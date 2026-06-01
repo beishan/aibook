@@ -1,0 +1,37 @@
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Dependencies
+node_modules/
+target/
+
+# Build
+dist/
+build/
+*.class
+*.jar
+*.war
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker/data/
+
+# Resources (大文件)
+resources/books/
+resources/covers/
+!resources/.gitkeep
