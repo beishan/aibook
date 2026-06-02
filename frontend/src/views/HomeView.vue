@@ -1,131 +1,95 @@
 <template>
   <div class="home-view">
+    <!-- 欢迎区 -->
     <div class="welcome-section">
-      <h1>欢迎使用汗牛充栋</h1>
-      <p>您的私人书库管理系统</p>
+      <h1 class="page-title">欢迎回来</h1>
+      <p class="page-subtitle">您的私人书库管理系统</p>
     </div>
 
-    <el-row :gutter="20" class="stats-section">
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-icon" style="background-color: #409eff">
-            <el-icon :size="24"><Document /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ stats.totalBooks }}</div>
-            <div class="stat-label">书籍总数</div>
-          </div>
-        </el-card>
-      </el-col>
+    <!-- 统计卡片 -->
+    <div class="stats-section">
+      <div
+        v-for="stat in statsList"
+        :key="stat.label"
+        class="stat-card glass"
+        :style="{ '--accent-color': stat.color }"
+      >
+        <div class="stat-icon-wrapper">
+          <span class="stat-icon">{{ stat.icon }}</span>
+        </div>
+        <div class="stat-info">
+          <div class="stat-value">{{ stat.value }}</div>
+          <div class="stat-label">{{ stat.label }}</div>
+        </div>
+      </div>
+    </div>
 
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-icon" style="background-color: #67c23a">
-            <el-icon :size="24"><Reading /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ stats.readingBooks }}</div>
-            <div class="stat-label">正在阅读</div>
-          </div>
-        </el-card>
-      </el-col>
+    <!-- 内容区 -->
+    <div class="content-section">
+      <!-- 最近阅读 -->
+      <div class="card glass">
+        <div class="card-header">
+          <span>📖 最近阅读</span>
+          <button class="btn btn-text" @click="$router.push('/books')">查看更多</button>
+        </div>
 
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-icon" style="background-color: #e6a23c">
-            <el-icon :size="24"><Star /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ stats.favoriteBooks }}</div>
-            <div class="stat-label">收藏书籍</div>
-          </div>
-        </el-card>
-      </el-col>
+        <div v-if="recentBooks.length === 0" class="empty">
+          <div class="empty-icon">📚</div>
+          <p>暂无最近阅读的书籍</p>
+        </div>
 
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-icon" style="background-color: #f56c6c">
-            <el-icon :size="24"><Finished /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ stats.finishedBooks }}</div>
-            <div class="stat-label">已读完</div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <el-row :gutter="20" class="content-section">
-      <el-col :span="16">
-        <el-card shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span>最近阅读</span>
-              <el-button type="primary" text @click="$router.push('/books')">查看更多</el-button>
+        <div v-else class="recent-books">
+          <div
+            v-for="book in recentBooks"
+            :key="book.id"
+            class="recent-book-item"
+            @click="$router.push(`/reader/${book.id}`)"
+          >
+            <div class="book-cover">
+              <img v-if="book.coverUrl" :src="book.coverUrl" alt="封面" />
+              <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
             </div>
-          </template>
-
-          <div v-if="recentBooks.length === 0" class="empty-state">
-            <el-empty description="暂无最近阅读的书籍" />
-          </div>
-
-          <div v-else class="recent-books">
-            <div
-              v-for="book in recentBooks"
-              :key="book.id"
-              class="recent-book-item"
-              @click="$router.push(`/reader/${book.id}`)"
-            >
-              <div class="book-cover">
-                <el-image
-                  v-if="book.coverUrl"
-                  :src="book.coverUrl"
-                  fit="cover"
-                />
-                <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
-              </div>
-              <div class="book-info">
-                <div class="book-title">{{ book.title }}</div>
-                <div class="book-author">{{ book.author || '未知作者' }}</div>
-              </div>
+            <div class="book-info">
+              <div class="book-title">{{ book.title }}</div>
+              <div class="book-author">{{ book.author || '未知作者' }}</div>
             </div>
           </div>
-        </el-card>
-      </el-col>
+        </div>
+      </div>
 
-      <el-col :span="8">
-        <el-card shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span>想读书单</span>
-              <el-button type="primary" text @click="$router.push('/shelf')">查看更多</el-button>
+      <!-- 想读书单 -->
+      <div class="card glass">
+        <div class="card-header">
+          <span>⭐ 想读书单</span>
+          <button class="btn btn-text" @click="$router.push('/shelf')">查看更多</button>
+        </div>
+
+        <div v-if="wantedBooks.length === 0" class="empty">
+          <div class="empty-icon">📝</div>
+          <p>暂无想读的书籍</p>
+        </div>
+
+        <div v-else class="wanted-list">
+          <div
+            v-for="book in wantedBooks"
+            :key="book.id"
+            class="wanted-item"
+            @click="$router.push(`/books/${book.id}`)"
+          >
+            <div class="wanted-icon">📖</div>
+            <div class="wanted-content">
+              <div class="wanted-title">{{ book.title }}</div>
+              <div class="wanted-author">{{ book.author || '未知作者' }}</div>
             </div>
-          </template>
-
-          <div v-if="wantedBooks.length === 0" class="empty-state">
-            <el-empty description="暂无想读的书籍" />
           </div>
-
-          <div v-else class="wanted-list">
-            <div
-              v-for="book in wantedBooks"
-              :key="book.id"
-              class="wanted-item"
-              @click="$router.push(`/books/${book.id}`)"
-            >
-              <span class="wanted-title">{{ book.title }}</span>
-              <span class="wanted-author">{{ book.author || '' }}</span>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { Document, Reading, Star, Finished } from '@element-plus/icons-vue'
+import { ref, computed, onMounted } from 'vue'
 import { useBookStore } from '@/stores/book'
 
 const bookStore = useBookStore()
@@ -140,15 +104,19 @@ const stats = ref({
 const recentBooks = ref<any[]>([])
 const wantedBooks = ref<any[]>([])
 
+const statsList = computed(() => [
+  { icon: '📚', label: '书籍总数', value: stats.value.totalBooks, color: '#007AFF' },
+  { icon: '📖', label: '正在阅读', value: stats.value.readingBooks, color: '#34C759' },
+  { icon: '⭐', label: '收藏书籍', value: stats.value.favoriteBooks, color: '#FF9500' },
+  { icon: '✅', label: '已读完', value: stats.value.finishedBooks, color: '#FF3B30' },
+])
+
 onMounted(async () => {
   try {
     const data = await bookStore.fetchBooks(0, 5, 'updatedAt', 'desc')
     recentBooks.value = data.content
-
-    // 获取统计数据
     stats.value.totalBooks = data.totalElements
 
-    // 获取想读书单
     const wantedData = await bookStore.fetchBooks(0, 5, 'createdAt', 'desc')
     wantedBooks.value = wantedData.content.filter((b: any) => b.isWanted)
   } catch (error) {
@@ -159,48 +127,69 @@ onMounted(async () => {
 
 <style scoped>
 .home-view {
-  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--spacing-lg) 0;
 }
 
+/* 欢迎区 */
 .welcome-section {
-  text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: var(--spacing-xl);
 }
 
-.welcome-section h1 {
-  font-size: 28px;
-  color: #333;
-  margin-bottom: 10px;
+.page-title {
+  font-size: var(--font-size-4xl);
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin-bottom: var(--spacing-sm);
 }
 
-.welcome-section p {
-  color: #666;
-  font-size: 16px;
+.page-subtitle {
+  font-size: var(--font-size-lg);
+  color: rgba(255, 255, 255, 0.8);
 }
 
+/* 统计卡片 */
 .stats-section {
-  margin-bottom: 30px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
 }
 
 .stat-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  transition: all var(--transition-normal);
   cursor: pointer;
 }
 
-.stat-card .el-card__body {
-  display: flex;
-  align-items: center;
-  padding: 20px;
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
 }
 
-.stat-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: 10px;
+.stat-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  background: var(--accent-color);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  margin-right: 15px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.stat-icon {
+  font-size: 28px;
 }
 
 .stat-info {
@@ -208,125 +197,197 @@ onMounted(async () => {
 }
 
 .stat-value {
-  font-size: 24px;
-  font-weight: bold;
-  color: #333;
+  font-size: var(--font-size-3xl);
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .stat-label {
-  font-size: 14px;
-  color: #666;
-  margin-top: 5px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
 }
 
+/* 内容区 */
 .content-section {
-  margin-top: 20px;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--spacing-lg);
+}
+
+/* 卡片 */
+.card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  font-weight: 600;
+  font-size: var(--font-size-lg);
 }
 
-.empty-state {
-  padding: 20px 0;
+/* 空状态 */
+.empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: var(--spacing-xl) var(--spacing-lg);
 }
 
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: var(--spacing-md);
+  opacity: 0.5;
+}
+
+/* 最近阅读 */
 .recent-books {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 15px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
 }
 
 .recent-book-item {
   display: flex;
   align-items: center;
-  padding: 10px;
-  border-radius: 8px;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background-color 0.3s;
-  width: calc(50% - 8px);
+  transition: all var(--transition-fast);
 }
 
 .recent-book-item:hover {
-  background-color: #f5f7fa;
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .book-cover {
-  width: 50px;
-  height: 70px;
-  border-radius: 4px;
+  width: 60px;
+  height: 80px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  margin-right: 12px;
   flex-shrink: 0;
+  box-shadow: var(--shadow-md);
 }
 
-.book-cover .el-image {
+.book-cover img {
   width: 100%;
   height: 100%;
+  object-fit: cover;
 }
 
 .no-cover {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 20px;
-  font-weight: bold;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
 }
 
 .book-info {
   flex: 1;
-  overflow: hidden;
+  min-width: 0;
 }
 
 .book-title {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 500;
-  color: #333;
-  margin-bottom: 4px;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .book-author {
-  font-size: 12px;
-  color: #999;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
 }
 
+/* 想读书单 */
 .wanted-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
 }
 
 .wanted-item {
   display: flex;
-  flex-direction: column;
-  padding: 10px;
-  border-radius: 8px;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: all var(--transition-fast);
 }
 
 .wanted-item:hover {
-  background-color: #f5f7fa;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.wanted-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 122, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.wanted-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .wanted-title {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: 500;
-  color: #333;
-  margin-bottom: 4px;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .wanted-author {
-  font-size: 12px;
-  color: #999;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+/* 响应式 */
+@media (max-width: 1024px) {
+  .stats-section {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .content-section {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .stats-section {
+    grid-template-columns: 1fr;
+  }
+
+  .recent-books {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

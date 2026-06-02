@@ -1,196 +1,168 @@
 <template>
   <div class="connections-view">
-    <h2>客户端连接</h2>
-    <p class="subtitle">配置第三方阅读器连接到汗牛充栋书库</p>
+    <!-- 页面头部 -->
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">客户端连接</h1>
+        <p class="page-subtitle">配置第三方阅读器连接到汗牛充栋书库</p>
+      </div>
+    </div>
 
-    <el-row :gutter="20">
+    <!-- 连接卡片 -->
+    <div class="connections-grid">
       <!-- OPDS 连接 -->
-      <el-col :span="12">
-        <el-card class="connection-card">
-          <template #header>
-            <div class="card-header">
-              <el-icon><Document /></el-icon>
-              <span>OPDS 电子书目录</span>
+      <div class="connection-card glass">
+        <div class="card-header">
+          <span class="card-icon">📚</span>
+          <span class="card-title">OPDS 电子书目录</span>
+        </div>
+
+        <div class="connection-info">
+          <p class="description">
+            OPDS 协议允许阅读器浏览和下载书库中的电子书。支持大部分开源阅读器。
+          </p>
+
+          <div class="url-box">
+            <label class="form-label">OPDS 地址</label>
+            <div class="url-row">
+              <input :value="opdsUrl" readonly class="input url-input" />
+              <button class="btn" @click="copyUrl(opdsUrl)">
+                <span>📋</span>
+              </button>
+              <button class="btn btn-primary" @click="testConnection('opds')">测试</button>
             </div>
-          </template>
-
-          <div class="connection-info">
-            <p class="description">
-              OPDS 协议允许阅读器浏览和下载书库中的电子书。支持大部分开源阅读器。
-            </p>
-
-            <div class="url-box">
-              <label>OPDS 地址</label>
-              <div class="url-row">
-                <el-input
-                  :model-value="opdsUrl"
-                  readonly
-                  class="url-input"
-                />
-                <el-button type="primary" @click="copyUrl(opdsUrl)">
-                  <el-icon><CopyDocument /></el-icon>
-                </el-button>
-                <el-button @click="testConnection('opds')">
-                  测试
-                </el-button>
-              </div>
-            </div>
-
-            <div class="supported-clients">
-              <label>支持的客户端</label>
-              <div class="client-tags">
-                <el-tag>KOReader</el-tag>
-                <el-tag>Moon+ Reader</el-tag>
-                <el-tag>Librera</el-tag>
-                <el-tag>CoolReader</el-tag>
-                <el-tag>FBReader</el-tag>
-              </div>
-            </div>
-
-            <el-collapse>
-              <el-collapse-item title="OPDS 2.0 (JSON)">
-                <div class="url-box">
-                  <label>OPDS 2.0 地址</label>
-                  <div class="url-row">
-                    <el-input
-                      :model-value="opds2Url"
-                      readonly
-                      class="url-input"
-                    />
-                    <el-button type="primary" @click="copyUrl(opds2Url)">
-                      <el-icon><CopyDocument /></el-icon>
-                    </el-button>
-                  </div>
-                </div>
-              </el-collapse-item>
-            </el-collapse>
           </div>
-        </el-card>
-      </el-col>
+
+          <div class="supported-clients">
+            <label class="form-label">支持的客户端</label>
+            <div class="client-tags">
+              <span class="tag tag-primary">KOReader</span>
+              <span class="tag tag-primary">Moon+ Reader</span>
+              <span class="tag tag-primary">Librera</span>
+              <span class="tag tag-primary">CoolReader</span>
+              <span class="tag tag-primary">FBReader</span>
+            </div>
+          </div>
+
+          <div class="url-box">
+            <label class="form-label">OPDS 2.0 (JSON) 地址</label>
+            <div class="url-row">
+              <input :value="opds2Url" readonly class="input url-input" />
+              <button class="btn" @click="copyUrl(opds2Url)">
+                <span>📋</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- WebDAV 连接 -->
-      <el-col :span="12">
-        <el-card class="connection-card">
-          <template #header>
-            <div class="card-header">
-              <el-icon><Folder /></el-icon>
-              <span>WebDAV 文件同步</span>
-            </div>
-          </template>
+      <div class="connection-card glass">
+        <div class="card-header">
+          <span class="card-icon">📁</span>
+          <span class="card-title">WebDAV 文件同步</span>
+        </div>
 
-          <div class="connection-info">
-            <p class="description">
-              WebDAV 协议支持文件浏览、下载和进度同步。主要用于 KOReader 的阅读进度同步。
-            </p>
+        <div class="connection-info">
+          <p class="description">
+            WebDAV 协议支持文件浏览、下载和进度同步。主要用于 KOReader 的阅读进度同步。
+          </p>
 
-            <div class="url-box">
-              <label>WebDAV 地址</label>
-              <div class="url-row">
-                <el-input
-                  :model-value="webdavUrl"
-                  readonly
-                  class="url-input"
-                />
-                <el-button type="primary" @click="copyUrl(webdavUrl)">
-                  <el-icon><CopyDocument /></el-icon>
-                </el-button>
-                <el-button @click="testConnection('webdav')">
-                  测试
-                </el-button>
-              </div>
-            </div>
-
-            <div class="supported-clients">
-              <label>支持的客户端</label>
-              <div class="client-tags">
-                <el-tag>KOReader (进度同步)</el-tag>
-                <el-tag>Cyberduck</el-tag>
-                <el-tag>文件管理器</el-tag>
-              </div>
+          <div class="url-box">
+            <label class="form-label">WebDAV 地址</label>
+            <div class="url-row">
+              <input :value="webdavUrl" readonly class="input url-input" />
+              <button class="btn" @click="copyUrl(webdavUrl)">
+                <span>📋</span>
+              </button>
+              <button class="btn btn-primary" @click="testConnection('webdav')">测试</button>
             </div>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
+
+          <div class="supported-clients">
+            <label class="form-label">支持的客户端</label>
+            <div class="client-tags">
+              <span class="tag tag-primary">KOReader (进度同步)</span>
+              <span class="tag tag-primary">Cyberduck</span>
+              <span class="tag tag-primary">文件管理器</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- KOReader 设置指南 -->
-    <el-card class="guide-card" style="margin-top: 20px;">
-      <template #header>
-        <div class="card-header">
-          <el-icon><InfoFilled /></el-icon>
-          <span>KOReader 设置指南</span>
-        </div>
-      </template>
+    <div class="guide-card glass">
+      <div class="card-header">
+        <span class="card-icon">📖</span>
+        <span class="card-title">KOReader 设置指南</span>
+      </div>
 
-      <el-steps :active="1" direction="vertical" :space="60">
-        <el-step title="添加 OPDS 书库" description="打开 KOReader → 左上角菜单 → 云存储 → 添加 OPDS 目录">
-          <template #icon><el-icon><Edit /></el-icon></template>
-        </el-step>
-        <el-step title="输入服务器地址" :description="'输入 OPDS 地址: ' + opdsUrl">
-          <template #icon><el-icon><Link /></el-icon></template>
-        </el-step>
-        <el-step title="输入用户名和密码" description="使用汗牛充栋的账号密码登录">
-          <template #icon><el-icon><User /></el-icon></template>
-        </el-step>
-        <el-step title="浏览和下载书籍" description="成功连接后即可浏览书库、下载和阅读书籍">
-          <template #icon><el-icon><Reading /></el-icon></template>
-        </el-step>
-        <el-step title="配置进度同步" description="在 KOReader 设置中启用 WebDAV 进度同步，输入 WebDAV 地址">
-          <template #icon><el-icon><Refresh /></el-icon></template>
-        </el-step>
-      </el-steps>
-    </el-card>
+      <div class="steps">
+        <div class="step" v-for="(step, index) in steps" :key="index">
+          <div class="step-icon">{{ index + 1 }}</div>
+          <div class="step-content">
+            <div class="step-title">{{ step.title }}</div>
+            <div class="step-description">{{ step.description }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 测试结果对话框 -->
-    <el-dialog v-model="showTestResult" title="连接测试" width="400px">
-      <div v-if="testResult" class="test-result">
-        <el-result
-          :icon="testResult.success ? 'success' : 'error'"
-          :title="testResult.success ? '连接成功' : '连接失败'"
-          :sub-title="testResult.message"
-        />
-      </div>
-      <template #footer>
-        <el-button @click="showTestResult = false">关闭</el-button>
-      </template>
-    </el-dialog>
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="showTestResult" class="dialog-overlay" @click.self="showTestResult = false">
+          <div class="dialog">
+            <div class="dialog-header">
+              <span>🔗 连接测试</span>
+              <button class="dialog-close" @click="showTestResult = false">✕</button>
+            </div>
+            <div class="dialog-body">
+              <div v-if="testResult" class="test-result" :class="testResult.success ? 'success' : 'error'">
+                <div class="result-icon">{{ testResult.success ? '✅' : '❌' }}</div>
+                <div class="result-title">{{ testResult.success ? '连接成功' : '连接失败' }}</div>
+                <div class="result-message">{{ testResult.message }}</div>
+              </div>
+            </div>
+            <div class="dialog-footer">
+              <button class="btn" @click="showTestResult = false">关闭</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ElMessage } from 'element-plus'
-import {
-  Document,
-  Folder,
-  InfoFilled,
-  CopyDocument,
-  Edit,
-  Link,
-  User,
-  Reading,
-  Refresh,
-} from '@element-plus/icons-vue'
+import { message } from '@/utils/message'
 import api from '@/utils/api'
 
 const showTestResult = ref(false)
 const testResult = ref<{ success: boolean; message: string } | null>(null)
 
-// 构建服务器地址
-const serverUrl = computed(() => {
-  return window.location.origin
-})
+const serverUrl = computed(() => window.location.origin)
 
 const opdsUrl = computed(() => `${serverUrl.value}/opds`)
 const opds2Url = computed(() => `${serverUrl.value}/opds/v2`)
 const webdavUrl = computed(() => `${serverUrl.value}/webdav`)
 
+const steps = computed(() => [
+  { title: '添加 OPDS 书库', description: '打开 KOReader → 左上角菜单 → 云存储 → 添加 OPDS 目录' },
+  { title: '输入服务器地址', description: `输入 OPDS 地址: ${opdsUrl.value}` },
+  { title: '输入用户名和密码', description: '使用汗牛充栋的账号密码登录' },
+  { title: '浏览和下载书籍', description: '成功连接后即可浏览书库、下载和阅读书籍' },
+  { title: '配置进度同步', description: '在 KOReader 设置中启用 WebDAV 进度同步，输入 WebDAV 地址' },
+])
+
 const copyUrl = async (url: string) => {
   try {
     await navigator.clipboard.writeText(url)
-    ElMessage.success('已复制到剪贴板')
+    message.success('已复制到剪贴板')
   } catch {
-    ElMessage.error('复制失败')
+    message.error('复制失败')
   }
 }
 
@@ -227,39 +199,75 @@ const testConnection = async (type: 'opds' | 'webdav') => {
 <style scoped>
 .connections-view {
   max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--spacing-lg) 0;
 }
 
-.connections-view h2 {
-  margin-bottom: 8px;
-  font-size: 24px;
-  font-weight: 600;
+/* 页面头部 */
+.page-header {
+  margin-bottom: var(--spacing-xl);
 }
 
-.subtitle {
-  color: #666;
-  margin-bottom: 24px;
+.page-title {
+  font-size: var(--font-size-4xl);
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin-bottom: var(--spacing-sm);
 }
 
-.connection-card {
-  height: 100%;
+.page-subtitle {
+  font-size: var(--font-size-base);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* 连接网格 */
+.connections-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+/* 连接卡片 */
+.connection-card,
+.guide-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 
 .card-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 500;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  font-weight: 600;
+  font-size: var(--font-size-lg);
+}
+
+.card-icon {
+  font-size: 24px;
+}
+
+.card-title {
+  flex: 1;
 }
 
 .connection-info {
+  padding: var(--spacing-lg);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--spacing-lg);
 }
 
 .description {
-  color: #666;
-  font-size: 14px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   margin: 0;
 }
@@ -267,56 +275,114 @@ const testConnection = async (type: 'opds' | 'webdav') => {
 .url-box {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.url-box label {
-  font-size: 13px;
-  color: #909399;
-  font-weight: 500;
+  gap: var(--spacing-sm);
 }
 
 .url-row {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-sm);
 }
 
 .url-input {
   flex: 1;
-}
-
-.url-input :deep(.el-input__inner) {
-  font-family: monospace;
-  font-size: 13px;
+  font-family: 'SF Mono', monospace;
+  font-size: var(--font-size-sm);
+  background: var(--bg-secondary);
 }
 
 .supported-clients {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.supported-clients label {
-  font-size: 13px;
-  color: #909399;
-  font-weight: 500;
+  gap: var(--spacing-sm);
 }
 
 .client-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--spacing-sm);
 }
 
-.guide-card :deep(.el-step__title) {
-  font-size: 15px;
+/* 步骤指南 */
+.steps {
+  padding: var(--spacing-lg);
 }
 
-.guide-card :deep(.el-step__description) {
-  font-size: 13px;
+.step {
+  display: flex;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg) 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
+.step:last-child {
+  border-bottom: none;
+}
+
+.step-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--primary-gradient);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+}
+
+.step-content {
+  flex: 1;
+}
+
+.step-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-size-base);
+}
+
+.step-description {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* 测试结果 */
 .test-result {
-  padding: 20px 0;
+  text-align: center;
+  padding: var(--spacing-lg);
+}
+
+.result-icon {
+  font-size: 64px;
+  margin-bottom: var(--spacing-md);
+}
+
+.result-title {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  margin-bottom: var(--spacing-sm);
+}
+
+.result-message {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.test-result.success .result-title {
+  color: var(--success);
+}
+
+.test-result.error .result-title {
+  color: var(--danger);
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .connections-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

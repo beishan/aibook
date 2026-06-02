@@ -1,81 +1,124 @@
 <template>
-  <div class="metadata-search">
-    <el-dialog
-      v-model="visible"
-      title="搜索书籍元数据"
-      width="600px"
-      @close="handleClose"
-    >
-      <el-form :model="searchForm" label-width="80px">
-        <el-form-item label="ISBN">
-          <el-input
-            v-model="searchForm.isbn"
-            placeholder="输入 ISBN 搜索"
-            clearable
-          />
-        </el-form-item>
+  <Teleport to="body">
+    <Transition name="fade">
+      <div v-if="visible" class="dialog-overlay" @click.self="handleClose">
+        <div class="dialog">
+          <div class="dialog-header">
+            <span>🔍 搜索书籍元数据</span>
+            <button class="dialog-close" @click="handleClose">✕</button>
+          </div>
 
-        <el-form-item label="书名">
-          <el-input
-            v-model="searchForm.title"
-            placeholder="输入书名搜索"
-            clearable
-          />
-        </el-form-item>
+          <div class="dialog-body">
+            <div class="search-form">
+              <div class="form-group">
+                <label class="form-label">ISBN</label>
+                <input
+                  v-model="searchForm.isbn"
+                  type="text"
+                  class="input"
+                  placeholder="输入 ISBN 搜索"
+                />
+              </div>
 
-        <el-form-item label="作者">
-          <el-input
-            v-model="searchForm.author"
-            placeholder="输入作者名搜索（可选）"
-            clearable
-          />
-        </el-form-item>
+              <div class="form-group">
+                <label class="form-label">书名</label>
+                <input
+                  v-model="searchForm.title"
+                  type="text"
+                  class="input"
+                  placeholder="输入书名搜索"
+                />
+              </div>
 
-        <el-form-item>
-          <el-button type="primary" @click="handleSearch" :loading="loading">
-            搜索
-          </el-button>
-          <el-button @click="handleReset">重置</el-button>
-        </el-form-item>
-      </el-form>
+              <div class="form-group">
+                <label class="form-label">作者 <span class="optional">（可选）</span></label>
+                <input
+                  v-model="searchForm.author"
+                  type="text"
+                  class="input"
+                  placeholder="输入作者名搜索"
+                />
+              </div>
 
-      <!-- 搜索结果 -->
-      <div v-if="searchResult" class="search-result">
-        <el-divider>搜索结果</el-divider>
+              <div class="form-actions">
+                <button class="btn btn-primary" @click="handleSearch" :disabled="loading">
+                  <span v-if="loading" class="loading-spinner-small"></span>
+                  <span>{{ loading ? '搜索中...' : '搜索' }}</span>
+                </button>
+                <button class="btn" @click="handleReset">重置</button>
+              </div>
+            </div>
 
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="书名">{{ searchResult.title }}</el-descriptions-item>
-          <el-descriptions-item label="作者">{{ searchResult.author || '未知' }}</el-descriptions-item>
-          <el-descriptions-item label="ISBN">{{ searchResult.isbn || '无' }}</el-descriptions-item>
-          <el-descriptions-item label="出版社">{{ searchResult.publisher || '未知' }}</el-descriptions-item>
-          <el-descriptions-item label="出版日期">{{ searchResult.publishDate || '未知' }}</el-descriptions-item>
-          <el-descriptions-item label="页数">{{ searchResult.pageCount || '未知' }}</el-descriptions-item>
-          <el-descriptions-item label="简介" :span="2">
-            {{ searchResult.description || '暂无简介' }}
-          </el-descriptions-item>
-        </el-descriptions>
+            <!-- 搜索结果 -->
+            <div v-if="searchResult" class="search-result">
+              <div class="divider">
+                <span class="divider-text">搜索结果</span>
+              </div>
 
-        <div v-if="searchResult.coverUrl" class="cover-preview">
-          <img :src="searchResult.coverUrl" alt="封面预览" />
-        </div>
+              <div class="result-content">
+                <div class="result-info">
+                  <div class="result-item">
+                    <span class="result-label">书名</span>
+                    <span class="result-value">{{ searchResult.title }}</span>
+                  </div>
+                  <div class="result-item">
+                    <span class="result-label">作者</span>
+                    <span class="result-value">{{ searchResult.author || '未知' }}</span>
+                  </div>
+                  <div class="result-item">
+                    <span class="result-label">ISBN</span>
+                    <span class="result-value">{{ searchResult.isbn || '无' }}</span>
+                  </div>
+                  <div class="result-item">
+                    <span class="result-label">出版社</span>
+                    <span class="result-value">{{ searchResult.publisher || '未知' }}</span>
+                  </div>
+                  <div class="result-item">
+                    <span class="result-label">出版日期</span>
+                    <span class="result-value">{{ searchResult.publishDate || '未知' }}</span>
+                  </div>
+                  <div class="result-item">
+                    <span class="result-label">页数</span>
+                    <span class="result-value">{{ searchResult.pageCount || '未知' }}</span>
+                  </div>
+                  <div class="result-item full">
+                    <span class="result-label">简介</span>
+                    <span class="result-value">{{ searchResult.description || '暂无简介' }}</span>
+                  </div>
+                </div>
 
-        <div class="result-actions">
-          <el-button type="primary" @click="handleApply">应用到书籍</el-button>
-          <el-button @click="searchResult = null">重新搜索</el-button>
+                <div v-if="searchResult.coverUrl" class="cover-preview">
+                  <img :src="searchResult.coverUrl" alt="封面预览" />
+                </div>
+              </div>
+
+              <div class="result-actions">
+                <button class="btn btn-primary" @click="handleApply">
+                  <span>✓</span>
+                  <span>应用到书籍</span>
+                </button>
+                <button class="btn" @click="searchResult = null">
+                  <span>🔄</span>
+                  <span>重新搜索</span>
+                </button>
+              </div>
+            </div>
+
+            <div v-else-if="searched && !loading" class="empty">
+              <div class="empty-icon">🔍</div>
+              <p>未找到相关书籍</p>
+            </div>
+          </div>
         </div>
       </div>
-
-      <div v-else-if="searched && !loading" class="no-result">
-        <el-empty description="未找到相关书籍" />
-      </div>
-    </el-dialog>
-  </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
+import { message } from '@/utils/message'
 
 const props = defineProps<{
   modelValue: boolean
@@ -100,7 +143,7 @@ const searchForm = reactive({
 
 const handleSearch = async () => {
   if (!searchForm.isbn && !searchForm.title) {
-    ElMessage.warning('请输入 ISBN 或书名')
+    message.warning('请输入 ISBN 或书名')
     return
   }
 
@@ -123,9 +166,9 @@ const handleSearch = async () => {
     searchResult.value = response.data
   } catch (error: any) {
     if (error.response?.status === 404) {
-      ElMessage.info('未找到相关书籍')
+      message.info('未找到相关书籍')
     } else {
-      ElMessage.error('搜索失败')
+      message.error('搜索失败')
     }
   } finally {
     loading.value = false
@@ -154,30 +197,119 @@ const handleClose = () => {
 </script>
 
 <style scoped>
+.search-form {
+  margin-bottom: var(--spacing-lg);
+}
+
+.form-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.form-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.optional {
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
+.form-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.loading-spinner-small {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: var(--spacing-sm);
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .search-result {
-  margin-top: 20px;
+  margin-top: var(--spacing-lg);
+}
+
+.result-content {
+  display: flex;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.result-info {
+  flex: 1;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.result-item {
+  display: flex;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.result-item:last-child {
+  border-bottom: none;
+}
+
+.result-item.full {
+  flex-direction: column;
+}
+
+.result-label {
+  width: 80px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.result-value {
+  flex: 1;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
 }
 
 .cover-preview {
-  text-align: center;
-  margin: 20px 0;
+  flex-shrink: 0;
 }
 
 .cover-preview img {
   max-width: 150px;
   max-height: 200px;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
 }
 
 .result-actions {
   display: flex;
   justify-content: center;
-  gap: 10px;
-  margin-top: 20px;
+  gap: var(--spacing-md);
 }
 
-.no-result {
-  padding: 20px 0;
+.empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: var(--spacing-xl);
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: var(--spacing-md);
+  opacity: 0.5;
 }
 </style>
