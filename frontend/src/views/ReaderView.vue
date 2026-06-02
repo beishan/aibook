@@ -246,8 +246,6 @@ const initEpub = async () => {
       spread: 'none',
     })
 
-    rendition.display()
-
     // 监听位置变化
     rendition.on('relocated', (location: any) => {
       if (location && location.start) {
@@ -262,11 +260,15 @@ const initEpub = async () => {
       }
     })
 
+    // 每次渲染新内容时，重新应用主题样式（关键：覆盖 EPUB 内置 CSS）
+    rendition.hooks.content.register((contents: any) => {
+      applyThemeToContent(contents)
+    })
+
+    await rendition.display()
+
     // 生成 locations 用于进度计算
     await bookInstance.locations.generate(1024)
-
-    // 注册默认主题并应用当前设置
-    applyEpubTheme()
 
   } catch (error) {
     console.error('Failed to init EPUB:', error)
@@ -320,29 +322,51 @@ const handleDownload = () => {
   window.open(`/api/books/${book.value.id}/content`, '_blank')
 }
 
-// 应用 EPUB 主题样式
-const applyEpubTheme = () => {
-  if (!rendition) return
+// 对单个 contents 对象应用主题样式（直接操作 DOM，最高优先级）
+const applyThemeToContent = (contents: any) => {
+  if (!contents || !contents.css) return
 
   const fontFamily = settings.value.fontFamily === 'default'
     ? 'serif'
     : settings.value.fontFamily.split(',')[0].trim()
 
-  rendition.themes.register('custom', {
-    'body': {
-      'font-family': `${fontFamily}, serif !important`,
-      'font-size': `${settings.value.fontSize}px !important`,
-      'line-height': `${settings.value.lineHeight} !important`,
-      'color': settings.value.backgroundColor === '#333' ? '#fff !important' : '#333 !important',
-      'background': `${settings.value.backgroundColor} !important`,
-    },
-    'p': {
-      'font-family': `${fontFamily}, serif !important`,
-      'font-size': `${settings.value.fontSize}px !important`,
-      'line-height': `${settings.value.lineHeight} !important`,
+  const textColor = settings.value.backgroundColor === '#333' ? '#fff' : '#333'
+
+  // 直接用 inline style + important 覆盖所有样式
+  contents.css('font-family', `${fontFamily}, serif`, true)
+  contents.css('font-size', `${settings.value.fontSize}px`, true)
+  contents.css('line-height', `${settings.value.lineHeight}`, true)
+  contents.css('color', textColor, true)
+  contents.css('background', settings.value.backgroundColor, true)
+
+  // 也应用到子元素 p, h1-h6, span, div
+  try {
+    const doc = contents.document
+    if (doc) {
+      const style = doc.createElement('style')
+      style.textContent = `
+        * {
+          font-family: ${fontFamily}, serif !important;
+          font-size: ${settings.value.fontSize}px !important;
+          line-height: ${settings.value.lineHeight} !important;
+          color: ${textColor} !important;
+        }
+        body {
+          background: ${settings.value.backgroundColor} !important;
+        }
+      `
+      doc.head.appendChild(style)
     }
-  })
-  rendition.themes.select('custom')
+  } catch (e) {
+    // 忽略跨域错误
+  }
+}
+
+// 应用主题到当前所有 contents
+const applyEpubTheme = () => {
+  if (!rendition) return
+  const contents = rendition.getContents()
+  contents.forEach((c: any) => applyThemeToContent(c))
 }
 
 // 监听设置变化，更新 EPUB 样式
