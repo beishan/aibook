@@ -221,12 +221,15 @@ const initEpub = async () => {
   try {
     const ePub = (await import('epubjs')).default
 
+    // 先用 fetch 拿到 ArrayBuffer，再传给 epubjs（避免 iframe 跨域认证问题）
     const token = localStorage.getItem('token')
-    const url = `/api/books/${book.value.id}/content`
-
-    bookInstance = ePub(url, {
+    const response = await fetch(`/api/books/${book.value.id}/content`, {
       headers: { Authorization: `Bearer ${token}` }
     })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const arrayBuffer = await response.arrayBuffer()
+
+    bookInstance = ePub(arrayBuffer)
 
     await bookInstance.ready
 
