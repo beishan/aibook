@@ -265,6 +265,9 @@ const initEpub = async () => {
     // 生成 locations 用于进度计算
     await bookInstance.locations.generate(1024)
 
+    // 注册默认主题并应用当前设置
+    applyEpubTheme()
+
   } catch (error) {
     console.error('Failed to init EPUB:', error)
   }
@@ -317,15 +320,34 @@ const handleDownload = () => {
   window.open(`/api/books/${book.value.id}/content`, '_blank')
 }
 
+// 应用 EPUB 主题样式
+const applyEpubTheme = () => {
+  if (!rendition) return
+
+  const fontFamily = settings.value.fontFamily === 'default'
+    ? 'serif'
+    : settings.value.fontFamily.split(',')[0].trim()
+
+  rendition.themes.register('custom', {
+    'body': {
+      'font-family': `${fontFamily}, serif !important`,
+      'font-size': `${settings.value.fontSize}px !important`,
+      'line-height': `${settings.value.lineHeight} !important`,
+      'color': settings.value.backgroundColor === '#333' ? '#fff !important' : '#333 !important',
+      'background': `${settings.value.backgroundColor} !important`,
+    },
+    'p': {
+      'font-family': `${fontFamily}, serif !important`,
+      'font-size': `${settings.value.fontSize}px !important`,
+      'line-height': `${settings.value.lineHeight} !important`,
+    }
+  })
+  rendition.themes.select('custom')
+}
+
 // 监听设置变化，更新 EPUB 样式
-watch(() => settings.value, (newSettings) => {
-  if (rendition) {
-    rendition.themes.fontSize(`${newSettings.fontSize}px`)
-    rendition.themes.lineHeight(String(newSettings.lineHeight))
-    rendition.themes.override('color',
-      newSettings.backgroundColor === '#333' ? '#fff' : '#333')
-    rendition.themes.override('background', newSettings.backgroundColor)
-  }
+watch(() => settings.value, () => {
+  applyEpubTheme()
 }, { deep: true })
 
 onMounted(loadBook)
