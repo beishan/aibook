@@ -15,6 +15,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.*;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -35,22 +38,17 @@ public class FileUploadController {
     private String uploadPath;
 
     /**
-     * 上传书籍文件
+     * 上传书籍文件（支持多文件）
      */
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Object>> uploadBook(
             Authentication authentication,
-            @RequestParam("file") MultipartFile file) throws IOException {
+            @RequestParam("files") List<MultipartFile> files) throws IOException {
 
         User user = userService.findByUsername(authentication.getName());
-
-        // 生成唯一文件名
-        String originalFilename = file.getOriginalFilename();
-        String extension = "";
-        if (originalFilename != null && originalFilename.contains(".")) {
-            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        }
-        String uniqueFilename = UUID.randomUUID().toString() + extension;
+        List<Map<String, Object>> results = new ArrayList<>();
+        int successCount = 0;
+        int failCount = 0;
 
         // 确保上传目录存在
         Path uploadDir = Paths.get(uploadPath);
@@ -58,47 +56,82 @@ public class FileUploadController {
             Files.createDirectories(uploadDir);
         }
 
-        // 保存文件
-        Path filePath = uploadDir.resolve(uniqueFilename);
-        file.transferTo(filePath.toFile());
+        for (MultipartFile file : files) {
+            try {
+                // 生成唯一文件名
+                String originalFilename = file.getOriginalFilename();
+                String extension = "";
+                if (originalFilename != null && originalFilename.contains(".")) {
+                    extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+                }
+                String uniqueFilename = UUID.randomUUID().toString() + extension;
 
-        // 计算文件哈希
-        String fileHash = calculateFileHash(filePath);
+                // 保存文件
+                Path filePath = uploadDir.resolve(uniqueFilename);
+                file.transferTo(filePath.toFile());
 
-        // 检查是否已存在
-        if (bookRepository.findByFileHash(fileHash).isPresent()) {
-            Files.deleteIfExists(filePath);
-            return ResponseEntity.ok(Map.of(
-                "success", false,
-                "message", "文件已存在"
-            ));
+                // 计算文件哈希
+                String fileHash = calculateFileHash(filePath);
+
+                // 检查是否已存在
+                if (bookRepository.findByFileHash(fileHash).isPresent()) {
+                    Files.deleteIfExists(filePath);
+                    results.add(Map.of(
+                        "filename", originalFilename,
+                        "success", false,
+                        "message", "文件已存在"
+                    ));
+                    failCount++;
+                    continue;
+                }
+
+                // 提取书名（去掉扩展名）
+                String title = originalFilename;
+                if (title != null && title.contains(".")) {
+                    title = title.substring(0, title.lastIndexOf("."));
+                }
+
+                // 创建书籍记录
+                Book book = Book.builder()
+                        .title(title)
+                        .format(extension.substring(1).toLowerCase())
+                        .filePath(filePath.toString())
+                        .fileSize(file.getSize())
+                        .fileHash(fileHash)
+                        .user(user)
+                        .build();
+
+                bookRepository.save(book);
+                successCount++;
+
+                results.add(Map.of(
+                    "filename", originalFilename,
+                    "success", true,
+                    "message", "上传成功",
+                    "bookId", book.getId()
+                ));
+
+                log.info("文件上传成功: {}", originalFilename);
+            } catch (Exception e) {
+                log.error("文件上传失败: {}", file.getOriginalFilename(), e);
+                results.add(Map.of(
+                    "filename", file.getOriginalFilename(),
+                    "success", false,
+                    "message", "上传失败: " + e.getMessage()
+                ));
+                failCount++;
+            }
         }
 
-        // 提取书名（去掉扩展名）
-        String title = originalFilename;
-        if (title != null && title.contains(".")) {
-            title = title.substring(0, title.lastIndexOf("."));
-        }
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", successCount > 0);
+        response.put("message", String.format("上传完成: 成功 %d 个, 失败 %d 个", successCount, failCount));
+        response.put("results", results);
+        response.put("totalCount", files.size());
+        response.put("successCount", successCount);
+        response.put("failCount", failCount);
 
-        // 创建书籍记录
-        Book book = Book.builder()
-                .title(title)
-                .format(extension.substring(1).toLowerCase())
-                .filePath(filePath.toString())
-                .fileSize(file.getSize())
-                .fileHash(fileHash)
-                .user(user)
-                .build();
-
-        bookRepository.save(book);
-
-        log.info("文件上传成功: {}", originalFilename);
-
-        return ResponseEntity.ok(Map.of(
-            "success", true,
-            "message", "上传成功",
-            "bookId", book.getId()
-        ));
+        return ResponseEntity.ok(response);
     }
 
     /**

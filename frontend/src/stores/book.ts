@@ -125,6 +125,20 @@ export const useBookStore = defineStore('book', () => {
     totalElements.value--
   }
 
+  // 更新书籍元数据
+  async function updateBookMetadata(id: number, metadata: Partial<Book>) {
+    const response = await api.put(`/api/books/${id}`, metadata)
+    const updatedBook = response.data
+    const index = books.value.findIndex((b) => b.id === id)
+    if (index !== -1) {
+      books.value[index] = updatedBook
+    }
+    if (currentBook.value?.id === id) {
+      currentBook.value = updatedBook
+    }
+    return updatedBook
+  }
+
   return {
     books,
     currentBook,
@@ -138,5 +152,6 @@ export const useBookStore = defineStore('book', () => {
     toggleFavorite,
     toggleWanted,
     deleteBook,
+    updateBookMetadata,
   }
 })

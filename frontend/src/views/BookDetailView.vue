@@ -24,7 +24,30 @@
         </div>
 
         <div class="book-info">
-          <h1 class="book-title">{{ book.title }}</h1>
+          <!-- 书名显示/编辑 -->
+          <div class="book-title-wrapper">
+            <h1 v-if="!editingTitle" class="book-title">{{ book.title }}</h1>
+            <div v-else class="title-edit-group">
+              <input
+                v-model="editTitleValue"
+                class="title-edit-input"
+                placeholder="请输入书名"
+                @keyup.enter="saveTitle"
+                @keyup.escape="cancelEditTitle"
+                :disabled="savingTitle"
+                ref="titleInput"
+              />
+              <div class="title-edit-actions">
+                <button class="btn btn-primary btn-sm" @click="saveTitle" :disabled="savingTitle">
+                  {{ savingTitle ? '保存中...' : '保存' }}
+                </button>
+                <button class="btn btn-sm" @click="cancelEditTitle" :disabled="savingTitle">取消</button>
+              </div>
+            </div>
+            <button v-if="!editingTitle" class="btn-edit-title" @click="startEditTitle" title="编辑书名">
+              ✏️
+            </button>
+          </div>
 
           <div class="book-meta">
             <span v-if="book.author" class="meta-item">
@@ -61,6 +84,14 @@
             <button class="btn" :class="book.isWanted ? 'btn-success' : ''" @click="handleToggleWanted">
               <span>{{ book.isWanted ? '✓' : '○' }}</span>
               <span>{{ book.isWanted ? '想读中' : '想读' }}</span>
+            </button>
+            <button class="btn btn-scrape" @click="handleScrape" :disabled="scraping">
+              <span>🔍</span>
+              <span>{{ scraping ? '刮削中...' : '刮削元数据' }}</span>
+            </button>
+            <button class="btn" @click="handleDownloadCover" :disabled="downloadingCover">
+              <span>🖼️</span>
+              <span>{{ downloadingCover ? '下载中...' : '下载封面' }}</span>
             </button>
           </div>
 
@@ -186,14 +217,24 @@
       <p>书籍不存在</p>
       <button class="btn btn-primary" @click="$router.back()">返回书库</button>
     </div>
+
+    <!-- 刮削对话框 -->
+    <ScraperDialog
+      ref="scraperDialog"
+      :visible="showScraperDialog"
+      @close="showScraperDialog = false"
+      @refresh="loadBook"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
+import { scrapeBook, downloadCover } from '@/utils/scraper'
+import ScraperDialog from '@/components/ScraperDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -203,6 +244,15 @@ const book = ref<any>(null)
 const loading = ref(true)
 const notes = ref('')
 const activeTab = ref('description')
+const scraping = ref(false)
+const downloadingCover = ref(false)
+const showScraperDialog = ref(false)
+const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
+
+// 编辑书名相关
+const editingTitle = ref(false)
+const editTitleValue = ref('')
+const savingTitle = ref(false)
 
 const loadBook = async () => {
   const id = Number(route.params.id)
@@ -249,6 +299,86 @@ const setRating = (rating: number) => {
 
 const handleSaveNotes = () => {
   message.success('笔记保存成功')
+}
+
+const handleScrape = async () => {
+  if (!book.value) return
+
+  showScraperDialog.value = true
+  scraping.value = true
+
+  // 等待对话框渲染
+  await nextTick()
+
+  if (scraperDialog.value) {
+    scraperDialog.value.startScrape(async () => {
+      const result = await scrapeBook(book.value.id)
+      // 刷新书籍数据
+      if (result.success && result.book) {
+        book.value = result.book
+      }
+      return result
+    })
+  }
+
+  scraping.value = false
+}
+
+// 编辑书名
+const startEditTitle = () => {
+  editTitleValue.value = book.value.title
+  editingTitle.value = true
+}
+
+const cancelEditTitle = () => {
+  editingTitle.value = false
+  editTitleValue.value = ''
+}
+
+const saveTitle = async () => {
+  if (!editTitleValue.value.trim()) {
+    message.error('书名不能为空')
+    return
+  }
+
+  if (editTitleValue.value === book.value.title) {
+    editingTitle.value = false
+    return
+  }
+
+  savingTitle.value = true
+  try {
+    const updatedBook = await bookStore.updateBookMetadata(book.value.id, {
+      title: editTitleValue.value.trim()
+    })
+    book.value = updatedBook
+    editingTitle.value = false
+    message.success('书名修改成功')
+  } catch (error) {
+    message.error('书名修改失败')
+  } finally {
+    savingTitle.value = false
+  }
+}
+
+const handleDownloadCover = async () => {
+  if (!book.value) return
+
+  downloadingCover.value = true
+  try {
+    const result = await downloadCover(book.value.id)
+    if (result.success) {
+      message.success('封面下载成功')
+      // 刷新书籍数据
+      await loadBook()
+    } else {
+      message.error(result.message || '封面下载失败')
+    }
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '封面下载失败')
+  } finally {
+    downloadingCover.value = false
+  }
 }
 
 const formatFileSize = (bytes?: number) => {
@@ -383,12 +513,69 @@ onMounted(loadBook)
   flex: 1;
 }
 
+.book-title-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
 .book-title {
   font-size: var(--font-size-4xl);
   font-weight: 700;
   color: var(--text-primary);
-  margin: 0 0 var(--spacing-md) 0;
+  margin: 0;
   line-height: 1.2;
+}
+
+.btn-edit-title {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px;
+  opacity: 0.6;
+  transition: opacity var(--transition-fast);
+  flex-shrink: 0;
+  margin-top: 8px;
+}
+
+.btn-edit-title:hover {
+  opacity: 1;
+}
+
+.title-edit-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.title-edit-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: var(--font-size-2xl);
+  font-weight: 600;
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.title-edit-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
+}
+
+.title-edit-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.btn-sm {
+  padding: 6px 16px;
+  font-size: var(--font-size-sm);
 }
 
 .book-meta {
@@ -426,6 +613,20 @@ onMounted(loadBook)
 .btn-large {
   padding: 14px 28px;
   font-size: var(--font-size-lg);
+}
+
+.btn-scrape {
+  background: linear-gradient(135deg, #5856D6 0%, #AF52DE 100%);
+  color: white;
+}
+
+.btn-scrape:hover {
+  opacity: 0.9;
+}
+
+.btn-scrape:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .book-rating {
