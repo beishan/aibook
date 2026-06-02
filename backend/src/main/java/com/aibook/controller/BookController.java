@@ -5,14 +5,22 @@ import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
 import com.aibook.service.BookService;
 import com.aibook.service.UserService;
+import com.aibook.util.MimeTypeUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 
@@ -204,5 +212,30 @@ public class BookController {
         Book.ReadingStatus status = Book.ReadingStatus.valueOf(body.get("status"));
         BookDTO book = bookService.updateReadingStatus(id, status, user);
         return ResponseEntity.ok(book);
+    }
+
+    /**
+     * 获取书籍文件内容（用于在线阅读）
+     */
+    @GetMapping("/{id}/content")
+    public ResponseEntity<Resource> getBookContent(
+            Authentication authentication,
+            @PathVariable Long id) {
+
+        User user = userService.findByUsername(authentication.getName());
+        BookDTO bookDTO = bookService.getBookById(id, user);
+
+        Path filePath = Paths.get(bookDTO.getFilePath());
+        if (!Files.exists(filePath)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        FileSystemResource resource = new FileSystemResource(filePath.toFile());
+        String contentType = MimeTypeUtil.getContentTypeWithCharset(bookDTO.getFormat());
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, contentType)
+                .header(HttpHeaders.CACHE_CONTROL, "max-age=3600")
+                .body(resource);
     }
 }

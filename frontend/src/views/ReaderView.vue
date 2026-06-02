@@ -13,34 +13,72 @@
         </el-button>
         <div class="reader-title">{{ book.title }}</div>
         <div class="reader-actions">
+          <el-button v-if="book.format === 'epub'" @click="toggleToc">
+            <el-icon><List /></el-icon>
+          </el-button>
           <el-button @click="showSettings = true">
             <el-icon><Setting /></el-icon>
           </el-button>
         </div>
       </div>
 
-      <!-- 阅读器内容 -->
-      <div class="reader-body" :style="readerStyle">
-        <div class="reader-text" v-if="book.format === 'txt' || book.format === 'md'">
-          <p v-for="(paragraph, index) in content" :key="index">{{ paragraph }}</p>
+      <div class="reader-body-wrapper">
+        <!-- EPUB 目录侧边栏 -->
+        <div v-if="showToc && book.format === 'epub'" class="toc-sidebar">
+          <div class="toc-header">目录</div>
+          <div class="toc-list">
+            <div
+              v-for="(item, index) in tocItems"
+              :key="index"
+              class="toc-item"
+              :class="{ active: item.href === currentTocHref }"
+              @click="goToTocItem(item)"
+            >
+              {{ item.label }}
+            </div>
+          </div>
         </div>
 
-        <div class="reader-html" v-else-if="book.format === 'html'" v-html="htmlContent">
-        </div>
+        <!-- 阅读器内容 -->
+        <div class="reader-body" :style="readerStyle">
+          <!-- EPUB 阅读器 -->
+          <div v-if="book.format === 'epub'" ref="epubContainer" class="epub-container"></div>
 
-        <div class="reader-placeholder" v-else>
-          <el-empty :description="`${book.format.toUpperCase()} 格式暂不支持在线阅读`">
-            <el-button type="primary" @click="handleDownload">下载文件</el-button>
-          </el-empty>
+          <!-- TXT / MD 阅读器 -->
+          <div v-else-if="book.format === 'txt' || book.format === 'md'" class="reader-text">
+            <p v-for="(paragraph, index) in content" :key="index">{{ paragraph }}</p>
+          </div>
+
+          <!-- HTML 阅读器 -->
+          <div v-else-if="book.format === 'html'" class="reader-html" v-html="htmlContent"></div>
+
+          <!-- PDF 阅读器 -->
+          <div v-else-if="book.format === 'pdf'" class="reader-pdf">
+            <iframe :src="pdfUrl" class="pdf-frame"></iframe>
+          </div>
+
+          <!-- 不支持的格式 -->
+          <div v-else class="reader-placeholder">
+            <el-empty :description="`${book.format.toUpperCase()} 格式暂不支持在线阅读`">
+              <el-button type="primary" @click="handleDownload">下载文件</el-button>
+            </el-empty>
+          </div>
         </div>
       </div>
 
       <!-- 阅读器底部 -->
-      <div class="reader-footer">
+      <div class="reader-footer" v-if="book.format !== 'epub'">
         <div class="progress-info">
           <span>进度：{{ progress }}%</span>
         </div>
         <el-slider v-model="progress" :max="100" :step="1" />
+      </div>
+
+      <!-- EPUB 底部导航 -->
+      <div class="reader-footer epub-footer" v-else>
+        <el-button @click="prevPage" :disabled="!bookInstance">上一页</el-button>
+        <span class="epub-location">{{ currentLocation || '' }}</span>
+        <el-button @click="nextPage" :disabled="!bookInstance">下一页</el-button>
       </div>
 
       <!-- 设置面板 -->
@@ -81,9 +119,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Setting } from '@element-plus/icons-vue'
+import { ArrowLeft, Setting, List } from '@element-plus/icons-vue'
 import { useBookStore } from '@/stores/book'
 
 const route = useRoute()
@@ -96,6 +134,21 @@ const content = ref<string[]>([])
 const htmlContent = ref('')
 const progress = ref(0)
 const showSettings = ref(false)
+const showToc = ref(false)
+const tocItems = ref<any[]>([])
+const currentTocHref = ref('')
+const currentLocation = ref('')
+
+// EPUB 相关
+const epubContainer = ref<HTMLElement>()
+let bookInstance: any = null
+let rendition: any = null
+
+const pdfUrl = computed(() => {
+  if (!book.value) return ''
+  const token = localStorage.getItem('token')
+  return `/api/books/${book.value.id}/content?token=${token}`
+})
 
 const settings = ref({
   fontFamily: 'default',
@@ -122,14 +175,13 @@ const loadBook = async () => {
   try {
     book.value = await bookStore.fetchBookById(id)
 
-    // TODO: 从后端加载书籍内容
-    // 这里先用示例内容
     if (book.value.format === 'txt' || book.value.format === 'md') {
-      content.value = [
-        '这是一本示例书籍的内容。',
-        '在实际使用中，这里会显示从后端加载的书籍内容。',
-        '支持多种格式的在线阅读。',
-      ]
+      await loadTextContent()
+    } else if (book.value.format === 'html') {
+      await loadHtmlContent()
+    } else if (book.value.format === 'epub') {
+      await nextTick()
+      initEpub()
     }
   } catch (error) {
     console.error('Failed to load book:', error)
@@ -138,15 +190,150 @@ const loadBook = async () => {
   }
 }
 
+const loadTextContent = async () => {
+  try {
+    const token = localStorage.getItem('token')
+    const response = await fetch(`/api/books/${book.value.id}/content`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    const text = await response.text()
+    content.value = text.split(/\n\n+/).filter(p => p.trim())
+  } catch (error) {
+    console.error('Failed to load text content:', error)
+    content.value = ['加载内容失败']
+  }
+}
+
+const loadHtmlContent = async () => {
+  try {
+    const token = localStorage.getItem('token')
+    const response = await fetch(`/api/books/${book.value.id}/content`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    htmlContent.value = await response.text()
+  } catch (error) {
+    console.error('Failed to load HTML content:', error)
+    htmlContent.value = '<p>加载内容失败</p>'
+  }
+}
+
+const initEpub = async () => {
+  try {
+    const ePub = (await import('epubjs')).default
+
+    const token = localStorage.getItem('token')
+    const url = `/api/books/${book.value.id}/content`
+
+    bookInstance = ePub(url, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+
+    await bookInstance.ready
+
+    // 获取目录
+    const navigation = bookInstance.navigation
+    if (navigation && navigation.toc) {
+      tocItems.value = flattenToc(navigation.toc)
+    }
+
+    // 渲染到容器
+    rendition = bookInstance.renderTo(epubContainer.value!, {
+      width: '100%',
+      height: '100%',
+      spread: 'none',
+    })
+
+    rendition.display()
+
+    // 监听位置变化
+    rendition.on('relocated', (location: any) => {
+      if (location && location.start) {
+        currentLocation.value = location.start.displayed
+          ? `${location.start.displayed.page} / ${location.start.displayed.total}`
+          : ''
+        // 更新进度
+        if (bookInstance.locations && bookInstance.locations.length()) {
+          const percentage = bookInstance.locations.percentageFromCfi(location.start.cfi)
+          progress.value = Math.round(percentage * 100)
+        }
+      }
+    })
+
+    // 生成 locations 用于进度计算
+    await bookInstance.locations.generate(1024)
+
+  } catch (error) {
+    console.error('Failed to init EPUB:', error)
+  }
+}
+
+const flattenToc = (toc: any[], result: any[] = []): any[] => {
+  for (const item of toc) {
+    result.push({ label: item.label.trim(), href: item.href })
+    if (item.subitems && item.subitems.length > 0) {
+      flattenToc(item.subitems, result)
+    }
+  }
+  return result
+}
+
+const toggleToc = () => {
+  showToc.value = !showToc.value
+}
+
+const goToTocItem = (item: any) => {
+  if (rendition) {
+    rendition.display(item.href)
+    currentTocHref.value = item.href
+  }
+}
+
+const prevPage = () => {
+  if (rendition) {
+    rendition.prev()
+  }
+}
+
+const nextPage = () => {
+  if (rendition) {
+    rendition.next()
+  }
+}
+
 const goBack = () => {
   router.back()
 }
 
 const handleDownload = () => {
-  // TODO: 实现下载功能
+  if (!book.value) return
+  const token = localStorage.getItem('token')
+  const link = document.createElement('a')
+  link.href = `/api/books/${book.value.id}/content`
+  link.setAttribute('download', `${book.value.title}.${book.value.format}`)
+  // For auth, we use a workaround: open in new tab
+  window.open(`/api/books/${book.value.id}/content`, '_blank')
 }
 
+// 监听设置变化，更新 EPUB 样式
+watch(() => settings.value, (newSettings) => {
+  if (rendition) {
+    rendition.themes.fontSize(`${newSettings.fontSize}px`)
+    rendition.themes.lineHeight(String(newSettings.lineHeight))
+    rendition.themes.override('color',
+      newSettings.backgroundColor === '#333' ? '#fff' : '#333')
+    rendition.themes.override('background', newSettings.backgroundColor)
+  }
+}, { deep: true })
+
 onMounted(loadBook)
+
+onBeforeUnmount(() => {
+  if (bookInstance) {
+    bookInstance.destroy()
+    bookInstance = null
+    rendition = null
+  }
+})
 </script>
 
 <style scoped>
@@ -169,6 +356,7 @@ onMounted(loadBook)
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .reader-header {
@@ -178,12 +366,57 @@ onMounted(loadBook)
   padding: 10px 20px;
   background: white;
   border-bottom: 1px solid #eee;
+  flex-shrink: 0;
 }
 
 .reader-title {
   font-size: 16px;
   font-weight: 500;
   color: #333;
+}
+
+.reader-body-wrapper {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.toc-sidebar {
+  width: 250px;
+  background: white;
+  border-right: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.toc-header {
+  padding: 12px 16px;
+  font-weight: 500;
+  border-bottom: 1px solid #eee;
+}
+
+.toc-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.toc-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+  transition: background 0.2s;
+}
+
+.toc-item:hover {
+  background: #f5f7fa;
+}
+
+.toc-item.active {
+  color: #409eff;
+  background: #ecf5ff;
 }
 
 .reader-body {
@@ -193,6 +426,11 @@ onMounted(loadBook)
   max-width: 800px;
   margin: 0 auto;
   width: 100%;
+}
+
+.epub-container {
+  width: 100%;
+  height: 100%;
 }
 
 .reader-text {
@@ -208,6 +446,17 @@ onMounted(loadBook)
   line-height: 1.8;
 }
 
+.reader-pdf {
+  width: 100%;
+  height: 100%;
+}
+
+.pdf-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
 .reader-placeholder {
   display: flex;
   align-items: center;
@@ -219,6 +468,18 @@ onMounted(loadBook)
   padding: 10px 20px;
   background: white;
   border-top: 1px solid #eee;
+  flex-shrink: 0;
+}
+
+.epub-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.epub-location {
+  font-size: 14px;
+  color: #666;
 }
 
 .progress-info {

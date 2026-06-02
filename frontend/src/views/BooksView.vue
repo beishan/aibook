@@ -3,7 +3,7 @@
     <div class="page-header">
       <h2>书库</h2>
       <div class="header-actions">
-        <el-button type="primary" @click="$router.push('/books/upload')">
+        <el-button type="primary" @click="showUploadDialog = true">
           <el-icon><Upload /></el-icon>
           上传书籍
         </el-button>
@@ -77,7 +77,7 @@
     <!-- 空状态 -->
     <div v-else-if="bookStore.books.length === 0" class="empty-state">
       <el-empty description="书库空空如也，快去上传书籍吧">
-        <el-button type="primary" @click="$router.push('/books/upload')">上传书籍</el-button>
+        <el-button type="primary" @click="showUploadDialog = true">上传书籍</el-button>
       </el-empty>
     </div>
 
@@ -182,6 +182,17 @@
         @current-change="loadBooks"
       />
     </div>
+
+    <!-- 上传对话框 -->
+    <el-dialog
+      v-model="showUploadDialog"
+      title="上传书籍"
+      width="600px"
+      :close-on-click-modal="false"
+      @closed="handleUploadDialogClosed"
+    >
+      <FileUpload @success="handleUploadSuccess" />
+    </el-dialog>
   </div>
 </template>
 
@@ -191,6 +202,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Star, Clock, Upload, Grid, List } from '@element-plus/icons-vue'
 import { useBookStore } from '@/stores/book'
+import FileUpload from '@/components/FileUpload.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -203,6 +215,16 @@ const sortBy = ref('createdAt')
 const viewMode = ref<'card' | 'list'>('card')
 const currentPage = ref(1)
 const pageSize = ref(10)
+const showUploadDialog = ref(false)
+
+const handleUploadSuccess = () => {
+  showUploadDialog.value = false
+  loadBooks()
+}
+
+const handleUploadDialogClosed = () => {
+  loadBooks()
+}
 
 const loadBooks = async () => {
   if (searchKeyword.value) {

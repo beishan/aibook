@@ -45,6 +45,10 @@ minio:
   secret-key: ${MINIO_SECRET_KEY:${MINIO_PASSWORD:memoryvault}}
   bucket-name: aibook
 
+# Upload configuration
+upload:
+  path: ${UPLOAD_PATH:/app/uploads}
+
 # Book scanning configuration
 scanning:
   enabled: true
