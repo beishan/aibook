@@ -41,7 +41,7 @@
           @click="$router.push(`/books/${book.id}`)"
         >
           <div class="book-cover">
-            <img v-if="book.coverUrl" :src="book.coverUrl" alt="封面" />
+            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
           </div>
           <div class="book-info">
@@ -67,7 +67,7 @@
           @click="$router.push(`/reader/${book.id}`)"
         >
           <div class="book-cover">
-            <img v-if="book.coverUrl" :src="book.coverUrl" alt="封面" />
+            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
           </div>
           <div class="book-info">
@@ -92,7 +92,7 @@
           @click="$router.push(`/books/${book.id}`)"
         >
           <div class="book-cover">
-            <img v-if="book.coverUrl" :src="book.coverUrl" alt="封面" />
+            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
           </div>
           <div class="book-info">
@@ -118,7 +118,7 @@
           @click="$router.push(`/books/${book.id}`)"
         >
           <div class="book-cover">
-            <img v-if="book.coverUrl" :src="book.coverUrl" alt="封面" />
+            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
           </div>
           <div class="book-info">
@@ -154,7 +154,7 @@
               :key="book.id"
               class="list-book-cover"
             >
-              <img v-if="book.coverUrl" :src="book.coverUrl" alt="封面" />
+              <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
               <div v-else class="no-cover-small">{{ book.title.charAt(0) }}</div>
             </div>
           </div>
@@ -197,6 +197,7 @@ import { ref, computed, onMounted } from 'vue'
 import { message } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import api from '@/utils/api'
+import { getCoverUrl } from '@/utils/cover'
 
 const bookStore = useBookStore()
 

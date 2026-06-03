@@ -57,10 +57,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private String parseJwt(HttpServletRequest request) {
+        // 1. 优先从Authorization header读取
         String headerAuth = request.getHeader("Authorization");
 
         if (StringUtils.hasText(headerAuth) && headerAuth.startsWith("Bearer ")) {
             return headerAuth.substring(7);
+        }
+
+        // 2. 从查询参数读取（支持SSE连接）
+        String token = request.getParameter("token");
+        if (StringUtils.hasText(token)) {
+            return token;
         }
 
         return null;

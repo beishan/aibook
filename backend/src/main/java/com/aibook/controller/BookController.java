@@ -1,11 +1,18 @@
 package com.aibook.controller;
 
+import com.aibook.dto.BatchScrapeRequest;
 import com.aibook.dto.BookDTO;
+import com.aibook.dto.ScrapeTaskDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
 import com.aibook.service.BookService;
 import com.aibook.service.UserService;
+import com.aibook.service.scraper.BatchScrapeTaskService;
+import com.aibook.service.scraper.CoverDownloadService;
+import com.aibook.service.scraper.MetadataScrapingService;
 import com.aibook.util.MimeTypeUtil;
+import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -16,6 +23,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -35,6 +43,9 @@ public class BookController {
 
     private final BookService bookService;
     private final UserService userService;
+    private final MetadataScrapingService metadataScrapingService;
+    private final CoverDownloadService coverDownloadService;
+    private final BatchScrapeTaskService batchScrapeTaskService;
 
     /**
      * 获取书籍列表
@@ -237,5 +248,133 @@ public class BookController {
                 .header(HttpHeaders.CONTENT_TYPE, contentType)
                 .header(HttpHeaders.CACHE_CONTROL, "max-age=3600")
                 .body(resource);
+    }
+
+    /**
+     * 刮削书籍元数据
+     */
+    @PostMapping("/{id}/scrape")
+    public ResponseEntity<Map<String, Object>> scrapeBook(
+            Authentication authentication,
+            @PathVariable Long id) {
+
+        User user = userService.findByUsername(authentication.getName());
+        Book book = bookService.getBookEntity(id, user);
+        Book scrapedBook = metadataScrapingService.scrapeBook(book);
+        BookDTO bookDTO = bookService.convertToDTO(scrapedBook);
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "book", bookDTO
+        ));
+    }
+
+    /**
+     * 下载书籍封面
+     */
+    @PostMapping("/{id}/cover")
+    public ResponseEntity<Map<String, Object>> downloadCover(
+            Authentication authentication,
+            @PathVariable Long id) {
+
+        User user = userService.findByUsername(authentication.getName());
+        Book book = bookService.getBookEntity(id, user);
+        Book updatedBook = coverDownloadService.downloadCover(book);
+        BookDTO bookDTO = bookService.convertToDTO(updatedBook);
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "book", bookDTO
+        ));
+    }
+
+    /**
+     * 批量刮削指定书籍
+     */
+    @PostMapping("/batch-scrape")
+    public ResponseEntity<Map<String, String>> batchScrape(
+            Authentication authentication,
+            @Valid @RequestBody BatchScrapeRequest request) {
+
+        User user = userService.findByUsername(authentication.getName());
+        String taskId = batchScrapeTaskService.createTask(request.getBookIds(), user, request.isForceUpdate());
+
+        return ResponseEntity.ok(Map.of("taskId", taskId));
+    }
+
+    /**
+     * 刮削所有缺少元数据的书籍
+     */
+    @PostMapping("/scrape-all-incomplete")
+    public ResponseEntity<Map<String, String>> scrapeAllIncomplete(
+            Authentication authentication,
+            @RequestParam(defaultValue = "false") boolean forceUpdate) {
+
+        User user = userService.findByUsername(authentication.getName());
+        String taskId = batchScrapeTaskService.createScrapeAllIncompleteTask(user, forceUpdate);
+
+        return ResponseEntity.ok(Map.of("taskId", taskId));
+    }
+
+    /**
+     * 查询刮削任务状态（轮询用）
+     */
+    @GetMapping("/scrape-task/{taskId}")
+    public ResponseEntity<ScrapeTaskDTO> getScrapeTask(
+            @PathVariable String taskId) {
+
+        ScrapeTaskDTO task = batchScrapeTaskService.getTask(taskId);
+        if (task == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(task);
+    }
+
+    /**
+     * SSE实时推送刮削进度
+     */
+    @GetMapping(value = "/scrape-task/{taskId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamScrapeProgress(@PathVariable String taskId) {
+
+        SseEmitter emitter = new SseEmitter(600000L); // 10分钟超时
+
+        ScrapeTaskDTO task = batchScrapeTaskService.getTask(taskId);
+        if (task == null) {
+            emitter.completeWithError(new IllegalArgumentException("任务不存在"));
+            return emitter;
+        }
+
+        // 如果任务已完成，直接发送最终状态
+        if ("COMPLETED".equals(task.getStatus()) ||
+            "FAILED".equals(task.getStatus()) ||
+            "CANCELLED".equals(task.getStatus())) {
+            try {
+                emitter.send(SseEmitter.event()
+                        .name("scrape-progress")
+                        .data(task));
+                emitter.complete();
+            } catch (Exception e) {
+                emitter.completeWithError(e);
+            }
+            return emitter;
+        }
+
+        // 注册SSE连接
+        batchScrapeTaskService.addSseEmitter(taskId, emitter);
+
+        return emitter;
+    }
+
+    /**
+     * 取消刮削任务
+     */
+    @PostMapping("/scrape-task/{taskId}/cancel")
+    public ResponseEntity<Map<String, Boolean>> cancelScrapeTask(
+            @PathVariable String taskId) {
+
+        boolean cancelled = batchScrapeTaskService.cancelTask(taskId);
+
+        return ResponseEntity.ok(Map.of("cancelled", cancelled));
     }
 }

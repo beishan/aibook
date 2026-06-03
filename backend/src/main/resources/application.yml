@@ -26,7 +26,13 @@ spring:
         format_sql: true
 
   cache:
-    type: simple
+    type: redis
+
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:memoryvault}
 
   servlet:
     multipart:

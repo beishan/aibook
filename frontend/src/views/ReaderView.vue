@@ -16,7 +16,7 @@
         </button>
         <div class="reader-title">{{ book.title }}</div>
         <div class="reader-actions">
-          <button v-if="book.format === 'epub'" class="btn btn-icon" @click="toggleToc">
+          <button v-if="book.format === 'epub' || tocItems.length > 0" class="btn btn-icon" @click="toggleToc">
             <span>☰</span>
           </button>
           <button class="btn btn-icon" @click="showSettings = true">
@@ -26,9 +26,9 @@
       </header>
 
       <div class="reader-body-wrapper">
-        <!-- EPUB 目录侧边栏 -->
+        <!-- 目录侧边栏 -->
         <Transition name="slide-left">
-          <div v-if="showToc && book.format === 'epub'" class="toc-sidebar glass">
+          <div v-if="showToc && (book.format === 'epub' || tocItems.length > 0)" class="toc-sidebar glass">
             <div class="toc-header">
               <span>📑 目录</span>
               <button class="btn btn-icon btn-small" @click="showToc = false">✕</button>
@@ -54,7 +54,12 @@
 
           <!-- TXT / MD 阅读器 -->
           <div v-else-if="book.format === 'txt' || book.format === 'md'" class="reader-text">
-            <p v-for="(paragraph, index) in content" :key="index">{{ paragraph }}</p>
+            <template v-for="(paragraph, index) in content" :key="index">
+              <div v-if="isChapterTitle(paragraph)" class="chapter-title" :id="'chapter-' + index">
+                {{ paragraph }}
+              </div>
+              <p v-else>{{ paragraph }}</p>
+            </template>
           </div>
 
           <!-- HTML 阅读器 -->
@@ -179,6 +184,12 @@ const route = useRoute()
 const router = useRouter()
 const bookStore = useBookStore()
 
+// 章节接口定义
+interface Chapter {
+  title: string
+  index: number
+}
+
 const book = ref<any>(null)
 const loading = ref(true)
 const content = ref<string[]>([])
@@ -186,7 +197,7 @@ const htmlContent = ref('')
 const progress = ref(0)
 const showSettings = ref(false)
 const showToc = ref(false)
-const tocItems = ref<any[]>([])
+const tocItems = ref<Chapter[]>([])
 const currentTocHref = ref('')
 const currentLocation = ref('')
 
@@ -216,6 +227,11 @@ const readerStyle = computed(() => ({
   color: settings.value.backgroundColor === '#333' ? '#fff' : '#333',
 }))
 
+// 阅读进度保存相关
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+let readingStartTime = 0
+const savedCfi = ref<string | null>(null)
+
 const loadBook = async () => {
   const id = Number(route.params.id)
   if (isNaN(id)) {
@@ -226,6 +242,9 @@ const loadBook = async () => {
   try {
     book.value = await bookStore.fetchBookById(id)
 
+    // 加载已保存的阅读进度
+    await loadSavedProgress(id)
+
     if (book.value.format === 'txt' || book.value.format === 'md') {
       await loadTextContent()
     } else if (book.value.format === 'html') {
@@ -234,11 +253,130 @@ const loadBook = async () => {
       await nextTick()
       initEpub()
     }
+
+    // 记录开始阅读时间
+    readingStartTime = Date.now()
   } catch (error) {
     console.error('Failed to load book:', error)
   } finally {
     loading.value = false
   }
+}
+
+/**
+ * 加载已保存的阅读进度
+ */
+const loadSavedProgress = async (bookId: number) => {
+  try {
+    const token = localStorage.getItem('token')
+    const response = await fetch(`/api/reading-progress/book/${bookId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (response.ok) {
+      const data = await response.json()
+      console.log('[Reader] Loaded progress:', data)
+      if (data.totalProgress > 0) {
+        progress.value = data.totalProgress
+      }
+      if (data.currentChapter) {
+        savedCfi.value = data.currentChapter
+        console.log('[Reader] Saved CFI:', savedCfi.value)
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load reading progress:', error)
+  }
+}
+
+/**
+ * 保存阅读进度（防抖）
+ */
+const saveProgress = (totalProgress: number, currentChapter?: string) => {
+  if (!book.value) return
+
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(async () => {
+    try {
+      const token = localStorage.getItem('token')
+      await fetch(`/api/reading-progress/book/${book.value.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          currentChapter: currentChapter || '',
+          chapterProgress: 0,
+          totalProgress: Math.round(totalProgress)
+        })
+      })
+    } catch (error) {
+      console.error('Failed to save reading progress:', error)
+    }
+  }, 1000)
+}
+
+/**
+ * 保存阅读时长
+ */
+const saveReadingTime = async () => {
+  if (!book.value || readingStartTime === 0) return
+
+  const elapsedSeconds = Math.floor((Date.now() - readingStartTime) / 1000)
+  if (elapsedSeconds < 5) return // 少于5秒不记录
+
+  try {
+    const token = localStorage.getItem('token')
+    await fetch(`/api/reading-progress/book/${book.value.id}/time`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ seconds: elapsedSeconds })
+    })
+  } catch (error) {
+    console.error('Failed to save reading time:', error)
+  }
+}
+
+/**
+ * 解析章节标题，生成目录
+ */
+const parseChapters = (paragraphs: string[]): Chapter[] => {
+  const chapters: Chapter[] = []
+
+  // 章节匹配正则表达式
+  const patterns = [
+    // 中文数字格式：第X章/回/节/卷/篇
+    /^第[一二三四五六七八九十百千万零\d]+[章回节卷篇]/,
+    // 英文格式：Chapter X
+    /^Chapter\s+\d+/i,
+    // 卷X格式
+    /^卷[一二三四五六七八九十\d]+/,
+    // 特殊章节：序章、楔子、尾声等
+    /^(序章|楔子|尾声|后记|前言|引言)/,
+  ]
+
+  paragraphs.forEach((paragraph, index) => {
+    const trimmed = paragraph.trim()
+    // 检查是否匹配章节模式
+    if (patterns.some(pattern => pattern.test(trimmed))) {
+      chapters.push({
+        title: trimmed,
+        index
+      })
+    }
+  })
+
+  return chapters
+}
+
+/**
+ * 判断是否为章节标题
+ */
+const isChapterTitle = (paragraph: string): boolean => {
+  return tocItems.value.some(item => item.title === paragraph.trim())
 }
 
 const loadTextContent = async () => {
@@ -249,10 +387,72 @@ const loadTextContent = async () => {
     })
     const text = await response.text()
     content.value = text.split(/\n\n+/).filter(p => p.trim())
+
+    // 解析章节并生成目录
+    tocItems.value = parseChapters(content.value)
+
+    // 等待 DOM 渲染后恢复滚动位置并监听滚动
+    await nextTick()
+    restoreScrollPosition()
+    setupScrollListener()
   } catch (error) {
     console.error('Failed to load text content:', error)
     content.value = ['加载内容失败']
   }
+}
+
+/**
+ * 恢复 TXT/MD 滚动位置
+ */
+const restoreScrollPosition = () => {
+  if (progress.value > 0) {
+    const readerBody = document.querySelector('.reader-body')
+    if (readerBody) {
+      const maxScroll = readerBody.scrollHeight - readerBody.clientHeight
+      readerBody.scrollTop = maxScroll * (progress.value / 100)
+    }
+  }
+}
+
+/**
+ * 监听 TXT/MD 滚动事件，保存进度
+ */
+const setupScrollListener = () => {
+  const readerBody = document.querySelector('.reader-body')
+  if (!readerBody) return
+
+  readerBody.addEventListener('scroll', () => {
+    const maxScroll = readerBody.scrollHeight - readerBody.clientHeight
+    if (maxScroll > 0) {
+      const currentProgress = Math.round((readerBody.scrollTop / maxScroll) * 100)
+      if (Math.abs(currentProgress - progress.value) >= 1) {
+        progress.value = currentProgress
+        // 找到当前可见的章节作为 currentChapter
+        const currentChapter = findCurrentChapter()
+        saveProgress(currentProgress, currentChapter)
+      }
+    }
+  })
+}
+
+/**
+ * 找到当前可见的章节
+ */
+const findCurrentChapter = (): string => {
+  const readerBody = document.querySelector('.reader-body')
+  if (!readerBody) return ''
+
+  const scrollTop = readerBody.scrollTop
+  let currentChapter = ''
+
+  for (const item of tocItems.value) {
+    const element = document.getElementById('chapter-' + item.index)
+    if (element && element.offsetTop <= scrollTop + 100) {
+      currentChapter = item.title
+    }
+  }
+
+  return currentChapter
 }
 
 const loadHtmlContent = async () => {
@@ -292,6 +492,7 @@ const initEpub = async () => {
       width: '100%',
       height: '100%',
       spread: 'none',
+      allowScriptedContent: true,
     })
 
     rendition.on('relocated', (location: any) => {
@@ -302,6 +503,8 @@ const initEpub = async () => {
         if (bookInstance.locations && bookInstance.locations.length()) {
           const percentage = bookInstance.locations.percentageFromCfi(location.start.cfi)
           progress.value = Math.round(percentage * 100)
+          // 保存阅读进度，用 CFI 作为当前章节标记
+          saveProgress(progress.value, location.start.cfi)
         }
       }
     })
@@ -310,9 +513,24 @@ const initEpub = async () => {
       applyThemeToContent(contents)
     })
 
-    await rendition.display()
-
+    // 先生成 locations，再 display，否则首次 relocated 事件中无法计算进度
     await bookInstance.locations.generate(1024)
+    console.log('[Reader] Locations generated, count:', bookInstance.locations.length())
+
+    // 如果有保存的阅读位置，恢复到该位置
+    if (savedCfi.value) {
+      console.log('[Reader] Restoring to CFI:', savedCfi.value)
+      try {
+        await rendition.display(savedCfi.value)
+        console.log('[Reader] Restored to saved position')
+      } catch (e) {
+        console.error('[Reader] Failed to restore CFI, falling back to start:', e)
+        await rendition.display()
+      }
+    } else {
+      console.log('[Reader] No saved CFI, starting from beginning')
+      await rendition.display()
+    }
 
   } catch (error) {
     console.error('Failed to init EPUB:', error)
@@ -333,10 +551,17 @@ const toggleToc = () => {
   showToc.value = !showToc.value
 }
 
-const goToTocItem = (item: any) => {
-  if (rendition) {
+const goToTocItem = (item: Chapter | any) => {
+  if (book.value?.format === 'epub' && rendition) {
+    // EPUB跳转
     rendition.display(item.href)
     currentTocHref.value = item.href
+  } else if (book.value?.format === 'txt' || book.value?.format === 'md') {
+    // TXT/MD跳转 - 滚动到对应章节
+    const element = document.getElementById('chapter-' + item.index)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' })
+    }
   }
 }
 
@@ -411,6 +636,47 @@ watch(() => settings.value, () => {
 onMounted(loadBook)
 
 onBeforeUnmount(() => {
+  // 清除防抖定时器
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+
+  const token = localStorage.getItem('token')
+
+  // 离开页面时同步保存最终进度（keepalive 保证请求不被取消）
+  if (book.value && progress.value > 0 && token) {
+    fetch(`/api/reading-progress/book/${book.value.id}`, {
+      method: 'POST',
+      keepalive: true,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        currentChapter: savedCfi.value || '',
+        chapterProgress: 0,
+        totalProgress: Math.round(progress.value)
+      })
+    })
+  }
+
+  // 保存阅读时长
+  if (book.value && readingStartTime > 0 && token) {
+    const elapsedSeconds = Math.floor((Date.now() - readingStartTime) / 1000)
+    if (elapsedSeconds >= 5) {
+      fetch(`/api/reading-progress/book/${book.value.id}/time`, {
+        method: 'PUT',
+        keepalive: true,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ seconds: elapsedSeconds })
+      })
+    }
+  }
+
   if (bookInstance) {
     bookInstance.destroy()
     bookInstance = null
@@ -609,6 +875,16 @@ onBeforeUnmount(() => {
 .reader-text p {
   margin-bottom: 1em;
   text-indent: 2em;
+}
+
+.chapter-title {
+  font-size: 1.5em;
+  font-weight: bold;
+  text-align: center;
+  margin: 2em 0 1em 0;
+  padding: 0.5em 0;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .reader-html {

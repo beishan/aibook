@@ -17,7 +17,7 @@
       <!-- 书籍头部 -->
       <div class="book-header">
         <div class="book-cover">
-          <img v-if="book.coverUrl" :src="book.coverUrl" alt="封面" class="cover-image" />
+          <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" class="cover-image" />
           <div v-else class="no-cover">
             <span>{{ book.title.charAt(0) }}</span>
           </div>
@@ -234,6 +234,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { message } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import { scrapeBook, downloadCover } from '@/utils/scraper'
+import { getCoverUrl } from '@/utils/cover'
 import ScraperDialog from '@/components/ScraperDialog.vue'
 
 const route = useRoute()

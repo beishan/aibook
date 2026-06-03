@@ -46,7 +46,7 @@
             @click="$router.push(`/reader/${book.id}`)"
           >
             <div class="book-cover">
-              <img v-if="book.coverUrl" :src="book.coverUrl" alt="封面" />
+              <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
               <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
             </div>
             <div class="book-info">
@@ -91,6 +91,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useBookStore } from '@/stores/book'
+import { getCoverUrl } from '@/utils/cover'
 
 const bookStore = useBookStore()
 
