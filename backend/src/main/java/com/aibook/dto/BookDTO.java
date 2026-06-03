@@ -36,6 +36,7 @@ public class BookDTO {
     private Boolean isFavorite;
     private Boolean isWanted;
     private String notes;
+    private String chapterInfo;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

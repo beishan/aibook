@@ -188,6 +188,8 @@ const bookStore = useBookStore()
 interface Chapter {
   title: string
   index: number
+  startIndex?: number
+  endIndex?: number
 }
 
 const book = ref<any>(null)
@@ -341,35 +343,56 @@ const saveReadingTime = async () => {
 }
 
 /**
- * 解析章节标题，生成目录
+ * 解析章节标题，生成目录（客户端降级方案）
  */
 const parseChapters = (paragraphs: string[]): Chapter[] => {
   const chapters: Chapter[] = []
 
   // 章节匹配正则表达式
   const patterns = [
-    // 中文数字格式：第X章/回/节/卷/篇
     /^第[一二三四五六七八九十百千万零\d]+[章回节卷篇]/,
-    // 英文格式：Chapter X
     /^Chapter\s+\d+/i,
-    // 卷X格式
     /^卷[一二三四五六七八九十\d]+/,
-    // 特殊章节：序章、楔子、尾声等
-    /^(序章|楔子|尾声|后记|前言|引言)/,
+    /^(序章|序幕|楔子|尾声|终章|后记|前言|引言|番外|附录)/,
+    /^【[^】]{1,50}】/,
+    /^#{1,3}\s+.{1,100}/,
   ]
 
   paragraphs.forEach((paragraph, index) => {
     const trimmed = paragraph.trim()
-    // 检查是否匹配章节模式
     if (patterns.some(pattern => pattern.test(trimmed))) {
-      chapters.push({
-        title: trimmed,
-        index
-      })
+      chapters.push({ title: trimmed, index })
     }
   })
 
   return chapters
+}
+
+/**
+ * 将后端章节信息映射到段落索引（按标题匹配，不依赖字符位置）
+ */
+const mapChaptersToParagraphs = (
+  backendChapters: { title: string; startIndex: number; endIndex: number }[],
+  processedText: string
+): Chapter[] => {
+  const paragraphs = processedText.split(/\n\n+/)
+  const result: Chapter[] = []
+
+  for (const ch of backendChapters) {
+    const titleTrimmed = ch.title.trim()
+    // 在段落中查找匹配的标题
+    const paraIndex = paragraphs.findIndex(p => p.trim() === titleTrimmed)
+    if (paraIndex >= 0) {
+      result.push({
+        title: titleTrimmed,
+        index: paraIndex,
+        startIndex: ch.startIndex,
+        endIndex: ch.endIndex
+      })
+    }
+  }
+
+  return result
 }
 
 /**
@@ -382,14 +405,46 @@ const isChapterTitle = (paragraph: string): boolean => {
 const loadTextContent = async () => {
   try {
     const token = localStorage.getItem('token')
-    const response = await fetch(`/api/books/${book.value.id}/content`, {
+
+    // 优先使用后端处理端点（带段落归一化 + 章节信息）
+    const response = await fetch(`/api/books/${book.value.id}/content-processed`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-    const text = await response.text()
-    content.value = text.split(/\n\n+/).filter(p => p.trim())
 
-    // 解析章节并生成目录
-    tocItems.value = parseChapters(content.value)
+    if (response.ok) {
+      const data = await response.json()
+      // 分段
+      content.value = data.text.split(/\n\n+/).filter((p: string) => p.trim())
+
+      // 使用后端章节信息
+      if (data.chapterInfo && data.chapterInfo !== '[]') {
+        try {
+          const backendChapters = JSON.parse(data.chapterInfo)
+          if (backendChapters.length > 0) {
+            tocItems.value = mapChaptersToParagraphs(backendChapters, data.text)
+            console.log('[Reader] Backend chapters:', tocItems.value.length, tocItems.value.slice(0, 3))
+          } else {
+            tocItems.value = parseChapters(content.value)
+            console.log('[Reader] Client chapters (fallback):', tocItems.value.length)
+          }
+        } catch (e) {
+          console.error('[Reader] Failed to parse chapterInfo:', e)
+          tocItems.value = parseChapters(content.value)
+        }
+      } else {
+        tocItems.value = parseChapters(content.value)
+        console.log('[Reader] No backend chapterInfo, client chapters:', tocItems.value.length)
+      }
+    } else {
+      // 降级：原始内容 + 客户端解析
+      console.warn('[Reader] content-processed failed, status:', response.status)
+      const rawResponse = await fetch(`/api/books/${book.value.id}/content`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const text = await rawResponse.text()
+      content.value = text.split(/\n\n+/).filter(p => p.trim())
+      tocItems.value = parseChapters(content.value)
+    }
 
     // 等待 DOM 渲染后恢复滚动位置并监听滚动
     await nextTick()

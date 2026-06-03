@@ -217,6 +217,7 @@ public class BookService {
                 .isFavorite(book.getIsFavorite())
                 .isWanted(book.getIsWanted())
                 .notes(book.getNotes())
+                .chapterInfo(book.getChapterInfo())
                 .createdAt(book.getCreatedAt())
                 .updatedAt(book.getUpdatedAt())
                 .build();

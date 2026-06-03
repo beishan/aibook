@@ -149,6 +149,13 @@ public class Book {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
+    /**
+     * 章节信息 (JSON格式，仅TXT/MD)
+     * 格式: [{"title":"...","startIndex":0,"endIndex":1234},...]
+     */
+    @Column(columnDefinition = "TEXT")
+    private String chapterInfo;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

@@ -30,6 +30,7 @@ public class FileScannerService {
     private final BookRepository bookRepository;
     private final UserRepository userRepository;
     private final MetadataService metadataService;
+    private final TxtParserService txtParserService;
 
     @Value("#{'${scanning.directories:/books/fiction,/books/tech}'.split(',')}")
     private List<String> scanDirectories;
@@ -183,7 +184,14 @@ public class FileScannerService {
                     break;
                 case "txt":
                 case "md":
-                    // 纯文本格式暂不提取元数据
+                    try {
+                        String chapterInfo = txtParserService.parseChapters(file);
+                        book.setChapterInfo(chapterInfo);
+                        log.info("TXT章节解析成功: {}，章节数: {}", file,
+                                chapterInfo.split("\"title\"").length - 1);
+                    } catch (Exception e) {
+                        log.warn("TXT章节解析失败: {}", file, e);
+                    }
                     break;
                 default:
                     log.debug("格式 {} 暂不支持元数据提取", format);

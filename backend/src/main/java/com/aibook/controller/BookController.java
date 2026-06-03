@@ -5,7 +5,9 @@ import com.aibook.dto.BookDTO;
 import com.aibook.dto.ScrapeTaskDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
+import com.aibook.repository.BookRepository;
 import com.aibook.service.BookService;
+import com.aibook.service.TxtParserService;
 import com.aibook.service.UserService;
 import com.aibook.service.scraper.BatchScrapeTaskService;
 import com.aibook.service.scraper.CoverDownloadService;
@@ -14,6 +16,7 @@ import com.aibook.util.MimeTypeUtil;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
@@ -39,6 +42,7 @@ import java.util.Map;
 @RequestMapping("/api/books")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
+@Slf4j
 public class BookController {
 
     private final BookService bookService;
@@ -46,6 +50,8 @@ public class BookController {
     private final MetadataScrapingService metadataScrapingService;
     private final CoverDownloadService coverDownloadService;
     private final BatchScrapeTaskService batchScrapeTaskService;
+    private final TxtParserService txtParserService;
+    private final BookRepository bookRepository;
 
     /**
      * 获取书籍列表
@@ -248,6 +254,71 @@ public class BookController {
                 .header(HttpHeaders.CONTENT_TYPE, contentType)
                 .header(HttpHeaders.CACHE_CONTROL, "max-age=3600")
                 .body(resource);
+    }
+
+    /**
+     * 获取TXT处理后的内容（带段落结构 + 章节信息）
+     */
+    @GetMapping("/{id}/content-processed")
+    public ResponseEntity<Map<String, String>> getProcessedContent(
+            Authentication authentication,
+            @PathVariable Long id) {
+
+        User user = userService.findByUsername(authentication.getName());
+        BookDTO bookDTO = bookService.getBookById(id, user);
+
+        Path filePath = Paths.get(bookDTO.getFilePath());
+        if (!Files.exists(filePath)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        try {
+            String rawText = txtParserService.readFileWithEncoding(filePath);
+            String processedText = txtParserService.processText(rawText);
+            return ResponseEntity.ok(Map.of(
+                    "text", processedText,
+                    "chapterInfo", bookDTO.getChapterInfo() != null ? bookDTO.getChapterInfo() : "[]"
+            ));
+        } catch (Exception e) {
+            log.error("处理TXT内容失败: {}", filePath, e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * 重新解析TXT章节信息
+     */
+    @PostMapping("/{id}/parse-chapters")
+    public ResponseEntity<Map<String, Object>> parseChapters(
+            Authentication authentication,
+            @PathVariable Long id) {
+
+        User user = userService.findByUsername(authentication.getName());
+        Book book = bookService.getBookEntity(id, user);
+
+        if (!"txt".equals(book.getFormat()) && !"md".equals(book.getFormat())) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "仅支持TXT/MD格式"
+            ));
+        }
+
+        try {
+            String chapterInfo = txtParserService.parseChapters(Paths.get(book.getFilePath()));
+            book.setChapterInfo(chapterInfo);
+            bookRepository.save(book);
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "chapterInfo", chapterInfo
+            ));
+        } catch (Exception e) {
+            log.error("解析章节失败: {}", book.getFilePath(), e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "success", false,
+                    "message", "解析失败: " + e.getMessage()
+            ));
+        }
     }
 
     /**

@@ -22,6 +22,7 @@ interface Book {
   isFavorite: boolean
   isWanted: boolean
   notes?: string
+  chapterInfo?: string
   createdAt: string
   updatedAt: string
 }

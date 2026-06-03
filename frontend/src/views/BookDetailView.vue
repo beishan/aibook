@@ -93,6 +93,15 @@
               <span>🖼️</span>
               <span>{{ downloadingCover ? '下载中...' : '下载封面' }}</span>
             </button>
+            <button
+              v-if="book.format === 'txt' || book.format === 'md'"
+              class="btn"
+              @click="handleReparse"
+              :disabled="reparsing"
+            >
+              <span>📑</span>
+              <span>{{ reparsing ? '解析中...' : '重新解析章节' }}</span>
+            </button>
           </div>
 
           <div class="book-rating">
@@ -246,6 +255,7 @@ const loading = ref(true)
 const notes = ref('')
 const activeTab = ref('description')
 const scraping = ref(false)
+const reparsing = ref(false)
 const downloadingCover = ref(false)
 const showScraperDialog = ref(false)
 const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
@@ -379,6 +389,29 @@ const handleDownloadCover = async () => {
     message.error(error.response?.data?.message || '封面下载失败')
   } finally {
     downloadingCover.value = false
+  }
+}
+
+const handleReparse = async () => {
+  if (!book.value) return
+  reparsing.value = true
+  try {
+    const token = localStorage.getItem('token')
+    const response = await fetch(`/api/books/${book.value.id}/parse-chapters`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    const result = await response.json()
+    if (result.success) {
+      book.value.chapterInfo = result.chapterInfo
+      message.success('章节解析完成')
+    } else {
+      message.error(result.message || '解析失败')
+    }
+  } catch {
+    message.error('解析失败')
+  } finally {
+    reparsing.value = false
   }
 }
 
