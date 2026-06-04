@@ -548,6 +548,37 @@ onMounted(() => {
   margin-bottom: var(--spacing-lg);
 }
 
+.btn-group {
+  display: inline-flex;
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  padding: 4px;
+  gap: 2px;
+  border: 1px solid var(--border-color-light);
+}
+
+.btn-group .btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  transition: all 0.2s ease;
+}
+
+.btn-group .btn:hover {
+  background: var(--surface-hover);
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-group .btn.active {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 2px 8px var(--primary-alpha-30);
+}
+
 .selection-controls {
   display: flex;
   gap: var(--spacing-sm);
