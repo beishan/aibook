@@ -574,43 +574,18 @@ const calculatePageSize = (): number => {
   const readerBody = document.querySelector('.reader-body')
   if (!readerBody) return 5
 
-  // 先临时显示所有内容来测量
-  const testContainer = document.createElement('div')
-  testContainer.style.cssText = `
-    position: absolute;
-    visibility: hidden;
-    height: auto;
-    width: ${readerBody.clientWidth - 120}px;
-    padding: 40px 60px;
-    font-size: ${settings.value.fontSize}px;
-    line-height: ${settings.value.lineHeight};
-    font-family: ${settings.value.fontFamily === 'default' ? 'inherit' : settings.value.fontFamily};
-  `
-  document.body.appendChild(testContainer)
+  // 可用高度 = 容器高度 - 上下padding(40px*2) - 提示区域(80px)
+  const availableHeight = readerBody.clientHeight - 160
+  const lineHeight = settings.value.fontSize * settings.value.lineHeight
+  const paragraphSpacing = settings.value.paragraphSpacing
 
-  // 测量每个段落的实际高度
-  const paragraphHeights: number[] = []
-  const sampleSize = Math.min(content.value.length, 20) // 只测量前20段
+  // 保守估计每段高度：假设较长的段落会换行
+  // 中文段落平均约50-80字，在手机宽度约30字/行，所以约2-3行
+  const charsPerLine = Math.floor((readerBody.clientWidth - 120) / (settings.value.fontSize * 0.9))
+  const avgLinesPerParagraph = Math.max(2, Math.ceil(60 / charsPerLine)) // 假设每段60字
+  const estimatedParagraphHeight = lineHeight * avgLinesPerParagraph + paragraphSpacing
 
-  for (let i = 0; i < sampleSize; i++) {
-    const p = document.createElement('p')
-    p.style.marginBottom = `${settings.value.paragraphSpacing}px`
-    p.style.textIndent = settings.value.textIndent ? '2em' : '0'
-    p.textContent = content.value[i]
-    testContainer.appendChild(p)
-    paragraphHeights.push(p.offsetHeight + settings.value.paragraphSpacing)
-  }
-
-  document.body.removeChild(testContainer)
-
-  if (paragraphHeights.length === 0) return 5
-
-  // 计算平均段落高度
-  const avgHeight = paragraphHeights.reduce((a, b) => a + b, 0) / paragraphHeights.length
-  // 可用高度 = 容器高度 - 上下padding(40px*2)
-  const availableHeight = readerBody.clientHeight - 80
-
-  return Math.max(1, Math.floor(availableHeight / avgHeight))
+  return Math.max(1, Math.floor(availableHeight / estimatedParagraphHeight))
 }
 
 const updateTotalPages = () => {
@@ -619,6 +594,24 @@ const updateTotalPages = () => {
     totalPages.value = Math.ceil(content.value.length / pageSize)
   } else {
     totalPages.value = 0
+  }
+}
+
+// 检查内容是否溢出，如果溢出则减少每页内容
+const checkAndAdjustPageSize = () => {
+  if (!settings.value.paginationMode) return
+
+  const readerBody = document.querySelector('.reader-body')
+  if (!readerBody) return
+
+  // 检查是否溢出
+  if (readerBody.scrollHeight > readerBody.clientHeight + 10) {
+    // 内容溢出，重新计算更小的页大小
+    const newPageSize = calculatePageSize()
+    if (newPageSize < currentPageContent.value.length) {
+      // 强制更新页大小
+      updateTotalPages()
+    }
   }
 }
 
@@ -1295,6 +1288,15 @@ watch(() => settings.value.paginationMode, (newVal) => {
 // 监听内容变化
 watch(content, () => {
   updateTotalPages()
+})
+
+// 监听当前页内容变化，检查是否溢出
+watch(currentPageContent, () => {
+  if (settings.value.paginationMode) {
+    nextTick(() => {
+      checkAndAdjustPageSize()
+    })
+  }
 })
 
 // 监听窗口大小变化
