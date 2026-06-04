@@ -102,6 +102,10 @@
               <span>📑</span>
               <span>{{ reparsing ? '解析中...' : '重新解析章节' }}</span>
             </button>
+            <button class="btn btn-danger" @click="handleDelete">
+              <span>🗑️</span>
+              <span>删除书籍</span>
+            </button>
           </div>
 
           <div class="book-rating">
@@ -246,7 +250,7 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { message } from '@/utils/message'
+import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import { scrapeBook, downloadCover } from '@/utils/scraper'
 import { getCoverUrl } from '@/utils/cover'
@@ -307,6 +311,19 @@ const handleToggleWanted = async () => {
     message.success('操作成功')
   } catch (error) {
     message.error('操作失败')
+  }
+}
+
+const handleDelete = async () => {
+  const result = await confirm('确定要删除这本书吗？删除后无法恢复。')
+  if (result) {
+    try {
+      await bookStore.deleteBook(book.value.id)
+      message.success('删除成功')
+      router.push('/books')
+    } catch (error) {
+      message.error('删除失败')
+    }
   }
 }
 
@@ -685,6 +702,14 @@ onMounted(loadBook)
 .btn-scrape:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.btn-danger {
+  color: var(--danger);
+}
+
+.btn-danger:hover {
+  background: rgba(255, 59, 48, 0.1);
 }
 
 .book-rating {

@@ -164,6 +164,13 @@
             >
               {{ book.isWanted ? '✓' : '○' }}
             </button>
+            <button
+              class="action-btn action-btn-danger"
+              @click.stop="handleDelete(book.id)"
+              title="删除"
+            >
+              🗑️
+            </button>
           </div>
         </div>
       </div>
@@ -753,6 +760,19 @@ onMounted(() => {
 
 .action-btn.active {
   background: var(--warning-alpha-15, rgba(255, 149, 0, 0.15));
+}
+
+.action-btn-danger {
+  opacity: 0;
+  transition: all var(--transition-fast);
+}
+
+.book-card:hover .action-btn-danger {
+  opacity: 1;
+}
+
+.action-btn-danger:hover {
+  background: rgba(255, 59, 48, 0.15) !important;
 }
 
 /* 书籍列表 */
