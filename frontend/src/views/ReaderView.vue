@@ -318,6 +318,20 @@
                   <label class="form-label">段落间距：{{ settings.paragraphSpacing }}px</label>
                   <input type="range" v-model="settings.paragraphSpacing" min="0" max="40" step="2" class="slider" />
                 </div>
+                <div class="form-group">
+                  <label class="form-label">内容宽度</label>
+                  <div class="width-options">
+                    <button
+                      v-for="width in widthOptions"
+                      :key="width.value"
+                      class="width-btn"
+                      :class="{ active: settings.contentWidth === width.value }"
+                      @click="settings.contentWidth = width.value"
+                    >
+                      {{ width.label }}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <!-- 主题设置 -->
@@ -513,7 +527,15 @@ const settings = ref({
   textIndent: true,
   showProgress: true,
   paginationMode: false, // 翻页模式
+  contentWidth: 'medium', // 内容宽度: narrow, medium, wide
 })
+
+// 内容宽度选项
+const widthOptions = [
+  { value: 'narrow', label: '窄', maxWidth: '700px' },
+  { value: 'medium', label: '中', maxWidth: '800px' },
+  { value: 'wide', label: '宽', maxWidth: '1000px' },
+]
 
 // 获取实际背景色和文字色（处理 'auto' 跟随主题）
 const getResolvedColors = (bg: string) => {
@@ -525,12 +547,14 @@ const getResolvedColors = (bg: string) => {
 
 const readerStyle = computed(() => {
   const colors = getResolvedColors(settings.value.backgroundColor)
+  const widthOption = widthOptions.find(w => w.value === settings.value.contentWidth) || widthOptions[1]
   return {
     fontFamily: settings.value.fontFamily === 'default' ? 'inherit' : settings.value.fontFamily,
     fontSize: `${settings.value.fontSize}px`,
     lineHeight: settings.value.lineHeight,
     backgroundColor: colors.bg,
     color: colors.text,
+    maxWidth: widthOption.maxWidth,
   }
 })
 
@@ -1776,7 +1800,6 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow-y: auto;
   padding: 40px 60px;
-  max-width: 800px;
   margin: 0 auto;
   width: 100%;
   scroll-behavior: smooth;
@@ -2114,6 +2137,33 @@ onBeforeUnmount(() => {
 }
 
 .font-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-alpha-10);
+}
+
+/* 宽度选项 */
+.width-options {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.width-btn {
+  flex: 1;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.width-btn:hover {
+  border-color: var(--primary);
+}
+
+.width-btn.active {
   border-color: var(--primary);
   background: var(--primary-alpha-10);
 }
