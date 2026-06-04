@@ -51,11 +51,8 @@ public class ScanDirectoryController {
      * 删除扫描目录
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteDirectory(
-            Authentication authentication,
-            @PathVariable Long id) {
-        User user = getUserFromAuth(authentication);
-        scanDirectoryService.deleteDirectory(user, id);
+    public ResponseEntity<Void> deleteDirectory(@PathVariable Long id) {
+        scanDirectoryService.deleteDirectory(id);
         return ResponseEntity.noContent().build();
     }
 
@@ -63,11 +60,8 @@ public class ScanDirectoryController {
      * 触发扫描
      */
     @PostMapping("/{id}/scan")
-    public ResponseEntity<Map<String, Object>> scanDirectory(
-            Authentication authentication,
-            @PathVariable Long id) {
-        User user = getUserFromAuth(authentication);
-        Map<String, Object> result = scanDirectoryService.scanDirectory(user, id);
+    public ResponseEntity<Map<String, Object>> scanDirectory(@PathVariable Long id) {
+        Map<String, Object> result = scanDirectoryService.scanDirectory(id);
         return ResponseEntity.ok(result);
     }
 
@@ -75,11 +69,8 @@ public class ScanDirectoryController {
      * 切换启用状态
      */
     @PutMapping("/{id}/toggle")
-    public ResponseEntity<ScanDirectory> toggleEnabled(
-            Authentication authentication,
-            @PathVariable Long id) {
-        User user = getUserFromAuth(authentication);
-        ScanDirectory dir = scanDirectoryService.toggleEnabled(user, id);
+    public ResponseEntity<ScanDirectory> toggleEnabled(@PathVariable Long id) {
+        ScanDirectory dir = scanDirectoryService.toggleEnabled(id);
         return ResponseEntity.ok(dir);
     }
 

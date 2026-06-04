@@ -28,7 +28,7 @@ public class ScanDirectoryService {
     private final FileScannerService fileScannerService;
 
     /**
-     * 获取所有扫描目录（管理用）
+     * 获取所有扫描目录
      */
     public List<ScanDirectory> getAllDirectories() {
         return scanDirectoryRepository.findAll();
@@ -64,7 +64,7 @@ public class ScanDirectoryService {
         }
 
         // 检查是否已存在
-        if (scanDirectoryRepository.findByUserAndPath(user, path).isPresent()) {
+        if (scanDirectoryRepository.existsByPath(path)) {
             throw new IllegalArgumentException("该目录已添加");
         }
 
@@ -86,24 +86,22 @@ public class ScanDirectoryService {
     }
 
     /**
-     * 删除扫描目录
+     * 删除扫描目录（所有用户都可以操作）
      */
     @Transactional
-    public void deleteDirectory(User user, Long id) {
+    public void deleteDirectory(Long id) {
         ScanDirectory dir = scanDirectoryRepository.findById(id)
-                .filter(d -> d.getUser().getId().equals(user.getId()))
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
         scanDirectoryRepository.delete(dir);
         log.info("删除扫描目录: {}", dir.getPath());
     }
 
     /**
-     * 触发扫描目录 - 实际导入书籍到数据库
+     * 触发扫描目录 - 实际导入书籍到数据库（所有用户都可以操作）
      */
     @Transactional
-    public Map<String, Object> scanDirectory(User user, Long id) {
+    public Map<String, Object> scanDirectory(Long id) {
         ScanDirectory dir = scanDirectoryRepository.findById(id)
-                .filter(d -> d.getUser().getId().equals(user.getId()))
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
 
         Path dirPath = Paths.get(dir.getPath());
@@ -138,12 +136,11 @@ public class ScanDirectoryService {
     }
 
     /**
-     * 切换启用状态
+     * 切换启用状态（所有用户都可以操作）
      */
     @Transactional
-    public ScanDirectory toggleEnabled(User user, Long id) {
+    public ScanDirectory toggleEnabled(Long id) {
         ScanDirectory dir = scanDirectoryRepository.findById(id)
-                .filter(d -> d.getUser().getId().equals(user.getId()))
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
 
         dir.setEnabled(!dir.getEnabled());
