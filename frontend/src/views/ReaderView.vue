@@ -535,6 +535,8 @@ const widthOptions = [
   { value: 'narrow', label: '窄', maxWidth: '700px' },
   { value: 'medium', label: '中', maxWidth: '800px' },
   { value: 'wide', label: '宽', maxWidth: '1000px' },
+  { value: 'wider', label: '更宽', maxWidth: '1200px' },
+  { value: 'full', label: '全屏', maxWidth: '100%' },
 ]
 
 // 获取实际背景色和文字色（处理 'auto' 跟随主题）
