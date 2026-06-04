@@ -183,12 +183,16 @@
 
           <!-- TXT / MD 阅读器 -->
           <div v-else-if="book.format === 'txt' || book.format === 'md'" class="reader-text">
-            <template v-for="(paragraph, index) in content" :key="index">
+            <template v-for="(paragraph, index) in currentPageContent" :key="index">
               <div v-if="isChapterTitle(paragraph)" class="chapter-title" :id="'chapter-' + index">
                 {{ paragraph }}
               </div>
               <p v-else :id="'para-' + index">{{ paragraph }}</p>
             </template>
+            <!-- 翻页模式提示 -->
+            <div v-if="settings.paginationMode && totalPages > 1" class="pagination-hint">
+              <span>按 ← → 键或点击底部按钮翻页</span>
+            </div>
           </div>
 
           <!-- HTML 阅读器 -->
@@ -210,8 +214,24 @@
 
       <!-- 阅读器底部 -->
       <footer class="reader-footer glass" v-show="!isFullscreen">
-        <!-- 非EPUB格式 -->
-        <template v-if="book.format !== 'epub'">
+        <!-- TXT/MD 翻页模式 -->
+        <template v-if="(book.format === 'txt' || book.format === 'md') && settings.paginationMode">
+          <button class="btn" @click="prevTextPage" :disabled="currentPage === 0">
+            <span>‹</span>
+            <span>上一页</span>
+          </button>
+          <div class="pagination-info">
+            <span class="chapter-info">{{ currentChapterName }}</span>
+            <span class="page-info">{{ currentPage + 1 }} / {{ totalPages }}</span>
+          </div>
+          <button class="btn" @click="nextTextPage" :disabled="currentPage >= totalPages - 1">
+            <span>下一页</span>
+            <span>›</span>
+          </button>
+        </template>
+
+        <!-- TXT/MD 滚动模式 / 其他格式 -->
+        <template v-else-if="book.format !== 'epub'">
           <div class="footer-left">
             <span class="chapter-info">{{ currentChapterName }}</span>
           </div>
@@ -346,6 +366,18 @@
                     </button>
                   </label>
                 </div>
+                <div class="form-group" v-if="book?.format === 'txt' || book?.format === 'md'">
+                  <label class="form-label toggle-label">
+                    <span>翻页模式</span>
+                    <button class="toggle-switch" :class="{ on: settings.paginationMode }" @click="settings.paginationMode = !settings.paginationMode">
+                      <span class="toggle-knob"></span>
+                    </button>
+                  </label>
+                </div>
+                <div class="form-group" v-if="(book?.format === 'txt' || book?.format === 'md') && settings.paginationMode">
+                  <label class="form-label">每页段落数：{{ settings.pageSize }}</label>
+                  <input type="range" v-model="settings.pageSize" min="10" max="100" step="5" class="slider" />
+                </div>
               </div>
             </div>
           </div>
@@ -423,6 +455,10 @@ const currentChapterName = ref('')
 const isFullscreen = ref(false)
 const showFullscreenControls = ref(false)
 
+// 翻页模式相关
+const currentPage = ref(0)
+const totalPages = ref(0)
+
 // 书签和高亮数据
 const bookmarks = ref<Bookmark[]>([])
 const highlights = ref<Highlight[]>([])
@@ -486,6 +522,8 @@ const settings = ref({
   backgroundColor: 'auto',
   textIndent: true,
   showProgress: true,
+  paginationMode: false, // 翻页模式
+  pageSize: 30, // 每页显示段落数
 })
 
 // 获取实际背景色和文字色（处理 'auto' 跟随主题）
@@ -523,6 +561,57 @@ const saveReaderSettings = () => {
   try {
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings.value))
   } catch (e) { /* ignore */ }
+}
+
+// 翻页模式相关计算
+const currentPageContent = computed(() => {
+  if (!settings.value.paginationMode || book.value?.format === 'epub') {
+    return content.value
+  }
+  const start = currentPage.value * settings.value.pageSize
+  const end = start + settings.value.pageSize
+  return content.value.slice(start, end)
+})
+
+const updateTotalPages = () => {
+  if (settings.value.paginationMode && content.value.length > 0) {
+    totalPages.value = Math.ceil(content.value.length / settings.value.pageSize)
+  } else {
+    totalPages.value = 0
+  }
+}
+
+const goToPage = (page: number) => {
+  if (page >= 0 && page < totalPages.value) {
+    currentPage.value = page
+    progress.value = Math.round((page / (totalPages.value - 1)) * 100)
+    saveProgress(progress.value, currentChapterName.value)
+    // 滚动到顶部
+    const readerBody = document.querySelector('.reader-body')
+    if (readerBody) {
+      readerBody.scrollTop = 0
+    }
+  }
+}
+
+const prevTextPage = () => {
+  goToPage(currentPage.value - 1)
+}
+
+const nextTextPage = () => {
+  goToPage(currentPage.value + 1)
+}
+
+// 键盘翻页
+const handleKeydown = (e: KeyboardEvent) => {
+  if (!settings.value.paginationMode) return
+  if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+    e.preventDefault()
+    prevTextPage()
+  } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+    e.preventDefault()
+    nextTextPage()
+  }
 }
 
 // 面板显示状态
@@ -861,6 +950,7 @@ const loadTextContent = async () => {
     }
 
     await nextTick()
+    updateTotalPages()
     restoreScrollPosition()
   } catch (error) {
     console.error('Failed to load text content:', error)
@@ -873,10 +963,15 @@ const loadTextContent = async () => {
  */
 const restoreScrollPosition = () => {
   if (progress.value > 0) {
-    const readerBody = document.querySelector('.reader-body')
-    if (readerBody) {
-      const maxScroll = readerBody.scrollHeight - readerBody.clientHeight
-      readerBody.scrollTop = maxScroll * (progress.value / 100)
+    if (settings.value.paginationMode && totalPages.value > 0) {
+      // 翻页模式下恢复到对应页码
+      currentPage.value = Math.floor((progress.value / 100) * (totalPages.value - 1))
+    } else {
+      const readerBody = document.querySelector('.reader-body')
+      if (readerBody) {
+        const maxScroll = readerBody.scrollHeight - readerBody.clientHeight
+        readerBody.scrollTop = maxScroll * (progress.value / 100)
+      }
     }
   }
 }
@@ -886,6 +981,8 @@ const restoreScrollPosition = () => {
  */
 const handleScroll = () => {
   if (book.value?.format === 'epub') return
+  // 翻页模式下不处理滚动进度
+  if (settings.value.paginationMode) return
 
   const readerBody = document.querySelector('.reader-body')
   if (!readerBody) return
@@ -1140,11 +1237,36 @@ const formatTime = (timeStr: string) => {
 watch(() => settings.value, () => {
   applyEpubTheme()
   saveReaderSettings()
+  updateTotalPages()
 }, { deep: true })
+
+// 监听翻页模式变化
+watch(() => settings.value.paginationMode, (newVal) => {
+  if (newVal) {
+    // 切换到翻页模式，根据当前进度计算页码
+    if (totalPages.value > 0) {
+      currentPage.value = Math.floor((progress.value / 100) * (totalPages.value - 1))
+    }
+  }
+})
+
+// 监听每页段落数变化
+watch(() => settings.value.pageSize, () => {
+  updateTotalPages()
+  if (settings.value.paginationMode && totalPages.value > 0) {
+    currentPage.value = Math.min(currentPage.value, totalPages.value - 1)
+  }
+})
+
+// 监听内容变化
+watch(content, () => {
+  updateTotalPages()
+})
 
 onMounted(() => {
   loadReaderSettings()
   loadBook()
+  document.addEventListener('keydown', handleKeydown)
 })
 
 onBeforeUnmount(() => {
@@ -1191,6 +1313,8 @@ onBeforeUnmount(() => {
     bookInstance = null
     rendition = null
   }
+
+  document.removeEventListener('keydown', handleKeydown)
 })
 </script>
 
@@ -1581,8 +1705,8 @@ onBeforeUnmount(() => {
 .reader-body {
   flex: 1;
   overflow-y: auto;
-  padding: var(--spacing-xl) var(--spacing-2xl);
-  max-width: 900px;
+  padding: 40px 60px;
+  max-width: 800px;
   margin: 0 auto;
   width: 100%;
   scroll-behavior: smooth;
@@ -1593,19 +1717,54 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
+.reader-text {
+  min-height: 100%;
+}
+
 .reader-text p {
   margin-bottom: v-bind('settings.paragraphSpacing + "px"');
   text-indent: v-bind('settings.textIndent ? "2em" : "0"');
+  line-height: 1.9;
+  font-size: 1.05em;
+  color: var(--text-primary);
+}
+
+.reader-text p::first-letter {
+  font-size: 1.1em;
 }
 
 .chapter-title {
-  font-size: 1.5em;
+  font-size: 1.6em;
   font-weight: bold;
   text-align: center;
-  margin: 2em 0 1em 0;
-  padding: 0.5em 0;
+  margin: 2.5em 0 1.5em 0;
+  padding: 0.8em 0;
   color: var(--text-primary);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 2px solid var(--border-color);
+  letter-spacing: 0.1em;
+}
+
+.pagination-hint {
+  text-align: center;
+  padding: 2em 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  margin-top: 2em;
+  border-top: 1px dashed var(--border-color-light);
+}
+
+.pagination-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex: 1;
+}
+
+.page-info {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .reader-html {
