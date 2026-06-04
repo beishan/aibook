@@ -34,4 +34,9 @@ public interface BookHighlightRepository extends JpaRepository<BookHighlight, Lo
      * 查询用户在某本书中的高亮数量
      */
     long countByUserAndBook(User user, Book book);
+
+    /**
+     * 根据书籍删除所有高亮
+     */
+    void deleteByBook(Book book);
 }

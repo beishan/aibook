@@ -3,7 +3,10 @@ package com.aibook.service;
 import com.aibook.dto.BookDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
+import com.aibook.repository.BookHighlightRepository;
 import com.aibook.repository.BookRepository;
+import com.aibook.repository.BookmarkRepository;
+import com.aibook.repository.ReadingProgressRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,6 +24,9 @@ import java.util.stream.Collectors;
 public class BookService {
 
     private final BookRepository bookRepository;
+    private final ReadingProgressRepository readingProgressRepository;
+    private final BookmarkRepository bookmarkRepository;
+    private final BookHighlightRepository bookHighlightRepository;
 
     /**
      * 获取用户书籍列表
@@ -152,6 +158,10 @@ public class BookService {
                 .filter(b -> b.getUser().equals(user))
                 .orElseThrow(() -> new RuntimeException("书籍不存在"));
 
+        // 先删除关联的阅读进度、书签和高亮记录
+        readingProgressRepository.deleteByBook(book);
+        bookmarkRepository.deleteByBook(book);
+        bookHighlightRepository.deleteByBook(book);
         bookRepository.delete(book);
     }
 
