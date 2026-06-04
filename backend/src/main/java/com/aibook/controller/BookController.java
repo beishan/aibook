@@ -250,10 +250,16 @@ public class BookController {
         FileSystemResource resource = new FileSystemResource(filePath.toFile());
         String contentType = MimeTypeUtil.getContentTypeWithCharset(bookDTO.getFormat());
 
-        return ResponseEntity.ok()
+        ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_TYPE, contentType)
-                .header(HttpHeaders.CACHE_CONTROL, "max-age=3600")
-                .body(resource);
+                .header(HttpHeaders.CACHE_CONTROL, "max-age=3600");
+
+        // PDF 文件需要 inline 显示，而不是下载
+        if ("pdf".equalsIgnoreCase(bookDTO.getFormat())) {
+            responseBuilder.header(HttpHeaders.CONTENT_DISPOSITION, "inline");
+        }
+
+        return responseBuilder.body(resource);
     }
 
     /**
