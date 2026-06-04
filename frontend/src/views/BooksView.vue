@@ -589,6 +589,31 @@ onMounted(() => {
   gap: var(--spacing-sm);
 }
 
+.selection-controls .btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  background: var(--surface-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.selection-controls .btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: none;
+  box-shadow: none;
+}
+
+.selection-controls .btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+  box-shadow: 0 2px 8px var(--primary-alpha-30);
+}
+
 /* 批量操作工具栏 */
 .batch-toolbar {
   display: flex;
@@ -624,6 +649,23 @@ onMounted(() => {
   display: flex;
   gap: var(--spacing-sm);
   align-items: center;
+}
+
+.batch-actions .btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+}
+
+.batch-actions .btn-text {
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+}
+
+.batch-actions .btn-text:hover {
+  color: var(--primary);
+  background: var(--primary-alpha-10);
 }
 
 /* 复选框样式 */
