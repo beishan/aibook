@@ -3,6 +3,7 @@ package com.aibook.service;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
+import com.aibook.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,7 +28,9 @@ import java.util.stream.Stream;
 public class FileScannerService {
 
     private final BookRepository bookRepository;
+    private final UserRepository userRepository;
     private final MetadataService metadataService;
+    private final TxtParserService txtParserService;
 
     @Value("#{'${scanning.directories:/books/fiction,/books/tech}'.split(',')}")
     private List<String> scanDirectories;
@@ -61,6 +64,33 @@ public class FileScannerService {
                 log.warn("目录不存在: {}", dirPath);
                 result.addError(dirPath, "目录不存在");
             }
+        }
+
+        result.setEndTime(System.currentTimeMillis());
+        return result;
+    }
+
+    /**
+     * 扫描指定目录（供 ScanDirectoryService 调用）
+     */
+    public ScanResult scanDirectory(String dirPath) {
+        ScanResult result = new ScanResult();
+        result.setStartTime(System.currentTimeMillis());
+
+        Path dir = Paths.get(dirPath);
+        if (Files.exists(dir) && Files.isDirectory(dir)) {
+            try {
+                // 获取第一个用户作为默认用户
+                User defaultUser = userRepository.findAll().stream().findFirst()
+                        .orElseThrow(() -> new RuntimeException("没有用户，请先注册"));
+                scanDirectory(dir, defaultUser, result);
+            } catch (IOException e) {
+                log.error("扫描目录失败: {}", dirPath, e);
+                result.addError(dirPath, e.getMessage());
+            }
+        } else {
+            log.warn("目录不存在: {}", dirPath);
+            result.addError(dirPath, "目录不存在");
         }
 
         result.setEndTime(System.currentTimeMillis());
@@ -154,7 +184,14 @@ public class FileScannerService {
                     break;
                 case "txt":
                 case "md":
-                    // 纯文本格式暂不提取元数据
+                    try {
+                        String chapterInfo = txtParserService.parseChapters(file);
+                        book.setChapterInfo(chapterInfo);
+                        log.info("TXT章节解析成功: {}，章节数: {}", file,
+                                chapterInfo.split("\"title\"").length - 1);
+                    } catch (Exception e) {
+                        log.warn("TXT章节解析失败: {}", file, e);
+                    }
                     break;
                 default:
                     log.debug("格式 {} 暂不支持元数据提取", format);

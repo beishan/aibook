@@ -97,6 +97,15 @@ public class BookService {
     }
 
     /**
+     * 获取书籍实体（用于刮削等操作）
+     */
+    public Book getBookEntity(Long id, User user) {
+        return bookRepository.findById(id)
+                .filter(b -> b.getUser().equals(user))
+                .orElseThrow(() -> new RuntimeException("书籍不存在"));
+    }
+
+    /**
      * 获取用户所有书籍
      */
     public List<BookDTO> getAllBooks(User user) {
@@ -187,7 +196,7 @@ public class BookService {
     /**
      * 转换为 DTO
      */
-    private BookDTO convertToDTO(Book book) {
+    public BookDTO convertToDTO(Book book) {
         return BookDTO.builder()
                 .id(book.getId())
                 .title(book.getTitle())
@@ -208,6 +217,7 @@ public class BookService {
                 .isFavorite(book.getIsFavorite())
                 .isWanted(book.getIsWanted())
                 .notes(book.getNotes())
+                .chapterInfo(book.getChapterInfo())
                 .createdAt(book.getCreatedAt())
                 .updatedAt(book.getUpdatedAt())
                 .build();

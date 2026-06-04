@@ -30,18 +30,29 @@ public class MetadataScrapingService {
 
     /**
      * 为单本书籍刮削元数据
+     * @param forceUpdate 是否强制更新已有字段
      */
     @Transactional
-    public Book scrapeBook(Book book) {
-        log.info("开始刮削书籍元数据: {}", book.getTitle());
+    public Book scrapeBook(Book book, boolean forceUpdate) {
+        log.info("开始刮削书籍元数据: {} (forceUpdate={})", book.getTitle(), forceUpdate);
 
-        // 尝试从缓存获取
-        MetadataScraper.BookMetadata cachedMetadata = getCachedMetadata(book);
-        if (cachedMetadata != null) {
-            log.info("使用缓存元数据: {}", book.getTitle());
-            applyMetadata(book, cachedMetadata);
-            bookRepository.save(book);
-            return book;
+        // 强制更新时清除缓存，确保获取最新数据
+        if (forceUpdate) {
+            if (book.getIsbn() != null) {
+                cacheService.evictCache(cacheService.isbnKey(book.getIsbn()));
+            }
+            cacheService.evictCache(cacheService.titleKey(book.getTitle()));
+        }
+
+        // 尝试从缓存获取（非强制更新时）
+        if (!forceUpdate) {
+            MetadataScraper.BookMetadata cachedMetadata = getCachedMetadata(book);
+            if (cachedMetadata != null) {
+                log.info("使用缓存元数据: {}", book.getTitle());
+                applyMetadata(book, cachedMetadata, forceUpdate);
+                bookRepository.save(book);
+                return book;
+            }
         }
 
         // 获取按优先级排序的已启用刮削器
@@ -63,11 +74,11 @@ public class MetadataScrapingService {
                     saveToCache(book, metadata);
 
                     // 应用元数据
-                    applyMetadata(book, metadata);
+                    applyMetadata(book, metadata, forceUpdate);
                     bookRepository.save(book);
 
-                    // 下载封面
-                    if (metadata.getCoverUrl() != null && book.getCoverUrl() == null) {
+                    // 下载封面（强制更新或无封面时）
+                    if (metadata.getCoverUrl() != null && (forceUpdate || book.getCoverUrl() == null)) {
                         book.setCoverUrl(metadata.getCoverUrl());
                         coverDownloadService.downloadCover(book);
                     }
@@ -82,6 +93,14 @@ public class MetadataScrapingService {
 
         log.warn("所有刮削器均未找到元数据: {}", book.getTitle());
         return book;
+    }
+
+    /**
+     * 为单本书籍刮削元数据（兼容旧接口，默认不强制更新）
+     */
+    @Transactional
+    public Book scrapeBook(Book book) {
+        return scrapeBook(book, false);
     }
 
     /**
@@ -104,8 +123,8 @@ public class MetadataScrapingService {
 
     /**
      * 批量刮削书籍元数据
+     * 注意：不使用@Transactional，因为异步批量执行时每本书需要独立事务
      */
-    @Transactional
     public List<ScrapeResult> scrapeBooks(List<Book> books) {
         List<ScrapeResult> results = new ArrayList<>();
 
@@ -131,8 +150,8 @@ public class MetadataScrapingService {
 
     /**
      * 刮削所有缺少元数据的书籍
+     * 注意：不使用@Transactional，因为异步批量执行时每本书需要独立事务
      */
-    @Transactional
     public List<ScrapeResult> scrapeAllIncomplete() {
         List<Book> books = bookRepository.findByAuthorIsNullOrDescriptionIsNull();
         log.info("找到 {} 本缺少元数据的书籍", books.size());
@@ -176,36 +195,36 @@ public class MetadataScrapingService {
     /**
      * 应用元数据到书籍
      */
-    private void applyMetadata(Book book, MetadataScraper.BookMetadata metadata) {
-        if (metadata.getTitle() != null && (book.getTitle() == null || book.getTitle().length() < metadata.getTitle().length())) {
+    private void applyMetadata(Book book, MetadataScraper.BookMetadata metadata, boolean forceUpdate) {
+        if (metadata.getTitle() != null && (forceUpdate || book.getTitle() == null || book.getTitle().length() < metadata.getTitle().length())) {
             book.setTitle(metadata.getTitle());
         }
 
-        if (metadata.getAuthor() != null && book.getAuthor() == null) {
+        if (metadata.getAuthor() != null && (forceUpdate || book.getAuthor() == null)) {
             book.setAuthor(metadata.getAuthor());
         }
 
-        if (metadata.getIsbn() != null && book.getIsbn() == null) {
+        if (metadata.getIsbn() != null && (forceUpdate || book.getIsbn() == null)) {
             book.setIsbn(metadata.getIsbn());
         }
 
-        if (metadata.getPublisher() != null && book.getPublisher() == null) {
+        if (metadata.getPublisher() != null && (forceUpdate || book.getPublisher() == null)) {
             book.setPublisher(metadata.getPublisher());
         }
 
-        if (metadata.getPublishDate() != null && book.getPublishDate() == null) {
+        if (metadata.getPublishDate() != null && (forceUpdate || book.getPublishDate() == null)) {
             book.setPublishDate(metadata.getPublishDate());
         }
 
-        if (metadata.getDescription() != null && book.getDescription() == null) {
+        if (metadata.getDescription() != null && (forceUpdate || book.getDescription() == null)) {
             book.setDescription(metadata.getDescription());
         }
 
-        if (metadata.getCoverUrl() != null && book.getCoverUrl() == null) {
+        if (metadata.getCoverUrl() != null && (forceUpdate || book.getCoverUrl() == null)) {
             book.setCoverUrl(metadata.getCoverUrl());
         }
 
-        if (metadata.getLanguage() != null && book.getLanguage() == null) {
+        if (metadata.getLanguage() != null && (forceUpdate || book.getLanguage() == null)) {
             book.setLanguage(metadata.getLanguage());
         }
 

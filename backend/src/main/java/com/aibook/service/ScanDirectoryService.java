@@ -19,6 +19,7 @@ import java.util.Map;
 
 /**
  * 扫描目录管理服务
+ * 扫描目录服务
  */
 @Service
 @RequiredArgsConstructor
@@ -33,6 +34,15 @@ public class ScanDirectoryService {
      */
     public List<ScanDirectory> getDirectories(User user) {
         return scanDirectoryRepository.findByUser(user);
+    public List<ScanDirectory> getAllDirectories() {
+        return scanDirectoryRepository.findAll();
+    }
+
+    /**
+     * 获取启用的扫描目录
+     */
+    public List<ScanDirectory> getEnabledDirectories() {
+        return scanDirectoryRepository.findByEnabledTrue();
     }
 
     /**
@@ -48,6 +58,9 @@ public class ScanDirectoryService {
         path = path.trim();
         if (!path.startsWith("/")) {
             path = "/" + path;
+    public ScanDirectory addDirectory(String path) {
+        if (scanDirectoryRepository.existsByPath(path)) {
+            throw new RuntimeException("目录已存在: " + path);
         }
 
         // 检查是否已存在
@@ -64,12 +77,14 @@ public class ScanDirectoryService {
                 .enabled(exists)
                 .user(user)
                 .bookCount(0)
+                .enabled(true)
                 .build();
 
         ScanDirectory saved = scanDirectoryRepository.save(directory);
         log.info("添加扫描目录: {} (存在: {})", path, exists);
 
         return saved;
+        return scanDirectoryRepository.save(directory);
     }
 
     /**
@@ -82,16 +97,22 @@ public class ScanDirectoryService {
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
         scanDirectoryRepository.delete(dir);
         log.info("删除扫描目录: {}", dir.getPath());
+    public void deleteDirectory(Long id) {
+        scanDirectoryRepository.deleteById(id);
     }
 
     /**
      * 触发扫描目录 - 实际导入书籍到数据库
+     * 切换目录启用状态
      */
     @Transactional
     public Map<String, Object> scanDirectory(User user, Long id) {
         ScanDirectory dir = scanDirectoryRepository.findById(id)
                 .filter(d -> d.getUser().getId().equals(user.getId()))
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
+    public ScanDirectory toggleDirectory(Long id) {
+        ScanDirectory directory = scanDirectoryRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("目录不存在"));
 
         Path dirPath = Paths.get(dir.getPath());
         if (!Files.exists(dirPath) || !Files.isDirectory(dirPath)) {
@@ -122,16 +143,22 @@ public class ScanDirectoryService {
             "failedBooks", scanResult.getFailedCount(),
             "bookCount", scanResult.getNewCount() + scanResult.getSkippedCount()
         );
+        directory.setEnabled(!directory.getEnabled());
+        return scanDirectoryRepository.save(directory);
     }
 
     /**
      * 切换启用状态
+     * 扫描指定目录
      */
     @Transactional
     public ScanDirectory toggleEnabled(User user, Long id) {
         ScanDirectory dir = scanDirectoryRepository.findById(id)
                 .filter(d -> d.getUser().getId().equals(user.getId()))
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
+    public ScanDirectory scanDirectory(Long id) {
+        ScanDirectory directory = scanDirectoryRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("目录不存在"));
 
         dir.setEnabled(!dir.getEnabled());
         return scanDirectoryRepository.save(dir);
@@ -146,12 +173,22 @@ public class ScanDirectoryService {
                     .filter(Files::isRegularFile)
                     .filter(p -> isBookFile(p.toString()))
                     .count();
+        try {
+            FileScannerService.ScanResult result = fileScannerService.scanDirectory(directory.getPath());
+            directory.setLastScanTime(LocalDateTime.now());
+            directory.setLastScanResult(String.format("新增: %d, 跳过: %d, 失败: %d",
+                    result.getNewCount(), result.getSkippedCount(), result.getFailedCount()));
         } catch (Exception e) {
+            directory.setLastScanTime(LocalDateTime.now());
+            directory.setLastScanResult("扫描失败: " + e.getMessage());
+            log.error("扫描目录失败: {}", directory.getPath(), e);
+        }
             log.warn("统计目录文件失败: {}", e.getMessage());
             return 0;
         }
     }
 
+        return scanDirectoryRepository.save(directory);
     private boolean isBookFile(String filename) {
         String lower = filename.toLowerCase();
         return lower.endsWith(".epub") || lower.endsWith(".txt") ||

@@ -43,6 +43,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/books/*/content/**").permitAll()
+                .requestMatchers("/api/files/**").permitAll()
+                .requestMatchers("/api/covers/**").permitAll()
                 .requestMatchers("/opds/**").permitAll()
                 .requestMatchers("/webdav/**").permitAll()
                 .requestMatchers("/api/sync/**").permitAll()

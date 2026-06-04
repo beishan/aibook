@@ -36,13 +36,17 @@ public class ScanDirectory {
      * 是否启用
      */
     @Builder.Default
+    @Column(nullable = false)
     private Boolean enabled = true;
 
     /**
      * 上次扫描时间
      */
+    @Column(name = "last_scan_time")
     private LocalDateTime lastScanTime;
 
+    @Column(name = "last_scan_result")
+    private String lastScanResult;
     /**
      * 扫描到的书籍数量
      */
@@ -58,8 +62,10 @@ public class ScanDirectory {
     private User user;
 
     @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 }

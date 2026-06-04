@@ -15,8 +15,16 @@ import java.util.Optional;
 public interface ScanDirectoryRepository extends JpaRepository<ScanDirectory, Long> {
 
     List<ScanDirectory> findByUser(User user);
+    /**
+     * 查找所有启用的扫描目录
+     */
+    List<ScanDirectory> findByEnabledTrue();
 
     Optional<ScanDirectory> findByUserAndPath(User user, String path);
 
     long countByUser(User user);
+    /**
+     * 检查路径是否已存在
+     */
+    boolean existsByPath(String path);
 }

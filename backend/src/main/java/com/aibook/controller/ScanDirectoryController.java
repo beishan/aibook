@@ -28,6 +28,14 @@ public class ScanDirectoryController {
      * 获取所有扫描目录
      */
     @GetMapping
+    public ResponseEntity<List<ScanDirectory>> getAllDirectories() {
+        return ResponseEntity.ok(scanDirectoryService.getAllDirectories());
+    }
+
+    /**
+     * 获取所有扫描目录
+     */
+    @GetMapping
     public ResponseEntity<List<ScanDirectory>> getDirectories(Authentication authentication) {
         User user = getUserFromAuth(authentication);
         return ResponseEntity.ok(scanDirectoryService.getDirectories(user));
@@ -37,13 +45,12 @@ public class ScanDirectoryController {
      * 添加扫描目录
      */
     @PostMapping
-    public ResponseEntity<ScanDirectory> addDirectory(
-            Authentication authentication,
-            @RequestBody Map<String, String> body) {
-        User user = getUserFromAuth(authentication);
+    public ResponseEntity<ScanDirectory> addDirectory(@RequestBody Map<String, String> body) {
         String path = body.get("path");
-        ScanDirectory dir = scanDirectoryService.addDirectory(user, path);
-        return ResponseEntity.ok(dir);
+        if (path == null || path.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(scanDirectoryService.addDirectory(path));
     }
 
     /**
@@ -59,6 +66,7 @@ public class ScanDirectoryController {
     }
 
     /**
+     * 切换目录启用状态
      * 触发扫描
      */
     @PostMapping("/{id}/scan")
@@ -69,6 +77,7 @@ public class ScanDirectoryController {
         Map<String, Object> result = scanDirectoryService.scanDirectory(user, id);
         return ResponseEntity.ok(result);
     }
+
 
     /**
      * 切换启用状态
@@ -87,5 +96,13 @@ public class ScanDirectoryController {
             throw new RuntimeException("未认证");
         }
         return userService.findByUsername(authentication.getName());
+    }
+
+    /**
+     * 扫描指定目录
+     */
+    @PostMapping("/{id}/scan")
+    public ResponseEntity<ScanDirectory> scanDirectory(@PathVariable Long id) {
+        return ResponseEntity.ok(scanDirectoryService.scanDirectory(id));
     }
 }

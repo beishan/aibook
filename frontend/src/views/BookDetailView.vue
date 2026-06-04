@@ -17,7 +17,7 @@
       <!-- 书籍头部 -->
       <div class="book-header">
         <div class="book-cover">
-          <img v-if="book.coverUrl" :src="book.coverUrl" alt="封面" class="cover-image" />
+          <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" class="cover-image" />
           <div v-else class="no-cover">
             <span>{{ book.title.charAt(0) }}</span>
           </div>
@@ -92,6 +92,15 @@
             <button class="btn" @click="handleDownloadCover" :disabled="downloadingCover">
               <span>🖼️</span>
               <span>{{ downloadingCover ? '下载中...' : '下载封面' }}</span>
+            </button>
+            <button
+              v-if="book.format === 'txt' || book.format === 'md'"
+              class="btn"
+              @click="handleReparse"
+              :disabled="reparsing"
+            >
+              <span>📑</span>
+              <span>{{ reparsing ? '解析中...' : '重新解析章节' }}</span>
             </button>
           </div>
 
@@ -234,6 +243,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { message } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import { scrapeBook, downloadCover } from '@/utils/scraper'
+import { getCoverUrl } from '@/utils/cover'
 import ScraperDialog from '@/components/ScraperDialog.vue'
 
 const route = useRoute()
@@ -245,6 +255,7 @@ const loading = ref(true)
 const notes = ref('')
 const activeTab = ref('description')
 const scraping = ref(false)
+const reparsing = ref(false)
 const downloadingCover = ref(false)
 const showScraperDialog = ref(false)
 const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
@@ -378,6 +389,29 @@ const handleDownloadCover = async () => {
     message.error(error.response?.data?.message || '封面下载失败')
   } finally {
     downloadingCover.value = false
+  }
+}
+
+const handleReparse = async () => {
+  if (!book.value) return
+  reparsing.value = true
+  try {
+    const token = localStorage.getItem('token')
+    const response = await fetch(`/api/books/${book.value.id}/parse-chapters`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    const result = await response.json()
+    if (result.success) {
+      book.value.chapterInfo = result.chapterInfo
+      message.success('章节解析完成')
+    } else {
+      message.error(result.message || '解析失败')
+    }
+  } catch {
+    message.error('解析失败')
+  } finally {
+    reparsing.value = false
   }
 }
 

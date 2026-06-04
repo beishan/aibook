@@ -84,4 +84,28 @@ public interface BookRepository extends JpaRepository<Book, Long> {
      */
     @Query("SELECT b FROM Book b WHERE b.user = :user AND (b.title || '.' || b.format) = :filename")
     Optional<Book> findByUserAndFilename(@Param("user") User user, @Param("filename") String filename);
+
+    /**
+     * 查找作者或描述为空的书籍（用于刮削）
+     */
+    @Query("SELECT b FROM Book b WHERE b.author IS NULL OR b.description IS NULL")
+    List<Book> findByAuthorIsNullOrDescriptionIsNull();
+
+    /**
+     * 查找封面为空或以http开头的书籍（用于下载封面）
+     */
+    @Query("SELECT b FROM Book b WHERE b.coverUrl IS NULL OR b.coverUrl LIKE :prefix%")
+    List<Book> findByCoverUrlIsNullOrCoverUrlStartingWith(@Param("prefix") String prefix);
+
+    /**
+     * 根据ID列表和用户查询书籍（用于批量操作）
+     */
+    @Query("SELECT b FROM Book b WHERE b.id IN :ids AND b.user = :user")
+    List<Book> findByIdInAndUser(@Param("ids") List<Long> ids, @Param("user") User user);
+
+    /**
+     * 根据用户查找作者或描述为空的书籍（用于批量刮削）
+     */
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND (b.author IS NULL OR b.description IS NULL)")
+    List<Book> findByUserAndAuthorIsNullOrDescriptionIsNull(@Param("user") User user);
 }

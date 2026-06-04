@@ -74,6 +74,37 @@
           <span>列表</span>
         </button>
       </div>
+      <div class="selection-controls">
+        <button
+          class="btn"
+          @click="openBatchScraper('all-incomplete')"
+          title="刮削所有缺少作者或简介的书籍"
+        >
+          <span>✨</span>
+          <span>刮削所有不完整</span>
+        </button>
+        <button
+          class="btn"
+          :class="{ active: selectionMode }"
+          @click="toggleSelectionMode"
+        >
+          <span>☑</span>
+          <span>{{ selectionMode ? '退出多选' : '多选' }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 多选工具栏 -->
+    <div v-if="selectionMode && selectedBooks.size > 0" class="batch-toolbar glass">
+      <span class="selection-count">已选择 {{ selectedBooks.size }} 本</span>
+      <div class="batch-actions">
+        <button class="btn btn-text" @click="selectAllCurrentPage">全选当前页</button>
+        <button class="btn btn-text" @click="clearSelection">取消全选</button>
+        <button class="btn btn-primary" @click="openBatchScraper('selected')">
+          <span>✨</span>
+          <span>批量刮削</span>
+        </button>
+      </div>
     </div>
 
     <!-- 加载中 -->
@@ -95,10 +126,20 @@
         v-for="book in bookStore.books"
         :key="book.id"
         class="book-card glass"
-        @click="$router.push(`/books/${book.id}`)"
+        :class="{ selected: selectionMode && selectedBooks.has(book.id) }"
+        @click="handleCardClick(book.id)"
       >
+        <!-- 多选复选框 -->
+        <div v-if="selectionMode" class="book-select-checkbox" @click.stop>
+          <input
+            type="checkbox"
+            :checked="selectedBooks.has(book.id)"
+            @change="toggleBookSelection(book.id)"
+          />
+        </div>
+
         <div class="book-cover">
-          <img v-if="book.coverUrl" :src="book.coverUrl" alt="封面" class="cover-image" />
+          <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" class="cover-image" />
           <div v-else class="no-cover">
             <span>{{ book.title.charAt(0) }}</span>
           </div>
@@ -134,10 +175,20 @@
         v-for="row in bookStore.books"
         :key="row.id"
         class="book-list-item"
-        @click="$router.push(`/books/${row.id}`)"
+        :class="{ selected: selectionMode && selectedBooks.has(row.id) }"
+        @click="handleListClick(row.id)"
       >
+        <!-- 多选复选框 -->
+        <div v-if="selectionMode" class="list-select-checkbox" @click.stop>
+          <input
+            type="checkbox"
+            :checked="selectedBooks.has(row.id)"
+            @change="toggleBookSelection(row.id)"
+          />
+        </div>
+
         <div class="book-cover-small">
-          <img v-if="row.coverUrl" :src="row.coverUrl" alt="封面" />
+          <img v-if="row.coverUrl" :src="getCoverUrl(row.coverUrl)" alt="封面" />
           <div v-else class="no-cover-small">{{ row.title.charAt(0) }}</div>
         </div>
         <div class="book-list-info">
@@ -187,6 +238,15 @@
         </div>
       </Transition>
     </Teleport>
+
+    <!-- 批量刮削对话框 -->
+    <BatchScraperDialog
+      :visible="showBatchScraperDialog"
+      :book-ids="Array.from(selectedBooks)"
+      :mode="batchScraperMode"
+      @close="showBatchScraperDialog = false"
+      @complete="handleBatchScraperComplete"
+    />
   </div>
 </template>
 
@@ -196,6 +256,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import FileUpload from '@/components/FileUpload.vue'
+import BatchScraperDialog from '@/components/BatchScraperDialog.vue'
+import { getCoverUrl } from '@/utils/cover'
 
 const route = useRoute()
 const router = useRouter()
@@ -207,8 +269,14 @@ const filterStatus = ref('')
 const sortBy = ref('createdAt')
 const viewMode = ref<'card' | 'list'>('card')
 const currentPage = ref(1)
-const pageSize = ref(12)
+const pageSize = ref(18)
 const showUploadDialog = ref(false)
+
+// 多选相关状态
+const selectionMode = ref(false)
+const selectedBooks = ref<Set<number>>(new Set())
+const showBatchScraperDialog = ref(false)
+const batchScraperMode = ref<'selected' | 'all-incomplete'>('selected')
 
 const totalPages = computed(() => Math.ceil(bookStore.totalElements / pageSize.value))
 
@@ -254,6 +322,58 @@ const handleToggleWanted = async (id: number) => {
     message.success('操作成功')
   } catch (error) {
     message.error('操作失败')
+  }
+}
+
+// 多选相关函数
+const toggleSelectionMode = () => {
+  selectionMode.value = !selectionMode.value
+  if (!selectionMode.value) {
+    selectedBooks.value.clear()
+  }
+}
+
+const toggleBookSelection = (bookId: number) => {
+  if (selectedBooks.value.has(bookId)) {
+    selectedBooks.value.delete(bookId)
+  } else {
+    selectedBooks.value.add(bookId)
+  }
+}
+
+const selectAllCurrentPage = () => {
+  bookStore.books.forEach(book => {
+    selectedBooks.value.add(book.id)
+  })
+}
+
+const clearSelection = () => {
+  selectedBooks.value.clear()
+}
+
+const openBatchScraper = (mode: 'selected' | 'all-incomplete') => {
+  batchScraperMode.value = mode
+  showBatchScraperDialog.value = true
+}
+
+const handleBatchScraperComplete = () => {
+  showBatchScraperDialog.value = false
+  loadBooks()
+}
+
+const handleCardClick = (bookId: number) => {
+  if (selectionMode.value) {
+    toggleBookSelection(bookId)
+  } else {
+    router.push(`/books/${bookId}`)
+  }
+}
+
+const handleListClick = (bookId: number) => {
+  if (selectionMode.value) {
+    toggleBookSelection(bookId)
+  } else {
+    router.push(`/books/${bookId}`)
   }
 }
 
@@ -414,8 +534,85 @@ onMounted(() => {
 /* 视图切换 */
 .view-controls {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: var(--spacing-lg);
+}
+
+.selection-controls {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+/* 批量操作工具栏 */
+.batch-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-lg);
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.selection-count {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.batch-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+/* 复选框样式 */
+.book-select-checkbox,
+.list-select-checkbox {
+  position: absolute;
+  z-index: 10;
+}
+
+.book-select-checkbox {
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+}
+
+.list-select-checkbox {
+  margin-right: var(--spacing-md);
+}
+
+.book-select-checkbox input,
+.list-select-checkbox input {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+/* 选中状态 */
+.book-card.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.3);
+}
+
+.book-list-item.selected {
+  background: rgba(0, 122, 255, 0.1);
 }
 
 /* 加载中和空状态 */
@@ -457,12 +654,13 @@ onMounted(() => {
 /* 书籍网格 */
 .books-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: var(--spacing-lg);
   margin-bottom: var(--spacing-xl);
 }
 
 .book-card {
+  position: relative;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -474,12 +672,12 @@ onMounted(() => {
 }
 
 .book-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
 }
 
 .book-cover {
-  height: 260px;
+  height: 200px;
   position: relative;
 }
 
@@ -497,7 +695,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 56px;
+  font-size: 40px;
   font-weight: 600;
 }
 
@@ -515,7 +713,7 @@ onMounted(() => {
 }
 
 .book-info {
-  padding: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
 }
 
 .book-title {
