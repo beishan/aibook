@@ -572,15 +572,16 @@ const currentPageContent = computed(() => {
 // 计算每页能显示多少段落（基于实际渲染高度）
 const calculatePageSize = (): number => {
   const readerBody = document.querySelector('.reader-body')
-  if (!readerBody) return 15
+  if (!readerBody) return 8
 
-  const availableHeight = readerBody.clientHeight - 100 // 减去padding
+  // 可用高度 = 容器高度 - 上下padding(40px*2) - 提示区域(60px)
+  const availableHeight = readerBody.clientHeight - 140
   const lineHeight = settings.value.fontSize * settings.value.lineHeight
   const paragraphSpacing = settings.value.paragraphSpacing
-  // 每段大约2-4行，取平均值3行
-  const estimatedParagraphHeight = lineHeight * 2.5 + paragraphSpacing
+  // 每段按4行计算，更保守
+  const estimatedParagraphHeight = lineHeight * 4 + paragraphSpacing
 
-  return Math.max(3, Math.floor(availableHeight / estimatedParagraphHeight))
+  return Math.max(2, Math.floor(availableHeight / estimatedParagraphHeight))
 }
 
 const updateTotalPages = () => {
