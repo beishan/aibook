@@ -233,7 +233,7 @@ const handleThemeChange = (id: ThemeId) => {
   message.success(`已切换到「${themes.find(t => t.id === id)?.name}」主题`)
 }
 
-const activeTab = ref('directories')
+const activeTab = ref('theme')
 const loading = ref(false)
 const adding = ref(false)
 const showAddDialog = ref(false)
