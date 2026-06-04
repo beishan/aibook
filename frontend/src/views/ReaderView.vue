@@ -665,19 +665,28 @@ const loadBook = async () => {
   }
 
   try {
+    // 先获取书籍信息
     book.value = await bookStore.fetchBookById(id)
 
-    // 加载已保存的阅读进度
-    await loadSavedProgress(id)
+    // 并行加载进度、书签、高亮和内容
+    const promises = [
+      loadSavedProgress(id),
+      loadBookmarks(id),
+      loadHighlights(id)
+    ]
 
-    // 加载书签和高亮
-    await Promise.all([loadBookmarks(id), loadHighlights(id)])
-
+    // 根据格式加载内容
     if (book.value.format === 'txt' || book.value.format === 'md') {
-      await loadTextContent()
+      promises.push(loadTextContent())
     } else if (book.value.format === 'html') {
-      await loadHtmlContent()
-    } else if (book.value.format === 'epub') {
+      promises.push(loadHtmlContent())
+    }
+
+    // 等待所有请求完成
+    await Promise.all(promises)
+
+    // EPUB 需要在 DOM 更新后初始化
+    if (book.value.format === 'epub') {
       await nextTick()
       initEpub()
     }

@@ -81,14 +81,9 @@ export const useBookStore = defineStore('book', () => {
 
   // 获取书籍详情
   async function fetchBookById(id: number) {
-    loading.value = true
-    try {
-      const response = await api.get(`/api/books/${id}`)
-      currentBook.value = response.data
-      return response.data
-    } finally {
-      loading.value = false
-    }
+    const response = await api.get(`/api/books/${id}`)
+    currentBook.value = response.data
+    return response.data
   }
 
   // 切换收藏状态
