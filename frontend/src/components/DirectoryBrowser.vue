@@ -85,14 +85,15 @@ const treeData = ref<TreeNodeData[]>([])
 const loadDirectory = async (path: string): Promise<TreeNodeData[]> => {
   try {
     const res = await api.get('/api/files/browse', { params: { path } })
-    const items: DirectoryItem[] = res.data.directories || []
+    // 后端直接返回数组格式
+    const items: DirectoryItem[] = Array.isArray(res.data) ? res.data : (res.data.directories || [])
     return items
       .filter((item: DirectoryItem) => item.isDirectory)
       .map((item: DirectoryItem) => ({
         name: item.name,
         path: item.path,
         isDirectory: item.isDirectory,
-        accessible: item.readable !== false,
+        accessible: item.accessible !== false,
         expanded: false,
         children: [],
         loaded: false,
