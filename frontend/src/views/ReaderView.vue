@@ -1267,6 +1267,12 @@ onMounted(() => {
   loadReaderSettings()
   loadBook()
   document.addEventListener('keydown', handleKeydown)
+
+  // 禁用父容器的滚动，让 reader-body 自己处理滚动
+  const layoutMain = document.querySelector('.layout-main')
+  if (layoutMain) {
+    layoutMain.style.overflow = 'hidden'
+  }
 })
 
 onBeforeUnmount(() => {
@@ -1315,20 +1321,31 @@ onBeforeUnmount(() => {
   }
 
   document.removeEventListener('keydown', handleKeydown)
+
+  // 恢复父容器的滚动
+  const layoutMain = document.querySelector('.layout-main')
+  if (layoutMain) {
+    layoutMain.style.overflow = ''
+  }
 })
 </script>
 
 <style scoped>
 .reader-view {
-  height: 100%;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   background: var(--bg-page-gradient);
-  position: relative;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
 }
 
 .reader-view.fullscreen-mode {
-  height: 100vh;
+  /* Already full screen with fixed positioning */
 }
 
 /* 加载中和空状态 */
@@ -1370,6 +1387,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 /* 阅读器头部 */
@@ -1385,6 +1403,8 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   z-index: 100;
   min-height: 56px;
+  position: sticky;
+  top: 0;
 }
 
 .back-btn {
@@ -1455,6 +1475,7 @@ onBeforeUnmount(() => {
   display: flex;
   overflow: hidden;
   position: relative;
+  min-height: 0;
 }
 
 /* 侧边面板 */
@@ -1710,6 +1731,7 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   width: 100%;
   scroll-behavior: smooth;
+  min-height: 0;
 }
 
 .epub-container {
