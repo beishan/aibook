@@ -31,7 +31,7 @@ public class FileBrowseController {
             "/uploads",
             "/data",
             "/media",
-            "/scanfloder"
+            "/scanfolder"
     );
 
     /**
@@ -146,7 +146,7 @@ public class FileBrowseController {
                 .build());
 
         // 添加常用目录
-        String[] commonPaths = {"/home", "/books", "/app", "/uploads", "/data", "/media"};
+        String[] commonPaths = {"/home", "/books", "/app", "/uploads", "/data", "/media", "/scanfolder"};
         for (String path : commonPaths) {
             Path dirPath = Paths.get(path);
             if (Files.exists(dirPath) && Files.isDirectory(dirPath)) {
