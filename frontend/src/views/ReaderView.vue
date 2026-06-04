@@ -1,5 +1,5 @@
 <template>
-  <div class="reader-view">
+  <div class="reader-view" :class="{ 'fullscreen-mode': isFullscreen }">
     <!-- 加载中 -->
     <div v-if="loading" class="loading">
       <div class="loading-spinner"></div>
@@ -9,46 +9,175 @@
     <!-- 阅读器内容 -->
     <div v-else-if="book" class="reader-content">
       <!-- 阅读器头部 -->
-      <header class="reader-header glass">
+      <header class="reader-header glass" v-show="!isFullscreen">
         <button class="back-btn" @click="goBack">
           <span>‹</span>
           <span>返回</span>
         </button>
         <div class="reader-title">{{ book.title }}</div>
         <div class="reader-actions">
-          <button v-if="book.format === 'epub' || tocItems.length > 0" class="btn btn-icon" @click="toggleToc">
+          <button
+            v-if="book.format === 'epub' || tocItems.length > 0"
+            class="btn btn-icon"
+            :class="{ active: showToc }"
+            @click="togglePanel('toc')"
+            title="目录"
+          >
             <span>☰</span>
           </button>
-          <button class="btn btn-icon" @click="showSettings = true">
+          <button
+            class="btn btn-icon"
+            :class="{ active: showBookmarks }"
+            @click="togglePanel('bookmarks')"
+            title="书签"
+          >
+            <span>📑</span>
+          </button>
+          <button
+            class="btn btn-icon"
+            :class="{ active: showHighlights }"
+            @click="togglePanel('highlights')"
+            title="高亮"
+          >
+            <span>🖍️</span>
+          </button>
+          <button class="btn btn-icon" @click="showSettings = true" title="设置">
             <span>⚙️</span>
+          </button>
+          <button class="btn btn-icon" @click="toggleFullscreen" :title="isFullscreen ? '退出全屏' : '全屏'">
+            <span>{{ isFullscreen ? '⊡' : '⊞' }}</span>
           </button>
         </div>
       </header>
 
       <div class="reader-body-wrapper">
-        <!-- 目录侧边栏 -->
+        <!-- 左侧面板：目录/书签/高亮 -->
         <Transition name="slide-left">
-          <div v-if="showToc && (book.format === 'epub' || tocItems.length > 0)" class="toc-sidebar glass">
-            <div class="toc-header">
-              <span>📑 目录</span>
-              <button class="btn btn-icon btn-small" @click="showToc = false">✕</button>
-            </div>
-            <div class="toc-list">
-              <div
-                v-for="(item, index) in tocItems"
-                :key="index"
-                class="toc-item"
-                :class="{ active: item.href === currentTocHref }"
-                @click="goToTocItem(item)"
+          <div v-if="showSidePanel" class="side-panel glass">
+            <!-- 面板标签页 -->
+            <div class="panel-tabs">
+              <button
+                class="tab-btn"
+                :class="{ active: activeTab === 'toc' }"
+                @click="activeTab = 'toc'"
               >
-                {{ item.label }}
+                目录
+              </button>
+              <button
+                class="tab-btn"
+                :class="{ active: activeTab === 'bookmarks' }"
+                @click="activeTab = 'bookmarks'"
+              >
+                书签
+              </button>
+              <button
+                class="tab-btn"
+                :class="{ active: activeTab === 'highlights' }"
+                @click="activeTab = 'highlights'"
+              >
+                高亮
+              </button>
+              <button class="btn btn-icon btn-small close-panel" @click="closeAllPanels">✕</button>
+            </div>
+
+            <!-- 目录内容 -->
+            <div v-if="activeTab === 'toc'" class="panel-content">
+              <div class="toc-header">
+                <span>📑 章节目录</span>
+                <span class="tag">{{ tocItems.length }} 章</span>
+              </div>
+              <div class="toc-list">
+                <div
+                  v-for="(item, index) in tocItems"
+                  :key="index"
+                  class="toc-item"
+                  :class="{ active: isCurrentTocItem(item) }"
+                  @click="goToTocItem(item)"
+                >
+                  <span class="toc-index">{{ index + 1 }}</span>
+                  <span class="toc-title">{{ item.label }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 书签内容 -->
+            <div v-if="activeTab === 'bookmarks'" class="panel-content">
+              <div class="bookmarks-header">
+                <span>📑 我的书签</span>
+                <button class="btn btn-primary btn-small" @click="handleAddBookmark">
+                  + 添加书签
+                </button>
+              </div>
+              <div v-if="bookmarks.length === 0" class="empty-panel">
+                <div class="empty-icon">📑</div>
+                <p>暂无书签</p>
+                <p class="empty-hint">点击上方按钮添加当前阅读位置</p>
+              </div>
+              <div v-else class="bookmarks-list">
+                <div
+                  v-for="bookmark in bookmarks"
+                  :key="bookmark.id"
+                  class="bookmark-item"
+                  @click="handleGotoBookmark(bookmark)"
+                >
+                  <div class="bookmark-icon">🔖</div>
+                  <div class="bookmark-info">
+                    <div class="bookmark-title">{{ bookmark.title || '书签' }}</div>
+                    <div class="bookmark-meta">
+                      <span>{{ bookmark.chapter || '未知章节' }}</span>
+                      <span>·</span>
+                      <span>{{ formatTime(bookmark.createdAt) }}</span>
+                    </div>
+                  </div>
+                  <button class="btn btn-icon btn-small" @click.stop="handleDeleteBookmark(bookmark)">
+                    <span>🗑️</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 高亮内容 -->
+            <div v-if="activeTab === 'highlights'" class="panel-content">
+              <div class="highlights-header">
+                <span>🖍️ 高亮与笔记</span>
+                <span class="tag">{{ highlights.length }} 条</span>
+              </div>
+              <div v-if="highlights.length === 0" class="empty-panel">
+                <div class="empty-icon">🖍️</div>
+                <p>暂无高亮内容</p>
+                <p class="empty-hint">选中文本后可添加高亮或笔记</p>
+              </div>
+              <div v-else class="highlights-list">
+                <div
+                  v-for="highlight in highlights"
+                  :key="highlight.id"
+                  class="highlight-item"
+                  :style="{ borderLeftColor: highlight.color }"
+                >
+                  <div class="highlight-content">
+                    <div class="highlight-text">"{{ highlight.text }}"</div>
+                    <div v-if="highlight.note" class="highlight-note">
+                      <span class="note-icon">✏️</span>
+                      <span>{{ highlight.note }}</span>
+                    </div>
+                  </div>
+                  <div class="highlight-meta">
+                    <span>{{ highlight.chapter }}</span>
+                    <span>·</span>
+                    <span>{{ formatTime(highlight.createdAt) }}</span>
+                  </div>
+                  <div class="highlight-actions">
+                    <button class="btn btn-text" @click="handleGotoHighlight(highlight)">定位</button>
+                    <button class="btn btn-text btn-danger" @click="handleDeleteHighlight(highlight)">删除</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </Transition>
 
         <!-- 阅读器内容 -->
-        <div class="reader-body" :style="readerStyle">
+        <div class="reader-body" :style="readerStyle" @scroll="handleScroll">
           <!-- EPUB 阅读器 -->
           <div v-if="book.format === 'epub'" ref="epubContainer" class="epub-container"></div>
 
@@ -58,7 +187,7 @@
               <div v-if="isChapterTitle(paragraph)" class="chapter-title" :id="'chapter-' + index">
                 {{ paragraph }}
               </div>
-              <p v-else>{{ paragraph }}</p>
+              <p v-else :id="'para-' + index">{{ paragraph }}</p>
             </template>
           </div>
 
@@ -80,30 +209,57 @@
       </div>
 
       <!-- 阅读器底部 -->
-      <footer class="reader-footer glass" v-if="book.format !== 'epub'">
-        <div class="progress-info">
-          <span>进度：{{ progress }}%</span>
-        </div>
-        <div class="progress-bar-wrapper">
-          <div class="progress" style="height: 6px;">
-            <div class="progress-bar" :style="{ width: progress + '%' }"></div>
+      <footer class="reader-footer glass" v-show="!isFullscreen">
+        <!-- 非EPUB格式 -->
+        <template v-if="book.format !== 'epub'">
+          <div class="footer-left">
+            <span class="chapter-info">{{ currentChapterName }}</span>
           </div>
-          <input type="range" v-model="progress" min="0" max="100" class="progress-slider" />
-        </div>
+          <div class="footer-center">
+            <div class="progress-bar-wrapper">
+              <div class="progress-bar" :style="{ width: progress + '%' }"></div>
+              <input type="range" v-model="progress" min="0" max="100" class="progress-slider" @input="handleProgressChange" />
+            </div>
+          </div>
+          <div class="footer-right">
+            <span class="progress-text">{{ progress }}%</span>
+          </div>
+        </template>
+
+        <!-- EPUB格式 -->
+        <template v-else>
+          <button class="btn" @click="prevPage" :disabled="!bookInstance">
+            <span>‹</span>
+            <span>上一页</span>
+          </button>
+          <div class="epub-info">
+            <span class="epub-location">{{ currentLocation || '' }}</span>
+            <span class="epub-progress">{{ progress }}%</span>
+          </div>
+          <button class="btn" @click="nextPage" :disabled="!bookInstance">
+            <span>下一页</span>
+            <span>›</span>
+          </button>
+        </template>
       </footer>
 
-      <!-- EPUB 底部导航 -->
-      <footer class="reader-footer glass epub-footer" v-else>
-        <button class="btn" @click="prevPage" :disabled="!bookInstance">
-          <span>‹</span>
-          <span>上一页</span>
-        </button>
-        <span class="epub-location">{{ currentLocation || '' }}</span>
-        <button class="btn" @click="nextPage" :disabled="!bookInstance">
-          <span>下一页</span>
-          <span>›</span>
-        </button>
-      </footer>
+      <!-- 全屏模式下的浮动控制条 -->
+      <div v-if="isFullscreen" class="fullscreen-controls" @mouseenter="showFullscreenControls = true" @mouseleave="showFullscreenControls = false">
+        <Transition name="fade">
+          <div v-if="showFullscreenControls" class="floating-bar glass">
+            <button class="btn btn-icon" @click="togglePanel('toc')" title="目录">
+              <span>☰</span>
+            </button>
+            <button class="btn btn-icon" @click="showSettings = true" title="设置">
+              <span>⚙️</span>
+            </button>
+            <span class="floating-progress">{{ progress }}%</span>
+            <button class="btn btn-icon" @click="toggleFullscreen" title="退出全屏">
+              <span>⊡</span>
+            </button>
+          </div>
+        </Transition>
+      </div>
 
       <!-- 设置面板 -->
       <Transition name="slide-right">
@@ -114,50 +270,81 @@
               <button class="dialog-close" @click="showSettings = false">✕</button>
             </div>
             <div class="settings-body">
-              <div class="form-group">
-                <label class="form-label">字体</label>
-                <select v-model="settings.fontFamily" class="select-input">
-                  <option value="default">默认</option>
-                  <option value="SimSun, serif">宋体</option>
-                  <option value="SimHei, sans-serif">黑体</option>
-                  <option value="KaiTi, serif">楷体</option>
-                </select>
+              <!-- 字体设置 -->
+              <div class="setting-section">
+                <h4 class="section-title">字体设置</h4>
+                <div class="form-group">
+                  <label class="form-label">字体</label>
+                  <div class="font-options">
+                    <button
+                      v-for="font in fontOptions"
+                      :key="font.value"
+                      class="font-btn"
+                      :class="{ active: settings.fontFamily === font.value }"
+                      :style="{ fontFamily: font.preview }"
+                      @click="settings.fontFamily = font.value"
+                    >
+                      {{ font.label }}
+                    </button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">字号：{{ settings.fontSize }}px</label>
+                  <div class="slider-wrapper">
+                    <span class="slider-min">A</span>
+                    <input type="range" v-model="settings.fontSize" min="12" max="28" class="slider" />
+                    <span class="slider-max">A</span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">行间距：{{ settings.lineHeight }}</label>
+                  <input type="range" v-model="settings.lineHeight" min="1.2" max="2.5" step="0.1" class="slider" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">段落间距：{{ settings.paragraphSpacing }}px</label>
+                  <input type="range" v-model="settings.paragraphSpacing" min="0" max="40" step="2" class="slider" />
+                </div>
               </div>
-              <div class="form-group">
-                <label class="form-label">字号：{{ settings.fontSize }}px</label>
-                <input type="range" v-model="settings.fontSize" min="12" max="24" class="slider" />
+
+              <!-- 主题设置 -->
+              <div class="setting-section">
+                <h4 class="section-title">阅读主题</h4>
+                <div class="theme-options">
+                  <button
+                    v-for="theme in themeOptions"
+                    :key="theme.value"
+                    class="theme-btn"
+                    :class="{ active: settings.backgroundColor === theme.value }"
+                    @click="settings.backgroundColor = theme.value"
+                  >
+                    <span class="theme-preview" :style="getThemePreviewStyle(theme)">
+                      <span class="preview-title">字</span>
+                      <span class="preview-line"></span>
+                      <span class="preview-line short"></span>
+                    </span>
+                    <span class="theme-name">{{ theme.label }}</span>
+                  </button>
+                </div>
               </div>
-              <div class="form-group">
-                <label class="form-label">行间距：{{ settings.lineHeight }}</label>
-                <input type="range" v-model="settings.lineHeight" min="1" max="3" step="0.1" class="slider" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">背景色</label>
-                <div class="color-options">
-                  <button
-                    class="color-btn"
-                    :class="{ active: settings.backgroundColor === 'white' }"
-                    @click="settings.backgroundColor = 'white'"
-                  >
-                    <span class="color-preview" style="background: white;"></span>
-                    <span>白色</span>
-                  </button>
-                  <button
-                    class="color-btn"
-                    :class="{ active: settings.backgroundColor === '#f5f5dc' }"
-                    @click="settings.backgroundColor = '#f5f5dc'"
-                  >
-                    <span class="color-preview" style="background: #f5f5dc;"></span>
-                    <span>米色</span>
-                  </button>
-                  <button
-                    class="color-btn"
-                    :class="{ active: settings.backgroundColor === '#333' }"
-                    @click="settings.backgroundColor = '#333'"
-                  >
-                    <span class="color-preview" style="background: #333;"></span>
-                    <span>黑色</span>
-                  </button>
+
+              <!-- 阅读设置 -->
+              <div class="setting-section">
+                <h4 class="section-title">阅读偏好</h4>
+                <div class="form-group">
+                  <label class="form-label toggle-label">
+                    <span>首行缩进</span>
+                    <button class="toggle-switch" :class="{ on: settings.textIndent }" @click="settings.textIndent = !settings.textIndent">
+                      <span class="toggle-knob"></span>
+                    </button>
+                  </label>
+                </div>
+                <div class="form-group">
+                  <label class="form-label toggle-label">
+                    <span>显示阅读进度</span>
+                    <button class="toggle-switch" :class="{ on: settings.showProgress }" @click="settings.showProgress = !settings.showProgress">
+                      <span class="toggle-knob"></span>
+                    </button>
+                  </label>
                 </div>
               </div>
             </div>
@@ -179,10 +366,14 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookStore } from '@/stores/book'
+import { useThemeStore } from '@/stores/theme'
+import api from '@/utils/api'
+import { message, confirm } from '@/utils/message'
 
 const route = useRoute()
 const router = useRouter()
 const bookStore = useBookStore()
+const themeStore = useThemeStore()
 
 // 章节接口定义
 interface Chapter {
@@ -190,6 +381,29 @@ interface Chapter {
   index: number
   startIndex?: number
   endIndex?: number
+  label?: string
+  href?: string
+}
+
+interface Bookmark {
+  id: number
+  title: string
+  chapter?: string
+  page?: number
+  cfi?: string
+  scrollPosition?: number
+  createdAt: string
+}
+
+interface Highlight {
+  id: number
+  text: string
+  note?: string
+  color: string
+  chapter: string
+  startOffset: number
+  endOffset: number
+  createdAt: string
 }
 
 const book = ref<any>(null)
@@ -199,9 +413,19 @@ const htmlContent = ref('')
 const progress = ref(0)
 const showSettings = ref(false)
 const showToc = ref(false)
+const showBookmarks = ref(false)
+const showHighlights = ref(false)
+const activeTab = ref('toc')
 const tocItems = ref<Chapter[]>([])
 const currentTocHref = ref('')
 const currentLocation = ref('')
+const currentChapterName = ref('')
+const isFullscreen = ref(false)
+const showFullscreenControls = ref(false)
+
+// 书签和高亮数据
+const bookmarks = ref<Bookmark[]>([])
+const highlights = ref<Highlight[]>([])
 
 // EPUB 相关
 const epubContainer = ref<HTMLElement>()
@@ -214,25 +438,101 @@ const pdfUrl = computed(() => {
   return `/api/books/${book.value.id}/content?token=${token}`
 })
 
+// 字体选项
+const fontOptions = [
+  { value: 'default', label: '默认', preview: 'inherit' },
+  { value: 'SimSun, serif', label: '宋体', preview: 'SimSun, serif' },
+  { value: 'SimHei, sans-serif', label: '黑体', preview: 'SimHei, sans-serif' },
+  { value: 'KaiTi, serif', label: '楷体', preview: 'KaiTi, serif' },
+  { value: 'FangSong, serif', label: '仿宋', preview: 'FangSong, serif' },
+]
+
+// 主题选项
+const themeOptions = [
+  { value: 'auto', label: '跟随主题', textColor: 'auto' },
+  { value: '#ffffff', label: '白色', textColor: '#333' },
+  { value: '#f5f5dc', label: '米色', textColor: '#333' },
+  { value: '#e8f5e9', label: '护眼', textColor: '#333' },
+  { value: '#fff8e1', label: '暖黄', textColor: '#333' },
+  { value: '#2d2d2d', label: '暗黑', textColor: '#eee' },
+  { value: '#1a1a2e', label: '深蓝', textColor: '#eee' },
+]
+
+// 自动跟随主题的颜色映射
+const autoThemeColors = computed(() => {
+  switch (themeStore.currentTheme) {
+    case 'modern': return { bg: '#ffffff', text: '#1a1a1a' }
+    case 'warm': return { bg: '#faf6f1', text: '#3d2b1f' }
+    case 'natural':
+    default: return { bg: '#f0f7f4', text: '#1a3a2a' }
+  }
+})
+
+// 获取主题预览样式
+const getThemePreviewStyle = (theme: any) => {
+  if (theme.value === 'auto') {
+    return { background: autoThemeColors.value.bg, color: autoThemeColors.value.text }
+  }
+  return { background: theme.value, color: theme.textColor }
+}
+
+const SETTINGS_STORAGE_KEY = 'ai-book-reader-settings'
+
 const settings = ref({
   fontFamily: 'default',
   fontSize: 16,
   lineHeight: 1.8,
-  backgroundColor: 'white',
+  paragraphSpacing: 16,
+  backgroundColor: 'auto',
+  textIndent: true,
+  showProgress: true,
 })
 
-const readerStyle = computed(() => ({
-  fontFamily: settings.value.fontFamily === 'default' ? 'inherit' : settings.value.fontFamily,
-  fontSize: `${settings.value.fontSize}px`,
-  lineHeight: settings.value.lineHeight,
-  backgroundColor: settings.value.backgroundColor,
-  color: settings.value.backgroundColor === '#333' ? '#fff' : '#333',
-}))
+// 获取实际背景色和文字色（处理 'auto' 跟随主题）
+const getResolvedColors = (bg: string) => {
+  if (bg === 'auto') {
+    return { bg: autoThemeColors.value.bg, text: autoThemeColors.value.text }
+  }
+  return { bg, text: ['#2d2d2d', '#1a1a2e'].includes(bg) ? '#eee' : '#333' }
+}
+
+const readerStyle = computed(() => {
+  const colors = getResolvedColors(settings.value.backgroundColor)
+  return {
+    fontFamily: settings.value.fontFamily === 'default' ? 'inherit' : settings.value.fontFamily,
+    fontSize: `${settings.value.fontSize}px`,
+    lineHeight: settings.value.lineHeight,
+    backgroundColor: colors.bg,
+    color: colors.text,
+  }
+})
+
+// 加载保存的阅读设置
+const loadReaderSettings = () => {
+  try {
+    const saved = localStorage.getItem(SETTINGS_STORAGE_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      Object.assign(settings.value, parsed)
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// 保存阅读设置
+const saveReaderSettings = () => {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings.value))
+  } catch (e) { /* ignore */ }
+}
+
+// 面板显示状态
+const showSidePanel = computed(() => showToc.value || showBookmarks.value || showHighlights.value)
 
 // 阅读进度保存相关
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let readingStartTime = 0
 const savedCfi = ref<string | null>(null)
+const savedScrollPosition = ref<number | null>(null)
 
 const loadBook = async () => {
   const id = Number(route.params.id)
@@ -246,6 +546,9 @@ const loadBook = async () => {
 
     // 加载已保存的阅读进度
     await loadSavedProgress(id)
+
+    // 加载书签和高亮
+    await Promise.all([loadBookmarks(id), loadHighlights(id)])
 
     if (book.value.format === 'txt' || book.value.format === 'md') {
       await loadTextContent()
@@ -287,6 +590,116 @@ const loadSavedProgress = async (bookId: number) => {
     }
   } catch (error) {
     console.error('Failed to load reading progress:', error)
+  }
+}
+
+/**
+ * 加载书签
+ */
+const loadBookmarks = async (bookId: number) => {
+  try {
+    const response = await api.get(`/api/books/${bookId}/bookmarks`)
+    bookmarks.value = response.data || []
+  } catch (error) {
+    console.error('Failed to load bookmarks:', error)
+  }
+}
+
+/**
+ * 加载高亮
+ */
+const loadHighlights = async (bookId: number) => {
+  try {
+    const response = await api.get(`/api/books/${bookId}/highlights`)
+    highlights.value = response.data || []
+  } catch (error) {
+    console.error('Failed to load highlights:', error)
+  }
+}
+
+/**
+ * 添加书签
+ */
+const handleAddBookmark = async () => {
+  if (!book.value) return
+
+  try {
+    const bookmarkData: any = {
+      title: currentChapterName.value || '书签',
+      chapter: currentChapterName.value,
+    }
+
+    if (book.value.format === 'epub' && rendition) {
+      const location = rendition.currentLocation()
+      if (location?.start?.cfi) {
+        bookmarkData.cfi = location.start.cfi
+      }
+    } else {
+      const readerBody = document.querySelector('.reader-body')
+      if (readerBody) {
+        bookmarkData.scrollPosition = readerBody.scrollTop
+      }
+    }
+
+    const response = await api.post(`/api/books/${book.value.id}/bookmarks`, bookmarkData)
+    bookmarks.value.unshift(response.data)
+    message.success('书签添加成功')
+  } catch (error) {
+    message.error('书签添加失败')
+  }
+}
+
+/**
+ * 跳转到书签位置
+ */
+const handleGotoBookmark = async (bookmark: Bookmark) => {
+  if (book.value?.format === 'epub' && bookmark.cfi && rendition) {
+    await rendition.display(bookmark.cfi)
+  } else if (bookmark.scrollPosition !== undefined) {
+    const readerBody = document.querySelector('.reader-body')
+    if (readerBody) {
+      readerBody.scrollTop = bookmark.scrollPosition
+    }
+  }
+}
+
+/**
+ * 删除书签
+ */
+const handleDeleteBookmark = async (bookmark: Bookmark) => {
+  const result = await confirm('确定要删除这个书签吗？')
+  if (result) {
+    try {
+      await api.delete(`/api/books/${book.value.id}/bookmarks/${bookmark.id}`)
+      bookmarks.value = bookmarks.value.filter(b => b.id !== bookmark.id)
+      message.success('书签已删除')
+    } catch (error) {
+      message.error('删除失败')
+    }
+  }
+}
+
+/**
+ * 跳转到高亮位置
+ */
+const handleGotoHighlight = (highlight: Highlight) => {
+  // TODO: 实现高亮定位
+  message.info('高亮定位功能开发中')
+}
+
+/**
+ * 删除高亮
+ */
+const handleDeleteHighlight = async (highlight: Highlight) => {
+  const result = await confirm('确定要删除这个高亮吗？')
+  if (result) {
+    try {
+      await api.delete(`/api/books/${book.value.id}/highlights/${highlight.id}`)
+      highlights.value = highlights.value.filter(h => h.id !== highlight.id)
+      message.success('高亮已删除')
+    } catch (error) {
+      message.error('删除失败')
+    }
   }
 }
 
@@ -361,7 +774,7 @@ const parseChapters = (paragraphs: string[]): Chapter[] => {
   paragraphs.forEach((paragraph, index) => {
     const trimmed = paragraph.trim()
     if (patterns.some(pattern => pattern.test(trimmed))) {
-      chapters.push({ title: trimmed, index })
+      chapters.push({ title: trimmed, index, label: trimmed })
     }
   })
 
@@ -369,7 +782,7 @@ const parseChapters = (paragraphs: string[]): Chapter[] => {
 }
 
 /**
- * 将后端章节信息映射到段落索引（按标题匹配，不依赖字符位置）
+ * 将后端章节信息映射到段落索引
  */
 const mapChaptersToParagraphs = (
   backendChapters: { title: string; startIndex: number; endIndex: number }[],
@@ -380,14 +793,14 @@ const mapChaptersToParagraphs = (
 
   for (const ch of backendChapters) {
     const titleTrimmed = ch.title.trim()
-    // 在段落中查找匹配的标题
     const paraIndex = paragraphs.findIndex(p => p.trim() === titleTrimmed)
     if (paraIndex >= 0) {
       result.push({
         title: titleTrimmed,
         index: paraIndex,
         startIndex: ch.startIndex,
-        endIndex: ch.endIndex
+        endIndex: ch.endIndex,
+        label: titleTrimmed
       })
     }
   }
@@ -402,42 +815,43 @@ const isChapterTitle = (paragraph: string): boolean => {
   return tocItems.value.some(item => item.title === paragraph.trim())
 }
 
+/**
+ * 判断是否为当前目录项
+ */
+const isCurrentTocItem = (item: Chapter): boolean => {
+  if (book.value?.format === 'epub') {
+    return item.href === currentTocHref.value
+  }
+  return item.title === currentChapterName.value
+}
+
 const loadTextContent = async () => {
   try {
     const token = localStorage.getItem('token')
 
-    // 优先使用后端处理端点（带段落归一化 + 章节信息）
     const response = await fetch(`/api/books/${book.value.id}/content-processed`, {
       headers: { Authorization: `Bearer ${token}` }
     })
 
     if (response.ok) {
       const data = await response.json()
-      // 分段
       content.value = data.text.split(/\n\n+/).filter((p: string) => p.trim())
 
-      // 使用后端章节信息
       if (data.chapterInfo && data.chapterInfo !== '[]') {
         try {
           const backendChapters = JSON.parse(data.chapterInfo)
           if (backendChapters.length > 0) {
             tocItems.value = mapChaptersToParagraphs(backendChapters, data.text)
-            console.log('[Reader] Backend chapters:', tocItems.value.length, tocItems.value.slice(0, 3))
           } else {
             tocItems.value = parseChapters(content.value)
-            console.log('[Reader] Client chapters (fallback):', tocItems.value.length)
           }
         } catch (e) {
-          console.error('[Reader] Failed to parse chapterInfo:', e)
           tocItems.value = parseChapters(content.value)
         }
       } else {
         tocItems.value = parseChapters(content.value)
-        console.log('[Reader] No backend chapterInfo, client chapters:', tocItems.value.length)
       }
     } else {
-      // 降级：原始内容 + 客户端解析
-      console.warn('[Reader] content-processed failed, status:', response.status)
       const rawResponse = await fetch(`/api/books/${book.value.id}/content`, {
         headers: { Authorization: `Bearer ${token}` }
       })
@@ -446,10 +860,8 @@ const loadTextContent = async () => {
       tocItems.value = parseChapters(content.value)
     }
 
-    // 等待 DOM 渲染后恢复滚动位置并监听滚动
     await nextTick()
     restoreScrollPosition()
-    setupScrollListener()
   } catch (error) {
     console.error('Failed to load text content:', error)
     content.value = ['加载内容失败']
@@ -457,7 +869,7 @@ const loadTextContent = async () => {
 }
 
 /**
- * 恢复 TXT/MD 滚动位置
+ * 恢复滚动位置
  */
 const restoreScrollPosition = () => {
   if (progress.value > 0) {
@@ -470,24 +882,23 @@ const restoreScrollPosition = () => {
 }
 
 /**
- * 监听 TXT/MD 滚动事件，保存进度
+ * 处理滚动事件
  */
-const setupScrollListener = () => {
+const handleScroll = () => {
+  if (book.value?.format === 'epub') return
+
   const readerBody = document.querySelector('.reader-body')
   if (!readerBody) return
 
-  readerBody.addEventListener('scroll', () => {
-    const maxScroll = readerBody.scrollHeight - readerBody.clientHeight
-    if (maxScroll > 0) {
-      const currentProgress = Math.round((readerBody.scrollTop / maxScroll) * 100)
-      if (Math.abs(currentProgress - progress.value) >= 1) {
-        progress.value = currentProgress
-        // 找到当前可见的章节作为 currentChapter
-        const currentChapter = findCurrentChapter()
-        saveProgress(currentProgress, currentChapter)
-      }
+  const maxScroll = readerBody.scrollHeight - readerBody.clientHeight
+  if (maxScroll > 0) {
+    const currentProgress = Math.round((readerBody.scrollTop / maxScroll) * 100)
+    if (Math.abs(currentProgress - progress.value) >= 1) {
+      progress.value = currentProgress
+      currentChapterName.value = findCurrentChapter()
+      saveProgress(currentProgress, currentChapterName.value)
     }
-  })
+  }
 }
 
 /**
@@ -508,6 +919,17 @@ const findCurrentChapter = (): string => {
   }
 
   return currentChapter
+}
+
+/**
+ * 处理进度条拖动
+ */
+const handleProgressChange = () => {
+  const readerBody = document.querySelector('.reader-body')
+  if (!readerBody) return
+
+  const maxScroll = readerBody.scrollHeight - readerBody.clientHeight
+  readerBody.scrollTop = maxScroll * (progress.value / 100)
 }
 
 const loadHtmlContent = async () => {
@@ -558,7 +980,6 @@ const initEpub = async () => {
         if (bookInstance.locations && bookInstance.locations.length()) {
           const percentage = bookInstance.locations.percentageFromCfi(location.start.cfi)
           progress.value = Math.round(percentage * 100)
-          // 保存阅读进度，用 CFI 作为当前章节标记
           saveProgress(progress.value, location.start.cfi)
         }
       }
@@ -568,22 +989,16 @@ const initEpub = async () => {
       applyThemeToContent(contents)
     })
 
-    // 先生成 locations，再 display，否则首次 relocated 事件中无法计算进度
     await bookInstance.locations.generate(1024)
-    console.log('[Reader] Locations generated, count:', bookInstance.locations.length())
 
-    // 如果有保存的阅读位置，恢复到该位置
     if (savedCfi.value) {
-      console.log('[Reader] Restoring to CFI:', savedCfi.value)
       try {
         await rendition.display(savedCfi.value)
-        console.log('[Reader] Restored to saved position')
       } catch (e) {
         console.error('[Reader] Failed to restore CFI, falling back to start:', e)
         await rendition.display()
       }
     } else {
-      console.log('[Reader] No saved CFI, starting from beginning')
       await rendition.display()
     }
 
@@ -594,7 +1009,7 @@ const initEpub = async () => {
 
 const flattenToc = (toc: any[], result: any[] = []): any[] => {
   for (const item of toc) {
-    result.push({ label: item.label.trim(), href: item.href })
+    result.push({ label: item.label.trim(), href: item.href, title: item.label.trim() })
     if (item.subitems && item.subitems.length > 0) {
       flattenToc(item.subitems, result)
     }
@@ -602,17 +1017,36 @@ const flattenToc = (toc: any[], result: any[] = []): any[] => {
   return result
 }
 
-const toggleToc = () => {
-  showToc.value = !showToc.value
+const togglePanel = (panel: 'toc' | 'bookmarks' | 'highlights') => {
+  if (panel === 'toc') {
+    showToc.value = !showToc.value
+    showBookmarks.value = false
+    showHighlights.value = false
+    activeTab.value = 'toc'
+  } else if (panel === 'bookmarks') {
+    showBookmarks.value = !showBookmarks.value
+    showToc.value = false
+    showHighlights.value = false
+    activeTab.value = 'bookmarks'
+  } else if (panel === 'highlights') {
+    showHighlights.value = !showHighlights.value
+    showToc.value = false
+    showBookmarks.value = false
+    activeTab.value = 'highlights'
+  }
+}
+
+const closeAllPanels = () => {
+  showToc.value = false
+  showBookmarks.value = false
+  showHighlights.value = false
 }
 
 const goToTocItem = (item: Chapter | any) => {
   if (book.value?.format === 'epub' && rendition) {
-    // EPUB跳转
     rendition.display(item.href)
     currentTocHref.value = item.href
   } else if (book.value?.format === 'txt' || book.value?.format === 'md') {
-    // TXT/MD跳转 - 滚动到对应章节
     const element = document.getElementById('chapter-' + item.index)
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' })
@@ -641,6 +1075,16 @@ const handleDownload = () => {
   window.open(`/api/books/${book.value.id}/content`, '_blank')
 }
 
+const toggleFullscreen = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen()
+    isFullscreen.value = true
+  } else {
+    document.exitFullscreen()
+    isFullscreen.value = false
+  }
+}
+
 const applyThemeToContent = (contents: any) => {
   if (!contents || !contents.css) return
 
@@ -648,13 +1092,13 @@ const applyThemeToContent = (contents: any) => {
     ? 'serif'
     : settings.value.fontFamily.split(',')[0].trim()
 
-  const textColor = settings.value.backgroundColor === '#333' ? '#fff' : '#333'
+  const colors = getResolvedColors(settings.value.backgroundColor)
 
   contents.css('font-family', `${fontFamily}, serif`, true)
   contents.css('font-size', `${settings.value.fontSize}px`, true)
   contents.css('line-height', `${settings.value.lineHeight}`, true)
-  contents.css('color', textColor, true)
-  contents.css('background', settings.value.backgroundColor, true)
+  contents.css('color', colors.text, true)
+  contents.css('background', colors.bg, true)
 
   try {
     const doc = contents.document
@@ -665,10 +1109,14 @@ const applyThemeToContent = (contents: any) => {
           font-family: ${fontFamily}, serif !important;
           font-size: ${settings.value.fontSize}px !important;
           line-height: ${settings.value.lineHeight} !important;
-          color: ${textColor} !important;
+          color: ${colors.text} !important;
         }
         body {
-          background: ${settings.value.backgroundColor} !important;
+          background: ${colors.bg} !important;
+        }
+        p {
+          margin-bottom: ${settings.value.paragraphSpacing}px !important;
+          ${settings.value.textIndent ? 'text-indent: 2em !important;' : ''}
         }
       `
       doc.head.appendChild(style)
@@ -684,14 +1132,22 @@ const applyEpubTheme = () => {
   contents.forEach((c: any) => applyThemeToContent(c))
 }
 
+const formatTime = (timeStr: string) => {
+  const date = new Date(timeStr)
+  return date.toLocaleString('zh-CN')
+}
+
 watch(() => settings.value, () => {
   applyEpubTheme()
+  saveReaderSettings()
 }, { deep: true })
 
-onMounted(loadBook)
+onMounted(() => {
+  loadReaderSettings()
+  loadBook()
+})
 
 onBeforeUnmount(() => {
-  // 清除防抖定时器
   if (saveTimer) {
     clearTimeout(saveTimer)
     saveTimer = null
@@ -699,7 +1155,6 @@ onBeforeUnmount(() => {
 
   const token = localStorage.getItem('token')
 
-  // 离开页面时同步保存最终进度（keepalive 保证请求不被取消）
   if (book.value && progress.value > 0 && token) {
     fetch(`/api/reading-progress/book/${book.value.id}`, {
       method: 'POST',
@@ -716,7 +1171,6 @@ onBeforeUnmount(() => {
     })
   }
 
-  // 保存阅读时长
   if (book.value && readingStartTime > 0 && token) {
     const elapsedSeconds = Math.floor((Date.now() - readingStartTime) / 1000)
     if (elapsedSeconds >= 5) {
@@ -742,10 +1196,15 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .reader-view {
-  height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg-page-gradient);
+  position: relative;
+}
+
+.reader-view.fullscreen-mode {
+  height: 100vh;
 }
 
 /* 加载中和空状态 */
@@ -794,13 +1253,14 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-md) var(--spacing-lg);
+  padding: var(--spacing-sm) var(--spacing-lg);
   background: var(--surface-card);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--border-color-light);
   flex-shrink: 0;
-  z-index: 10;
+  z-index: 100;
+  min-height: 56px;
 }
 
 .back-btn {
@@ -835,7 +1295,7 @@ onBeforeUnmount(() => {
 
 .reader-actions {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
 }
 
 .btn-icon {
@@ -847,6 +1307,16 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.btn-icon:hover {
+  background: var(--bg-tertiary);
+}
+
+.btn-icon.active {
+  background: var(--primary-alpha-20);
+  color: var(--primary);
 }
 
 .btn-small {
@@ -860,11 +1330,12 @@ onBeforeUnmount(() => {
   flex: 1;
   display: flex;
   overflow: hidden;
+  position: relative;
 }
 
-/* 目录侧边栏 */
-.toc-sidebar {
-  width: 280px;
+/* 侧边面板 */
+.side-panel {
+  width: 320px;
   background: var(--surface-elevated);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -872,30 +1343,76 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  z-index: 50;
 }
 
-.toc-header {
+.panel-tabs {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color-light);
+  padding: 0 var(--spacing-sm);
+  background: var(--surface-card);
+}
+
+.tab-btn {
+  flex: 1;
+  padding: var(--spacing-md) var(--spacing-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border-bottom: 2px solid transparent;
+}
+
+.tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.close-panel {
+  margin-left: auto;
+}
+
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-md);
+}
+
+/* 目录样式 */
+.toc-header,
+.bookmarks-header,
+.highlights-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-md) var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
   font-weight: 600;
-  border-bottom: 1px solid var(--border-color-light);
 }
 
 .toc-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--spacing-sm) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
 }
 
 .toc-item {
-  padding: var(--spacing-md) var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
   cursor: pointer;
   font-size: var(--font-size-sm);
   color: var(--text-primary);
   transition: all var(--transition-fast);
-  border-left: 3px solid transparent;
+  border-radius: var(--radius-md);
 }
 
 .toc-item:hover {
@@ -905,17 +1422,170 @@ onBeforeUnmount(() => {
 .toc-item.active {
   color: var(--primary);
   background: var(--primary-alpha-10);
-  border-left-color: var(--primary);
+}
+
+.toc-index {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.toc-item.active .toc-index {
+  background: var(--primary);
+  color: white;
+}
+
+.toc-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 空面板状态 */
+.empty-panel {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--text-secondary);
+}
+
+.empty-panel .empty-icon {
+  font-size: 48px;
+  margin-bottom: var(--spacing-md);
+  opacity: 0.5;
+}
+
+.empty-hint {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-top: var(--spacing-sm);
+}
+
+/* 书签列表 */
+.bookmarks-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.bookmark-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.bookmark-item:hover {
+  background: var(--primary-alpha-10);
+}
+
+.bookmark-icon {
+  font-size: 20px;
+}
+
+.bookmark-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.bookmark-title {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+/* 高亮列表 */
+.highlights-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.highlight-item {
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border-left: 4px solid;
+}
+
+.highlight-content {
+  margin-bottom: var(--spacing-sm);
+}
+
+.highlight-text {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  font-style: italic;
+  line-height: 1.6;
+}
+
+.highlight-note {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+}
+
+.note-icon {
+  flex-shrink: 0;
+}
+
+.highlight-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.highlight-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.btn-danger {
+  color: var(--danger) !important;
+}
+
+.btn-danger:hover {
+  background: rgba(255, 59, 48, 0.1) !important;
 }
 
 /* 阅读器内容区 */
 .reader-body {
   flex: 1;
   overflow-y: auto;
-  padding: var(--spacing-xl);
-  max-width: 800px;
+  padding: var(--spacing-xl) var(--spacing-2xl);
+  max-width: 900px;
   margin: 0 auto;
   width: 100%;
+  scroll-behavior: smooth;
 }
 
 .epub-container {
@@ -923,13 +1593,9 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
-.reader-text {
-  line-height: 1.8;
-}
-
 .reader-text p {
-  margin-bottom: 1em;
-  text-indent: 2em;
+  margin-bottom: v-bind('settings.paragraphSpacing + "px"');
+  text-indent: v-bind('settings.textIndent ? "2em" : "0"');
 }
 
 .chapter-title {
@@ -974,18 +1640,88 @@ onBeforeUnmount(() => {
 
 /* 阅读器底部 */
 .reader-footer {
-  padding: var(--spacing-md) var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-lg);
   background: var(--surface-card);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border-top: 1px solid var(--border-color-light);
   flex-shrink: 0;
+  min-height: 48px;
 }
 
-.epub-footer {
+.footer-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.chapter-info {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.footer-center {
+  flex: 2;
+  padding: 0 var(--spacing-lg);
+}
+
+.footer-right {
+  flex: 1;
+  text-align: right;
+}
+
+.progress-text {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.progress-bar-wrapper {
+  position: relative;
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  overflow: visible;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 2px;
+  transition: width 0.1s linear;
+}
+
+.progress-slider {
+  position: absolute;
+  top: -8px;
+  left: 0;
+  width: 100%;
+  height: 20px;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.progress-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  box-shadow: 0 2px 6px var(--primary-alpha-30);
+}
+
+.epub-info {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--spacing-xs);
 }
 
 .epub-location {
@@ -993,25 +1729,41 @@ onBeforeUnmount(() => {
   color: var(--text-secondary);
 }
 
-.progress-info {
-  text-align: center;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin-bottom: var(--spacing-sm);
+.epub-progress {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
 }
 
-.progress-bar-wrapper {
-  position: relative;
-}
-
-.progress-slider {
-  position: absolute;
+/* 全屏模式控制 */
+.fullscreen-controls {
+  position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 6px;
-  opacity: 0;
-  cursor: pointer;
+  right: 0;
+  height: 60px;
+  z-index: 100;
+}
+
+.floating-bar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--radius-full);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.floating-progress {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 /* 设置面板 */
@@ -1021,23 +1773,23 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   justify-content: flex-end;
-  z-index: 1000;
+  z-index: 2000;
 }
 
 .settings-panel {
-  width: 320px;
+  width: 360px;
   background: var(--surface-elevated);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   height: 100%;
   display: flex;
   flex-direction: column;
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.1);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.2);
 }
 
 .settings-header {
@@ -1075,24 +1827,77 @@ onBeforeUnmount(() => {
   overflow-y: auto;
 }
 
+.setting-section {
+  margin-bottom: var(--spacing-xl);
+}
+
+.section-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--spacing-md);
+}
+
 .form-group {
-  margin-bottom: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
 }
 
 .form-label {
-  display: block;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: var(--spacing-sm);
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
   font-weight: 500;
 }
 
-.select-input {
-  width: 100%;
+/* 字体选项 */
+.font-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.font-btn {
+  flex: 1;
+  min-width: calc(33.33% - var(--spacing-sm));
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.font-btn:hover {
+  border-color: var(--primary);
+}
+
+.font-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-alpha-10);
+}
+
+/* 滑块样式 */
+.slider-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.slider-min,
+.slider-max {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
 }
 
 .slider {
-  width: 100%;
+  flex: 1;
   height: 6px;
   -webkit-appearance: none;
   background: var(--bg-tertiary);
@@ -1110,13 +1915,52 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 6px var(--primary-alpha-30);
 }
 
-.color-options {
-  display: flex;
+/* 开关样式 */
+.toggle-label {
+  cursor: pointer;
+}
+
+.toggle-switch {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  border: none;
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  position: relative;
+  transition: all var(--transition-fast);
+  padding: 0;
+}
+
+.toggle-switch.on {
+  background: var(--primary);
+}
+
+.toggle-knob {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: all var(--transition-fast);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch.on .toggle-knob {
+  left: 22px;
+}
+
+/* 主题选项 */
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--spacing-sm);
 }
 
-.color-btn {
-  flex: 1;
+.theme-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1124,25 +1968,59 @@ onBeforeUnmount(() => {
   padding: var(--spacing-md);
   border: 2px solid var(--border-color);
   border-radius: var(--radius-md);
-  background: white;
+  background: var(--surface-card);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
-.color-btn:hover {
+.theme-btn:first-child {
+  grid-column: 1 / -1;
+}
+
+.theme-btn:hover {
   border-color: var(--primary);
 }
 
-.color-btn.active {
+.theme-btn.active {
   border-color: var(--primary);
   background: var(--primary-alpha-10);
 }
 
-.color-preview {
-  width: 32px;
-  height: 32px;
+.theme-preview {
+  width: 100%;
+  height: 60px;
   border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px;
   border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+}
+
+.preview-title {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.preview-line {
+  width: 70%;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.3;
+}
+
+.preview-line.short {
+  width: 45%;
+}
+
+.theme-name {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
 }
 
 /* 动画 */
@@ -1164,5 +2042,46 @@ onBeforeUnmount(() => {
 .slide-right-enter-from,
 .slide-right-leave-to {
   transform: translateX(100%);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .side-panel {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 100;
+    width: 85%;
+    max-width: 320px;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.2);
+  }
+
+  .settings-panel {
+    width: 100%;
+  }
+
+  .reader-body {
+    padding: var(--spacing-md);
+  }
+
+  .reader-actions {
+    gap: 0;
+  }
+
+  .btn-icon {
+    width: 36px;
+    height: 36px;
+  }
 }
 </style>
