@@ -191,7 +191,7 @@
             </template>
             <!-- 翻页模式提示 -->
             <div v-if="settings.paginationMode && totalPages > 1" class="pagination-hint">
-              <span>按 ← → 键或点击底部按钮翻页</span>
+              <span>← → 翻页 | 共 {{ totalPages }} 页</span>
             </div>
           </div>
 
@@ -374,10 +374,6 @@
                     </button>
                   </label>
                 </div>
-                <div class="form-group" v-if="(book?.format === 'txt' || book?.format === 'md') && settings.paginationMode">
-                  <label class="form-label">每页段落数：{{ settings.pageSize }}</label>
-                  <input type="range" v-model="settings.pageSize" min="10" max="100" step="5" class="slider" />
-                </div>
               </div>
             </div>
           </div>
@@ -523,7 +519,6 @@ const settings = ref({
   textIndent: true,
   showProgress: true,
   paginationMode: false, // 翻页模式
-  pageSize: 30, // 每页显示段落数
 })
 
 // 获取实际背景色和文字色（处理 'auto' 跟随主题）
@@ -568,14 +563,30 @@ const currentPageContent = computed(() => {
   if (!settings.value.paginationMode || book.value?.format === 'epub') {
     return content.value
   }
-  const start = currentPage.value * settings.value.pageSize
-  const end = start + settings.value.pageSize
+  const pageSize = calculatePageSize()
+  const start = currentPage.value * pageSize
+  const end = start + pageSize
   return content.value.slice(start, end)
 })
 
+// 计算每页能显示多少段落（基于实际渲染高度）
+const calculatePageSize = (): number => {
+  const readerBody = document.querySelector('.reader-body')
+  if (!readerBody) return 15
+
+  const availableHeight = readerBody.clientHeight - 100 // 减去padding
+  const lineHeight = settings.value.fontSize * settings.value.lineHeight
+  const paragraphSpacing = settings.value.paragraphSpacing
+  // 每段大约2-4行，取平均值3行
+  const estimatedParagraphHeight = lineHeight * 2.5 + paragraphSpacing
+
+  return Math.max(3, Math.floor(availableHeight / estimatedParagraphHeight))
+}
+
 const updateTotalPages = () => {
   if (settings.value.paginationMode && content.value.length > 0) {
-    totalPages.value = Math.ceil(content.value.length / settings.value.pageSize)
+    const pageSize = calculatePageSize()
+    totalPages.value = Math.ceil(content.value.length / pageSize)
   } else {
     totalPages.value = 0
   }
@@ -1243,18 +1254,11 @@ watch(() => settings.value, () => {
 // 监听翻页模式变化
 watch(() => settings.value.paginationMode, (newVal) => {
   if (newVal) {
+    updateTotalPages()
     // 切换到翻页模式，根据当前进度计算页码
     if (totalPages.value > 0) {
       currentPage.value = Math.floor((progress.value / 100) * (totalPages.value - 1))
     }
-  }
-})
-
-// 监听每页段落数变化
-watch(() => settings.value.pageSize, () => {
-  updateTotalPages()
-  if (settings.value.paginationMode && totalPages.value > 0) {
-    currentPage.value = Math.min(currentPage.value, totalPages.value - 1)
   }
 })
 
@@ -1263,10 +1267,21 @@ watch(content, () => {
   updateTotalPages()
 })
 
+// 监听窗口大小变化
+const handleResize = () => {
+  if (settings.value.paginationMode) {
+    updateTotalPages()
+    if (currentPage.value >= totalPages.value) {
+      currentPage.value = Math.max(0, totalPages.value - 1)
+    }
+  }
+}
+
 onMounted(() => {
   loadReaderSettings()
   loadBook()
   document.addEventListener('keydown', handleKeydown)
+  window.addEventListener('resize', handleResize)
 
   // 禁用父容器的滚动，让 reader-body 自己处理滚动
   const layoutMain = document.querySelector('.layout-main')
@@ -1321,6 +1336,7 @@ onBeforeUnmount(() => {
   }
 
   document.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('resize', handleResize)
 
   // 恢复父容器的滚动
   const layoutMain = document.querySelector('.layout-main')
