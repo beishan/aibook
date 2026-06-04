@@ -448,4 +448,34 @@ public class BookController {
 
         return ResponseEntity.ok(Map.of("cancelled", cancelled));
     }
+
+    /**
+     * 保存读书笔记
+     */
+    @PutMapping("/{id}/notes")
+    public ResponseEntity<Map<String, Object>> saveNotes(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
+
+        User user = userService.findByUsername(authentication.getName());
+        String notes = body.get("notes");
+
+        try {
+            Book book = bookService.getBookEntity(id, user);
+            book.setNotes(notes);
+            bookRepository.save(book);
+
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "笔记保存成功"
+            ));
+        } catch (Exception e) {
+            log.error("保存笔记失败: {}", id, e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                "success", false,
+                "message", "保存失败: " + e.getMessage()
+            ));
+        }
+    }
 }

@@ -308,8 +308,26 @@ const setRating = (rating: number) => {
   book.value.rating = rating
 }
 
-const handleSaveNotes = () => {
-  message.success('笔记保存成功')
+const handleSaveNotes = async () => {
+  try {
+    const token = localStorage.getItem('token')
+    const response = await fetch(`/api/books/${book.value.id}/notes`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ notes: notes.value })
+    })
+    const result = await response.json()
+    if (result.success) {
+      message.success('笔记保存成功')
+    } else {
+      message.error(result.message || '保存失败')
+    }
+  } catch (error) {
+    message.error('保存失败')
+  }
 }
 
 const handleScrape = async () => {
