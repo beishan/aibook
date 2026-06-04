@@ -102,6 +102,10 @@
               <span>📑</span>
               <span>{{ reparsing ? '解析中...' : '重新解析章节' }}</span>
             </button>
+            <button class="btn" @click="showAddToListDialog = true">
+              <span>📚</span>
+              <span>添加到书单</span>
+            </button>
             <button class="btn btn-danger" @click="handleDelete">
               <span>🗑️</span>
               <span>删除书籍</span>
@@ -244,11 +248,61 @@
       @close="showScraperDialog = false"
       @refresh="loadBook"
     />
+
+    <!-- 添加到书单对话框 -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="showAddToListDialog" class="dialog-overlay" @click.self="showAddToListDialog = false">
+          <div class="dialog">
+            <div class="dialog-header">
+              <span>📚 添加到书单</span>
+              <button class="dialog-close" @click="showAddToListDialog = false">✕</button>
+            </div>
+            <div class="dialog-body">
+              <div v-if="loadingLists" class="loading-lists">
+                <div class="loading-spinner-small"></div>
+                <span>加载书单...</span>
+              </div>
+              <div v-else-if="bookLists.length === 0" class="empty-lists">
+                <p>暂无书单</p>
+                <button class="btn btn-primary btn-sm" @click="goToCreateList">创建书单</button>
+              </div>
+              <div v-else class="lists-selector">
+                <div
+                  v-for="list in bookLists"
+                  :key="list.id"
+                  class="list-option"
+                  :class="{ selected: selectedListId === list.id }"
+                  @click="selectedListId = list.id"
+                >
+                  <span class="list-icon">📚</span>
+                  <div class="list-info">
+                    <div class="list-name">{{ list.name }}</div>
+                    <div class="list-count">{{ list.bookCount }} 本书</div>
+                  </div>
+                  <span v-if="selectedListId === list.id" class="check-icon">✓</span>
+                </div>
+              </div>
+            </div>
+            <div class="dialog-footer">
+              <button class="btn" @click="showAddToListDialog = false">取消</button>
+              <button
+                class="btn btn-primary"
+                @click="handleAddToList"
+                :disabled="!selectedListId || addingToList"
+              >
+                {{ addingToList ? '添加中...' : '确定' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
@@ -268,6 +322,13 @@ const scraping = ref(false)
 const reparsing = ref(false)
 const downloadingCover = ref(false)
 const showScraperDialog = ref(false)
+
+// 书单相关
+const showAddToListDialog = ref(false)
+const bookLists = ref<any[]>([])
+const selectedListId = ref<number | null>(null)
+const loadingLists = ref(false)
+const addingToList = ref(false)
 const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 
 // 编辑书名相关
@@ -326,6 +387,66 @@ const handleDelete = async () => {
     }
   }
 }
+
+// 加载书单列表
+const loadBookLists = async () => {
+  loadingLists.value = true
+  try {
+    const token = localStorage.getItem('token')
+    const response = await fetch('/api/booklists', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (response.ok) {
+      bookLists.value = await response.json()
+    }
+  } catch (error) {
+    console.error('Failed to load book lists:', error)
+  } finally {
+    loadingLists.value = false
+  }
+}
+
+// 添加到书单
+const handleAddToList = async () => {
+  if (!selectedListId.value || !book.value) return
+
+  addingToList.value = true
+  try {
+    const token = localStorage.getItem('token')
+    const response = await fetch(`/api/booklists/${selectedListId.value}/books/${book.value.id}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    })
+
+    if (response.ok) {
+      message.success('已添加到书单')
+      showAddToListDialog.value = false
+      selectedListId.value = null
+    } else {
+      const data = await response.json()
+      message.error(data.message || '添加失败')
+    }
+  } catch (error) {
+    message.error('添加失败')
+  } finally {
+    addingToList.value = false
+  }
+}
+
+// 跳转到创建书单
+const goToCreateList = () => {
+  showAddToListDialog.value = false
+  router.push('/shelf')
+}
+
+// 监听对话框打开，加载书单
+watch(showAddToListDialog, (newVal) => {
+  if (newVal) {
+    loadBookLists()
+  }
+})
 
 const setRating = async (rating: number) => {
   try {
@@ -874,5 +995,171 @@ onMounted(loadBook)
   .book-rating {
     justify-content: center;
   }
+}
+
+/* 弹窗样式 */
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.dialog {
+  width: 420px;
+  max-width: 90vw;
+  max-height: 80vh;
+  background: var(--surface-elevated);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color-light);
+  font-weight: 600;
+  font-size: var(--font-size-lg);
+  flex-shrink: 0;
+}
+
+.dialog-close {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.dialog-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.dialog-body {
+  padding: var(--spacing-lg);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  border-top: 1px solid var(--border-color-light);
+  flex-shrink: 0;
+}
+
+/* 书单选择器 */
+.loading-lists {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xl);
+  color: var(--text-secondary);
+}
+
+.loading-spinner-small {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.empty-lists {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--text-secondary);
+}
+
+.lists-selector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.list-option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--bg-secondary);
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.list-option:hover {
+  background: var(--bg-tertiary);
+}
+
+.list-option.selected {
+  border-color: var(--primary);
+  background: var(--primary-alpha-10);
+}
+
+.list-icon {
+  font-size: 24px;
+}
+
+.list-info {
+  flex: 1;
+}
+
+.list-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.list-count {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.check-icon {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* 动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

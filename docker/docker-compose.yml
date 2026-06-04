@@ -88,7 +88,8 @@ services:
       - "8080:8080"
     volumes:
       - uploads_data:/app/uploads
-      - /Users/beibei/aiprojects/test/book:/scanfolder
+      - D:\ai_projects\test:/scanfolder
+      - /Users/beibei/aiprojects/test/book:/scanfolder2
     depends_on:
       postgres:
         condition: service_healthy

@@ -176,7 +176,7 @@
           <div v-if="book.format === 'epub'" ref="epubContainer" class="epub-container"></div>
 
           <!-- TXT / MD 阅读器 -->
-          <div v-else-if="book.format === 'txt' || book.format === 'md'" class="reader-text">
+          <div v-else-if="book.format === 'txt' || book.format === 'md'" class="reader-text" :style="contentStyle">
             <template v-for="(paragraph, index) in currentPageContent" :key="index">
               <div v-if="isChapterTitle(paragraph)" class="chapter-title" :id="'chapter-' + index">
                 {{ paragraph }}
@@ -359,6 +359,27 @@
               <div class="setting-section">
                 <h4 class="section-title">阅读偏好</h4>
                 <div class="form-group">
+                  <label class="form-label">屏幕模式</label>
+                  <div class="screen-mode-options">
+                    <button
+                      class="screen-mode-btn"
+                      :class="{ active: settings.screenMode === 'single' }"
+                      @click="settings.screenMode = 'single'"
+                    >
+                      <span class="screen-mode-icon">▣</span>
+                      <span>一屏</span>
+                    </button>
+                    <button
+                      class="screen-mode-btn"
+                      :class="{ active: settings.screenMode === 'double' }"
+                      @click="settings.screenMode = 'double'"
+                    >
+                      <span class="screen-mode-icon">▥</span>
+                      <span>两屏</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="form-group">
                   <label class="form-label toggle-label">
                     <span>首行缩进</span>
                     <button class="toggle-switch" :class="{ on: settings.textIndent }" @click="settings.textIndent = !settings.textIndent">
@@ -528,6 +549,7 @@ const settings = ref({
   showProgress: true,
   paginationMode: false, // 翻页模式
   contentWidth: 'medium', // 内容宽度: narrow, medium, wide
+  screenMode: 'single', // 屏幕模式: single(一屏), double(两屏)
 })
 
 // 内容宽度选项
@@ -550,13 +572,29 @@ const getResolvedColors = (bg: string) => {
 const readerStyle = computed(() => {
   const colors = getResolvedColors(settings.value.backgroundColor)
   const widthOption = widthOptions.find(w => w.value === settings.value.contentWidth) || widthOptions[1]
+  const isDoubleScreen = settings.value.screenMode === 'double'
   return {
     fontFamily: settings.value.fontFamily === 'default' ? 'inherit' : settings.value.fontFamily,
     fontSize: `${settings.value.fontSize}px`,
     lineHeight: settings.value.lineHeight,
     backgroundColor: colors.bg,
     color: colors.text,
-    maxWidth: widthOption.maxWidth,
+    // 两屏模式下不限制宽度，让两栏均匀分布
+    maxWidth: isDoubleScreen ? '100%' : widthOption.maxWidth,
+    padding: isDoubleScreen ? '40px 60px' : '40px 60px',
+  }
+})
+
+// 两屏模式下的内容样式（仅用于 TXT/MD）
+const contentStyle = computed(() => {
+  const isDoubleScreen = settings.value.screenMode === 'double'
+  const isTxtOrMd = book.value?.format === 'txt' || book.value?.format === 'md'
+  if (!isTxtOrMd) return {}
+  return {
+    columnCount: isDoubleScreen ? 2 : 1,
+    columnGap: isDoubleScreen ? '40px' : '0',
+    columnRule: isDoubleScreen ? '1px solid var(--border-color-light)' : 'none',
+    height: isDoubleScreen ? '100%' : 'auto',
   }
 })
 
@@ -1123,10 +1161,13 @@ const initEpub = async () => {
       tocItems.value = flattenToc(navigation.toc)
     }
 
+    // 根据屏幕模式设置 spread
+    const spreadMode = settings.value.screenMode === 'double' ? 'always' : 'none'
+
     rendition = bookInstance.renderTo(epubContainer.value!, {
       width: '100%',
       height: '100%',
-      spread: 'none',
+      spread: spreadMode,
       allowScriptedContent: true,
     })
 
@@ -1147,8 +1188,7 @@ const initEpub = async () => {
       applyThemeToContent(contents)
     })
 
-    await bookInstance.locations.generate(1024)
-
+    // 先显示内容，让用户立即看到书
     if (savedCfi.value) {
       try {
         await rendition.display(savedCfi.value)
@@ -1159,6 +1199,19 @@ const initEpub = async () => {
     } else {
       await rendition.display()
     }
+
+    // 后台生成位置数据（不阻塞显示）
+    bookInstance.locations.generate(1024).then(() => {
+      console.log('[Reader] Locations generated')
+      // 生成完成后更新一次进度
+      if (rendition) {
+        const location = rendition.currentLocation()
+        if (location?.start?.cfi && bookInstance.locations.length()) {
+          const percentage = bookInstance.locations.percentageFromCfi(location.start.cfi)
+          progress.value = Math.round(percentage * 100)
+        }
+      }
+    })
 
   } catch (error) {
     console.error('Failed to init EPUB:', error)
@@ -1309,6 +1362,14 @@ watch(() => settings.value.paginationMode, (newVal) => {
     if (totalPages.value > 0) {
       currentPage.value = Math.floor((progress.value / 100) * (totalPages.value - 1))
     }
+  }
+})
+
+// 监听屏幕模式变化（EPUB）
+watch(() => settings.value.screenMode, (newVal) => {
+  if (book.value?.format === 'epub' && rendition) {
+    const spreadMode = newVal === 'double' ? 'always' : 'none'
+    rendition.spread(spreadMode)
   }
 })
 
@@ -1822,6 +1883,13 @@ onBeforeUnmount(() => {
   min-height: 100%;
 }
 
+/* 两屏模式下的样式 */
+.reader-text[column-count="2"] {
+  min-height: auto;
+  height: 100%;
+  overflow: hidden;
+}
+
 .reader-text p {
   margin-bottom: v-bind('settings.paragraphSpacing + "px"');
   text-indent: v-bind('settings.textIndent ? "2em" : "0"');
@@ -2168,6 +2236,41 @@ onBeforeUnmount(() => {
 .width-btn.active {
   border-color: var(--primary);
   background: var(--primary-alpha-10);
+}
+
+/* 屏幕模式选项 */
+.screen-mode-options {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.screen-mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.screen-mode-btn:hover {
+  border-color: var(--primary);
+}
+
+.screen-mode-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-alpha-10);
+}
+
+.screen-mode-icon {
+  font-size: 18px;
 }
 
 /* 滑块样式 */

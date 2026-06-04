@@ -88,7 +88,7 @@ const loadDirectory = async (path: string): Promise<TreeNodeData[]> => {
     // 后端直接返回数组格式
     const items: DirectoryItem[] = Array.isArray(res.data) ? res.data : (res.data.directories || [])
     return items
-      .filter((item: DirectoryItem) => item.isDirectory)
+      .filter((item: DirectoryItem) => item.isDirectory && item.accessible !== false)
       .map((item: DirectoryItem) => ({
         name: item.name,
         path: item.path,

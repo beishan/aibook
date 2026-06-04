@@ -24,6 +24,7 @@ public class BookListService {
     /**
      * 获取用户所有书单
      */
+    @Transactional(readOnly = true)
     public List<BookList> getBookLists(User user) {
         return bookListRepository.findByUser(user);
     }
@@ -31,10 +32,14 @@ public class BookListService {
     /**
      * 获取书单详情
      */
+    @Transactional(readOnly = true)
     public BookList getBookList(Long id, User user) {
-        return bookListRepository.findById(id)
+        BookList bookList = bookListRepository.findById(id)
                 .filter(bl -> bl.getUser().equals(user))
                 .orElseThrow(() -> new RuntimeException("书单不存在"));
+        // 强制加载懒加载的 books 集合
+        bookList.getBooks().size();
+        return bookList;
     }
 
     /**
