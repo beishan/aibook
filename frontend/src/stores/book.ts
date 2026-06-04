@@ -123,7 +123,7 @@ export const useBookStore = defineStore('book', () => {
 
   // 更新书籍元数据
   async function updateBookMetadata(id: number, metadata: Partial<Book>) {
-    const response = await api.put(`/api/books/${id}`, metadata)
+    const response = await api.put(`/api/books/${id}/metadata`, metadata)
     const updatedBook = response.data
     const index = books.value.findIndex((b) => b.id === id)
     if (index !== -1) {
