@@ -276,7 +276,8 @@ const searchKeyword = ref('')
 const filterFormat = ref('')
 const filterStatus = ref('')
 const sortBy = ref('createdAt')
-const viewMode = ref<'card' | 'list'>('card')
+const VIEW_MODE_KEY = 'ai-book-view-mode'
+const viewMode = ref<'card' | 'list'>((localStorage.getItem(VIEW_MODE_KEY) as 'card' | 'list') || 'card')
 const currentPage = ref(1)
 const pageSize = ref(18)
 const showUploadDialog = ref(false)
@@ -450,6 +451,10 @@ watch(
   },
   { immediate: true }
 )
+
+watch(viewMode, (newMode) => {
+  localStorage.setItem(VIEW_MODE_KEY, newMode)
+})
 
 onMounted(() => {
   if (!route.query.search) {
