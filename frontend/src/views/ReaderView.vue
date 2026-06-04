@@ -1,13 +1,7 @@
 <template>
   <div class="reader-view" :class="{ 'fullscreen-mode': isFullscreen }">
-    <!-- 加载中 -->
-    <div v-if="loading" class="loading">
-      <div class="loading-spinner"></div>
-      <p>加载中...</p>
-    </div>
-
     <!-- 阅读器内容 -->
-    <div v-else-if="book" class="reader-content">
+    <div v-if="book" class="reader-content">
       <!-- 阅读器头部 -->
       <header class="reader-header glass" v-show="!isFullscreen">
         <button class="back-btn" @click="goBack">
