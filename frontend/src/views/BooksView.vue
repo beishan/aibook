@@ -156,7 +156,7 @@
               @click.stop="handleToggleFavorite(book.id)"
               title="收藏"
             >
-              {{ book.isFavorite ? '★' : '☆' }}
+              <span class="action-icon">{{ book.isFavorite ? '⭐' : '☆' }}</span>
             </button>
             <button
               class="action-btn"
@@ -164,14 +164,14 @@
               @click.stop="handleToggleWanted(book.id)"
               title="想读"
             >
-              {{ book.isWanted ? '♥' : '♡' }}
+              <span class="action-icon">{{ book.isWanted ? '🔖' : '📑' }}</span>
             </button>
             <button
               class="action-btn action-btn-delete"
               @click.stop="handleDelete(book.id)"
               title="删除"
             >
-              ×
+              <span class="action-icon">🗑️</span>
             </button>
           </div>
         </div>
@@ -743,52 +743,83 @@ onMounted(() => {
 
 .book-actions {
   display: flex;
-  gap: 4px;
-  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color-light);
 }
 
 .action-btn {
-  width: 32px;
-  height: 32px;
-  padding: 0;
+  flex: 1;
+  height: 34px;
+  padding: 0 8px;
   border: none;
-  border-radius: var(--radius-full);
-  background: transparent;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition-fast);
-  color: var(--text-tertiary);
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+  position: relative;
+  overflow: hidden;
+}
+
+.action-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
 .action-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text-secondary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.action-btn:hover::before {
+  opacity: 0.08;
+}
+
+.action-btn:active {
+  transform: translateY(0);
+}
+
+.action-icon {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .action-btn.active-favorite {
-  color: #f59e0b;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #d97706;
 }
 
 .action-btn.active-wanted {
-  color: #ef4444;
+  background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%);
+  color: #db2777;
 }
 
 .action-btn-delete {
   opacity: 0;
-  font-size: 20px;
-  font-weight: 300;
+  background: transparent;
 }
 
 .book-card:hover .action-btn-delete {
   opacity: 1;
+  background: var(--bg-secondary);
 }
 
 .action-btn-delete:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%) !important;
+  color: #dc2626;
 }
 
 /* 书籍列表 */
