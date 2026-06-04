@@ -177,7 +177,7 @@
         </Transition>
 
         <!-- 阅读器内容 -->
-        <div class="reader-body" :style="readerStyle" @scroll="handleScroll">
+        <div class="reader-body" :class="{ 'pagination-mode': settings.paginationMode }" :style="readerStyle" @scroll="handleScroll">
           <!-- EPUB 阅读器 -->
           <div v-if="book.format === 'epub'" ref="epubContainer" class="epub-container"></div>
 
@@ -572,16 +572,45 @@ const currentPageContent = computed(() => {
 // 计算每页能显示多少段落（基于实际渲染高度）
 const calculatePageSize = (): number => {
   const readerBody = document.querySelector('.reader-body')
-  if (!readerBody) return 8
+  if (!readerBody) return 5
 
-  // 可用高度 = 容器高度 - 上下padding(40px*2) - 提示区域(60px)
-  const availableHeight = readerBody.clientHeight - 140
-  const lineHeight = settings.value.fontSize * settings.value.lineHeight
-  const paragraphSpacing = settings.value.paragraphSpacing
-  // 每段按4行计算，更保守
-  const estimatedParagraphHeight = lineHeight * 4 + paragraphSpacing
+  // 先临时显示所有内容来测量
+  const testContainer = document.createElement('div')
+  testContainer.style.cssText = `
+    position: absolute;
+    visibility: hidden;
+    height: auto;
+    width: ${readerBody.clientWidth - 120}px;
+    padding: 40px 60px;
+    font-size: ${settings.value.fontSize}px;
+    line-height: ${settings.value.lineHeight};
+    font-family: ${settings.value.fontFamily === 'default' ? 'inherit' : settings.value.fontFamily};
+  `
+  document.body.appendChild(testContainer)
 
-  return Math.max(2, Math.floor(availableHeight / estimatedParagraphHeight))
+  // 测量每个段落的实际高度
+  const paragraphHeights: number[] = []
+  const sampleSize = Math.min(content.value.length, 20) // 只测量前20段
+
+  for (let i = 0; i < sampleSize; i++) {
+    const p = document.createElement('p')
+    p.style.marginBottom = `${settings.value.paragraphSpacing}px`
+    p.style.textIndent = settings.value.textIndent ? '2em' : '0'
+    p.textContent = content.value[i]
+    testContainer.appendChild(p)
+    paragraphHeights.push(p.offsetHeight + settings.value.paragraphSpacing)
+  }
+
+  document.body.removeChild(testContainer)
+
+  if (paragraphHeights.length === 0) return 5
+
+  // 计算平均段落高度
+  const avgHeight = paragraphHeights.reduce((a, b) => a + b, 0) / paragraphHeights.length
+  // 可用高度 = 容器高度 - 上下padding(40px*2)
+  const availableHeight = readerBody.clientHeight - 80
+
+  return Math.max(1, Math.floor(availableHeight / avgHeight))
 }
 
 const updateTotalPages = () => {
@@ -1749,6 +1778,11 @@ onBeforeUnmount(() => {
   width: 100%;
   scroll-behavior: smooth;
   min-height: 0;
+}
+
+/* 翻页模式禁用滚动 */
+.reader-body.pagination-mode {
+  overflow: hidden;
 }
 
 .epub-container {
