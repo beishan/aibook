@@ -327,8 +327,14 @@ const handleDelete = async () => {
   }
 }
 
-const setRating = (rating: number) => {
-  book.value.rating = rating
+const setRating = async (rating: number) => {
+  try {
+    book.value.rating = rating
+    await bookStore.updateBookMetadata(book.value.id, { rating })
+    message.success('评分已更新')
+  } catch (error) {
+    message.error('评分更新失败')
+  }
 }
 
 const handleSaveNotes = async () => {
