@@ -10,7 +10,7 @@ let messageContainer: HTMLDivElement | null = null
 const getContainer = () => {
   if (!messageContainer) {
     messageContainer = document.createElement('div')
-    messageContainer.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 2000;'
+    messageContainer.className = 'message-container'
     document.body.appendChild(messageContainer)
   }
   return messageContainer
