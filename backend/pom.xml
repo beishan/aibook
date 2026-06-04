@@ -65,6 +65,12 @@
             <version>1.17.2</version>
         </dependency>
 
+        <!-- Jackson Hibernate5 module for lazy loading serialization -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-hibernate5-jakarta</artifactId>
+        </dependency>
+
         <!-- JWT -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

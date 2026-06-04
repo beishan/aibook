@@ -1,25 +1,5 @@
 import api from './api'
 
-export interface ScrapeResult {
-/**
- * 刮削书籍元数据
- * 从豆瓣/Open Library/Google Books 获取书籍信息
- */
-export async function scrapeBook(bookId: number) {
-  const response = await api.post(`/api/books/${bookId}/scrape`)
-  return response.data
-}
-
-/**
- * 下载书籍封面
- */
-export async function downloadCover(bookId: number) {
-  const response = await api.post(`/api/books/${bookId}/cover`)
-  return response.data
-}
-
-// ==================== 批量刮削相关 ====================
-
 /**
  * 单本书的刮削结果
  */
@@ -27,7 +7,6 @@ export interface BookScrapeResult {
   bookId: number
   title: string
   success: boolean
-  updatedFields?: string[]
   updatedFields: string[]
   error?: string
 }
@@ -36,8 +15,10 @@ export interface ScrapeResponse {
   success: boolean
   message: string
   book?: any
-  results?: ScrapeResult[]
+  results?: BookScrapeResult[]
   count?: number
+}
+
 /**
  * 批量刮削任务状态
  */
@@ -56,9 +37,6 @@ export interface TaskStatus {
 
 /**
  * 刮削单本书籍
- * 批量刮削指定书籍
- * @param bookIds 书籍ID列表
- * @param forceUpdate 是否强制更新已有字段
  */
 export async function scrapeBook(bookId: number): Promise<ScrapeResponse> {
   const response = await api.post(`/api/scraper/books/${bookId}`)
@@ -66,10 +44,10 @@ export async function scrapeBook(bookId: number): Promise<ScrapeResponse> {
 }
 
 /**
- * 批量刮削书籍
+ * 批量刮削指定书籍
+ * @param bookIds 书籍ID列表
+ * @param forceUpdate 是否强制更新已有字段
  */
-export async function scrapeBooks(bookIds: number[]): Promise<ScrapeResponse> {
-  const response = await api.post('/api/scraper/books/batch', bookIds)
 export async function batchScrape(bookIds: number[], forceUpdate: boolean = false): Promise<{ taskId: string }> {
   const response = await api.post('/api/books/batch-scrape', { bookIds, forceUpdate })
   return response.data
@@ -79,30 +57,38 @@ export async function batchScrape(bookIds: number[], forceUpdate: boolean = fals
  * 刮削所有缺少元数据的书籍
  * @param forceUpdate 是否强制更新已有字段
  */
-export async function scrapeAllIncomplete(): Promise<ScrapeResponse> {
-  const response = await api.post('/api/scraper/scrape-all')
 export async function scrapeAllIncomplete(forceUpdate: boolean = false): Promise<{ taskId: string }> {
   const response = await api.post(`/api/books/scrape-all-incomplete?forceUpdate=${forceUpdate}`)
   return response.data
 }
 
 /**
- * 下载书籍封面
  * 查询刮削任务状态
  */
-export async function downloadCover(bookId: number): Promise<ScrapeResponse> {
-  const response = await api.post(`/api/scraper/covers/${bookId}`)
 export async function getScrapeTask(taskId: string): Promise<TaskStatus> {
   const response = await api.get(`/api/books/scrape-task/${taskId}`)
   return response.data
 }
 
 /**
- * 批量下载缺失封面
  * 取消刮削任务
  */
 export async function cancelScrapeTask(taskId: string): Promise<{ cancelled: boolean }> {
   const response = await api.post(`/api/books/scrape-task/${taskId}/cancel`)
+  return response.data
+}
+
+/**
+ * 下载书籍封面
+ */
+export async function downloadCover(bookId: number): Promise<ScrapeResponse> {
+  const response = await api.post(`/api/scraper/covers/${bookId}`)
+  return response.data
+}
+
+/**
+ * 批量下载缺失封面
+ */
 export async function downloadMissingCovers(): Promise<ScrapeResponse> {
   const response = await api.post('/api/scraper/covers/download-missing')
   return response.data
