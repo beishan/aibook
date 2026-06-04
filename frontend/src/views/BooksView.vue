@@ -669,19 +669,19 @@ onMounted(() => {
 }
 
 /* 复选框样式 */
-.book-select-checkbox,
-.list-select-checkbox {
+.book-select-checkbox {
   position: absolute;
   z-index: 10;
-}
-
-.book-select-checkbox {
   top: var(--spacing-md);
   left: var(--spacing-md);
 }
 
 .list-select-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-right: var(--spacing-md);
+  flex-shrink: 0;
 }
 
 .book-select-checkbox input,
