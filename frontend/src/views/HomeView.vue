@@ -141,14 +141,14 @@ onMounted(async () => {
 .page-title {
   font-size: var(--font-size-4xl);
   font-weight: 700;
-  color: white;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  color: var(--text-on-page-bg);
+  text-shadow: var(--text-on-page-bg-shadow);
   margin-bottom: var(--spacing-sm);
 }
 
 .page-subtitle {
   font-size: var(--font-size-lg);
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-on-page-bg-secondary);
 }
 
 /* 统计卡片 */
@@ -160,10 +160,10 @@ onMounted(async () => {
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   display: flex;
@@ -218,10 +218,10 @@ onMounted(async () => {
 
 /* 卡片 */
 .card {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
@@ -231,7 +231,7 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding: var(--spacing-lg);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid var(--border-color-light);
   font-weight: 600;
   font-size: var(--font-size-lg);
 }
@@ -268,7 +268,7 @@ onMounted(async () => {
 }
 
 .recent-book-item:hover {
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--surface-hover);
 }
 
 .book-cover {
@@ -289,7 +289,7 @@ onMounted(async () => {
 .no-cover {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%);
+  background: var(--primary-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -337,14 +337,14 @@ onMounted(async () => {
 }
 
 .wanted-item:hover {
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--surface-hover);
 }
 
 .wanted-icon {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-sm);
-  background: rgba(0, 122, 255, 0.1);
+  background: var(--primary-alpha-10);
   display: flex;
   align-items: center;
   justify-content: center;

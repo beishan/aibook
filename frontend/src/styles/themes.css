@@ -1,0 +1,196 @@
+/* 主题变量定义 */
+
+/* 默认主题 (natural) - 保持向后兼容 */
+:root {
+  /* 圆角 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* 页面背景 */
+  --bg-page: #f0f7f4;
+  --bg-page-gradient: linear-gradient(135deg, #e8f5e9 0%, #e0f2f1 100%);
+
+  /* 表面色 */
+  --bg-surface: rgba(255, 255, 255, 0.85);
+  --surface-card: rgba(255, 255, 255, 0.72);
+  --surface-elevated: rgba(255, 255, 255, 0.9);
+  --surface-hover: rgba(255, 255, 255, 0.5);
+
+  /* 文本色 */
+  --text-primary: #1a3a2a;
+  --text-secondary: #5a7a6a;
+  --text-tertiary: #8aaa9a;
+  --text-on-page-bg: #1a3a2a;
+  --text-on-page-bg-secondary: rgba(255, 255, 255, 0.8);
+  --text-on-page-bg-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+
+  /* 主色 */
+  --primary: #2e7d5a;
+  --primary-light: #4caf80;
+  --primary-dark: #1b5e3a;
+  --primary-gradient: linear-gradient(135deg, #2e7d5a 0%, #4caf80 100%);
+  --primary-alpha-10: rgba(46, 125, 90, 0.1);
+  --primary-alpha-15: rgba(46, 125, 90, 0.15);
+  --primary-alpha-20: rgba(46, 125, 90, 0.2);
+  --primary-alpha-30: rgba(46, 125, 90, 0.3);
+
+  /* 语义色 */
+  --success: #2e7d32;
+  --success-alpha-15: rgba(46, 125, 50, 0.15);
+  --warning: #e68a00;
+  --danger: #c62828;
+  --info: #5a7a6a;
+
+  /* 边框 */
+  --border-color: #c8e0d0;
+  --border-color-light: #e0f0e8;
+
+  /* 阴影 */
+  --shadow-color: rgba(0, 80, 40, 0.06);
+  --shadow-sm: 0 2px 6px var(--shadow-color);
+  --shadow-md: 0 4px 12px var(--shadow-color);
+  --shadow-lg: 0 8px 24px var(--shadow-color);
+  --shadow-xl: 0 16px 48px var(--shadow-color);
+
+  /* 毛玻璃 */
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-blur: blur(16px) saturate(150%);
+  --glass-border: 1px solid rgba(200, 230, 210, 0.3);
+  --glass-shadow: 0 8px 24px rgba(0, 80, 40, 0.06);
+
+  /* 导航 */
+  --nav-bg: rgba(255, 255, 255, 0.75);
+  --nav-border: rgba(255, 255, 255, 0.3);
+}
+
+/* 现代简约 - Notion/Linear 风格 */
+[data-theme="modern"] {
+  /* 圆角 - 更方正 */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  /* 页面背景 - 纯灰白 */
+  --bg-page: #f5f5f5;
+  --bg-page-gradient: #f5f5f5;
+
+  /* 表面色 - 纯白不透明 */
+  --bg-surface: #ffffff;
+  --surface-card: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-hover: #f0f0f0;
+
+  /* 文本色 */
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --text-tertiary: #999999;
+  --text-on-page-bg: #1a1a1a;
+  --text-on-page-bg-secondary: #666666;
+  --text-on-page-bg-shadow: none;
+
+  /* 主色 - 蓝色 */
+  --primary: #2563eb;
+  --primary-light: #60a5fa;
+  --primary-dark: #1d4ed8;
+  --primary-gradient: #2563eb;
+  --primary-alpha-10: rgba(37, 99, 235, 0.1);
+  --primary-alpha-15: rgba(37, 99, 235, 0.15);
+  --primary-alpha-20: rgba(37, 99, 235, 0.2);
+  --primary-alpha-30: rgba(37, 99, 235, 0.3);
+
+  /* 语义色 */
+  --success: #16a34a;
+  --success-alpha-15: rgba(22, 163, 74, 0.15);
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #666666;
+
+  /* 边框 */
+  --border-color: #e5e5e5;
+  --border-color-light: #f0f0f0;
+
+  /* 阴影 - 更轻 */
+  --shadow-color: rgba(0, 0, 0, 0.06);
+  --shadow-sm: 0 1px 2px var(--shadow-color);
+  --shadow-md: 0 2px 8px var(--shadow-color);
+  --shadow-lg: 0 4px 16px var(--shadow-color);
+  --shadow-xl: 0 8px 32px var(--shadow-color);
+
+  /* 毛玻璃 - 不使用模糊，纯白卡片 */
+  --glass-bg: #ffffff;
+  --glass-blur: none;
+  --glass-border: 1px solid #e5e5e5;
+  --glass-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+
+  /* 导航 */
+  --nav-bg: #ffffff;
+  --nav-border: #e5e5e5;
+}
+
+/* 暖色文艺 - 豆瓣/微信读书风格 */
+[data-theme="warm"] {
+  /* 圆角 - 更圆润 */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  /* 页面背景 - 暖奶油色 */
+  --bg-page: #faf6f1;
+  --bg-page-gradient: #faf6f1;
+
+  /* 表面色 - 暖白 */
+  --bg-surface: #fffbf5;
+  --surface-card: #fffbf5;
+  --surface-elevated: #fff8f0;
+  --surface-hover: #f5ede4;
+
+  /* 文本色 - 暖棕 */
+  --text-primary: #3d2b1f;
+  --text-secondary: #8b7355;
+  --text-tertiary: #b8a08a;
+  --text-on-page-bg: #3d2b1f;
+  --text-on-page-bg-secondary: #8b7355;
+  --text-on-page-bg-shadow: none;
+
+  /* 主色 - 琥珀/暖棕 */
+  --primary: #c47d2e;
+  --primary-light: #e8a84c;
+  --primary-dark: #a66820;
+  --primary-gradient: linear-gradient(135deg, #c47d2e 0%, #e8a84c 100%);
+  --primary-alpha-10: rgba(196, 125, 46, 0.1);
+  --primary-alpha-15: rgba(196, 125, 46, 0.15);
+  --primary-alpha-20: rgba(196, 125, 46, 0.2);
+  --primary-alpha-30: rgba(196, 125, 46, 0.3);
+
+  /* 语义色 */
+  --success: #6a9b3e;
+  --success-alpha-15: rgba(106, 155, 62, 0.15);
+  --warning: #c47d2e;
+  --danger: #b85450;
+  --info: #8b7355;
+
+  /* 边框 - 暖调 */
+  --border-color: #e8ddd0;
+  --border-color-light: #f0e8dd;
+
+  /* 阴影 - 暖棕调 */
+  --shadow-color: rgba(100, 70, 40, 0.08);
+  --shadow-sm: 0 2px 8px var(--shadow-color);
+  --shadow-md: 0 4px 16px var(--shadow-color);
+  --shadow-lg: 0 8px 24px var(--shadow-color);
+  --shadow-xl: 0 16px 48px var(--shadow-color);
+
+  /* 毛玻璃 - 暖调柔和 */
+  --glass-bg: rgba(255, 251, 245, 0.8);
+  --glass-blur: blur(12px) saturate(120%);
+  --glass-border: 1px solid rgba(200, 180, 150, 0.2);
+  --glass-shadow: 0 4px 16px rgba(100, 70, 40, 0.08);
+
+  /* 导航 */
+  --nav-bg: #fffbf5;
+  --nav-border: #e8ddd0;
+}

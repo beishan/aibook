@@ -211,14 +211,14 @@ const testConnection = async (type: 'opds' | 'webdav') => {
 .page-title {
   font-size: var(--font-size-4xl);
   font-weight: 700;
-  color: white;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  color: var(--text-on-page-bg);
+  text-shadow: var(--text-on-page-bg-shadow);
   margin-bottom: var(--spacing-sm);
 }
 
 .page-subtitle {
   font-size: var(--font-size-base);
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-on-page-bg-secondary);
 }
 
 /* 连接网格 */
@@ -232,10 +232,10 @@ const testConnection = async (type: 'opds' | 'webdav') => {
 /* 连接卡片 */
 .connection-card,
 .guide-card {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
@@ -245,7 +245,7 @@ const testConnection = async (type: 'opds' | 'webdav') => {
   align-items: center;
   gap: var(--spacing-md);
   padding: var(--spacing-lg);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid var(--border-color-light);
   font-weight: 600;
   font-size: var(--font-size-lg);
 }
@@ -311,7 +311,7 @@ const testConnection = async (type: 'opds' | 'webdav') => {
   display: flex;
   gap: var(--spacing-lg);
   padding: var(--spacing-lg) 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .step:last-child {
@@ -329,7 +329,7 @@ const testConnection = async (type: 'opds' | 'webdav') => {
   justify-content: center;
   font-weight: 600;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+  box-shadow: 0 4px 12px var(--primary-alpha-30);
 }
 
 .step-content {

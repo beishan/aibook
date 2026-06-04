@@ -472,10 +472,10 @@ onMounted(loadBook)
 .empty {
   text-align: center;
   padding: var(--spacing-xl) var(--spacing-lg);
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   color: var(--text-secondary);
 }
@@ -505,10 +505,10 @@ onMounted(loadBook)
 
 /* 书籍内容 */
 .book-content {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
 }
@@ -558,7 +558,7 @@ onMounted(loadBook)
 .no-cover {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%);
+  background: var(--primary-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -623,7 +623,7 @@ onMounted(loadBook)
 
 .title-edit-input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
+  box-shadow: 0 0 0 3px var(--primary-alpha-20);
 }
 
 .title-edit-actions {
@@ -715,7 +715,7 @@ onMounted(loadBook)
 }
 
 .star.active {
-  color: #FF9500;
+  color: var(--warning);
 }
 
 /* 内容区 */
@@ -806,7 +806,7 @@ onMounted(loadBook)
 
 .book-notes .textarea:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+  box-shadow: 0 0 0 3px var(--primary-alpha-10);
   outline: none;
 }
 

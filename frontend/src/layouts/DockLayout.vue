@@ -3,7 +3,7 @@
     <!-- 顶部工具栏 -->
     <header class="layout-header glass">
       <div class="header-left">
-        <div class="logo">
+        <div class="logo" @click="router.push('/')">
           <span class="logo-icon">📚</span>
           <span class="logo-text">汗牛充栋</span>
         </div>
@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { confirm } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
@@ -88,9 +88,7 @@ const menuItems = [
 ]
 
 const isActiveRoute = (path: string) => {
-  if (path === '/') {
-    return route.path === '/'
-  }
+  if (path === '/') return route.path === '/'
   return route.path.startsWith(path)
 }
 
@@ -109,7 +107,6 @@ const handleLogout = async () => {
   showDropdown.value = false
 }
 
-// 点击外部关闭下拉菜单
 const handleClickOutside = (e: MouseEvent) => {
   const target = e.target as HTMLElement
   if (!target.closest('.user-menu')) {
@@ -117,13 +114,8 @@ const handleClickOutside = (e: MouseEvent) => {
   }
 }
 
-onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
-})
+onMounted(() => document.addEventListener('click', handleClickOutside))
+onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 </script>
 
 <style scoped>
@@ -131,10 +123,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--bg-page-gradient);
 }
 
-/* 顶部工具栏 */
 .layout-header {
   position: sticky;
   top: 0;
@@ -144,11 +135,11 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 0 var(--spacing-lg);
   height: 60px;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: var(--glass-border);
+  box-shadow: var(--glass-shadow);
 }
 
 .header-left {
@@ -170,20 +161,18 @@ onUnmounted(() => {
 .logo-text {
   font-size: var(--font-size-xl);
   font-weight: 700;
-  background: linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%);
+  background: var(--primary-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* 右侧区域 */
 .header-right {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
 }
 
-/* 搜索框 */
 .search-box {
   position: relative;
   display: flex;
@@ -203,24 +192,24 @@ onUnmounted(() => {
   border: none;
   border-radius: var(--radius-full);
   font-size: var(--font-size-sm);
-  background: var(--bg-secondary);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   transition: all var(--transition-normal);
   outline: none;
+  color: var(--text-primary);
 }
 
 .search-input:focus {
   width: 320px;
-  background: var(--bg-primary);
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
+  background: var(--surface-elevated);
+  box-shadow: 0 0 0 3px var(--primary-alpha-20);
 }
 
 .search-input::placeholder {
   color: var(--text-tertiary);
 }
 
-/* 用户菜单 */
 .user-menu {
   position: relative;
   display: flex;
@@ -233,7 +222,7 @@ onUnmounted(() => {
 }
 
 .user-menu:hover {
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--surface-hover);
 }
 
 .user-avatar {
@@ -255,17 +244,16 @@ onUnmounted(() => {
   font-size: var(--font-size-sm);
 }
 
-/* 下拉菜单 */
 .dropdown-menu {
   position: absolute;
   top: 100%;
   right: 0;
   margin-top: var(--spacing-sm);
   min-width: 160px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--surface-elevated);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
@@ -282,36 +270,34 @@ onUnmounted(() => {
 }
 
 .dropdown-item:hover {
-  background: rgba(255, 59, 48, 0.1);
+  background: var(--surface-hover);
 }
 
 .dropdown-icon {
   font-size: 16px;
 }
 
-/* 内容区 */
 .layout-main {
   flex: 1;
   padding: var(--spacing-lg);
-  padding-bottom: 100px; /* 为底部 Dock 留出空间 */
+  padding-bottom: 100px;
   overflow-y: auto;
 }
 
-/* 底部 Dock 导航栏 */
+/* Dock 导航 */
 .dock-nav {
   position: fixed;
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--nav-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--nav-border);
   border-radius: 28px;
   padding: 8px 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12),
-              0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
 }
 
 .dock-container {
@@ -337,14 +323,14 @@ onUnmounted(() => {
 
 .dock-item:hover {
   transform: translateY(-8px) scale(1.15);
-  background: rgba(0, 122, 255, 0.15);
+  background: var(--primary-alpha-15);
 }
 
 .dock-item.active {
   transform: translateY(-8px) scale(1.15);
   background: var(--primary-gradient);
   color: white;
-  box-shadow: 0 8px 20px rgba(0, 122, 255, 0.4);
+  box-shadow: 0 8px 20px var(--primary-alpha-30);
 }
 
 .dock-icon {
@@ -356,15 +342,14 @@ onUnmounted(() => {
   transform: scale(1.1);
 }
 
-/* 工具提示 */
 .dock-tooltip {
   position: absolute;
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
   padding: 6px 12px;
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
+  background: var(--text-primary);
+  color: var(--text-on-page-bg-secondary);
   font-size: 12px;
   font-weight: 500;
   border-radius: 8px;
@@ -383,7 +368,7 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%);
   border: 6px solid transparent;
-  border-top-color: rgba(0, 0, 0, 0.8);
+  border-top-color: var(--text-primary);
 }
 
 .dock-item:hover .dock-tooltip {
@@ -392,7 +377,6 @@ onUnmounted(() => {
   transform: translateX(-50%) translateY(-4px);
 }
 
-/* 动画 */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -408,7 +392,6 @@ onUnmounted(() => {
   transform: translateY(-10px);
 }
 
-/* 响应式 */
 @media (max-width: 768px) {
   .layout-header {
     padding: 0 var(--spacing-md);

@@ -17,7 +17,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'Layout',
-    component: () => import('@/views/LayoutView.vue'),
+    component: () => import('@/layouts/ThemeLayoutWrapper.vue'),
     meta: { requiresAuth: true },
     children: [
       {

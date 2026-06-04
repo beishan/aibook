@@ -467,22 +467,22 @@ onMounted(() => {
 .page-title {
   font-size: var(--font-size-4xl);
   font-weight: 700;
-  color: white;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  color: var(--text-on-page-bg);
+  text-shadow: var(--text-on-page-bg-shadow);
   margin-bottom: var(--spacing-sm);
 }
 
 .page-subtitle {
   font-size: var(--font-size-base);
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-on-page-bg-secondary);
 }
 
 /* 筛选区 */
 .filter-card {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   margin-bottom: var(--spacing-lg);
@@ -551,10 +551,10 @@ onMounted(() => {
   align-items: center;
   padding: var(--spacing-md) var(--spacing-lg);
   margin-bottom: var(--spacing-lg);
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   animation: slideDown 0.3s ease;
 }
@@ -608,11 +608,11 @@ onMounted(() => {
 /* 选中状态 */
 .book-card.selected {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.3);
+  box-shadow: 0 0 0 2px var(--primary-alpha-30);
 }
 
 .book-list-item.selected {
-  background: rgba(0, 122, 255, 0.1);
+  background: var(--primary-alpha-10);
 }
 
 /* 加载中和空状态 */
@@ -620,10 +620,10 @@ onMounted(() => {
 .empty {
   text-align: center;
   padding: var(--spacing-xl) var(--spacing-lg);
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   color: var(--text-secondary);
 }
@@ -661,10 +661,10 @@ onMounted(() => {
 
 .book-card {
   position: relative;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
   cursor: pointer;
@@ -690,7 +690,7 @@ onMounted(() => {
 .no-cover {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%);
+  background: var(--primary-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -752,15 +752,15 @@ onMounted(() => {
 }
 
 .action-btn.active {
-  background: rgba(255, 149, 0, 0.15);
+  background: var(--warning-alpha-15, rgba(255, 149, 0, 0.15));
 }
 
 /* 书籍列表 */
 .books-list {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
   margin-bottom: var(--spacing-xl);
@@ -770,7 +770,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   padding: var(--spacing-md) var(--spacing-lg);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid var(--border-color-light);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -780,7 +780,7 @@ onMounted(() => {
 }
 
 .book-list-item:hover {
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--surface-hover);
 }
 
 .book-cover-small {
@@ -802,7 +802,7 @@ onMounted(() => {
 .no-cover-small {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%);
+  background: var(--primary-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -855,7 +855,7 @@ onMounted(() => {
 }
 
 .btn-danger:hover {
-  background: rgba(255, 59, 48, 0.1) !important;
+  background: var(--danger-alpha-10, rgba(255, 59, 48, 0.1)) !important;
 }
 
 /* 分页 */
@@ -867,7 +867,7 @@ onMounted(() => {
 }
 
 .page-info {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-on-page-bg-secondary);
   font-size: var(--font-size-sm);
 }
 

@@ -285,24 +285,24 @@ onMounted(loadBooks)
 .page-title {
   font-size: var(--font-size-4xl);
   font-weight: 700;
-  color: white;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  color: var(--text-on-page-bg);
+  text-shadow: var(--text-on-page-bg-shadow);
   margin-bottom: var(--spacing-sm);
 }
 
 .page-subtitle {
   font-size: var(--font-size-base);
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-on-page-bg-secondary);
 }
 
 /* 空状态 */
 .empty {
   text-align: center;
   padding: var(--spacing-xl) var(--spacing-lg);
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   color: var(--text-secondary);
 }
@@ -321,10 +321,10 @@ onMounted(loadBooks)
 }
 
 .book-card {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
   cursor: pointer;
@@ -349,7 +349,7 @@ onMounted(loadBooks)
 .no-cover {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%);
+  background: var(--primary-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -385,10 +385,10 @@ onMounted(loadBooks)
 }
 
 .list-card {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   cursor: pointer;
@@ -446,7 +446,7 @@ onMounted(loadBooks)
 .no-cover-small {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%);
+  background: var(--primary-gradient);
   display: flex;
   align-items: center;
   justify-content: center;

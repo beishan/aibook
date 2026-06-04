@@ -745,7 +745,7 @@ onBeforeUnmount(() => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--bg-page-gradient);
 }
 
 /* 加载中和空状态 */
@@ -795,10 +795,10 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: var(--spacing-md) var(--spacing-lg);
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--border-color-light);
   flex-shrink: 0;
   z-index: 10;
 }
@@ -865,10 +865,10 @@ onBeforeUnmount(() => {
 /* 目录侧边栏 */
 .toc-sidebar {
   width: 280px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-right: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--surface-elevated);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-right: 1px solid var(--border-color-light);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -880,7 +880,7 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: var(--spacing-md) var(--spacing-lg);
   font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .toc-list {
@@ -899,12 +899,12 @@ onBeforeUnmount(() => {
 }
 
 .toc-item:hover {
-  background: rgba(0, 122, 255, 0.1);
+  background: var(--primary-alpha-10);
 }
 
 .toc-item.active {
   color: var(--primary);
-  background: rgba(0, 122, 255, 0.1);
+  background: var(--primary-alpha-10);
   border-left-color: var(--primary);
 }
 
@@ -975,10 +975,10 @@ onBeforeUnmount(() => {
 /* 阅读器底部 */
 .reader-footer {
   padding: var(--spacing-md) var(--spacing-lg);
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-top: 1px solid var(--border-color-light);
   flex-shrink: 0;
 }
 
@@ -1031,9 +1031,9 @@ onBeforeUnmount(() => {
 
 .settings-panel {
   width: 320px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: var(--surface-elevated);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -1045,7 +1045,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   padding: var(--spacing-lg);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid var(--border-color-light);
   font-weight: 600;
   font-size: var(--font-size-lg);
 }
@@ -1107,7 +1107,7 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: var(--primary);
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 122, 255, 0.3);
+  box-shadow: 0 2px 6px var(--primary-alpha-30);
 }
 
 .color-options {
@@ -1135,7 +1135,7 @@ onBeforeUnmount(() => {
 
 .color-btn.active {
   border-color: var(--primary);
-  background: rgba(0, 122, 255, 0.1);
+  background: var(--primary-alpha-10);
 }
 
 .color-preview {

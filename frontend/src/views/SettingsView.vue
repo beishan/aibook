@@ -22,6 +22,47 @@
       </div>
     </div>
 
+    <!-- 主题设置 -->
+    <div v-show="activeTab === 'theme'" class="tab-content">
+      <div class="card glass">
+        <div class="card-header">
+          <span>🎨 主题风格</span>
+        </div>
+
+        <div class="theme-grid">
+          <div
+            v-for="theme in themes"
+            :key="theme.id"
+            class="theme-card"
+            :class="{ active: themeStore.currentTheme === theme.id }"
+            @click="handleThemeChange(theme.id)"
+          >
+            <div class="theme-preview" :class="`theme-preview-${theme.id}`">
+              <div class="preview-sidebar" :class="`sidebar-${theme.id}`"></div>
+              <div class="preview-content">
+                <div class="preview-header" :class="`header-${theme.id}`"></div>
+                <div class="preview-cards">
+                  <div class="preview-card" :class="`card-${theme.id}`"></div>
+                  <div class="preview-card" :class="`card-${theme.id}`"></div>
+                </div>
+              </div>
+            </div>
+            <div class="theme-info">
+              <div class="theme-name">
+                <span class="theme-icon">{{ theme.icon }}</span>
+                <span>{{ theme.name }}</span>
+              </div>
+              <div class="theme-desc">{{ theme.description }}</div>
+              <div class="theme-layout">
+                <span class="layout-badge">{{ getLayoutName(theme.layout) }}</span>
+              </div>
+            </div>
+            <div v-if="themeStore.currentTheme === theme.id" class="theme-check">✓</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 扫描目录 -->
     <div v-show="activeTab === 'directories'" class="tab-content">
       <div class="card glass">
@@ -165,12 +206,32 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { message, confirm } from '@/utils/message'
 import api from '@/utils/api'
 import DirectoryBrowser from '@/components/DirectoryBrowser.vue'
+import { useThemeStore } from '@/stores/theme'
+import { THEMES, type ThemeId } from '@/types/theme'
+
+const themeStore = useThemeStore()
+const themes = THEMES
 
 const tabs = [
+  { key: 'theme', label: '主题风格', icon: '🎨' },
   { key: 'directories', label: '扫描目录', icon: '📂' },
   { key: 'scheduler', label: '定时任务', icon: '⏰' },
   { key: 'info', label: '系统信息', icon: 'ℹ️' },
 ]
+
+const getLayoutName = (layout: string) => {
+  const names: Record<string, string> = {
+    sidebar: '侧边栏',
+    topbar: '顶部栏',
+    dock: '底部 Dock'
+  }
+  return names[layout] || layout
+}
+
+const handleThemeChange = (id: ThemeId) => {
+  themeStore.setTheme(id)
+  message.success(`已切换到「${themes.find(t => t.id === id)?.name}」主题`)
+}
 
 const activeTab = ref('directories')
 const loading = ref(false)
@@ -298,22 +359,22 @@ onMounted(loadDirectories)
 .page-title {
   font-size: var(--font-size-4xl);
   font-weight: 700;
-  color: white;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  color: var(--text-on-page-bg);
+  text-shadow: var(--text-on-page-bg-shadow);
   margin-bottom: var(--spacing-sm);
 }
 
 .page-subtitle {
   font-size: var(--font-size-base);
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-on-page-bg-secondary);
 }
 
 /* 卡片 */
 .card {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
@@ -323,7 +384,7 @@ onMounted(loadDirectories)
   justify-content: space-between;
   align-items: center;
   padding: var(--spacing-lg);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid var(--border-color-light);
   font-weight: 600;
   font-size: var(--font-size-lg);
 }
@@ -381,7 +442,7 @@ onMounted(loadDirectories)
   justify-content: space-between;
   align-items: center;
   padding: var(--spacing-lg);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid var(--border-color-light);
   transition: background var(--transition-fast);
 }
 
@@ -390,7 +451,7 @@ onMounted(loadDirectories)
 }
 
 .directory-item:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--surface-hover);
 }
 
 .directory-info {
@@ -448,9 +509,9 @@ onMounted(loadDirectories)
 
 /* 信息列表 */
 .info-list {
-  background: var(--bg-primary);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: var(--surface-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-radius: var(--radius-md);
   overflow: hidden;
   margin: var(--spacing-md);
@@ -461,7 +522,7 @@ onMounted(loadDirectories)
   justify-content: space-between;
   align-items: center;
   padding: var(--spacing-md) var(--spacing-lg);
-  border-bottom: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .info-item:last-child {
@@ -478,7 +539,183 @@ onMounted(loadDirectories)
   font-weight: 500;
 }
 
+/* 主题选择 */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
+}
+
+.theme-card {
+  position: relative;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.theme-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.theme-card.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-alpha-20);
+}
+
+.theme-preview {
+  height: 120px;
+  display: flex;
+  overflow: hidden;
+}
+
+/* 现代简约预览 */
+.theme-preview-modern {
+  background: #f5f5f5;
+}
+
+.sidebar-modern {
+  width: 40px;
+  background: #ffffff;
+  border-right: 1px solid #e5e5e5;
+}
+
+.header-modern {
+  height: 20px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.card-modern {
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 4px;
+}
+
+/* 暖色文艺预览 */
+.theme-preview-warm {
+  background: #faf6f1;
+}
+
+.sidebar-warm {
+  width: 0;
+}
+
+.header-warm {
+  height: 24px;
+  background: #fffbf5;
+  border-bottom: 1px solid #e8ddd0;
+}
+
+.card-warm {
+  background: #fffbf5;
+  border: 1px solid #e8ddd0;
+  border-radius: 10px;
+}
+
+/* 自然清新预览 */
+.theme-preview-natural {
+  background: linear-gradient(135deg, #e8f5e9 0%, #e0f2f1 100%);
+}
+
+.sidebar-natural {
+  width: 0;
+}
+
+.header-natural {
+  height: 20px;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(10px);
+}
+
+.card-natural {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(200, 230, 210, 0.3);
+  border-radius: 8px;
+}
+
+.preview-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-cards {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+
+.preview-card {
+  flex: 1;
+}
+
+.theme-info {
+  padding: var(--spacing-md);
+}
+
+.theme-name {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.theme-icon {
+  font-size: 18px;
+}
+
+.theme-desc {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.theme-layout {
+  display: flex;
+}
+
+.layout-badge {
+  display: inline-flex;
+  padding: 2px 8px;
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+.theme-check {
+  position: absolute;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 /* 响应式 */
+@media (max-width: 768px) {
+  .theme-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 640px) {
   .directory-item {
     flex-direction: column;
