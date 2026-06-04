@@ -590,7 +590,7 @@ onMounted(loadBook)
 
 .book-title-wrapper {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--spacing-sm);
   margin-bottom: var(--spacing-md);
 }
@@ -612,7 +612,6 @@ onMounted(loadBook)
   opacity: 0.6;
   transition: opacity var(--transition-fast);
   flex-shrink: 0;
-  margin-top: 8px;
 }
 
 .btn-edit-title:hover {
