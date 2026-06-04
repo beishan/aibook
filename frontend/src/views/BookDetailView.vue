@@ -205,16 +205,22 @@
         <!-- 笔记 -->
         <div v-show="activeTab === 'notes'" class="tab-content">
           <div class="book-notes">
+            <div class="notes-header">
+              <h3>📝 读书笔记</h3>
+              <p class="notes-hint">记录你的阅读心得和感悟</p>
+            </div>
             <textarea
               v-model="notes"
               class="textarea"
-              rows="6"
-              placeholder="添加读书笔记..."
+              rows="8"
+              placeholder="在这里写下你的读书笔记..."
             ></textarea>
-            <button class="btn btn-primary" style="margin-top: var(--spacing-md)" @click="handleSaveNotes">
-              <span>💾</span>
-              <span>保存笔记</span>
-            </button>
+            <div class="notes-actions">
+              <button class="btn btn-primary" @click="handleSaveNotes">
+                <span>💾</span>
+                <span>保存笔记</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -761,7 +767,59 @@ onMounted(loadBook)
 
 /* 笔记 */
 .book-notes {
-  max-width: 600px;
+  background: var(--bg-primary);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+}
+
+.notes-header {
+  margin-bottom: var(--spacing-lg);
+}
+
+.notes-header h3 {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.notes-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.book-notes .textarea {
+  min-height: 200px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+  resize: vertical;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.book-notes .textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+  outline: none;
+}
+
+.notes-actions {
+  margin-top: var(--spacing-md);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.notes-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 /* 响应式 */
