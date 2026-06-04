@@ -152,24 +152,26 @@
           <div class="book-actions">
             <button
               class="action-btn"
-              :class="{ 'active': book.isFavorite }"
+              :class="{ 'active-favorite': book.isFavorite }"
               @click.stop="handleToggleFavorite(book.id)"
+              title="收藏"
             >
-              {{ book.isFavorite ? '⭐' : '☆' }}
+              {{ book.isFavorite ? '★' : '☆' }}
             </button>
             <button
               class="action-btn"
-              :class="{ 'active': book.isWanted }"
+              :class="{ 'active-wanted': book.isWanted }"
               @click.stop="handleToggleWanted(book.id)"
+              title="想读"
             >
-              {{ book.isWanted ? '✓' : '○' }}
+              {{ book.isWanted ? '♥' : '♡' }}
             </button>
             <button
-              class="action-btn action-btn-danger"
+              class="action-btn action-btn-delete"
               @click.stop="handleDelete(book.id)"
               title="删除"
             >
-              🗑️
+              ×
             </button>
           </div>
         </div>
@@ -741,38 +743,52 @@ onMounted(() => {
 
 .book-actions {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: 4px;
+  justify-content: flex-end;
 }
 
 .action-btn {
-  padding: 6px 10px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: none;
-  border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  border-radius: var(--radius-full);
+  background: transparent;
   cursor: pointer;
-  font-size: var(--font-size-base);
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all var(--transition-fast);
+  color: var(--text-tertiary);
 }
 
 .action-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-hover);
+  color: var(--text-secondary);
 }
 
-.action-btn.active {
-  background: var(--warning-alpha-15, rgba(255, 149, 0, 0.15));
+.action-btn.active-favorite {
+  color: #f59e0b;
 }
 
-.action-btn-danger {
+.action-btn.active-wanted {
+  color: #ef4444;
+}
+
+.action-btn-delete {
   opacity: 0;
-  transition: all var(--transition-fast);
+  font-size: 20px;
+  font-weight: 300;
 }
 
-.book-card:hover .action-btn-danger {
+.book-card:hover .action-btn-delete {
   opacity: 1;
 }
 
-.action-btn-danger:hover {
-  background: rgba(255, 59, 48, 0.15) !important;
+.action-btn-delete:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
 }
 
 /* 书籍列表 */
