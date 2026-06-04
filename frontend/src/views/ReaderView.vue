@@ -1015,8 +1015,6 @@ const restoreScrollPosition = () => {
  */
 const handleScroll = () => {
   if (book.value?.format === 'epub') return
-  // 翻页模式下不处理滚动进度
-  if (settings.value.paginationMode) return
 
   const readerBody = document.querySelector('.reader-body')
   if (!readerBody) return
@@ -1782,9 +1780,9 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
-/* 翻页模式禁用滚动 */
+/* 翻页模式也允许滚动 */
 .reader-body.pagination-mode {
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .epub-container {
