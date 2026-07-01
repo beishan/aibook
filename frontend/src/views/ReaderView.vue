@@ -185,7 +185,7 @@
             </template>
             <!-- 翻页模式提示 -->
             <div v-if="settings.paginationMode && totalPages > 1" class="pagination-hint">
-              <span>← → 翻页 | 共 {{ totalPages }} 页</span>
+              <span>← → 或 空格键 翻页 | 共 {{ totalPages }} 页</span>
             </div>
           </div>
 
@@ -696,13 +696,58 @@ const nextTextPage = () => {
 
 // 键盘翻页
 const handleKeydown = (e: KeyboardEvent) => {
-  if (!settings.value.paginationMode) return
-  if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+  // 如果设置面板打开，不处理按键
+  if (showSettings.value) return
+
+  // EPUB 格式
+  if (book.value?.format === 'epub' && rendition) {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+      e.preventDefault()
+      prevPage()
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+      e.preventDefault()
+      nextPage()
+    }
+    return
+  }
+
+  // TXT/MD 翻页模式
+  if (settings.value.paginationMode) {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+      e.preventDefault()
+      prevTextPage()
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+      e.preventDefault()
+      nextTextPage()
+    }
+    return
+  }
+
+  // TXT/MD 滚动模式
+  const readerBody = document.querySelector('.reader-body')
+  if (!readerBody) return
+
+  const scrollStep = 200
+  const pageScroll = readerBody.clientHeight * 0.8
+
+  if (e.key === 'ArrowUp') {
     e.preventDefault()
-    prevTextPage()
-  } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+    readerBody.scrollTop -= scrollStep
+  } else if (e.key === 'ArrowDown') {
     e.preventDefault()
-    nextTextPage()
+    readerBody.scrollTop += scrollStep
+  } else if (e.key === 'PageUp') {
+    e.preventDefault()
+    readerBody.scrollTop -= pageScroll
+  } else if (e.key === 'PageDown' || e.key === ' ') {
+    e.preventDefault()
+    readerBody.scrollTop += pageScroll
+  } else if (e.key === 'Home') {
+    e.preventDefault()
+    readerBody.scrollTop = 0
+  } else if (e.key === 'End') {
+    e.preventDefault()
+    readerBody.scrollTop = readerBody.scrollHeight
   }
 }
 

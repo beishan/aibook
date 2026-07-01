@@ -60,8 +60,11 @@ public class ScanDirectoryController {
      * 触发扫描
      */
     @PostMapping("/{id}/scan")
-    public ResponseEntity<Map<String, Object>> scanDirectory(@PathVariable Long id) {
-        Map<String, Object> result = scanDirectoryService.scanDirectory(id);
+    public ResponseEntity<Map<String, Object>> scanDirectory(
+            Authentication authentication,
+            @PathVariable Long id) {
+        User user = getUserFromAuth(authentication);
+        Map<String, Object> result = scanDirectoryService.scanDirectory(id, user);
         return ResponseEntity.ok(result);
     }
 

@@ -73,17 +73,14 @@ public class FileScannerService {
     /**
      * 扫描指定目录（供 ScanDirectoryService 调用）
      */
-    public ScanResult scanDirectory(String dirPath) {
+    public ScanResult scanDirectory(String dirPath, User user) {
         ScanResult result = new ScanResult();
         result.setStartTime(System.currentTimeMillis());
 
         Path dir = Paths.get(dirPath);
         if (Files.exists(dir) && Files.isDirectory(dir)) {
             try {
-                // 获取第一个用户作为默认用户
-                User defaultUser = userRepository.findAll().stream().findFirst()
-                        .orElseThrow(() -> new RuntimeException("没有用户，请先注册"));
-                scanDirectory(dir, defaultUser, result);
+                scanDirectory(dir, user, result);
             } catch (IOException e) {
                 log.error("扫描目录失败: {}", dirPath, e);
                 result.addError(dirPath, e.getMessage());

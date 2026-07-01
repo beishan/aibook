@@ -100,7 +100,7 @@ public class ScanDirectoryService {
      * 触发扫描目录 - 实际导入书籍到数据库（所有用户都可以操作）
      */
     @Transactional
-    public Map<String, Object> scanDirectory(Long id) {
+    public Map<String, Object> scanDirectory(Long id, User user) {
         ScanDirectory dir = scanDirectoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
 
@@ -114,7 +114,7 @@ public class ScanDirectoryService {
 
         // 调用 FileScannerService 实际导入书籍
         log.info("开始扫描目录并导入书籍: {}", dir.getPath());
-        FileScannerService.ScanResult scanResult = fileScannerService.scanDirectory(dir.getPath());
+        FileScannerService.ScanResult scanResult = fileScannerService.scanDirectory(dir.getPath(), user);
 
         // 更新扫描目录记录
         dir.setLastScanTime(LocalDateTime.now());
