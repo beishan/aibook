@@ -177,11 +177,11 @@
 
           <!-- TXT / MD 阅读器 -->
           <div v-else-if="book.format === 'txt' || book.format === 'md'" class="reader-text" :style="contentStyle">
-            <template v-for="(paragraph, index) in currentPageContent" :key="index">
-              <div v-if="isChapterTitle(paragraph)" class="chapter-title" :id="'chapter-' + index">
+            <template v-for="(paragraph, localIndex) in currentPageContent" :key="localIndex">
+              <div v-if="isChapterTitle(paragraph)" class="chapter-title" :id="'chapter-' + getOriginalIndex(localIndex)">
                 {{ paragraph }}
               </div>
-              <p v-else :id="'para-' + index">{{ paragraph }}</p>
+              <p v-else :id="'para-' + getOriginalIndex(localIndex)">{{ paragraph }}</p>
             </template>
             <!-- 翻页模式提示 -->
             <div v-if="settings.paginationMode && totalPages > 1" class="pagination-hint">
@@ -626,6 +626,15 @@ const currentPageContent = computed(() => {
   const end = start + pageSize
   return content.value.slice(start, end)
 })
+
+// 获取当前页中某个本地索引对应原始 content 数组的索引
+const getOriginalIndex = (localIndex: number): number => {
+  if (!settings.value.paginationMode || book.value?.format === 'epub') {
+    return localIndex
+  }
+  const pageSize = calculatePageSize()
+  return currentPage.value * pageSize + localIndex
+}
 
 // 计算每页能显示多少段落（基于实际渲染高度）
 const calculatePageSize = (): number => {

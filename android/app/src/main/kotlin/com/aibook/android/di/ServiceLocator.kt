@@ -1,0 +1,52 @@
+package com.aibook.android.di
+
+import android.content.Context
+import com.aibook.android.core.data.db.AiBookDatabase
+import com.aibook.android.core.data.prefs.ReaderSettingsStore
+import com.aibook.android.core.data.prefs.ServerConfigStore
+import com.aibook.android.core.data.repository.BookRepository
+import com.aibook.android.core.data.repository.OpdsConnectionRepository
+import com.aibook.android.core.data.repository.ServerRepository
+import com.aibook.android.core.network.opds.OkHttpOpdsTransport
+import com.aibook.android.core.network.opds.OpdsCatalogService
+import com.aibook.android.core.network.opds.OpdsFeedParser
+import okhttp3.OkHttpClient
+
+class ServiceLocator(private val context: Context) {
+
+    private val database: AiBookDatabase by lazy { AiBookDatabase.get(context) }
+
+    val readerSettingsStore: ReaderSettingsStore by lazy { ReaderSettingsStore(context) }
+
+    val serverConfigStore: ServerConfigStore by lazy { ServerConfigStore(context) }
+
+    val bookRepository: BookRepository by lazy {
+        BookRepository(context, database.bookDao())
+    }
+
+    val opdsConnectionRepository: OpdsConnectionRepository by lazy {
+        OpdsConnectionRepository(database.opdsConnectionDao())
+    }
+
+    val serverRepository: ServerRepository by lazy {
+        ServerRepository(serverConfigStore)
+    }
+
+    val opdsCatalogService: OpdsCatalogService by lazy {
+        OpdsCatalogService(
+            transport = OkHttpOpdsTransport(OkHttpClient()),
+            parser = OpdsFeedParser()
+        )
+    }
+
+    companion object {
+        @Volatile
+        private var instance: ServiceLocator? = null
+
+        fun get(context: Context): ServiceLocator {
+            return instance ?: synchronized(this) {
+                ServiceLocator(context.applicationContext).also { instance = it }
+            }
+        }
+    }
+}
