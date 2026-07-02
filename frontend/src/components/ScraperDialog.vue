@@ -11,7 +11,7 @@
         <el-icon class="is-loading" :size="48">
           <Loading />
         </el-icon>
-        <p>正在从豆瓣/Open Library/Google Books 获取书籍信息...</p>
+        <p>正在从豆瓣/京东读书/Open Library 获取书籍信息...</p>
         <p class="tip">请稍候，这可能需要几秒钟</p>
       </div>
       <div v-else-if="result" class="scraping-result">

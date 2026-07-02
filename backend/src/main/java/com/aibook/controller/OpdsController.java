@@ -46,7 +46,7 @@ public class OpdsController {
     /**
      * 根目录
      */
-    @GetMapping(produces = "application/atom+xml;profile=opds-catalog")
+    @GetMapping({"", "/"})
     public ResponseEntity<String> getRootCatalog(Authentication authentication) {
         User user = getUserFromAuth(authentication);
         String catalog = opdsService.getRootCatalog(user);
@@ -58,7 +58,7 @@ public class OpdsController {
     /**
      * 所有书籍（分页）
      */
-    @GetMapping(value = "/books", produces = "application/atom+xml;profile=opds-catalog")
+    @GetMapping(value = "/books")
     public ResponseEntity<String> getBooks(
             Authentication authentication,
             @RequestParam(defaultValue = "0") int page) {
@@ -72,7 +72,7 @@ public class OpdsController {
     /**
      * 按格式获取书籍（分页）
      */
-    @GetMapping(value = "/formats/{format}", produces = "application/atom+xml;profile=opds-catalog")
+    @GetMapping(value = "/formats/{format}")
     public ResponseEntity<String> getBooksByFormat(
             Authentication authentication,
             @PathVariable String format,
@@ -87,7 +87,7 @@ public class OpdsController {
     /**
      * 格式列表
      */
-    @GetMapping(value = "/formats", produces = "application/atom+xml;profile=opds-catalog")
+    @GetMapping(value = "/formats")
     public ResponseEntity<String> getFormats(Authentication authentication) {
         User user = getUserFromAuth(authentication);
         String catalog = opdsService.getFormatsCatalog(user);
@@ -99,7 +99,7 @@ public class OpdsController {
     /**
      * 收藏书籍（分页）
      */
-    @GetMapping(value = "/favorites", produces = "application/atom+xml;profile=opds-catalog")
+    @GetMapping(value = "/favorites")
     public ResponseEntity<String> getFavorites(
             Authentication authentication,
             @RequestParam(defaultValue = "0") int page) {
@@ -113,7 +113,7 @@ public class OpdsController {
     /**
      * 正在阅读的书籍（分页）
      */
-    @GetMapping(value = "/reading", produces = "application/atom+xml;profile=opds-catalog")
+    @GetMapping(value = "/reading")
     public ResponseEntity<String> getReading(
             Authentication authentication,
             @RequestParam(defaultValue = "0") int page) {
@@ -127,7 +127,7 @@ public class OpdsController {
     /**
      * 搜索书籍（分页）
      */
-    @GetMapping(value = "/search", produces = "application/atom+xml;profile=opds-catalog")
+    @GetMapping(value = "/search")
     public ResponseEntity<String> search(
             Authentication authentication,
             @RequestParam String query,
@@ -180,7 +180,7 @@ public class OpdsController {
     /**
      * OPDS 2.0 根目录
      */
-    @GetMapping(value = "/v2", produces = "application/opds+json")
+    @GetMapping(value = "/v2")
     public ResponseEntity<Map<String, Object>> getV2RootCatalog(Authentication authentication) {
         User user = getUserFromAuth(authentication);
         return ResponseEntity.ok(opds2Service.getRootCatalog(user));
@@ -189,7 +189,7 @@ public class OpdsController {
     /**
      * OPDS 2.0 格式列表
      */
-    @GetMapping(value = "/v2/formats", produces = "application/opds+json")
+    @GetMapping(value = "/v2/formats")
     public ResponseEntity<Map<String, Object>> getV2Formats(Authentication authentication) {
         User user = getUserFromAuth(authentication);
         return ResponseEntity.ok(opds2Service.getFormatsCatalog(user));
@@ -198,7 +198,7 @@ public class OpdsController {
     /**
      * OPDS 2.0 所有书籍
      */
-    @GetMapping(value = "/v2/books", produces = "application/opds+json")
+    @GetMapping(value = "/v2/books")
     public ResponseEntity<Map<String, Object>> getV2Books(
             Authentication authentication,
             @RequestParam(defaultValue = "0") int page) {
@@ -209,7 +209,7 @@ public class OpdsController {
     /**
      * OPDS 2.0 按格式获取书籍
      */
-    @GetMapping(value = "/v2/formats/{format}", produces = "application/opds+json")
+    @GetMapping(value = "/v2/formats/{format}")
     public ResponseEntity<Map<String, Object>> getV2BooksByFormat(
             Authentication authentication,
             @PathVariable String format,
@@ -221,7 +221,7 @@ public class OpdsController {
     /**
      * OPDS 2.0 收藏书籍
      */
-    @GetMapping(value = "/v2/favorites", produces = "application/opds+json")
+    @GetMapping(value = "/v2/favorites")
     public ResponseEntity<Map<String, Object>> getV2Favorites(
             Authentication authentication,
             @RequestParam(defaultValue = "0") int page) {
@@ -232,7 +232,7 @@ public class OpdsController {
     /**
      * OPDS 2.0 正在阅读的书籍
      */
-    @GetMapping(value = "/v2/reading", produces = "application/opds+json")
+    @GetMapping(value = "/v2/reading")
     public ResponseEntity<Map<String, Object>> getV2Reading(
             Authentication authentication,
             @RequestParam(defaultValue = "0") int page) {
@@ -243,7 +243,7 @@ public class OpdsController {
     /**
      * OPDS 2.0 搜索书籍
      */
-    @GetMapping(value = "/v2/search", produces = "application/opds+json")
+    @GetMapping(value = "/v2/search")
     public ResponseEntity<Map<String, Object>> v2Search(
             Authentication authentication,
             @RequestParam String query,

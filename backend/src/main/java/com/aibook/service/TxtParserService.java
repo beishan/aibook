@@ -39,8 +39,6 @@ public class TxtParserService {
         // 数字编号：1. 标题 / 一、标题（仅匹配短标题行，排除对话和长句）
         Pattern.compile("^[一二三四五六七八九十]+[、\\.．]\\s*\\S{1,30}$"),
         Pattern.compile("^\\d{1,4}[、\\.．]\\s*\\S{1,30}$"),
-        // 方括号标题（网文常见）— 仅匹配短标题，排除对话和问句
-        Pattern.compile("^【(?!.*[？。！?!…])[^】]{1,30}】$"),
         // Markdown 标题
         Pattern.compile("^#{1,3}\\s+.{1,100}")
     );
