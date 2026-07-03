@@ -20,30 +20,42 @@ import com.aibook.android.core.reader.EpubBookContent
 import com.aibook.android.core.reader.EpubContentParser
 import com.aibook.android.core.reader.ReaderChapter
 import com.aibook.android.core.reader.ReaderChapterSelection
+import com.aibook.android.core.reader.ReaderProgressCalculator
 import com.aibook.android.core.reader.TextChapterParser
 import com.aibook.android.di.ServiceLocator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.charset.Charset
 
 data class ReaderUiState(
     val book: LocalBook? = null,
-    val content: String = "",
+    val loadedChapters: List<ReaderChapter> = emptyList(),
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val scrollProgress: Float = 0f,
     val chapters: List<ReaderChapter> = emptyList(),
     val currentChapterIndex: Int = 0,
+    val currentLineIndex: Int = 0,
+    val currentScrollOffset: Int = 0,
     val isRemote: Boolean = false,
     val remoteBookId: Long? = null,
     val settings: ReaderSettings = ReaderSettings(),
     val isBookSpecific: Boolean = false,
     val hasSettingsDraft: Boolean = false
-)
+) {
+    val content: String get() = loadedChapters.joinToString("\n") { it.content }
+    val currentChapterTitle: String get() =
+        loadedChapters.lastOrNull()?.title
+            ?: chapters.getOrNull(currentChapterIndex)?.title
+            ?: book?.progress?.chapterTitle
+            ?: ""
+}
 
 class ReaderViewModel(
     private val appContext: android.content.Context,
@@ -54,7 +66,6 @@ class ReaderViewModel(
 
     private val _state = MutableStateFlow(ReaderUiState())
     private val loadingChapterIndexes = mutableSetOf<Int>()
-    private var pendingChapterIndex: Int? = null
     private var settingsSnapshot: ReaderSettings? = null
 
     val uiState: StateFlow<ReaderUiState> = _state
@@ -81,7 +92,13 @@ class ReaderViewModel(
                 return@launch
             }
 
-            _state.value = _state.value.copy(book = book, scrollProgress = book.progress.percent)
+            _state.value = _state.value.copy(
+                book = book,
+                currentChapterIndex = book.progress.chapterIndex ?: 0,
+                currentLineIndex = book.progress.lineIndex ?: 0,
+                currentScrollOffset = book.progress.scrollOffset,
+                scrollProgress = book.progress.percent
+            )
 
             try {
                 val file = File(book.uri)
@@ -109,7 +126,7 @@ class ReaderViewModel(
                             epub.fullText.ifBlank { readTxtFile(file) }
                         } else null
                         applyChapters(chapters, fallbackText = fallback)
-                        if (chapters.isNotEmpty()) prefetchNextEpubChapter()
+                        if (chapters.isNotEmpty()) prefetchNextEpubChapter(_state.value.currentChapterIndex)
                     }
                     BookFormat.PDF -> _state.value = _state.value.copy(
                         isLoading = false,
@@ -118,7 +135,11 @@ class ReaderViewModel(
                     BookFormat.TXT,
                     BookFormat.MARKDOWN,
                     BookFormat.HTML,
-                    BookFormat.HTM -> applyContent(readTxtFile(file))
+                    BookFormat.HTM -> {
+                        val text = withContext(Dispatchers.IO) { readTxtFile(file) }
+                        val chapters = withContext(Dispatchers.Default) { TextChapterParser.parse(text) }
+                        applyChapters(chapters, fallbackText = text)
+                    }
                 }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
@@ -135,7 +156,8 @@ class ReaderViewModel(
             try {
                 val result = serverRepository.getProcessedContent(bookId)
                 result.onSuccess { response ->
-                    applyContent(response.text)
+                    val chapters = withContext(Dispatchers.Default) { TextChapterParser.parse(response.text) }
+                    applyChapters(chapters, fallbackText = response.text)
                 }.onFailure { e ->
                     _state.value = _state.value.copy(isLoading = false, errorMessage = "加载失败：${e.message}")
                 }
@@ -145,8 +167,36 @@ class ReaderViewModel(
         }
     }
 
+    /**
+     * 更新当前视图对应的章节索引（由滚动位置计算得出）
+     */
+    fun updateCurrentChapterIndex(index: Int) {
+        updateReadingPosition(chapterIndex = index, lineIndex = 0, scrollOffset = 0)
+    }
+
+    /**
+     * 更新当前视图对应的章节、章节内行号与像素偏移。
+     */
+    fun updateReadingPosition(chapterIndex: Int, lineIndex: Int, scrollOffset: Int) {
+        val state = _state.value
+        val changedLine = chapterIndex != state.currentChapterIndex || lineIndex != state.currentLineIndex
+        if (changedLine || scrollOffset != state.currentScrollOffset) {
+            _state.update {
+                it.copy(
+                    currentChapterIndex = chapterIndex,
+                    currentLineIndex = lineIndex.coerceAtLeast(0),
+                    currentScrollOffset = scrollOffset.coerceAtLeast(0),
+                    scrollProgress = ReaderProgressCalculator.chapterProgress(chapterIndex, it.chapters.size)
+                )
+            }
+        }
+        if (changedLine) {
+            saveProgress()
+        }
+    }
+
     fun updateScrollProgress(percent: Float) {
-        _state.value = _state.value.copy(scrollProgress = percent)
+        _state.update { it.copy(scrollProgress = percent) }
     }
 
     fun toggleFavorite() {
@@ -161,69 +211,100 @@ class ReaderViewModel(
     fun selectChapter(index: Int) {
         val chapters = _state.value.chapters
         val chapter = chapters.getOrNull(index) ?: return
-        val book = _state.value.book
-        if (book?.format == BookFormat.EPUB && chapter.content.isBlank()) {
-            pendingChapterIndex = index
+        val book = _state.value.book ?: return
+
+        if (book.format == BookFormat.EPUB && chapter.content.isBlank()) {
+            // 需要先从 Readium 加载这个章节
             if (!loadingChapterIndexes.add(index)) return
             viewModelScope.launch {
-                val loadedChapter = runCatching {
+                val loaded = runCatching {
                     ReadiumEpubReader(appContext).parseChapter(File(book.uri), index)
-                }.getOrElse { error ->
-                    loadingChapterIndexes.remove(index)
-                    if (pendingChapterIndex == index) pendingChapterIndex = null
-                    _state.value = _state.value.copy(
-                        errorMessage = "章节读取失败：${error.message ?: error::class.java.simpleName}"
-                    )
-                    return@launch
-                }
-                val updatedChapters = _state.value.chapters.map { current ->
-                    if (current.index == loadedChapter.index) loadedChapter else current
-                }
-                _state.value = _state.value.copy(
-                    chapters = updatedChapters,
-                    currentChapterIndex = index,
-                    content = loadedChapter.content,
-                    scrollProgress = loadedChapter.index.toFloat() / updatedChapters.size.coerceAtLeast(1),
-                    errorMessage = null
-                )
+                }.getOrNull()
                 loadingChapterIndexes.remove(index)
-                if (pendingChapterIndex == index) pendingChapterIndex = null
-                prefetchNextEpubChapter()
+                if (loaded == null) return@launch
+                // 更新 chapters 列表中这个章节的内容
+                val updatedChapters = _state.value.chapters.map {
+                    if (it.index == index) loaded else it
+                }
+                _state.update {
+                    it.copy(
+                        chapters = updatedChapters,
+                        loadedChapters = listOf(loaded),
+                        currentChapterIndex = index,
+                        currentLineIndex = 0,
+                        currentScrollOffset = 0,
+                        scrollProgress = ReaderProgressCalculator.chapterProgress(index, updatedChapters.size),
+                        errorMessage = null
+                    )
+                }
+                saveProgress()
+                prefetchNextEpubChapter(index)
             }
-            return
+        } else {
+            // 章节已有内容，直接显示
+            _state.update {
+                it.copy(
+                    loadedChapters = listOf(chapter),
+                    currentChapterIndex = index,
+                    currentLineIndex = 0,
+                    currentScrollOffset = 0,
+                    scrollProgress = ReaderProgressCalculator.chapterProgress(index, chapters.size)
+                )
+            }
+            saveProgress()
+            prefetchNextEpubChapter(index)
         }
-        _state.value = _state.value.copy(
-            currentChapterIndex = index,
-            content = chapter.content,
-            scrollProgress = chapter.index.toFloat() / chapters.size.coerceAtLeast(1)
-        )
-        prefetchNextEpubChapter()
     }
 
-    fun loadNextChapter() {
+    /**
+     * 滚动到已加载内容底部时，追加下一章到 loadedChapters 尾部
+     */
+    fun appendNextChapter() {
         val state = _state.value
         if (state.isLoading) return
-        val nextIndex = state.currentChapterIndex + 1
+        val lastLoaded = state.loadedChapters.lastOrNull()
+        val nextIndex = (lastLoaded?.index ?: state.currentChapterIndex) + 1
         if (nextIndex >= state.chapters.size) return
-        selectChapter(nextIndex)
+        val nextChapter = state.chapters[nextIndex]
+        val book = state.book
+
+        if (book?.format == BookFormat.EPUB && nextChapter.content.isBlank()) {
+            if (!loadingChapterIndexes.add(nextIndex)) return
+            viewModelScope.launch {
+                val loaded = runCatching {
+                    ReadiumEpubReader(appContext).parseChapter(File(book.uri), nextIndex)
+                }.getOrNull()
+                loadingChapterIndexes.remove(nextIndex)
+                if (loaded == null) return@launch
+                val updatedChapters = _state.value.chapters.map {
+                    if (it.index == nextIndex) loaded else it
+                }
+                _state.update {
+                    it.copy(
+                        chapters = updatedChapters,
+                        loadedChapters = it.loadedChapters + loaded
+                    )
+                }
+            }
+        } else {
+            _state.update {
+                it.copy(
+                    loadedChapters = it.loadedChapters + nextChapter
+                )
+            }
+        }
     }
 
     fun saveProgress() {
-        val state = _state.value
-        val percent = state.scrollProgress
-        val chapter = state.chapters.getOrNull(state.currentChapterIndex)
         viewModelScope.launch {
-            state.book?.let { book ->
-                bookRepository.updateProgress(book.id, chapter?.href, chapter?.title, percent)
-            }
-            if (state.isRemote && state.remoteBookId != null) {
-                serverRepository.saveReadingProgress(
-                    state.remoteBookId,
-                    null,
-                    (percent * 100).toInt(),
-                    (percent * 100).toInt()
-                )
-            }
+            persistProgress(_state.value)
+        }
+    }
+
+    fun saveProgressThen(afterSave: () -> Unit) {
+        viewModelScope.launch {
+            persistProgress(_state.value)
+            afterSave()
         }
     }
 
@@ -320,6 +401,30 @@ class ReaderViewModel(
         return replacementCount < text.length / 100
     }
 
+    private suspend fun persistProgress(state: ReaderUiState) {
+        val percent = state.scrollProgress
+        val chapter = state.chapters.getOrNull(state.currentChapterIndex)
+        state.book?.let { book ->
+            bookRepository.updateProgress(
+                bookId = book.id,
+                chapterHref = chapter?.href,
+                chapterTitle = chapter?.title,
+                percent = percent,
+                chapterIndex = state.currentChapterIndex,
+                lineIndex = state.currentLineIndex,
+                scrollOffset = state.currentScrollOffset
+            )
+        }
+        if (state.isRemote && state.remoteBookId != null) {
+            serverRepository.saveReadingProgress(
+                state.remoteBookId,
+                null,
+                (percent * 100).toInt(),
+                (percent * 100).toInt()
+            )
+        }
+    }
+
     private fun applyContent(text: String) {
         val chapters = TextChapterParser.parse(text)
         applyChapters(chapters, fallbackText = text)
@@ -327,36 +432,53 @@ class ReaderViewModel(
 
     private fun applyChapters(chapters: List<ReaderChapter>, fallbackText: String?) {
         if (chapters.isEmpty()) {
+            val loaded = fallbackText?.takeIf { it.isNotBlank() }?.let { text ->
+                listOf(ReaderChapter(0, "正文", "fallback", text))
+            } ?: emptyList()
             _state.value = _state.value.copy(
-                content = fallbackText.orEmpty(),
+                loadedChapters = loaded,
                 chapters = emptyList(),
                 currentChapterIndex = 0,
+                currentLineIndex = _state.value.book?.progress?.lineIndex ?: 0,
+                currentScrollOffset = _state.value.book?.progress?.scrollOffset ?: 0,
                 scrollProgress = _state.value.book?.progress?.percent ?: 0f,
                 isLoading = false,
-                errorMessage = if (fallbackText.isNullOrBlank()) "未解析到可阅读内容" else null
+                errorMessage = if (loaded.isEmpty()) "未解析到可阅读内容" else null
             )
             return
         }
-        val initialIndex = ReaderChapterSelection.selectInitialIndex(
+        val savedProgress = _state.value.book?.progress
+        val initialIndex = savedProgress?.chapterIndex?.takeIf { it in chapters.indices }
+            ?: ReaderChapterSelection.selectInitialIndex(
             chapters = chapters,
-            preferredHref = _state.value.book?.progress?.chapterHref
+            preferredHref = savedProgress?.chapterHref
         )
         val chapter = chapters.getOrNull(initialIndex)
+        val restoredLineIndex = savedProgress
+            ?.takeIf { it.chapterIndex == initialIndex || it.chapterHref == chapter?.href }
+            ?.lineIndex
+            ?: 0
+        val restoredScrollOffset = savedProgress
+            ?.takeIf { it.chapterIndex == initialIndex || it.chapterHref == chapter?.href }
+            ?.scrollOffset
+            ?: 0
 
         _state.value = _state.value.copy(
-            content = chapter?.content ?: fallbackText.orEmpty(),
+            loadedChapters = listOfNotNull(chapter),
             chapters = chapters,
             currentChapterIndex = initialIndex,
-            scrollProgress = _state.value.book?.progress?.percent ?: 0f,
+            currentLineIndex = restoredLineIndex,
+            currentScrollOffset = restoredScrollOffset,
+            scrollProgress = savedProgress?.percent ?: 0f,
             isLoading = false
         )
     }
 
-    private fun prefetchNextEpubChapter() {
+    private fun prefetchNextEpubChapter(afterIndex: Int) {
         val state = _state.value
         val book = state.book ?: return
         if (book.format != BookFormat.EPUB) return
-        val nextIndex = state.currentChapterIndex + 1
+        val nextIndex = afterIndex + 1
         val nextChapter = state.chapters.getOrNull(nextIndex) ?: return
         if (nextChapter.content.isNotBlank()) return
         if (!loadingChapterIndexes.add(nextIndex)) return
@@ -366,22 +488,10 @@ class ReaderViewModel(
                 ReadiumEpubReader(appContext).parseChapter(File(book.uri), nextIndex)
             }.getOrNull()
             if (loadedChapter != null) {
-                val updatedChapters = _state.value.chapters.map { current ->
-                    if (current.index == loadedChapter.index) loadedChapter else current
+                val updatedChapters = _state.value.chapters.map {
+                    if (it.index == nextIndex) loadedChapter else it
                 }
-                if (pendingChapterIndex == loadedChapter.index) {
-                    _state.value = _state.value.copy(
-                        chapters = updatedChapters,
-                        currentChapterIndex = loadedChapter.index,
-                        content = loadedChapter.content,
-                        scrollProgress = loadedChapter.index.toFloat() / updatedChapters.size.coerceAtLeast(1),
-                        errorMessage = null
-                    )
-                    pendingChapterIndex = null
-                    prefetchNextEpubChapter()
-                } else {
-                    _state.value = _state.value.copy(chapters = updatedChapters)
-                }
+                _state.update { it.copy(chapters = updatedChapters) }
             }
             loadingChapterIndexes.remove(nextIndex)
         }

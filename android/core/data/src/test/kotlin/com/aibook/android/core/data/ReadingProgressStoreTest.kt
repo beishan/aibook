@@ -21,12 +21,18 @@ class ReadingProgressStoreTest {
             book = book,
             chapterHref = "chapter-01.xhtml",
             chapterTitle = "科学边界",
-            percent = 0.42f
+            percent = 0.42f,
+            chapterIndex = 1,
+            lineIndex = 36,
+            scrollOffset = 12
         )
 
         assertEquals(ReadingStatus.READING, updated.status)
         assertEquals("chapter-01.xhtml", updated.progress.chapterHref)
         assertEquals("科学边界", updated.progress.chapterTitle)
+        assertEquals(1, updated.progress.chapterIndex)
+        assertEquals(36, updated.progress.lineIndex)
+        assertEquals(12, updated.progress.scrollOffset)
         assertEquals(0.42f, updated.progress.percent)
     }
 

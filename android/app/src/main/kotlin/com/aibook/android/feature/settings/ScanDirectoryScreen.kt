@@ -138,31 +138,31 @@ fun ScanDirectoryScreen(
                     )
                 }
             }
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(8.dp, RoundedCornerShape(18.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(20.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Icon(Icons.Default.Schedule, null, tint = DesignTokens.Accent, modifier = Modifier.size(34.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("启动应用时自动扫描", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("真实目录授权已保存，自动扫描任务后续可接入 WorkManager", color = DesignTokens.SoftText)
-                    }
-                    Switch(
-                        checked = false,
-                        onCheckedChange = {},
-                        enabled = false,
-                        colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent)
-                    )
-                }
-            }
+//            Card(
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .shadow(8.dp, RoundedCornerShape(18.dp)),
+//                colors = CardDefaults.cardColors(containerColor = Color.White),
+//                shape = RoundedCornerShape(18.dp)
+//            ) {
+//                Row(
+//                    modifier = Modifier.padding(20.dp),
+//                    verticalAlignment = Alignment.CenterVertically,
+//                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+//                ) {
+//                    Icon(Icons.Default.Schedule, null, tint = DesignTokens.Accent, modifier = Modifier.size(34.dp))
+//                    Column(Modifier.weight(1f)) {
+//                        Text("启动应用时自动扫描", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+//                        Text("真实目录授权已保存，自动扫描任务后续可接入 WorkManager", color = DesignTokens.SoftText)
+//                    }
+//                    Switch(
+//                        checked = false,
+//                        onCheckedChange = {},
+//                        enabled = false,
+//                        colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent)
+//                    )
+//                }
+//            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

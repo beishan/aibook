@@ -27,6 +27,9 @@ fun BookEntity.toDomain(): LocalBook {
         progress = ReadingProgress(
             chapterHref = progressChapterHref,
             chapterTitle = progressChapterTitle,
+            chapterIndex = progressChapterIndex,
+            lineIndex = progressLineIndex,
+            scrollOffset = progressScrollOffset,
             percent = progressPercent,
             positionLabel = progressPositionLabel
         )
@@ -50,6 +53,9 @@ fun LocalBook.toEntity(): BookEntity {
         progressPercent = progress.percent,
         progressChapterHref = progress.chapterHref,
         progressChapterTitle = progress.chapterTitle,
+        progressChapterIndex = progress.chapterIndex,
+        progressLineIndex = progress.lineIndex,
+        progressScrollOffset = progress.scrollOffset,
         progressPositionLabel = progress.positionLabel,
         source = "LOCAL"
     )

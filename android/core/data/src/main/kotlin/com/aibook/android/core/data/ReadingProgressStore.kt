@@ -10,7 +10,10 @@ class ReadingProgressStore {
         book: LocalBook,
         chapterHref: String?,
         chapterTitle: String?,
-        percent: Float
+        percent: Float,
+        chapterIndex: Int? = null,
+        lineIndex: Int? = null,
+        scrollOffset: Int = 0
     ): LocalBook {
         return book.copy(
             status = if (percent >= 1f) ReadingStatus.FINISHED else ReadingStatus.READING,
@@ -18,6 +21,9 @@ class ReadingProgressStore {
             progress = ReadingProgress(
                 chapterHref = chapterHref,
                 chapterTitle = chapterTitle,
+                chapterIndex = chapterIndex,
+                lineIndex = lineIndex,
+                scrollOffset = scrollOffset.coerceAtLeast(0),
                 percent = percent.coerceIn(0f, 1f),
                 positionLabel = "${(percent.coerceIn(0f, 1f) * 100).toInt()}%"
             )

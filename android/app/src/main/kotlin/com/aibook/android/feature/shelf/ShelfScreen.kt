@@ -405,10 +405,6 @@ private fun ReadingBookCard(
                         Icon(Icons.Default.RemoveCircleOutline, contentDescription = "移出书架", tint = DesignTokens.SoftText)
                     }
                 }
-            } else {
-                TextButton(onClick = onReadClick, contentPadding = PaddingValues(horizontal = 0.dp)) {
-                    Text("阅读")
-                }
             }
         }
     }

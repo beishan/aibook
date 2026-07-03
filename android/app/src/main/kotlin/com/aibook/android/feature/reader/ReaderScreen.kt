@@ -1,5 +1,6 @@
 package com.aibook.android.feature.reader
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,6 +22,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -58,6 +61,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,10 +86,14 @@ import com.aibook.android.core.model.ParagraphSpacing
 import com.aibook.android.core.model.ReaderSettings
 import com.aibook.android.core.model.ReaderTheme
 import com.aibook.android.core.model.TextAlignment
+import com.aibook.android.core.model.usesPagedReading
 import com.aibook.android.core.reader.ReaderChapter
 import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.WarmProgress
+import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 
 private enum class ReaderPanel {
     None,
@@ -93,6 +101,20 @@ private enum class ReaderPanel {
     Settings,
     Theme
 }
+
+private data class ReaderVisiblePosition(
+    val chapterIndex: Int,
+    val lineIndex: Int,
+    val scrollOffset: Int
+)
+
+private data class ReaderPageContent(
+    val chapterIndex: Int,
+    val startLineIndex: Int,
+    val endLineIndex: Int,
+    val title: String?,
+    val paragraphs: List<String>
+)
 
 @Composable
 fun ReaderScreen(
@@ -115,6 +137,13 @@ fun ReaderScreen(
 
     DisposableEffect(Unit) {
         onDispose { viewModel.saveProgress() }
+    }
+
+    BackHandler {
+        when (panel) {
+            ReaderPanel.None -> viewModel.saveProgressThen(onBack)
+            else -> panel = ReaderPanel.None
+        }
     }
 
     when (panel) {
@@ -142,13 +171,15 @@ fun ReaderScreen(
         ReaderPanel.None -> ReaderMainPage(
             state = state,
             settings = settings,
-            onBack = onBack,
+            onBack = { viewModel.saveProgressThen(onBack) },
             onOpenContents = { panel = ReaderPanel.Contents },
             onOpenSettings = { panel = ReaderPanel.Settings },
             onOpenTheme = { panel = ReaderPanel.Theme },
             onProgressChange = viewModel::updateScrollProgress,
-            onLoadNextChapter = viewModel::loadNextChapter,
-            onToggleFavorite = viewModel::toggleFavorite
+            onLoadNextChapter = viewModel::appendNextChapter,
+            onToggleFavorite = viewModel::toggleFavorite,
+            onSelectChapter = viewModel::selectChapter,
+            onReadingPositionChanged = viewModel::updateReadingPosition
         )
     }
 }
@@ -177,37 +208,35 @@ private fun ReaderMainPage(
     onOpenTheme: () -> Unit,
     onProgressChange: (Float) -> Unit,
     onLoadNextChapter: () -> Unit,
-    onToggleFavorite: () -> Unit
+    onToggleFavorite: () -> Unit,
+    onSelectChapter: (Int) -> Unit,
+    onReadingPositionChanged: (Int, Int, Int) -> Unit
 ) {
     val colors = readerColors(settings.theme)
     val scrollState = rememberLazyListState()
     var controlsVisible by remember(state.book?.id) { mutableStateOf(false) }
     val readerTapInteractionSource = remember { MutableInteractionSource() }
 
-    LaunchedEffect(scrollState, state.content) {
-        snapshotFlow {
-            val total = state.content.length.coerceAtLeast(1)
-            val charPerItem = (total / 100).coerceAtLeast(1)
-            val scrolled = scrollState.firstVisibleItemIndex * charPerItem +
-                (scrollState.firstVisibleItemScrollOffset * charPerItem / 1000)
-            (scrolled.toFloat() / total).coerceIn(0f, 1f)
-        }.collect(onProgressChange)
-    }
+    var restoredInitialPosition by remember(state.book?.id, state.remoteBookId) { mutableStateOf(false) }
 
-    LaunchedEffect(scrollState, state.currentChapterIndex, state.chapters.size) {
-        snapshotFlow {
-            scrollState.isScrollInProgress &&
-                !scrollState.canScrollForward &&
-                scrollState.layoutInfo.totalItemsCount > 0
-        }.collect { reachedBottomByScroll ->
-            if (reachedBottomByScroll) {
-                onLoadNextChapter()
+    // 章节切换时滚动到顶部；初次打开时恢复到保存的章节内行号
+    LaunchedEffect(state.loadedChapters.firstOrNull()?.index, state.book?.id, state.remoteBookId, settings.pageTurnMode) {
+        if (state.loadedChapters.size == 1 && !settings.pageTurnMode.usesPagedReading()) {
+            val savedProgress = state.book?.progress
+            val loadedChapter = state.loadedChapters.firstOrNull()
+            val canRestore = !restoredInitialPosition &&
+                savedProgress != null &&
+                loadedChapter != null &&
+                (savedProgress.chapterIndex == loadedChapter.index || savedProgress.chapterHref == loadedChapter.href)
+            val targetItem = if (canRestore && savedProgress?.lineIndex != null) {
+                (savedProgress.lineIndex ?: 0) + 1
+            } else {
+                0
             }
+            val targetOffset = if (canRestore) savedProgress?.scrollOffset ?: 0 else 0
+            scrollState.scrollToItem(targetItem.coerceAtLeast(0), targetOffset.coerceAtLeast(0))
+            restoredInitialPosition = true
         }
-    }
-
-    LaunchedEffect(state.currentChapterIndex) {
-        scrollState.scrollToItem(0)
     }
 
     Box(
@@ -218,11 +247,10 @@ private fun ReaderMainPage(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable(
-                    interactionSource = readerTapInteractionSource,
-                    indication = null
-                ) {
-                    controlsVisible = !controlsVisible
+                .pointerInput(Unit) {
+                    detectTapGestures {
+                        controlsVisible = !controlsVisible
+                    }
                 }
         ) {
             when {
@@ -242,7 +270,9 @@ private fun ReaderMainPage(
                     state = state,
                     settings = settings,
                     scrollState = scrollState,
-                    foreground = colors.foreground
+                    foreground = colors.foreground,
+                    onLoadNextChapter = onLoadNextChapter,
+                    onReadingPositionChanged = onReadingPositionChanged
                 )
                 else -> Text(
                     text = "暂无可阅读内容",
@@ -259,6 +289,8 @@ private fun ReaderMainPage(
             ) {
                 ReaderBottomBar(
                     progress = state.scrollProgress,
+                    currentChapterIndex = state.currentChapterIndex,
+                    totalChapters = state.chapters.size,
                     foreground = colors.foreground,
                     muted = colors.muted,
                     divider = colors.divider,
@@ -267,7 +299,8 @@ private fun ReaderMainPage(
                     onOpenSettings = onOpenSettings,
                     onOpenTheme = onOpenTheme,
                     isFavorite = state.book?.favorite ?: false,
-                    onToggleFavorite = onToggleFavorite
+                    onToggleFavorite = onToggleFavorite,
+                    onSelectChapter = onSelectChapter
                 )
             }
         }
@@ -279,10 +312,68 @@ private fun ReaderTextContent(
     state: ReaderUiState,
     settings: ReaderSettings,
     scrollState: androidx.compose.foundation.lazy.LazyListState,
-    foreground: Color
+    foreground: Color,
+    onLoadNextChapter: () -> Unit,
+    onReadingPositionChanged: (Int, Int, Int) -> Unit
 ) {
-    val paragraphs = remember(state.content) {
-        state.content.split("\n").filter { it.isNotBlank() }
+    val loadedChapters = state.loadedChapters
+    val chapterParagraphs = remember(loadedChapters) {
+        loadedChapters.map { chapter ->
+            chapter to chapter.content.split("\n").filter { it.isNotBlank() }
+        }
+    }
+    val chapterItemCounts = remember(chapterParagraphs) {
+        chapterParagraphs.map { (chapter, paragraphs) -> chapter.index to 1 + paragraphs.size }
+    }
+
+    if (settings.pageTurnMode.usesPagedReading()) {
+        ReaderPagedContent(
+            state = state,
+            settings = settings,
+            foreground = foreground,
+            chapterParagraphs = chapterParagraphs,
+            onLoadNextChapter = onLoadNextChapter,
+            onReadingPositionChanged = onReadingPositionChanged
+        )
+        return
+    }
+
+    // 监听滚动到底部，自动加载下一章
+    val shouldLoadMore = remember(scrollState, loadedChapters) {
+        derivedStateOf {
+            val lastVisible = scrollState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val totalItems = scrollState.layoutInfo.totalItemsCount
+            totalItems > 0 && lastVisible >= totalItems - 3
+        }
+    }
+    LaunchedEffect(shouldLoadMore.value) {
+        if (shouldLoadMore.value) onLoadNextChapter()
+    }
+
+    // 追踪当前所在章节与章节内行号
+    LaunchedEffect(scrollState, loadedChapters) {
+        snapshotFlow {
+            val firstVisible = scrollState.firstVisibleItemIndex
+            // 累积每个已加载章节的段落数，确定当前章节
+            var offset = 0
+            var currentIdx = loadedChapters.lastOrNull()?.index ?: 0
+            var lineIndex = 0
+            for ((chapterIndex, chapterItems) in chapterItemCounts) {
+                if (firstVisible < offset + chapterItems) {
+                    currentIdx = chapterIndex
+                    lineIndex = (firstVisible - offset - 1).coerceAtLeast(0)
+                    break
+                }
+                offset += chapterItems
+            }
+            ReaderVisiblePosition(
+                chapterIndex = currentIdx,
+                lineIndex = lineIndex,
+                scrollOffset = scrollState.firstVisibleItemScrollOffset
+            )
+        }.distinctUntilChanged().collect { position ->
+            onReadingPositionChanged(position.chapterIndex, position.lineIndex, position.scrollOffset)
+        }
     }
 
     LazyColumn(
@@ -291,30 +382,190 @@ private fun ReaderTextContent(
         contentPadding = PaddingValues(horizontal = 38.dp, vertical = 48.dp),
         verticalArrangement = Arrangement.spacedBy(28.dp)
     ) {
-        item {
-            Text(
-                text = currentChapterTitle(state),
-                color = foreground,
-                fontSize = 34.sp,
-                lineHeight = 44.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-        }
-        items(paragraphs.size) { index ->
-            Text(
-                text = paragraphs[index],
-                color = foreground,
-                fontSize = (19 * settings.fontScale).sp,
-                lineHeight = (35 * settings.fontScale * settings.lineHeight).sp,
-                letterSpacing = 0.sp
-            )
+        chapterParagraphs.forEach { (chapter, paragraphs) ->
+            item(key = "title_${chapter.index}") {
+                Text(
+                    text = chapter.title,
+                    color = foreground,
+                    fontSize = 34.sp,
+                    lineHeight = 44.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+            items(paragraphs.size, key = { "p_${chapter.index}_$it" }) { index ->
+                Text(
+                    text = paragraphs[index],
+                    color = foreground,
+                    fontSize = (19 * settings.fontScale).sp,
+                    lineHeight = (35 * settings.fontScale * settings.lineHeight).sp,
+                    letterSpacing = 0.sp
+                )
+            }
         }
     }
 }
 
 @Composable
+private fun ReaderPagedContent(
+    state: ReaderUiState,
+    settings: ReaderSettings,
+    foreground: Color,
+    chapterParagraphs: List<Pair<ReaderChapter, List<String>>>,
+    onLoadNextChapter: () -> Unit,
+    onReadingPositionChanged: (Int, Int, Int) -> Unit
+) {
+    val pages = remember(chapterParagraphs, settings.fontScale, settings.lineHeight, settings.paragraphSpacing) {
+        buildReaderPages(chapterParagraphs, settings)
+    }
+    val pagerState = rememberPagerState(pageCount = { pages.size.coerceAtLeast(1) })
+    var restoredInitialPage by remember(state.book?.id, state.remoteBookId, settings.pageTurnMode) {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(state.loadedChapters.firstOrNull()?.index, pages.size, settings.pageTurnMode) {
+        if (pages.isEmpty()) return@LaunchedEffect
+
+        val savedProgress = state.book?.progress
+        val loadedChapter = state.loadedChapters.firstOrNull()
+        val canRestore = !restoredInitialPage &&
+            savedProgress != null &&
+            loadedChapter != null &&
+            (savedProgress.chapterIndex == loadedChapter.index || savedProgress.chapterHref == loadedChapter.href)
+        val targetChapterIndex = loadedChapter?.index ?: state.currentChapterIndex
+        val targetLineIndex = if (canRestore) savedProgress?.lineIndex ?: 0 else 0
+        val targetPage = pages.indexOfFirst {
+            it.chapterIndex == targetChapterIndex && targetLineIndex in it.startLineIndex..it.endLineIndex
+        }.takeIf { it >= 0 } ?: pages.indexOfFirst { it.chapterIndex == targetChapterIndex }.takeIf { it >= 0 } ?: 0
+
+        pagerState.scrollToPage(targetPage)
+        restoredInitialPage = true
+    }
+
+    LaunchedEffect(pagerState, pages) {
+        snapshotFlow { pagerState.currentPage }
+            .distinctUntilChanged()
+            .collect { pageIndex ->
+                val page = pages.getOrNull(pageIndex) ?: return@collect
+                onReadingPositionChanged(page.chapterIndex, page.startLineIndex, 0)
+                if (pageIndex >= pages.size - 2) {
+                    onLoadNextChapter()
+                }
+            }
+    }
+
+    if (pages.isEmpty()) {
+        Text(
+            text = "暂无可阅读内容",
+            modifier = Modifier.fillMaxSize().padding(38.dp),
+            color = foreground
+        )
+        return
+    }
+
+    HorizontalPager(
+        state = pagerState,
+        modifier = Modifier.fillMaxSize(),
+        beyondViewportPageCount = 1
+    ) { pageIndex ->
+        val page = pages.getOrNull(pageIndex) ?: return@HorizontalPager
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 38.dp, vertical = 48.dp),
+            verticalArrangement = Arrangement.spacedBy(paragraphGap(settings.paragraphSpacing))
+        ) {
+            if (page.title != null) {
+                Text(
+                    text = page.title,
+                    color = foreground,
+                    fontSize = 34.sp,
+                    lineHeight = 44.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+            page.paragraphs.forEach { paragraph ->
+                Text(
+                    text = paragraph,
+                    color = foreground,
+                    fontSize = (19 * settings.fontScale).sp,
+                    lineHeight = (35 * settings.fontScale * settings.lineHeight).sp,
+                    letterSpacing = 0.sp
+                )
+            }
+        }
+    }
+}
+
+private fun buildReaderPages(
+    chapterParagraphs: List<Pair<ReaderChapter, List<String>>>,
+    settings: ReaderSettings
+): List<ReaderPageContent> {
+    val charBudget = (760 / (settings.fontScale * settings.lineHeight))
+        .toInt()
+        .coerceIn(260, 920)
+    val pages = mutableListOf<ReaderPageContent>()
+
+    chapterParagraphs.forEach { (chapter, paragraphs) ->
+        if (paragraphs.isEmpty()) {
+            pages += ReaderPageContent(
+                chapterIndex = chapter.index,
+                startLineIndex = 0,
+                endLineIndex = 0,
+                title = chapter.title,
+                paragraphs = emptyList()
+            )
+            return@forEach
+        }
+
+        var title: String? = chapter.title
+        var startLineIndex = 0
+        var charCount = 0
+        val pageParagraphs = mutableListOf<String>()
+
+        fun flush(endLineIndex: Int) {
+            pages += ReaderPageContent(
+                chapterIndex = chapter.index,
+                startLineIndex = startLineIndex,
+                endLineIndex = endLineIndex.coerceAtLeast(startLineIndex),
+                title = title,
+                paragraphs = pageParagraphs.toList()
+            )
+            title = null
+            pageParagraphs.clear()
+            charCount = 0
+        }
+
+        paragraphs.forEachIndexed { lineIndex, paragraph ->
+            if (pageParagraphs.isNotEmpty() && charCount + paragraph.length > charBudget) {
+                flush(lineIndex - 1)
+                startLineIndex = lineIndex
+            }
+            if (pageParagraphs.isEmpty()) {
+                startLineIndex = lineIndex
+            }
+            pageParagraphs += paragraph
+            charCount += paragraph.length
+        }
+
+        if (pageParagraphs.isNotEmpty()) {
+            flush(paragraphs.lastIndex)
+        }
+    }
+
+    return pages
+}
+
+private fun paragraphGap(spacing: ParagraphSpacing) = when (spacing) {
+    ParagraphSpacing.NONE -> 12.dp
+    ParagraphSpacing.SMALL -> 22.dp
+    ParagraphSpacing.LARGE -> 34.dp
+}
+
+@Composable
 private fun ReaderBottomBar(
     progress: Float,
+    currentChapterIndex: Int,
+    totalChapters: Int,
     foreground: Color,
     muted: Color,
     divider: Color,
@@ -323,7 +574,8 @@ private fun ReaderBottomBar(
     onOpenSettings: () -> Unit,
     onOpenTheme: () -> Unit,
     isFavorite: Boolean = false,
-    onToggleFavorite: () -> Unit = {}
+    onToggleFavorite: () -> Unit = {},
+    onSelectChapter: (Int) -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -337,7 +589,18 @@ private fun ReaderBottomBar(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("上一章", color = foreground, fontWeight = FontWeight.Bold)
+            Text(
+                "上一章",
+                color = if (currentChapterIndex > 0) foreground else divider,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    enabled = currentChapterIndex > 0
+                ) {
+                    onSelectChapter(currentChapterIndex - 1)
+                }
+            )
             Slider(
                 value = progress.coerceIn(0f, 1f),
                 onValueChange = onProgressChange,
@@ -352,12 +615,18 @@ private fun ReaderBottomBar(
                     inactiveTickColor = Color.Transparent
                 )
             )
-//            Text(
-//                text = "${(progress * 100).toInt()}%",
-//                color = DesignTokens.Accent,
-//                style = MaterialTheme.typography.titleMedium
-//            )
-            Text("下一章", color = foreground, fontWeight = FontWeight.Bold)
+            Text(
+                "下一章",
+                color = if (currentChapterIndex < totalChapters - 1) foreground else divider,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    enabled = currentChapterIndex < totalChapters - 1
+                ) {
+                    onSelectChapter(currentChapterIndex + 1)
+                }
+            )
         }
 //        Text(
 //            text = "${(progress * 100).toInt()}%",

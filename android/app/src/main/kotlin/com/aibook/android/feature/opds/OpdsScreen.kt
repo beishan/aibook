@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
@@ -36,6 +39,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
@@ -181,32 +185,32 @@ private fun DiscoveryHome(
                 )
             }
         }
-        item { SectionHeader("已配置扫描目录", "+ 添加目录") }
-        item {
-            SoftCard {
-                sampleScanDirectories.forEachIndexed { index, directory ->
-                    ScanDirectoryRow(directory)
-                    if (index != sampleScanDirectories.lastIndex) {
-                        Spacer(Modifier.height(14.dp))
-                        Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.Hairline))
-                        Spacer(Modifier.height(14.dp))
-                    }
-                }
-            }
-        }
-        item { SectionHeader("最近导入", "全部 ›") }
-        item {
-            SoftCard {
-                sampleRecentImports.forEachIndexed { index, imported ->
-                    RecentImportRow(imported)
-                    if (index != sampleRecentImports.lastIndex) {
-                        Spacer(Modifier.height(14.dp))
-                        Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.Hairline))
-                        Spacer(Modifier.height(14.dp))
-                    }
-                }
-            }
-        }
+//        item { SectionHeader("已配置扫描目录", "+ 添加目录") }
+//        item {
+//            SoftCard {
+//                sampleScanDirectories.forEachIndexed { index, directory ->
+//                    ScanDirectoryRow(directory)
+//                    if (index != sampleScanDirectories.lastIndex) {
+//                        Spacer(Modifier.height(14.dp))
+//                        Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.Hairline))
+//                        Spacer(Modifier.height(14.dp))
+//                    }
+//                }
+//            }
+//        }
+//        item { SectionHeader("最近导入", "全部 ›") }
+//        item {
+//            SoftCard {
+//                sampleRecentImports.forEachIndexed { index, imported ->
+//                    RecentImportRow(imported)
+//                    if (index != sampleRecentImports.lastIndex) {
+//                        Spacer(Modifier.height(14.dp))
+//                        Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.Hairline))
+//                        Spacer(Modifier.height(14.dp))
+//                    }
+//                }
+//            }
+//        }
         item {
             SupportedFormatsCard(importState.message)
         }
@@ -866,63 +870,388 @@ private fun CatalogBrowser(
     viewModel: OpdsViewModel
 ) {
     val feed = state.currentFeed ?: return
+    val connection = state.activeConnection
+    val categoryEntries = feed.entries.filter { it.acquisitionLink == null && it.alternateLink != null }
+    val bookEntries = feed.entries.filter { it.acquisitionLink != null }
+    val rankingEntries = bookEntries.take(3)
+    val recentEntries = bookEntries.take(4)
 
-    if (state.isLoading) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            CircularProgressIndicator()
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        item {
+            CatalogHeader(
+                connection = connection,
+                feedTitle = feed.title,
+                bookCount = bookEntries.size,
+                onBack = { viewModel.navigateBack() }
+            )
+        }
+        if (categoryEntries.isNotEmpty()) {
+            item {
+                CatalogCategoryChips(
+                    entries = categoryEntries,
+                    onBrowse = { href -> viewModel.browseLink(href) }
+                )
+            }
+        }
+        if (state.isLoading) {
+            item {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    CircularProgressIndicator(color = DesignTokens.Accent)
+                }
+            }
+        }
+        if (rankingEntries.isNotEmpty()) {
+            item {
+                CatalogRankingSection(rankingEntries)
+            }
+        }
+        if (recentEntries.isNotEmpty()) {
+            item {
+                CatalogRecentSection(recentEntries)
+            }
+        }
+        item {
+            CatalogListHeader(bookEntries.size)
+        }
+        if (bookEntries.isEmpty()) {
+            item {
+                CatalogEmptyState(categoryEntries.isNotEmpty())
+            }
+        } else {
+            items(bookEntries, key = { "${it.title}-${it.acquisitionLink?.href.orEmpty()}" }) { entry ->
+                CatalogBookRow(
+                    entry = entry,
+                    downloading = state.downloadingTitle == entry.title,
+                    onDownload = { viewModel.downloadEntry(entry) }
+                )
+            }
         }
     }
+}
 
-    Text(feed.title, style = MaterialTheme.typography.titleLarge)
-
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(feed.entries, key = { it.title }) { entry ->
-            OpdsEntryCard(
-                entry = entry,
-                downloading = state.downloadingTitle == entry.title,
-                onBrowse = { href -> viewModel.browseLink(href) },
-                onDownload = { viewModel.downloadEntry(entry) }
+@Composable
+private fun CatalogHeader(
+    connection: OpdsConnection?,
+    feedTitle: String,
+    bookCount: Int,
+    onBack: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                }
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(Color(0xFFFFF4E8), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.CloudUpload, null, tint = DesignTokens.Accent, modifier = Modifier.size(34.dp))
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            connection?.name ?: feedTitle,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            "OPDS",
+                            modifier = Modifier
+                                .background(Color(0xFFF0F6EA), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                            color = Color(0xFF6B8F42),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        connection?.baseUrl ?: feedTitle,
+                        color = DesignTokens.SoftText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Search, contentDescription = "搜索", tint = Color.Black, modifier = Modifier.size(34.dp))
+                Icon(Icons.Default.MoreVert, contentDescription = "更多", tint = Color.Black, modifier = Modifier.size(34.dp))
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("来自 OPDS 源的图书内容", color = DesignTokens.SoftText, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "共 $bookCount 本图书 · 最后更新 ${formatSyncTime(connection?.lastSyncedAt)}",
+                color = DesignTokens.SoftText,
+                style = MaterialTheme.typography.titleMedium
             )
         }
     }
 }
 
 @Composable
-private fun OpdsEntryCard(
-    entry: OpdsEntry,
-    downloading: Boolean,
-    onBrowse: (String) -> Unit,
-    onDownload: () -> Unit
+private fun CatalogCategoryChips(
+    entries: List<OpdsEntry>,
+    onBrowse: (String) -> Unit
 ) {
-    SoftCard {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(entry.title, style = MaterialTheme.typography.titleMedium)
-            entry.author?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            entry.summary?.let {
-                Text(
-                    it.take(200) + if (it.length > 200) "…" else "",
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 3
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                entry.alternateLink?.let { link ->
-                    TextButton(onClick = { onBrowse(link.href) }) {
-                        Text("浏览")
-                    }
-                }
-                entry.acquisitionLink?.let { link ->
-                    Button(onClick = onDownload, enabled = !downloading) {
-                        if (downloading) {
-                            CircularProgressIndicator()
-                        } else {
-                            Icon(Icons.Default.Download, contentDescription = null)
-                            Text("下载")
-                        }
-                    }
-                    Text("格式：${link.type ?: "未知"}", style = MaterialTheme.typography.labelSmall)
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 0.dp)
+    ) {
+        item {
+            CatalogChip("全部", selected = true, onClick = {})
+        }
+        items(entries.take(8), key = { it.title }) { entry ->
+            CatalogChip(
+                label = entry.title,
+                selected = false,
+                onClick = { entry.alternateLink?.href?.let(onBrowse) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CatalogChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        modifier = Modifier
+            .background(if (selected) Color(0xFFFFF2E8) else Color(0xFFF7F4F0), RoundedCornerShape(999.dp))
+            .border(
+                width = 1.dp,
+                color = if (selected) DesignTokens.Accent else DesignTokens.Hairline,
+                shape = RoundedCornerShape(999.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        color = if (selected) DesignTokens.Accent else Color(0xFF2C2A28),
+        fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
+private fun CatalogRankingSection(entries: List<OpdsEntry>) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionTitle("排行榜")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = DesignTokens.WarmCard),
+            shape = RoundedCornerShape(18.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
+        ) {
+            LazyRow(
+                modifier = Modifier.padding(18.dp),
+                horizontalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                items(entries, key = { it.title }) { entry ->
+                    RankingBookCard(entry = entry, rank = entries.indexOf(entry) + 1)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RankingBookCard(entry: OpdsEntry, rank: Int) {
+    Row(
+        modifier = Modifier
+            .width(230.dp)
+            .background(Color.White.copy(alpha = 0.64f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box {
+            CatalogCover(entry.title, width = 76.dp, height = 116.dp)
+            Text(
+                rank.toString(),
+                modifier = Modifier
+                    .background(DesignTokens.Accent, RoundedCornerShape(topStart = 8.dp, bottomEnd = 8.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+            Text(entry.title, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(entry.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("热度 ${String.format(Locale.getDefault(), "%.1f", 9.9f - rank * 0.2f)}", color = DesignTokens.SoftText)
+        }
+    }
+}
+
+@Composable
+private fun CatalogRecentSection(entries: List<OpdsEntry>) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionTitle("最近更新")
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+            items(entries, key = { it.title }) { entry ->
+                RecentCatalogBook(entry)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentCatalogBook(entry: OpdsEntry) {
+    Column(
+        modifier = Modifier.width(128.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box {
+            CatalogCover(entry.title, width = 112.dp, height = 154.dp)
+            Text(
+                "新",
+                modifier = Modifier
+                    .background(DesignTokens.Accent, RoundedCornerShape(topStart = 8.dp, bottomEnd = 8.dp))
+                    .padding(horizontal = 7.dp, vertical = 4.dp),
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Text(entry.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(entry.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text("昨天", color = DesignTokens.SoftText)
+    }
+}
+
+@Composable
+private fun CatalogListHeader(count: Int) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("全部图书", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("共 $count 本", color = DesignTokens.SoftText)
+            Text("最新更新⌄", color = DesignTokens.SoftText)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("筛选", color = DesignTokens.SoftText)
+                Icon(Icons.Default.FilterList, null, tint = DesignTokens.SoftText, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CatalogBookRow(
+    entry: OpdsEntry,
+    downloading: Boolean,
+    onDownload: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.78f)),
+        shape = RoundedCornerShape(16.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CatalogCover(entry.title, width = 86.dp, height = 118.dp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(entry.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(entry.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("更新于 昨天 22:15", color = DesignTokens.SoftText)
+                    Text(opdsFormatLabel(entry), color = DesignTokens.SoftText)
+                }
+                entry.summary?.takeIf { it.isNotBlank() }?.let {
+                    Text(it, color = DesignTokens.SoftText, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Button(
+                onClick = onDownload,
+                enabled = !downloading,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFF4E8), contentColor = DesignTokens.Accent),
+                shape = RoundedCornerShape(999.dp)
+            ) {
+                if (downloading) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = DesignTokens.Accent)
+                } else {
+                    Text("加入书架", fontWeight = FontWeight.Bold)
+                }
+            }
+            Icon(Icons.Default.MoreVert, contentDescription = "更多", tint = DesignTokens.SoftText)
+        }
+    }
+}
+
+@Composable
+private fun CatalogEmptyState(hasCategories: Boolean) {
+    SoftCard(color = DesignTokens.WarmCard) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                if (hasCategories) "当前分类还没有可下载图书" else "目录为空",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text("可以切换上方分类，或返回上一级目录继续浏览。", color = DesignTokens.SoftText)
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(title: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("查看全部", color = DesignTokens.SoftText)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = DesignTokens.SoftText)
+        }
+    }
+}
+
+@Composable
+private fun CatalogCover(title: String, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+    val palettes = listOf(
+        listOf(Color(0xFFBFDDE7), Color(0xFF5A9EB0)),
+        listOf(Color(0xFF203746), Color(0xFF101820)),
+        listOf(Color(0xFFEADFC9), Color(0xFFC78B4A)),
+        listOf(Color(0xFF9DBCC1), Color(0xFF38535B))
+    )
+    val colors = palettes[kotlin.math.abs(title.hashCode()) % palettes.size]
+    Box(
+        modifier = Modifier
+            .width(width)
+            .height(height)
+            .background(Brush.verticalGradient(colors), RoundedCornerShape(8.dp))
+            .padding(8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            title.take(5),
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+private fun opdsFormatLabel(entry: OpdsEntry): String {
+    val type = entry.acquisitionLink?.type.orEmpty().lowercase()
+    return when {
+        "epub" in type -> "EPUB"
+        "pdf" in type -> "PDF"
+        "text" in type || "txt" in type -> "TXT"
+        type.isNotBlank() -> type.substringAfterLast('/').uppercase()
+        else -> "未知格式"
     }
 }

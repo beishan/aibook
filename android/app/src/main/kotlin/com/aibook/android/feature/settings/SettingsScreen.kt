@@ -290,10 +290,10 @@ fun AboutScreen(onBack: () -> Unit) {
                     modifier = Modifier.size(86.dp).background(Color(0xFFFFE5C4), RoundedCornerShape(22.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("墨阅", color = DesignTokens.Accent, fontWeight = FontWeight.ExtraBold)
+                    Text("汗牛充栋", color = DesignTokens.Accent, fontWeight = FontWeight.ExtraBold)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("墨阅", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
+                    Text("汗牛充栋", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
                     Text("让阅读，成为一种生活方式", color = DesignTokens.SoftText)
                     Text(
                         "版本 1.3.2",
@@ -320,7 +320,7 @@ fun AboutScreen(onBack: () -> Unit) {
             DetailLine(Icons.Default.Menu, "个人信息收集清单", "查看个人信息收集情况", showDivider = false)
         }
         Text(
-            "墨阅 · 让每一本书，都找到知音\n© 2024 Moyue. All Rights Reserved.",
+            "汗牛充栋 · 让每一本书，都找到朋友\n© 2026 Miaomiao. All Rights Reserved.",
             modifier = Modifier.fillMaxWidth(),
             color = DesignTokens.SoftText,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center

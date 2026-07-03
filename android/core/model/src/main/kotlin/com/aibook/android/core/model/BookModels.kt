@@ -51,6 +51,9 @@ data class LocalBook(
 data class ReadingProgress(
     val chapterHref: String? = null,
     val chapterTitle: String? = null,
+    val chapterIndex: Int? = null,
+    val lineIndex: Int? = null,
+    val scrollOffset: Int = 0,
     val percent: Float = 0f,
     val positionLabel: String? = null
 )
@@ -94,3 +97,5 @@ enum class PageTurnMode {
     PAN,
     VERTICAL
 }
+
+fun PageTurnMode.usesPagedReading(): Boolean = this != PageTurnMode.VERTICAL

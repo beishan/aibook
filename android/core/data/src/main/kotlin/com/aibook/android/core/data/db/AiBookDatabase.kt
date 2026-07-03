@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [BookEntity::class, OpdsConnectionEntity::class, ScanDirectoryEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AiBookDatabase : RoomDatabase() {

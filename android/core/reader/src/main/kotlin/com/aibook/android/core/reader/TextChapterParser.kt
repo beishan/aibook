@@ -6,8 +6,7 @@ object TextChapterParser {
     )
 
     fun parse(text: String): List<ReaderChapter> {
-        val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
-        if (normalized.isBlank()) {
+        if (text.isBlank()) {
             return listOf(ReaderChapter(0, "正文", "chapter-0", ""))
         }
 
@@ -17,7 +16,8 @@ object TextChapterParser {
         var hasHeading = false
         var index = 0
 
-        normalized.lineSequence().forEach { line ->
+        text.lineSequence().forEach { rawLine ->
+            val line = rawLine.trimEnd('\r')
             val heading = chapterHeading.matchEntire(line)?.groupValues?.get(1)
             if (heading != null) {
                 if (current.isNotBlank()) {

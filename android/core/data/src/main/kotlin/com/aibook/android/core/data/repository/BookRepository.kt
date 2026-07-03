@@ -133,7 +133,10 @@ class BookRepository(
         bookId: String,
         chapterHref: String?,
         chapterTitle: String?,
-        percent: Float
+        percent: Float,
+        chapterIndex: Int? = null,
+        lineIndex: Int? = null,
+        scrollOffset: Int = 0
     ) {
         val clamped = percent.coerceIn(0f, 1f)
         val status = if (clamped >= 1f) ReadingStatus.FINISHED else ReadingStatus.READING
@@ -144,6 +147,9 @@ class BookRepository(
             percent = clamped,
             chapterHref = chapterHref,
             chapterTitle = chapterTitle,
+            chapterIndex = chapterIndex,
+            lineIndex = lineIndex,
+            scrollOffset = scrollOffset.coerceAtLeast(0),
             positionLabel = "${(clamped * 100).toInt()}%"
         )
     }

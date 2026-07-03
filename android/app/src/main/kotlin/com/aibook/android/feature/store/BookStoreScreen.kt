@@ -1,5 +1,6 @@
 package com.aibook.android.feature.store
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,6 +32,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -45,7 +48,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -72,6 +77,9 @@ fun BookStoreScreen(
 
     var selectedSource by remember { mutableStateOf(StoreSourceFilter.ALL) }
     var selectedCategory by remember { mutableStateOf("全部") }
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("store_prefs", Context.MODE_PRIVATE) }
+    var isGridView by remember { mutableStateOf(prefs.getBoolean("is_grid_view", true)) }
     var query by remember { mutableStateOf("") }
     val filteredBooks by remember(storeBooks, selectedSource, selectedCategory, query) {
         derivedStateOf {
@@ -94,6 +102,17 @@ fun BookStoreScreen(
         modifier = Modifier.fillMaxSize(),
         actions = {
             Icon(Icons.Default.Search, contentDescription = "搜索")
+            Icon(
+                if (isGridView) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
+                contentDescription = if (isGridView) "列表视图" else "网格视图",
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    isGridView = !isGridView
+                    prefs.edit().putBoolean("is_grid_view", isGridView).apply()
+                }
+            )
             Icon(
                 Icons.AutoMirrored.Filled.Sort,
                 contentDescription = "筛选",
@@ -160,15 +179,27 @@ fun BookStoreScreen(
 //            }
 //            item { SectionHeader("全部浏览", "全部书籍 ${filteredBooks.size} ›") }
             item {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth().height(620.dp)
-                ) {
-                    gridItems(filteredBooks) { book ->
-                        StoreBookCard(book, onBookClick)
+                if (isGridView) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        contentPadding = PaddingValues(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(620.dp)
+                    ) {
+                        gridItems(filteredBooks) { book ->
+                            StoreBookCard(book, onBookClick)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 8.dp),
+                        modifier = Modifier.fillMaxWidth().height(620.dp)
+                    ) {
+                        items(filteredBooks) { book ->
+                            StoreListItem(book, onBookClick)
+                        }
                     }
                 }
             }
@@ -491,6 +522,35 @@ private fun StoreBookCard(book: StoreBook, onBookClick: (String) -> Unit = {}) {
                 Text("★ ${book.rating}", color = DesignTokens.Accent)
                 SourceBadge(book.source)
             }
+        }
+    }
+}
+
+@Composable
+private fun StoreListItem(book: StoreBook, onBookClick: (String) -> Unit = {}) {
+    SoftCard(
+        modifier = Modifier.fillMaxWidth().clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null
+        ) { onBookClick(book.id) }
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            BookCover(
+                title = book.title,
+                width = 48.dp,
+                height = 68.dp,
+                brush = Brush.verticalGradient(listOf(book.color, Color(0xFF1C1B18)))
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(book.author, color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+            }
+            Text("★ ${book.rating}", color = DesignTokens.Accent, style = MaterialTheme.typography.bodySmall)
+            SourceBadge(book.source)
         }
     }
 }
