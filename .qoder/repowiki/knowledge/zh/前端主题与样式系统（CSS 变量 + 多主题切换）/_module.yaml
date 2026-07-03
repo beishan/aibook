@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: frontend_style
+title: 前端主题与样式系统（CSS 变量 + 多主题切换）
+scope: []
+source_files:
+    - frontend/src/styles/base.css
+    - frontend/src/styles/themes.css
+    - frontend/src/types/theme.ts
+    - frontend/src/stores/theme.ts
+    - frontend/src/layouts/ThemeLayoutWrapper.vue
+    - frontend/src/main.ts
+    - frontend/package.json
+depends_on: []
+related_to: []

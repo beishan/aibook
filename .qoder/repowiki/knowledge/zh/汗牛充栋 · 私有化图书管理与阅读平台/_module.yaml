@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: ""
+title: 汗牛充栋 · 私有化图书管理与阅读平台
+scope:
+    - .env
+    - .gitignore
+    - AGENTS.md
+    - CLAUDE.md
+    - requires_1.md
+source_files: []
+depends_on: []
+related_to: []

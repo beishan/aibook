@@ -1578,23 +1578,27 @@ onBeforeUnmount(() => {
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+  position: relative;
 }
 
 /* 阅读器头部 */
 .reader-header {
+  position: absolute;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  right: var(--spacing-md);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-sm) var(--spacing-lg);
-  background: var(--surface-card);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border-bottom: 1px solid var(--border-color-light);
-  flex-shrink: 0;
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  box-shadow: none;
   z-index: 100;
-  min-height: 56px;
-  position: sticky;
-  top: 0;
+  pointer-events: none;
+  min-height: 40px;
 }
 
 .back-btn {
@@ -1609,6 +1613,7 @@ onBeforeUnmount(() => {
   font-size: var(--font-size-base);
   cursor: pointer;
   transition: all var(--transition-fast);
+  pointer-events: auto;
 }
 
 .back-btn:hover {
@@ -1619,17 +1624,23 @@ onBeforeUnmount(() => {
   font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--text-primary);
-  flex: 1;
+  flex: 0 1 auto;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 0 var(--spacing-md);
+  padding: 8px var(--spacing-md);
+  margin: 0 var(--spacing-md);
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+  pointer-events: auto;
+  max-width: min(48vw, 560px);
 }
 
 .reader-actions {
   display: flex;
   gap: var(--spacing-xs);
+  pointer-events: auto;
 }
 
 .btn-icon {

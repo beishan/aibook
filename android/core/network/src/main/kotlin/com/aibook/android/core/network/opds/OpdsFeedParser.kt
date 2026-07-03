@@ -31,7 +31,12 @@ class OpdsFeedParser {
                     it.rel == "http://opds-spec.org/acquisition" ||
                         it.rel?.startsWith("http://opds-spec.org/acquisition/") == true
                 },
-                alternateLink = entry.links().firstOrNull { it.rel == "alternate" },
+                alternateLink = entry.links().firstOrNull {
+                    it.rel == "alternate" ||
+                        it.rel == "subsection" ||
+                        it.rel == "http://opds-spec.org/sort/new" ||
+                        it.rel == "http://opds-spec.org/sort/popular"
+                },
                 coverLink = entry.links().firstOrNull {
                     it.rel == "http://opds-spec.org/image" ||
                         it.rel == "http://opds-spec.org/image/thumbnail"

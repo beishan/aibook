@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: android_app/core_model
+title: 书籍领域数据模型与导入策略
+scope:
+    - android/core/model/
+source_files: []
+depends_on: []
+related_to: []

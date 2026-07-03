@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: android_app/core_data
+title: 本地数据持久化与仓储层
+scope:
+    - android/core/data/
+source_files: []
+depends_on: []
+related_to: []

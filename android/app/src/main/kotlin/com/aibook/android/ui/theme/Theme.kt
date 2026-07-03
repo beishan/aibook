@@ -6,19 +6,23 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.aibook.android.ui.design.DesignTokens
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF386A20),
-    secondary = Color(0xFF56624A),
-    tertiary = Color(0xFF386667),
-    background = Color(0xFFFBFDF5),
-    surface = Color(0xFFFBFDF5)
+    primary = DesignTokens.Accent,
+    onPrimary = Color.White,
+    secondary = Color(0xFF8A6F55),
+    tertiary = Color(0xFF6F8F52),
+    background = DesignTokens.AppBackground,
+    surface = DesignTokens.CardBackground,
+    surfaceContainerHighest = Color(0xFFF7F1EC),
+    outline = DesignTokens.Hairline
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF9CD67D),
-    secondary = Color(0xFFBECBAD),
-    tertiary = Color(0xFFA0CFD0),
+    primary = Color(0xFFE09A4B),
+    secondary = Color(0xFFD5C4B2),
+    tertiary = Color(0xFFA9C388),
     background = Color(0xFF11140F),
     surface = Color(0xFF11140F)
 )

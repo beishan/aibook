@@ -39,4 +39,21 @@ class OpdsFeedParserTest {
         assertEquals("", feed.title)
         assertEquals(emptyList(), feed.entries)
     }
+
+    @Test
+    fun `treats subsection links as navigation links`() {
+        val xml = """
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <title>目录</title>
+              <entry>
+                <title>科幻</title>
+                <link rel="subsection" href="/opds/categories/scifi" type="application/atom+xml" />
+              </entry>
+            </feed>
+        """.trimIndent()
+
+        val feed = OpdsFeedParser().parse(xml)
+
+        assertEquals("/opds/categories/scifi", feed.entries.single().alternateLink?.href)
+    }
 }

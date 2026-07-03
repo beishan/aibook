@@ -51,8 +51,28 @@ class OpdsCatalogServiceTest {
         assertEquals("http://192.168.1.100:8080/opds/catalog/scifi", transport.requestedUrl)
     }
 
+    @Test
+    fun `downloads acquisition bytes with basic auth`() {
+        val transport = RecordingTransport(response = "", bytes = byteArrayOf(1, 2, 3))
+        val service = OpdsCatalogService(transport, OpdsFeedParser())
+        val connection = OpdsConnection(
+            id = "home",
+            name = "家庭书库",
+            baseUrl = "http://192.168.1.100:8080/opds/",
+            username = "reader",
+            password = "secret"
+        )
+
+        val bytes = service.download(connection, "books/1/download")
+
+        assertEquals(listOf<Byte>(1, 2, 3), bytes.toList())
+        assertEquals("http://192.168.1.100:8080/opds/books/1/download", transport.requestedUrl)
+        assertEquals("Basic cmVhZGVyOnNlY3JldA==", transport.requestedAuthHeader)
+    }
+
     private class RecordingTransport(
-        private val response: String
+        private val response: String,
+        private val bytes: ByteArray = response.toByteArray()
     ) : OpdsTransport {
         var requestedUrl: String? = null
         var requestedAuthHeader: String? = null
@@ -61,6 +81,12 @@ class OpdsCatalogServiceTest {
             requestedUrl = url
             requestedAuthHeader = authorizationHeader
             return response
+        }
+
+        override fun getBytes(url: String, authorizationHeader: String?): ByteArray {
+            requestedUrl = url
+            requestedAuthHeader = authorizationHeader
+            return bytes
         }
     }
 }

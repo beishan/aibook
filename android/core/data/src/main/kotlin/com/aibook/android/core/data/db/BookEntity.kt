@@ -22,5 +22,6 @@ data class BookEntity(
     val progressChapterTitle: String? = null,
     val progressPositionLabel: String? = null,
     val source: String = "LOCAL",
-    val remoteBookId: Long? = null
+    val remoteBookId: Long? = null,
+    val shelved: Boolean = false
 )

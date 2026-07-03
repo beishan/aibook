@@ -25,5 +25,17 @@ data class OpdsConnection(
     val name: String,
     val baseUrl: String,
     val username: String? = null,
-    val password: String? = null
+    val password: String? = null,
+    val enabled: Boolean = true,
+    val lastSyncedAt: Long? = null,
+    val bookCount: Int = 0,
+    val syncState: OpdsSyncState = OpdsSyncState.IDLE,
+    val lastErrorMessage: String? = null
 )
+
+enum class OpdsSyncState {
+    IDLE,
+    SYNCING,
+    SUCCESS,
+    FAILED
+}

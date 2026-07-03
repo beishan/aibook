@@ -2,6 +2,7 @@ package com.aibook.android.core.data.repository
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import com.aibook.android.core.data.db.BookDao
 import com.aibook.android.core.data.mapper.toDomain
 import com.aibook.android.core.data.mapper.toEntity
@@ -10,6 +11,7 @@ import com.aibook.android.core.model.ImportPolicy
 import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.ReadingProgress
 import com.aibook.android.core.model.ReadingStatus
+import com.aibook.android.core.reader.EpubMetadataParser
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.io.File
@@ -36,19 +38,30 @@ class BookRepository(
         return bookDao.observeAll().map { entities -> entities.map { it.toDomain() } }
     }
 
+    fun observeShelvedBooks(): Flow<List<LocalBook>> {
+        return bookDao.observeShelved().map { entities -> entities.map { it.toDomain() } }
+    }
+
     suspend fun getBook(id: String): LocalBook? {
         return bookDao.getById(id)?.toDomain()
     }
 
-    suspend fun importBook(uri: Uri, fileName: String): ImportResult {
-        val format = BookFormat.fromFileName(fileName)
-            ?: return ImportResult.UnsupportedFormat(fileName)
+    fun observeBook(id: String): Flow<LocalBook?> {
+        return bookDao.observeById(id).map { it?.toDomain() }
+    }
 
-        val title = ImportPolicy.normalizedTitle(fileName)
+    suspend fun importBook(uri: Uri, fileName: String? = null): ImportResult {
+        val resolvedFileName = fileName?.takeIf { it.isNotBlank() }
+            ?: resolveDisplayName(uri)
+            ?: "imported-book"
+        val format = BookFormat.fromFileName(resolvedFileName)
+            ?: return ImportResult.UnsupportedFormat(resolvedFileName)
+
+        val title = ImportPolicy.normalizedTitle(resolvedFileName)
         val inputStream = context.contentResolver.openInputStream(uri)
             ?: return ImportResult.Failed("无法读取文件")
 
-        val destFile = File(booksDir, "${UUID.randomUUID()}.$format")
+        val destFile = File(booksDir, "${UUID.randomUUID()}.${format.extension}")
         val sha256 = inputStream.use { input ->
             destFile.outputStream().use { output ->
                 val digest = MessageDigest.getInstance("SHA-256")
@@ -71,6 +84,41 @@ class BookRepository(
         val book = LocalBook(
             id = UUID.nameUUIDFromBytes(sha256.toByteArray()).toString(),
             title = title,
+            format = format,
+            uri = destFile.absolutePath,
+            sha256 = sha256,
+            importedAt = Instant.now()
+        )
+
+        bookDao.insert(book.toEntity())
+        return ImportResult.Added(book)
+    }
+
+    suspend fun importDownloadedBook(fileName: String, bytes: ByteArray, fallbackTitle: String? = null): ImportResult {
+        val format = BookFormat.fromFileName(fileName)
+            ?: return ImportResult.UnsupportedFormat(fileName)
+        val sha256 = sha256(bytes)
+
+        val existing = bookDao.getBySha256(sha256)
+        if (existing != null) {
+            return ImportResult.Duplicate(existing.toDomain())
+        }
+
+        val metadata = if (format == BookFormat.EPUB) {
+            EpubMetadataParser.parse(bytes)
+        } else {
+            null
+        }
+        val title = metadata?.title
+            ?: fallbackTitle?.takeIf { it.isNotBlank() }
+            ?: ImportPolicy.normalizedTitle(fileName)
+        val destFile = File(booksDir, "${UUID.randomUUID()}.${format.extension}")
+        destFile.writeBytes(bytes)
+
+        val book = LocalBook(
+            id = UUID.nameUUIDFromBytes(sha256.toByteArray()).toString(),
+            title = title,
+            author = metadata?.author,
             format = format,
             uri = destFile.absolutePath,
             sha256 = sha256,
@@ -104,6 +152,10 @@ class BookRepository(
         bookDao.setFavorite(id, favorite)
     }
 
+    suspend fun setShelved(id: String, shelved: Boolean) {
+        bookDao.setShelved(id, shelved)
+    }
+
     suspend fun deleteBook(id: String) {
         val book = bookDao.getById(id)
         if (book != null) {
@@ -114,4 +166,20 @@ class BookRepository(
     }
 
     suspend fun count(): Int = bookDao.count()
+
+    private fun sha256(bytes: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun resolveDisplayName(uri: Uri): String? {
+        return runCatching {
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor ->
+                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+                }
+        }.getOrNull()
+            ?: uri.lastPathSegment?.substringAfterLast('/')
+    }
 }

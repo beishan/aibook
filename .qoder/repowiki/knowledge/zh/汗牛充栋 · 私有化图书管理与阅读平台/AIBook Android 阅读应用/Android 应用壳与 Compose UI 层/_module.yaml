@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: android_app/app_module
+title: Android 应用壳与 Compose UI 层
+scope:
+    - android/app/
+source_files: []
+depends_on: []
+related_to: []

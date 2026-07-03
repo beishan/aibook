@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: android_app/core_reader
+title: 电子书解析与分页核心库
+scope:
+    - android/core/reader/
+source_files: []
+depends_on: []
+related_to: []

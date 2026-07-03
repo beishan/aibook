@@ -1,0 +1,15 @@
+schema_version: 1
+module_path: build_system
+title: 多端构建与容器编排体系
+scope: []
+source_files:
+    - backend/pom.xml
+    - backend/Dockerfile
+    - android/build.gradle.kts
+    - android/app/build.gradle.kts
+    - frontend/package.json
+    - frontend/vite.config.ts
+    - frontend/Dockerfile
+    - docker/docker-compose.yml
+depends_on: []
+related_to: []

@@ -1,0 +1,199 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: main
+nodes_managed: true
+exported_at: "2026-07-03T08:23:44Z"
+modules:
+    "":
+        dir_name: 汗牛充栋 · 私有化图书管理与阅读平台
+        title: 汗牛充栋 · 私有化图书管理与阅读平台
+        scope:
+            - .env
+            - .gitignore
+            - AGENTS.md
+            - CLAUDE.md
+            - requires_1.md
+        source_files: []
+        children:
+            - android_app
+            - backend_service
+            - frontend_admin
+        depends_on: []
+        related_to: []
+    android_app:
+        dir_name: AIBook Android 阅读应用
+        title: AIBook Android 阅读应用
+        scope:
+            - android/
+        source_files: []
+        children:
+            - android_app/app_module
+            - android_app/core_data
+            - android_app/core_model
+            - android_app/core_network
+            - android_app/core_reader
+        depends_on: []
+        related_to: []
+    android_app/app_module:
+        dir_name: Android 应用壳与 Compose UI 层
+        title: Android 应用壳与 Compose UI 层
+        scope:
+            - android/app/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    android_app/core_data:
+        dir_name: 本地数据持久化与仓储层
+        title: 本地数据持久化与仓储层
+        scope:
+            - android/core/data/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    android_app/core_model:
+        dir_name: 书籍领域数据模型与导入策略
+        title: 书籍领域数据模型与导入策略
+        scope:
+            - android/core/model/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    android_app/core_network:
+        dir_name: 网络通信与 OPDS 目录服务
+        title: 网络通信与 OPDS 目录服务
+        scope:
+            - android/core/network/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend_service
+    android_app/core_reader:
+        dir_name: 电子书解析与分页核心库
+        title: 电子书解析与分页核心库
+        scope:
+            - android/core/reader/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_service:
+        dir_name: Aibook 后端服务（Spring Boot 3 + JPA）
+        title: Aibook 后端服务（Spring Boot 3 + JPA）
+        scope:
+            - backend/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: android_app/core_network
+            - path: frontend_admin
+    build_system:
+        dir_name: 多端构建与容器编排体系
+        title: 多端构建与容器编排体系
+        scope: []
+        source_files:
+            - backend/pom.xml
+            - backend/Dockerfile
+            - android/build.gradle.kts
+            - android/app/build.gradle.kts
+            - frontend/package.json
+            - frontend/vite.config.ts
+            - frontend/Dockerfile
+            - docker/docker-compose.yml
+        children: []
+        depends_on: []
+        related_to: []
+    configuration_system:
+        dir_name: 多端配置系统：Spring Boot + DataStore + localStorage 分层管理
+        title: 多端配置系统：Spring Boot + DataStore + localStorage 分层管理
+        scope: []
+        source_files:
+            - backend/src/main/resources/application.yml
+            - backend/src/main/java/com/aibook/config/AppConfig.java
+            - backend/src/main/java/com/aibook/config/JacksonConfig.java
+            - backend/src/main/java/com/aibook/config/RedisConfig.java
+            - backend/src/main/java/com/aibook/model/entity/SystemConfig.java
+            - backend/src/main/java/com/aibook/repository/SystemConfigRepository.java
+            - backend/src/main/java/com/aibook/service/SystemConfigService.java
+            - backend/src/main/java/com/aibook/controller/SystemConfigController.java
+            - .env
+            - docker/.env
+            - android/core/data/src/main/kotlin/com/aibook/android/core/data/prefs/ServerConfigStore.kt
+            - android/core/data/src/main/kotlin/com/aibook/android/core/data/prefs/ReaderSettingsStore.kt
+            - frontend/src/stores/theme.ts
+            - frontend/src/utils/config.ts
+        children: []
+        depends_on: []
+        related_to: []
+    dependency_management:
+        dir_name: 多语言依赖管理策略（Maven _ Gradle _ npm）
+        title: 多语言依赖管理策略（Maven / Gradle / npm）
+        scope: []
+        source_files:
+            - backend/pom.xml
+            - android/settings.gradle.kts
+            - android/build.gradle.kts
+            - android/app/build.gradle.kts
+            - android/core/network/build.gradle.kts
+            - android/gradle.properties
+            - frontend/package.json
+            - frontend/package-lock.json
+            - docker/docker-compose.yml
+        children: []
+        depends_on: []
+        related_to: []
+    error_handling:
+        dir_name: 多端错误处理体系：后端统一异常映射与前端状态驱动展示
+        title: 多端错误处理体系：后端统一异常映射与前端状态驱动展示
+        scope: []
+        source_files:
+            - backend/src/main/java/com/aibook/controller/GlobalExceptionHandler.java
+            - backend/src/main/java/com/aibook/exception/ResourceNotFoundException.java
+            - android/core/network/src/main/kotlin/com/aibook/android/core/network/opds/OkHttpOpdsTransport.kt
+            - android/app/src/main/kotlin/com/aibook/android/feature/opds/OpdsViewModel.kt
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin:
+        dir_name: 汗牛充栋前端管理界面（Vue3 + Vite）
+        title: 汗牛充栋前端管理界面（Vue3 + Vite）
+        scope:
+            - frontend/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend_service
+    frontend_style:
+        dir_name: 前端主题与样式系统（CSS 变量 + 多主题切换）
+        title: 前端主题与样式系统（CSS 变量 + 多主题切换）
+        scope: []
+        source_files:
+            - frontend/src/styles/base.css
+            - frontend/src/styles/themes.css
+            - frontend/src/types/theme.ts
+            - frontend/src/stores/theme.ts
+            - frontend/src/layouts/ThemeLayoutWrapper.vue
+            - frontend/src/main.ts
+            - frontend/package.json
+        children: []
+        depends_on: []
+        related_to: []
+    logging_system:
+        dir_name: 后端基于 Lombok+SLF4J 的日志体系与 Android OkHttp 网络日志
+        title: 后端基于 Lombok+SLF4J 的日志体系与 Android OkHttp 网络日志
+        scope: []
+        source_files:
+            - backend/src/main/resources/application.yml
+            - backend/src/main/java/com/aibook/controller/GlobalExceptionHandler.java
+            - backend/src/main/java/com/aibook/controller/FileBrowseController.java
+            - android/core/network/src/main/kotlin/com/aibook/android/core/network/api/ApiServiceFactory.kt
+            - android/app/src/main/kotlin/com/aibook/android/feature/reader/ReadiumEpubReader.kt
+        children: []
+        depends_on: []
+        related_to: []

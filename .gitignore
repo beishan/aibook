@@ -11,6 +11,9 @@ target/
 # Build
 dist/
 build/
+**/build/
+.gradle/
+**/.gradle/
 *.class
 *.jar
 *.war
@@ -23,6 +26,8 @@ logs/
 .env
 .env.local
 .env.*.local
+local.properties
+**/local.properties
 
 # OS
 .DS_Store

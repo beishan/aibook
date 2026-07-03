@@ -7,6 +7,7 @@ import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.ReadingProgress
 import com.aibook.android.core.model.ReadingStatus
 import com.aibook.android.core.network.opds.OpdsConnection
+import com.aibook.android.core.network.opds.OpdsSyncState
 import java.time.Instant
 
 fun BookEntity.toDomain(): LocalBook {
@@ -20,6 +21,7 @@ fun BookEntity.toDomain(): LocalBook {
         coverUri = coverUri,
         status = runCatching { ReadingStatus.valueOf(status) }.getOrDefault(ReadingStatus.UNREAD),
         favorite = favorite,
+        shelved = shelved,
         importedAt = Instant.ofEpochMilli(importedAt),
         lastReadAt = lastReadAt?.let { Instant.ofEpochMilli(it) },
         progress = ReadingProgress(
@@ -42,6 +44,7 @@ fun LocalBook.toEntity(): BookEntity {
         coverUri = coverUri,
         status = status.name,
         favorite = favorite,
+        shelved = shelved,
         importedAt = importedAt.toEpochMilli(),
         lastReadAt = lastReadAt?.toEpochMilli(),
         progressPercent = progress.percent,
@@ -58,7 +61,12 @@ fun OpdsConnectionEntity.toDomain(): OpdsConnection {
         name = name,
         baseUrl = baseUrl,
         username = username,
-        password = password
+        password = password,
+        enabled = enabled,
+        lastSyncedAt = lastSyncedAt,
+        bookCount = bookCount,
+        syncState = runCatching { OpdsSyncState.valueOf(syncState) }.getOrDefault(OpdsSyncState.IDLE),
+        lastErrorMessage = lastErrorMessage
     )
 }
 
@@ -68,6 +76,11 @@ fun OpdsConnection.toEntity(): OpdsConnectionEntity {
         name = name,
         baseUrl = baseUrl,
         username = username,
-        password = password
+        password = password,
+        enabled = enabled,
+        lastSyncedAt = lastSyncedAt,
+        bookCount = bookCount,
+        syncState = syncState.name,
+        lastErrorMessage = lastErrorMessage
     )
 }

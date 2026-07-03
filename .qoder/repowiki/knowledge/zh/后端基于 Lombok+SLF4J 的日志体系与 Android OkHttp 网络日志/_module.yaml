@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: logging_system
+title: 后端基于 Lombok+SLF4J 的日志体系与 Android OkHttp 网络日志
+scope: []
+source_files:
+    - backend/src/main/resources/application.yml
+    - backend/src/main/java/com/aibook/controller/GlobalExceptionHandler.java
+    - backend/src/main/java/com/aibook/controller/FileBrowseController.java
+    - android/core/network/src/main/kotlin/com/aibook/android/core/network/api/ApiServiceFactory.kt
+    - android/app/src/main/kotlin/com/aibook/android/feature/reader/ReadiumEpubReader.kt
+depends_on: []
+related_to: []

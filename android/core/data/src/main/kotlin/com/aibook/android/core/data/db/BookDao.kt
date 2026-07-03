@@ -13,8 +13,14 @@ interface BookDao {
     @Query("SELECT * FROM books ORDER BY lastReadAt DESC, title ASC")
     fun observeAll(): Flow<List<BookEntity>>
 
+    @Query("SELECT * FROM books WHERE shelved = 1 ORDER BY lastReadAt DESC, title ASC")
+    fun observeShelved(): Flow<List<BookEntity>>
+
     @Query("SELECT * FROM books WHERE id = :id")
     suspend fun getById(id: String): BookEntity?
+
+    @Query("SELECT * FROM books WHERE id = :id")
+    fun observeById(id: String): Flow<BookEntity?>
 
     @Query("SELECT * FROM books WHERE sha256 = :sha256 LIMIT 1")
     suspend fun getBySha256(sha256: String): BookEntity?
@@ -44,6 +50,9 @@ interface BookDao {
 
     @Query("UPDATE books SET favorite = :favorite WHERE id = :id")
     suspend fun setFavorite(id: String, favorite: Boolean)
+
+    @Query("UPDATE books SET shelved = :shelved WHERE id = :id")
+    suspend fun setShelved(id: String, shelved: Boolean)
 
     @Query("SELECT COUNT(*) FROM books")
     suspend fun count(): Int

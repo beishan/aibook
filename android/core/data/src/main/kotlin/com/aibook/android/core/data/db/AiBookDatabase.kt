@@ -6,14 +6,15 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [BookEntity::class, OpdsConnectionEntity::class],
-    version = 1,
+    entities = [BookEntity::class, OpdsConnectionEntity::class, ScanDirectoryEntity::class],
+    version = 4,
     exportSchema = false
 )
 abstract class AiBookDatabase : RoomDatabase() {
 
     abstract fun bookDao(): BookDao
     abstract fun opdsConnectionDao(): OpdsConnectionDao
+    abstract fun scanDirectoryDao(): ScanDirectoryDao
 
     companion object {
         @Volatile
@@ -25,7 +26,7 @@ abstract class AiBookDatabase : RoomDatabase() {
                     context.applicationContext,
                     AiBookDatabase::class.java,
                     "aibook.db"
-                ).fallbackToDestructiveMigration().build()
+                ).fallbackToDestructiveMigration(dropAllTables = true).build()
                 INSTANCE = instance
                 instance
             }

@@ -1,0 +1,16 @@
+schema_version: 1
+module_path: dependency_management
+title: 多语言依赖管理策略（Maven / Gradle / npm）
+scope: []
+source_files:
+    - backend/pom.xml
+    - android/settings.gradle.kts
+    - android/build.gradle.kts
+    - android/app/build.gradle.kts
+    - android/core/network/build.gradle.kts
+    - android/gradle.properties
+    - frontend/package.json
+    - frontend/package-lock.json
+    - docker/docker-compose.yml
+depends_on: []
+related_to: []

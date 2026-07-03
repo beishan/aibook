@@ -42,6 +42,7 @@ data class LocalBook(
     val coverUri: String? = null,
     val status: ReadingStatus = ReadingStatus.UNREAD,
     val favorite: Boolean = false,
+    val shelved: Boolean = false,
     val importedAt: Instant = Instant.now(),
     val lastReadAt: Instant? = null,
     val progress: ReadingProgress = ReadingProgress()
@@ -57,11 +58,39 @@ data class ReadingProgress(
 data class ReaderSettings(
     val fontScale: Float = 1.0f,
     val lineHeight: Float = 1.45f,
-    val theme: ReaderTheme = ReaderTheme.PAPER
+    val theme: ReaderTheme = ReaderTheme.PAPER,
+    val paragraphSpacing: ParagraphSpacing = ParagraphSpacing.SMALL,
+    val textAlignment: TextAlignment = TextAlignment.LEFT,
+    val pageTurnMode: PageTurnMode = PageTurnMode.SIMULATION,
+    val autoBrightness: Boolean = true,
+    val screenAlwaysOn: Boolean = false
 )
 
 enum class ReaderTheme {
     LIGHT,
     PAPER,
+    GREEN,
+    GRAY,
     DARK
+}
+
+enum class ParagraphSpacing {
+    NONE,
+    SMALL,
+    LARGE
+}
+
+enum class TextAlignment {
+    LEFT,
+    CENTER,
+    RIGHT,
+    JUSTIFY
+}
+
+enum class PageTurnMode {
+    SIMULATION,
+    SLIDE,
+    COVER,
+    PAN,
+    VERTICAL
 }

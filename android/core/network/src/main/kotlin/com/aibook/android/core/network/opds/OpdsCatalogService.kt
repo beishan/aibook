@@ -14,8 +14,17 @@ class OpdsCatalogService(
 
         return parser.parse(xml)
     }
+
+    fun download(connection: OpdsConnection, href: String): ByteArray {
+        val url = OpdsRequestFactory.resolveUrl(connection, href)
+        return transport.getBytes(url, OpdsRequestFactory.basicAuthHeader(connection))
+    }
 }
 
-fun interface OpdsTransport {
+interface OpdsTransport {
     fun get(url: String, authorizationHeader: String?): String
+
+    fun getBytes(url: String, authorizationHeader: String?): ByteArray {
+        return get(url, authorizationHeader).toByteArray(Charsets.UTF_8)
+    }
 }

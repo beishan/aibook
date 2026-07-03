@@ -10,6 +10,8 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aibook.android.core.data.repository.BookRepository
 import com.aibook.android.core.data.repository.ImportResult
 import com.aibook.android.core.model.LocalBook
+import com.aibook.android.core.model.ShelfBookSorter
+import com.aibook.android.core.model.ShelfSortOption
 import com.aibook.android.di.ServiceLocator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,15 +26,29 @@ data class ShelfUiState(
     val books: List<LocalBook> = emptyList(),
     val query: String = "",
     val importMessage: String = "支持 EPUB、TXT、PDF、Markdown、HTML",
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val sortOption: ShelfSortOption = ShelfSortOption.RECENT_READ,
+    val managementMode: Boolean = false,
+    val selectedIds: Set<String> = emptySet()
 ) {
     val filteredBooks: List<LocalBook>
-        get() = books.filter {
+        get() = ShelfBookSorter.sort(books.filter {
             query.isBlank() ||
                 it.title.contains(query, ignoreCase = true) ||
                 it.author?.contains(query, ignoreCase = true) == true
-        }
+        }, sortOption)
+
+    val selectedBooks: List<LocalBook>
+        get() = books.filter { it.id in selectedIds }
 }
+
+private data class ShelfControlState(
+    val query: String,
+    val importMessage: String,
+    val isLoading: Boolean,
+    val sortOption: ShelfSortOption,
+    val managementMode: Boolean
+)
 
 class ShelfViewModel(
     private val bookRepository: BookRepository
@@ -41,18 +57,40 @@ class ShelfViewModel(
     private val _query = MutableStateFlow("")
     private val _importMessage = MutableStateFlow("支持 EPUB、TXT、PDF、Markdown、HTML")
     private val _isLoading = MutableStateFlow(false)
+    private val _sortOption = MutableStateFlow(ShelfSortOption.RECENT_READ)
+    private val _managementMode = MutableStateFlow(false)
+    private val _selectedIds = MutableStateFlow<Set<String>>(emptySet())
 
-    val uiState: StateFlow<ShelfUiState> = combine(
-        bookRepository.observeBooks(),
+    private val controls = combine(
         _query,
         _importMessage,
-        _isLoading
-    ) { books, query, message, loading ->
-        ShelfUiState(
-            books = books,
+        _isLoading,
+        _sortOption,
+        _managementMode
+    ) { query, message, loading, sortOption, managementMode ->
+        ShelfControlState(
             query = query,
             importMessage = message,
-            isLoading = loading
+            isLoading = loading,
+            sortOption = sortOption,
+            managementMode = managementMode
+        )
+    }
+
+    val uiState: StateFlow<ShelfUiState> = combine(
+        bookRepository.observeShelvedBooks(),
+        controls,
+        _selectedIds
+    ) { books, controls, selectedIds ->
+        val visibleIds = books.map { it.id }.toSet()
+        ShelfUiState(
+            books = books,
+            query = controls.query,
+            importMessage = controls.importMessage,
+            isLoading = controls.isLoading,
+            sortOption = controls.sortOption,
+            managementMode = controls.managementMode,
+            selectedIds = selectedIds.intersect(visibleIds)
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ShelfUiState())
 
@@ -76,6 +114,55 @@ class ShelfViewModel(
 
     fun setFavorite(id: String, favorite: Boolean) {
         viewModelScope.launch { bookRepository.setFavorite(id, favorite) }
+    }
+
+    fun cycleSortOption() {
+        val options = ShelfSortOption.entries
+        val currentIndex = options.indexOf(_sortOption.value).takeIf { it >= 0 } ?: 0
+        _sortOption.value = options[(currentIndex + 1) % options.size]
+    }
+
+    fun setManagementMode(enabled: Boolean) {
+        _managementMode.value = enabled
+        if (!enabled) {
+            _selectedIds.value = emptySet()
+        }
+    }
+
+    fun toggleBookSelection(id: String) {
+        _selectedIds.update { selected ->
+            if (id in selected) selected - id else selected + id
+        }
+    }
+
+    fun selectAllVisible() {
+        _selectedIds.value = uiState.value.filteredBooks.map { it.id }.toSet()
+    }
+
+    fun clearSelection() {
+        _selectedIds.value = emptySet()
+    }
+
+    fun setSelectedFavorite(favorite: Boolean) {
+        val ids = _selectedIds.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            ids.forEach { id -> bookRepository.setFavorite(id, favorite) }
+        }
+    }
+
+    fun removeSelectedFromShelf() {
+        val ids = _selectedIds.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            ids.forEach { id -> bookRepository.setShelved(id, false) }
+            _selectedIds.value = emptySet()
+            _managementMode.value = false
+        }
+    }
+
+    fun toggleShelved(id: String, shelved: Boolean) {
+        viewModelScope.launch { bookRepository.setShelved(id, shelved) }
     }
 
     fun deleteBook(id: String) {

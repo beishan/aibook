@@ -1,0 +1,21 @@
+schema_version: 1
+module_path: configuration_system
+title: 多端配置系统：Spring Boot + DataStore + localStorage 分层管理
+scope: []
+source_files:
+    - backend/src/main/resources/application.yml
+    - backend/src/main/java/com/aibook/config/AppConfig.java
+    - backend/src/main/java/com/aibook/config/JacksonConfig.java
+    - backend/src/main/java/com/aibook/config/RedisConfig.java
+    - backend/src/main/java/com/aibook/model/entity/SystemConfig.java
+    - backend/src/main/java/com/aibook/repository/SystemConfigRepository.java
+    - backend/src/main/java/com/aibook/service/SystemConfigService.java
+    - backend/src/main/java/com/aibook/controller/SystemConfigController.java
+    - .env
+    - docker/.env
+    - android/core/data/src/main/kotlin/com/aibook/android/core/data/prefs/ServerConfigStore.kt
+    - android/core/data/src/main/kotlin/com/aibook/android/core/data/prefs/ReaderSettingsStore.kt
+    - frontend/src/stores/theme.ts
+    - frontend/src/utils/config.ts
+depends_on: []
+related_to: []
