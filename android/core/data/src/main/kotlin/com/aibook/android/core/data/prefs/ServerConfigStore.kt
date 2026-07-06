@@ -21,6 +21,8 @@ class ServerConfigStore(private val context: Context) {
         val USERNAME = stringPreferencesKey("username")
         val EMAIL = stringPreferencesKey("email")
         val WIFI_ONLY = booleanPreferencesKey("wifi_only_sync")
+        val PERSONALIZED_RECOMMENDATIONS = booleanPreferencesKey("personalized_recommendations")
+        val USAGE_STATISTICS = booleanPreferencesKey("usage_statistics")
     }
 
     val serverUrl: Flow<String> = context.serverConfigStore.data.map { it[Keys.SERVER_URL] ?: "" }
@@ -28,6 +30,10 @@ class ServerConfigStore(private val context: Context) {
     val username: Flow<String?> = context.serverConfigStore.data.map { it[Keys.USERNAME] }
     val email: Flow<String?> = context.serverConfigStore.data.map { it[Keys.EMAIL] }
     val wifiOnlySync: Flow<Boolean> = context.serverConfigStore.data.map { it[Keys.WIFI_ONLY] ?: true }
+    val personalizedRecommendations: Flow<Boolean> =
+        context.serverConfigStore.data.map { it[Keys.PERSONALIZED_RECOMMENDATIONS] ?: true }
+    val usageStatistics: Flow<Boolean> =
+        context.serverConfigStore.data.map { it[Keys.USAGE_STATISTICS] ?: true }
 
     val isLoggedIn: Flow<Boolean> = jwtToken.map { !it.isNullOrBlank() }
 
@@ -53,6 +59,14 @@ class ServerConfigStore(private val context: Context) {
 
     suspend fun setWifiOnlySync(enabled: Boolean) {
         context.serverConfigStore.edit { it[Keys.WIFI_ONLY] = enabled }
+    }
+
+    suspend fun setPersonalizedRecommendations(enabled: Boolean) {
+        context.serverConfigStore.edit { it[Keys.PERSONALIZED_RECOMMENDATIONS] = enabled }
+    }
+
+    suspend fun setUsageStatistics(enabled: Boolean) {
+        context.serverConfigStore.edit { it[Keys.USAGE_STATISTICS] = enabled }
     }
 
     suspend fun tokenSync(): String? {

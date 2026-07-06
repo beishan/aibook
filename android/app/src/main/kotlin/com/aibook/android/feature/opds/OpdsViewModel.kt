@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aibook.android.core.data.repository.BookRepository
 import com.aibook.android.core.data.repository.ImportResult
+import com.aibook.android.core.data.repository.OpdsCatalogCacheRepository
 import com.aibook.android.core.data.repository.OpdsConnectionRepository
 import com.aibook.android.core.network.opds.OpdsCatalogService
 import com.aibook.android.core.network.opds.OpdsConnection
@@ -32,6 +33,7 @@ data class OpdsUiState(
     val errorMessage: String? = null,
     val statusMessage: String? = null,
     val downloadingTitle: String? = null,
+    val errorDialogConnection: OpdsConnection? = null,
     val showConnectionForm: Boolean = false,
     val editingConnectionId: String? = null,
     val formName: String = "汗牛充栋",
@@ -43,6 +45,7 @@ data class OpdsUiState(
 class OpdsViewModel(
     private val connectionRepository: OpdsConnectionRepository,
     private val bookRepository: BookRepository,
+    private val catalogCacheRepository: OpdsCatalogCacheRepository,
     private val catalogService: OpdsCatalogService
 ) : ViewModel() {
 
@@ -96,6 +99,7 @@ class OpdsViewModel(
                 password = state.formPassword.ifBlank { null },
                 id = state.editingConnectionId
             )
+            val wasEditing = state.editingConnectionId != null
             _state.value = _state.value.copy(
                 showConnectionForm = false,
                 editingConnectionId = null,
@@ -103,9 +107,9 @@ class OpdsViewModel(
                 formBaseUrl = "",
                 formUsername = "",
                 formPassword = "",
-                statusMessage = "已保存数据源：${connection.name}"
+                statusMessage = if (wasEditing) "已保存修改：${connection.name}" else "已保存数据源：${connection.name}"
             )
-            if (browseAfterSave) {
+            if (browseAfterSave && !wasEditing) {
                 browse(connection)
             }
             onSaved?.invoke()
@@ -157,25 +161,27 @@ class OpdsViewModel(
             return
         }
         viewModelScope.launch {
-            connectionRepository.updateSyncState(connection.id, OpdsSyncState.SYNCING, errorMessage = null)
+            connectionRepository.markSyncing(connection.id)
             try {
-                val feed = connectionRepository.browse(catalogService, connection)
-                val bookCount = feed.entries.count { it.acquisitionLink != null }
-                connectionRepository.updateSyncState(
-                    id = connection.id,
-                    syncState = OpdsSyncState.SUCCESS,
-                    lastSyncedAt = System.currentTimeMillis(),
-                    bookCount = bookCount,
-                    errorMessage = null
+                val collection = OpdsSyncCollector { href ->
+                    connectionRepository.browse(catalogService, connection, href)
+                }.collect()
+                val feed = OpdsFeed(
+                    title = connection.name,
+                    entries = collection.acquisitionEntries
                 )
-                _state.value = _state.value.copy(statusMessage = "同步完成：发现 $bookCount 本可下载书籍")
+                val bookCount = collection.acquisitionEntries.size
+                val categoryCount = collection.catalogCount
+                catalogCacheRepository.replaceConnectionEntries(connection, feed)
+                connectionRepository.markSyncSuccess(
+                    connection.id,
+                    lastSyncedAt = System.currentTimeMillis(),
+                    bookCount = bookCount
+                )
+                _state.value = _state.value.copy(statusMessage = "同步完成：发现 $bookCount 本可下载书籍，$categoryCount 个目录")
             } catch (e: Exception) {
                 val message = e.message ?: "未知错误"
-                connectionRepository.updateSyncState(
-                    id = connection.id,
-                    syncState = OpdsSyncState.FAILED,
-                    errorMessage = message
-                )
+                connectionRepository.markSyncFailed(connection.id, message)
                 _state.value = _state.value.copy(errorMessage = "同步失败：$message")
             }
         }
@@ -196,11 +202,7 @@ class OpdsViewModel(
                     navigationStack = if (href != null) _state.value.navigationStack + href else emptyList()
                 )
             } catch (e: Exception) {
-                connectionRepository.updateSyncState(
-                    id = connection.id,
-                    syncState = OpdsSyncState.FAILED,
-                    errorMessage = e.message ?: "未知错误"
-                )
+                connectionRepository.markSyncFailed(connection.id, e.message ?: "未知错误")
                 _state.value = _state.value.copy(
                     isLoading = false,
                     errorMessage = "连接失败：${e.message}"
@@ -277,6 +279,7 @@ class OpdsViewModel(
     fun deleteConnection(id: String) {
         viewModelScope.launch {
             connectionRepository.deleteConnection(id)
+            catalogCacheRepository.deleteByConnection(id)
             if (_state.value.activeConnection?.id == id) {
                 _state.value = _state.value.copy(
                     activeConnection = null,
@@ -285,6 +288,14 @@ class OpdsViewModel(
                 )
             }
         }
+    }
+
+    fun showErrorDetails(connection: OpdsConnection) {
+        _state.value = _state.value.copy(errorDialogConnection = connection)
+    }
+
+    fun dismissErrorDetails() {
+        _state.value = _state.value.copy(errorDialogConnection = null)
     }
 
     fun clearError() {
@@ -303,6 +314,7 @@ class OpdsViewModel(
                 OpdsViewModel(
                     locator.opdsConnectionRepository,
                     locator.bookRepository,
+                    locator.opdsCatalogCacheRepository,
                     locator.opdsCatalogService
                 )
             }

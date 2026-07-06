@@ -72,4 +72,6 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    testImplementation(kotlin("test"))
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }

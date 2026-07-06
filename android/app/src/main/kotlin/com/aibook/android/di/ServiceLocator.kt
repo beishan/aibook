@@ -5,6 +5,7 @@ import com.aibook.android.core.data.db.AiBookDatabase
 import com.aibook.android.core.data.prefs.ReaderSettingsStore
 import com.aibook.android.core.data.prefs.ServerConfigStore
 import com.aibook.android.core.data.repository.BookRepository
+import com.aibook.android.core.data.repository.OpdsCatalogCacheRepository
 import com.aibook.android.core.data.repository.OpdsConnectionRepository
 import com.aibook.android.core.data.repository.ScanDirectoryRepository
 import com.aibook.android.core.data.repository.ServerRepository
@@ -22,11 +23,15 @@ class ServiceLocator(private val context: Context) {
     val serverConfigStore: ServerConfigStore by lazy { ServerConfigStore(context) }
 
     val bookRepository: BookRepository by lazy {
-        BookRepository(context, database.bookDao())
+        BookRepository(context, database.bookDao(), database.shelfFolderDao())
     }
 
     val opdsConnectionRepository: OpdsConnectionRepository by lazy {
         OpdsConnectionRepository(database.opdsConnectionDao())
+    }
+
+    val opdsCatalogCacheRepository: OpdsCatalogCacheRepository by lazy {
+        OpdsCatalogCacheRepository(database.opdsCatalogEntryDao())
     }
 
     val scanDirectoryRepository: ScanDirectoryRepository by lazy {

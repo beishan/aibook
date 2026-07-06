@@ -45,6 +45,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -56,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -68,6 +70,7 @@ import com.aibook.android.ui.design.SoftCard
 fun SettingsScreen(
     onThemeClick: () -> Unit = {},
     onScanDirectoriesClick: () -> Unit = {},
+    onSyncConnectionClick: () -> Unit = {},
     onStorageClick: () -> Unit = {},
     onPrivacyClick: () -> Unit = {},
     onAboutClick: () -> Unit = {},
@@ -89,16 +92,25 @@ fun SettingsScreen(
             modifier = Modifier.verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            SettingsRowCard(
-                icon = { Icon(Icons.Default.ColorLens, null, tint = DesignTokens.Accent) },
-                title = "页面主题",
-                subtitle = "选择应用的整体颜色风格",
-                trailing = "浅色米白",
-                onClick = onThemeClick
-            )
+            SectionLabel("阅读与外观")
             SoftCard {
-                SettingsLine(Icons.Default.Book, "阅读偏好", "阅读习惯、翻页方式等")
-                SettingsLine(Icons.Default.FormatSize, "字体与排版", "设置字体、字号、行距等")
+                SettingsLine(
+                    Icons.Default.ColorLens,
+                    "页面主题",
+                    "当前：${readerThemeLabel(state.readerTheme)}",
+                    onClick = onThemeClick
+                )
+                SettingsLine(
+                    Icons.Default.FormatSize,
+                    "字体与排版",
+                    "字号 ${"%.0f".format(state.fontScale * 100)}% · 行距 ${"%.2f".format(state.lineHeight)}",
+                    showDivider = false,
+                    onClick = onThemeClick
+                )
+            }
+
+            SectionLabel("书库与扫描")
+            SoftCard {
                 SettingsLine(
                     Icons.Default.Menu,
                     "扫描目录管理",
@@ -107,22 +119,40 @@ fun SettingsScreen(
                     onClick = onScanDirectoriesClick
                 )
             }
+
+            SectionLabel("同步与连接")
             SoftCard {
-                SettingsLine(Icons.Default.CloudSync, "OPDS 同步设置", "配置服务器与同步规则")
+                SettingsLine(
+                    Icons.Default.CloudSync,
+                    "服务器与同步",
+                    SettingsSummary.connectionSubtitle(
+                        serverUrl = state.serverUrl,
+                        isLoggedIn = state.isLoggedIn,
+                        username = state.username
+                    ),
+                    onClick = onSyncConnectionClick
+                )
                 SettingsLine(
                     Icons.Default.Storage,
                     "存储与缓存",
-                    "管理存储空间与缓存数据",
+                    "管理本机缓存、导入书籍与下载文件",
                     showDivider = false,
                     onClick = onStorageClick
                 )
             }
+
+            SectionLabel("隐私与安全")
             SettingsRowCard(
                 icon = { Icon(Icons.Default.Lock, null, tint = DesignTokens.Accent) },
                 title = "隐私与权限",
-                subtitle = "管理应用权限与隐私选项",
+                subtitle = SettingsSummary.privacySubtitle(
+                    personalizedRecommendations = state.personalizedRecommendations,
+                    usageStatistics = state.usageStatistics
+                ),
                 onClick = onPrivacyClick
             )
+
+            SectionLabel("关于")
             SettingsRowCard(
                 icon = { AboutAppIcon() },
                 title = "关于",
@@ -131,6 +161,16 @@ fun SettingsScreen(
                 onClick = onAboutClick
             )
         }
+    }
+}
+
+private fun readerThemeLabel(theme: com.aibook.android.core.model.ReaderTheme): String {
+    return when (theme) {
+        com.aibook.android.core.model.ReaderTheme.LIGHT -> "明亮"
+        com.aibook.android.core.model.ReaderTheme.PAPER -> "纸张"
+        com.aibook.android.core.model.ReaderTheme.GREEN -> "护眼"
+        com.aibook.android.core.model.ReaderTheme.GRAY -> "灰色"
+        com.aibook.android.core.model.ReaderTheme.DARK -> "深色"
     }
 }
 
@@ -235,7 +275,132 @@ fun StorageCacheScreen(onBack: () -> Unit) {
 }
 
 @Composable
-fun PrivacyPermissionsScreen(onBack: () -> Unit) {
+fun SyncConnectionSettingsScreen(
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(state.serverUrl) {
+        if (state.serverUrlInput.isBlank() && state.serverUrl.isNotBlank()) {
+            viewModel.updateServerUrlInput(state.serverUrl)
+        }
+    }
+
+    SettingsSubPage(title = "服务器与同步", subtitle = "配置私有书库服务器、登录状态与同步规则", onBack = onBack) {
+        SoftCard {
+            DetailLine(
+                Icons.Default.CloudSync,
+                "连接状态",
+                SettingsSummary.connectionSubtitle(
+                    serverUrl = state.serverUrl,
+                    isLoggedIn = state.isLoggedIn,
+                    username = state.username
+                ),
+                trailing = if (state.serverUrl.isBlank()) "未配置" else "已配置",
+                showDivider = false
+            )
+        }
+
+        SectionLabel("服务器")
+        SoftCard {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = state.serverUrlInput,
+                    onValueChange = viewModel::updateServerUrlInput,
+                    label = { Text("服务器地址") },
+                    placeholder = { Text("http://192.168.1.10:8080") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp)
+                )
+                Button(
+                    onClick = viewModel::saveServerUrl,
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text("保存服务器地址", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        SectionLabel("账号")
+        SoftCard {
+            if (state.isLoggedIn) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    DetailLine(
+                        Icons.Default.Security,
+                        "当前账号",
+                        state.username ?: "当前用户",
+                        trailing = "已登录",
+                        showDivider = false
+                    )
+                    Button(
+                        onClick = viewModel::logout,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text("退出登录", fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = state.loginFormUsername,
+                        onValueChange = viewModel::updateLoginUsername,
+                        label = { Text("用户名") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = state.loginFormPassword,
+                        onValueChange = viewModel::updateLoginPassword,
+                        label = { Text("密码") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    state.loginMessage?.let {
+                        Text(it, color = DesignTokens.SoftText)
+                    }
+                    Button(
+                        onClick = viewModel::login,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        enabled = !state.isLoggingIn,
+                        colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text(if (state.isLoggingIn) "登录中..." else "登录服务器", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        SectionLabel("同步规则")
+        SoftCard {
+            SwitchLine(
+                Icons.Default.Wifi,
+                "仅在 Wi-Fi 下同步",
+                "避免移动网络下载大文件或刷新 OPDS 缓存",
+                checked = state.wifiOnlySync,
+                onCheckedChange = viewModel::setWifiOnlySync,
+                showDivider = false
+            )
+        }
+    }
+}
+
+@Composable
+fun PrivacyPermissionsScreen(
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+
     SettingsSubPage(title = "隐私与权限", subtitle = "管理应用权限与隐私选项", onBack = onBack) {
         SoftCard(color = DesignTokens.WarmCard) {
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -255,8 +420,21 @@ fun PrivacyPermissionsScreen(onBack: () -> Unit) {
         }
         SectionLabel("数据与隐私")
         SoftCard {
-            SwitchLine(Icons.Default.PieChart, "个性化推荐", "基于您的阅读偏好，为您推荐更合适的书籍", checked = true)
-            SwitchLine(Icons.Default.PieChart, "使用数据统计", "帮助我们优化产品体验（不包含个人信息）", checked = true, showDivider = false)
+            SwitchLine(
+                Icons.Default.PieChart,
+                "个性化推荐",
+                "基于您的阅读偏好，为您推荐更合适的书籍",
+                checked = state.personalizedRecommendations,
+                onCheckedChange = viewModel::setPersonalizedRecommendations
+            )
+            SwitchLine(
+                Icons.Default.PieChart,
+                "使用数据统计",
+                "帮助我们优化产品体验（不包含个人信息）",
+                checked = state.usageStatistics,
+                showDivider = false,
+                onCheckedChange = viewModel::setUsageStatistics
+            )
         }
         SectionLabel("隐私选项")
         SoftCard {
@@ -441,7 +619,14 @@ private fun PermissionLine(icon: ImageVector, title: String, subtitle: String, s
 }
 
 @Composable
-private fun SwitchLine(icon: ImageVector, title: String, subtitle: String, checked: Boolean, showDivider: Boolean = true) {
+private fun SwitchLine(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    showDivider: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit = {}
+) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -452,7 +637,11 @@ private fun SwitchLine(icon: ImageVector, title: String, subtitle: String, check
             Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(subtitle, color = DesignTokens.SoftText)
         }
-        Switch(checked = checked, onCheckedChange = {}, colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent)
+        )
     }
     if (showDivider) HorizontalDivider(color = DesignTokens.Hairline)
 }

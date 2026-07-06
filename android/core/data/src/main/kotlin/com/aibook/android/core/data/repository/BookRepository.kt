@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.aibook.android.core.data.db.BookDao
+import com.aibook.android.core.data.db.ShelfFolderDao
 import com.aibook.android.core.data.mapper.toDomain
 import com.aibook.android.core.data.mapper.toEntity
 import com.aibook.android.core.model.BookFormat
@@ -11,6 +12,7 @@ import com.aibook.android.core.model.ImportPolicy
 import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.ReadingProgress
 import com.aibook.android.core.model.ReadingStatus
+import com.aibook.android.core.model.ShelfFolder
 import com.aibook.android.core.reader.EpubMetadataParser
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -28,7 +30,8 @@ sealed interface ImportResult {
 
 class BookRepository(
     private val context: Context,
-    private val bookDao: BookDao
+    private val bookDao: BookDao,
+    private val shelfFolderDao: ShelfFolderDao
 ) {
     private val booksDir: File by lazy {
         File(context.filesDir, "books").apply { mkdirs() }
@@ -40,6 +43,10 @@ class BookRepository(
 
     fun observeShelvedBooks(): Flow<List<LocalBook>> {
         return bookDao.observeShelved().map { entities -> entities.map { it.toDomain() } }
+    }
+
+    fun observeShelfFolders(): Flow<List<ShelfFolder>> {
+        return shelfFolderDao.observeAll().map { entities -> entities.map { it.toDomain() } }
     }
 
     suspend fun getBook(id: String): LocalBook? {
@@ -160,6 +167,26 @@ class BookRepository(
 
     suspend fun setShelved(id: String, shelved: Boolean) {
         bookDao.setShelved(id, shelved)
+    }
+
+    suspend fun createShelfFolder(name: String): ShelfFolder {
+        val folder = ShelfFolder(
+            id = UUID.randomUUID().toString(),
+            name = name.trim(),
+            createdAtEpochMillis = System.currentTimeMillis()
+        )
+        shelfFolderDao.insert(folder.toEntity())
+        return folder
+    }
+
+    suspend fun moveBooksToFolder(ids: Collection<String>, folderId: String?) {
+        if (ids.isEmpty()) return
+        bookDao.setFolder(ids.toList(), folderId)
+    }
+
+    suspend fun deleteShelfFolder(id: String) {
+        bookDao.clearFolder(id)
+        shelfFolderDao.deleteById(id)
     }
 
     suspend fun deleteBook(id: String) {

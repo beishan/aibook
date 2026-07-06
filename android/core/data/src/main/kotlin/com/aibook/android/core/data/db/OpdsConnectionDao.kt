@@ -21,6 +21,27 @@ interface OpdsConnectionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(connection: OpdsConnectionEntity)
 
+    @Query("UPDATE opds_connections SET name = :name, baseUrl = :baseUrl, username = :username, password = :password WHERE id = :id")
+    suspend fun updateConnectionFields(
+        id: String,
+        name: String,
+        baseUrl: String,
+        username: String?,
+        password: String?
+    )
+
+    @Query("UPDATE opds_connections SET enabled = :enabled WHERE id = :id")
+    suspend fun updateEnabled(id: String, enabled: Boolean)
+
+    @Query("UPDATE opds_connections SET syncState = :syncState, lastSyncedAt = COALESCE(:lastSyncedAt, lastSyncedAt), bookCount = COALESCE(:bookCount, bookCount), lastErrorMessage = :lastErrorMessage WHERE id = :id")
+    suspend fun updateSyncState(
+        id: String,
+        syncState: String,
+        lastSyncedAt: Long?,
+        bookCount: Int?,
+        lastErrorMessage: String?
+    )
+
     @Query("DELETE FROM opds_connections WHERE id = :id")
     suspend fun deleteById(id: String)
 }

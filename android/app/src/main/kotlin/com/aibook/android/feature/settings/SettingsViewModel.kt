@@ -22,6 +22,8 @@ data class SettingsUiState(
     val isLoggedIn: Boolean = false,
     val username: String? = null,
     val wifiOnlySync: Boolean = true,
+    val personalizedRecommendations: Boolean = true,
+    val usageStatistics: Boolean = true,
     val fontScale: Float = 1.0f,
     val lineHeight: Float = 1.45f,
     val readerTheme: ReaderTheme = ReaderTheme.PAPER,
@@ -60,6 +62,16 @@ class SettingsViewModel(
         viewModelScope.launch {
             serverConfigStore.wifiOnlySync.collect { wifiOnly ->
                 _state.update { it.copy(wifiOnlySync = wifiOnly) }
+            }
+        }
+        viewModelScope.launch {
+            serverConfigStore.personalizedRecommendations.collect { enabled ->
+                _state.update { it.copy(personalizedRecommendations = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            serverConfigStore.usageStatistics.collect { enabled ->
+                _state.update { it.copy(usageStatistics = enabled) }
             }
         }
         viewModelScope.launch {
@@ -125,6 +137,14 @@ class SettingsViewModel(
 
     fun setWifiOnlySync(enabled: Boolean) {
         viewModelScope.launch { serverConfigStore.setWifiOnlySync(enabled) }
+    }
+
+    fun setPersonalizedRecommendations(enabled: Boolean) {
+        viewModelScope.launch { serverConfigStore.setPersonalizedRecommendations(enabled) }
+    }
+
+    fun setUsageStatistics(enabled: Boolean) {
+        viewModelScope.launch { serverConfigStore.setUsageStatistics(enabled) }
     }
 
     fun setFontScale(value: Float) {

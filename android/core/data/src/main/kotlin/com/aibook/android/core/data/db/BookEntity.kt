@@ -13,6 +13,7 @@ data class BookEntity(
     val uri: String,
     val sha256: String? = null,
     val coverUri: String? = null,
+    val folderId: String? = null,
     val status: String = "UNREAD",
     val favorite: Boolean = false,
     val importedAt: Long = System.currentTimeMillis(),

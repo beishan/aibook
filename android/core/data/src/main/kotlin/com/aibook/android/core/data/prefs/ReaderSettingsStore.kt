@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.core.model.ParagraphSpacing
+import com.aibook.android.core.model.ReaderFontType
 import com.aibook.android.core.model.ReaderTheme
 import com.aibook.android.core.model.TextAlignment
 import kotlinx.coroutines.flow.Flow
@@ -21,6 +22,9 @@ class ReaderSettingsStore(private val context: Context) {
 
     private object Keys {
         val FONT_SCALE = floatPreferencesKey("font_scale")
+        val FONT_TYPE = stringPreferencesKey("font_type")
+        val CUSTOM_FONT_NAME = stringPreferencesKey("custom_font_name")
+        val CUSTOM_FONT_PATH = stringPreferencesKey("custom_font_path")
         val LINE_HEIGHT = floatPreferencesKey("line_height")
         val THEME = stringPreferencesKey("reader_theme")
         val PARAGRAPH_SPACING = stringPreferencesKey("paragraph_spacing")
@@ -32,6 +36,17 @@ class ReaderSettingsStore(private val context: Context) {
 
     val fontScale: Flow<Float> =
         context.readerSettingsStore.data.map { it[Keys.FONT_SCALE] ?: 1.0f }
+
+    val fontType: Flow<ReaderFontType> = context.readerSettingsStore.data.map {
+        val name = it[Keys.FONT_TYPE] ?: ReaderFontType.SYSTEM.name
+        runCatching { ReaderFontType.valueOf(name) }.getOrDefault(ReaderFontType.SYSTEM)
+    }
+
+    val customFontName: Flow<String?> =
+        context.readerSettingsStore.data.map { it[Keys.CUSTOM_FONT_NAME] }
+
+    val customFontPath: Flow<String?> =
+        context.readerSettingsStore.data.map { it[Keys.CUSTOM_FONT_PATH] }
 
     val lineHeight: Flow<Float> =
         context.readerSettingsStore.data.map { it[Keys.LINE_HEIGHT] ?: 1.45f }
@@ -64,6 +79,18 @@ class ReaderSettingsStore(private val context: Context) {
 
     suspend fun setFontScale(value: Float) {
         context.readerSettingsStore.edit { it[Keys.FONT_SCALE] = value }
+    }
+
+    suspend fun setFontType(type: ReaderFontType) {
+        context.readerSettingsStore.edit { it[Keys.FONT_TYPE] = type.name }
+    }
+
+    suspend fun setCustomFont(name: String, path: String) {
+        context.readerSettingsStore.edit {
+            it[Keys.FONT_TYPE] = ReaderFontType.CUSTOM.name
+            it[Keys.CUSTOM_FONT_NAME] = name
+            it[Keys.CUSTOM_FONT_PATH] = path
+        }
     }
 
     suspend fun setLineHeight(value: Float) {

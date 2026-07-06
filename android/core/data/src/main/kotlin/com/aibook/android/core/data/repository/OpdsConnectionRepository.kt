@@ -35,6 +35,15 @@ class OpdsConnectionRepository(
     ): OpdsConnection {
         val connectionId = id ?: UUID.nameUUIDFromBytes(baseUrl.toByteArray()).toString()
         val existing = dao.getById(connectionId)
+        if (existing != null && id != null) {
+            return updateConnectionFields(
+                id = id,
+                name = name,
+                baseUrl = baseUrl,
+                username = username,
+                password = password
+            ) ?: existing.toDomain()
+        }
         val connection = OpdsConnection(
             id = connectionId,
             name = name.ifBlank { "OPDS 书库" },
@@ -58,8 +67,60 @@ class OpdsConnectionRepository(
     }
 
     suspend fun updateEnabled(id: String, enabled: Boolean) {
-        val existing = dao.getById(id) ?: return
-        dao.insert(existing.copy(enabled = enabled))
+        dao.updateEnabled(id, enabled)
+    }
+
+    suspend fun updateConnectionFields(
+        id: String,
+        name: String,
+        baseUrl: String,
+        username: String?,
+        password: String?
+    ): OpdsConnection? {
+        val existing = dao.getById(id) ?: return null
+        dao.updateConnectionFields(
+            id = id,
+            name = name.ifBlank { "OPDS 书库" },
+            baseUrl = baseUrl,
+            username = username?.ifBlank { null },
+            password = password?.ifBlank { null }
+        )
+        return existing.copy(
+            name = name.ifBlank { "OPDS 书库" },
+            baseUrl = baseUrl,
+            username = username?.ifBlank { null },
+            password = password?.ifBlank { null }
+        ).toDomain()
+    }
+
+    suspend fun markSyncing(id: String) {
+        dao.updateSyncState(
+            id = id,
+            syncState = OpdsSyncState.SYNCING.name,
+            lastSyncedAt = null,
+            bookCount = null,
+            lastErrorMessage = null
+        )
+    }
+
+    suspend fun markSyncSuccess(id: String, lastSyncedAt: Long, bookCount: Int) {
+        dao.updateSyncState(
+            id = id,
+            syncState = OpdsSyncState.SUCCESS.name,
+            lastSyncedAt = lastSyncedAt,
+            bookCount = bookCount,
+            lastErrorMessage = null
+        )
+    }
+
+    suspend fun markSyncFailed(id: String, errorMessage: String) {
+        dao.updateSyncState(
+            id = id,
+            syncState = OpdsSyncState.FAILED.name,
+            lastSyncedAt = null,
+            bookCount = null,
+            lastErrorMessage = errorMessage
+        )
     }
 
     suspend fun updateSyncState(
@@ -69,14 +130,12 @@ class OpdsConnectionRepository(
         bookCount: Int? = null,
         errorMessage: String? = null
     ) {
-        val existing = dao.getById(id) ?: return
-        dao.insert(
-            existing.copy(
-                syncState = syncState.name,
-                lastSyncedAt = lastSyncedAt ?: existing.lastSyncedAt,
-                bookCount = bookCount ?: existing.bookCount,
-                lastErrorMessage = errorMessage
-            )
+        dao.updateSyncState(
+            id = id,
+            syncState = syncState.name,
+            lastSyncedAt = lastSyncedAt,
+            bookCount = bookCount,
+            lastErrorMessage = errorMessage
         )
     }
 

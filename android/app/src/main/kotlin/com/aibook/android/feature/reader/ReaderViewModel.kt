@@ -1,6 +1,8 @@
 package com.aibook.android.feature.reader
 
 import android.app.Application
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
@@ -13,6 +15,8 @@ import com.aibook.android.core.model.BookFormat
 import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.core.model.ParagraphSpacing
+import com.aibook.android.core.model.ReaderFontCatalog
+import com.aibook.android.core.model.ReaderFontType
 import com.aibook.android.core.model.ReaderSettings
 import com.aibook.android.core.model.ReaderTheme
 import com.aibook.android.core.model.TextAlignment
@@ -32,6 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.charset.Charset
+import java.util.UUID
 
 data class ReaderUiState(
     val book: LocalBook? = null,
@@ -73,6 +78,9 @@ class ReaderViewModel(
 
     init {
         viewModelScope.launch { readerSettingsStore.fontScale.collect { v -> _state.update { it.copy(settings = it.settings.copy(fontScale = v)) } } }
+        viewModelScope.launch { readerSettingsStore.fontType.collect { v -> _state.update { it.copy(settings = it.settings.copy(fontType = v)) } } }
+        viewModelScope.launch { readerSettingsStore.customFontName.collect { v -> _state.update { it.copy(settings = it.settings.copy(customFontName = v)) } } }
+        viewModelScope.launch { readerSettingsStore.customFontPath.collect { v -> _state.update { it.copy(settings = it.settings.copy(customFontPath = v)) } } }
         viewModelScope.launch { readerSettingsStore.lineHeight.collect { v -> _state.update { it.copy(settings = it.settings.copy(lineHeight = v)) } } }
         viewModelScope.launch { readerSettingsStore.theme.collect { v -> _state.update { it.copy(settings = it.settings.copy(theme = v)) } } }
         viewModelScope.launch { readerSettingsStore.paragraphSpacing.collect { v -> _state.update { it.copy(settings = it.settings.copy(paragraphSpacing = v)) } } }
@@ -312,6 +320,21 @@ class ReaderViewModel(
         viewModelScope.launch { readerSettingsStore.setFontScale(value) }
     }
 
+    fun setFontType(type: ReaderFontType) {
+        viewModelScope.launch { readerSettingsStore.setFontType(type) }
+    }
+
+    fun importFont(uri: Uri) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { copyFontToPrivateStorage(uri) }
+            result.onSuccess { imported ->
+                readerSettingsStore.setCustomFont(imported.name, imported.path)
+            }.onFailure { error ->
+                _state.update { it.copy(errorMessage = "字体导入失败：${error.message ?: error::class.java.simpleName}") }
+            }
+        }
+    }
+
     fun setLineHeight(value: Float) {
         viewModelScope.launch { readerSettingsStore.setLineHeight(value) }
     }
@@ -361,6 +384,12 @@ class ReaderViewModel(
         if (snapshot != null) {
             viewModelScope.launch {
                 readerSettingsStore.setFontScale(snapshot.fontScale)
+                readerSettingsStore.setFontType(snapshot.fontType)
+                val customFontName = snapshot.customFontName
+                val customFontPath = snapshot.customFontPath
+                if (customFontName != null && customFontPath != null) {
+                    readerSettingsStore.setCustomFont(customFontName, customFontPath)
+                }
                 readerSettingsStore.setLineHeight(snapshot.lineHeight)
                 readerSettingsStore.setTheme(snapshot.theme)
                 readerSettingsStore.setParagraphSpacing(snapshot.paragraphSpacing)
@@ -376,6 +405,7 @@ class ReaderViewModel(
         val defaults = ReaderSettings()
         viewModelScope.launch {
             readerSettingsStore.setFontScale(defaults.fontScale)
+            readerSettingsStore.setFontType(defaults.fontType)
             readerSettingsStore.setLineHeight(defaults.lineHeight)
             readerSettingsStore.setTheme(defaults.theme)
             readerSettingsStore.setParagraphSpacing(defaults.paragraphSpacing)
@@ -391,6 +421,41 @@ class ReaderViewModel(
         val utf8 = String(bytes, Charsets.UTF_8)
         return if (hasUtf8Bom(bytes) || looksValidUtf8(utf8)) utf8
         else String(bytes, Charset.forName("GBK"))
+    }
+
+    private data class ImportedFont(
+        val name: String,
+        val path: String
+    )
+
+    private fun copyFontToPrivateStorage(uri: Uri): Result<ImportedFont> {
+        return runCatching {
+            val displayName = fontDisplayName(uri)
+            require(ReaderFontCatalog.isSupportedFontFile(displayName)) {
+                "请选择 .ttf 或 .otf 字体文件"
+            }
+            val extension = displayName.substringAfterLast('.', "ttf").lowercase()
+            val targetDir = File(appContext.filesDir, "reader_fonts").apply { mkdirs() }
+            val target = File(targetDir, "${UUID.randomUUID()}.$extension")
+            appContext.contentResolver.openInputStream(uri).use { input ->
+                requireNotNull(input) { "无法读取字体文件" }
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+            ImportedFont(
+                name = displayName.substringBeforeLast('.').ifBlank { "本地导入字体" },
+                path = target.absolutePath
+            )
+        }
+    }
+
+    private fun fontDisplayName(uri: Uri): String {
+        appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (index >= 0 && cursor.moveToFirst()) {
+                return cursor.getString(index)
+            }
+        }
+        return uri.lastPathSegment?.substringAfterLast('/') ?: "imported-font.ttf"
     }
 
     private fun hasUtf8Bom(bytes: ByteArray): Boolean =

@@ -41,9 +41,11 @@ import com.aibook.android.feature.settings.PrivacyPermissionsScreen
 import com.aibook.android.feature.settings.ScanDirectoryScreen
 import com.aibook.android.feature.settings.SettingsScreen
 import com.aibook.android.feature.settings.StorageCacheScreen
+import com.aibook.android.feature.settings.SyncConnectionSettingsScreen
 import com.aibook.android.feature.shelf.ShelfScreen
 import com.aibook.android.feature.shelf.BookDetailScreen
 import com.aibook.android.feature.store.BookStoreScreen
+import com.aibook.android.feature.store.StoreRemoteBookDetailScreen
 import com.aibook.android.feature.store.StoreCategoryScreen
 import com.aibook.android.navigation.Screen
 import com.aibook.android.ui.design.DesignTokens
@@ -69,8 +71,10 @@ fun AiBookApp() {
 
     val selectedBottomRoute = when (currentRoute) {
         Screen.StoreCategory.route -> Screen.Store.route
+        Screen.StoreRemoteBookDetail.route -> Screen.Store.route
         Screen.OpdsAddSource.route -> Screen.Opds.route
         Screen.ScanDirectories.route -> Screen.Settings.route
+        Screen.SyncConnectionSettings.route -> Screen.Settings.route
         Screen.StorageCache.route -> Screen.Settings.route
         Screen.PrivacyPermissions.route -> Screen.Settings.route
         Screen.About.route -> Screen.Settings.route
@@ -79,8 +83,10 @@ fun AiBookApp() {
     val bottomBarRoutes = bottomTabs.map { it.screen.route } +
         listOf(
             Screen.StoreCategory.route,
+            Screen.StoreRemoteBookDetail.route,
             Screen.OpdsAddSource.route,
             Screen.ScanDirectories.route,
+            Screen.SyncConnectionSettings.route,
             Screen.StorageCache.route,
             Screen.PrivacyPermissions.route,
             Screen.About.route
@@ -162,6 +168,9 @@ fun AiBookApp() {
                         onCategoryClick = { navController.navigate(Screen.StoreCategory.route) },
                         onBookClick = { bookId ->
                             navController.navigate(Screen.BookDetail.createRoute(bookId))
+                        },
+                        onRemoteBookClick = { bookId ->
+                            navController.navigate(Screen.StoreRemoteBookDetail.createRoute(bookId))
                         }
                     )
                 }
@@ -172,6 +181,9 @@ fun AiBookApp() {
                         onBack = { navController.popBackStack() },
                         onBookClick = { bookId ->
                             navController.navigate(Screen.BookDetail.createRoute(bookId))
+                        },
+                        onRemoteBookClick = { bookId ->
+                            navController.navigate(Screen.StoreRemoteBookDetail.createRoute(bookId))
                         }
                     )
                 }
@@ -181,6 +193,7 @@ fun AiBookApp() {
                     SettingsScreen(
                         onThemeClick = { navController.navigate(Screen.ThemeSettings.route) },
                         onScanDirectoriesClick = { navController.navigate(Screen.ScanDirectories.route) },
+                        onSyncConnectionClick = { navController.navigate(Screen.SyncConnectionSettings.route) },
                         onStorageClick = { navController.navigate(Screen.StorageCache.route) },
                         onPrivacyClick = { navController.navigate(Screen.PrivacyPermissions.route) },
                         onAboutClick = { navController.navigate(Screen.About.route) }
@@ -197,6 +210,13 @@ fun AiBookApp() {
             composable(Screen.ScanDirectories.route) {
                 PaddedScreen(paddingValues) {
                     ScanDirectoryScreen(
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable(Screen.SyncConnectionSettings.route) {
+                PaddedScreen(paddingValues) {
+                    SyncConnectionSettingsScreen(
                         onBack = { navController.popBackStack() }
                     )
                 }
@@ -226,6 +246,21 @@ fun AiBookApp() {
                 PaddedScreen(paddingValues) {
                     OpdsAddSourceScreen(
                         onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable(
+                route = Screen.StoreRemoteBookDetail.route,
+                arguments = listOf(navArgument("bookId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val bookId = backStackEntry.arguments?.getString("bookId").orEmpty()
+                PaddedScreen(paddingValues) {
+                    StoreRemoteBookDetailScreen(
+                        bookId = bookId,
+                        onBack = { navController.popBackStack() },
+                        onOpenLocalBook = { localBookId ->
+                            navController.navigate(Screen.BookDetail.createRoute(localBookId))
+                        }
                     )
                 }
             }

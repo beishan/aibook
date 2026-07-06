@@ -6,8 +6,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [BookEntity::class, OpdsConnectionEntity::class, ScanDirectoryEntity::class],
-    version = 5,
+    entities = [
+        BookEntity::class,
+        OpdsConnectionEntity::class,
+        ScanDirectoryEntity::class,
+        OpdsCatalogEntryEntity::class,
+        ShelfFolderEntity::class
+    ],
+    version = 7,
     exportSchema = false
 )
 abstract class AiBookDatabase : RoomDatabase() {
@@ -15,6 +21,8 @@ abstract class AiBookDatabase : RoomDatabase() {
     abstract fun bookDao(): BookDao
     abstract fun opdsConnectionDao(): OpdsConnectionDao
     abstract fun scanDirectoryDao(): ScanDirectoryDao
+    abstract fun opdsCatalogEntryDao(): OpdsCatalogEntryDao
+    abstract fun shelfFolderDao(): ShelfFolderDao
 
     companion object {
         @Volatile

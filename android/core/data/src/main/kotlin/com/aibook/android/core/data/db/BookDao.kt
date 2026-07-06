@@ -57,6 +57,12 @@ interface BookDao {
     @Query("UPDATE books SET shelved = :shelved WHERE id = :id")
     suspend fun setShelved(id: String, shelved: Boolean)
 
+    @Query("UPDATE books SET folderId = :folderId WHERE id IN (:ids)")
+    suspend fun setFolder(ids: List<String>, folderId: String?)
+
+    @Query("UPDATE books SET folderId = NULL WHERE folderId = :folderId")
+    suspend fun clearFolder(folderId: String)
+
     @Query("SELECT COUNT(*) FROM books")
     suspend fun count(): Int
 }

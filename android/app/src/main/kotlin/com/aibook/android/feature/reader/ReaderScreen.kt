@@ -1,5 +1,8 @@
 package com.aibook.android.feature.reader
 
+import android.graphics.Typeface
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -36,6 +39,7 @@ import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Lock
@@ -46,6 +50,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -58,6 +63,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -70,11 +76,15 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -83,6 +93,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.core.model.ParagraphSpacing
+import com.aibook.android.core.model.ReaderFontCatalog
+import com.aibook.android.core.model.ReaderFontType
 import com.aibook.android.core.model.ReaderSettings
 import com.aibook.android.core.model.ReaderTheme
 import com.aibook.android.core.model.TextAlignment
@@ -94,6 +106,8 @@ import com.aibook.android.ui.design.WarmProgress
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
+import java.io.File
 
 private enum class ReaderPanel {
     None,
@@ -325,6 +339,7 @@ private fun ReaderTextContent(
     val chapterItemCounts = remember(chapterParagraphs) {
         chapterParagraphs.map { (chapter, paragraphs) -> chapter.index to 1 + paragraphs.size }
     }
+    val fontFamily = rememberReaderFontFamily(settings)
 
     if (settings.pageTurnMode.usesPagedReading()) {
         ReaderPagedContent(
@@ -389,7 +404,8 @@ private fun ReaderTextContent(
                     color = foreground,
                     fontSize = 34.sp,
                     lineHeight = 44.sp,
-                    fontWeight = FontWeight.ExtraBold
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = fontFamily
                 )
             }
             items(paragraphs.size, key = { "p_${chapter.index}_$it" }) { index ->
@@ -398,6 +414,7 @@ private fun ReaderTextContent(
                     color = foreground,
                     fontSize = (19 * settings.fontScale).sp,
                     lineHeight = (35 * settings.fontScale * settings.lineHeight).sp,
+                    fontFamily = fontFamily,
                     letterSpacing = 0.sp
                 )
             }
@@ -414,9 +431,17 @@ private fun ReaderPagedContent(
     onLoadNextChapter: () -> Unit,
     onReadingPositionChanged: (Int, Int, Int) -> Unit
 ) {
-    val pages = remember(chapterParagraphs, settings.fontScale, settings.lineHeight, settings.paragraphSpacing) {
+    val pages = remember(
+        chapterParagraphs,
+        settings.fontScale,
+        settings.lineHeight,
+        settings.paragraphSpacing,
+        settings.fontType,
+        settings.customFontPath
+    ) {
         buildReaderPages(chapterParagraphs, settings)
     }
+    val fontFamily = rememberReaderFontFamily(settings)
     val pagerState = rememberPagerState(pageCount = { pages.size.coerceAtLeast(1) })
     var restoredInitialPage by remember(state.book?.id, state.remoteBookId, settings.pageTurnMode) {
         mutableStateOf(false)
@@ -468,9 +493,57 @@ private fun ReaderPagedContent(
         beyondViewportPageCount = 1
     ) { pageIndex ->
         val page = pages.getOrNull(pageIndex) ?: return@HorizontalPager
+        val pageOffset = (pagerState.currentPage - pageIndex) + pagerState.currentPageOffsetFraction
+        val transform = PageTurnVisuals.transform(settings.pageTurnMode, pageOffset)
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .zIndex(transform.zIndex)
+                .graphicsLayer {
+                    alpha = transform.alpha
+                    scaleX = transform.scale
+                    scaleY = transform.scale
+                    translationX = size.width * transform.translationXMultiplier
+                    rotationY = transform.rotationY
+                    cameraDistance = 10f * density
+                    transformOrigin = TransformOrigin(
+                        pivotFractionX = transform.pivotFractionX,
+                        pivotFractionY = 0.5f
+                    )
+                }
+                .drawWithContent {
+                    drawContent()
+                    if (settings.pageTurnMode == PageTurnMode.SIMULATION) {
+                        val shadow = transform.shadowAlpha.coerceIn(0f, 0.5f)
+                        val highlight = transform.highlightAlpha.coerceIn(0f, 0.35f)
+                        if (shadow > 0f || highlight > 0f) {
+                            val hingeAtStart = transform.pivotFractionX == 0f
+                            drawRect(
+                                brush = if (hingeAtStart) {
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            Color.Black.copy(alpha = shadow),
+                                            Color.Transparent,
+                                            Color.White.copy(alpha = highlight)
+                                        ),
+                                        startX = 0f,
+                                        endX = size.width
+                                    )
+                                } else {
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            Color.White.copy(alpha = highlight),
+                                            Color.Transparent,
+                                            Color.Black.copy(alpha = shadow)
+                                        ),
+                                        startX = 0f,
+                                        endX = size.width
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
                 .padding(horizontal = 38.dp, vertical = 48.dp),
             verticalArrangement = Arrangement.spacedBy(paragraphGap(settings.paragraphSpacing))
         ) {
@@ -478,17 +551,19 @@ private fun ReaderPagedContent(
                 Text(
                     text = page.title,
                     color = foreground,
-                    fontSize = 34.sp,
-                    lineHeight = 44.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
+                        fontSize = 34.sp,
+                        lineHeight = 44.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = fontFamily
+                    )
+                }
             page.paragraphs.forEach { paragraph ->
                 Text(
                     text = paragraph,
                     color = foreground,
                     fontSize = (19 * settings.fontScale).sp,
                     lineHeight = (35 * settings.fontScale * settings.lineHeight).sp,
+                    fontFamily = fontFamily,
                     letterSpacing = 0.sp
                 )
             }
@@ -887,6 +962,13 @@ private fun ReadingSettingsPage(
     onBack: () -> Unit
 ) {
     val settings = state.settings
+    var showFontDialog by remember { mutableStateOf(false) }
+    val fontImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            viewModel.importFont(uri)
+            showFontDialog = false
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.enterSettingsPage()
@@ -928,7 +1010,13 @@ private fun ReadingSettingsPage(
                     }
                 }
             }
-            item { SettingLineCard("字体", trailing = "系统字体 〉") }
+            item {
+                SettingLineCard(
+                    "字体",
+                    trailing = "${ReaderFontCatalog.selectedLabel(settings)} 〉",
+                    onClick = { showFontDialog = true }
+                )
+            }
             item {
                 SliderCard(
                     title = "字号",
@@ -1001,6 +1089,28 @@ private fun ReadingSettingsPage(
             }
         }
     }
+
+    if (showFontDialog) {
+        FontSelectionDialog(
+            settings = settings,
+            onSelect = {
+                viewModel.setFontType(it)
+                showFontDialog = false
+            },
+            onImport = {
+                fontImportLauncher.launch(
+                    arrayOf(
+                        "font/ttf",
+                        "font/otf",
+                        "application/x-font-ttf",
+                        "application/x-font-otf",
+                        "application/octet-stream"
+                    )
+                )
+            },
+            onDismiss = { showFontDialog = false }
+        )
+    }
 }
 
 private data class ReaderThemeOption(
@@ -1054,7 +1164,10 @@ private fun ScopeToggle(
                             if (!isBookSpecific) Modifier.border(1.dp, DesignTokens.Accent.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
                             else Modifier
                         )
-                        .clickable { onScopeChange(false) },
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onScopeChange(false) },
                     contentAlignment = Alignment.Center
                 ) {
                     Text("全局默认", color = if (!isBookSpecific) DesignTokens.Accent else DesignTokens.SoftText)
@@ -1071,7 +1184,10 @@ private fun ScopeToggle(
                             if (isBookSpecific) Modifier.border(1.dp, DesignTokens.Accent.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
                             else Modifier
                         )
-                        .clickable { onScopeChange(true) },
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onScopeChange(true) },
                     contentAlignment = Alignment.Center
                 ) {
                     Text("本书设置", color = if (isBookSpecific) DesignTokens.Accent else DesignTokens.SoftText)
@@ -1108,7 +1224,11 @@ private fun SettingsPageHeader(
         Row(
             modifier = Modifier
                 .width(82.dp)
-                .then(if (onTrailingClick != null) Modifier.clickable(onClick = onTrailingClick) else Modifier),
+                .then(if (onTrailingClick != null) Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onTrailingClick
+                ) else Modifier),
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1147,7 +1267,11 @@ private fun ThemeDot(
     onClick: () -> Unit
 ) {
     Column(
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onClick
+        ),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -1179,11 +1303,16 @@ private fun ThemeDot(
 }
 
 @Composable
-private fun SettingLineCard(title: String, trailing: String) {
+private fun SettingLineCard(title: String, trailing: String, onClick: () -> Unit = {}) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(76.dp),
+            .height(76.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline),
         shape = RoundedCornerShape(18.dp)
@@ -1284,7 +1413,10 @@ private fun SegmentedSetting(
                                 if (index == selected) Modifier.border(1.dp, DesignTokens.Accent.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
                                 else Modifier
                             )
-                            .clickable { onSelect(index) },
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onSelect(index) },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(option, color = if (index == selected) DesignTokens.Accent else DesignTokens.SoftText)
@@ -1332,7 +1464,10 @@ private fun IconSegmentedSetting(
                             if (alignment == selected) DesignTokens.Accent.copy(alpha = 0.45f) else Color.Transparent,
                             RoundedCornerShape(12.dp)
                         )
-                        .clickable { onSelect(alignment) },
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onSelect(alignment) },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(icon, null, tint = if (alignment == selected) DesignTokens.Accent else DesignTokens.SoftText)
@@ -1503,7 +1638,11 @@ private fun ThemePreviewCard(
 ) {
     Column(
         modifier = modifier
-            .clickable(onClick = onClick),
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -1686,4 +1825,113 @@ private fun indexToLineHeight(index: Int): Float = when (index) {
     1 -> 1.45f
     2 -> 1.8f
     else -> 1.45f
+}
+
+@Composable
+private fun FontSelectionDialog(
+    settings: ReaderSettings,
+    onSelect: (ReaderFontType) -> Unit,
+    onImport: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("选择字体", fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("选择阅读正文使用的字体。导入字体会复制到应用私有目录。", color = DesignTokens.SoftText)
+                ReaderFontCatalog.builtInFonts.forEach { option ->
+                    FontOptionCard(
+                        title = option.label,
+                        subtitle = option.description,
+                        selected = settings.fontType == option.type,
+                        onClick = { onSelect(option.type) }
+                    )
+                }
+                if (!settings.customFontPath.isNullOrBlank()) {
+                    FontOptionCard(
+                        title = settings.customFontName ?: "本地导入字体",
+                        subtitle = "从本地文件导入",
+                        selected = settings.fontType == ReaderFontType.CUSTOM,
+                        onClick = { onSelect(ReaderFontType.CUSTOM) }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onImport) {
+                Text("导入本地字体", color = DesignTokens.Accent)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭", color = DesignTokens.SoftText)
+            }
+        }
+    )
+}
+
+@Composable
+private fun FontOptionCard(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) DesignTokens.WarmCard else Color.White
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (selected) DesignTokens.Accent.copy(alpha = 0.42f) else DesignTokens.Hairline
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                if (selected) Icons.Default.CheckCircle else Icons.Default.Check,
+                null,
+                tint = if (selected) DesignTokens.Accent else DesignTokens.SoftText
+            )
+            Column {
+                Text(title, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberReaderFontFamily(settings: ReaderSettings): FontFamily {
+    return remember(settings.fontType, settings.customFontPath) {
+        when (settings.fontType) {
+            ReaderFontType.SYSTEM -> FontFamily.Default
+            ReaderFontType.SERIF -> FontFamily.Serif
+            ReaderFontType.SANS_SERIF -> FontFamily.SansSerif
+            ReaderFontType.MONOSPACE -> FontFamily.Monospace
+            ReaderFontType.CUSTOM -> {
+                val path = settings.customFontPath
+                val file = path?.let { File(it) }
+                if (file != null && file.exists()) {
+                    runCatching { FontFamily(Typeface.createFromFile(file)) }.getOrDefault(FontFamily.Default)
+                } else {
+                    FontFamily.Default
+                }
+            }
+        }
+    }
 }

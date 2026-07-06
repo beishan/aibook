@@ -37,23 +37,33 @@ fun DesignPage(
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val topPadding = if (title.isNotEmpty()) 20.dp else 0.dp
     Column(
         modifier = modifier
             .background(DesignTokens.AppBackground)
-            .padding(horizontal = DesignTokens.PagePadding, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+            .padding(horizontal = DesignTokens.PagePadding, vertical = topPadding)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.ExtraBold
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), content = actions)
+        if (title.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 18.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), content = actions)
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), content = actions)
+            }
         }
         content()
     }

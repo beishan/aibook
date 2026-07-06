@@ -10,6 +10,9 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aibook.android.core.data.repository.BookRepository
 import com.aibook.android.core.data.repository.ImportResult
 import com.aibook.android.core.model.LocalBook
+import com.aibook.android.core.model.ShelfFolder
+import com.aibook.android.core.model.ShelfFolderCatalog
+import com.aibook.android.core.model.ShelfFolderSelection
 import com.aibook.android.core.model.ShelfBookSorter
 import com.aibook.android.core.model.ShelfSortOption
 import com.aibook.android.di.ServiceLocator
@@ -24,6 +27,9 @@ import kotlinx.coroutines.launch
 
 data class ShelfUiState(
     val books: List<LocalBook> = emptyList(),
+    val folders: List<ShelfFolder> = emptyList(),
+    val folderSelection: ShelfFolderSelection = ShelfFolderSelection.All,
+    val folderCounts: Map<String, Int> = emptyMap(),
     val query: String = "",
     val importMessage: String = "支持 EPUB、TXT、PDF、Markdown、HTML",
     val isLoading: Boolean = false,
@@ -32,11 +38,14 @@ data class ShelfUiState(
     val selectedIds: Set<String> = emptySet()
 ) {
     val filteredBooks: List<LocalBook>
-        get() = ShelfBookSorter.sort(books.filter {
-            query.isBlank() ||
-                it.title.contains(query, ignoreCase = true) ||
-                it.author?.contains(query, ignoreCase = true) == true
-        }, sortOption)
+        get() = ShelfBookSorter.sort(
+            ShelfFolderCatalog.filterBooks(books, folderSelection).filter {
+                query.isBlank() ||
+                    it.title.contains(query, ignoreCase = true) ||
+                    it.author?.contains(query, ignoreCase = true) == true
+            },
+            sortOption
+        )
 
     val selectedBooks: List<LocalBook>
         get() = books.filter { it.id in selectedIds }
@@ -47,7 +56,8 @@ private data class ShelfControlState(
     val importMessage: String,
     val isLoading: Boolean,
     val sortOption: ShelfSortOption,
-    val managementMode: Boolean
+    val managementMode: Boolean,
+    val folderSelection: ShelfFolderSelection
 )
 
 class ShelfViewModel(
@@ -60,31 +70,45 @@ class ShelfViewModel(
     private val _sortOption = MutableStateFlow(ShelfSortOption.RECENT_READ)
     private val _managementMode = MutableStateFlow(false)
     private val _selectedIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _folderSelection = MutableStateFlow<ShelfFolderSelection>(ShelfFolderSelection.All)
 
-    private val controls = combine(
+    private val baseControls = combine(
         _query,
         _importMessage,
         _isLoading,
         _sortOption,
-        _managementMode
+        _managementMode,
     ) { query, message, loading, sortOption, managementMode ->
         ShelfControlState(
             query = query,
             importMessage = message,
             isLoading = loading,
             sortOption = sortOption,
-            managementMode = managementMode
+            managementMode = managementMode,
+            folderSelection = ShelfFolderSelection.All
         )
+    }
+
+    private val controls = combine(baseControls, _folderSelection) { controls, folderSelection ->
+        controls.copy(folderSelection = folderSelection)
     }
 
     val uiState: StateFlow<ShelfUiState> = combine(
         bookRepository.observeShelvedBooks(),
+        bookRepository.observeShelfFolders(),
         controls,
         _selectedIds
-    ) { books, controls, selectedIds ->
+    ) { books, folders, controls, selectedIds ->
         val visibleIds = books.map { it.id }.toSet()
+        val validSelection = when (val selection = controls.folderSelection) {
+            is ShelfFolderSelection.Folder -> if (folders.any { it.id == selection.folderId }) selection else ShelfFolderSelection.All
+            else -> selection
+        }
         ShelfUiState(
             books = books,
+            folders = folders,
+            folderSelection = validSelection,
+            folderCounts = ShelfFolderCatalog.folderCounts(books),
             query = controls.query,
             importMessage = controls.importMessage,
             isLoading = controls.isLoading,
@@ -143,6 +167,11 @@ class ShelfViewModel(
         _selectedIds.value = emptySet()
     }
 
+    fun selectFolder(selection: ShelfFolderSelection) {
+        _folderSelection.value = selection
+        _selectedIds.value = emptySet()
+    }
+
     fun setSelectedFavorite(favorite: Boolean) {
         val ids = _selectedIds.value
         if (ids.isEmpty()) return
@@ -156,6 +185,30 @@ class ShelfViewModel(
         if (ids.isEmpty()) return
         viewModelScope.launch {
             ids.forEach { id -> bookRepository.setShelved(id, false) }
+            _selectedIds.value = emptySet()
+            _managementMode.value = false
+        }
+    }
+
+    fun createFolderAndMoveSelected(name: String) {
+        val ids = _selectedIds.value
+        val trimmed = name.trim()
+        if (ids.isEmpty() || trimmed.isBlank()) return
+        viewModelScope.launch {
+            val folder = bookRepository.createShelfFolder(trimmed)
+            bookRepository.moveBooksToFolder(ids, folder.id)
+            _folderSelection.value = ShelfFolderSelection.Folder(folder.id)
+            _selectedIds.value = emptySet()
+            _managementMode.value = false
+        }
+    }
+
+    fun moveSelectedToFolder(folderId: String?) {
+        val ids = _selectedIds.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            bookRepository.moveBooksToFolder(ids, folderId)
+            _folderSelection.value = folderId?.let { ShelfFolderSelection.Folder(it) } ?: ShelfFolderSelection.Unfiled
             _selectedIds.value = emptySet()
             _managementMode.value = false
         }

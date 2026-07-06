@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -117,7 +118,7 @@ fun OpdsScreen(
     }
 
     DesignPage(
-        title = if (state.currentFeed == null) "发现" else "OPDS 数据源",
+        title = if (state.currentFeed == null) "" else "OPDS 数据源",
         modifier = Modifier.fillMaxSize(),
         actions = {
             if (state.currentFeed != null) {
@@ -143,7 +144,19 @@ fun OpdsScreen(
                 onEditConnection = viewModel::editConnection,
                 onToggleConnection = viewModel::toggleConnectionEnabled,
                 onSyncConnection = viewModel::syncConnection,
+                onShowError = viewModel::showErrorDetails,
                 onDeleteConnection = viewModel::deleteConnection
+            )
+        }
+
+        state.errorDialogConnection?.let { connection ->
+            OpdsErrorDialog(
+                connection = connection,
+                onDismiss = viewModel::dismissErrorDetails,
+                onRetry = {
+                    viewModel.dismissErrorDetails()
+                    viewModel.syncConnection(connection)
+                }
             )
         }
 
@@ -162,6 +175,7 @@ private fun DiscoveryHome(
     onEditConnection: (OpdsConnection) -> Unit,
     onToggleConnection: (OpdsConnection, Boolean) -> Unit,
     onSyncConnection: (OpdsConnection) -> Unit,
+    onShowError: (OpdsConnection) -> Unit,
     onDeleteConnection: (String) -> Unit
 ) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(18.dp)) {
@@ -245,6 +259,7 @@ private fun DiscoveryHome(
                     onEdit = { onEditConnection(connection) },
                     onToggle = { enabled -> onToggleConnection(connection, enabled) },
                     onSync = { onSyncConnection(connection) },
+                    onShowError = { onShowError(connection) },
                     onDelete = { onDeleteConnection(connection.id) }
                 )
             }
@@ -405,6 +420,7 @@ private fun OpdsConnectionCard(
     onEdit: () -> Unit,
     onToggle: (Boolean) -> Unit,
     onSync: () -> Unit,
+    onShowError: () -> Unit,
     onDelete: () -> Unit
 ) {
     SoftCard {
@@ -446,17 +462,28 @@ private fun OpdsConnectionCard(
                 OpdsMetaText("状态", opdsSyncLabel(connection.syncState))
             }
             if (connection.syncState == OpdsSyncState.FAILED && !connection.lastErrorMessage.isNullOrBlank()) {
-                Text(
-                    "错误：${connection.lastErrorMessage}",
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color(0xFFFFF0EE), RoundedCornerShape(10.dp))
                         .padding(horizontal = 12.dp, vertical = 8.dp),
-                    color = Color(0xFFB44A35),
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        "错误：${connection.lastErrorMessage}",
+                        color = Color(0xFFB44A35),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "查看完整错误",
+                        modifier = Modifier.clickable(onClick = onShowError),
+                        color = Color(0xFFB44A35),
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
@@ -480,6 +507,11 @@ private fun OpdsConnectionCard(
                     Text("浏览目录")
                 }
             }
+            if (connection.syncState == OpdsSyncState.FAILED && !connection.lastErrorMessage.isNullOrBlank()) {
+                TextButton(onClick = onShowError, modifier = Modifier.fillMaxWidth()) {
+                    Text("查看错误详情", color = Color(0xFFB44A35))
+                }
+            }
         }
     }
 }
@@ -501,6 +533,52 @@ private fun OpdsStatusBadge(connection: OpdsConnection) {
         color = color,
         style = MaterialTheme.typography.labelMedium,
         fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
+private fun OpdsErrorDialog(
+    connection: OpdsConnection,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("OPDS 错误详情", fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OpdsMetaText("数据源", connection.name)
+                OpdsMetaText("状态", opdsSyncLabel(connection.syncState))
+                OpdsMetaText("上次同步", formatSyncTime(connection.lastSyncedAt))
+                Text("错误信息", color = DesignTokens.SoftText, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    connection.lastErrorMessage.orEmpty().ifBlank { "暂无错误详情" },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFFFF0EE), RoundedCornerShape(10.dp))
+                        .padding(12.dp),
+                    color = Color(0xFFB44A35),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onRetry,
+                enabled = connection.enabled && connection.syncState != OpdsSyncState.SYNCING,
+                colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null)
+                Text("重新同步")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭", color = DesignTokens.Accent)
+            }
+        }
     )
 }
 
@@ -531,10 +609,25 @@ private fun ConnectionForm(
     state: OpdsUiState,
     viewModel: OpdsViewModel
 ) {
+    val isEditing = state.editingConnectionId != null
     Column(
         modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        SoftCard(color = Color.White) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    if (isEditing) "编辑 OPDS 数据源" else "添加 OPDS 数据源",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    if (isEditing) "修改名称、地址或认证信息，不会清除启停状态和同步记录。"
+                    else "保存后会立即连接并浏览根目录。",
+                    color = DesignTokens.SoftText
+                )
+            }
+        }
         OutlinedTextField(
             modifier = Modifier.fillMaxWidth(),
             value = state.formName,
@@ -567,8 +660,8 @@ private fun ConnectionForm(
             singleLine = true
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { viewModel.saveConnection(browseAfterSave = state.editingConnectionId == null) }) {
-                Text(if (state.editingConnectionId == null) "保存并连接" else "保存修改")
+            Button(onClick = { viewModel.saveConnection(browseAfterSave = !isEditing) }) {
+                Text(if (isEditing) "保存修改" else "保存并连接")
             }
             TextButton(onClick = { viewModel.showConnectionForm(false) }) { Text("取消") }
         }
@@ -644,6 +737,7 @@ fun OpdsAddSourceScreen(
     viewModel: OpdsViewModel = viewModel(factory = OpdsViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val isEditing = state.editingConnectionId != null
 
     Column(
         modifier = Modifier
@@ -666,7 +760,7 @@ fun OpdsAddSourceScreen(
                     .background(DesignTokens.Hairline)
             )
             Text(
-                "添加 OPDS 数据源",
+                if (isEditing) "编辑 OPDS 数据源" else "添加 OPDS 数据源",
                 modifier = Modifier.padding(start = 18.dp),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.ExtraBold
@@ -786,7 +880,7 @@ fun OpdsAddSourceScreen(
             colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
             shape = RoundedCornerShape(16.dp)
         ) {
-            Text("保存并启用", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(if (isEditing) "保存修改" else "保存并启用", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
         TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
             Text("取消", color = DesignTokens.Accent)

@@ -115,6 +115,9 @@ npm run build  # 包含 vue-tsc
 - **Java**: 遵循 Google Java Style Guide
 - **Vue/TypeScript**: 使用 Composition API + `<script setup>`
 
+### Android UI 规范
+- 安卓端后续新增或调整按钮时，点击态不要使用阴影或按压投影效果；优先使用颜色、透明度、边框或轻量背景变化表达反馈。
+
 ### Git 提交
 - 使用中文提交信息
 - 格式: `<类型>: <描述>`

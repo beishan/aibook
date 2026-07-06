@@ -40,6 +40,7 @@ data class LocalBook(
     val uri: String,
     val sha256: String? = null,
     val coverUri: String? = null,
+    val folderId: String? = null,
     val status: ReadingStatus = ReadingStatus.UNREAD,
     val favorite: Boolean = false,
     val shelved: Boolean = false,
@@ -47,6 +48,38 @@ data class LocalBook(
     val lastReadAt: Instant? = null,
     val progress: ReadingProgress = ReadingProgress()
 )
+
+data class ShelfFolder(
+    val id: String,
+    val name: String,
+    val createdAtEpochMillis: Long
+)
+
+sealed interface ShelfFolderSelection {
+    data object All : ShelfFolderSelection
+    data object Unfiled : ShelfFolderSelection
+    data class Folder(val folderId: String) : ShelfFolderSelection
+}
+
+object ShelfFolderCatalog {
+    fun filterBooks(
+        books: List<LocalBook>,
+        selection: ShelfFolderSelection
+    ): List<LocalBook> {
+        return when (selection) {
+            ShelfFolderSelection.All -> books
+            ShelfFolderSelection.Unfiled -> books.filter { it.folderId == null }
+            is ShelfFolderSelection.Folder -> books.filter { it.folderId == selection.folderId }
+        }
+    }
+
+    fun folderCounts(books: List<LocalBook>): Map<String, Int> {
+        return books
+            .mapNotNull { it.folderId }
+            .groupingBy { it }
+            .eachCount()
+    }
+}
 
 data class ReadingProgress(
     val chapterHref: String? = null,
@@ -60,6 +93,9 @@ data class ReadingProgress(
 
 data class ReaderSettings(
     val fontScale: Float = 1.0f,
+    val fontType: ReaderFontType = ReaderFontType.SYSTEM,
+    val customFontName: String? = null,
+    val customFontPath: String? = null,
     val lineHeight: Float = 1.45f,
     val theme: ReaderTheme = ReaderTheme.PAPER,
     val paragraphSpacing: ParagraphSpacing = ParagraphSpacing.SMALL,
@@ -68,6 +104,41 @@ data class ReaderSettings(
     val autoBrightness: Boolean = true,
     val screenAlwaysOn: Boolean = false
 )
+
+enum class ReaderFontType {
+    SYSTEM,
+    SERIF,
+    SANS_SERIF,
+    MONOSPACE,
+    CUSTOM
+}
+
+data class ReaderFontOption(
+    val type: ReaderFontType,
+    val label: String,
+    val description: String
+)
+
+object ReaderFontCatalog {
+    val builtInFonts: List<ReaderFontOption> = listOf(
+        ReaderFontOption(ReaderFontType.SYSTEM, "系统字体", "使用设备默认字体"),
+        ReaderFontOption(ReaderFontType.SERIF, "衬线字体", "适合长篇阅读的传统排版"),
+        ReaderFontOption(ReaderFontType.SANS_SERIF, "无衬线字体", "清爽现代，适合屏幕阅读"),
+        ReaderFontOption(ReaderFontType.MONOSPACE, "等宽字体", "字符宽度一致，适合代码与笔记")
+    )
+
+    fun isSupportedFontFile(fileName: String): Boolean {
+        val normalized = fileName.trim().lowercase()
+        return normalized.endsWith(".ttf") || normalized.endsWith(".otf")
+    }
+
+    fun selectedLabel(settings: ReaderSettings): String {
+        return when (settings.fontType) {
+            ReaderFontType.CUSTOM -> settings.customFontName?.takeIf { it.isNotBlank() } ?: "本地导入字体"
+            else -> builtInFonts.firstOrNull { it.type == settings.fontType }?.label ?: "系统字体"
+        }
+    }
+}
 
 enum class ReaderTheme {
     LIGHT,

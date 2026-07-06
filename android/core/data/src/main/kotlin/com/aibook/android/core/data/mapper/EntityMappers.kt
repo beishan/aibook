@@ -2,10 +2,12 @@ package com.aibook.android.core.data.mapper
 
 import com.aibook.android.core.data.db.BookEntity
 import com.aibook.android.core.data.db.OpdsConnectionEntity
+import com.aibook.android.core.data.db.ShelfFolderEntity
 import com.aibook.android.core.model.BookFormat
 import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.ReadingProgress
 import com.aibook.android.core.model.ReadingStatus
+import com.aibook.android.core.model.ShelfFolder
 import com.aibook.android.core.network.opds.OpdsConnection
 import com.aibook.android.core.network.opds.OpdsSyncState
 import java.time.Instant
@@ -19,6 +21,7 @@ fun BookEntity.toDomain(): LocalBook {
         uri = uri,
         sha256 = sha256,
         coverUri = coverUri,
+        folderId = folderId,
         status = runCatching { ReadingStatus.valueOf(status) }.getOrDefault(ReadingStatus.UNREAD),
         favorite = favorite,
         shelved = shelved,
@@ -45,6 +48,7 @@ fun LocalBook.toEntity(): BookEntity {
         uri = uri,
         sha256 = sha256,
         coverUri = coverUri,
+        folderId = folderId,
         status = status.name,
         favorite = favorite,
         shelved = shelved,
@@ -58,6 +62,22 @@ fun LocalBook.toEntity(): BookEntity {
         progressScrollOffset = progress.scrollOffset,
         progressPositionLabel = progress.positionLabel,
         source = "LOCAL"
+    )
+}
+
+fun ShelfFolderEntity.toDomain(): ShelfFolder {
+    return ShelfFolder(
+        id = id,
+        name = name,
+        createdAtEpochMillis = createdAt
+    )
+}
+
+fun ShelfFolder.toEntity(): ShelfFolderEntity {
+    return ShelfFolderEntity(
+        id = id,
+        name = name,
+        createdAt = createdAtEpochMillis
     )
 }
 
