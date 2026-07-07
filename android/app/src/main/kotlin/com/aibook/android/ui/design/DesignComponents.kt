@@ -110,18 +110,20 @@ fun SectionHeader(title: String, trailing: String? = null) {
 fun BookCover(
     title: String,
     modifier: Modifier = Modifier,
-    width: Dp = 88.dp,
+    width: Dp? = 88.dp,
     height: Dp = 128.dp,
     imageUri: String? = null,
     brush: Brush = Brush.verticalGradient(listOf(Color(0xFF28323A), Color(0xFF0F1418)))
 ) {
+    val sizeModifier = if (width != null) Modifier.size(width, height) else Modifier.fillMaxWidth().height(height)
+
     if (!imageUri.isNullOrBlank()) {
         AsyncImage(
             model = imageUri,
             contentDescription = title,
             contentScale = ContentScale.Crop,
             modifier = modifier
-                .size(width, height)
+                .then(sizeModifier)
                 .clip(RoundedCornerShape(8.dp))
                 .background(brush, RoundedCornerShape(8.dp))
         )
@@ -130,7 +132,7 @@ fun BookCover(
 
     Box(
         modifier = modifier
-            .size(width, height)
+            .then(sizeModifier)
             .background(brush, RoundedCornerShape(8.dp))
             .padding(10.dp),
         contentAlignment = Alignment.Center
@@ -161,6 +163,19 @@ fun SourceBadge(text: String, source: String = text) {
             fontWeight = FontWeight.Medium
         )
     }
+}
+
+@Composable
+fun CoverSourceBadge(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        color = Color.White,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Medium
+    )
 }
 
 @Composable

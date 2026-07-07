@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -592,14 +593,25 @@ private fun ReadingBookCard(
     onFavoriteClick: () -> Unit,
     onRemoveClick: () -> Unit
 ) {
-    SoftCard {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = DesignTokens.SoftShadow,
+                shape = RoundedCornerShape(DesignTokens.CardRadius),
+                ambientColor = Color.Black.copy(alpha = 0.08f),
+                spotColor = Color.Black.copy(alpha = 0.08f)
+            ),
+        shape = RoundedCornerShape(DesignTokens.CardRadius),
+        colors = CardDefaults.cardColors(containerColor = DesignTokens.CardBackground)
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Box {
                 BookCover(
                     title = book.title,
                     modifier = Modifier.clickable(onClick = onCoverClick),
-                    width = 72.dp,
-                    height = 104.dp,
+                    width = null,
+                    height = 148.dp,
                     imageUri = book.coverUri,
                     brush = Brush.verticalGradient(listOf(Color(0xFF607D8B), Color(0xFF1B242A)))
                 )
@@ -621,21 +633,27 @@ private fun ReadingBookCard(
                     }
                 }
             }
-            Text(book.title, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
-            if (managementMode) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    IconButton(onClick = onFavoriteClick, modifier = Modifier.size(34.dp)) {
-                        Icon(
-                            if (book.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "收藏",
-                            tint = if (book.favorite) DesignTokens.Accent else DesignTokens.SoftText
-                        )
-                    }
-                    IconButton(onClick = onRemoveClick, modifier = Modifier.size(34.dp)) {
-                        Icon(Icons.Default.RemoveCircleOutline, contentDescription = "移出书架", tint = DesignTokens.SoftText)
+            Column(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 0.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
+                if (managementMode) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        IconButton(onClick = onFavoriteClick, modifier = Modifier.size(34.dp)) {
+                            Icon(
+                                if (book.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                contentDescription = "收藏",
+                                tint = if (book.favorite) DesignTokens.Accent else DesignTokens.SoftText
+                            )
+                        }
+                        IconButton(onClick = onRemoveClick, modifier = Modifier.size(34.dp)) {
+                            Icon(Icons.Default.RemoveCircleOutline, contentDescription = "移出书架", tint = DesignTokens.SoftText)
+                        }
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(2.dp))
         }
     }
 }

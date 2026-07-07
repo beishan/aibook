@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -34,12 +35,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -48,6 +51,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -64,6 +68,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aibook.android.ui.design.BookCover
+import com.aibook.android.ui.design.CoverSourceBadge
 import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
@@ -82,6 +87,7 @@ fun BookStoreScreen(
     val prefs = remember { context.getSharedPreferences("store_prefs", Context.MODE_PRIVATE) }
     // 0=网格视图, 1=带封面列表, 2=紧凑列表
     var viewMode by remember { mutableIntStateOf(prefs.getInt("view_mode", 0)) }
+    var showViewModeDialog by remember { mutableStateOf(false) }
     var managementMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     val filteredBooks = uiState.filteredBooks
@@ -97,14 +103,9 @@ fun BookStoreScreen(
     }
 
     val viewModeIcon = when (viewMode) {
-        0 -> Icons.AutoMirrored.Filled.ViewList
+        0 -> Icons.Default.GridView
         1 -> Icons.AutoMirrored.Filled.FormatListBulleted
-        else -> Icons.Default.GridView
-    }
-    val viewModeDescription = when (viewMode) {
-        0 -> "切换到列表视图"
-        1 -> "切换到紧凑视图"
-        else -> "切换到网格视图"
+        else -> Icons.AutoMirrored.Filled.ViewList
     }
 
     DesignPage(
@@ -113,14 +114,11 @@ fun BookStoreScreen(
         actions = {
             Icon(
                 viewModeIcon,
-                contentDescription = viewModeDescription,
+                contentDescription = "切换视图",
                 modifier = Modifier.clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
-                ) {
-                    viewMode = (viewMode + 1) % 3
-                    prefs.edit().putInt("view_mode", viewMode).apply()
-                }
+                ) { showViewModeDialog = true }
             )
             Icon(
                 Icons.Default.FilterList,
@@ -202,7 +200,7 @@ fun BookStoreScreen(
                 0 -> {
                     // 网格视图
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
+                        columns = GridCells.Fixed(3),
                         contentPadding = PaddingValues(bottom = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -288,6 +286,83 @@ fun BookStoreScreen(
 //            }
         }
     }
+
+    if (showViewModeDialog) {
+        ViewModeDialog(
+            currentMode = viewMode,
+            onDismiss = { showViewModeDialog = false },
+            onSelect = { mode ->
+                viewMode = mode
+                prefs.edit().putInt("view_mode", mode).apply()
+                showViewModeDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun ViewModeDialog(
+    currentMode: Int,
+    onDismiss: () -> Unit,
+    onSelect: (Int) -> Unit
+) {
+    val viewModes = listOf(
+        Triple(0, Icons.Default.GridView, "网格视图"),
+        Triple(1, Icons.AutoMirrored.Filled.FormatListBulleted, "封面列表"),
+        Triple(2, Icons.AutoMirrored.Filled.ViewList, "紧凑列表")
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("选择视图模式", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                viewModes.forEach { (mode, icon, label) ->
+                    val isSelected = mode == currentMode
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (isSelected) DesignTokens.Accent.copy(alpha = 0.1f) else Color.Transparent,
+                                RoundedCornerShape(12.dp)
+                            )
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onSelect(mode) }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            icon,
+                            contentDescription = null,
+                            tint = if (isSelected) DesignTokens.Accent else DesignTokens.SoftText
+                        )
+                        Text(
+                            label,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) DesignTokens.Accent else Color.Unspecified
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        if (isSelected) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = DesignTokens.Accent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
 }
 
 private fun toggleSelection(selectedIds: Set<String>, id: String): Set<String> {
@@ -861,45 +936,67 @@ private fun StoreBookCard(
     onDownloadClick: (StoreBook) -> Unit = {},
     onLocalShelfClick: (StoreBook) -> Unit = {}
 ) {
-    SoftCard(
-        modifier = Modifier.clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null
-        ) { onBookClick(book) }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onBookClick(book) },
+        shape = RoundedCornerShape(DesignTokens.CardRadius),
+        colors = CardDefaults.cardColors(containerColor = DesignTokens.CardBackground)
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Column {
             Box {
                 BookCover(
                     title = book.title,
-                    width = 72.dp,
-                    height = 104.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                    width = null,
+                    height = 180.dp,
                     imageUri = book.coverUri,
                     brush = Brush.verticalGradient(listOf(titleColor(book.title), Color(0xFF1C1B18)))
+                )
+                CoverSourceBadge(
+                    text = if (book.kind == StoreItemKind.LOCAL) "本地" else "OPDS",
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(6.dp)
                 )
                 if (managementMode && book.kind == StoreItemKind.LOCAL) {
                     StoreSelectionMark(
                         selected = selected,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(4.dp)
+                            .padding(6.dp)
                     )
                 }
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Icon(Icons.Default.FilterList, contentDescription = null, tint = DesignTokens.SoftText)
+            Column(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(book.format, color = DesignTokens.Accent, style = MaterialTheme.typography.bodySmall)
+                    if (book.kind == StoreItemKind.LOCAL && !managementMode) {
+                        Icon(
+                            imageVector = if (book.shelved) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
+                            contentDescription = if (book.shelved) "已在书架" else "加入书架",
+                            tint = if (book.shelved) DesignTokens.SoftText else DesignTokens.Accent,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clickable(
+                                    enabled = !book.shelved,
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onLocalShelfClick(book) }
+                        )
+                    }
                 }
-                Text(book.author, color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(book.format, color = DesignTokens.Accent)
-                SourceBadge(book.sourceName)
-                StoreBookAction(
-                    book = book,
-                    downloading = downloading,
-                    managementMode = managementMode,
-                    onDownloadClick = onDownloadClick,
-                    onLocalShelfClick = onLocalShelfClick
-                )
             }
         }
     }
