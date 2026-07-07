@@ -10,6 +10,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -22,8 +24,23 @@ import java.util.List;
 public class OpdsService {
 
     private static final int PAGE_SIZE = 50;
+    private static final String OPDS_TYPE = "application/atom+xml;profile=opds-catalog";
 
     private final BookRepository bookRepository;
+
+    /**
+     * 获取 OpenSearch 描述
+     */
+    public String getSearchDescription() {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            + "<OpenSearchDescription xmlns=\"http://a9.com/-/spec/opensearch/1.1/\">\n"
+            + "  <ShortName>汗牛充栋</ShortName>\n"
+            + "  <Description>搜索私人书库</Description>\n"
+            + "  <InputEncoding>UTF-8</InputEncoding>\n"
+            + "  <OutputEncoding>UTF-8</OutputEncoding>\n"
+            + "  <Url type=\"" + OPDS_TYPE + "\" template=\"/opds/search?query={searchTerms}\"/>\n"
+            + "</OpenSearchDescription>";
+    }
 
     /**
      * 获取根目录
@@ -39,6 +56,9 @@ public class OpdsService {
         xml.append("  <author>\n");
         xml.append("    <name>汗牛充栋</name>\n");
         xml.append("  </author>\n");
+        xml.append("  <link rel=\"self\" type=\"").append(OPDS_TYPE).append("\" href=\"/opds\"/>\n");
+        xml.append("  <link rel=\"start\" type=\"").append(OPDS_TYPE).append("\" href=\"/opds\"/>\n");
+        xml.append("  <link rel=\"search\" type=\"application/opensearchdescription+xml\" href=\"/opds/search.xml\" title=\"搜索\"/>\n");
 
         // 所有书籍
         xml.append("  <entry>\n");
@@ -148,7 +168,9 @@ public class OpdsService {
      */
     public String searchBooks(User user, String query, int page) {
         Page<Book> books = bookRepository.searchByKeyword(user, query, PageRequest.of(page, PAGE_SIZE));
-        return buildBooksFeed(books, "搜索: " + query, "urn:aibook:search:" + query, "/opds/search", page);
+        String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
+        return buildBooksFeed(books, "搜索: " + query, "urn:aibook:search:" + query,
+                "/opds/search?query=" + encodedQuery, page);
     }
 
     /**
@@ -166,19 +188,23 @@ public class OpdsService {
         xml.append("    <name>汗牛充栋</name>\n");
         xml.append("  </author>\n");
 
+        String pageSeparator = basePath.contains("?") ? "&amp;page=" : "?page=";
+
         // 返回根目录链接
-        xml.append("  <link rel=\"start\" type=\"application/atom+xml;profile=opds-catalog\" href=\"/opds\"/>\n");
+        xml.append("  <link rel=\"self\" type=\"").append(OPDS_TYPE).append("\" href=\"")
+           .append(basePath).append(pageSeparator).append(currentPage).append("\"/>\n");
+        xml.append("  <link rel=\"start\" type=\"").append(OPDS_TYPE).append("\" href=\"/opds\"/>\n");
 
         // 分页：下一页链接
         if (page.hasNext()) {
-            xml.append("  <link rel=\"next\" type=\"application/atom+xml;profile=opds-catalog\" href=\"")
-               .append(basePath).append("?page=").append(currentPage + 1).append("\"/>\n");
+            xml.append("  <link rel=\"next\" type=\"").append(OPDS_TYPE).append("\" href=\"")
+               .append(basePath).append(pageSeparator).append(currentPage + 1).append("\"/>\n");
         }
 
         // 分页：上一页链接
         if (currentPage > 0) {
-            xml.append("  <link rel=\"prev\" type=\"application/atom+xml;profile=opds-catalog\" href=\"")
-               .append(basePath).append("?page=").append(currentPage - 1).append("\"/>\n");
+            xml.append("  <link rel=\"prev\" type=\"").append(OPDS_TYPE).append("\" href=\"")
+               .append(basePath).append(pageSeparator).append(currentPage - 1).append("\"/>\n");
         }
 
         for (Book book : books) {
@@ -201,7 +227,9 @@ public class OpdsService {
 
             // 封面
             if (book.getCoverUrl() != null) {
-                xml.append("    <link rel=\"http://opds-spec.org/image\" type=\"image/jpeg\" href=\"").append(escapeXml(book.getCoverUrl())).append("\"/>\n");
+                String coverUrl = escapeXml(book.getCoverUrl());
+                xml.append("    <link rel=\"http://opds-spec.org/image\" type=\"image/jpeg\" href=\"").append(coverUrl).append("\"/>\n");
+                xml.append("    <link rel=\"http://opds-spec.org/image/thumbnail\" type=\"image/jpeg\" href=\"").append(coverUrl).append("\"/>\n");
             }
 
             // 下载链接
