@@ -17,6 +17,8 @@ build/
 *.class
 *.jar
 *.war
+android/.gradle/*
+
 
 # Logs
 *.log
@@ -40,3 +42,6 @@ docker/data/
 resources/books/
 resources/covers/
 !resources/.gitkeep
+android/.gradle/8.13/executionHistory/executionHistory.bin
+android/.gradle/8.13/fileHashes/fileHashes.lock
+android/.gradle/buildOutputCleanup/buildOutputCleanup.lock

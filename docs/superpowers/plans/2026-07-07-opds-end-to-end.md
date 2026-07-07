@@ -616,7 +616,7 @@ Run:
 
 ```bash
 cd /Users/beibei/aiprojects/ai-book/android
-./gradlew :core:network:testDebugUnitTest --tests '*opds*'
+./gradlew :core:network:test --tests '*opds*'
 ```
 
 Expected: FAIL for parser summary/content behavior or filename fallback if missing.
@@ -679,7 +679,7 @@ Run:
 
 ```bash
 cd /Users/beibei/aiprojects/ai-book/android
-./gradlew :core:network:testDebugUnitTest --tests '*opds*'
+./gradlew :core:network:test --tests '*opds*'
 ```
 
 Expected: PASS.
@@ -814,7 +814,7 @@ Run:
 
 ```bash
 cd /Users/beibei/aiprojects/ai-book/android
-./gradlew :core:network:testDebugUnitTest --tests '*opds*'
+./gradlew :core:network:test --tests '*opds*'
 ./gradlew :app:testDebugUnitTest --tests '*opds*'
 ```
 
