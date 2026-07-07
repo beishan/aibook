@@ -168,7 +168,6 @@ class StoreViewModel(
         if (book.kind != StoreItemKind.LOCAL || book.shelved) return
         viewModelScope.launch {
             bookRepository.setShelved(book.id, true)
-            _actionState.value = StoreActionState(message = "已加入书架：${book.title}")
         }
     }
 

@@ -85,7 +85,7 @@ fun BookStoreScreen(
     val actionState by viewModel.actionState.collectAsState()
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("store_prefs", Context.MODE_PRIVATE) }
-    // 0=网格视图, 1=带封面列表, 2=紧凑列表
+    // 0=网格视图(3列), 1=带封面列表, 2=紧凑列表, 3=小网格视图(4列)
     var viewMode by remember { mutableIntStateOf(prefs.getInt("view_mode", 0)) }
     var showViewModeDialog by remember { mutableStateOf(false) }
     var managementMode by remember { mutableStateOf(false) }
@@ -277,6 +277,34 @@ fun BookStoreScreen(
                         }
                     }
                 }
+                3 -> {
+                    // 小网格视图（4列）
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(4),
+                        contentPadding = PaddingValues(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth().weight(1f)
+                    ) {
+                        gridItems(filteredBooks) { book ->
+                            StoreSmallBookCard(
+                                book = book,
+                                downloading = actionState.downloadingBookId == book.id,
+                                managementMode = managementMode,
+                                selected = book.id in selectedIds,
+                                onBookClick = {
+                                    if (managementMode && it.kind == StoreItemKind.LOCAL) {
+                                        selectedIds = toggleSelection(selectedIds, it.id)
+                                    } else {
+                                        openBook(it)
+                                    }
+                                },
+                                onDownloadClick = viewModel::downloadRemoteBook,
+                                onLocalShelfClick = viewModel::addLocalBookToShelf
+                            )
+                        }
+                    }
+                }
             }
 //            SectionHeader("最近更新", "更多更新 ›")
 //            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -309,7 +337,8 @@ private fun ViewModeDialog(
     val viewModes = listOf(
         Triple(0, Icons.Default.GridView, "网格视图"),
         Triple(1, Icons.AutoMirrored.Filled.FormatListBulleted, "封面列表"),
-        Triple(2, Icons.AutoMirrored.Filled.ViewList, "紧凑列表")
+        Triple(2, Icons.AutoMirrored.Filled.ViewList, "紧凑列表"),
+        Triple(3, Icons.Default.GridView, "小网格视图")
     )
 
     AlertDialog(
@@ -989,6 +1018,82 @@ private fun StoreBookCard(
                             tint = if (book.shelved) DesignTokens.SoftText else DesignTokens.Accent,
                             modifier = Modifier
                                 .size(22.dp)
+                                .clickable(
+                                    enabled = !book.shelved,
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onLocalShelfClick(book) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StoreSmallBookCard(
+    book: StoreBook,
+    downloading: Boolean,
+    managementMode: Boolean,
+    selected: Boolean,
+    onBookClick: (StoreBook) -> Unit = {},
+    onDownloadClick: (StoreBook) -> Unit = {},
+    onLocalShelfClick: (StoreBook) -> Unit = {}
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onBookClick(book) },
+        shape = RoundedCornerShape(DesignTokens.CardRadius),
+        colors = CardDefaults.cardColors(containerColor = DesignTokens.CardBackground)
+    ) {
+        Column {
+            Box {
+                BookCover(
+                    title = book.title,
+                    modifier = Modifier.fillMaxWidth(),
+                    width = null,
+                    height = 140.dp,
+                    imageUri = book.coverUri,
+                    brush = Brush.verticalGradient(listOf(titleColor(book.title), Color(0xFF1C1B18)))
+                )
+                CoverSourceBadge(
+                    text = if (book.kind == StoreItemKind.LOCAL) "本地" else "OPDS",
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(4.dp)
+                )
+                if (managementMode && book.kind == StoreItemKind.LOCAL) {
+                    StoreSelectionMark(
+                        selected = selected,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(book.format, color = DesignTokens.Accent, style = MaterialTheme.typography.labelSmall)
+                    if (book.kind == StoreItemKind.LOCAL && !managementMode) {
+                        Icon(
+                            imageVector = if (book.shelved) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
+                            contentDescription = if (book.shelved) "已在书架" else "加入书架",
+                            tint = if (book.shelved) DesignTokens.SoftText else DesignTokens.Accent,
+                            modifier = Modifier
+                                .size(18.dp)
                                 .clickable(
                                     enabled = !book.shelved,
                                     interactionSource = remember { MutableInteractionSource() },
