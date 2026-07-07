@@ -128,6 +128,7 @@ class ShelfViewModel(
             val result = bookRepository.importBook(uri, fileName)
             _importMessage.value = when (result) {
                 is ImportResult.Added -> "已加入书架：${result.book.title}"
+                is ImportResult.Restored -> "已恢复到书城：${result.book.title}"
                 is ImportResult.Duplicate -> "书架中已存在：${result.existingBook.title}"
                 is ImportResult.UnsupportedFormat -> "当前文件格式暂不支持：${result.fileName}"
                 is ImportResult.Failed -> "导入失败：${result.message}"

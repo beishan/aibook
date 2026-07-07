@@ -95,7 +95,7 @@ class ScanDirectoryViewModel(
     }
 
     private fun ScanImportStats.toMessage(prefix: String): String {
-        return "$prefix：扫描 $scanned 个文件，新增 $added 本，重复 $duplicate 本，不支持 $unsupported 个，失败 $failed 个"
+        return "$prefix：扫描 $scanned 个文件，新增 $added 本，恢复 $restored 本，重复 $duplicate 本，不支持 $unsupported 个，失败 $failed 个"
     }
 
     companion object {

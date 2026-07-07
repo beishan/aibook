@@ -83,6 +83,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
@@ -103,6 +104,7 @@ import com.aibook.android.core.reader.ReaderChapter
 import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.WarmProgress
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -127,7 +129,8 @@ private data class ReaderPageContent(
     val startLineIndex: Int,
     val endLineIndex: Int,
     val title: String?,
-    val paragraphs: List<String>
+    val paragraphs: List<String>,
+    val imageUri: String? = null
 )
 
 @Composable
@@ -280,7 +283,7 @@ private fun ReaderMainPage(
                     color = colors.foreground,
                     textAlign = TextAlign.Center
                 )
-                state.content.isNotBlank() -> ReaderTextContent(
+                state.hasReadableContent -> ReaderTextContent(
                     state = state,
                     settings = settings,
                     scrollState = scrollState,
@@ -407,6 +410,15 @@ private fun ReaderTextContent(
                     fontWeight = FontWeight.ExtraBold,
                     fontFamily = fontFamily
                 )
+            }
+            chapter.imageUri?.let { imageUri ->
+                item(key = "image_${chapter.index}") {
+                    ReaderChapterImage(
+                        imageUri = imageUri,
+                        title = chapter.title,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
             items(paragraphs.size, key = { "p_${chapter.index}_$it" }) { index ->
                 Text(
@@ -557,6 +569,13 @@ private fun ReaderPagedContent(
                         fontFamily = fontFamily
                     )
                 }
+            if (page.imageUri != null) {
+                ReaderChapterImage(
+                    imageUri = page.imageUri,
+                    title = page.title ?: "",
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             page.paragraphs.forEach { paragraph ->
                 Text(
                     text = paragraph,
@@ -587,7 +606,8 @@ private fun buildReaderPages(
                 startLineIndex = 0,
                 endLineIndex = 0,
                 title = chapter.title,
-                paragraphs = emptyList()
+                paragraphs = emptyList(),
+                imageUri = chapter.imageUri
             )
             return@forEach
         }
@@ -603,7 +623,8 @@ private fun buildReaderPages(
                 startLineIndex = startLineIndex,
                 endLineIndex = endLineIndex.coerceAtLeast(startLineIndex),
                 title = title,
-                paragraphs = pageParagraphs.toList()
+                paragraphs = pageParagraphs.toList(),
+                imageUri = if (title != null) chapter.imageUri else null
             )
             title = null
             pageParagraphs.clear()
@@ -634,6 +655,27 @@ private fun paragraphGap(spacing: ParagraphSpacing) = when (spacing) {
     ParagraphSpacing.NONE -> 12.dp
     ParagraphSpacing.SMALL -> 22.dp
     ParagraphSpacing.LARGE -> 34.dp
+}
+
+@Composable
+private fun ReaderChapterImage(
+    imageUri: String,
+    title: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(520.dp)
+            .clip(RoundedCornerShape(6.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        AsyncImage(
+            model = imageUri,
+            contentDescription = title,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize()
+        )
+    }
 }
 
 @Composable

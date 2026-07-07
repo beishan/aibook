@@ -13,7 +13,7 @@ import androidx.room.RoomDatabase
         OpdsCatalogEntryEntity::class,
         ShelfFolderEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AiBookDatabase : RoomDatabase() {

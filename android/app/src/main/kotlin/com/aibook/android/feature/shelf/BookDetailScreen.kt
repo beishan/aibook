@@ -89,7 +89,12 @@ fun BookDetailScreen(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
-            BookCover(title = currentBook.title, width = 142.dp, height = 212.dp)
+            BookCover(
+                title = currentBook.title,
+                width = 142.dp,
+                height = 212.dp,
+                imageUri = currentBook.coverUri
+            )
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(currentBook.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(currentBook.author ?: "未知作者 ›", color = DesignTokens.SoftText)

@@ -25,6 +25,7 @@ fun BookEntity.toDomain(): LocalBook {
         status = runCatching { ReadingStatus.valueOf(status) }.getOrDefault(ReadingStatus.UNREAD),
         favorite = favorite,
         shelved = shelved,
+        visibleInStore = visibleInStore,
         importedAt = Instant.ofEpochMilli(importedAt),
         lastReadAt = lastReadAt?.let { Instant.ofEpochMilli(it) },
         progress = ReadingProgress(
@@ -52,6 +53,7 @@ fun LocalBook.toEntity(): BookEntity {
         status = status.name,
         favorite = favorite,
         shelved = shelved,
+        visibleInStore = visibleInStore,
         importedAt = importedAt.toEpochMilli(),
         lastReadAt = lastReadAt?.toEpochMilli(),
         progressPercent = progress.percent,

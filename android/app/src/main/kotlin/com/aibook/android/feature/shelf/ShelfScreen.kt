@@ -533,6 +533,7 @@ private fun ContinueReadingCard(
                 title = book.title,
                 width = 106.dp,
                 height = 160.dp,
+                imageUri = book.coverUri,
                 modifier = Modifier.clickable(onClick = onCoverClick)
             )
             Column(
@@ -599,6 +600,7 @@ private fun ReadingBookCard(
                     modifier = Modifier.clickable(onClick = onCoverClick),
                     width = 72.dp,
                     height = 104.dp,
+                    imageUri = book.coverUri,
                     brush = Brush.verticalGradient(listOf(Color(0xFF607D8B), Color(0xFF1B242A)))
                 )
                 if (managementMode) {

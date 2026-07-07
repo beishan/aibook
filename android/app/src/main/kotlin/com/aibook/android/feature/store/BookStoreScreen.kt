@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -33,10 +34,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -76,7 +82,12 @@ fun BookStoreScreen(
     val prefs = remember { context.getSharedPreferences("store_prefs", Context.MODE_PRIVATE) }
     // 0=网格视图, 1=带封面列表, 2=紧凑列表
     var viewMode by remember { mutableIntStateOf(prefs.getInt("view_mode", 0)) }
+    var managementMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     val filteredBooks = uiState.filteredBooks
+    val localBooks = filteredBooks.filter { it.kind == StoreItemKind.LOCAL }
+    val selectedLocalBooks = filteredBooks.filter { it.kind == StoreItemKind.LOCAL && it.id in selectedIds }
+    val allLocalSelected = localBooks.isNotEmpty() && localBooks.all { it.id in selectedIds }
     val openBook: (StoreBook) -> Unit = { book ->
         when {
             book.kind == StoreItemKind.LOCAL -> onBookClick(book.id)
@@ -97,7 +108,7 @@ fun BookStoreScreen(
     }
 
     DesignPage(
-        title = "",
+        title = if (managementMode) "已选 ${selectedLocalBooks.size} 本" else "",
         modifier = Modifier.fillMaxSize(),
         actions = {
             Icon(
@@ -128,6 +139,16 @@ fun BookStoreScreen(
                     onClick = onCategoryClick
                 )
             )
+            Text(
+                if (managementMode) "取消" else "管理",
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    managementMode = !managementMode
+                    selectedIds = emptySet()
+                }
+            )
         }
     ) {
         Column(
@@ -156,6 +177,25 @@ fun BookStoreScreen(
                     }
                 }
             }
+            if (managementMode) {
+                StoreManagementBar(
+                    selectedCount = selectedLocalBooks.size,
+                    allLocalSelected = allLocalSelected,
+                    hasLocalBooks = localBooks.isNotEmpty(),
+                    onSelectAll = {
+                        selectedIds = if (allLocalSelected) {
+                            selectedIds - localBooks.map { it.id }.toSet()
+                        } else {
+                            selectedIds + localBooks.map { it.id }
+                        }
+                    },
+                    onRemove = {
+                        viewModel.removeLocalBooksFromStore(selectedLocalBooks)
+                        selectedIds = emptySet()
+                        managementMode = false
+                    }
+                )
+            }
 //            StoreHeroCard(featuredBooks = featuredBooks, onExploreClick = onCategoryClick)
 //            SectionHeader("全部浏览", "全部书籍 ${filteredBooks.size} ›")
             when (viewMode) {
@@ -172,8 +212,17 @@ fun BookStoreScreen(
                             StoreBookCard(
                                 book = book,
                                 downloading = actionState.downloadingBookId == book.id,
-                                onBookClick = openBook,
-                                onDownloadClick = viewModel::downloadRemoteBook
+                                managementMode = managementMode,
+                                selected = book.id in selectedIds,
+                                onBookClick = {
+                                    if (managementMode && it.kind == StoreItemKind.LOCAL) {
+                                        selectedIds = toggleSelection(selectedIds, it.id)
+                                    } else {
+                                        openBook(it)
+                                    }
+                                },
+                                onDownloadClick = viewModel::downloadRemoteBook,
+                                onLocalShelfClick = viewModel::addLocalBookToShelf
                             )
                         }
                     }
@@ -189,8 +238,17 @@ fun BookStoreScreen(
                             StoreListItem(
                                 book = book,
                                 downloading = actionState.downloadingBookId == book.id,
-                                onBookClick = openBook,
-                                onDownloadClick = viewModel::downloadRemoteBook
+                                managementMode = managementMode,
+                                selected = book.id in selectedIds,
+                                onBookClick = {
+                                    if (managementMode && it.kind == StoreItemKind.LOCAL) {
+                                        selectedIds = toggleSelection(selectedIds, it.id)
+                                    } else {
+                                        openBook(it)
+                                    }
+                                },
+                                onDownloadClick = viewModel::downloadRemoteBook,
+                                onLocalShelfClick = viewModel::addLocalBookToShelf
                             )
                         }
                     }
@@ -206,8 +264,17 @@ fun BookStoreScreen(
                             StoreCompactListItem(
                                 book = book,
                                 downloading = actionState.downloadingBookId == book.id,
-                                onBookClick = openBook,
-                                onDownloadClick = viewModel::downloadRemoteBook
+                                managementMode = managementMode,
+                                selected = book.id in selectedIds,
+                                onBookClick = {
+                                    if (managementMode && it.kind == StoreItemKind.LOCAL) {
+                                        selectedIds = toggleSelection(selectedIds, it.id)
+                                    } else {
+                                        openBook(it)
+                                    }
+                                },
+                                onDownloadClick = viewModel::downloadRemoteBook,
+                                onLocalShelfClick = viewModel::addLocalBookToShelf
                             )
                         }
                     }
@@ -221,6 +288,10 @@ fun BookStoreScreen(
 //            }
         }
     }
+}
+
+private fun toggleSelection(selectedIds: Set<String>, id: String): Set<String> {
+    return if (id in selectedIds) selectedIds - id else selectedIds + id
 }
 
 @Composable
@@ -423,6 +494,62 @@ private fun StoreChip(
             )
             .padding(horizontal = 16.dp, vertical = 8.dp)
     )
+}
+
+@Composable
+private fun StoreManagementBar(
+    selectedCount: Int,
+    allLocalSelected: Boolean,
+    hasLocalBooks: Boolean,
+    onSelectAll: () -> Unit,
+    onRemove: () -> Unit
+) {
+    SoftCard(color = DesignTokens.WarmCard) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = allLocalSelected,
+                        enabled = hasLocalBooks,
+                        onCheckedChange = { onSelectAll() }
+                    )
+                    Text(if (allLocalSelected) "取消全选本地书" else "全选本地书")
+                }
+                Text("已选 $selectedCount 本", color = DesignTokens.SoftText)
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "移出后不删除文件，再次导入同一文件可恢复到书城",
+                    color = DesignTokens.SoftText,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = onRemove,
+                    enabled = selectedCount > 0,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB44A35)),
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 0.dp,
+                        pressedElevation = 0.dp,
+                        focusedElevation = 0.dp,
+                        hoveredElevation = 0.dp,
+                        disabledElevation = 0.dp
+                    )
+                ) {
+                    Icon(Icons.Default.RemoveCircleOutline, contentDescription = null)
+                    Text("移出书城")
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -694,6 +821,7 @@ private fun CategoryBookCard(book: StoreBook, onBookClick: (StoreBook) -> Unit =
                     modifier = Modifier.fillMaxWidth(),
                     width = 96.dp,
                     height = 132.dp,
+                    imageUri = book.coverUri,
                     brush = Brush.verticalGradient(listOf(titleColor(book.title), Color(0xFF1C1B18)))
                 )
                 CategorySourceBadge(
@@ -727,8 +855,11 @@ private fun CategorySourceBadge(text: String, modifier: Modifier = Modifier) {
 private fun StoreBookCard(
     book: StoreBook,
     downloading: Boolean,
+    managementMode: Boolean,
+    selected: Boolean,
     onBookClick: (StoreBook) -> Unit = {},
-    onDownloadClick: (StoreBook) -> Unit = {}
+    onDownloadClick: (StoreBook) -> Unit = {},
+    onLocalShelfClick: (StoreBook) -> Unit = {}
 ) {
     SoftCard(
         modifier = Modifier.clickable(
@@ -737,12 +868,23 @@ private fun StoreBookCard(
         ) { onBookClick(book) }
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            BookCover(
-                title = book.title,
-                width = 72.dp,
-                height = 104.dp,
-                brush = Brush.verticalGradient(listOf(titleColor(book.title), Color(0xFF1C1B18)))
-            )
+            Box {
+                BookCover(
+                    title = book.title,
+                    width = 72.dp,
+                    height = 104.dp,
+                    imageUri = book.coverUri,
+                    brush = Brush.verticalGradient(listOf(titleColor(book.title), Color(0xFF1C1B18)))
+                )
+                if (managementMode && book.kind == StoreItemKind.LOCAL) {
+                    StoreSelectionMark(
+                        selected = selected,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                    )
+                }
+            }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -751,10 +893,12 @@ private fun StoreBookCard(
                 Text(book.author, color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(book.format, color = DesignTokens.Accent)
                 SourceBadge(book.sourceName)
-                StoreRemoteAction(
+                StoreBookAction(
                     book = book,
                     downloading = downloading,
-                    onDownloadClick = onDownloadClick
+                    managementMode = managementMode,
+                    onDownloadClick = onDownloadClick,
+                    onLocalShelfClick = onLocalShelfClick
                 )
             }
         }
@@ -765,8 +909,11 @@ private fun StoreBookCard(
 private fun StoreListItem(
     book: StoreBook,
     downloading: Boolean,
+    managementMode: Boolean,
+    selected: Boolean,
     onBookClick: (StoreBook) -> Unit = {},
-    onDownloadClick: (StoreBook) -> Unit = {}
+    onDownloadClick: (StoreBook) -> Unit = {},
+    onLocalShelfClick: (StoreBook) -> Unit = {}
 ) {
     SoftCard(
         modifier = Modifier.fillMaxWidth().clickable(
@@ -779,10 +926,14 @@ private fun StoreListItem(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
+            if (managementMode && book.kind == StoreItemKind.LOCAL) {
+                StoreSelectionMark(selected = selected)
+            }
             BookCover(
                 title = book.title,
                 width = 48.dp,
                 height = 68.dp,
+                imageUri = book.coverUri,
                 brush = Brush.verticalGradient(listOf(titleColor(book.title), Color(0xFF1C1B18)))
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -791,22 +942,44 @@ private fun StoreListItem(
             }
             Text(book.format, color = DesignTokens.Accent, style = MaterialTheme.typography.bodySmall)
             SourceBadge(book.sourceName)
-            StoreRemoteAction(
+            StoreBookAction(
                 book = book,
                 downloading = downloading,
-                onDownloadClick = onDownloadClick
+                managementMode = managementMode,
+                onDownloadClick = onDownloadClick,
+                onLocalShelfClick = onLocalShelfClick
             )
         }
     }
 }
 
 @Composable
-private fun StoreRemoteAction(
+private fun StoreBookAction(
     book: StoreBook,
     downloading: Boolean,
-    onDownloadClick: (StoreBook) -> Unit
+    managementMode: Boolean,
+    onDownloadClick: (StoreBook) -> Unit,
+    onLocalShelfClick: (StoreBook) -> Unit
 ) {
-    if (book.kind != StoreItemKind.OPDS) return
+    if (book.kind == StoreItemKind.LOCAL) {
+        if (managementMode) return
+        val label = if (book.shelved) "已在书架" else "加入书架"
+        Text(
+            label,
+            modifier = Modifier
+                .background(DesignTokens.Accent.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                .clickable(
+                    enabled = !book.shelved,
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onLocalShelfClick(book) }
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            color = if (book.shelved) DesignTokens.SoftText else DesignTokens.Accent,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelMedium
+        )
+        return
+    }
 
     val label = when {
         book.isDownloaded -> "已下载"
@@ -833,8 +1006,11 @@ private fun StoreRemoteAction(
 private fun StoreCompactListItem(
     book: StoreBook,
     downloading: Boolean,
+    managementMode: Boolean,
+    selected: Boolean,
     onBookClick: (StoreBook) -> Unit = {},
-    onDownloadClick: (StoreBook) -> Unit = {}
+    onDownloadClick: (StoreBook) -> Unit = {},
+    onLocalShelfClick: (StoreBook) -> Unit = {}
 ) {
     Row(
         modifier = Modifier
@@ -848,16 +1024,41 @@ private fun StoreCompactListItem(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (managementMode && book.kind == StoreItemKind.LOCAL) {
+            StoreSelectionMark(selected = selected)
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(book.author, color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
         }
         Text(book.format, color = DesignTokens.Accent, style = MaterialTheme.typography.bodySmall)
         SourceBadge(book.sourceName)
-        StoreRemoteAction(
+        StoreBookAction(
             book = book,
             downloading = downloading,
-            onDownloadClick = onDownloadClick
+            managementMode = managementMode,
+            onDownloadClick = onDownloadClick,
+            onLocalShelfClick = onLocalShelfClick
+        )
+    }
+}
+
+@Composable
+private fun StoreSelectionMark(
+    selected: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(26.dp)
+            .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(999.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            Icons.Default.CheckCircle,
+            contentDescription = "选择",
+            tint = if (selected) DesignTokens.Accent else DesignTokens.SoftText,
+            modifier = Modifier.size(21.dp)
         )
     }
 }
@@ -878,6 +1079,7 @@ private fun RecentUpdateCard(book: StoreBook) {
                 title = book.title,
                 width = 50.dp,
                 height = 70.dp,
+                imageUri = book.coverUri,
                 brush = Brush.verticalGradient(listOf(titleColor(book.title), Color(0xFF1C1B18)))
             )
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

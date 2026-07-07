@@ -101,6 +101,107 @@ class StoreCatalogTest {
     }
 
     @Test
+    fun hiddenLocalBooksAreExcludedFromStoreCatalog() {
+        val books = StoreCatalog.aggregate(
+            localBooks = listOf(
+                StoreCatalog.LocalInput(
+                    id = "visible-local",
+                    title = "可见本地书",
+                    author = "作者",
+                    format = "EPUB",
+                    importedAtEpochSeconds = 50L,
+                    visibleInStore = true
+                ),
+                StoreCatalog.LocalInput(
+                    id = "hidden-local",
+                    title = "已移出本地书",
+                    author = "作者",
+                    format = "TXT",
+                    importedAtEpochSeconds = 60L,
+                    visibleInStore = false
+                )
+            ),
+            opdsEntries = emptyList(),
+            enabledConnectionIds = emptySet()
+        )
+
+        assertEquals(listOf("可见本地书"), books.map { it.title })
+    }
+
+    @Test
+    fun hiddenLocalBooksStillMatchDownloadedRemoteEntries() {
+        val books = StoreCatalog.aggregate(
+            localBooks = listOf(
+                StoreCatalog.LocalInput(
+                    id = "hidden-local-foundation",
+                    title = "银河帝国",
+                    author = "Isaac Asimov",
+                    format = "EPUB",
+                    importedAtEpochSeconds = 50L,
+                    visibleInStore = false
+                )
+            ),
+            opdsEntries = listOf(
+                StoreCatalog.OpdsInput(
+                    id = "remote-foundation",
+                    connectionId = "source-1",
+                    sourceName = "家庭书库",
+                    title = "银河帝国",
+                    author = "Isaac Asimov",
+                    format = "EPUB",
+                    categories = listOf("科幻"),
+                    syncedAt = 80L,
+                    acquisitionHref = "/foundation.epub"
+                )
+            ),
+            enabledConnectionIds = setOf("source-1")
+        )
+
+        assertEquals(listOf("银河帝国"), books.map { it.title })
+        assertEquals("hidden-local-foundation", books.single().downloadedLocalId)
+    }
+
+    @Test
+    fun localCoverUriIsPreservedForStoreCards() {
+        val books = StoreCatalog.aggregate(
+            localBooks = listOf(
+                StoreCatalog.LocalInput(
+                    id = "local-cover",
+                    title = "有封面的本地书",
+                    author = "作者",
+                    format = "EPUB",
+                    importedAtEpochSeconds = 50L,
+                    coverUri = "/covers/local-cover.jpg"
+                )
+            ),
+            opdsEntries = emptyList(),
+            enabledConnectionIds = emptySet()
+        )
+
+        assertEquals("/covers/local-cover.jpg", books.single().coverUri)
+    }
+
+    @Test
+    fun localShelvedStateIsPreservedForStoreActions() {
+        val books = StoreCatalog.aggregate(
+            localBooks = listOf(
+                StoreCatalog.LocalInput(
+                    id = "local-shelved",
+                    title = "已上架本地书",
+                    author = "作者",
+                    format = "EPUB",
+                    importedAtEpochSeconds = 50L,
+                    shelved = true
+                )
+            ),
+            opdsEntries = emptyList(),
+            enabledConnectionIds = emptySet()
+        )
+
+        assertEquals(true, books.single().shelved)
+    }
+
+    @Test
     fun opdsEntrySummaryIsPreservedForRemoteDetail() {
         val books = StoreCatalog.aggregate(
             localBooks = emptyList(),

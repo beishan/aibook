@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
@@ -25,10 +26,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 
 @Composable
 fun DesignPage(
@@ -109,8 +112,22 @@ fun BookCover(
     modifier: Modifier = Modifier,
     width: Dp = 88.dp,
     height: Dp = 128.dp,
+    imageUri: String? = null,
     brush: Brush = Brush.verticalGradient(listOf(Color(0xFF28323A), Color(0xFF0F1418)))
 ) {
+    if (!imageUri.isNullOrBlank()) {
+        AsyncImage(
+            model = imageUri,
+            contentDescription = title,
+            contentScale = ContentScale.Crop,
+            modifier = modifier
+                .size(width, height)
+                .clip(RoundedCornerShape(8.dp))
+                .background(brush, RoundedCornerShape(8.dp))
+        )
+        return
+    }
+
     Box(
         modifier = modifier
             .size(width, height)

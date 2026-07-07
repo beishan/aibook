@@ -9,23 +9,27 @@ object StoreCatalog {
         enabledConnectionIds: Set<String>
     ): List<StoreBook> {
         val localByTitleAndFormat = localBooks.associateBy { downloadMatchKey(it.title, it.format) }
-        val localItems = localBooks.map {
-            StoreBook(
-                id = it.id,
-                title = it.title,
-                author = it.author ?: "未知作者",
-                summary = null,
-                sourceId = LOCAL_SOURCE_ID,
-                sourceName = "本地",
-                kind = StoreItemKind.LOCAL,
-                format = it.format,
-                categories = listOf(it.format),
-                updatedRank = it.importedAtEpochSeconds,
-                acquisitionHref = null,
-                acquisitionType = null,
-                downloadedLocalId = it.id
-            )
-        }
+        val localItems = localBooks
+            .filter { it.visibleInStore }
+            .map {
+                StoreBook(
+                    id = it.id,
+                    title = it.title,
+                    author = it.author ?: "未知作者",
+                    summary = null,
+                    sourceId = LOCAL_SOURCE_ID,
+                    sourceName = "本地",
+                    kind = StoreItemKind.LOCAL,
+                    format = it.format,
+                    categories = listOf(it.format),
+                    updatedRank = it.importedAtEpochSeconds,
+                    acquisitionHref = null,
+                    acquisitionType = null,
+                    downloadedLocalId = it.id,
+                    coverUri = it.coverUri,
+                    shelved = it.shelved
+                )
+            }
         val opdsItems = opdsEntries
             .filter { it.connectionId in enabledConnectionIds }
             .map {
@@ -43,7 +47,9 @@ object StoreCatalog {
                     updatedRank = it.syncedAt,
                     acquisitionHref = it.acquisitionHref,
                     acquisitionType = it.acquisitionType,
-                    downloadedLocalId = downloadedLocal?.id
+                    downloadedLocalId = downloadedLocal?.id,
+                    coverUri = downloadedLocal?.coverUri,
+                    shelved = downloadedLocal?.shelved == true
                 )
             }
         return (opdsItems + localItems).sortedWith(StoreSortOption.RECENT.comparator)
@@ -91,7 +97,10 @@ object StoreCatalog {
         val title: String,
         val author: String?,
         val format: String,
-        val importedAtEpochSeconds: Long
+        val importedAtEpochSeconds: Long,
+        val visibleInStore: Boolean = true,
+        val coverUri: String? = null,
+        val shelved: Boolean = false
     )
 
     data class OpdsInput(
@@ -132,7 +141,9 @@ data class StoreBook(
     val updatedRank: Long,
     val acquisitionHref: String?,
     val acquisitionType: String?,
-    val downloadedLocalId: String? = null
+    val downloadedLocalId: String? = null,
+    val coverUri: String? = null,
+    val shelved: Boolean = false
 ) {
     val isDownloaded: Boolean get() = downloadedLocalId != null
 }

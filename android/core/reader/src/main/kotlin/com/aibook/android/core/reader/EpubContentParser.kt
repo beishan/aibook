@@ -5,6 +5,7 @@ import org.w3c.dom.Element
 import org.w3c.dom.Node
 import java.io.ByteArrayInputStream
 import java.net.URI
+import java.util.Base64
 import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 
@@ -40,7 +41,7 @@ object EpubContentParser {
         val chapters = documentItems.mapIndexedNotNull { index, item ->
             val path = resolvePath(basePath, item.href)
             val documentBytes = entries[path] ?: return@mapIndexedNotNull null
-            parseChapter(index, path, documentBytes)
+            parseChapter(index, path, documentBytes, entries)
         }
 
         return EpubBookContent(metadata = metadata, chapters = chapters)
@@ -90,7 +91,12 @@ object EpubContentParser {
             val id = element.getAttribute("id").takeIf { it.isNotBlank() } ?: continue
             val href = element.getAttribute("href").takeIf { it.isNotBlank() } ?: continue
             val mediaType = element.getAttribute("media-type")
-            items[id] = ManifestItem(id, href, mediaType)
+            items[id] = ManifestItem(
+                id = id,
+                href = href,
+                mediaType = mediaType,
+                properties = element.getAttribute("properties")
+            )
         }
         return items
     }
@@ -106,10 +112,18 @@ object EpubContentParser {
         return ids
     }
 
-    private fun parseChapter(index: Int, href: String, bytes: ByteArray): ReaderChapter {
+    private fun parseChapter(
+        index: Int,
+        href: String,
+        bytes: ByteArray,
+        entries: Map<String, ByteArray>
+    ): ReaderChapter {
         val document = parseXml(sanitizeXhtml(bytes).toByteArray())
         val body = document.getElementsByTagNameNS("*", "body").item(0) ?: document.documentElement
-        val title = firstHeading(body) ?: "第${index + 1}章"
+        val image = firstImage(body, href, entries)
+        val title = firstHeading(body)
+            ?: image?.alt?.takeIf { it.isNotBlank() }
+            ?: if (image != null) "封面" else "第${index + 1}章"
         val paragraphs = mutableListOf<String>()
         collectBlockText(body, paragraphs)
         val content = paragraphs
@@ -121,8 +135,34 @@ object EpubContentParser {
             index = index,
             title = title.trimWhitespace(),
             href = href,
-            content = content
+            content = content,
+            imageUri = image?.dataUri
         )
+    }
+
+    private fun firstImage(node: Node, chapterHref: String, entries: Map<String, ByteArray>): ChapterImage? {
+        if (node is Element && node.localName?.lowercase() == "img") {
+            val src = node.getAttribute("src").takeIf { it.isNotBlank() }
+                ?: node.getAttribute("href").takeIf { it.isNotBlank() }
+            if (src != null) {
+                val chapterBasePath = chapterHref.substringBeforeLast('/', missingDelimiterValue = "")
+                val imagePath = resolvePath(chapterBasePath, src)
+                val bytes = entries[imagePath]
+                if (bytes != null) {
+                    val mediaType = mediaTypeFor(imagePath)
+                    val encoded = Base64.getEncoder().encodeToString(bytes)
+                    return ChapterImage(
+                        dataUri = "data:$mediaType;base64,$encoded",
+                        alt = node.getAttribute("alt")
+                    )
+                }
+            }
+        }
+        val children = node.childNodes
+        for (i in 0 until children.length) {
+            firstImage(children.item(i), chapterHref, entries)?.let { return it }
+        }
+        return null
     }
 
     private fun firstHeading(node: Node): String? {
@@ -194,8 +234,25 @@ object EpubContentParser {
     private data class ManifestItem(
         val id: String,
         val href: String,
-        val mediaType: String
+        val mediaType: String,
+        val properties: String
     )
+
+    private data class ChapterImage(
+        val dataUri: String,
+        val alt: String?
+    )
+
+    private fun mediaTypeFor(path: String): String {
+        return when (path.substringAfterLast('.', missingDelimiterValue = "").lowercase()) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "gif" -> "image/gif"
+            "webp" -> "image/webp"
+            "svg" -> "image/svg+xml"
+            else -> "application/octet-stream"
+        }
+    }
 
     private val headingNames = setOf("h1", "h2", "h3", "h4", "h5", "h6", "title")
     private val blockNames = setOf("p", "div", "section", "blockquote", "li")

@@ -55,6 +55,8 @@ data class ReaderUiState(
     val hasSettingsDraft: Boolean = false
 ) {
     val content: String get() = loadedChapters.joinToString("\n") { it.content }
+    val hasReadableContent: Boolean get() =
+        loadedChapters.any { it.content.isNotBlank() || !it.imageUri.isNullOrBlank() }
     val currentChapterTitle: String get() =
         loadedChapters.lastOrNull()?.title
             ?: chapters.getOrNull(currentChapterIndex)?.title
@@ -122,7 +124,7 @@ class ReaderViewModel(
 
                         // Readium 返回空或初始章节内容为空时，降级到 EpubContentParser
                         if (epub == null || epub.chapters.isEmpty() ||
-                            epub.chapters.firstOrNull { it.content.isNotBlank() } == null
+                            epub.chapters.firstOrNull()?.let { it.content.isBlank() && it.imageUri.isNullOrBlank() } == true
                         ) {
                             epub = runCatching {
                                 EpubContentParser.parse(file.readBytes())
@@ -221,7 +223,7 @@ class ReaderViewModel(
         val chapter = chapters.getOrNull(index) ?: return
         val book = _state.value.book ?: return
 
-        if (book.format == BookFormat.EPUB && chapter.content.isBlank()) {
+        if (book.format == BookFormat.EPUB && chapter.content.isBlank() && chapter.imageUri.isNullOrBlank()) {
             // 需要先从 Readium 加载这个章节
             if (!loadingChapterIndexes.add(index)) return
             viewModelScope.launch {
@@ -276,7 +278,7 @@ class ReaderViewModel(
         val nextChapter = state.chapters[nextIndex]
         val book = state.book
 
-        if (book?.format == BookFormat.EPUB && nextChapter.content.isBlank()) {
+        if (book?.format == BookFormat.EPUB && nextChapter.content.isBlank() && nextChapter.imageUri.isNullOrBlank()) {
             if (!loadingChapterIndexes.add(nextIndex)) return
             viewModelScope.launch {
                 val loaded = runCatching {
@@ -513,10 +515,10 @@ class ReaderViewModel(
             return
         }
         val savedProgress = _state.value.book?.progress
-        val initialIndex = savedProgress?.chapterIndex?.takeIf { it in chapters.indices }
-            ?: ReaderChapterSelection.selectInitialIndex(
+        val initialIndex = ReaderChapterSelection.selectInitialIndex(
             chapters = chapters,
-            preferredHref = savedProgress?.chapterHref
+            preferredHref = savedProgress?.chapterHref,
+            preferredIndex = savedProgress?.chapterIndex
         )
         val chapter = chapters.getOrNull(initialIndex)
         val restoredLineIndex = savedProgress
@@ -545,7 +547,7 @@ class ReaderViewModel(
         if (book.format != BookFormat.EPUB) return
         val nextIndex = afterIndex + 1
         val nextChapter = state.chapters.getOrNull(nextIndex) ?: return
-        if (nextChapter.content.isNotBlank()) return
+        if (nextChapter.content.isNotBlank() || !nextChapter.imageUri.isNullOrBlank()) return
         if (!loadingChapterIndexes.add(nextIndex)) return
 
         viewModelScope.launch {

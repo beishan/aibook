@@ -44,6 +44,7 @@ data class LocalBook(
     val status: ReadingStatus = ReadingStatus.UNREAD,
     val favorite: Boolean = false,
     val shelved: Boolean = false,
+    val visibleInStore: Boolean = true,
     val importedAt: Instant = Instant.now(),
     val lastReadAt: Instant? = null,
     val progress: ReadingProgress = ReadingProgress()

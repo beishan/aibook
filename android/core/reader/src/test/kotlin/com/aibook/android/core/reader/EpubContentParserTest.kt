@@ -5,6 +5,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class EpubContentParserTest {
     @Test
@@ -101,7 +102,48 @@ class EpubContentParserTest {
         assertEquals("第一段 有空格。", book.chapters.single().content)
     }
 
-    private fun epubBytes(opf: String, files: Map<String, String>): ByteArray {
+    @Test
+    fun `keeps image-only cover page as readable chapter`() {
+        val coverBytes = byteArrayOf(9, 8, 7, 6)
+        val bytes = epubBytes(
+            opf = """
+                <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+                  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                    <dc:title>封面测试</dc:title>
+                  </metadata>
+                  <manifest>
+                    <item id="cover-page" href="cover.xhtml" media-type="application/xhtml+xml"/>
+                    <item id="cover-image" href="images/cover.jpg" media-type="image/jpeg" properties="cover-image"/>
+                    <item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+                  </manifest>
+                  <spine>
+                    <itemref idref="cover-page"/>
+                    <itemref idref="chapter"/>
+                  </spine>
+                </package>
+            """.trimIndent(),
+            files = mapOf(
+                "OEBPS/cover.xhtml" to """
+                    <html xmlns="http://www.w3.org/1999/xhtml">
+                      <body><div><img src="images/cover.jpg" alt="封面"/></div></body>
+                    </html>
+                """.trimIndent(),
+                "OEBPS/chapter.xhtml" to "<html><body><h1>正文</h1><p>开始阅读。</p></body></html>"
+            ),
+            binaryFiles = mapOf("OEBPS/images/cover.jpg" to coverBytes)
+        )
+
+        val book = EpubContentParser.parse(bytes)
+
+        assertEquals("封面", book.chapters.first().title)
+        assertTrue(book.chapters.first().imageUri.orEmpty().startsWith("data:image/jpeg;base64,"))
+    }
+
+    private fun epubBytes(
+        opf: String,
+        files: Map<String, String>,
+        binaryFiles: Map<String, ByteArray> = emptyMap()
+    ): ByteArray {
         val output = ByteArrayOutputStream()
         ZipOutputStream(output).use { zip ->
             zip.putNextEntry(ZipEntry("META-INF/container.xml"))
@@ -123,6 +165,12 @@ class EpubContentParserTest {
             files.forEach { (name, content) ->
                 zip.putNextEntry(ZipEntry(name))
                 zip.write(content.toByteArray())
+                zip.closeEntry()
+            }
+
+            binaryFiles.forEach { (name, content) ->
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(content)
                 zip.closeEntry()
             }
         }

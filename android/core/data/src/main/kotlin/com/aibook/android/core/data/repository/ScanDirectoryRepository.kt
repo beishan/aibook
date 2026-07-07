@@ -27,6 +27,7 @@ data class ScanDirectory(
 data class ScanImportStats(
     val scanned: Int = 0,
     val added: Int = 0,
+    val restored: Int = 0,
     val duplicate: Int = 0,
     val unsupported: Int = 0,
     val failed: Int = 0
@@ -35,6 +36,7 @@ data class ScanImportStats(
         return ScanImportStats(
             scanned = scanned + other.scanned,
             added = added + other.added,
+            restored = restored + other.restored,
             duplicate = duplicate + other.duplicate,
             unsupported = unsupported + other.unsupported,
             failed = failed + other.failed
@@ -99,7 +101,7 @@ class ScanDirectoryRepository(
                 directory.copy(
                     lastScanAt = System.currentTimeMillis(),
                     discoveredCount = stats.scanned,
-                    addedCount = stats.added,
+                    addedCount = stats.added + stats.restored,
                     duplicateCount = stats.duplicate,
                     unsupportedCount = stats.unsupported,
                     failedCount = stats.failed,
@@ -159,12 +161,19 @@ class ScanDirectoryRepository(
             return ScanImportStats(scanned = 1, unsupported = 1)
         }
         val documentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
-        return when (bookRepository.importBook(documentUri, name)) {
-            is ImportResult.Added -> ScanImportStats(scanned = 1, added = 1)
-            is ImportResult.Duplicate -> ScanImportStats(scanned = 1, duplicate = 1)
-            is ImportResult.UnsupportedFormat -> ScanImportStats(scanned = 1, unsupported = 1)
-            is ImportResult.Failed -> ScanImportStats(scanned = 1, failed = 1)
-        }
+        return runCatching { bookRepository.importBook(documentUri, name) }
+            .fold(
+                onSuccess = { result ->
+                    when (result) {
+                        is ImportResult.Added -> ScanImportStats(scanned = 1, added = 1)
+                        is ImportResult.Restored -> ScanImportStats(scanned = 1, restored = 1)
+                        is ImportResult.Duplicate -> ScanImportStats(scanned = 1, duplicate = 1)
+                        is ImportResult.UnsupportedFormat -> ScanImportStats(scanned = 1, unsupported = 1)
+                        is ImportResult.Failed -> ScanImportStats(scanned = 1, failed = 1)
+                    }
+                },
+                onFailure = { ScanImportStats(scanned = 1, failed = 1) }
+            )
     }
 
     private fun resolveDirectoryName(uri: Uri): String {

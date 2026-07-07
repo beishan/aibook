@@ -27,5 +27,6 @@ data class BookEntity(
     val progressPositionLabel: String? = null,
     val source: String = "LOCAL",
     val remoteBookId: Long? = null,
-    val shelved: Boolean = false
+    val shelved: Boolean = false,
+    val visibleInStore: Boolean = true
 )

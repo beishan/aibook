@@ -57,6 +57,15 @@ interface BookDao {
     @Query("UPDATE books SET shelved = :shelved WHERE id = :id")
     suspend fun setShelved(id: String, shelved: Boolean)
 
+    @Query("UPDATE books SET visibleInStore = :visibleInStore WHERE id = :id")
+    suspend fun setStoreVisible(id: String, visibleInStore: Boolean)
+
+    @Query("UPDATE books SET visibleInStore = 1 WHERE id = :id")
+    suspend fun restoreStoreVisibility(id: String)
+
+    @Query("UPDATE books SET visibleInStore = 0, shelved = 0, folderId = NULL WHERE id = :id")
+    suspend fun removeFromStore(id: String)
+
     @Query("UPDATE books SET folderId = :folderId WHERE id IN (:ids)")
     suspend fun setFolder(ids: List<String>, folderId: String?)
 

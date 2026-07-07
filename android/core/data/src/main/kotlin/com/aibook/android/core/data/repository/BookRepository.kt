@@ -13,6 +13,7 @@ import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.ReadingProgress
 import com.aibook.android.core.model.ReadingStatus
 import com.aibook.android.core.model.ShelfFolder
+import com.aibook.android.core.reader.EpubImage
 import com.aibook.android.core.reader.EpubMetadataParser
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -23,6 +24,7 @@ import java.util.UUID
 
 sealed interface ImportResult {
     data class Added(val book: LocalBook) : ImportResult
+    data class Restored(val book: LocalBook) : ImportResult
     data class Duplicate(val existingBook: LocalBook) : ImportResult
     data class UnsupportedFormat(val fileName: String) : ImportResult
     data class Failed(val message: String) : ImportResult
@@ -35,6 +37,9 @@ class BookRepository(
 ) {
     private val booksDir: File by lazy {
         File(context.filesDir, "books").apply { mkdirs() }
+    }
+    private val coversDir: File by lazy {
+        File(context.filesDir, "covers").apply { mkdirs() }
     }
 
     fun observeBooks(): Flow<List<LocalBook>> {
@@ -64,7 +69,6 @@ class BookRepository(
         val format = BookFormat.fromFileName(resolvedFileName)
             ?: return ImportResult.UnsupportedFormat(resolvedFileName)
 
-        val title = ImportPolicy.normalizedTitle(resolvedFileName)
         val inputStream = context.contentResolver.openInputStream(uri)
             ?: return ImportResult.Failed("无法读取文件")
 
@@ -85,15 +89,26 @@ class BookRepository(
         val existing = bookDao.getBySha256(sha256)
         if (existing != null) {
             destFile.delete()
+            if (!existing.visibleInStore) {
+                bookDao.restoreStoreVisibility(existing.id)
+                return ImportResult.Restored(existing.copy(visibleInStore = true).toDomain())
+            }
             return ImportResult.Duplicate(existing.toDomain())
         }
 
+        val metadata = parseMetadataSafely(format, destFile.readBytes())
+        val title = metadata?.title ?: ImportPolicy.normalizedTitle(resolvedFileName)
+        val bookId = UUID.nameUUIDFromBytes(sha256.toByteArray()).toString()
+        val coverUri = metadata?.coverImage?.let { image -> runCatching { writeCoverImage(bookId, image) }.getOrNull() }
+
         val book = LocalBook(
-            id = UUID.nameUUIDFromBytes(sha256.toByteArray()).toString(),
+            id = bookId,
             title = title,
+            author = metadata?.author,
             format = format,
             uri = destFile.absolutePath,
             sha256 = sha256,
+            coverUri = coverUri,
             importedAt = Instant.now()
         )
 
@@ -108,27 +123,30 @@ class BookRepository(
 
         val existing = bookDao.getBySha256(sha256)
         if (existing != null) {
+            if (!existing.visibleInStore) {
+                bookDao.restoreStoreVisibility(existing.id)
+                return ImportResult.Restored(existing.copy(visibleInStore = true).toDomain())
+            }
             return ImportResult.Duplicate(existing.toDomain())
         }
 
-        val metadata = if (format == BookFormat.EPUB) {
-            EpubMetadataParser.parse(bytes)
-        } else {
-            null
-        }
+        val metadata = parseMetadataSafely(format, bytes)
         val title = metadata?.title
             ?: fallbackTitle?.takeIf { it.isNotBlank() }
             ?: ImportPolicy.normalizedTitle(fileName)
         val destFile = File(booksDir, "${UUID.randomUUID()}.${format.extension}")
         destFile.writeBytes(bytes)
+        val bookId = UUID.nameUUIDFromBytes(sha256.toByteArray()).toString()
+        val coverUri = metadata?.coverImage?.let { image -> runCatching { writeCoverImage(bookId, image) }.getOrNull() }
 
         val book = LocalBook(
-            id = UUID.nameUUIDFromBytes(sha256.toByteArray()).toString(),
+            id = bookId,
             title = title,
             author = metadata?.author,
             format = format,
             uri = destFile.absolutePath,
             sha256 = sha256,
+            coverUri = coverUri,
             importedAt = Instant.now()
         )
 
@@ -169,6 +187,10 @@ class BookRepository(
         bookDao.setShelved(id, shelved)
     }
 
+    suspend fun removeFromStore(id: String) {
+        bookDao.removeFromStore(id)
+    }
+
     suspend fun createShelfFolder(name: String): ShelfFolder {
         val folder = ShelfFolder(
             id = UUID.randomUUID().toString(),
@@ -203,6 +225,27 @@ class BookRepository(
     private fun sha256(bytes: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
         return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun parseMetadataSafely(format: BookFormat, bytes: ByteArray) =
+        if (format == BookFormat.EPUB) {
+            runCatching { EpubMetadataParser.parse(bytes) }.getOrNull()
+        } else {
+            null
+        }
+
+    private fun writeCoverImage(bookId: String, image: EpubImage): String? {
+        if (image.bytes.isEmpty()) return null
+        val extension = when (image.mediaType.lowercase()) {
+            "image/jpeg" -> "jpg"
+            "image/png" -> "png"
+            "image/gif" -> "gif"
+            "image/webp" -> "webp"
+            else -> image.href.substringAfterLast('.', missingDelimiterValue = "jpg").lowercase()
+        }.takeIf { it.matches(Regex("[a-z0-9]+")) } ?: "jpg"
+        val file = File(coversDir, "$bookId.$extension")
+        file.writeBytes(image.bytes)
+        return file.absolutePath
     }
 
     private fun resolveDisplayName(uri: Uri): String? {

@@ -4,7 +4,8 @@ data class ReaderChapter(
     val index: Int,
     val title: String,
     val href: String,
-    val content: String
+    val content: String,
+    val imageUri: String? = null
 )
 
 data class ReaderPage(

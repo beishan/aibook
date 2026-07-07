@@ -58,7 +58,10 @@ class StoreViewModel(
                     title = it.title,
                     author = it.author,
                     format = it.format.displayName,
-                    importedAtEpochSeconds = (it.lastReadAt ?: it.importedAt).epochSecond
+                    importedAtEpochSeconds = (it.lastReadAt ?: it.importedAt).epochSecond,
+                    visibleInStore = it.visibleInStore,
+                    coverUri = it.coverUri,
+                    shelved = it.shelved
                 )
             },
             opdsEntries = opdsEntries.map {
@@ -141,6 +144,7 @@ class StoreViewModel(
                 )
                 val message = when (result) {
                     is ImportResult.Added -> "已下载到书架：${result.book.title}"
+                    is ImportResult.Restored -> "已恢复到书城：${result.book.title}"
                     is ImportResult.Duplicate -> "书架中已存在：${result.existingBook.title}"
                     is ImportResult.UnsupportedFormat -> "暂不支持该格式：${result.fileName}"
                     is ImportResult.Failed -> "下载失败：${result.message}"
@@ -149,6 +153,31 @@ class StoreViewModel(
             } catch (e: Exception) {
                 _actionState.value = StoreActionState(message = "下载失败：${e.message ?: e::class.java.simpleName}")
             }
+        }
+    }
+
+    fun removeLocalBookFromStore(book: StoreBook) {
+        if (book.kind != StoreItemKind.LOCAL) return
+        viewModelScope.launch {
+            bookRepository.removeFromStore(book.id)
+            _actionState.value = StoreActionState(message = "已从书城移出：${book.title}，文件未删除")
+        }
+    }
+
+    fun addLocalBookToShelf(book: StoreBook) {
+        if (book.kind != StoreItemKind.LOCAL || book.shelved) return
+        viewModelScope.launch {
+            bookRepository.setShelved(book.id, true)
+            _actionState.value = StoreActionState(message = "已加入书架：${book.title}")
+        }
+    }
+
+    fun removeLocalBooksFromStore(books: Collection<StoreBook>) {
+        val localBooks = books.filter { it.kind == StoreItemKind.LOCAL }
+        if (localBooks.isEmpty()) return
+        viewModelScope.launch {
+            localBooks.forEach { bookRepository.removeFromStore(it.id) }
+            _actionState.value = StoreActionState(message = "已从书城移出 ${localBooks.size} 本本地书，文件未删除")
         }
     }
 

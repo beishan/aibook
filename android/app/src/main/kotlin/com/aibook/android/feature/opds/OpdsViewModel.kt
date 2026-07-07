@@ -235,6 +235,7 @@ class OpdsViewModel(
                 )
                 val message = when (result) {
                     is ImportResult.Added -> "已下载到书架：${result.book.title}"
+                    is ImportResult.Restored -> "已恢复到书城：${result.book.title}"
                     is ImportResult.Duplicate -> "书架中已存在：${result.existingBook.title}"
                     is ImportResult.UnsupportedFormat -> "暂不支持该格式：${result.fileName}"
                     is ImportResult.Failed -> "下载失败：${result.message}"
