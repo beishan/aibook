@@ -53,6 +53,21 @@ class OpdsSyncCollectorTest {
         assertEquals(1, result.catalogCount)
     }
 
+    @Test
+    fun collectStopsAtMaxDepth() = runTest {
+        val feeds = mapOf(
+            null to OpdsFeed("root", listOf(catalog("一层", "/one"))),
+            "/one" to OpdsFeed("one", listOf(catalog("二层", "/two"))),
+            "/two" to OpdsFeed("two", listOf(book("太深的书", "/deep.epub")))
+        )
+        val collector = OpdsSyncCollector(maxDepth = 1) { href -> feeds.getValue(href) }
+
+        val result = collector.collect()
+
+        assertEquals(emptyList(), result.acquisitionEntries.map { it.title })
+        assertEquals(2, result.catalogCount)
+    }
+
     private fun catalog(title: String, href: String) = OpdsEntry(
         title = title,
         alternateLink = OpdsLink(href = href)
