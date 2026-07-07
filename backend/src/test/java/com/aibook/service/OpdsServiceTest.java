@@ -1,31 +1,23 @@
 package com.aibook.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.when;
 
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
+import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
-@ExtendWith(MockitoExtension.class)
 class OpdsServiceTest {
-
-    @Mock
-    private BookRepository bookRepository;
 
     @Test
     void rootCatalogIncludesSelfStartAndSearchLinks() {
-        OpdsService service = new OpdsService(bookRepository);
+        OpdsService service = new OpdsService(repository());
 
         String xml = service.getRootCatalog(user());
 
@@ -42,8 +34,7 @@ class OpdsServiceTest {
         Book book = book("三体 & 黑暗森林", "刘<慈欣>", "epub");
         book.setDescription("文明 > 危机");
         book.setCoverUrl("/api/covers/1.jpg");
-        when(bookRepository.findByUser(eq(user()), any(PageRequest.class)))
-            .thenReturn(new PageImpl<>(List.of(book), PageRequest.of(0, 50), 80));
+        BookRepository bookRepository = repository(new PageImpl<>(List.of(book), PageRequest.of(0, 50), 80), null);
         OpdsService service = new OpdsService(bookRepository);
 
         String xml = service.getBooksCatalog(user(), 0);
@@ -61,8 +52,10 @@ class OpdsServiceTest {
 
     @Test
     void searchPaginationKeepsQueryParameter() {
-        when(bookRepository.searchByKeyword(eq(user()), eq("三体"), any(PageRequest.class)))
-            .thenReturn(new PageImpl<>(List.of(book("三体", "刘慈欣", "epub")), PageRequest.of(1, 50), 120));
+        BookRepository bookRepository = repository(
+            null,
+            new PageImpl<>(List.of(book("三体", "刘慈欣", "epub")), PageRequest.of(1, 50), 120)
+        );
         OpdsService service = new OpdsService(bookRepository);
 
         String xml = service.searchBooks(user(), "三体", 1);
@@ -74,7 +67,7 @@ class OpdsServiceTest {
 
     @Test
     void searchDescriptionExposesOpenSearchTemplate() {
-        OpdsService service = new OpdsService(bookRepository);
+        OpdsService service = new OpdsService(repository());
 
         String xml = service.getSearchDescription();
 
@@ -98,5 +91,25 @@ class OpdsServiceTest {
             .createdAt(LocalDateTime.of(2026, 7, 7, 12, 0))
             .updatedAt(LocalDateTime.of(2026, 7, 7, 12, 30))
             .build();
+    }
+
+    private BookRepository repository() {
+        return repository(new PageImpl<>(new ArrayList<>(), PageRequest.of(0, 50), 0), null);
+    }
+
+    private BookRepository repository(PageImpl<Book> booksPage, PageImpl<Book> searchPage) {
+        return (BookRepository) Proxy.newProxyInstance(
+            BookRepository.class.getClassLoader(),
+            new Class<?>[] {BookRepository.class},
+            (proxy, method, args) -> {
+                if ("findByUser".equals(method.getName())) {
+                    return booksPage;
+                }
+                if ("searchByKeyword".equals(method.getName())) {
+                    return searchPage;
+                }
+                throw new UnsupportedOperationException(method.getName());
+            }
+        );
     }
 }

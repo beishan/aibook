@@ -7,19 +7,19 @@ import com.aibook.service.Opds2Service;
 import com.aibook.service.OpdsService;
 import com.aibook.service.UserService;
 import com.aibook.util.MimeTypeUtil;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -36,6 +36,10 @@ import java.util.Map;
 @Slf4j
 public class OpdsController {
 
+    private static final String OPDS_ATOM_TYPE = "application/atom+xml;profile=opds-catalog";
+    private static final String OPDS_JSON_TYPE = "application/opds+json";
+    private static final String OPENSEARCH_TYPE = "application/opensearchdescription+xml";
+
     private final OpdsService opdsService;
     private final Opds2Service opds2Service;
     private final BookRepository bookRepository;
@@ -51,7 +55,7 @@ public class OpdsController {
         User user = getUserFromAuth(authentication);
         String catalog = opdsService.getRootCatalog(user);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, "application/atom+xml;profile=opds-catalog")
+                .header(HttpHeaders.CONTENT_TYPE, OPDS_ATOM_TYPE)
                 .body(catalog);
     }
 
@@ -65,7 +69,7 @@ public class OpdsController {
         User user = getUserFromAuth(authentication);
         String catalog = opdsService.getBooksCatalog(user, page);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, "application/atom+xml;profile=opds-catalog")
+                .header(HttpHeaders.CONTENT_TYPE, OPDS_ATOM_TYPE)
                 .body(catalog);
     }
 
@@ -80,7 +84,7 @@ public class OpdsController {
         User user = getUserFromAuth(authentication);
         String catalog = opdsService.getBooksByFormat(user, format, page);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, "application/atom+xml;profile=opds-catalog")
+                .header(HttpHeaders.CONTENT_TYPE, OPDS_ATOM_TYPE)
                 .body(catalog);
     }
 
@@ -92,7 +96,7 @@ public class OpdsController {
         User user = getUserFromAuth(authentication);
         String catalog = opdsService.getFormatsCatalog(user);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, "application/atom+xml;profile=opds-catalog")
+                .header(HttpHeaders.CONTENT_TYPE, OPDS_ATOM_TYPE)
                 .body(catalog);
     }
 
@@ -106,7 +110,7 @@ public class OpdsController {
         User user = getUserFromAuth(authentication);
         String catalog = opdsService.getFavoriteBooks(user, page);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, "application/atom+xml;profile=opds-catalog")
+                .header(HttpHeaders.CONTENT_TYPE, OPDS_ATOM_TYPE)
                 .body(catalog);
     }
 
@@ -120,7 +124,7 @@ public class OpdsController {
         User user = getUserFromAuth(authentication);
         String catalog = opdsService.getReadingBooks(user, page);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, "application/atom+xml;profile=opds-catalog")
+                .header(HttpHeaders.CONTENT_TYPE, OPDS_ATOM_TYPE)
                 .body(catalog);
     }
 
@@ -135,8 +139,19 @@ public class OpdsController {
         User user = getUserFromAuth(authentication);
         String catalog = opdsService.searchBooks(user, query, page);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, "application/atom+xml;profile=opds-catalog")
+                .header(HttpHeaders.CONTENT_TYPE, OPDS_ATOM_TYPE)
                 .body(catalog);
+    }
+
+    /**
+     * OpenSearch 描述
+     */
+    @GetMapping(value = "/search.xml")
+    public ResponseEntity<String> getSearchDescription(Authentication authentication) {
+        getUserFromAuth(authentication);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, OPENSEARCH_TYPE)
+                .body(opdsService.getSearchDescription());
     }
 
     /**
@@ -166,10 +181,14 @@ public class OpdsController {
         FileSystemResource resource = new FileSystemResource(file);
 
         String contentType = MimeTypeUtil.getContentType(book.getFormat());
-        String filename = book.getTitle() + "." + book.getFormat();
+        String extension = book.getFormat().toLowerCase();
+        String filename = book.getTitle() + "." + extension;
+        String fallbackFilename = "book-" + book.getId() + "." + extension;
+        String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + fallbackFilename + "\"; filename*=UTF-8''" + encodedFilename)
                 .header(HttpHeaders.CONTENT_TYPE, contentType)
                 .header("Content-Length", String.valueOf(file.length()))
                 .body(resource);
@@ -183,7 +202,7 @@ public class OpdsController {
     @GetMapping(value = "/v2")
     public ResponseEntity<Map<String, Object>> getV2RootCatalog(Authentication authentication) {
         User user = getUserFromAuth(authentication);
-        return ResponseEntity.ok(opds2Service.getRootCatalog(user));
+        return opdsJson(opds2Service.getRootCatalog(user));
     }
 
     /**
@@ -192,7 +211,7 @@ public class OpdsController {
     @GetMapping(value = "/v2/formats")
     public ResponseEntity<Map<String, Object>> getV2Formats(Authentication authentication) {
         User user = getUserFromAuth(authentication);
-        return ResponseEntity.ok(opds2Service.getFormatsCatalog(user));
+        return opdsJson(opds2Service.getFormatsCatalog(user));
     }
 
     /**
@@ -203,7 +222,7 @@ public class OpdsController {
             Authentication authentication,
             @RequestParam(defaultValue = "0") int page) {
         User user = getUserFromAuth(authentication);
-        return ResponseEntity.ok(opds2Service.getBooksCatalog(user, page));
+        return opdsJson(opds2Service.getBooksCatalog(user, page));
     }
 
     /**
@@ -215,7 +234,7 @@ public class OpdsController {
             @PathVariable String format,
             @RequestParam(defaultValue = "0") int page) {
         User user = getUserFromAuth(authentication);
-        return ResponseEntity.ok(opds2Service.getBooksByFormat(user, format, page));
+        return opdsJson(opds2Service.getBooksByFormat(user, format, page));
     }
 
     /**
@@ -226,7 +245,7 @@ public class OpdsController {
             Authentication authentication,
             @RequestParam(defaultValue = "0") int page) {
         User user = getUserFromAuth(authentication);
-        return ResponseEntity.ok(opds2Service.getFavoriteBooks(user, page));
+        return opdsJson(opds2Service.getFavoriteBooks(user, page));
     }
 
     /**
@@ -237,7 +256,7 @@ public class OpdsController {
             Authentication authentication,
             @RequestParam(defaultValue = "0") int page) {
         User user = getUserFromAuth(authentication);
-        return ResponseEntity.ok(opds2Service.getReadingBooks(user, page));
+        return opdsJson(opds2Service.getReadingBooks(user, page));
     }
 
     /**
@@ -249,7 +268,13 @@ public class OpdsController {
             @RequestParam String query,
             @RequestParam(defaultValue = "0") int page) {
         User user = getUserFromAuth(authentication);
-        return ResponseEntity.ok(opds2Service.searchBooks(user, query, page));
+        return opdsJson(opds2Service.searchBooks(user, query, page));
+    }
+
+    private ResponseEntity<Map<String, Object>> opdsJson(Map<String, Object> body) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, OPDS_JSON_TYPE)
+                .body(body);
     }
 
     /**
