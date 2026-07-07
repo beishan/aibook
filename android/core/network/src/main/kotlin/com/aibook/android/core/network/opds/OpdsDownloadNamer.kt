@@ -21,7 +21,7 @@ object OpdsDownloadNamer {
             "text/plain" -> "txt"
             "text/markdown" -> "md"
             "text/html", "application/xhtml+xml" -> "html"
-            else -> "epub"
+            else -> "bin"
         }
     }
 

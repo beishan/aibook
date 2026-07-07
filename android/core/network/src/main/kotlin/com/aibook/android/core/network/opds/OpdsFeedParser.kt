@@ -23,21 +23,22 @@ class OpdsFeedParser {
         val feed = document.documentElement
         val title = feed.directChildText("title").orEmpty()
         val entries = feed.directChildren("entry").map { entry ->
+            val links = entry.links()
             OpdsEntry(
                 title = entry.directChildText("title").orEmpty(),
                 author = entry.directChildren("author").firstOrNull()?.directChildText("name"),
-                summary = entry.directChildText("summary"),
-                acquisitionLink = entry.links().firstOrNull {
+                summary = entry.directChildText("summary") ?: entry.directChildText("content"),
+                acquisitionLink = links.firstOrNull {
                     it.rel == "http://opds-spec.org/acquisition" ||
                         it.rel?.startsWith("http://opds-spec.org/acquisition/") == true
                 },
-                alternateLink = entry.links().firstOrNull {
+                alternateLink = links.firstOrNull {
                     it.rel == "alternate" ||
                         it.rel == "subsection" ||
                         it.rel == "http://opds-spec.org/sort/new" ||
                         it.rel == "http://opds-spec.org/sort/popular"
                 },
-                coverLink = entry.links().firstOrNull {
+                coverLink = links.firstOrNull {
                     it.rel == "http://opds-spec.org/image" ||
                         it.rel == "http://opds-spec.org/image/thumbnail"
                 }

@@ -45,4 +45,22 @@ class OpdsRequestFactoryTest {
             OpdsRequestFactory.resolveUrl(connection, "/opds/books/2/download")
         )
     }
+
+    @Test
+    fun `resolves absolute and query opds links`() {
+        val connection = OpdsConnection(
+            id = "home",
+            name = "家庭书库",
+            baseUrl = "http://192.168.1.100:8080/opds"
+        )
+
+        assertEquals(
+            "https://cdn.example/books/1.epub",
+            OpdsRequestFactory.resolveUrl(connection, "https://cdn.example/books/1.epub")
+        )
+        assertEquals(
+            "http://192.168.1.100:8080/opds/search?query=%E4%B8%89%E4%BD%93&page=1",
+            OpdsRequestFactory.resolveUrl(connection, "/opds/search?query=%E4%B8%89%E4%BD%93&page=1")
+        )
+    }
 }

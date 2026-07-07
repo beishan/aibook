@@ -29,4 +29,17 @@ class OpdsDownloadNamerTest {
 
         assertEquals("三体_黑暗森林.epub", OpdsDownloadNamer.fileName(entry))
     }
+
+    @Test
+    fun `falls back to bin for unknown mime type`() {
+        val entry = OpdsEntry(
+            title = "无扩展名",
+            acquisitionLink = OpdsLink(
+                href = "/opds/books/9/download",
+                type = "application/octet-stream"
+            )
+        )
+
+        assertEquals("无扩展名.bin", OpdsDownloadNamer.fileName(entry))
+    }
 }
