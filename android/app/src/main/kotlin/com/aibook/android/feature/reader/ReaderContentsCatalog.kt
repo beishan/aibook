@@ -13,6 +13,20 @@ enum class ReaderChapterReadState {
     UNREAD
 }
 
+sealed interface ReaderContentsListItem {
+    data class GroupHeader(
+        val groupIndex: Int,
+        val group: ReaderContentsGroup,
+        val expanded: Boolean
+    ) : ReaderContentsListItem
+
+    data class Chapter(
+        val groupIndex: Int,
+        val chapter: ReaderChapter,
+        val isLast: Boolean
+    ) : ReaderContentsListItem
+}
+
 object ReaderContentsCatalog {
     private val volumeHeading = Regex(
         "^(?:第[0-9零〇一二两三四五六七八九十百千]+卷|卷[0-9零〇一二两三四五六七八九十百千]+|[上中下终序]卷)(?:\\s|　|[:：·._-]|$).*"
@@ -56,5 +70,26 @@ object ReaderContentsCatalog {
         chapterIndex < currentChapterIndex -> ReaderChapterReadState.READ
         chapterIndex == currentChapterIndex -> ReaderChapterReadState.CURRENT
         else -> ReaderChapterReadState.UNREAD
+    }
+
+    fun visibleItems(
+        groups: List<ReaderContentsGroup>,
+        expandedGroupIndexes: Set<Int>
+    ): List<ReaderContentsListItem> = buildList {
+        groups.forEachIndexed { groupIndex, group ->
+            val expanded = groupIndex in expandedGroupIndexes
+            add(ReaderContentsListItem.GroupHeader(groupIndex, group, expanded))
+            if (expanded) {
+                group.chapters.forEachIndexed { chapterIndex, chapter ->
+                    add(
+                        ReaderContentsListItem.Chapter(
+                            groupIndex = groupIndex,
+                            chapter = chapter,
+                            isLast = chapterIndex == group.chapters.lastIndex
+                        )
+                    )
+                }
+            }
+        }
     }
 }

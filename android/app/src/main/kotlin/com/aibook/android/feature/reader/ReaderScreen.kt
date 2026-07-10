@@ -985,9 +985,12 @@ private fun GroupedContentsList(
             if (groups.isNotEmpty()) put(currentGroupIndex, true)
         }
     }
+    val visibleItems = ReaderContentsCatalog.visibleItems(
+        groups = groups,
+        expandedGroupIndexes = expandedGroups.filterValues { it }.keys
+    )
 
     LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(bottom = 20.dp)
     ) {
         if (groups.isEmpty()) {
@@ -995,16 +998,32 @@ private fun GroupedContentsList(
                 ContentsEmptyState(errorMessage)
             }
         } else {
-            itemsIndexed(groups) { groupIndex, group ->
-                GroupedContentsCard(
-                    group = group,
-                    expanded = expandedGroups[groupIndex] == true,
-                    currentChapterIndex = currentChapterIndex,
-                    onToggle = {
-                        expandedGroups[groupIndex] = expandedGroups[groupIndex] != true
-                    },
-                    onChapterClick = onChapterClick
-                )
+            itemsIndexed(
+                items = visibleItems,
+                key = { _, item ->
+                    when (item) {
+                        is ReaderContentsListItem.GroupHeader -> "group-${item.groupIndex}"
+                        is ReaderContentsListItem.Chapter -> "chapter-${item.chapter.index}"
+                    }
+                }
+            ) { _, item ->
+                when (item) {
+                    is ReaderContentsListItem.GroupHeader -> GroupedContentsHeader(
+                        group = item.group,
+                        expanded = item.expanded,
+                        addTopSpacing = item.groupIndex > 0,
+                        onToggle = {
+                            expandedGroups[item.groupIndex] = expandedGroups[item.groupIndex] != true
+                        }
+                    )
+
+                    is ReaderContentsListItem.Chapter -> GroupedChapterRow(
+                        chapter = item.chapter,
+                        currentChapterIndex = currentChapterIndex,
+                        isLast = item.isLast,
+                        onClick = { onChapterClick(item.chapter.index) }
+                    )
+                }
             }
         }
         item {
@@ -1014,58 +1033,45 @@ private fun GroupedContentsList(
 }
 
 @Composable
-private fun GroupedContentsCard(
+private fun GroupedContentsHeader(
     group: ReaderContentsGroup,
     expanded: Boolean,
-    currentChapterIndex: Int,
-    onToggle: () -> Unit,
-    onChapterClick: (Int) -> Unit
+    addTopSpacing: Boolean,
+    onToggle: () -> Unit
 ) {
+    val shape = if (expanded) {
+        RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+    } else {
+        RoundedCornerShape(16.dp)
+    }
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = if (addTopSpacing) 12.dp else 0.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline),
-        shape = RoundedCornerShape(16.dp)
+        shape = shape
     ) {
-        Column {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onToggle)
-                    .padding(horizontal = 18.dp, vertical = 17.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = group.title,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Icon(
-                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (expanded) "收起${group.title}" else "展开${group.title}",
-                    tint = DesignTokens.SoftText
-                )
-            }
-
-            if (expanded) {
-                HorizontalDivider(color = DesignTokens.Hairline)
-                group.chapters.forEachIndexed { index, chapter ->
-                    GroupedChapterRow(
-                        chapter = chapter,
-                        currentChapterIndex = currentChapterIndex,
-                        onClick = { onChapterClick(chapter.index) }
-                    )
-                    if (index < group.chapters.lastIndex) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 18.dp),
-                            color = DesignTokens.Hairline
-                        )
-                    }
-                }
-            }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 18.dp, vertical = 17.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = group.title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (expanded) "收起${group.title}" else "展开${group.title}",
+                tint = DesignTokens.SoftText
+            )
         }
     }
 }
@@ -1074,6 +1080,7 @@ private fun GroupedContentsCard(
 private fun GroupedChapterRow(
     chapter: ReaderChapter,
     currentChapterIndex: Int,
+    isLast: Boolean,
     onClick: () -> Unit
 ) {
     val readState = ReaderContentsCatalog.readState(chapter.index, currentChapterIndex)
@@ -1085,43 +1092,54 @@ private fun GroupedChapterRow(
         ReaderChapterReadState.UNREAD -> "未读"
     }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(68.dp)
-            .background(if (selected) DesignTokens.Accent.copy(alpha = 0.08f) else Color.Transparent)
-            .clickable(onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline),
+        shape = if (isLast) {
+            RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
+        } else {
+            RoundedCornerShape(0.dp)
+        }
     ) {
-        Box(
+        Row(
             modifier = Modifier
-                .width(4.dp)
-                .fillMaxHeight()
-                .background(if (selected) DesignTokens.Accent else Color.Transparent)
-        )
-        Text(
-            text = (chapter.index + 1).toString().padStart(2, '0'),
-            modifier = Modifier.padding(start = 14.dp),
-            color = mutedOrAccent,
-            style = MaterialTheme.typography.titleMedium
-        )
-        Text(
-            text = chapter.title.ifBlank { "第${chapter.index + 1}章" },
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 18.dp),
-            color = if (selected) DesignTokens.Accent else MaterialTheme.colorScheme.onSurface,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = status,
-            modifier = Modifier.padding(end = 18.dp),
-            color = mutedOrAccent,
-            style = MaterialTheme.typography.bodyMedium
-        )
+                .fillMaxWidth()
+                .height(68.dp)
+                .background(if (selected) DesignTokens.Accent.copy(alpha = 0.08f) else Color.Transparent)
+                .clickable(onClick = onClick),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(if (selected) DesignTokens.Accent else Color.Transparent)
+            )
+            Text(
+                text = (chapter.index + 1).toString().padStart(2, '0'),
+                modifier = Modifier.padding(start = 14.dp),
+                color = mutedOrAccent,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = chapter.title.ifBlank { "第${chapter.index + 1}章" },
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 18.dp),
+                color = if (selected) DesignTokens.Accent else MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = status,
+                modifier = Modifier.padding(end = 18.dp),
+                color = mutedOrAccent,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
     }
 }
 

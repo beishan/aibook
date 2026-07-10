@@ -3,6 +3,7 @@ package com.aibook.android.feature.reader
 import com.aibook.android.core.reader.ReaderChapter
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 
 class ReaderContentsCatalogTest {
     private fun chapter(index: Int, title: String) =
@@ -44,5 +45,22 @@ class ReaderContentsCatalogTest {
         assertEquals(ReaderChapterReadState.READ, ReaderContentsCatalog.readState(1, 2))
         assertEquals(ReaderChapterReadState.CURRENT, ReaderContentsCatalog.readState(2, 2))
         assertEquals(ReaderChapterReadState.UNREAD, ReaderContentsCatalog.readState(3, 2))
+    }
+
+    @Test
+    fun `expanded group exposes every chapter as an independent lazy list item`() {
+        val groups = ReaderContentsCatalog.group(
+            List(5_000) { index -> chapter(index, "第${index + 1}章") }
+        )
+
+        val collapsed = ReaderContentsCatalog.visibleItems(groups, emptySet())
+        val expanded = ReaderContentsCatalog.visibleItems(groups, setOf(0))
+
+        assertEquals(1, collapsed.size)
+        assertIs<ReaderContentsListItem.GroupHeader>(collapsed.single())
+        assertEquals(5_001, expanded.size)
+        assertIs<ReaderContentsListItem.GroupHeader>(expanded.first())
+        assertIs<ReaderContentsListItem.Chapter>(expanded[1])
+        assertIs<ReaderContentsListItem.Chapter>(expanded.last())
     }
 }
