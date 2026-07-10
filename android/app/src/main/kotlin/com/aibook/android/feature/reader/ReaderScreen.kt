@@ -1092,41 +1092,32 @@ private fun GroupedChapterRow(
         ReaderChapterReadState.UNREAD -> "未读"
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline),
-        shape = if (isLast) {
-            RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
-        } else {
-            RoundedCornerShape(0.dp)
-        }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = if (selected) 8.dp else 0.dp, vertical = if (selected) 4.dp else 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(68.dp)
-                .background(if (selected) DesignTokens.Accent.copy(alpha = 0.08f) else Color.Transparent)
+                .clip(if (selected) RoundedCornerShape(14.dp) else RoundedCornerShape(0.dp))
+                .background(if (selected) DesignTokens.Accent.copy(alpha = 0.08f) else Color.White)
                 .clickable(onClick = onClick),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
                     .width(4.dp)
-                    .fillMaxHeight()
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(4.dp))
                     .background(if (selected) DesignTokens.Accent else Color.Transparent)
-            )
-            Text(
-                text = (chapter.index + 1).toString().padStart(2, '0'),
-                modifier = Modifier.padding(start = 14.dp),
-                color = mutedOrAccent,
-                style = MaterialTheme.typography.titleMedium
             )
             Text(
                 text = chapter.title.ifBlank { "第${chapter.index + 1}章" },
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 18.dp),
+                    .padding(start = 18.dp, end = 14.dp),
                 color = if (selected) DesignTokens.Accent else MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
@@ -1138,6 +1129,20 @@ private fun GroupedChapterRow(
                 modifier = Modifier.padding(end = 18.dp),
                 color = mutedOrAccent,
                 style = MaterialTheme.typography.bodyMedium
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = mutedOrAccent.copy(alpha = if (selected) 1f else 0.55f),
+                modifier = Modifier
+                    .padding(end = 8.dp)
+                    .size(22.dp)
+            )
+        }
+        if (!selected && !isLast) {
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 22.dp),
+                color = DesignTokens.Hairline.copy(alpha = 0.55f)
             )
         }
     }
