@@ -8,7 +8,11 @@ sealed class Screen(val route: String) {
         fun createRoute(bookId: String) = "store-remote-book/$bookId"
     }
     data object Opds : Screen("opds")
-    data object OpdsAddSource : Screen("opds-add-source")
+    data object OpdsAddSource : Screen("opds-add-source") {
+        fun createRoute(connectionId: String? = null): String =
+            if (connectionId != null) "opds-add-source?connectionId=$connectionId"
+            else "opds-add-source"
+    }
     data object Settings : Screen("settings")
     data object ThemeSettings : Screen("theme-settings")
     data object ScanDirectories : Screen("scan-directories")

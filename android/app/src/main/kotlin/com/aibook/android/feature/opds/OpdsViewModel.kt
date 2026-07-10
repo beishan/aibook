@@ -137,6 +137,19 @@ class OpdsViewModel(
         )
     }
 
+    fun loadConnectionForEdit(connectionId: String) {
+        viewModelScope.launch {
+            val connection = connectionRepository.getById(connectionId) ?: return@launch
+            _state.value = _state.value.copy(
+                editingConnectionId = connection.id,
+                formName = connection.name,
+                formBaseUrl = connection.baseUrl,
+                formUsername = connection.username.orEmpty(),
+                formPassword = connection.password.orEmpty()
+            )
+        }
+    }
+
     fun toggleConnectionEnabled(connection: OpdsConnection, enabled: Boolean) {
         viewModelScope.launch {
             connectionRepository.updateEnabled(connection.id, enabled)

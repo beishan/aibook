@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -92,6 +94,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aibook.android.core.model.AccentColor
+import com.aibook.android.core.model.AppThemeMode
 import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.core.model.ParagraphSpacing
 import com.aibook.android.core.model.ReaderFontCatalog
@@ -100,6 +104,7 @@ import com.aibook.android.core.model.ReaderSettings
 import com.aibook.android.core.model.ReaderTheme
 import com.aibook.android.core.model.TextAlignment
 import com.aibook.android.core.model.usesPagedReading
+import com.aibook.android.feature.settings.SettingsViewModel
 import com.aibook.android.core.reader.ReaderChapter
 import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignTokens
@@ -143,6 +148,8 @@ fun ReaderScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val settings = state.settings
     var panel by remember { mutableStateOf(ReaderPanel.None) }
+    // 提升 scrollState 到此处，避免打开目录/设置后返回时丢失滚动位置
+    val scrollState = rememberLazyListState()
 
     LaunchedEffect(bookId, isRemote) {
         if (isRemote) {
@@ -188,6 +195,7 @@ fun ReaderScreen(
         ReaderPanel.None -> ReaderMainPage(
             state = state,
             settings = settings,
+            scrollState = scrollState,
             onBack = { viewModel.saveProgressThen(onBack) },
             onOpenContents = { panel = ReaderPanel.Contents },
             onOpenSettings = { panel = ReaderPanel.Settings },
@@ -204,14 +212,18 @@ fun ReaderScreen(
 @Composable
 fun ReaderThemeSettingsScreen(
     onBack: () -> Unit,
-    viewModel: ReaderViewModel = viewModel(factory = ReaderViewModel.Factory)
+    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    ReaderThemePage(
-        settings = state.settings,
+    ThemeSettingsPage(
+        appThemeMode = state.appThemeMode,
+        accentColor = state.accentColor,
+        readerTheme = state.readerTheme,
         onBack = onBack,
-        onThemeChange = viewModel::setTheme
+        onAppThemeModeChange = viewModel::setAppThemeMode,
+        onAccentColorChange = viewModel::setAccentColor,
+        onReaderThemeChange = viewModel::setReaderTheme
     )
 }
 
@@ -219,6 +231,7 @@ fun ReaderThemeSettingsScreen(
 private fun ReaderMainPage(
     state: ReaderUiState,
     settings: ReaderSettings,
+    scrollState: androidx.compose.foundation.lazy.LazyListState,
     onBack: () -> Unit,
     onOpenContents: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -230,7 +243,6 @@ private fun ReaderMainPage(
     onReadingPositionChanged: (Int, Int, Int) -> Unit
 ) {
     val colors = readerColors(settings.theme)
-    val scrollState = rememberLazyListState()
     var controlsVisible by remember(state.book?.id) { mutableStateOf(false) }
     val readerTapInteractionSource = remember { MutableInteractionSource() }
 
@@ -1554,58 +1566,71 @@ private fun SwitchSetting(
 }
 
 @Composable
-private fun ReaderThemePage(
-    settings: ReaderSettings,
+private fun ThemeSettingsPage(
+    appThemeMode: AppThemeMode,
+    accentColor: AccentColor,
+    readerTheme: ReaderTheme,
     onBack: () -> Unit,
-    onThemeChange: (ReaderTheme) -> Unit
+    onAppThemeModeChange: (AppThemeMode) -> Unit,
+    onAccentColorChange: (AccentColor) -> Unit,
+    onReaderThemeChange: (ReaderTheme) -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White)
-            .padding(horizontal = 24.dp, vertical = 30.dp),
+            .padding(horizontal = 24.dp, vertical = 30.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(22.dp)
     ) {
         SettingsPageHeader("页面主题", onBack = onBack)
-        Text("主题预览", style = MaterialTheme.typography.titleLarge)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+
+        // App Theme Mode
+        Text("外观模式", style = MaterialTheme.typography.titleLarge)
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline),
+            shape = RoundedCornerShape(18.dp)
         ) {
-            ThemePreviewCard(
-                label = "浅色米白",
-                selected = settings.theme == ReaderTheme.LIGHT,
-                dark = false,
-                modifier = Modifier.weight(1f)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                onThemeChange(ReaderTheme.LIGHT)
-            }
-            ThemePreviewCard(
-                label = "纯白简洁",
-                selected = false,
-                dark = false,
-                modifier = Modifier.weight(1f)
-            ) {
-                onThemeChange(ReaderTheme.LIGHT)
-            }
-            ThemePreviewCard(
-                label = "深色护眼",
-                selected = settings.theme == ReaderTheme.DARK,
-                dark = true,
-                modifier = Modifier.weight(1f)
-            ) {
-                onThemeChange(ReaderTheme.DARK)
-            }
-            ThemePreviewCard(
-                label = "墨黑夜间",
-                selected = false,
-                dark = true,
-                modifier = Modifier.weight(1f)
-            ) {
-                onThemeChange(ReaderTheme.DARK)
+                listOf(
+                    AppThemeMode.SYSTEM to "跟随系统",
+                    AppThemeMode.LIGHT to "浅色",
+                    AppThemeMode.DARK to "深色"
+                ).forEach { (mode, label) ->
+                    val selected = appThemeMode == mode
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .background(
+                                if (selected) DesignTokens.Accent else Color.Transparent,
+                                RoundedCornerShape(12.dp)
+                            )
+                            .border(
+                                1.dp,
+                                if (selected) DesignTokens.Accent else DesignTokens.Hairline,
+                                RoundedCornerShape(12.dp)
+                            )
+                            .clickable { onAppThemeModeChange(mode) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            label,
+                            color = if (selected) Color.White else DesignTokens.SoftText,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
             }
         }
-        ThemeOptionCard("跟随系统", "开启后，将跟随系统外观设置自动切换主题")
+
+        // Accent Color
         Text("主题配色", style = MaterialTheme.typography.titleLarge)
         Card(
             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1619,24 +1644,81 @@ private fun ReaderThemePage(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                listOf(DesignTokens.Accent, Color(0xFF35A65B), Color(0xFF2F80ED), Color(0xFF7B4AC5), Color(0xFFE34A45)).forEachIndexed { index, color ->
+                AccentColor.entries.forEach { color ->
+                    val selected = accentColor == color
                     Box(
                         modifier = Modifier
                             .size(48.dp)
-                            .background(color, CircleShape)
-                            .border(3.dp, if (index == 0) DesignTokens.Accent.copy(alpha = 0.35f) else Color.Transparent, CircleShape),
+                            .background(Color(color.colorValue), CircleShape)
+                            .border(
+                                3.dp,
+                                if (selected) Color(color.colorValue).copy(alpha = 0.35f) else Color.Transparent,
+                                CircleShape
+                            )
+                            .clickable { onAccentColorChange(color) },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (index == 0) Icon(Icons.Default.Check, null, tint = Color.White)
+                        if (selected) Icon(Icons.Default.Check, null, tint = Color.White)
                     }
                 }
-                Text("更多颜色 〉", color = DesignTokens.SoftText)
             }
         }
-        Text("卡片样式", style = MaterialTheme.typography.titleLarge)
-        StyleOptions(listOf("圆角卡片", "轻盈卡片", "描边卡片", "平面简约"), selected = 0)
-        Text("图标风格", style = MaterialTheme.typography.titleLarge)
-        StyleOptions(listOf("温暖填充", "线性简约", "双色简约", "柔和圆润"), selected = 0)
+
+        // Reader Theme
+        Text("阅读主题", style = MaterialTheme.typography.titleLarge)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            ThemePreviewCard(
+                label = "明亮",
+                selected = readerTheme == ReaderTheme.LIGHT,
+                dark = false,
+                modifier = Modifier.weight(1f)
+            ) {
+                onReaderThemeChange(ReaderTheme.LIGHT)
+            }
+            ThemePreviewCard(
+                label = "纸张",
+                selected = readerTheme == ReaderTheme.PAPER,
+                dark = false,
+                modifier = Modifier.weight(1f)
+            ) {
+                onReaderThemeChange(ReaderTheme.PAPER)
+            }
+            ThemePreviewCard(
+                label = "护眼",
+                selected = readerTheme == ReaderTheme.GREEN,
+                dark = false,
+                modifier = Modifier.weight(1f)
+            ) {
+                onReaderThemeChange(ReaderTheme.GREEN)
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            ThemePreviewCard(
+                label = "灰色",
+                selected = readerTheme == ReaderTheme.GRAY,
+                dark = true,
+                modifier = Modifier.weight(1f)
+            ) {
+                onReaderThemeChange(ReaderTheme.GRAY)
+            }
+            ThemePreviewCard(
+                label = "深色",
+                selected = readerTheme == ReaderTheme.DARK,
+                dark = true,
+                modifier = Modifier.weight(1f)
+            ) {
+                onReaderThemeChange(ReaderTheme.DARK)
+            }
+            Spacer(Modifier.weight(1f))
+        }
+
+        // Preview
         Text("效果预览", style = MaterialTheme.typography.titleLarge)
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -1652,7 +1734,7 @@ private fun ReaderThemePage(
                 BookCover("三体（全集）", width = 86.dp, height = 122.dp)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("三体（全集）", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("刘慈欣 〉", color = DesignTokens.SoftText)
+                    Text("刘慈欣", color = DesignTokens.SoftText)
                     Text("阅读进度 42%", color = DesignTokens.SoftText)
                     WarmProgress(0.42f, Modifier.fillMaxWidth())
                     Text("上次阅读：昨天 22:15", color = DesignTokens.SoftText)
@@ -1666,6 +1748,75 @@ private fun ReaderThemePage(
                     fontWeight = FontWeight.Bold
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ReaderThemePage(
+    settings: ReaderSettings,
+    onBack: () -> Unit,
+    onThemeChange: (ReaderTheme) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .padding(horizontal = 24.dp, vertical = 30.dp),
+        verticalArrangement = Arrangement.spacedBy(22.dp)
+    ) {
+        SettingsPageHeader("阅读主题", onBack = onBack)
+        Text("选择阅读主题", style = MaterialTheme.typography.titleLarge)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            ThemePreviewCard(
+                label = "明亮",
+                selected = settings.theme == ReaderTheme.LIGHT,
+                dark = false,
+                modifier = Modifier.weight(1f)
+            ) {
+                onThemeChange(ReaderTheme.LIGHT)
+            }
+            ThemePreviewCard(
+                label = "纸张",
+                selected = settings.theme == ReaderTheme.PAPER,
+                dark = false,
+                modifier = Modifier.weight(1f)
+            ) {
+                onThemeChange(ReaderTheme.PAPER)
+            }
+            ThemePreviewCard(
+                label = "护眼",
+                selected = settings.theme == ReaderTheme.GREEN,
+                dark = false,
+                modifier = Modifier.weight(1f)
+            ) {
+                onThemeChange(ReaderTheme.GREEN)
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            ThemePreviewCard(
+                label = "灰色",
+                selected = settings.theme == ReaderTheme.GRAY,
+                dark = true,
+                modifier = Modifier.weight(1f)
+            ) {
+                onThemeChange(ReaderTheme.GRAY)
+            }
+            ThemePreviewCard(
+                label = "深色",
+                selected = settings.theme == ReaderTheme.DARK,
+                dark = true,
+                modifier = Modifier.weight(1f)
+            ) {
+                onThemeChange(ReaderTheme.DARK)
+            }
+            Spacer(Modifier.weight(1f))
         }
     }
 }
@@ -1721,67 +1872,6 @@ private fun ThemePreviewCard(
             Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             if (selected) {
                 Icon(Icons.Default.Check, null, tint = DesignTokens.Accent, modifier = Modifier.size(22.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ThemeOptionCard(title: String, subtitle: String) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("☀", fontSize = 32.sp, modifier = Modifier.width(54.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(subtitle, color = DesignTokens.SoftText)
-            }
-            Switch(checked = false, onCheckedChange = {})
-        }
-    }
-}
-
-@Composable
-private fun StyleOptions(options: List<String>, selected: Int) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            options.forEachIndexed { index, option ->
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(88.dp)
-                        .background(if (index == selected) DesignTokens.WarmCard else Color.White, RoundedCornerShape(12.dp))
-                        .border(1.dp, if (index == selected) DesignTokens.Accent else DesignTokens.Hairline, RoundedCornerShape(12.dp))
-                        .padding(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(34.dp)
-                            .background(Color.White, RoundedCornerShape(if (index == 0) 10.dp else 4.dp))
-                            .border(1.dp, DesignTokens.Hairline, RoundedCornerShape(if (index == 0) 10.dp else 4.dp))
-                    )
-                    Text(option, color = if (index == selected) DesignTokens.Accent else DesignTokens.SoftText)
-                }
             }
         }
     }

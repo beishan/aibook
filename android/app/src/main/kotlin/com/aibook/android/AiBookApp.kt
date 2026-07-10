@@ -91,7 +91,8 @@ fun AiBookApp() {
             Screen.PrivacyPermissions.route,
             Screen.About.route
         )
-    val showBottomBar = currentRoute in bottomBarRoutes
+    val showBottomBar = currentRoute in bottomBarRoutes ||
+        currentRoute?.startsWith("opds-add-source") == true
 
     Scaffold(
         bottomBar = {
@@ -245,6 +246,19 @@ fun AiBookApp() {
             composable(Screen.OpdsAddSource.route) {
                 PaddedScreen(paddingValues) {
                     OpdsAddSourceScreen(
+                        connectionId = null,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable(
+                route = "${Screen.OpdsAddSource.route}?connectionId={connectionId}",
+                arguments = listOf(navArgument("connectionId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val connectionId = backStackEntry.arguments?.getString("connectionId")
+                PaddedScreen(paddingValues) {
+                    OpdsAddSourceScreen(
+                        connectionId = connectionId,
                         onBack = { navController.popBackStack() }
                     )
                 }

@@ -97,7 +97,7 @@ fun SettingsScreen(
                 SettingsLine(
                     Icons.Default.ColorLens,
                     "页面主题",
-                    "当前：${readerThemeLabel(state.readerTheme)}",
+                    "${appThemeModeLabel(state.appThemeMode)} · ${readerThemeLabel(state.readerTheme)}",
                     onClick = onThemeClick
                 )
                 SettingsLine(
@@ -171,6 +171,14 @@ private fun readerThemeLabel(theme: com.aibook.android.core.model.ReaderTheme): 
         com.aibook.android.core.model.ReaderTheme.GREEN -> "护眼"
         com.aibook.android.core.model.ReaderTheme.GRAY -> "灰色"
         com.aibook.android.core.model.ReaderTheme.DARK -> "深色"
+    }
+}
+
+private fun appThemeModeLabel(mode: com.aibook.android.core.model.AppThemeMode): String {
+    return when (mode) {
+        com.aibook.android.core.model.AppThemeMode.SYSTEM -> "跟随系统"
+        com.aibook.android.core.model.AppThemeMode.LIGHT -> "浅色"
+        com.aibook.android.core.model.AppThemeMode.DARK -> "深色"
     }
 }
 

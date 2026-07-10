@@ -3,9 +3,17 @@ package com.aibook.android
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.lifecycleScope
+import com.aibook.android.core.model.AccentColor
+import com.aibook.android.core.model.AppThemeMode
+import com.aibook.android.di.ServiceLocator
 import com.aibook.android.ui.theme.AiBookTheme
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -15,8 +23,20 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
 
+        val locator = ServiceLocator.get(application)
+        val appThemeModeFlow = locator.readerSettingsStore.appThemeMode
+            .stateIn(lifecycleScope, SharingStarted.Eagerly, AppThemeMode.SYSTEM)
+        val accentColorFlow = locator.readerSettingsStore.accentColor
+            .stateIn(lifecycleScope, SharingStarted.Eagerly, AccentColor.ORANGE)
+
         setContent {
-            AiBookTheme {
+            val appThemeMode by appThemeModeFlow.collectAsState()
+            val accentColor by accentColorFlow.collectAsState()
+
+            AiBookTheme(
+                appThemeMode = appThemeMode,
+                accentColor = accentColor
+            ) {
                 AiBookApp()
             }
         }

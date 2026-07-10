@@ -9,6 +9,8 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aibook.android.core.data.prefs.ReaderSettingsStore
 import com.aibook.android.core.data.prefs.ServerConfigStore
 import com.aibook.android.core.data.repository.ServerRepository
+import com.aibook.android.core.model.AccentColor
+import com.aibook.android.core.model.AppThemeMode
 import com.aibook.android.core.model.ReaderTheme
 import com.aibook.android.di.ServiceLocator
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +29,8 @@ data class SettingsUiState(
     val fontScale: Float = 1.0f,
     val lineHeight: Float = 1.45f,
     val readerTheme: ReaderTheme = ReaderTheme.PAPER,
+    val appThemeMode: AppThemeMode = AppThemeMode.SYSTEM,
+    val accentColor: AccentColor = AccentColor.ORANGE,
     val loginFormUsername: String = "",
     val loginFormPassword: String = "",
     val isLoggingIn: Boolean = false,
@@ -87,6 +91,16 @@ class SettingsViewModel(
         viewModelScope.launch {
             readerSettingsStore.theme.collect { theme ->
                 _state.update { it.copy(readerTheme = theme) }
+            }
+        }
+        viewModelScope.launch {
+            readerSettingsStore.appThemeMode.collect { mode ->
+                _state.update { it.copy(appThemeMode = mode) }
+            }
+        }
+        viewModelScope.launch {
+            readerSettingsStore.accentColor.collect { color ->
+                _state.update { it.copy(accentColor = color) }
             }
         }
     }
@@ -157,6 +171,14 @@ class SettingsViewModel(
 
     fun setReaderTheme(theme: ReaderTheme) {
         viewModelScope.launch { readerSettingsStore.setTheme(theme) }
+    }
+
+    fun setAppThemeMode(mode: AppThemeMode) {
+        viewModelScope.launch { readerSettingsStore.setAppThemeMode(mode) }
+    }
+
+    fun setAccentColor(color: AccentColor) {
+        viewModelScope.launch { readerSettingsStore.setAccentColor(color) }
     }
 
     companion object {

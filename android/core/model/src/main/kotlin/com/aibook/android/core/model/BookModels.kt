@@ -171,3 +171,17 @@ enum class PageTurnMode {
 }
 
 fun PageTurnMode.usesPagedReading(): Boolean = this != PageTurnMode.VERTICAL
+
+enum class AppThemeMode {
+    SYSTEM,
+    LIGHT,
+    DARK
+}
+
+enum class AccentColor(val colorValue: Long) {
+    ORANGE(0xFFD47A1F),
+    GREEN(0xFF35A65B),
+    BLUE(0xFF2F80ED),
+    PURPLE(0xFF7B4AC5),
+    RED(0xFFE34A45)
+}

@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.aibook.android.core.model.AccentColor
+import com.aibook.android.core.model.AppThemeMode
 import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.core.model.ParagraphSpacing
 import com.aibook.android.core.model.ReaderFontType
@@ -32,6 +34,8 @@ class ReaderSettingsStore(private val context: Context) {
         val PAGE_TURN_MODE = stringPreferencesKey("page_turn_mode")
         val AUTO_BRIGHTNESS = booleanPreferencesKey("auto_brightness")
         val SCREEN_ALWAYS_ON = booleanPreferencesKey("screen_always_on")
+        val APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
+        val ACCENT_COLOR = stringPreferencesKey("accent_color")
     }
 
     val fontScale: Flow<Float> =
@@ -77,6 +81,16 @@ class ReaderSettingsStore(private val context: Context) {
     val screenAlwaysOn: Flow<Boolean> =
         context.readerSettingsStore.data.map { it[Keys.SCREEN_ALWAYS_ON] ?: false }
 
+    val appThemeMode: Flow<AppThemeMode> = context.readerSettingsStore.data.map {
+        val name = it[Keys.APP_THEME_MODE] ?: AppThemeMode.SYSTEM.name
+        runCatching { AppThemeMode.valueOf(name) }.getOrDefault(AppThemeMode.SYSTEM)
+    }
+
+    val accentColor: Flow<AccentColor> = context.readerSettingsStore.data.map {
+        val name = it[Keys.ACCENT_COLOR] ?: AccentColor.ORANGE.name
+        runCatching { AccentColor.valueOf(name) }.getOrDefault(AccentColor.ORANGE)
+    }
+
     suspend fun setFontScale(value: Float) {
         context.readerSettingsStore.edit { it[Keys.FONT_SCALE] = value }
     }
@@ -119,5 +133,13 @@ class ReaderSettingsStore(private val context: Context) {
 
     suspend fun setScreenAlwaysOn(enabled: Boolean) {
         context.readerSettingsStore.edit { it[Keys.SCREEN_ALWAYS_ON] = enabled }
+    }
+
+    suspend fun setAppThemeMode(mode: AppThemeMode) {
+        context.readerSettingsStore.edit { it[Keys.APP_THEME_MODE] = mode.name }
+    }
+
+    suspend fun setAccentColor(color: AccentColor) {
+        context.readerSettingsStore.edit { it[Keys.ACCENT_COLOR] = color.name }
     }
 }

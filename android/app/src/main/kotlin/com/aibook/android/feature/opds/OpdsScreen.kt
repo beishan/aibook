@@ -733,11 +733,33 @@ private fun ConnectionList(
 
 @Composable
 fun OpdsAddSourceScreen(
+    connectionId: String? = null,
     onBack: () -> Unit,
-    viewModel: OpdsViewModel = viewModel(factory = OpdsViewModel.Factory)
+    viewModel: OpdsAddSourceViewModel = viewModel(
+        factory = OpdsAddSourceViewModel.Factory,
+        key = "opds-add-source-${connectionId ?: "new"}"
+    )
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val isEditing = state.editingConnectionId != null
+    val isEditing = connectionId != null
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) {
+        if (connectionId != null) {
+            viewModel.loadConnection(connectionId)
+        }
+    }
+    LaunchedEffect(state.message) {
+        state.message?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearMessage()
+        }
+    }
+    LaunchedEffect(state.saved) {
+        if (state.saved) {
+            onBack()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -873,18 +895,24 @@ fun OpdsAddSourceScreen(
             }
         }
         Button(
-            onClick = { viewModel.saveConnection(browseAfterSave = false, onSaved = onBack) },
+            onClick = { viewModel.save() },
+            enabled = !state.isSaving,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
             shape = RoundedCornerShape(16.dp)
         ) {
-            Text(if (isEditing) "保存修改" else "保存并启用", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (state.isSaving) {
+                CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+            } else {
+                Text(if (isEditing) "保存修改" else "保存并启用", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
         }
         TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
             Text("取消", color = DesignTokens.Accent)
         }
+        SnackbarHost(snackbarHostState)
     }
 }
 

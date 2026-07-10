@@ -287,9 +287,8 @@ private fun DirectoryRow(
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(item.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(item.uri, color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
             Text(
-                "扫描 ${formatScanTime(item.lastScanAt)} · 发现 ${item.discoveredCount} · 新增 ${item.addedCount} · 重复 ${item.duplicateCount}",
+                "扫${item.discoveredCount}/新${item.addedCount}/重${item.duplicateCount}",
                 color = DesignTokens.SoftText,
                 style = MaterialTheme.typography.bodySmall
             )
