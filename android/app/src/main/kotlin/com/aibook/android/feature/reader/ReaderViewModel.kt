@@ -29,6 +29,7 @@ import com.aibook.android.core.reader.ReaderChapterSelection
 import com.aibook.android.core.reader.ReaderBookmark
 import com.aibook.android.core.reader.ReaderProgressCalculator
 import com.aibook.android.core.reader.TextChapterParser
+import com.aibook.android.core.reader.TextFileDecoder
 import com.aibook.android.di.ServiceLocator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,7 +40,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.nio.charset.Charset
 import java.util.UUID
 
 data class ReaderUiState(
@@ -530,10 +530,7 @@ class ReaderViewModel(
     }
 
     private fun readTxtFile(file: File): String {
-        val bytes = file.readBytes()
-        val utf8 = String(bytes, Charsets.UTF_8)
-        return if (hasUtf8Bom(bytes) || looksValidUtf8(utf8)) utf8
-        else String(bytes, Charset.forName("GBK"))
+        return TextFileDecoder.decode(file.readBytes())
     }
 
     private data class ImportedFont(
@@ -569,14 +566,6 @@ class ReaderViewModel(
             }
         }
         return uri.lastPathSegment?.substringAfterLast('/') ?: "imported-font.ttf"
-    }
-
-    private fun hasUtf8Bom(bytes: ByteArray): Boolean =
-        bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()
-
-    private fun looksValidUtf8(text: String): Boolean {
-        val replacementCount = text.count { it == '\uFFFD' }
-        return replacementCount < text.length / 100
     }
 
     private suspend fun persistProgress(state: ReaderUiState) {

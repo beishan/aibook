@@ -6,7 +6,7 @@ object TextChapterParser {
     )
 
     fun parse(text: String): List<ReaderChapter> {
-        if (text.isBlank()) {
+        if (text.isEmpty()) {
             return listOf(ReaderChapter(0, "正文", "chapter-0", ""))
         }
 
@@ -18,7 +18,11 @@ object TextChapterParser {
 
         text.lineSequence().forEach { rawLine ->
             val line = rawLine.trimEnd('\r')
-            val heading = chapterHeading.matchEntire(line)?.groupValues?.get(1)
+            val heading = if (couldBeChapterHeading(line)) {
+                chapterHeading.matchEntire(line)?.groupValues?.get(1)
+            } else {
+                null
+            }
             if (heading != null) {
                 if (current.isNotBlank()) {
                     chapters += ReaderChapter(
@@ -47,5 +51,13 @@ object TextChapterParser {
         }
 
         return chapters
+    }
+
+    private fun couldBeChapterHeading(line: String): Boolean {
+        var index = 0
+        while (index < line.length && line[index].isWhitespace()) {
+            index += 1
+        }
+        return index < line.length && line[index] == '第'
     }
 }
