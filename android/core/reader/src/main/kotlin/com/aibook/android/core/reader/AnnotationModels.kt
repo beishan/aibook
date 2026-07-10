@@ -9,6 +9,9 @@ data class ReaderBookmark(
     val chapterHref: String?,
     val chapterTitle: String?,
     val progress: Float,
+    val chapterIndex: Int? = null,
+    val lineIndex: Int = 0,
+    val scrollOffset: Int = 0,
     val createdAt: Instant = Instant.now()
 ) {
     val progressLabel: String = "${(progress.coerceIn(0f, 1f) * 100).toInt()}%"

@@ -217,10 +217,10 @@ private fun SettingsRowCard(
             icon()
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(subtitle, color = DesignTokens.SoftText)
+                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            trailing?.let { Text(it, color = DesignTokens.SoftText) }
-            Icon(Icons.Default.ChevronRight, null, tint = DesignTokens.SoftText)
+            trailing?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -244,12 +244,12 @@ private fun SettingsLine(
         Icon(icon, null, tint = DesignTokens.Accent)
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = DesignTokens.SoftText)
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Icon(Icons.Default.ChevronRight, null, tint = DesignTokens.SoftText)
+        Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     if (showDivider) {
-        androidx.compose.material3.HorizontalDivider(color = DesignTokens.Hairline)
+        androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
     }
 }
 
@@ -524,7 +524,7 @@ private fun SettingsSubPage(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DesignTokens.AppBackground)
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 24.dp, vertical = 24.dp)
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(18.dp)
@@ -533,7 +533,7 @@ private fun SettingsSubPage(
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
         }
         Text(title, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold)
-        subtitle?.let { Text(it, color = DesignTokens.SoftText, style = MaterialTheme.typography.titleMedium) }
+        subtitle?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium) }
         content()
     }
 }

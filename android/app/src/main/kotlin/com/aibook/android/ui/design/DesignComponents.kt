@@ -43,7 +43,7 @@ fun DesignPage(
     val topPadding = if (title.isNotEmpty()) 20.dp else 0.dp
     Column(
         modifier = modifier
-            .background(DesignTokens.AppBackground)
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = DesignTokens.PagePadding, vertical = topPadding)
     ) {
         if (title.isNotEmpty()) {
@@ -75,9 +75,11 @@ fun DesignPage(
 @Composable
 fun SoftCard(
     modifier: Modifier = Modifier,
-    color: Color = DesignTokens.CardBackground,
+    color: Color = Color.Unspecified,
+    contentPadding: Dp = 18.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val containerColor = if (color == Color.Unspecified) MaterialTheme.colorScheme.surface else color
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -88,9 +90,9 @@ fun SoftCard(
                 spotColor = Color.Black.copy(alpha = 0.08f)
             ),
         shape = RoundedCornerShape(DesignTokens.CardRadius),
-        colors = CardDefaults.cardColors(containerColor = color)
+        colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
-        Column(Modifier.padding(18.dp), content = content)
+        Column(Modifier.padding(contentPadding), content = content)
     }
 }
 
@@ -102,7 +104,7 @@ fun SectionHeader(title: String, trailing: String? = null) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        trailing?.let { Text(it, color = DesignTokens.SoftText) }
+        trailing?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 

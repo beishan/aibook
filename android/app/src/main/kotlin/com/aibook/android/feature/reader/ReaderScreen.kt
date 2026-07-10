@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.FormatAlignJustify
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Checkroom
@@ -52,6 +53,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -106,6 +108,7 @@ import com.aibook.android.core.model.TextAlignment
 import com.aibook.android.core.model.usesPagedReading
 import com.aibook.android.feature.settings.SettingsViewModel
 import com.aibook.android.core.reader.ReaderChapter
+import com.aibook.android.core.reader.ReaderBookmark
 import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.WarmProgress
@@ -119,6 +122,7 @@ import java.io.File
 private enum class ReaderPanel {
     None,
     Contents,
+    Bookmarks,
     Settings,
     Theme
 }
@@ -174,10 +178,20 @@ fun ReaderScreen(
         ReaderPanel.Contents -> ReaderContentsPage(
             state = state,
             onBack = { panel = ReaderPanel.None },
+            onOpenBookmarks = { panel = ReaderPanel.Bookmarks },
             onChapterClick = {
                 viewModel.selectChapter(it)
                 panel = ReaderPanel.None
             }
+        )
+        ReaderPanel.Bookmarks -> ReaderBookmarksPage(
+            bookmarks = state.bookmarks,
+            onBack = { panel = ReaderPanel.Contents },
+            onBookmarkClick = {
+                viewModel.openBookmark(it)
+                panel = ReaderPanel.None
+            },
+            onDelete = viewModel::removeBookmark
         )
         ReaderPanel.Settings -> ReadingSettingsPage(
             state = state,
@@ -203,6 +217,7 @@ fun ReaderScreen(
             onProgressChange = viewModel::updateScrollProgress,
             onLoadNextChapter = viewModel::appendNextChapter,
             onToggleFavorite = viewModel::toggleFavorite,
+            onToggleBookmark = viewModel::toggleBookmark,
             onSelectChapter = viewModel::selectChapter,
             onReadingPositionChanged = viewModel::updateReadingPosition
         )
@@ -239,6 +254,7 @@ private fun ReaderMainPage(
     onProgressChange: (Float) -> Unit,
     onLoadNextChapter: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onToggleBookmark: () -> Unit,
     onSelectChapter: (Int) -> Unit,
     onReadingPositionChanged: (Int, Int, Int) -> Unit
 ) {
@@ -265,6 +281,13 @@ private fun ReaderMainPage(
             val targetOffset = if (canRestore) savedProgress?.scrollOffset ?: 0 else 0
             scrollState.scrollToItem(targetItem.coerceAtLeast(0), targetOffset.coerceAtLeast(0))
             restoredInitialPosition = true
+        }
+    }
+
+    LaunchedEffect(state.bookmarkNavigation?.requestId) {
+        val request = state.bookmarkNavigation ?: return@LaunchedEffect
+        if (!settings.pageTurnMode.usesPagedReading()) {
+            scrollState.scrollToItem((request.lineIndex + 1).coerceAtLeast(0), request.scrollOffset.coerceAtLeast(0))
         }
     }
 
@@ -329,6 +352,8 @@ private fun ReaderMainPage(
                     onOpenTheme = onOpenTheme,
                     isFavorite = state.book?.favorite ?: false,
                     onToggleFavorite = onToggleFavorite,
+                    isBookmarked = state.isCurrentPositionBookmarked,
+                    onToggleBookmark = onToggleBookmark,
                     onSelectChapter = onSelectChapter
                 )
             }
@@ -704,6 +729,8 @@ private fun ReaderBottomBar(
     onOpenTheme: () -> Unit,
     isFavorite: Boolean = false,
     onToggleFavorite: () -> Unit = {},
+    isBookmarked: Boolean = false,
+    onToggleBookmark: () -> Unit = {},
     onSelectChapter: (Int) -> Unit = {}
 ) {
     Column(
@@ -777,7 +804,12 @@ private fun ReaderBottomBar(
             )
             ReaderAction(Icons.Default.Settings, "设置", muted, onOpenSettings)
             ReaderAction(Icons.Default.Checkroom, "主题", muted, onOpenTheme)
-            ReaderAction(Icons.Default.GridView, "更多", muted, {})
+            ReaderAction(
+                icon = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                label = if (isBookmarked) "取消书签" else "书签",
+                color = if (isBookmarked) DesignTokens.Accent else muted,
+                onClick = onToggleBookmark
+            )
         }
     }
 }
@@ -806,6 +838,7 @@ private fun ReaderAction(
 private fun ReaderContentsPage(
     state: ReaderUiState,
     onBack: () -> Unit,
+    onOpenBookmarks: () -> Unit,
     onChapterClick: (Int) -> Unit
 ) {
     val chapters = normalizedChapters(state)
@@ -813,7 +846,7 @@ private fun ReaderContentsPage(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 28.dp, vertical = 25.dp),
         verticalArrangement = Arrangement.spacedBy(22.dp)
     ) {
@@ -831,9 +864,15 @@ private fun ReaderContentsPage(
                 fontWeight = FontWeight.ExtraBold
             )
             Text("共 ${chapters.size} 章", color = DesignTokens.SoftText)
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(onClick = onOpenBookmarks)
+                    .padding(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(Icons.Default.BookmarkBorder, contentDescription = null)
-                Text("书签")
+                Text("书签 ${state.bookmarks.size}")
             }
         }
 //        Row(
@@ -913,6 +952,93 @@ private fun ReaderContentsPage(
                     color = DesignTokens.SoftText,
                     textAlign = TextAlign.Center
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReaderBookmarksPage(
+    bookmarks: List<ReaderBookmark>,
+    onBack: () -> Unit,
+    onBookmarkClick: (ReaderBookmark) -> Unit,
+    onDelete: (ReaderBookmark) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .padding(horizontal = 24.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回目录")
+            }
+            Text(
+                text = "书签",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Text("${bookmarks.size} 条", color = DesignTokens.SoftText)
+        }
+
+        if (bookmarks.isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 72.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    Icons.Default.BookmarkBorder,
+                    contentDescription = null,
+                    tint = DesignTokens.SoftText,
+                    modifier = Modifier.size(44.dp)
+                )
+                Text("还没有书签", fontWeight = FontWeight.Bold)
+                Text("阅读时打开底部工具栏，点击“书签”即可添加", color = DesignTokens.SoftText)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                itemsIndexed(bookmarks, key = { _, bookmark -> bookmark.id }) { _, bookmark ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onBookmarkClick(bookmark) },
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F4F0)),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Default.Bookmark, contentDescription = null, tint = DesignTokens.Accent)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    bookmark.chapterTitle?.takeIf { it.isNotBlank() } ?: "正文",
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    "${bookmark.progressLabel} · 第 ${bookmark.lineIndex + 1} 段",
+                                    color = DesignTokens.SoftText,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            IconButton(onClick = { onDelete(bookmark) }) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = "删除书签", tint = DesignTokens.SoftText)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1578,7 +1704,7 @@ private fun ThemeSettingsPage(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 24.dp, vertical = 30.dp)
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(22.dp)
@@ -1588,8 +1714,8 @@ private fun ThemeSettingsPage(
         // App Theme Mode
         Text("外观模式", style = MaterialTheme.typography.titleLarge)
         Card(
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             shape = RoundedCornerShape(18.dp)
         ) {
             Row(
@@ -1614,7 +1740,7 @@ private fun ThemeSettingsPage(
                             )
                             .border(
                                 1.dp,
-                                if (selected) DesignTokens.Accent else DesignTokens.Hairline,
+                                if (selected) DesignTokens.Accent else MaterialTheme.colorScheme.outline,
                                 RoundedCornerShape(12.dp)
                             )
                             .clickable { onAppThemeModeChange(mode) },
@@ -1622,7 +1748,7 @@ private fun ThemeSettingsPage(
                     ) {
                         Text(
                             label,
-                            color = if (selected) Color.White else DesignTokens.SoftText,
+                            color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
                         )
                     }
@@ -1633,8 +1759,8 @@ private fun ThemeSettingsPage(
         // Accent Color
         Text("主题配色", style = MaterialTheme.typography.titleLarge)
         Card(
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             shape = RoundedCornerShape(18.dp)
         ) {
             Row(
@@ -1722,9 +1848,9 @@ private fun ThemeSettingsPage(
         Text("效果预览", style = MaterialTheme.typography.titleLarge)
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(18.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
         ) {
             Row(
                 modifier = Modifier.padding(18.dp),
@@ -1734,10 +1860,10 @@ private fun ThemeSettingsPage(
                 BookCover("三体（全集）", width = 86.dp, height = 122.dp)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("三体（全集）", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("刘慈欣", color = DesignTokens.SoftText)
-                    Text("阅读进度 42%", color = DesignTokens.SoftText)
+                    Text("刘慈欣", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("阅读进度 42%", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     WarmProgress(0.42f, Modifier.fillMaxWidth())
-                    Text("上次阅读：昨天 22:15", color = DesignTokens.SoftText)
+                    Text("上次阅读：昨天 22:15", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(
                     "继续阅读",

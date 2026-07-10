@@ -171,6 +171,13 @@ class StoreViewModel(
         }
     }
 
+    fun removeLocalBookFromShelf(book: StoreBook) {
+        if (book.kind != StoreItemKind.LOCAL || !book.shelved) return
+        viewModelScope.launch {
+            bookRepository.setShelved(book.id, false)
+        }
+    }
+
     fun removeLocalBooksFromStore(books: Collection<StoreBook>) {
         val localBooks = books.filter { it.kind == StoreItemKind.LOCAL }
         if (localBooks.isEmpty()) return

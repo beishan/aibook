@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.LocalMall
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -99,8 +100,8 @@ fun AiBookApp() {
             if (showBottomBar) {
                 NavigationBar(
                     modifier = Modifier.height(64.dp),
-                    containerColor = DesignTokens.AppBackground,
-                    contentColor = DesignTokens.SoftText,
+                    containerColor = MaterialTheme.colorScheme.background,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     tonalElevation = 0.dp
                 ) {
                     Row(
@@ -110,7 +111,7 @@ fun AiBookApp() {
                     ) {
                         bottomTabs.forEach { tab ->
                             val selected = selectedBottomRoute == tab.screen.route
-                            val color = if (selected) DesignTokens.Accent else DesignTokens.SoftText
+                            val color = if (selected) DesignTokens.Accent else MaterialTheme.colorScheme.onSurfaceVariant
                             Column(
                                 modifier = Modifier
                                     .weight(1f)

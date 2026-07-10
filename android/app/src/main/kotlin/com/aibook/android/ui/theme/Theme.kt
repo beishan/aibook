@@ -25,10 +25,17 @@ private fun lightColors(accent: AccentColor) = lightColorScheme(
 
 private fun darkColors(accent: AccentColor) = darkColorScheme(
     primary = Color(accent.colorValue),
+    onPrimary = Color.White,
     secondary = Color(0xFFD5C4B2),
     tertiary = Color(0xFFA9C388),
     background = Color(0xFF11140F),
-    surface = Color(0xFF11140F)
+    onBackground = Color(0xFFF3EFE9),
+    surface = Color(0xFF171A15),
+    onSurface = Color(0xFFF3EFE9),
+    surfaceVariant = Color(0xFF23271F),
+    onSurfaceVariant = Color(0xFFC8C1B8),
+    surfaceContainerHighest = Color(0xFF252920),
+    outline = Color(0xFF5F6558)
 )
 
 @Composable

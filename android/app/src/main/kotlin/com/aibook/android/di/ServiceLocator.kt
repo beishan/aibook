@@ -9,6 +9,7 @@ import com.aibook.android.core.data.repository.OpdsCatalogCacheRepository
 import com.aibook.android.core.data.repository.OpdsConnectionRepository
 import com.aibook.android.core.data.repository.ScanDirectoryRepository
 import com.aibook.android.core.data.repository.ServerRepository
+import com.aibook.android.core.data.repository.ReaderBookmarkRepository
 import com.aibook.android.core.network.opds.OkHttpOpdsTransport
 import com.aibook.android.core.network.opds.OpdsCatalogService
 import com.aibook.android.core.network.opds.OpdsFeedParser
@@ -40,6 +41,10 @@ class ServiceLocator(private val context: Context) {
 
     val serverRepository: ServerRepository by lazy {
         ServerRepository(serverConfigStore)
+    }
+
+    val readerBookmarkRepository: ReaderBookmarkRepository by lazy {
+        ReaderBookmarkRepository(database.readerBookmarkDao())
     }
 
     val opdsCatalogService: OpdsCatalogService by lazy {

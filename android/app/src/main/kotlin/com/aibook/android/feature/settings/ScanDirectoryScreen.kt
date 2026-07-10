@@ -80,7 +80,7 @@ fun ScanDirectoryScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DesignTokens.AppBackground)
+            .background(MaterialTheme.colorScheme.background)
     ) {
         Column(
             modifier = Modifier
@@ -105,9 +105,9 @@ fun ScanDirectoryScreen(
             }
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = DesignTokens.WarmCard),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(18.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Row(
                     modifier = Modifier.padding(14.dp),
@@ -126,7 +126,7 @@ fun ScanDirectoryScreen(
                             .padding(horizontal = 14.dp)
                             .height(48.dp)
                             .width(1.dp)
-                            .background(DesignTokens.Hairline)
+                            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
                     )
                     DirectoryAction(
                         modifier = Modifier.weight(1f),
@@ -169,18 +169,18 @@ fun ScanDirectoryScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("已配置目录", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("共 ${state.directories.size} 个目录", color = DesignTokens.SoftText)
+                Text("共 ${state.directories.size} 个目录", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(18.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 if (state.directories.isEmpty()) {
                     Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("还没有扫描目录", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("点击「添加目录」选择本机或云盘文件夹，授权后即可递归扫描电子书文件。", color = DesignTokens.SoftText)
+                        Text("点击「添加目录」选择本机或云盘文件夹，授权后即可递归扫描电子书文件。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
                     Column {
@@ -196,7 +196,7 @@ fun ScanDirectoryScreen(
                             if (index != state.directories.lastIndex) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(start = 52.dp),
-                                    color = DesignTokens.Hairline
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
                                 )
                             }
                         }
@@ -205,7 +205,7 @@ fun ScanDirectoryScreen(
             }
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = DesignTokens.WarmCard),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(18.dp)
             ) {
                 Row(
@@ -216,7 +216,7 @@ fun ScanDirectoryScreen(
                     Icon(Icons.Default.Lightbulb, null, tint = DesignTokens.Accent)
                     Column {
                         Text("提示", fontWeight = FontWeight.Bold)
-                        Text("支持扫描 EPUB、TXT、PDF、Markdown、HTML 文件，重复书籍会按内容哈希自动跳过。", color = DesignTokens.SoftText)
+                        Text("支持扫描 EPUB、TXT、PDF、Markdown、HTML 文件，重复书籍会按内容哈希自动跳过。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -248,13 +248,13 @@ private fun DirectoryAction(
                 .background(Color(0xFFF5E7D8), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = if (enabled) DesignTokens.Accent else DesignTokens.SoftText, modifier = Modifier.size(24.dp))
+            Icon(icon, null, tint = if (enabled) DesignTokens.Accent else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
         }
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = DesignTokens.SoftText)
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -289,7 +289,7 @@ private fun DirectoryRow(
             Text(item.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
                 "扫${item.discoveredCount}/新${item.addedCount}/重${item.duplicateCount}",
-                color = DesignTokens.SoftText,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )
             item.lastErrorMessage?.let {
@@ -298,7 +298,7 @@ private fun DirectoryRow(
         }
         Text(
             if (item.enabled) "已开启" else "已关闭",
-            color = if (item.enabled) DesignTokens.Accent else DesignTokens.SoftText,
+            color = if (item.enabled) DesignTokens.Accent else MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelSmall
         )
         Switch(
@@ -315,7 +315,7 @@ private fun DirectoryRow(
             }
         }
         IconButton(onClick = onDelete, enabled = !busy, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Default.Delete, contentDescription = "删除", tint = DesignTokens.SoftText, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
         }
     }
 }

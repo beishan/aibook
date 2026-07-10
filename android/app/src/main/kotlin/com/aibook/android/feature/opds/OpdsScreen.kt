@@ -386,9 +386,9 @@ private fun FormatBadge(format: String) {
 private fun SupportedFormatsCard(message: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4E8)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         shape = RoundedCornerShape(18.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0D8BD))
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Row(
             modifier = Modifier.padding(18.dp),
@@ -400,14 +400,14 @@ private fun SupportedFormatsCard(message: String) {
                 null,
                 modifier = Modifier
                     .size(54.dp)
-                    .background(Color(0xFFF2D2AA), CircleShape)
+                    .background(DesignTokens.Accent.copy(alpha = 0.18f), CircleShape)
                     .padding(14.dp),
                 tint = DesignTokens.Accent
             )
             Column {
                 Text("支持的文件格式", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Text("EPUB / TXT / PDF / MOBI", color = DesignTokens.SoftText)
-                Text("$message。文件过大或加密文件可能无法导入", color = DesignTokens.SoftText)
+                Text("EPUB / TXT / PDF / MOBI", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("$message。文件过大或加密文件可能无法导入", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

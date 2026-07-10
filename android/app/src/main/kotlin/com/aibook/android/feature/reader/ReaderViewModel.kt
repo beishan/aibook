@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aibook.android.core.data.prefs.ReaderSettingsStore
 import com.aibook.android.core.data.repository.BookRepository
 import com.aibook.android.core.data.repository.ServerRepository
+import com.aibook.android.core.data.repository.ReaderBookmarkRepository
 import com.aibook.android.core.model.BookFormat
 import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.PageTurnMode
@@ -24,6 +25,7 @@ import com.aibook.android.core.reader.EpubBookContent
 import com.aibook.android.core.reader.EpubContentParser
 import com.aibook.android.core.reader.ReaderChapter
 import com.aibook.android.core.reader.ReaderChapterSelection
+import com.aibook.android.core.reader.ReaderBookmark
 import com.aibook.android.core.reader.ReaderProgressCalculator
 import com.aibook.android.core.reader.TextChapterParser
 import com.aibook.android.di.ServiceLocator
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.charset.Charset
@@ -52,7 +55,9 @@ data class ReaderUiState(
     val remoteBookId: Long? = null,
     val settings: ReaderSettings = ReaderSettings(),
     val isBookSpecific: Boolean = false,
-    val hasSettingsDraft: Boolean = false
+    val hasSettingsDraft: Boolean = false,
+    val bookmarks: List<ReaderBookmark> = emptyList(),
+    val bookmarkNavigation: BookmarkNavigation? = null
 ) {
     val content: String get() = loadedChapters.joinToString("\n") { it.content }
     val hasReadableContent: Boolean get() =
@@ -62,18 +67,30 @@ data class ReaderUiState(
             ?: chapters.getOrNull(currentChapterIndex)?.title
             ?: book?.progress?.chapterTitle
             ?: ""
+    val isCurrentPositionBookmarked: Boolean get() = bookmarks.any {
+        it.chapterIndex == currentChapterIndex && it.lineIndex == currentLineIndex
+    }
 }
+
+data class BookmarkNavigation(
+    val requestId: Long,
+    val chapterIndex: Int,
+    val lineIndex: Int,
+    val scrollOffset: Int
+)
 
 class ReaderViewModel(
     private val appContext: android.content.Context,
     private val bookRepository: BookRepository,
     private val readerSettingsStore: ReaderSettingsStore,
-    private val serverRepository: ServerRepository
+    private val serverRepository: ServerRepository,
+    private val readerBookmarkRepository: ReaderBookmarkRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReaderUiState())
     private val loadingChapterIndexes = mutableSetOf<Int>()
     private var settingsSnapshot: ReaderSettings? = null
+    private var bookmarkObservationJob: Job? = null
 
     val uiState: StateFlow<ReaderUiState> = _state
         .asStateFlow()
@@ -109,6 +126,7 @@ class ReaderViewModel(
                 currentScrollOffset = book.progress.scrollOffset,
                 scrollProgress = book.progress.percent
             )
+            observeBookmarks(book.id)
 
             try {
                 val file = File(book.uri)
@@ -162,7 +180,15 @@ class ReaderViewModel(
 
     fun loadRemoteBook(bookId: Long) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true, errorMessage = null, isRemote = true, remoteBookId = bookId)
+            bookmarkObservationJob?.cancel()
+            _state.value = _state.value.copy(
+                book = null,
+                bookmarks = emptyList(),
+                isLoading = true,
+                errorMessage = null,
+                isRemote = true,
+                remoteBookId = bookId
+            )
             try {
                 val result = serverRepository.getProcessedContent(bookId)
                 result.onSuccess { response ->
@@ -217,6 +243,83 @@ class ReaderViewModel(
             _state.update { it.copy(book = it.book?.copy(favorite = newFavorite)) }
         }
     }
+
+    fun toggleBookmark() {
+        val state = _state.value
+        val book = state.book ?: return
+        val existing = currentBookmark(state)
+        viewModelScope.launch {
+            if (existing != null) {
+                readerBookmarkRepository.remove(existing.id)
+            } else {
+                val chapter = state.chapters.getOrNull(state.currentChapterIndex)
+                readerBookmarkRepository.add(
+                    ReaderBookmark(
+                        bookId = book.id,
+                        chapterHref = chapter?.href,
+                        chapterTitle = chapter?.title,
+                        progress = state.scrollProgress,
+                        chapterIndex = state.currentChapterIndex,
+                        lineIndex = state.currentLineIndex,
+                        scrollOffset = state.currentScrollOffset
+                    )
+                )
+            }
+        }
+    }
+
+    fun removeBookmark(bookmark: ReaderBookmark) {
+        viewModelScope.launch { readerBookmarkRepository.remove(bookmark.id) }
+    }
+
+    fun openBookmark(bookmark: ReaderBookmark) {
+        val targetIndex = bookmark.chapterIndex
+            ?: _state.value.chapters.indexOfFirst { it.href == bookmark.chapterHref }.takeIf { it >= 0 }
+            ?: return
+        val chapter = _state.value.chapters.getOrNull(targetIndex) ?: return
+        val book = _state.value.book ?: return
+
+        viewModelScope.launch {
+            val loaded = if (
+                book.format == BookFormat.EPUB &&
+                chapter.content.isBlank() && chapter.imageUri.isNullOrBlank()
+            ) {
+                runCatching { ReadiumEpubReader(appContext).parseChapter(File(book.uri), targetIndex) }.getOrNull()
+                    ?: chapter
+            } else chapter
+            val updatedChapters = _state.value.chapters.map { if (it.index == targetIndex) loaded else it }
+            _state.update {
+                it.copy(
+                    chapters = updatedChapters,
+                    loadedChapters = listOf(loaded),
+                    currentChapterIndex = targetIndex,
+                    currentLineIndex = bookmark.lineIndex,
+                    currentScrollOffset = bookmark.scrollOffset,
+                    scrollProgress = bookmark.progress,
+                    bookmarkNavigation = BookmarkNavigation(
+                        requestId = System.nanoTime(),
+                        chapterIndex = targetIndex,
+                        lineIndex = bookmark.lineIndex,
+                        scrollOffset = bookmark.scrollOffset
+                    )
+                )
+            }
+        }
+    }
+
+    private fun observeBookmarks(bookId: String) {
+        bookmarkObservationJob?.cancel()
+        bookmarkObservationJob = viewModelScope.launch {
+            readerBookmarkRepository.observeForBook(bookId).collect { bookmarks ->
+                _state.update { it.copy(bookmarks = bookmarks) }
+            }
+        }
+    }
+
+    private fun currentBookmark(state: ReaderUiState): ReaderBookmark? =
+        state.bookmarks.firstOrNull {
+            it.chapterIndex == state.currentChapterIndex && it.lineIndex == state.currentLineIndex
+        }
 
     fun selectChapter(index: Int) {
         val chapters = _state.value.chapters
@@ -569,7 +672,13 @@ class ReaderViewModel(
             initializer {
                 val app = this[APPLICATION_KEY] as Application
                 val locator = ServiceLocator.get(app)
-                ReaderViewModel(app, locator.bookRepository, locator.readerSettingsStore, locator.serverRepository)
+                ReaderViewModel(
+                    app,
+                    locator.bookRepository,
+                    locator.readerSettingsStore,
+                    locator.serverRepository,
+                    locator.readerBookmarkRepository
+                )
             }
         }
     }

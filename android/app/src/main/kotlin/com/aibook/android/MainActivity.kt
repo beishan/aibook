@@ -7,6 +7,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.aibook.android.core.model.AccentColor
 import com.aibook.android.core.model.AppThemeMode
@@ -32,6 +35,19 @@ class MainActivity : ComponentActivity() {
         setContent {
             val appThemeMode by appThemeModeFlow.collectAsState()
             val accentColor by accentColorFlow.collectAsState()
+            val systemDark = isSystemInDarkTheme()
+            val darkTheme = when (appThemeMode) {
+                AppThemeMode.SYSTEM -> systemDark
+                AppThemeMode.LIGHT -> false
+                AppThemeMode.DARK -> true
+            }
+
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !darkTheme
+                    isAppearanceLightNavigationBars = !darkTheme
+                }
+            }
 
             AiBookTheme(
                 appThemeMode = appThemeMode,
