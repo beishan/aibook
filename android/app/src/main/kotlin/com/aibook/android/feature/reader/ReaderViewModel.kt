@@ -16,6 +16,7 @@ import com.aibook.android.core.model.BookFormat
 import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.core.model.ParagraphSpacing
+import com.aibook.android.core.model.ReaderContentsStyle
 import com.aibook.android.core.model.ReaderFontCatalog
 import com.aibook.android.core.model.ReaderFontType
 import com.aibook.android.core.model.ReaderSettings
@@ -107,6 +108,7 @@ class ReaderViewModel(
         viewModelScope.launch { readerSettingsStore.pageTurnMode.collect { v -> _state.update { it.copy(settings = it.settings.copy(pageTurnMode = v)) } } }
         viewModelScope.launch { readerSettingsStore.autoBrightness.collect { v -> _state.update { it.copy(settings = it.settings.copy(autoBrightness = v)) } } }
         viewModelScope.launch { readerSettingsStore.screenAlwaysOn.collect { v -> _state.update { it.copy(settings = it.settings.copy(screenAlwaysOn = v)) } } }
+        viewModelScope.launch { readerSettingsStore.contentsStyle.collect { v -> _state.update { it.copy(settings = it.settings.copy(contentsStyle = v)) } } }
     }
 
     fun loadLocalBook(bookId: String) {
@@ -468,6 +470,10 @@ class ReaderViewModel(
         viewModelScope.launch { readerSettingsStore.setScreenAlwaysOn(enabled) }
     }
 
+    fun setContentsStyle(style: ReaderContentsStyle) {
+        viewModelScope.launch { readerSettingsStore.setContentsStyle(style) }
+    }
+
     fun setBookSpecific(bookSpecific: Boolean) {
         _state.update { it.copy(isBookSpecific = bookSpecific) }
     }
@@ -502,6 +508,7 @@ class ReaderViewModel(
                 readerSettingsStore.setPageTurnMode(snapshot.pageTurnMode)
                 readerSettingsStore.setAutoBrightness(snapshot.autoBrightness)
                 readerSettingsStore.setScreenAlwaysOn(snapshot.screenAlwaysOn)
+                readerSettingsStore.setContentsStyle(snapshot.contentsStyle)
             }
         }
     }
@@ -518,6 +525,7 @@ class ReaderViewModel(
             readerSettingsStore.setPageTurnMode(defaults.pageTurnMode)
             readerSettingsStore.setAutoBrightness(defaults.autoBrightness)
             readerSettingsStore.setScreenAlwaysOn(defaults.screenAlwaysOn)
+            readerSettingsStore.setContentsStyle(defaults.contentsStyle)
         }
     }
 

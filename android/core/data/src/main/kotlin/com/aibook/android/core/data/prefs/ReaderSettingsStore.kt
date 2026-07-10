@@ -12,6 +12,7 @@ import com.aibook.android.core.model.AccentColor
 import com.aibook.android.core.model.AppThemeMode
 import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.core.model.ParagraphSpacing
+import com.aibook.android.core.model.ReaderContentsStyle
 import com.aibook.android.core.model.ReaderFontType
 import com.aibook.android.core.model.ReaderTheme
 import com.aibook.android.core.model.TextAlignment
@@ -20,7 +21,9 @@ import kotlinx.coroutines.flow.map
 
 private val Context.readerSettingsStore: DataStore<Preferences> by preferencesDataStore(name = "reader_settings")
 
-class ReaderSettingsStore(private val context: Context) {
+class ReaderSettingsStore(private val dataStore: DataStore<Preferences>) {
+
+    constructor(context: Context) : this(context.readerSettingsStore)
 
     private object Keys {
         val FONT_SCALE = floatPreferencesKey("font_scale")
@@ -36,71 +39,76 @@ class ReaderSettingsStore(private val context: Context) {
         val SCREEN_ALWAYS_ON = booleanPreferencesKey("screen_always_on")
         val APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
         val ACCENT_COLOR = stringPreferencesKey("accent_color")
+        val CONTENTS_STYLE = stringPreferencesKey("contents_style")
     }
 
     val fontScale: Flow<Float> =
-        context.readerSettingsStore.data.map { it[Keys.FONT_SCALE] ?: 1.0f }
+        dataStore.data.map { it[Keys.FONT_SCALE] ?: 1.0f }
 
-    val fontType: Flow<ReaderFontType> = context.readerSettingsStore.data.map {
+    val fontType: Flow<ReaderFontType> = dataStore.data.map {
         val name = it[Keys.FONT_TYPE] ?: ReaderFontType.SYSTEM.name
         runCatching { ReaderFontType.valueOf(name) }.getOrDefault(ReaderFontType.SYSTEM)
     }
 
     val customFontName: Flow<String?> =
-        context.readerSettingsStore.data.map { it[Keys.CUSTOM_FONT_NAME] }
+        dataStore.data.map { it[Keys.CUSTOM_FONT_NAME] }
 
     val customFontPath: Flow<String?> =
-        context.readerSettingsStore.data.map { it[Keys.CUSTOM_FONT_PATH] }
+        dataStore.data.map { it[Keys.CUSTOM_FONT_PATH] }
 
     val lineHeight: Flow<Float> =
-        context.readerSettingsStore.data.map { it[Keys.LINE_HEIGHT] ?: 1.45f }
+        dataStore.data.map { it[Keys.LINE_HEIGHT] ?: 1.45f }
 
-    val theme: Flow<ReaderTheme> = context.readerSettingsStore.data.map {
+    val theme: Flow<ReaderTheme> = dataStore.data.map {
         val name = it[Keys.THEME] ?: ReaderTheme.PAPER.name
         runCatching { ReaderTheme.valueOf(name) }.getOrDefault(ReaderTheme.PAPER)
     }
 
-    val paragraphSpacing: Flow<ParagraphSpacing> = context.readerSettingsStore.data.map {
+    val paragraphSpacing: Flow<ParagraphSpacing> = dataStore.data.map {
         val name = it[Keys.PARAGRAPH_SPACING] ?: ParagraphSpacing.SMALL.name
         runCatching { ParagraphSpacing.valueOf(name) }.getOrDefault(ParagraphSpacing.SMALL)
     }
 
-    val textAlignment: Flow<TextAlignment> = context.readerSettingsStore.data.map {
+    val textAlignment: Flow<TextAlignment> = dataStore.data.map {
         val name = it[Keys.TEXT_ALIGNMENT] ?: TextAlignment.LEFT.name
         runCatching { TextAlignment.valueOf(name) }.getOrDefault(TextAlignment.LEFT)
     }
 
-    val pageTurnMode: Flow<PageTurnMode> = context.readerSettingsStore.data.map {
+    val pageTurnMode: Flow<PageTurnMode> = dataStore.data.map {
         val name = it[Keys.PAGE_TURN_MODE] ?: PageTurnMode.SIMULATION.name
         runCatching { PageTurnMode.valueOf(name) }.getOrDefault(PageTurnMode.SIMULATION)
     }
 
     val autoBrightness: Flow<Boolean> =
-        context.readerSettingsStore.data.map { it[Keys.AUTO_BRIGHTNESS] ?: true }
+        dataStore.data.map { it[Keys.AUTO_BRIGHTNESS] ?: true }
 
     val screenAlwaysOn: Flow<Boolean> =
-        context.readerSettingsStore.data.map { it[Keys.SCREEN_ALWAYS_ON] ?: false }
+        dataStore.data.map { it[Keys.SCREEN_ALWAYS_ON] ?: false }
 
-    val appThemeMode: Flow<AppThemeMode> = context.readerSettingsStore.data.map {
+    val appThemeMode: Flow<AppThemeMode> = dataStore.data.map {
         val name = it[Keys.APP_THEME_MODE] ?: AppThemeMode.SYSTEM.name
         runCatching { AppThemeMode.valueOf(name) }.getOrDefault(AppThemeMode.SYSTEM)
     }
 
-    val accentColor: Flow<AccentColor> = context.readerSettingsStore.data.map {
+    val accentColor: Flow<AccentColor> = dataStore.data.map {
         val name = it[Keys.ACCENT_COLOR] ?: AccentColor.ORANGE.name
         runCatching { AccentColor.valueOf(name) }.getOrDefault(AccentColor.ORANGE)
     }
 
+    val contentsStyle: Flow<ReaderContentsStyle> = dataStore.data.map {
+        ReaderContentsStyle.fromStoredValue(it[Keys.CONTENTS_STYLE])
+    }
+
     suspend fun setFontScale(value: Float) {
-        context.readerSettingsStore.edit { it[Keys.FONT_SCALE] = value }
+        dataStore.edit { it[Keys.FONT_SCALE] = value }
     }
 
     suspend fun setFontType(type: ReaderFontType) {
-        context.readerSettingsStore.edit { it[Keys.FONT_TYPE] = type.name }
+        dataStore.edit { it[Keys.FONT_TYPE] = type.name }
     }
 
     suspend fun setCustomFont(name: String, path: String) {
-        context.readerSettingsStore.edit {
+        dataStore.edit {
             it[Keys.FONT_TYPE] = ReaderFontType.CUSTOM.name
             it[Keys.CUSTOM_FONT_NAME] = name
             it[Keys.CUSTOM_FONT_PATH] = path
@@ -108,38 +116,42 @@ class ReaderSettingsStore(private val context: Context) {
     }
 
     suspend fun setLineHeight(value: Float) {
-        context.readerSettingsStore.edit { it[Keys.LINE_HEIGHT] = value }
+        dataStore.edit { it[Keys.LINE_HEIGHT] = value }
     }
 
     suspend fun setTheme(theme: ReaderTheme) {
-        context.readerSettingsStore.edit { it[Keys.THEME] = theme.name }
+        dataStore.edit { it[Keys.THEME] = theme.name }
     }
 
     suspend fun setParagraphSpacing(spacing: ParagraphSpacing) {
-        context.readerSettingsStore.edit { it[Keys.PARAGRAPH_SPACING] = spacing.name }
+        dataStore.edit { it[Keys.PARAGRAPH_SPACING] = spacing.name }
     }
 
     suspend fun setTextAlignment(alignment: TextAlignment) {
-        context.readerSettingsStore.edit { it[Keys.TEXT_ALIGNMENT] = alignment.name }
+        dataStore.edit { it[Keys.TEXT_ALIGNMENT] = alignment.name }
     }
 
     suspend fun setPageTurnMode(mode: PageTurnMode) {
-        context.readerSettingsStore.edit { it[Keys.PAGE_TURN_MODE] = mode.name }
+        dataStore.edit { it[Keys.PAGE_TURN_MODE] = mode.name }
     }
 
     suspend fun setAutoBrightness(enabled: Boolean) {
-        context.readerSettingsStore.edit { it[Keys.AUTO_BRIGHTNESS] = enabled }
+        dataStore.edit { it[Keys.AUTO_BRIGHTNESS] = enabled }
     }
 
     suspend fun setScreenAlwaysOn(enabled: Boolean) {
-        context.readerSettingsStore.edit { it[Keys.SCREEN_ALWAYS_ON] = enabled }
+        dataStore.edit { it[Keys.SCREEN_ALWAYS_ON] = enabled }
     }
 
     suspend fun setAppThemeMode(mode: AppThemeMode) {
-        context.readerSettingsStore.edit { it[Keys.APP_THEME_MODE] = mode.name }
+        dataStore.edit { it[Keys.APP_THEME_MODE] = mode.name }
     }
 
     suspend fun setAccentColor(color: AccentColor) {
-        context.readerSettingsStore.edit { it[Keys.ACCENT_COLOR] = color.name }
+        dataStore.edit { it[Keys.ACCENT_COLOR] = color.name }
+    }
+
+    suspend fun setContentsStyle(style: ReaderContentsStyle) {
+        dataStore.edit { it[Keys.CONTENTS_STYLE] = style.name }
     }
 }
