@@ -4,8 +4,10 @@ import android.app.Application
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -30,6 +32,7 @@ import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,8 +43,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aibook.android.core.model.BookFormat
 import com.aibook.android.core.model.LocalBook
+import com.aibook.android.core.reader.EpubContentParser
+import com.aibook.android.core.reader.TextChapterParser
 import com.aibook.android.di.ServiceLocator
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SectionHeader
@@ -112,13 +121,52 @@ fun BookDetailScreen(
             Text("更多 ›", color = DesignTokens.SoftText, modifier = Modifier.align(Alignment.CenterVertically))
         }
 
+        val chapterTitles by produceState<List<String>>(emptyList(), currentBook.id, currentBook.description) {
+            if (currentBook.description.isNullOrBlank()) {
+                value = withContext(Dispatchers.IO) { loadChapterTitles(currentBook) }
+            } else {
+                value = emptyList()
+            }
+        }
+
         SoftCard {
             SectionHeader("书籍简介", "展开⌄")
             Text(
-                text = "这本书已加入你的私人书库，可离线阅读并保存阅读进度。后续将支持从元数据服务补全简介、评分与封面。",
-                color = DesignTokens.SoftText,
-                lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
+                text = currentBook.title,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium
             )
+            Spacer(Modifier.height(8.dp))
+            val desc = currentBook.description
+            if (!desc.isNullOrBlank()) {
+                Text(
+                    text = desc,
+                    color = DesignTokens.SoftText,
+                    lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
+                )
+            } else if (chapterTitles.isNotEmpty()) {
+                chapterTitles.take(10).forEachIndexed { index, title ->
+                    Text(
+                        text = "${index + 1}. $title",
+                        color = DesignTokens.SoftText,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                if (chapterTitles.size > 10) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "共 ${chapterTitles.size} 章 ›",
+                        color = DesignTokens.SoftText,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            } else {
+                Text(
+                    text = "暂无简介",
+                    color = DesignTokens.SoftText,
+                    lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
+                )
+            }
         }
 
         SoftCard {
@@ -189,5 +237,25 @@ private fun InfoItem(label: String, value: String) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
         Text(value, fontWeight = FontWeight.Medium)
+    }
+}
+
+private fun loadChapterTitles(book: LocalBook): List<String> {
+    return try {
+        val file = File(book.uri)
+        if (!file.exists()) return emptyList()
+        when (book.format) {
+            BookFormat.EPUB -> {
+                val epub = EpubContentParser.parse(file.readBytes())
+                epub.chapters.map { it.title }
+            }
+            BookFormat.TXT, BookFormat.MARKDOWN, BookFormat.HTML, BookFormat.HTM -> {
+                val text = file.readText()
+                TextChapterParser.parse(text).map { it.title }
+            }
+            else -> emptyList()
+        }
+    } catch (e: Exception) {
+        emptyList()
     }
 }

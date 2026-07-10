@@ -36,6 +36,7 @@ data class LocalBook(
     val id: String,
     val title: String,
     val author: String? = null,
+    val description: String? = null,
     val format: BookFormat,
     val uri: String,
     val sha256: String? = null,

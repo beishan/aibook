@@ -10,6 +10,7 @@ data class EpubMetadata(
     val title: String? = null,
     val author: String? = null,
     val language: String? = null,
+    val description: String? = null,
     val coverImage: EpubImage? = null
 )
 
@@ -59,6 +60,7 @@ object EpubMetadataParser {
             title = root.firstTextByLocalName("title"),
             author = root.firstTextByLocalName("creator"),
             language = root.firstTextByLocalName("language"),
+            description = root.firstTextByLocalName("description"),
             coverImage = coverImage
         )
     }

@@ -79,7 +79,8 @@ object EpubContentParser {
         return EpubMetadata(
             title = root.firstTextByLocalName("title"),
             author = root.firstTextByLocalName("creator"),
-            language = root.firstTextByLocalName("language")
+            language = root.firstTextByLocalName("language"),
+            description = root.firstTextByLocalName("description")
         )
     }
 

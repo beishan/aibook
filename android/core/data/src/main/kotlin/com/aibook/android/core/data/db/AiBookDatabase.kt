@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ShelfFolderEntity::class,
         ReaderBookmarkEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class AiBookDatabase : RoomDatabase() {
@@ -39,11 +39,17 @@ abstract class AiBookDatabase : RoomDatabase() {
                     AiBookDatabase::class.java,
                     "aibook.db"
                 )
-                    .addMigrations(MIGRATION_8_9)
+                    .addMigrations(MIGRATION_8_9, MIGRATION_9_10)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance
                 instance
+            }
+        }
+
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE books ADD COLUMN description TEXT")
             }
         }
 
