@@ -347,9 +347,6 @@ private fun ReaderMainPage(
                     progress = state.scrollProgress,
                     currentChapterIndex = state.currentChapterIndex,
                     totalChapters = state.chapters.size,
-                    foreground = colors.foreground,
-                    muted = colors.muted,
-                    divider = colors.divider,
                     onProgressChange = onProgressChange,
                     onOpenContents = onOpenContents,
                     onOpenSettings = onOpenSettings,
@@ -724,9 +721,6 @@ private fun ReaderBottomBar(
     progress: Float,
     currentChapterIndex: Int,
     totalChapters: Int,
-    foreground: Color,
-    muted: Color,
-    divider: Color,
     onProgressChange: (Float) -> Unit,
     onOpenContents: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -737,6 +731,11 @@ private fun ReaderBottomBar(
     onToggleBookmark: () -> Unit = {},
     onSelectChapter: (Int) -> Unit = {}
 ) {
+    val navigationColor = Color(0xFF302D28)
+    val actionColor = Color(0xFF4E4942)
+    val disabledColor = Color(0xFFB8B1A8)
+    val sliderTrackColor = Color(0xFFD9D1C8)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -751,7 +750,7 @@ private fun ReaderBottomBar(
         ) {
             Text(
                 "上一章",
-                color = if (currentChapterIndex > 0) foreground else divider,
+                color = if (currentChapterIndex > 0) navigationColor else disabledColor,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -770,14 +769,14 @@ private fun ReaderBottomBar(
                 colors = SliderDefaults.colors(
                     thumbColor = DesignTokens.Accent,
                     activeTrackColor = DesignTokens.Accent,
-                    inactiveTrackColor = divider,
+                    inactiveTrackColor = sliderTrackColor,
                     activeTickColor = Color.Transparent,
                     inactiveTickColor = Color.Transparent
                 )
             )
             Text(
                 "下一章",
-                color = if (currentChapterIndex < totalChapters - 1) foreground else divider,
+                color = if (currentChapterIndex < totalChapters - 1) navigationColor else disabledColor,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -799,19 +798,19 @@ private fun ReaderBottomBar(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            ReaderAction(Icons.AutoMirrored.Filled.FormatListBulleted, "目录", muted, onOpenContents)
+            ReaderAction(Icons.AutoMirrored.Filled.FormatListBulleted, "目录", actionColor, onOpenContents)
             ReaderAction(
                 icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                 label = "收藏",
-                color = if (isFavorite) DesignTokens.Accent else muted,
+                color = if (isFavorite) DesignTokens.Accent else actionColor,
                 onClick = onToggleFavorite
             )
-            ReaderAction(Icons.Default.Settings, "设置", muted, onOpenSettings)
-            ReaderAction(Icons.Default.Checkroom, "主题", muted, onOpenTheme)
+            ReaderAction(Icons.Default.Settings, "设置", actionColor, onOpenSettings)
+            ReaderAction(Icons.Default.Checkroom, "主题", actionColor, onOpenTheme)
             ReaderAction(
                 icon = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                 label = if (isBookmarked) "取消书签" else "书签",
-                color = if (isBookmarked) DesignTokens.Accent else muted,
+                color = if (isBookmarked) DesignTokens.Accent else actionColor,
                 onClick = onToggleBookmark
             )
         }
