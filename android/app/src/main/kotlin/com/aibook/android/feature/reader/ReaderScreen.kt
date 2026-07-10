@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
@@ -73,6 +75,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -100,6 +103,7 @@ import com.aibook.android.core.model.AccentColor
 import com.aibook.android.core.model.AppThemeMode
 import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.core.model.ParagraphSpacing
+import com.aibook.android.core.model.ReaderContentsStyle
 import com.aibook.android.core.model.ReaderFontCatalog
 import com.aibook.android.core.model.ReaderFontType
 import com.aibook.android.core.model.ReaderSettings
@@ -916,45 +920,233 @@ private fun ReaderContentsPage(
 ////            )
 //            Text("共 ${chapters.size} 章", color = DesignTokens.SoftText)
 //        }
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(bottom = 20.dp)
-        ) {
-            if (chapters.isEmpty()) {
-                item {
-                    Text(
-                        text = state.errorMessage ?: "暂无目录，书籍解析完成后会显示章节列表",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        color = DesignTokens.SoftText,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            } else {
-                itemsIndexed(chapters) { index, chapter ->
-                    ChapterRow(
-                        index = index,
-                        title = chapter.title,
-                        selected = index == state.currentChapterIndex,
-                        locked = false,
-                        progressText = chapterProgressText(index, state.currentChapterIndex, state.scrollProgress),
-                        onClick = { onChapterClick(index) }
-                    )
-                }
-            }
+        when (state.settings.contentsStyle) {
+            ReaderContentsStyle.CLASSIC -> ClassicContentsList(
+                chapters = chapters,
+                state = state,
+                onChapterClick = onChapterClick
+            )
+
+            ReaderContentsStyle.GROUPED -> GroupedContentsList(
+                chapters = chapters,
+                currentChapterIndex = state.currentChapterIndex,
+                errorMessage = state.errorMessage,
+                onChapterClick = onChapterClick
+            )
+        }
+    }
+}
+
+@Composable
+private fun ClassicContentsList(
+    chapters: List<ReaderChapter>,
+    state: ReaderUiState,
+    onChapterClick: (Int) -> Unit
+) {
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 20.dp)
+    ) {
+        if (chapters.isEmpty()) {
             item {
-                Text(
-                    if (chapters.isEmpty()) "" else "已加载全部章节",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    color = DesignTokens.SoftText,
-                    textAlign = TextAlign.Center
+                ContentsEmptyState(state.errorMessage)
+            }
+        } else {
+            itemsIndexed(chapters) { index, chapter ->
+                ChapterRow(
+                    index = index,
+                    title = chapter.title,
+                    selected = index == state.currentChapterIndex,
+                    locked = false,
+                    progressText = chapterProgressText(index, state.currentChapterIndex, state.scrollProgress),
+                    onClick = { onChapterClick(index) }
                 )
             }
         }
+        item {
+            ContentsLoadedFooter(chapters.isNotEmpty())
+        }
     }
+}
+
+@Composable
+private fun GroupedContentsList(
+    chapters: List<ReaderChapter>,
+    currentChapterIndex: Int,
+    errorMessage: String?,
+    onChapterClick: (Int) -> Unit
+) {
+    val groups = remember(chapters) { ReaderContentsCatalog.group(chapters) }
+    val currentGroupIndex = remember(groups, currentChapterIndex) {
+        ReaderContentsCatalog.currentGroupIndex(groups, currentChapterIndex)
+    }
+    val expandedGroups = remember(groups, currentChapterIndex) {
+        mutableStateMapOf<Int, Boolean>().apply {
+            if (groups.isNotEmpty()) put(currentGroupIndex, true)
+        }
+    }
+
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 20.dp)
+    ) {
+        if (groups.isEmpty()) {
+            item {
+                ContentsEmptyState(errorMessage)
+            }
+        } else {
+            itemsIndexed(groups) { groupIndex, group ->
+                GroupedContentsCard(
+                    group = group,
+                    expanded = expandedGroups[groupIndex] == true,
+                    currentChapterIndex = currentChapterIndex,
+                    onToggle = {
+                        expandedGroups[groupIndex] = expandedGroups[groupIndex] != true
+                    },
+                    onChapterClick = onChapterClick
+                )
+            }
+        }
+        item {
+            ContentsLoadedFooter(groups.isNotEmpty())
+        }
+    }
+}
+
+@Composable
+private fun GroupedContentsCard(
+    group: ReaderContentsGroup,
+    expanded: Boolean,
+    currentChapterIndex: Int,
+    onToggle: () -> Unit,
+    onChapterClick: (Int) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggle)
+                    .padding(horizontal = 18.dp, vertical = 17.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = group.title,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "收起${group.title}" else "展开${group.title}",
+                    tint = DesignTokens.SoftText
+                )
+            }
+
+            if (expanded) {
+                HorizontalDivider(color = DesignTokens.Hairline)
+                group.chapters.forEachIndexed { index, chapter ->
+                    GroupedChapterRow(
+                        chapter = chapter,
+                        currentChapterIndex = currentChapterIndex,
+                        onClick = { onChapterClick(chapter.index) }
+                    )
+                    if (index < group.chapters.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 18.dp),
+                            color = DesignTokens.Hairline
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GroupedChapterRow(
+    chapter: ReaderChapter,
+    currentChapterIndex: Int,
+    onClick: () -> Unit
+) {
+    val readState = ReaderContentsCatalog.readState(chapter.index, currentChapterIndex)
+    val selected = readState == ReaderChapterReadState.CURRENT
+    val mutedOrAccent = if (selected) DesignTokens.Accent else DesignTokens.SoftText
+    val status = when (readState) {
+        ReaderChapterReadState.READ -> "已读"
+        ReaderChapterReadState.CURRENT -> "当前阅读"
+        ReaderChapterReadState.UNREAD -> "未读"
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(68.dp)
+            .background(if (selected) DesignTokens.Accent.copy(alpha = 0.08f) else Color.Transparent)
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .fillMaxHeight()
+                .background(if (selected) DesignTokens.Accent else Color.Transparent)
+        )
+        Text(
+            text = (chapter.index + 1).toString().padStart(2, '0'),
+            modifier = Modifier.padding(start = 14.dp),
+            color = mutedOrAccent,
+            style = MaterialTheme.typography.titleMedium
+        )
+        Text(
+            text = chapter.title.ifBlank { "第${chapter.index + 1}章" },
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 18.dp),
+            color = if (selected) DesignTokens.Accent else MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = status,
+            modifier = Modifier.padding(end = 18.dp),
+            color = mutedOrAccent,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+@Composable
+private fun ContentsEmptyState(errorMessage: String?) {
+    Text(
+        text = errorMessage ?: "暂无目录，书籍解析完成后会显示章节列表",
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        color = DesignTokens.SoftText,
+        textAlign = TextAlign.Center
+    )
+}
+
+@Composable
+private fun ContentsLoadedFooter(hasChapters: Boolean) {
+    Text(
+        if (hasChapters) "已加载全部章节" else "",
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        color = DesignTokens.SoftText,
+        textAlign = TextAlign.Center
+    )
 }
 
 @Composable
@@ -1236,6 +1428,14 @@ private fun ReadingSettingsPage(
                     listOf("仿真", "滑动", "覆盖", "平移", "上下"),
                     selected = settings.pageTurnMode.ordinal,
                     onSelect = { viewModel.setPageTurnMode(PageTurnMode.entries[it]) }
+                )
+            }
+            item {
+                SegmentedSetting(
+                    "目录样式",
+                    listOf("经典", "分卷"),
+                    selected = settings.contentsStyle.ordinal,
+                    onSelect = { viewModel.setContentsStyle(ReaderContentsStyle.entries[it]) }
                 )
             }
             item {
