@@ -104,7 +104,8 @@ data class ReaderSettings(
     val textAlignment: TextAlignment = TextAlignment.LEFT,
     val pageTurnMode: PageTurnMode = PageTurnMode.SIMULATION,
     val autoBrightness: Boolean = true,
-    val screenAlwaysOn: Boolean = false
+    val screenAlwaysOn: Boolean = false,
+    val contentsStyle: ReaderContentsStyle = ReaderContentsStyle.CLASSIC
 )
 
 enum class ReaderFontType {
