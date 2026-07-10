@@ -1099,7 +1099,7 @@ private fun GroupedChapterRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(60.dp)
+                .height(58.dp)
                 .clip(if (selected) RoundedCornerShape(14.dp) else RoundedCornerShape(0.dp))
                 .background(if (selected) DesignTokens.Accent.copy(alpha = 0.08f) else Color.White)
                 .clickable(onClick = onClick),
