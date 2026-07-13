@@ -48,6 +48,7 @@ data class LocalBook(
     val visibleInStore: Boolean = true,
     val importedAt: Instant = Instant.now(),
     val lastReadAt: Instant? = null,
+    val readingDurationSeconds: Long = 0,
     val progress: ReadingProgress = ReadingProgress()
 )
 
@@ -104,7 +105,14 @@ data class ReaderSettings(
     val textAlignment: TextAlignment = TextAlignment.LEFT,
     val pageTurnMode: PageTurnMode = PageTurnMode.SIMULATION,
     val autoBrightness: Boolean = true,
+    val brightness: Float = 0.6f,
+    val orientationMode: ReaderOrientationMode = ReaderOrientationMode.SYSTEM,
+    val autoPageIntervalSeconds: Int = 8,
+    val autoScrollSpeed: ReaderAutoScrollSpeed = ReaderAutoScrollSpeed.MEDIUM,
     val screenAlwaysOn: Boolean = false,
+    val compressTxtBlankLines: Boolean = true,
+    val mergeTxtShortLines: Boolean = false,
+    val indentTxtParagraphs: Boolean = false,
     val contentsStyle: ReaderContentsStyle = ReaderContentsStyle.CLASSIC
 )
 
@@ -173,6 +181,18 @@ enum class PageTurnMode {
 }
 
 fun PageTurnMode.usesPagedReading(): Boolean = this != PageTurnMode.VERTICAL
+
+enum class ReaderOrientationMode {
+    SYSTEM,
+    PORTRAIT,
+    LANDSCAPE
+}
+
+enum class ReaderAutoScrollSpeed {
+    SLOW,
+    MEDIUM,
+    FAST
+}
 
 enum class AppThemeMode {
     SYSTEM,

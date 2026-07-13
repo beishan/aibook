@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface BookDao {
 
+    @Query("UPDATE books SET readingDurationSeconds = readingDurationSeconds + :seconds WHERE id = :id")
+    suspend fun addReadingDuration(id: String, seconds: Long)
+
     @Query("SELECT * FROM books ORDER BY lastReadAt DESC, title ASC")
     fun observeAll(): Flow<List<BookEntity>>
 

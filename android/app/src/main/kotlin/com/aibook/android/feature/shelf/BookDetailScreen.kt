@@ -51,6 +51,8 @@ import com.aibook.android.di.ServiceLocator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.Duration
+import java.time.Instant
 import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SectionHeader
@@ -174,8 +176,10 @@ fun BookDetailScreen(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 InfoItem("文件格式", currentBook.format.displayName)
                 InfoItem("阅读进度", "${(currentBook.progress.percent * 100).toInt()}%")
-                InfoItem("来源", "本地导入")
+                InfoItem("累计阅读", readingDurationLabel(currentBook.readingDurationSeconds))
             }
+            Spacer(Modifier.height(10.dp))
+            Text("最近阅读：${lastReadLabel(currentBook.lastReadAt)}", color = DesignTokens.SoftText)
         }
 
         Row(
@@ -229,6 +233,22 @@ fun BookDetailScreen(
             Icon(Icons.Default.Delete, contentDescription = null)
             Text("删除")
         }
+    }
+}
+
+private fun readingDurationLabel(seconds: Long): String {
+    val minutes = seconds.coerceAtLeast(0) / 60
+    return if (minutes >= 60) "${minutes / 60}小时${minutes % 60}分" else "${minutes}分"
+}
+
+private fun lastReadLabel(lastReadAt: Instant?): String {
+    if (lastReadAt == null) return "尚未开始"
+    val minutes = Duration.between(lastReadAt, Instant.now()).toMinutes().coerceAtLeast(0)
+    return when {
+        minutes < 1 -> "刚刚"
+        minutes < 60 -> "$minutes 分钟前"
+        minutes < 24 * 60 -> "${minutes / 60} 小时前"
+        else -> "${minutes / (24 * 60)} 天前"
     }
 }
 

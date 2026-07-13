@@ -14,9 +14,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ScanDirectoryEntity::class,
         OpdsCatalogEntryEntity::class,
         ShelfFolderEntity::class,
-        ReaderBookmarkEntity::class
+        ReaderBookmarkEntity::class,
+        ReaderHighlightEntity::class
     ],
-    version = 10,
+    version = 12,
     exportSchema = false
 )
 abstract class AiBookDatabase : RoomDatabase() {
@@ -27,6 +28,7 @@ abstract class AiBookDatabase : RoomDatabase() {
     abstract fun opdsCatalogEntryDao(): OpdsCatalogEntryDao
     abstract fun shelfFolderDao(): ShelfFolderDao
     abstract fun readerBookmarkDao(): ReaderBookmarkDao
+    abstract fun readerHighlightDao(): ReaderHighlightDao
 
     companion object {
         @Volatile
@@ -39,7 +41,7 @@ abstract class AiBookDatabase : RoomDatabase() {
                     AiBookDatabase::class.java,
                     "aibook.db"
                 )
-                    .addMigrations(MIGRATION_8_9, MIGRATION_9_10)
+                    .addMigrations(MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance
@@ -50,6 +52,18 @@ abstract class AiBookDatabase : RoomDatabase() {
         private val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE books ADD COLUMN description TEXT")
+            }
+        }
+
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS reader_highlights (id TEXT NOT NULL, bookId TEXT NOT NULL, chapterHref TEXT, chapterIndex INTEGER, lineIndex INTEGER NOT NULL, startOffset INTEGER NOT NULL, endOffset INTEGER NOT NULL, excerpt TEXT NOT NULL, note TEXT, color INTEGER NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(id), FOREIGN KEY(bookId) REFERENCES books(id) ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_reader_highlights_bookId ON reader_highlights(bookId)")
+            }
+        }
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE books ADD COLUMN readingDurationSeconds INTEGER NOT NULL DEFAULT 0")
             }
         }
 

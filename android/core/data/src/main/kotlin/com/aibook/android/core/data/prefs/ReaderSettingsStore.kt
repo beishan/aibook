@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.aibook.android.core.model.AccentColor
@@ -13,7 +14,9 @@ import com.aibook.android.core.model.AppThemeMode
 import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.core.model.ParagraphSpacing
 import com.aibook.android.core.model.ReaderContentsStyle
+import com.aibook.android.core.model.ReaderAutoScrollSpeed
 import com.aibook.android.core.model.ReaderFontType
+import com.aibook.android.core.model.ReaderOrientationMode
 import com.aibook.android.core.model.ReaderTheme
 import com.aibook.android.core.model.TextAlignment
 import kotlinx.coroutines.flow.Flow
@@ -36,7 +39,14 @@ class ReaderSettingsStore(private val dataStore: DataStore<Preferences>) {
         val TEXT_ALIGNMENT = stringPreferencesKey("text_alignment")
         val PAGE_TURN_MODE = stringPreferencesKey("page_turn_mode")
         val AUTO_BRIGHTNESS = booleanPreferencesKey("auto_brightness")
+        val BRIGHTNESS = floatPreferencesKey("reader_brightness")
+        val ORIENTATION_MODE = stringPreferencesKey("reader_orientation_mode")
+        val AUTO_PAGE_INTERVAL_SECONDS = intPreferencesKey("auto_page_interval_seconds")
+        val AUTO_SCROLL_SPEED = stringPreferencesKey("auto_scroll_speed")
         val SCREEN_ALWAYS_ON = booleanPreferencesKey("screen_always_on")
+        val COMPRESS_TXT_BLANK_LINES = booleanPreferencesKey("compress_txt_blank_lines")
+        val MERGE_TXT_SHORT_LINES = booleanPreferencesKey("merge_txt_short_lines")
+        val INDENT_TXT_PARAGRAPHS = booleanPreferencesKey("indent_txt_paragraphs")
         val APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
         val ACCENT_COLOR = stringPreferencesKey("accent_color")
         val CONTENTS_STYLE = stringPreferencesKey("contents_style")
@@ -82,8 +92,29 @@ class ReaderSettingsStore(private val dataStore: DataStore<Preferences>) {
     val autoBrightness: Flow<Boolean> =
         dataStore.data.map { it[Keys.AUTO_BRIGHTNESS] ?: true }
 
+    val brightness: Flow<Float> =
+        dataStore.data.map { (it[Keys.BRIGHTNESS] ?: 0.6f).coerceIn(0.1f, 1f) }
+
+    val orientationMode: Flow<ReaderOrientationMode> = dataStore.data.map {
+        val name = it[Keys.ORIENTATION_MODE] ?: ReaderOrientationMode.SYSTEM.name
+        runCatching { ReaderOrientationMode.valueOf(name) }.getOrDefault(ReaderOrientationMode.SYSTEM)
+    }
+
+    val autoPageIntervalSeconds: Flow<Int> =
+        dataStore.data.map { (it[Keys.AUTO_PAGE_INTERVAL_SECONDS] ?: 8).coerceIn(3, 30) }
+
+    val autoScrollSpeed: Flow<ReaderAutoScrollSpeed> = dataStore.data.map {
+        val name = it[Keys.AUTO_SCROLL_SPEED] ?: ReaderAutoScrollSpeed.MEDIUM.name
+        runCatching { ReaderAutoScrollSpeed.valueOf(name) }.getOrDefault(ReaderAutoScrollSpeed.MEDIUM)
+    }
+
     val screenAlwaysOn: Flow<Boolean> =
         dataStore.data.map { it[Keys.SCREEN_ALWAYS_ON] ?: false }
+
+    val compressTxtBlankLines: Flow<Boolean> =
+        dataStore.data.map { it[Keys.COMPRESS_TXT_BLANK_LINES] ?: true }
+    val mergeTxtShortLines: Flow<Boolean> = dataStore.data.map { it[Keys.MERGE_TXT_SHORT_LINES] ?: false }
+    val indentTxtParagraphs: Flow<Boolean> = dataStore.data.map { it[Keys.INDENT_TXT_PARAGRAPHS] ?: false }
 
     val appThemeMode: Flow<AppThemeMode> = dataStore.data.map {
         val name = it[Keys.APP_THEME_MODE] ?: AppThemeMode.SYSTEM.name
@@ -139,9 +170,31 @@ class ReaderSettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[Keys.AUTO_BRIGHTNESS] = enabled }
     }
 
+    suspend fun setBrightness(value: Float) {
+        dataStore.edit { it[Keys.BRIGHTNESS] = value.coerceIn(0.1f, 1f) }
+    }
+
+    suspend fun setOrientationMode(mode: ReaderOrientationMode) {
+        dataStore.edit { it[Keys.ORIENTATION_MODE] = mode.name }
+    }
+
+    suspend fun setAutoPageIntervalSeconds(seconds: Int) {
+        dataStore.edit { it[Keys.AUTO_PAGE_INTERVAL_SECONDS] = seconds.coerceIn(3, 30) }
+    }
+
+    suspend fun setAutoScrollSpeed(speed: ReaderAutoScrollSpeed) {
+        dataStore.edit { it[Keys.AUTO_SCROLL_SPEED] = speed.name }
+    }
+
     suspend fun setScreenAlwaysOn(enabled: Boolean) {
         dataStore.edit { it[Keys.SCREEN_ALWAYS_ON] = enabled }
     }
+
+    suspend fun setCompressTxtBlankLines(enabled: Boolean) {
+        dataStore.edit { it[Keys.COMPRESS_TXT_BLANK_LINES] = enabled }
+    }
+    suspend fun setMergeTxtShortLines(enabled: Boolean) { dataStore.edit { it[Keys.MERGE_TXT_SHORT_LINES] = enabled } }
+    suspend fun setIndentTxtParagraphs(enabled: Boolean) { dataStore.edit { it[Keys.INDENT_TXT_PARAGRAPHS] = enabled } }
 
     suspend fun setAppThemeMode(mode: AppThemeMode) {
         dataStore.edit { it[Keys.APP_THEME_MODE] = mode.name }

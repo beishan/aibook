@@ -63,4 +63,24 @@ class ReaderContentsCatalogTest {
         assertIs<ReaderContentsListItem.Chapter>(expanded[1])
         assertIs<ReaderContentsListItem.Chapter>(expanded.last())
     }
+
+    @Test
+    fun `finds current chapter position in classic list by real chapter index`() {
+        val filtered = listOf(chapter(7, "第八章"), chapter(12, "第十三章"))
+
+        assertEquals(1, ReaderContentsCatalog.chapterListPosition(filtered, 12))
+        assertEquals(0, ReaderContentsCatalog.chapterListPosition(filtered, 99))
+        assertEquals(0, ReaderContentsCatalog.chapterListPosition(emptyList(), 12))
+    }
+
+    @Test
+    fun `finds current chapter position in expanded grouped items`() {
+        val groups = ReaderContentsCatalog.group(
+            listOf(chapter(7, "上卷"), chapter(8, "第一章"), chapter(12, "下卷"), chapter(13, "第二章"))
+        )
+        val visibleItems = ReaderContentsCatalog.visibleItems(groups, setOf(1))
+
+        assertEquals(2, ReaderContentsCatalog.visibleItemPosition(visibleItems, 12))
+        assertEquals(0, ReaderContentsCatalog.visibleItemPosition(visibleItems, 99))
+    }
 }

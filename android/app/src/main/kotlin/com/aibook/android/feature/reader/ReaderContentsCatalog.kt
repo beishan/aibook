@@ -72,6 +72,20 @@ object ReaderContentsCatalog {
         else -> ReaderChapterReadState.UNREAD
     }
 
+    fun chapterListPosition(
+        chapters: List<ReaderChapter>,
+        currentChapterIndex: Int
+    ): Int = chapters.indexOfFirst { it.index == currentChapterIndex }
+        .takeIf { it >= 0 }
+        ?: 0
+
+    fun visibleItemPosition(
+        items: List<ReaderContentsListItem>,
+        currentChapterIndex: Int
+    ): Int = items.indexOfFirst { item ->
+        item is ReaderContentsListItem.Chapter && item.chapter.index == currentChapterIndex
+    }.takeIf { it >= 0 } ?: 0
+
     fun visibleItems(
         groups: List<ReaderContentsGroup>,
         expandedGroupIndexes: Set<Int>

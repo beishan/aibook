@@ -19,6 +19,7 @@ data class BookEntity(
     val favorite: Boolean = false,
     val importedAt: Long = System.currentTimeMillis(),
     val lastReadAt: Long? = null,
+    val readingDurationSeconds: Long = 0,
     val progressPercent: Float = 0f,
     val progressChapterHref: String? = null,
     val progressChapterTitle: String? = null,

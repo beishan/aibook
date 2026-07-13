@@ -21,10 +21,13 @@ data class ReaderHighlight(
     val id: String = UUID.randomUUID().toString(),
     val bookId: String,
     val chapterHref: String?,
+    val chapterIndex: Int? = null,
+    val lineIndex: Int = 0,
     val startOffset: Int,
     val endOffset: Int,
     val excerpt: String,
     val note: String? = null,
+    val color: Long = 0xFFFFE082,
     val createdAt: Instant = Instant.now()
 ) {
     companion object {
@@ -34,7 +37,10 @@ data class ReaderHighlight(
             text: String,
             startOffset: Int,
             endOffset: Int,
-            note: String? = null
+            note: String? = null,
+            chapterIndex: Int? = null,
+            lineIndex: Int = 0,
+            color: Long = 0xFFFFE082
         ): ReaderHighlight {
             val safeStart = startOffset.coerceIn(0, text.length)
             val safeEnd = endOffset.coerceIn(safeStart, text.length)
@@ -42,10 +48,13 @@ data class ReaderHighlight(
             return ReaderHighlight(
                 bookId = bookId,
                 chapterHref = chapterHref,
+                chapterIndex = chapterIndex,
+                lineIndex = lineIndex,
                 startOffset = safeStart,
                 endOffset = safeEnd,
                 excerpt = text.substring(safeStart, safeEnd),
-                note = note
+                note = note,
+                color = color
             )
         }
     }

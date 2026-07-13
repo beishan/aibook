@@ -1,6 +1,7 @@
 package com.aibook.android.feature.reader
 
 import android.graphics.Typeface
+import android.content.res.Configuration
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
@@ -27,6 +29,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -56,6 +60,10 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -64,6 +72,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
@@ -95,38 +104,56 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibook.android.core.model.AccentColor
 import com.aibook.android.core.model.AppThemeMode
+import com.aibook.android.core.model.BookFormat
 import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.core.model.ParagraphSpacing
 import com.aibook.android.core.model.ReaderContentsStyle
+import com.aibook.android.core.model.ReaderAutoScrollSpeed
 import com.aibook.android.core.model.ReaderFontCatalog
 import com.aibook.android.core.model.ReaderFontType
 import com.aibook.android.core.model.ReaderSettings
 import com.aibook.android.core.model.ReaderTheme
+import com.aibook.android.core.model.ReaderOrientationMode
 import com.aibook.android.core.model.TextAlignment
 import com.aibook.android.core.model.usesPagedReading
 import com.aibook.android.feature.settings.SettingsViewModel
 import com.aibook.android.core.reader.ReaderChapter
 import com.aibook.android.core.reader.ReaderBookmark
+import com.aibook.android.core.reader.ReaderHighlight
 import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.WarmProgress
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 private enum class ReaderPanel {
     None,
     Contents,
     Bookmarks,
+    Highlights,
     Settings,
     Theme
 }
@@ -136,6 +163,8 @@ private data class ReaderVisiblePosition(
     val lineIndex: Int,
     val scrollOffset: Int
 )
+
+private data class HighlightDraft(val chapter: ReaderChapter, val lineIndex: Int, val text: String)
 
 private data class ReaderPageContent(
     val chapterIndex: Int,
@@ -156,8 +185,25 @@ fun ReaderScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val settings = state.settings
     var panel by remember { mutableStateOf(ReaderPanel.None) }
+    var touchLocked by remember(bookId, isRemote) { mutableStateOf(false) }
+    var autoPlaying by remember(bookId, isRemote) { mutableStateOf(false) }
     // 提升 scrollState 到此处，避免打开目录/设置后返回时丢失滚动位置
     val scrollState = rememberLazyListState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    ReaderWindowEffects(settings = settings, autoPlaying = autoPlaying)
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) autoPlaying = false
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(panel) {
+        if (panel != ReaderPanel.None) autoPlaying = false
+    }
 
     LaunchedEffect(bookId, isRemote) {
         if (isRemote) {
@@ -197,9 +243,25 @@ fun ReaderScreen(
             },
             onDelete = viewModel::removeBookmark
         )
+        ReaderPanel.Highlights -> ReaderHighlightsPage(
+            highlights = state.highlights,
+            onBack = { panel = ReaderPanel.None },
+            onDelete = viewModel::removeHighlight
+        )
         ReaderPanel.Settings -> ReadingSettingsPage(
             state = state,
             viewModel = viewModel,
+            autoPlaying = autoPlaying,
+            onStartAutoPlay = {
+                viewModel.confirmSettings()
+                autoPlaying = true
+                panel = ReaderPanel.None
+            },
+            onLockTouch = {
+                viewModel.confirmSettings()
+                touchLocked = true
+                panel = ReaderPanel.None
+            },
             onBack = {
                 viewModel.confirmSettings()
                 panel = ReaderPanel.None
@@ -220,10 +282,21 @@ fun ReaderScreen(
             onOpenTheme = { panel = ReaderPanel.Theme },
             onProgressChange = viewModel::updateScrollProgress,
             onLoadNextChapter = viewModel::appendNextChapter,
+            onLoadPreviousChapter = viewModel::prependPreviousChapter,
             onToggleFavorite = viewModel::toggleFavorite,
             onToggleBookmark = viewModel::toggleBookmark,
+            onAddHighlight = viewModel::addHighlight,
+            onOpenHighlights = { panel = ReaderPanel.Highlights },
+            onOpenSearchMatch = viewModel::openSearchMatch,
+            onToggleQuickTheme = {
+                viewModel.setTheme(if (settings.theme == ReaderTheme.DARK) ReaderTheme.LIGHT else ReaderTheme.DARK)
+            },
             onSelectChapter = viewModel::selectChapter,
-            onReadingPositionChanged = viewModel::updateReadingPosition
+            onReadingPositionChanged = viewModel::updateReadingPosition,
+            touchLocked = touchLocked,
+            autoPlaying = autoPlaying,
+            onUnlockTouch = { touchLocked = false },
+            onAutoPlayingChange = { autoPlaying = it }
         )
     }
 }
@@ -257,14 +330,29 @@ private fun ReaderMainPage(
     onOpenTheme: () -> Unit,
     onProgressChange: (Float) -> Unit,
     onLoadNextChapter: () -> Unit,
+    onLoadPreviousChapter: () -> Unit,
     onToggleFavorite: () -> Unit,
     onToggleBookmark: () -> Unit,
+    onAddHighlight: (ReaderChapter, Int, String, String?, Long) -> Unit,
+    onOpenHighlights: () -> Unit,
+    onOpenSearchMatch: (ReaderSearchMatch) -> Unit,
+    onToggleQuickTheme: () -> Unit,
     onSelectChapter: (Int) -> Unit,
-    onReadingPositionChanged: (Int, Int, Int) -> Unit
+    onReadingPositionChanged: (Int, Int, Int) -> Unit,
+    touchLocked: Boolean,
+    autoPlaying: Boolean,
+    onUnlockTouch: () -> Unit,
+    onAutoPlayingChange: (Boolean) -> Unit
 ) {
     val colors = readerColors(settings.theme)
     var controlsVisible by remember(state.book?.id) { mutableStateOf(false) }
-    val readerTapInteractionSource = remember { MutableInteractionSource() }
+    var searchVisible by remember(state.book?.id) { mutableStateOf(false) }
+    var searchQuery by remember(state.book?.id) { mutableStateOf("") }
+    var searchMatchIndex by remember(state.book?.id) { mutableStateOf(-1) }
+    var highlightDraft by remember { mutableStateOf<HighlightDraft?>(null) }
+    val searchMatches = remember(state.chapters, searchQuery) {
+        ReaderSearchCatalog.find(state.chapters, searchQuery)
+    }
 
     var restoredInitialPosition by remember(state.book?.id, state.remoteBookId) { mutableStateOf(false) }
 
@@ -303,9 +391,12 @@ private fun ReaderMainPage(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures {
-                        controlsVisible = !controlsVisible
+                .pointerInput(touchLocked, autoPlaying) {
+                    if (!touchLocked) {
+                        detectTapGestures {
+                            if (autoPlaying) onAutoPlayingChange(false)
+                            else controlsVisible = !controlsVisible
+                        }
                     }
                 }
         ) {
@@ -328,7 +419,19 @@ private fun ReaderMainPage(
                     scrollState = scrollState,
                     foreground = colors.foreground,
                     onLoadNextChapter = onLoadNextChapter,
-                    onReadingPositionChanged = onReadingPositionChanged
+                    onLoadPreviousChapter = onLoadPreviousChapter,
+                    onReadingPositionChanged = onReadingPositionChanged,
+                    touchLocked = touchLocked,
+                    autoPlaying = autoPlaying,
+                    onAutoPlayStopped = { onAutoPlayingChange(false) },
+                    onParagraphLongPress = { chapter, lineIndex, text ->
+                        onAutoPlayingChange(false)
+                        highlightDraft = HighlightDraft(chapter, lineIndex, text)
+                    },
+                    onParagraphTap = {
+                        if (autoPlaying) onAutoPlayingChange(false)
+                        else controlsVisible = !controlsVisible
+                    }
                 )
                 else -> Text(
                     text = "暂无可阅读内容",
@@ -337,7 +440,81 @@ private fun ReaderMainPage(
                 )
             }
         }
+        highlightDraft?.let { draft ->
+            var note by remember(draft) { mutableStateOf("") }
+            var color by remember(draft) { mutableStateOf(0xFFFFE082L) }
+            AlertDialog(
+                onDismissRequest = { highlightDraft = null },
+                title = { Text("添加高亮") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(draft.text, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            listOf(0xFFFFE082L, 0xFFB9E6A7L, 0xFF90CAF9L).forEach { option ->
+                                Box(Modifier.size(28.dp).clip(CircleShape).background(Color(option)).clickable { color = option })
+                            }
+                        }
+                        OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("批注（可选）") })
+                    }
+                },
+                confirmButton = { TextButton(onClick = { onAddHighlight(draft.chapter, draft.lineIndex, draft.text, note.ifBlank { null }, color); highlightDraft = null }) { Text("保存") } },
+                dismissButton = { TextButton(onClick = { highlightDraft = null }) { Text("取消") } }
+            )
+        }
         if (controlsVisible) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .background(colors.background)
+                    .statusBarsPadding()
+                    .fillMaxWidth()
+            ) {
+                ReaderTopBar(
+                    title = state.book?.title ?: "在线书籍",
+                    chapterTitle = state.currentChapterTitle,
+                    colors = colors,
+                    isBookmarked = state.isCurrentPositionBookmarked,
+                    onBack = onBack,
+                    onOpenSearch = {
+                        onAutoPlayingChange(false)
+                        searchVisible = true
+                    },
+                    onToggleBookmark = onToggleBookmark,
+                    onOpenHighlights = {
+                        onAutoPlayingChange(false)
+                        onOpenHighlights()
+                    }
+                )
+                if (searchVisible) {
+                    ReaderSearchBar(
+                        query = searchQuery,
+                        matchCount = searchMatches.size,
+                        matchIndex = searchMatchIndex,
+                        colors = colors,
+                        onQueryChange = {
+                            searchQuery = it
+                            searchMatchIndex = -1
+                        },
+                        onPrevious = {
+                            searchMatchIndex = ReaderSearchCatalog.nextIndex(
+                                currentIndex = searchMatchIndex,
+                                count = searchMatches.size,
+                                forward = false
+                            )
+                            searchMatches.getOrNull(searchMatchIndex)?.let(onOpenSearchMatch)
+                        },
+                        onNext = {
+                            searchMatchIndex = ReaderSearchCatalog.nextIndex(
+                                currentIndex = searchMatchIndex,
+                                count = searchMatches.size,
+                                forward = true
+                            )
+                            searchMatches.getOrNull(searchMatchIndex)?.let(onOpenSearchMatch)
+                        },
+                        onClose = { searchVisible = false }
+                    )
+                }
+            }
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -347,17 +524,198 @@ private fun ReaderMainPage(
                     progress = state.scrollProgress,
                     currentChapterIndex = state.currentChapterIndex,
                     totalChapters = state.chapters.size,
-                    onProgressChange = onProgressChange,
+                    colors = colors,
+                    onProgressChange = {
+                        onAutoPlayingChange(false)
+                        onProgressChange(it)
+                    },
                     onOpenContents = onOpenContents,
                     onOpenSettings = onOpenSettings,
                     onOpenTheme = onOpenTheme,
                     isFavorite = state.book?.favorite ?: false,
                     onToggleFavorite = onToggleFavorite,
-                    isBookmarked = state.isCurrentPositionBookmarked,
-                    onToggleBookmark = onToggleBookmark,
-                    onSelectChapter = onSelectChapter
+                    quickThemeLabel = if (settings.theme == ReaderTheme.DARK) "亮色" else "暗色",
+                    onToggleQuickTheme = {
+                        onAutoPlayingChange(false)
+                        onToggleQuickTheme()
+                    },
+                    onSelectChapter = {
+                        onAutoPlayingChange(false)
+                        onSelectChapter(it)
+                    }
                 )
             }
+        }
+        if (autoPlaying) {
+            ReaderAutoPlayOverlay(
+                modifier = Modifier.align(Alignment.BottomCenter),
+                settings = settings,
+                colors = colors,
+                onPause = { onAutoPlayingChange(false) }
+            )
+        }
+        if (touchLocked) {
+            ReaderTouchLockOverlay(colors = colors, onUnlock = onUnlockTouch)
+        }
+    }
+}
+
+@Composable
+private fun ReaderAutoPlayOverlay(
+    modifier: Modifier = Modifier,
+    settings: ReaderSettings,
+    colors: ReaderPalette,
+    onPause: () -> Unit
+) {
+    val speedLabel = if (settings.pageTurnMode.usesPagedReading()) {
+        "${settings.autoPageIntervalSeconds} 秒/页"
+    } else {
+        when (settings.autoScrollSpeed) {
+            ReaderAutoScrollSpeed.SLOW -> "慢速"
+            ReaderAutoScrollSpeed.MEDIUM -> "中速"
+            ReaderAutoScrollSpeed.FAST -> "快速"
+        }
+    }
+    Row(
+        modifier = modifier
+            .padding(bottom = 28.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(colors.foreground.copy(alpha = 0.88f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onPause
+            )
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(Icons.Default.Pause, contentDescription = "暂停自动阅读", tint = colors.background)
+        Text("自动阅读 · $speedLabel", color = colors.background, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun ReaderTouchLockOverlay(
+    colors: ReaderPalette,
+    onUnlock: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(20f)
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    val released = withTimeoutOrNull(2_000L) { waitForUpOrCancellation() }
+                    if (released == null) onUnlock()
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(18.dp))
+                .background(colors.foreground.copy(alpha = 0.78f))
+                .padding(horizontal = 24.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(Icons.Default.Lock, contentDescription = null, tint = colors.background)
+            Text("已锁定触摸", color = colors.background, fontWeight = FontWeight.Bold)
+            Text("长按 2 秒解锁", color = colors.background.copy(alpha = 0.82f))
+        }
+    }
+}
+
+@Composable
+private fun ReaderTopBar(
+    title: String,
+    chapterTitle: String,
+    colors: ReaderPalette,
+    isBookmarked: Boolean,
+    onBack: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onToggleBookmark: () -> Unit,
+    onOpenHighlights: () -> Unit
+) {
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.background)
+            .padding(horizontal = 8.dp, vertical = if (isLandscape) 2.dp else 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = colors.foreground)
+        }
+        Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
+            Text(title, color = colors.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                chapterTitle.ifBlank { "正在阅读" },
+                color = colors.muted,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        IconButton(onClick = onOpenSearch) {
+            Icon(Icons.Default.Search, contentDescription = "搜索书内内容", tint = colors.foreground)
+        }
+        IconButton(onClick = onToggleBookmark) {
+            Icon(
+                if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                contentDescription = if (isBookmarked) "取消书签" else "添加书签",
+                tint = if (isBookmarked) DesignTokens.Accent else colors.foreground
+            )
+        }
+        IconButton(onClick = onOpenHighlights) {
+            Icon(Icons.Default.MoreVert, contentDescription = "全部笔记", tint = colors.foreground)
+        }
+    }
+}
+
+@Composable
+private fun ReaderSearchBar(
+    query: String,
+    matchCount: Int,
+    matchIndex: Int,
+    colors: ReaderPalette,
+    onQueryChange: (String) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onClose: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.background)
+            .border(1.dp, colors.divider)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            placeholder = { Text("搜索书内内容") }
+        )
+        Text(
+            text = if (query.isBlank()) "" else "${if (matchIndex !in 0 until matchCount) 0 else matchIndex + 1}/$matchCount",
+            color = colors.muted,
+            modifier = Modifier.padding(start = 8.dp)
+        )
+        IconButton(onClick = onPrevious, enabled = matchCount > 0) {
+            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "上一处", tint = colors.foreground)
+        }
+        IconButton(onClick = onNext, enabled = matchCount > 0) {
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "下一处", tint = colors.foreground)
+        }
+        IconButton(onClick = onClose) {
+            Icon(Icons.Default.Close, contentDescription = "关闭搜索", tint = colors.foreground)
         }
     }
 }
@@ -369,12 +727,23 @@ private fun ReaderTextContent(
     scrollState: androidx.compose.foundation.lazy.LazyListState,
     foreground: Color,
     onLoadNextChapter: () -> Unit,
-    onReadingPositionChanged: (Int, Int, Int) -> Unit
+    onLoadPreviousChapter: () -> Unit,
+    onReadingPositionChanged: (Int, Int, Int) -> Unit,
+    touchLocked: Boolean,
+    autoPlaying: Boolean,
+    onAutoPlayStopped: () -> Unit,
+    onParagraphLongPress: (ReaderChapter, Int, String) -> Unit,
+    onParagraphTap: () -> Unit
 ) {
     val loadedChapters = state.loadedChapters
-    val chapterParagraphs = remember(loadedChapters) {
+    val chapterParagraphs = remember(loadedChapters, state.book?.format, settings.compressTxtBlankLines, settings.mergeTxtShortLines) {
         loadedChapters.map { chapter ->
-            chapter to chapter.content.split("\n").filter { it.isNotBlank() }
+            val paragraphs = if (state.book?.format == BookFormat.TXT) {
+                TxtParagraphNormalizer.normalize(chapter.content, settings.compressTxtBlankLines).let { if (settings.mergeTxtShortLines) TxtParagraphNormalizer.mergeHardWrappedLines(it) else it }
+            } else {
+                chapter.content.split("\n").filter { it.isNotBlank() }
+            }
+            chapter to paragraphs
         }
     }
     val chapterItemCounts = remember(chapterParagraphs) {
@@ -389,7 +758,11 @@ private fun ReaderTextContent(
             foreground = foreground,
             chapterParagraphs = chapterParagraphs,
             onLoadNextChapter = onLoadNextChapter,
-            onReadingPositionChanged = onReadingPositionChanged
+            onLoadPreviousChapter = onLoadPreviousChapter,
+            onReadingPositionChanged = onReadingPositionChanged,
+            touchLocked = touchLocked,
+            autoPlaying = autoPlaying,
+            onAutoPlayStopped = onAutoPlayStopped
         )
         return
     }
@@ -404,6 +777,40 @@ private fun ReaderTextContent(
     }
     LaunchedEffect(shouldLoadMore.value) {
         if (shouldLoadMore.value) onLoadNextChapter()
+    }
+
+    val shouldLoadPrevious = remember(scrollState, loadedChapters) {
+        derivedStateOf {
+            ReaderChapterWindow.shouldPrependPrevious(
+                firstVisibleItemIndex = scrollState.firstVisibleItemIndex,
+                scrollOffset = scrollState.firstVisibleItemScrollOffset
+            )
+        }
+    }
+    LaunchedEffect(shouldLoadPrevious.value) {
+        if (shouldLoadPrevious.value) onLoadPreviousChapter()
+    }
+
+    val density = LocalDensity.current.density
+    LaunchedEffect(autoPlaying, settings.autoScrollSpeed, loadedChapters.size) {
+        if (!autoPlaying) return@LaunchedEffect
+        while (true) {
+            val consumed = scrollState.scrollBy(
+                ReaderAutoPlayPolicy.scrollStepPx(settings.autoScrollSpeed, density)
+            )
+            if (kotlin.math.abs(consumed) < 0.01f) {
+                val lastLoadedChapter = loadedChapters.lastOrNull()?.index ?: -1
+                if (lastLoadedChapter < state.chapters.lastIndex) {
+                    onLoadNextChapter()
+                    delay(300)
+                } else {
+                    onAutoPlayStopped()
+                    break
+                }
+            } else {
+                delay(16)
+            }
+        }
     }
 
     // 追踪当前所在章节与章节内行号
@@ -432,11 +839,29 @@ private fun ReaderTextContent(
         }
     }
 
+    val configuration = LocalConfiguration.current
+    val horizontalPadding = if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+        (((configuration.screenWidthDp - 760) / 2).coerceAtLeast(24) + 24).dp
+    } else {
+        38.dp
+    }
+    val verticalPadding = if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 24.dp else 48.dp
+
     LazyColumn(
         state = scrollState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 38.dp, vertical = 48.dp),
-        verticalArrangement = Arrangement.spacedBy(28.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(autoPlaying) {
+                if (autoPlaying) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        onAutoPlayStopped()
+                    }
+                }
+            },
+        userScrollEnabled = !touchLocked,
+        contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = verticalPadding),
+        verticalArrangement = Arrangement.spacedBy(paragraphGap(settings.paragraphSpacing))
     ) {
         chapterParagraphs.forEach { (chapter, paragraphs) ->
             item(key = "title_${chapter.index}") {
@@ -459,13 +884,25 @@ private fun ReaderTextContent(
                 }
             }
             items(paragraphs.size, key = { "p_${chapter.index}_$it" }) { index ->
+                val highlight = state.highlights.firstOrNull { it.chapterIndex == chapter.index && it.lineIndex == index }
                 Text(
                     text = paragraphs[index],
+                    modifier = Modifier
+                        .background(highlight?.let { Color(it.color) } ?: Color.Transparent)
+                        .pointerInput(chapter.index, index, paragraphs[index]) {
+                            detectTapGestures(
+                                onTap = { onParagraphTap() },
+                                onLongPress = { onParagraphLongPress(chapter, index, paragraphs[index]) }
+                            )
+                        },
                     color = foreground,
                     fontSize = (19 * settings.fontScale).sp,
                     lineHeight = (35 * settings.fontScale * settings.lineHeight).sp,
                     fontFamily = fontFamily,
                     letterSpacing = 0.sp
+                    , style = if (state.book?.format == BookFormat.TXT && settings.indentTxtParagraphs && paragraphs[index].isNotBlank()) {
+                        MaterialTheme.typography.bodyLarge.copy(textIndent = TextIndent(firstLine = 2.em))
+                    } else MaterialTheme.typography.bodyLarge
                 )
             }
         }
@@ -479,7 +916,11 @@ private fun ReaderPagedContent(
     foreground: Color,
     chapterParagraphs: List<Pair<ReaderChapter, List<String>>>,
     onLoadNextChapter: () -> Unit,
-    onReadingPositionChanged: (Int, Int, Int) -> Unit
+    onLoadPreviousChapter: () -> Unit,
+    onReadingPositionChanged: (Int, Int, Int) -> Unit,
+    touchLocked: Boolean,
+    autoPlaying: Boolean,
+    onAutoPlayStopped: () -> Unit
 ) {
     val pages = remember(
         chapterParagraphs,
@@ -516,16 +957,50 @@ private fun ReaderPagedContent(
         restoredInitialPage = true
     }
 
+    LaunchedEffect(state.chapterWindowNavigation?.requestId) {
+        val navigation = state.chapterWindowNavigation ?: return@LaunchedEffect
+        val targetPage = pages.indexOfFirst {
+            it.chapterIndex == navigation.chapterIndex &&
+                navigation.lineIndex in it.startLineIndex..it.endLineIndex
+        }.takeIf { it >= 0 }
+            ?: pages.indexOfFirst { it.chapterIndex == navigation.chapterIndex }.takeIf { it >= 0 }
+            ?: return@LaunchedEffect
+        pagerState.scrollToPage(targetPage)
+    }
+
     LaunchedEffect(pagerState, pages) {
         snapshotFlow { pagerState.currentPage }
             .distinctUntilChanged()
             .collect { pageIndex ->
                 val page = pages.getOrNull(pageIndex) ?: return@collect
                 onReadingPositionChanged(page.chapterIndex, page.startLineIndex, 0)
+                if (pageIndex <= 1) {
+                    onLoadPreviousChapter()
+                }
                 if (pageIndex >= pages.size - 2) {
                     onLoadNextChapter()
                 }
             }
+    }
+
+    LaunchedEffect(autoPlaying, pages.size, settings.autoPageIntervalSeconds) {
+        if (!autoPlaying || pages.isEmpty()) return@LaunchedEffect
+        while (true) {
+            delay(ReaderAutoPlayPolicy.pageDelayMillis(settings.autoPageIntervalSeconds))
+            val nextPage = pagerState.currentPage + 1
+            if (nextPage < pages.size) {
+                pagerState.animateScrollToPage(nextPage)
+            } else {
+                val lastLoadedChapter = state.loadedChapters.lastOrNull()?.index ?: -1
+                if (lastLoadedChapter < state.chapters.lastIndex) {
+                    onLoadNextChapter()
+                    delay(300)
+                } else {
+                    onAutoPlayStopped()
+                    break
+                }
+            }
+        }
     }
 
     if (pages.isEmpty()) {
@@ -539,12 +1014,27 @@ private fun ReaderPagedContent(
 
     HorizontalPager(
         state = pagerState,
-        modifier = Modifier.fillMaxSize(),
-        beyondViewportPageCount = 1
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(autoPlaying) {
+                if (autoPlaying) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        onAutoPlayStopped()
+                    }
+                }
+            },
+        beyondViewportPageCount = 1,
+        userScrollEnabled = !touchLocked
     ) { pageIndex ->
         val page = pages.getOrNull(pageIndex) ?: return@HorizontalPager
         val pageOffset = (pagerState.currentPage - pageIndex) + pagerState.currentPageOffsetFraction
         val transform = PageTurnVisuals.transform(settings.pageTurnMode, pageOffset)
+        val configuration = LocalConfiguration.current
+        val horizontalPadding = if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            (((configuration.screenWidthDp - 760) / 2).coerceAtLeast(24) + 24).dp
+        } else 38.dp
+        val verticalPadding = if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 24.dp else 48.dp
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -594,7 +1084,7 @@ private fun ReaderPagedContent(
                         }
                     }
                 }
-                .padding(horizontal = 38.dp, vertical = 48.dp),
+                .padding(horizontal = horizontalPadding, vertical = verticalPadding),
             verticalArrangement = Arrangement.spacedBy(paragraphGap(settings.paragraphSpacing))
         ) {
             if (page.title != null) {
@@ -721,25 +1211,26 @@ private fun ReaderBottomBar(
     progress: Float,
     currentChapterIndex: Int,
     totalChapters: Int,
+    colors: ReaderPalette,
     onProgressChange: (Float) -> Unit,
     onOpenContents: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenTheme: () -> Unit,
     isFavorite: Boolean = false,
     onToggleFavorite: () -> Unit = {},
-    isBookmarked: Boolean = false,
-    onToggleBookmark: () -> Unit = {},
+    quickThemeLabel: String,
+    onToggleQuickTheme: () -> Unit,
     onSelectChapter: (Int) -> Unit = {}
 ) {
-    val navigationColor = Color(0xFF302D28)
-    val actionColor = Color(0xFF4E4942)
-    val disabledColor = Color(0xFFB8B1A8)
-    val sliderTrackColor = Color(0xFFD9D1C8)
+    val navigationColor = colors.foreground
+    val actionColor = colors.foreground.copy(alpha = 0.82f)
+    val disabledColor = colors.muted.copy(alpha = 0.55f)
+    val sliderTrackColor = colors.divider
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(colors.background)
             .padding(horizontal = 28.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -808,10 +1299,10 @@ private fun ReaderBottomBar(
             ReaderAction(Icons.Default.Settings, "设置", actionColor, onOpenSettings)
             ReaderAction(Icons.Default.Checkroom, "主题", actionColor, onOpenTheme)
             ReaderAction(
-                icon = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                label = if (isBookmarked) "取消书签" else "书签",
-                color = if (isBookmarked) DesignTokens.Accent else actionColor,
-                onClick = onToggleBookmark
+                icon = if (quickThemeLabel == "亮色") Icons.Default.LightMode else Icons.Default.DarkMode,
+                label = quickThemeLabel,
+                color = actionColor,
+                onClick = onToggleQuickTheme
             )
         }
     }
@@ -845,11 +1336,16 @@ private fun ReaderContentsPage(
     onChapterClick: (Int) -> Unit
 ) {
     val chapters = normalizedChapters(state)
+    val colors = readerColors(state.settings.theme)
+    var query by remember { mutableStateOf("") }
+    val visibleChapters = remember(chapters, query) {
+        if (query.isBlank()) chapters else chapters.filter { it.title.contains(query, ignoreCase = true) }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(colors.background)
             .padding(horizontal = 28.dp, vertical = 25.dp),
         verticalArrangement = Arrangement.spacedBy(22.dp)
     ) {
@@ -858,15 +1354,24 @@ private fun ReaderContentsPage(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = colors.foreground)
             }
             Text(
                 "目录",
                 modifier = Modifier.weight(2f),
                 style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.ExtraBold
+                fontWeight = FontWeight.ExtraBold,
+                color = colors.foreground
             )
-            Text("共 ${chapters.size} 章", color = DesignTokens.SoftText)
+            Text("共 ${chapters.size} 章", color = colors.muted)
+            Text(
+                "当前章节",
+                color = DesignTokens.Accent,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onChapterClick(state.currentChapterIndex) }
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+            )
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
@@ -874,9 +1379,20 @@ private fun ReaderContentsPage(
                     .padding(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.BookmarkBorder, contentDescription = null)
-                Text("书签 ${state.bookmarks.size}")
+                Icon(Icons.Default.BookmarkBorder, contentDescription = null, tint = colors.foreground)
+                Text("书签 ${state.bookmarks.size}", color = colors.foreground)
             }
+        }
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            placeholder = { Text("搜索章节") }
+        )
+        if (query.isNotBlank()) {
+            Text("找到 ${visibleChapters.size} 章", color = colors.muted, style = MaterialTheme.typography.labelMedium)
         }
 //        Row(
 //            modifier = Modifier.fillMaxWidth(),
@@ -903,7 +1419,7 @@ private fun ReaderContentsPage(
 //                }
 //            }
 //        }
-//        ContentsProgressCard(state)
+        ContentsProgressCard(state)
 //        Row(
 //            modifier = Modifier.fillMaxWidth(),
 //            horizontalArrangement = Arrangement.SpaceBetween,
@@ -921,15 +1437,17 @@ private fun ReaderContentsPage(
 //        }
         when (state.settings.contentsStyle) {
             ReaderContentsStyle.CLASSIC -> ClassicContentsList(
-                chapters = chapters,
+                chapters = visibleChapters,
                 state = state,
+                colors = colors,
                 onChapterClick = onChapterClick
             )
 
             ReaderContentsStyle.GROUPED -> GroupedContentsList(
-                chapters = chapters,
+                chapters = visibleChapters,
                 currentChapterIndex = state.currentChapterIndex,
                 errorMessage = state.errorMessage,
+                colors = colors,
                 onChapterClick = onChapterClick
             )
         }
@@ -940,30 +1458,38 @@ private fun ReaderContentsPage(
 private fun ClassicContentsList(
     chapters: List<ReaderChapter>,
     state: ReaderUiState,
+    colors: ReaderPalette,
     onChapterClick: (Int) -> Unit
 ) {
+    val initialIndex = remember(chapters, state.currentChapterIndex) {
+        ReaderContentsCatalog.chapterListPosition(chapters, state.currentChapterIndex)
+    }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+
     LazyColumn(
+        state = listState,
         verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(bottom = 20.dp)
     ) {
         if (chapters.isEmpty()) {
             item {
-                ContentsEmptyState(state.errorMessage)
+                ContentsEmptyState(state.errorMessage, colors)
             }
         } else {
-            itemsIndexed(chapters) { index, chapter ->
+            itemsIndexed(chapters) { _, chapter ->
                 ChapterRow(
-                    index = index,
+                    index = chapter.index,
                     title = chapter.title,
-                    selected = index == state.currentChapterIndex,
+                    selected = chapter.index == state.currentChapterIndex,
                     locked = false,
-                    progressText = chapterProgressText(index, state.currentChapterIndex, state.scrollProgress),
-                    onClick = { onChapterClick(index) }
+                    progressText = chapterProgressText(chapter.index, state.currentChapterIndex, state.scrollProgress),
+                    colors = colors,
+                    onClick = { onChapterClick(chapter.index) }
                 )
             }
         }
         item {
-            ContentsLoadedFooter(chapters.isNotEmpty())
+            ContentsLoadedFooter(chapters.isNotEmpty(), colors)
         }
     }
 }
@@ -973,6 +1499,7 @@ private fun GroupedContentsList(
     chapters: List<ReaderChapter>,
     currentChapterIndex: Int,
     errorMessage: String?,
+    colors: ReaderPalette,
     onChapterClick: (Int) -> Unit
 ) {
     val groups = remember(chapters) { ReaderContentsCatalog.group(chapters) }
@@ -988,13 +1515,18 @@ private fun GroupedContentsList(
         groups = groups,
         expandedGroupIndexes = expandedGroups.filterValues { it }.keys
     )
+    val initialIndex = remember(visibleItems, currentChapterIndex) {
+        ReaderContentsCatalog.visibleItemPosition(visibleItems, currentChapterIndex)
+    }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
 
     LazyColumn(
+        state = listState,
         contentPadding = PaddingValues(bottom = 20.dp)
     ) {
         if (groups.isEmpty()) {
             item {
-                ContentsEmptyState(errorMessage)
+                ContentsEmptyState(errorMessage, colors)
             }
         } else {
             itemsIndexed(
@@ -1011,6 +1543,7 @@ private fun GroupedContentsList(
                         group = item.group,
                         expanded = item.expanded,
                         addTopSpacing = item.groupIndex > 0,
+                        colors = colors,
                         onToggle = {
                             expandedGroups[item.groupIndex] = expandedGroups[item.groupIndex] != true
                         }
@@ -1020,13 +1553,14 @@ private fun GroupedContentsList(
                         chapter = item.chapter,
                         currentChapterIndex = currentChapterIndex,
                         isLast = item.isLast,
+                        colors = colors,
                         onClick = { onChapterClick(item.chapter.index) }
                     )
                 }
             }
         }
         item {
-            ContentsLoadedFooter(groups.isNotEmpty())
+            ContentsLoadedFooter(groups.isNotEmpty(), colors)
         }
     }
 }
@@ -1036,6 +1570,7 @@ private fun GroupedContentsHeader(
     group: ReaderContentsGroup,
     expanded: Boolean,
     addTopSpacing: Boolean,
+    colors: ReaderPalette,
     onToggle: () -> Unit
 ) {
     val shape = if (expanded) {
@@ -1047,8 +1582,8 @@ private fun GroupedContentsHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = if (addTopSpacing) 12.dp else 0.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline),
+        colors = CardDefaults.cardColors(containerColor = colors.background),
+        border = androidx.compose.foundation.BorderStroke(1.dp, colors.divider),
         shape = shape
     ) {
         Row(
@@ -1062,6 +1597,7 @@ private fun GroupedContentsHeader(
                 text = group.title,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleLarge,
+                color = colors.foreground,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1069,7 +1605,7 @@ private fun GroupedContentsHeader(
             Icon(
                 imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                 contentDescription = if (expanded) "收起${group.title}" else "展开${group.title}",
-                tint = DesignTokens.SoftText
+                tint = colors.muted
             )
         }
     }
@@ -1080,11 +1616,12 @@ private fun GroupedChapterRow(
     chapter: ReaderChapter,
     currentChapterIndex: Int,
     isLast: Boolean,
+    colors: ReaderPalette,
     onClick: () -> Unit
 ) {
     val readState = ReaderContentsCatalog.readState(chapter.index, currentChapterIndex)
     val selected = readState == ReaderChapterReadState.CURRENT
-    val mutedOrAccent = if (selected) DesignTokens.Accent else DesignTokens.SoftText
+    val mutedOrAccent = if (selected) DesignTokens.Accent else colors.muted
     val status = when (readState) {
         ReaderChapterReadState.READ -> "已读"
         ReaderChapterReadState.CURRENT -> "当前阅读"
@@ -1101,7 +1638,7 @@ private fun GroupedChapterRow(
                 .fillMaxWidth()
                 .height(58.dp)
                 .clip(if (selected) RoundedCornerShape(14.dp) else RoundedCornerShape(0.dp))
-                .background(if (selected) DesignTokens.Accent.copy(alpha = 0.08f) else Color.White)
+                .background(if (selected) DesignTokens.Accent.copy(alpha = 0.08f) else colors.background)
                 .clickable(onClick = onClick),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1117,7 +1654,7 @@ private fun GroupedChapterRow(
                 modifier = Modifier
                     .weight(1f)
                     .padding(start = 18.dp, end = 14.dp),
-                color = if (selected) DesignTokens.Accent else MaterialTheme.colorScheme.onSurface,
+                color = if (selected) DesignTokens.Accent else colors.foreground,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 maxLines = 1,
@@ -1141,34 +1678,69 @@ private fun GroupedChapterRow(
         if (!selected && !isLast) {
             HorizontalDivider(
                 modifier = Modifier.padding(start = 22.dp),
-                color = DesignTokens.Hairline.copy(alpha = 0.55f)
+                color = colors.divider.copy(alpha = 0.55f)
             )
         }
     }
 }
 
 @Composable
-private fun ContentsEmptyState(errorMessage: String?) {
+private fun ContentsEmptyState(errorMessage: String?, colors: ReaderPalette) {
     Text(
         text = errorMessage ?: "暂无目录，书籍解析完成后会显示章节列表",
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 32.dp),
-        color = DesignTokens.SoftText,
+        color = colors.muted,
         textAlign = TextAlign.Center
     )
 }
 
 @Composable
-private fun ContentsLoadedFooter(hasChapters: Boolean) {
+private fun ContentsLoadedFooter(hasChapters: Boolean, colors: ReaderPalette) {
     Text(
         if (hasChapters) "已加载全部章节" else "",
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        color = DesignTokens.SoftText,
+        color = colors.muted,
         textAlign = TextAlign.Center
     )
+}
+
+@Composable
+private fun ReaderHighlightsPage(
+    highlights: List<ReaderHighlight>,
+    onBack: () -> Unit,
+    onDelete: (ReaderHighlight) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 24.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
+            Text("全部笔记", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+            Text("${highlights.size} 条", color = DesignTokens.SoftText)
+        }
+        if (highlights.isEmpty()) {
+            Text("还没有高亮或批注", color = DesignTokens.SoftText, modifier = Modifier.fillMaxWidth().padding(top = 42.dp), textAlign = TextAlign.Center)
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                itemsIndexed(highlights, key = { _, highlight -> highlight.id }) { _, highlight ->
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(highlight.color).copy(alpha = 0.25f))) {
+                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.Top) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Text(highlight.excerpt, fontWeight = FontWeight.Bold)
+                                highlight.note?.takeIf { it.isNotBlank() }?.let { Text(it, color = DesignTokens.SoftText) }
+                            }
+                            IconButton(onClick = { onDelete(highlight) }) { Icon(Icons.Default.DeleteOutline, contentDescription = "删除笔记") }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -1276,7 +1848,7 @@ private fun ContentsProgressCard(state: ReaderUiState) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("继续阅读", color = DesignTokens.Accent, fontWeight = FontWeight.Bold)
                 Text(currentChapterTitle(state), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("本章进度 ${(state.scrollProgress * 100).toInt()}%", color = DesignTokens.SoftText)
+                Text("本章进度 ${(state.scrollProgress * 100).toInt()}% · 已读 ${readingDurationLabel(state.book?.readingDurationSeconds ?: 0)}", color = DesignTokens.SoftText)
                 WarmProgress(state.scrollProgress, Modifier.fillMaxWidth())
             }
             Spacer(
@@ -1288,7 +1860,7 @@ private fun ContentsProgressCard(state: ReaderUiState) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("全书进度", color = DesignTokens.SoftText)
                 Text("${(state.scrollProgress * 100).toInt()}%", style = MaterialTheme.typography.displaySmall)
-                Text("已读 14.2 万字 / 共 49.8 万字", color = DesignTokens.SoftText)
+                Text("已读 ${state.currentChapterIndex + 1} / 共 ${state.chapters.size} 章", color = DesignTokens.SoftText)
                 WarmProgress(state.scrollProgress, Modifier.fillMaxWidth())
             }
         }
@@ -1302,12 +1874,13 @@ private fun ChapterRow(
     selected: Boolean,
     locked: Boolean,
     progressText: String,
+    colors: ReaderPalette,
     onClick: () -> Unit
 ) {
     val tint = when {
-        locked -> DesignTokens.SoftText
+        locked -> colors.muted
         selected -> DesignTokens.Accent
-        else -> Color(0xFF282522)
+        else -> colors.foreground
     }
     Card(
         modifier = Modifier
@@ -1315,9 +1888,9 @@ private fun ChapterRow(
             .height(64.dp)
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) DesignTokens.WarmCard else Color.White
+            containerColor = if (selected) DesignTokens.Accent.copy(alpha = 0.08f) else colors.background
         ),
-        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) DesignTokens.Accent.copy(alpha = 0.18f) else DesignTokens.Hairline),
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) DesignTokens.Accent.copy(alpha = 0.18f) else colors.divider),
         shape = RoundedCornerShape(14.dp)
     ) {
         Row(
@@ -1349,14 +1922,22 @@ private fun ChapterRow(
     }
 }
 
+private enum class ReadingSettingsSection { TYPOGRAPHY, OPERATIONS }
+
 @Composable
 private fun ReadingSettingsPage(
     state: ReaderUiState,
     viewModel: ReaderViewModel,
+    autoPlaying: Boolean,
+    onStartAutoPlay: () -> Unit,
+    onLockTouch: () -> Unit,
     onBack: () -> Unit
 ) {
     val settings = state.settings
+    var section by remember { mutableStateOf(ReadingSettingsSection.TYPOGRAPHY) }
     var showFontDialog by remember { mutableStateOf(false) }
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val fontImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             viewModel.importFont(uri)
@@ -1364,15 +1945,13 @@ private fun ReadingSettingsPage(
         }
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.enterSettingsPage()
-    }
+    LaunchedEffect(Unit) { viewModel.enterSettingsPage() }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(DesignTokens.AppBackground)
-            .padding(horizontal = 20.dp, vertical = 24.dp)
+            .padding(horizontal = if (isLandscape) 28.dp else 20.dp, vertical = if (isLandscape) 12.dp else 24.dp)
     ) {
         SettingsPageHeader(
             "阅读设置",
@@ -1381,113 +1960,79 @@ private fun ReadingSettingsPage(
             onBack = onBack,
             onTrailingClick = { viewModel.resetSettings() }
         )
-        LazyColumn(
+        SegmentedSetting(
+            title = "设置分类",
+            options = listOf("排版", "操作"),
+            selected = section.ordinal,
+            onSelect = { section = ReadingSettingsSection.entries[it] }
+        )
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(if (isLandscape) 2 else 1),
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(top = 18.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(top = 14.dp, bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
-                SettingsCard(title = "主题") {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        readerThemeOptions().forEach { option ->
-                            ThemeDot(
-                                label = option.label,
-                                color = option.color,
-                                selected = settings.theme == option.theme
-                            ) {
-                                viewModel.setTheme(option.theme)
+            if (section == ReadingSettingsSection.TYPOGRAPHY) {
+                item {
+                    SettingsCard(title = "主题") {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            readerThemeOptions().forEach { option ->
+                                ThemeDot(option.label, option.color, settings.theme == option.theme) {
+                                    viewModel.setTheme(option.theme)
+                                }
                             }
                         }
                     }
                 }
-            }
-            item {
-                SettingLineCard(
-                    "字体",
-                    trailing = "${ReaderFontCatalog.selectedLabel(settings)} 〉",
-                    onClick = { showFontDialog = true }
-                )
-            }
-            item {
-                SliderCard(
-                    title = "字号",
-                    leading = "A-",
-                    trailing = "A+",
-                    valueLabel = (18f * settings.fontScale).toInt().toString(),
-                    value = settings.fontScale.coerceIn(14f / 18f, 30f / 18f),
-                    range = 14f / 18f..30f / 18f,
-                    onValueChange = viewModel::setFontScale
-                )
-            }
-            item {
-                SegmentedSetting(
-                    "行距",
-                    listOf("紧凑", "适中", "宽松"),
-                    selected = lineHeightToIndex(settings.lineHeight),
-                    onSelect = { viewModel.setLineHeight(indexToLineHeight(it)) }
-                )
-            }
-            item {
-                SegmentedSetting(
-                    "段距",
-                    listOf("无", "小", "大"),
-                    selected = settings.paragraphSpacing.ordinal,
-                    onSelect = { viewModel.setParagraphSpacing(ParagraphSpacing.entries[it]) }
-                )
-            }
-            item {
-                IconSegmentedSetting(
-                    selected = settings.textAlignment,
-                    onSelect = viewModel::setTextAlignment
-                )
-            }
-            item {
-                SegmentedSetting(
-                    "翻页方式",
-                    listOf("仿真", "滑动", "覆盖", "平移", "上下"),
-                    selected = settings.pageTurnMode.ordinal,
-                    onSelect = { viewModel.setPageTurnMode(PageTurnMode.entries[it]) }
-                )
-            }
-            item {
-                SegmentedSetting(
-                    "目录样式",
-                    listOf("经典", "分卷"),
-                    selected = settings.contentsStyle.ordinal,
-                    onSelect = { viewModel.setContentsStyle(ReaderContentsStyle.entries[it]) }
-                )
-            }
-            item {
-                SwitchSetting(
-                    "自动亮度",
-                    "根据环境光线自动调节屏幕亮度",
-                    checked = settings.autoBrightness,
-                    onCheckedChange = viewModel::setAutoBrightness
-                )
-            }
-            item {
-                SwitchSetting(
-                    "屏幕常亮",
-                    "阅读时屏幕保持常亮状态",
-                    checked = settings.screenAlwaysOn,
-                    onCheckedChange = viewModel::setScreenAlwaysOn
-                )
-            }
-            item {
-                ScopeToggle(
-                    isBookSpecific = state.isBookSpecific,
-                    onScopeChange = viewModel::setBookSpecific
-                )
-            }
-            item {
-                Text(
-                    "ⓘ  设置仅在当前设备生效",
-                    color = Color(0xFF967645),
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+                item { SettingLineCard("字体", "${ReaderFontCatalog.selectedLabel(settings)} 〉") { showFontDialog = true } }
+                item {
+                    SliderCard("字号", "A-", "A+", (18f * settings.fontScale).toInt().toString(), settings.fontScale.coerceIn(14f / 18f, 30f / 18f), 14f / 18f..30f / 18f, viewModel::setFontScale)
+                }
+                item { SegmentedSetting("行距", listOf("紧凑", "适中", "宽松"), lineHeightToIndex(settings.lineHeight)) { viewModel.setLineHeight(indexToLineHeight(it)) } }
+                item { SegmentedSetting("段距", listOf("无", "小", "大"), settings.paragraphSpacing.ordinal) { viewModel.setParagraphSpacing(ParagraphSpacing.entries[it]) } }
+                item { IconSegmentedSetting(settings.textAlignment, viewModel::setTextAlignment) }
+                item { SegmentedSetting("翻页方式", listOf("仿真", "滑动", "覆盖", "平移", "上下"), settings.pageTurnMode.ordinal) { viewModel.setPageTurnMode(PageTurnMode.entries[it]) } }
+                item { SegmentedSetting("目录样式", listOf("经典", "分卷"), settings.contentsStyle.ordinal) { viewModel.setContentsStyle(ReaderContentsStyle.entries[it]) } }
+                if (state.book?.format == BookFormat.TXT) {
+                    item { SwitchSetting("压缩 TXT 空行", "连续空白行最多保留一行", settings.compressTxtBlankLines, viewModel::setCompressTxtBlankLines) }
+                    item { SwitchSetting("智能合并短行", "合并同段内被硬换行拆开的短句", settings.mergeTxtShortLines, viewModel::setMergeTxtShortLines) }
+                    item { SwitchSetting("首行缩进", "正文段落首行缩进两个汉字", settings.indentTxtParagraphs, viewModel::setIndentTxtParagraphs) }
+                }
+                item { ScopeToggle(state.isBookSpecific, viewModel::setBookSpecific) }
+            } else {
+                item { SwitchSetting("跟随系统亮度", "关闭后使用阅读器独立亮度", settings.autoBrightness, viewModel::setAutoBrightness) }
+                if (!settings.autoBrightness) {
+                    item {
+                        SliderCard("阅读亮度", "暗", "亮", "${(settings.brightness * 100).toInt()}%", settings.brightness, 0.1f..1f, viewModel::setBrightness)
+                    }
+                }
+                item { SwitchSetting("屏幕常亮", "阅读时屏幕保持常亮状态", settings.screenAlwaysOn, viewModel::setScreenAlwaysOn) }
+                item {
+                    SegmentedSetting("屏幕方向", listOf("跟随系统", "竖屏", "横屏"), settings.orientationMode.ordinal) {
+                        viewModel.setOrientationMode(ReaderOrientationMode.entries[it])
+                    }
+                }
+                if (settings.pageTurnMode.usesPagedReading()) {
+                    item {
+                        SliderCard("自动翻页", "3秒", "30秒", "${settings.autoPageIntervalSeconds} 秒/页", settings.autoPageIntervalSeconds.toFloat(), 3f..30f) {
+                            viewModel.setAutoPageIntervalSeconds(it.toInt())
+                        }
+                    }
+                } else {
+                    item {
+                        SegmentedSetting("滚动速度", listOf("慢", "中", "快"), settings.autoScrollSpeed.ordinal) {
+                            viewModel.setAutoScrollSpeed(ReaderAutoScrollSpeed.entries[it])
+                        }
+                    }
+                }
+                item {
+                    SettingLineCard("自动阅读", if (autoPlaying) "正在运行 〉" else "开始 〉", onClick = onStartAutoPlay)
+                }
+                item { SettingLineCard("锁定触摸", "立即锁定 〉", onClick = onLockTouch) }
+                item {
+                    Text("自动阅读时将临时保持屏幕常亮；打开其他面板或进入后台会自动暂停。", color = DesignTokens.SoftText, modifier = Modifier.padding(8.dp))
+                }
             }
         }
     }
@@ -1495,21 +2040,8 @@ private fun ReadingSettingsPage(
     if (showFontDialog) {
         FontSelectionDialog(
             settings = settings,
-            onSelect = {
-                viewModel.setFontType(it)
-                showFontDialog = false
-            },
-            onImport = {
-                fontImportLauncher.launch(
-                    arrayOf(
-                        "font/ttf",
-                        "font/otf",
-                        "application/x-font-ttf",
-                        "application/x-font-otf",
-                        "application/octet-stream"
-                    )
-                )
-            },
+            onSelect = { viewModel.setFontType(it); showFontDialog = false },
+            onImport = { fontImportLauncher.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/x-font-otf", "application/octet-stream")) },
             onDismiss = { showFontDialog = false }
         )
     }
@@ -2288,10 +2820,15 @@ private fun normalizedChapters(state: ReaderUiState): List<ReaderChapter> {
 }
 
 private fun chapterProgressText(index: Int, currentIndex: Int, progress: Float): String = when {
-    index < currentIndex -> "${((index + 1) * 10).coerceAtMost(100)}%"
+    index < currentIndex -> "已读"
     index == currentIndex -> "${(progress * 100).toInt()}%"
     index > 5 -> "未读"
     else -> "未读"
+}
+
+private fun readingDurationLabel(seconds: Long): String {
+    val minutes = (seconds.coerceAtLeast(0) / 60)
+    return if (minutes >= 60) "${minutes / 60}小时${minutes % 60}分钟" else "${minutes}分钟"
 }
 
 private fun lineHeightToIndex(lineHeight: Float): Int = when {

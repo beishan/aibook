@@ -29,6 +29,7 @@ fun BookEntity.toDomain(): LocalBook {
         visibleInStore = visibleInStore,
         importedAt = Instant.ofEpochMilli(importedAt),
         lastReadAt = lastReadAt?.let { Instant.ofEpochMilli(it) },
+        readingDurationSeconds = readingDurationSeconds,
         progress = ReadingProgress(
             chapterHref = progressChapterHref,
             chapterTitle = progressChapterTitle,
@@ -58,6 +59,7 @@ fun LocalBook.toEntity(): BookEntity {
         visibleInStore = visibleInStore,
         importedAt = importedAt.toEpochMilli(),
         lastReadAt = lastReadAt?.toEpochMilli(),
+        readingDurationSeconds = readingDurationSeconds,
         progressPercent = progress.percent,
         progressChapterHref = progress.chapterHref,
         progressChapterTitle = progress.chapterTitle,

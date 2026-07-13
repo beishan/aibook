@@ -12,13 +12,16 @@ import com.aibook.android.core.data.prefs.ReaderSettingsStore
 import com.aibook.android.core.data.repository.BookRepository
 import com.aibook.android.core.data.repository.ServerRepository
 import com.aibook.android.core.data.repository.ReaderBookmarkRepository
+import com.aibook.android.core.data.repository.ReaderHighlightRepository
 import com.aibook.android.core.model.BookFormat
 import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.core.model.ParagraphSpacing
 import com.aibook.android.core.model.ReaderContentsStyle
+import com.aibook.android.core.model.ReaderAutoScrollSpeed
 import com.aibook.android.core.model.ReaderFontCatalog
 import com.aibook.android.core.model.ReaderFontType
+import com.aibook.android.core.model.ReaderOrientationMode
 import com.aibook.android.core.model.ReaderSettings
 import com.aibook.android.core.model.ReaderTheme
 import com.aibook.android.core.model.TextAlignment
@@ -27,6 +30,7 @@ import com.aibook.android.core.reader.EpubContentParser
 import com.aibook.android.core.reader.ReaderChapter
 import com.aibook.android.core.reader.ReaderChapterSelection
 import com.aibook.android.core.reader.ReaderBookmark
+import com.aibook.android.core.reader.ReaderHighlight
 import com.aibook.android.core.reader.ReaderProgressCalculator
 import com.aibook.android.core.reader.TextChapterParser
 import com.aibook.android.core.reader.TextFileDecoder
@@ -58,7 +62,9 @@ data class ReaderUiState(
     val isBookSpecific: Boolean = false,
     val hasSettingsDraft: Boolean = false,
     val bookmarks: List<ReaderBookmark> = emptyList(),
-    val bookmarkNavigation: BookmarkNavigation? = null
+    val highlights: List<ReaderHighlight> = emptyList(),
+    val bookmarkNavigation: BookmarkNavigation? = null,
+    val chapterWindowNavigation: ChapterWindowNavigation? = null
 ) {
     val content: String get() = loadedChapters.joinToString("\n") { it.content }
     val hasReadableContent: Boolean get() =
@@ -80,18 +86,26 @@ data class BookmarkNavigation(
     val scrollOffset: Int
 )
 
+data class ChapterWindowNavigation(
+    val requestId: Long,
+    val chapterIndex: Int,
+    val lineIndex: Int
+)
+
 class ReaderViewModel(
     private val appContext: android.content.Context,
     private val bookRepository: BookRepository,
     private val readerSettingsStore: ReaderSettingsStore,
     private val serverRepository: ServerRepository,
     private val readerBookmarkRepository: ReaderBookmarkRepository
+    , private val readerHighlightRepository: ReaderHighlightRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReaderUiState())
     private val loadingChapterIndexes = mutableSetOf<Int>()
     private var settingsSnapshot: ReaderSettings? = null
     private var bookmarkObservationJob: Job? = null
+    private var readingStartedAtMillis: Long = 0L
 
     val uiState: StateFlow<ReaderUiState> = _state
         .asStateFlow()
@@ -107,12 +121,20 @@ class ReaderViewModel(
         viewModelScope.launch { readerSettingsStore.textAlignment.collect { v -> _state.update { it.copy(settings = it.settings.copy(textAlignment = v)) } } }
         viewModelScope.launch { readerSettingsStore.pageTurnMode.collect { v -> _state.update { it.copy(settings = it.settings.copy(pageTurnMode = v)) } } }
         viewModelScope.launch { readerSettingsStore.autoBrightness.collect { v -> _state.update { it.copy(settings = it.settings.copy(autoBrightness = v)) } } }
+        viewModelScope.launch { readerSettingsStore.brightness.collect { v -> _state.update { it.copy(settings = it.settings.copy(brightness = v)) } } }
+        viewModelScope.launch { readerSettingsStore.orientationMode.collect { v -> _state.update { it.copy(settings = it.settings.copy(orientationMode = v)) } } }
+        viewModelScope.launch { readerSettingsStore.autoPageIntervalSeconds.collect { v -> _state.update { it.copy(settings = it.settings.copy(autoPageIntervalSeconds = v)) } } }
+        viewModelScope.launch { readerSettingsStore.autoScrollSpeed.collect { v -> _state.update { it.copy(settings = it.settings.copy(autoScrollSpeed = v)) } } }
         viewModelScope.launch { readerSettingsStore.screenAlwaysOn.collect { v -> _state.update { it.copy(settings = it.settings.copy(screenAlwaysOn = v)) } } }
+        viewModelScope.launch { readerSettingsStore.compressTxtBlankLines.collect { v -> _state.update { it.copy(settings = it.settings.copy(compressTxtBlankLines = v)) } } }
+        viewModelScope.launch { readerSettingsStore.mergeTxtShortLines.collect { v -> _state.update { it.copy(settings = it.settings.copy(mergeTxtShortLines = v)) } } }
+        viewModelScope.launch { readerSettingsStore.indentTxtParagraphs.collect { v -> _state.update { it.copy(settings = it.settings.copy(indentTxtParagraphs = v)) } } }
         viewModelScope.launch { readerSettingsStore.contentsStyle.collect { v -> _state.update { it.copy(settings = it.settings.copy(contentsStyle = v)) } } }
     }
 
     fun loadLocalBook(bookId: String) {
         viewModelScope.launch {
+            readingStartedAtMillis = System.currentTimeMillis()
             _state.value = _state.value.copy(isLoading = true, errorMessage = null, isRemote = false, remoteBookId = null)
 
             val book = bookRepository.getBook(bookId)
@@ -129,6 +151,7 @@ class ReaderViewModel(
                 scrollProgress = book.progress.percent
             )
             observeBookmarks(book.id)
+            observeHighlights(book.id)
 
             try {
                 val file = File(book.uri)
@@ -274,6 +297,17 @@ class ReaderViewModel(
         viewModelScope.launch { readerBookmarkRepository.remove(bookmark.id) }
     }
 
+    fun addHighlight(chapter: ReaderChapter, lineIndex: Int, text: String, note: String?, color: Long) {
+        val book = _state.value.book ?: return
+        viewModelScope.launch {
+            readerHighlightRepository.add(ReaderHighlight.create(book.id, chapter.href, text, 0, text.length, note, chapter.index, lineIndex, color))
+        }
+    }
+
+    fun removeHighlight(highlight: ReaderHighlight) {
+        viewModelScope.launch { readerHighlightRepository.remove(highlight.id) }
+    }
+
     fun openBookmark(bookmark: ReaderBookmark) {
         val targetIndex = bookmark.chapterIndex
             ?: _state.value.chapters.indexOfFirst { it.href == bookmark.chapterHref }.takeIf { it >= 0 }
@@ -309,11 +343,63 @@ class ReaderViewModel(
         }
     }
 
+    fun openSearchMatch(match: ReaderSearchMatch) {
+        val state = _state.value
+        val chapter = state.chapters.getOrNull(match.chapterIndex) ?: return
+        val book = state.book
+
+        fun publish(loaded: ReaderChapter) {
+            _state.update { current ->
+                current.copy(
+                    chapters = current.chapters.map { if (it.index == match.chapterIndex) loaded else it },
+                    loadedChapters = listOf(loaded),
+                    currentChapterIndex = match.chapterIndex,
+                    currentLineIndex = match.lineIndex,
+                    currentScrollOffset = 0,
+                    scrollProgress = ReaderProgressCalculator.chapterProgress(match.chapterIndex, current.chapters.size),
+                    bookmarkNavigation = BookmarkNavigation(
+                        requestId = System.nanoTime(),
+                        chapterIndex = match.chapterIndex,
+                        lineIndex = match.lineIndex,
+                        scrollOffset = 0
+                    ),
+                    chapterWindowNavigation = ChapterWindowNavigation(
+                        requestId = System.nanoTime(),
+                        chapterIndex = match.chapterIndex,
+                        lineIndex = match.lineIndex
+                    )
+                )
+            }
+            saveProgress()
+        }
+
+        if (book?.format == BookFormat.EPUB && chapter.content.isBlank() && chapter.imageUri.isNullOrBlank()) {
+            if (!loadingChapterIndexes.add(match.chapterIndex)) return
+            viewModelScope.launch {
+                val loaded = runCatching {
+                    ReadiumEpubReader(appContext).parseChapter(File(book.uri), match.chapterIndex)
+                }.getOrNull()
+                loadingChapterIndexes.remove(match.chapterIndex)
+                if (loaded != null) publish(loaded)
+            }
+        } else {
+            publish(chapter)
+        }
+    }
+
     private fun observeBookmarks(bookId: String) {
         bookmarkObservationJob?.cancel()
         bookmarkObservationJob = viewModelScope.launch {
             readerBookmarkRepository.observeForBook(bookId).collect { bookmarks ->
                 _state.update { it.copy(bookmarks = bookmarks) }
+            }
+        }
+    }
+
+    private fun observeHighlights(bookId: String) {
+        viewModelScope.launch {
+            readerHighlightRepository.observeForBook(bookId).collect { highlights ->
+                _state.update { it.copy(highlights = highlights) }
             }
         }
     }
@@ -410,15 +496,61 @@ class ReaderViewModel(
         }
     }
 
+    /**
+     * 滑动到已加载内容顶部时，在章节窗口前插入上一章。
+     */
+    fun prependPreviousChapter() {
+        val state = _state.value
+        if (state.isLoading) return
+        val firstLoaded = state.loadedChapters.firstOrNull() ?: return
+        val previousIndex = firstLoaded.index - 1
+        if (previousIndex < 0) return
+        val previousChapter = state.chapters.getOrNull(previousIndex) ?: return
+        val book = state.book
+
+        fun prepend(loaded: ReaderChapter) {
+            _state.update { current ->
+                current.copy(
+                    chapters = current.chapters.map {
+                        if (it.index == previousIndex) loaded else it
+                    },
+                    loadedChapters = ReaderChapterWindow.prepend(current.loadedChapters, loaded),
+                    chapterWindowNavigation = ChapterWindowNavigation(
+                        requestId = System.nanoTime(),
+                        chapterIndex = current.currentChapterIndex,
+                        lineIndex = current.currentLineIndex
+                    )
+                )
+            }
+        }
+
+        if (book?.format == BookFormat.EPUB &&
+            previousChapter.content.isBlank() && previousChapter.imageUri.isNullOrBlank()
+        ) {
+            if (!loadingChapterIndexes.add(previousIndex)) return
+            viewModelScope.launch {
+                val loaded = runCatching {
+                    ReadiumEpubReader(appContext).parseChapter(File(book.uri), previousIndex)
+                }.getOrNull()
+                loadingChapterIndexes.remove(previousIndex)
+                if (loaded != null) prepend(loaded)
+            }
+        } else {
+            prepend(previousChapter)
+        }
+    }
+
     fun saveProgress() {
         viewModelScope.launch {
             persistProgress(_state.value)
+            persistReadingDuration()
         }
     }
 
     fun saveProgressThen(afterSave: () -> Unit) {
         viewModelScope.launch {
             persistProgress(_state.value)
+            persistReadingDuration()
             afterSave()
         }
     }
@@ -466,9 +598,31 @@ class ReaderViewModel(
         viewModelScope.launch { readerSettingsStore.setAutoBrightness(enabled) }
     }
 
+    fun setBrightness(value: Float) {
+        viewModelScope.launch { readerSettingsStore.setBrightness(value) }
+    }
+
+    fun setOrientationMode(mode: ReaderOrientationMode) {
+        viewModelScope.launch { readerSettingsStore.setOrientationMode(mode) }
+    }
+
+    fun setAutoPageIntervalSeconds(seconds: Int) {
+        viewModelScope.launch { readerSettingsStore.setAutoPageIntervalSeconds(seconds) }
+    }
+
+    fun setAutoScrollSpeed(speed: ReaderAutoScrollSpeed) {
+        viewModelScope.launch { readerSettingsStore.setAutoScrollSpeed(speed) }
+    }
+
     fun setScreenAlwaysOn(enabled: Boolean) {
         viewModelScope.launch { readerSettingsStore.setScreenAlwaysOn(enabled) }
     }
+
+    fun setCompressTxtBlankLines(enabled: Boolean) {
+        viewModelScope.launch { readerSettingsStore.setCompressTxtBlankLines(enabled) }
+    }
+    fun setMergeTxtShortLines(enabled: Boolean) { viewModelScope.launch { readerSettingsStore.setMergeTxtShortLines(enabled) } }
+    fun setIndentTxtParagraphs(enabled: Boolean) { viewModelScope.launch { readerSettingsStore.setIndentTxtParagraphs(enabled) } }
 
     fun setContentsStyle(style: ReaderContentsStyle) {
         viewModelScope.launch { readerSettingsStore.setContentsStyle(style) }
@@ -507,7 +661,14 @@ class ReaderViewModel(
                 readerSettingsStore.setTextAlignment(snapshot.textAlignment)
                 readerSettingsStore.setPageTurnMode(snapshot.pageTurnMode)
                 readerSettingsStore.setAutoBrightness(snapshot.autoBrightness)
+                readerSettingsStore.setBrightness(snapshot.brightness)
+                readerSettingsStore.setOrientationMode(snapshot.orientationMode)
+                readerSettingsStore.setAutoPageIntervalSeconds(snapshot.autoPageIntervalSeconds)
+                readerSettingsStore.setAutoScrollSpeed(snapshot.autoScrollSpeed)
                 readerSettingsStore.setScreenAlwaysOn(snapshot.screenAlwaysOn)
+                readerSettingsStore.setCompressTxtBlankLines(snapshot.compressTxtBlankLines)
+                readerSettingsStore.setMergeTxtShortLines(snapshot.mergeTxtShortLines)
+                readerSettingsStore.setIndentTxtParagraphs(snapshot.indentTxtParagraphs)
                 readerSettingsStore.setContentsStyle(snapshot.contentsStyle)
             }
         }
@@ -524,7 +685,14 @@ class ReaderViewModel(
             readerSettingsStore.setTextAlignment(defaults.textAlignment)
             readerSettingsStore.setPageTurnMode(defaults.pageTurnMode)
             readerSettingsStore.setAutoBrightness(defaults.autoBrightness)
+            readerSettingsStore.setBrightness(defaults.brightness)
+            readerSettingsStore.setOrientationMode(defaults.orientationMode)
+            readerSettingsStore.setAutoPageIntervalSeconds(defaults.autoPageIntervalSeconds)
+            readerSettingsStore.setAutoScrollSpeed(defaults.autoScrollSpeed)
             readerSettingsStore.setScreenAlwaysOn(defaults.screenAlwaysOn)
+            readerSettingsStore.setCompressTxtBlankLines(defaults.compressTxtBlankLines)
+            readerSettingsStore.setMergeTxtShortLines(defaults.mergeTxtShortLines)
+            readerSettingsStore.setIndentTxtParagraphs(defaults.indentTxtParagraphs)
             readerSettingsStore.setContentsStyle(defaults.contentsStyle)
         }
     }
@@ -590,6 +758,15 @@ class ReaderViewModel(
                 (percent * 100).toInt()
             )
         }
+    }
+
+    private suspend fun persistReadingDuration() {
+        val startedAt = readingStartedAtMillis
+        val bookId = _state.value.book?.id
+        if (startedAt == 0L || bookId == null) return
+        val seconds = ((System.currentTimeMillis() - startedAt) / 1000).coerceAtLeast(0)
+        bookRepository.addReadingDuration(bookId, seconds)
+        readingStartedAtMillis = System.currentTimeMillis()
     }
 
     private fun applyContent(text: String) {
@@ -674,7 +851,8 @@ class ReaderViewModel(
                     locator.bookRepository,
                     locator.readerSettingsStore,
                     locator.serverRepository,
-                    locator.readerBookmarkRepository
+                    locator.readerBookmarkRepository,
+                    locator.readerHighlightRepository
                 )
             }
         }

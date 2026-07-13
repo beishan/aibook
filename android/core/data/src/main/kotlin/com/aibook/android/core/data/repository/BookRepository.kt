@@ -35,6 +35,9 @@ class BookRepository(
     private val bookDao: BookDao,
     private val shelfFolderDao: ShelfFolderDao
 ) {
+    suspend fun addReadingDuration(bookId: String, seconds: Long) {
+        if (seconds > 0) bookDao.addReadingDuration(bookId, seconds)
+    }
     private val booksDir: File by lazy {
         File(context.filesDir, "books").apply { mkdirs() }
     }
