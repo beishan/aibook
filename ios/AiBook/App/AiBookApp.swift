@@ -7,6 +7,7 @@ import SwiftUI
 struct AiBookApp: App {
     @State private var locator = ServiceLocator.shared
     @State private var readerSettingsStore = ServiceLocator.shared.readerSettingsStore
+    @State private var startupIssue = ServiceLocator.shared.startupIssue
 
     var body: some Scene {
         WindowGroup {
@@ -17,6 +18,13 @@ struct AiBookApp: App {
                 ))
                 .environment(locator)
                 .preferredColorScheme(colorScheme)
+                .alert(item: $startupIssue) { issue in
+                    Alert(
+                        title: Text("存储初始化失败"),
+                        message: Text(issue.message),
+                        dismissButton: .default(Text("知道了"))
+                    )
+                }
         }
     }
 

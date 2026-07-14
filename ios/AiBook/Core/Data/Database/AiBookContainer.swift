@@ -5,7 +5,7 @@ import SwiftData
 
 @MainActor
 enum AiBookContainer {
-    static func create() -> ModelContainer {
+    static func createPersistent() throws -> ModelContainer {
         let schema = Schema([
             BookEntity.self,
             OpdsConnectionEntity.self,
@@ -14,14 +14,10 @@ enum AiBookContainer {
             ScanDirectoryEntity.self,
         ])
         let config = ModelConfiguration(isStoredInMemoryOnly: false)
-        do {
-            return try ModelContainer(for: schema, configurations: config)
-        } catch {
-            fatalError("Failed to create ModelContainer: \(error)")
-        }
+        return try ModelContainer(for: schema, configurations: config)
     }
 
-    static func createInMemory() -> ModelContainer {
+    static func createInMemory() throws -> ModelContainer {
         let schema = Schema([
             BookEntity.self,
             OpdsConnectionEntity.self,
@@ -30,10 +26,6 @@ enum AiBookContainer {
             ScanDirectoryEntity.self,
         ])
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        do {
-            return try ModelContainer(for: schema, configurations: config)
-        } catch {
-            fatalError("Failed to create in-memory ModelContainer: \(error)")
-        }
+        return try ModelContainer(for: schema, configurations: config)
     }
 }

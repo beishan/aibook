@@ -12,6 +12,7 @@ final class ServiceLocator {
     // MARK: - SwiftData
 
     let modelContainer: ModelContainer
+    let startupIssue: PersistenceStartupIssue?
 
     // MARK: - Prefs Stores
 
@@ -37,7 +38,13 @@ final class ServiceLocator {
 
     private init() {
         // Container
-        self.modelContainer = AiBookContainer.create()
+        do {
+            let bootstrap = try PersistenceBootstrap.bootstrap()
+            self.modelContainer = bootstrap.container
+            self.startupIssue = bootstrap.issue
+        } catch {
+            fatalError("Unable to create persistent or in-memory ModelContainer: \(error)")
+        }
 
         // Prefs
         self.readerSettingsStore = ReaderSettingsStore()
