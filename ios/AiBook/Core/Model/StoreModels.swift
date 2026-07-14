@@ -2,14 +2,14 @@ import Foundation
 
 // MARK: - StoreItemKind（与安卓 StoreItemKind 对齐）
 
-enum StoreItemKind {
+enum StoreItemKind: Sendable {
     case local
     case opds
 }
 
 // MARK: - StoreBook（与安卓 StoreBook 对齐）
 
-struct StoreBook: Identifiable {
+struct StoreBook: Identifiable, Sendable {
     var id: String { "\(kind)-\(sourceId ?? "")-\(title)-\(format.rawValue)" }
 
     let kind: StoreItemKind
@@ -27,7 +27,7 @@ struct StoreBook: Identifiable {
 
 // MARK: - StoreSortOption（与安卓枚举对齐）
 
-enum StoreSortOption: String, CaseIterable {
+enum StoreSortOption: String, CaseIterable, Sendable {
     case recent
     case title
     case author
@@ -36,7 +36,7 @@ enum StoreSortOption: String, CaseIterable {
 
 // MARK: - StoreCatalogFilter（与安卓 data class 对齐）
 
-struct StoreCatalogFilter {
+struct StoreCatalogFilter: Sendable {
     var sourceId: String?
     var format: BookFormat?
     var category: String?
@@ -155,7 +155,7 @@ enum StoreCatalog {
 
 // MARK: - OPDS 目录缓存条目展示模型（用于聚合）
 
-struct OpdsCatalogEntryDisplay {
+struct OpdsCatalogEntryDisplay: Sendable {
     let title: String
     let author: String?
     let summary: String?

@@ -3,6 +3,7 @@ import SwiftUI
 
 // MARK: - ShelfViewModel（与安卓 ShelfViewModel 对齐）
 
+@MainActor
 @Observable
 final class ShelfViewModel {
     var books: [LocalBook] = []
@@ -15,7 +16,7 @@ final class ShelfViewModel {
 
     private let locator: ServiceLocator
 
-    init(locator: ServiceLocator = .shared) {
+    init(locator: ServiceLocator) {
         self.locator = locator
     }
 

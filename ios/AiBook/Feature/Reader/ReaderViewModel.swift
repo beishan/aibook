@@ -4,6 +4,7 @@ import Observation
 
 // MARK: - ReaderViewModel（与安卓 ReaderViewModel 对齐 — 完整实现含远程阅读+进度同步）
 
+@MainActor
 @Observable
 final class ReaderViewModel {
     var chapters: [ReaderChapter] = []
@@ -34,7 +35,7 @@ final class ReaderViewModel {
     private var isRemote: Bool = false
     private let locator: ServiceLocator
 
-    init(locator: ServiceLocator = .shared) {
+    init(locator: ServiceLocator) {
         self.locator = locator
     }
 
@@ -124,8 +125,8 @@ final class ReaderViewModel {
             }
         }
 
-        if let savedIndex = await MainActor.run(body: { book.progress.chapterIndex }),
-           let idx = savedIndex, idx >= 0, idx < chapters.count {
+        if let idx = await MainActor.run(body: { book.progress.chapterIndex }),
+           idx >= 0, idx < chapters.count {
             await MainActor.run { currentChapterIndex = idx }
         }
     }
@@ -219,7 +220,7 @@ final class ReaderViewModel {
     // MARK: - 纯文本加载
 
     private func loadTextFile(url: URL) async {
-        guard let content = try? String(contentsOf: url, encoding: .utf8) ??
+        guard let content = (try? String(contentsOf: url, encoding: .utf8)) ??
                 (try? String(contentsOf: url, encoding: .ascii)) else {
             await MainActor.run {
                 chapters = [ReaderChapter(index: 0, title: "错误", href: "", content: ["文件读取失败"])]

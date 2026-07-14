@@ -2,6 +2,7 @@ import Foundation
 
 // MARK: - ServerConfigStore（与安卓 ServerConfigStore 对齐）
 
+@MainActor
 final class ServerConfigStore {
     private let defaults = UserDefaults.standard
 

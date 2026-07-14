@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - ReaderBookmarkSheet（书签管理面板）
 
+@MainActor
 struct ReaderBookmarkSheet: View {
     let bookId: String
     let currentChapterTitle: String

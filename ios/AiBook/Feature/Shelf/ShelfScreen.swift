@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 // MARK: - ShelfScreen（与安卓 ShelfScreen.kt 对齐 — 完整实现）
 
+@MainActor
 struct ShelfScreen: View {
     @Environment(ServiceLocator.self) private var locator
     @State private var viewModel: ShelfViewModel?

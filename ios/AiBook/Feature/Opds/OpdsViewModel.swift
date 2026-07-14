@@ -3,6 +3,7 @@ import Observation
 
 // MARK: - OpdsViewModel（与安卓 OpdsViewModel 对齐 — 完整实现）
 
+@MainActor
 @Observable
 final class OpdsViewModel {
     var connections: [OpdsConnection] = []
@@ -24,7 +25,7 @@ final class OpdsViewModel {
 
     private let locator: ServiceLocator
 
-    init(locator: ServiceLocator = .shared) {
+    init(locator: ServiceLocator) {
         self.locator = locator
     }
 

@@ -3,6 +3,7 @@ import Observation
 
 // MARK: - LocalBookImporter（与安卓 LocalBookImportViewModel 对齐）
 
+@MainActor
 @Observable
 final class LocalBookImporter {
     var addedCount: Int = 0
@@ -14,7 +15,7 @@ final class LocalBookImporter {
 
     private let locator: ServiceLocator
 
-    init(locator: ServiceLocator = .shared) {
+    init(locator: ServiceLocator) {
         self.locator = locator
     }
 

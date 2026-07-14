@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - ScanDirectoryScreen（与安卓 ScanDirectoryScreen.kt 对齐）
 
+@MainActor
 struct ScanDirectoryScreen: View {
     @Environment(ServiceLocator.self) private var locator
 

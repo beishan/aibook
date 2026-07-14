@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - ContentView（TabView + NavigationStack 根视图，与安卓 AiBookApp.kt 对齐）
 
+@MainActor
 struct ContentView: View {
     @Environment(ServiceLocator.self) private var locator
     @State private var selectedTab: Tab = .shelf

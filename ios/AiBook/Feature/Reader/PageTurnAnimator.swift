@@ -22,7 +22,7 @@ enum PageTurnAnimator {
         case .simulation:
             return simulationTransform(progress: p, pageSize: pageSize)
         case .slide:
-            return slideTransform(progress: p)
+            return slideTransform(progress: p, pageSize: pageSize)
         case .cover:
             return coverTransform(progress: p, pageSize: pageSize)
         case .pan:
@@ -36,7 +36,6 @@ enum PageTurnAnimator {
 
     private static func simulationTransform(progress: CGFloat, pageSize: CGSize) -> PageTurnTransform {
         let absP = abs(progress)
-        let sign: CGFloat = progress >= 0 ? 1 : -1
 
         // 水平偏移
         let offsetX = progress * pageSize.width
@@ -65,8 +64,8 @@ enum PageTurnAnimator {
 
     // MARK: - 滑动翻页
 
-    private static func slideTransform(progress: CGFloat) -> PageTurnTransform {
-        let offsetX = progress * UIScreen.main.bounds.width
+    private static func slideTransform(progress: CGFloat, pageSize: CGSize) -> PageTurnTransform {
+        let offsetX = progress * pageSize.width
 
         return PageTurnTransform(
             offset: CGSize(width: offsetX, height: 0),

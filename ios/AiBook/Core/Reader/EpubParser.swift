@@ -297,7 +297,6 @@ private final class EpubArchive {
     func readEntry(path: String) throws -> Data? {
         let normalizedPath = path.replacingOccurrences(of: "\\", with: "/")
         guard let range = entries[normalizedPath] else { return nil }
-        let entryData = data[range]
 
         // 读取 local file header 获取压缩方式
         // 简化处理：假设条目在 central directory 中能找到
@@ -331,7 +330,6 @@ private final class EpubArchive {
         guard eocdOffset >= 0 else { throw EpubParseError.invalidZip }
 
         let centralDirOffset = Int(data[eocdOffset+16..<eocdOffset+20].withUnsafeBytes { $0.load(as: UInt32.self) })
-        let centralDirSize = Int(data[eocdOffset+12..<eocdOffset+16].withUnsafeBytes { $0.load(as: UInt32.self) })
         let numEntries = Int(data[eocdOffset+10..<eocdOffset+12].withUnsafeBytes { $0.load(as: UInt16.self) })
 
         // 遍历 central directory entries
@@ -345,7 +343,6 @@ private final class EpubArchive {
 
             let compressionMethod = data[offset+10..<offset+12].withUnsafeBytes { $0.load(as: UInt16.self) }
             let compressedSize = Int(data[offset+20..<offset+24].withUnsafeBytes { $0.load(as: UInt32.self) })
-            let uncompressedSize = Int(data[offset+24..<offset+28].withUnsafeBytes { $0.load(as: UInt32.self) })
             let fileNameLength = Int(data[offset+28..<offset+30].withUnsafeBytes { $0.load(as: UInt16.self) })
             let extraFieldLength = Int(data[offset+30..<offset+32].withUnsafeBytes { $0.load(as: UInt16.self) })
             let commentLength = Int(data[offset+32..<offset+34].withUnsafeBytes { $0.load(as: UInt16.self) })
@@ -391,7 +388,6 @@ private final class EpubArchive {
         // 使用 Compression framework 解压 deflate 数据
         let decompressedSize = data.count * 10 // 估算
         var decompressed = Data(count: decompressedSize)
-        var processed = 0
 
         let result = data.withUnsafeBytes { srcPtr -> Int in
             decompressed.withUnsafeMutableBytes { dstPtr -> Int in

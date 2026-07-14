@@ -2,6 +2,7 @@ import Foundation
 
 // MARK: - ReaderSettingsStore（与安卓 ReaderSettingsStore 对齐，使用 UserDefaults）
 
+@MainActor
 final class ReaderSettingsStore {
     private let defaults = UserDefaults.standard
 

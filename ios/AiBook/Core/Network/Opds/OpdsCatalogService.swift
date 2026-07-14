@@ -1,7 +1,8 @@
-import Foundation
+@preconcurrency import Foundation
 
 // MARK: - OpdsCatalogService（与安卓 OpdsCatalogService 对齐）
 
+@MainActor
 final class OpdsCatalogService {
     private let session: URLSession
     private let parser: OpdsFeedParser

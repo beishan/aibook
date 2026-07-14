@@ -3,6 +3,7 @@ import UIKit
 
 // MARK: - ReaderBrightnessControl（屏幕亮度控制，与安卓 autoBrightness / screenAlwaysOn 对齐）
 
+@MainActor
 final class ReaderBrightnessControl {
     private let originalBrightness: CGFloat
     private var isAutoBrightnessEnabled = false
@@ -49,6 +50,7 @@ final class ReaderBrightnessControl {
 
 // MARK: - BrightnessSlider（亮度调节滑块视图）
 
+@MainActor
 struct BrightnessSlider: View {
     @Binding var brightness: CGFloat
     let onAutoToggle: (Bool) -> Void

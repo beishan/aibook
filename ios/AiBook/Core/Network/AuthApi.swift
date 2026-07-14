@@ -2,24 +2,25 @@ import Foundation
 
 // MARK: - AuthApi（认证 API，与安卓 AuthApi 对齐）
 
-struct AuthResponse: Decodable {
+struct AuthResponse: Decodable, Sendable {
     let token: String
     let username: String
     let email: String?
     let role: String?
 }
 
-struct LoginRequest: Encodable {
+struct LoginRequest: Encodable, Sendable {
     let username: String
     let password: String
 }
 
-struct RegisterRequest: Encodable {
+struct RegisterRequest: Encodable, Sendable {
     let username: String
     let password: String
     let email: String?
 }
 
+@MainActor
 final class AuthApi {
     private let client: ApiClient
 

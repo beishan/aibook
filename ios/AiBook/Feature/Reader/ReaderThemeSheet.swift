@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - ReaderThemeSheet（阅读主题选择面板，与安卓 ReaderThemePage 对齐）
 
+@MainActor
 struct ReaderThemeSheet: View {
     @Binding var theme: ReaderTheme
     let onDismiss: () -> Void

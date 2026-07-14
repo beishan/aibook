@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - PrivacyPermissionsScreen（与安卓 PrivacyPermissionsScreen.kt 对齐）
 
+@MainActor
 struct PrivacyPermissionsScreen: View {
     @Environment(ServiceLocator.self) private var locator
     @State private var personalizedRecommendations: Bool = true

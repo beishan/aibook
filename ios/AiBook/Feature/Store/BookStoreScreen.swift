@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - BookStoreScreen（与安卓 BookStoreScreen.kt 对齐 — 完整实现）
 
+@MainActor
 struct BookStoreScreen: View {
     @Environment(ServiceLocator.self) private var locator
     @State private var viewModel: StoreViewModel?
@@ -296,7 +297,7 @@ struct BookStoreScreen: View {
                 .padding(.horizontal, DesignTokens.pagePadding)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    if book.kind == .local, let localId = book.downloadedLocalId {
+                    if book.kind == .local, book.downloadedLocalId != nil {
                         // 导航到详情
                     } else {
                         Task { await vm.downloadOpdsBook(book) }

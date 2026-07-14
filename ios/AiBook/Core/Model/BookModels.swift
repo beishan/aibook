@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - BookFormat（与安卓 BookFormat 枚举完全对齐）
 
-enum BookFormat: String, CaseIterable, Codable {
+enum BookFormat: String, CaseIterable, Codable, Sendable {
     case epub
     case txt
     case pdf
@@ -40,7 +40,7 @@ enum BookFormat: String, CaseIterable, Codable {
 
 // MARK: - ReadingStatus（与安卓 ReadingStatus 枚举对齐）
 
-enum ReadingStatus: String, Codable {
+enum ReadingStatus: String, Codable, Sendable {
     case unread
     case reading
     case finished
@@ -49,7 +49,7 @@ enum ReadingStatus: String, Codable {
 
 // MARK: - LocalBook（与安卓 LocalBook data class 对齐）
 
-struct LocalBook: Identifiable {
+struct LocalBook: Identifiable, Sendable {
     let id: String
     var title: String
     var author: String?
@@ -69,7 +69,7 @@ struct LocalBook: Identifiable {
 
 // MARK: - ShelfFolder（与安卓 ShelfFolder 对齐）
 
-struct ShelfFolder: Identifiable {
+struct ShelfFolder: Identifiable, Sendable {
     let id: String
     var name: String
     var createdAtEpochMillis: Int64
@@ -77,7 +77,7 @@ struct ShelfFolder: Identifiable {
 
 // MARK: - ShelfFolderSelection（与安卓 sealed interface 对齐）
 
-enum ShelfFolderSelection: Equatable {
+enum ShelfFolderSelection: Equatable, Sendable {
     case all
     case unfiled
     case folder(folderId: String)
@@ -110,7 +110,7 @@ enum ShelfFolderCatalog {
 
 // MARK: - ReadingProgress（与安卓 ReadingProgress 对齐）
 
-struct ReadingProgress {
+struct ReadingProgress: Sendable {
     var chapterHref: String?
     var chapterTitle: String?
     var chapterIndex: Int?
@@ -140,7 +140,7 @@ struct ReadingProgress {
 
 // MARK: - ReaderSettings（与安卓 ReaderSettings 对齐）
 
-struct ReaderSettings {
+struct ReaderSettings: Sendable {
     var fontScale: Float
     var fontType: ReaderFontType
     var customFontName: String?
@@ -182,7 +182,7 @@ struct ReaderSettings {
 
 // MARK: - ReaderFontType（与安卓枚举对齐）
 
-enum ReaderFontType: String, CaseIterable {
+enum ReaderFontType: String, CaseIterable, Sendable {
     case system
     case serif
     case sansSerif
@@ -192,7 +192,7 @@ enum ReaderFontType: String, CaseIterable {
 
 // MARK: - ReaderFontOption（与安卓 data class 对齐）
 
-struct ReaderFontOption {
+struct ReaderFontOption: Sendable {
     let type: ReaderFontType
     let label: String
     let description: String
@@ -225,7 +225,7 @@ enum ReaderFontCatalog {
 
 // MARK: - ReaderTheme（与安卓枚举对齐）
 
-enum ReaderTheme: String, CaseIterable {
+enum ReaderTheme: String, CaseIterable, Sendable {
     case light
     case paper
     case green
@@ -235,7 +235,7 @@ enum ReaderTheme: String, CaseIterable {
 
 // MARK: - ParagraphSpacing（与安卓枚举对齐）
 
-enum ParagraphSpacing: String, CaseIterable {
+enum ParagraphSpacing: String, CaseIterable, Sendable {
     case none
     case small
     case large
@@ -243,7 +243,7 @@ enum ParagraphSpacing: String, CaseIterable {
 
 // MARK: - TextAlignment（与安卓枚举对齐，命名加 _ 后缀避免与 SwiftUI.TextAlignment 冲突）
 
-enum TextAlignment_: String, CaseIterable {
+enum TextAlignment_: String, CaseIterable, Sendable {
     case left
     case center
     case right
@@ -252,7 +252,7 @@ enum TextAlignment_: String, CaseIterable {
 
 // MARK: - PageTurnMode（与安卓枚举对齐）
 
-enum PageTurnMode: String, CaseIterable {
+enum PageTurnMode: String, CaseIterable, Sendable {
     case simulation
     case slide
     case cover
@@ -264,7 +264,7 @@ enum PageTurnMode: String, CaseIterable {
 
 // MARK: - AppThemeMode（与安卓枚举对齐）
 
-enum AppThemeMode: String, CaseIterable {
+enum AppThemeMode: String, CaseIterable, Sendable {
     case system
     case light
     case dark
@@ -272,7 +272,7 @@ enum AppThemeMode: String, CaseIterable {
 
 // MARK: - AccentColor（与安卓枚举对齐）
 
-enum AccentColor_: String, CaseIterable {
+enum AccentColor_: String, CaseIterable, Sendable {
     case orange
     case green
     case blue

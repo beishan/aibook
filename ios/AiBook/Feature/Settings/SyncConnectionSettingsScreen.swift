@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - SyncConnectionSettingsScreen（与安卓 SyncConnectionSettingsScreen.kt 对齐 — 完整实现）
 
+@MainActor
 struct SyncConnectionSettingsScreen: View {
     @Environment(ServiceLocator.self) private var locator
     @State private var serverUrl: String = ""
@@ -216,6 +217,7 @@ struct SyncConnectionSettingsScreen: View {
 
 // MARK: - 注册页面
 
+@MainActor
 struct RegisterScreen: View {
     @Environment(ServiceLocator.self) private var locator
     @Environment(\.dismiss) private var dismiss

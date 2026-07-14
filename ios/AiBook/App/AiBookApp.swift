@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - AiBookApp（@main 入口，与安卓 MainActivity + AiBookApp 对齐）
 
 @main
+@MainActor
 struct AiBookApp: App {
     @State private var locator = ServiceLocator.shared
     @State private var readerSettingsStore = ServiceLocator.shared.readerSettingsStore

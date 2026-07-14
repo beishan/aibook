@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - ReaderScreen（与安卓 ReaderScreen.kt 对齐 — 完整实现含书签/主题/亮度）
 
+@MainActor
 struct ReaderScreen: View {
     let bookId: String
     let isRemote: Bool

@@ -3,6 +3,7 @@ import Observation
 
 // MARK: - SettingsViewModel（与安卓 SettingsViewModel 对齐 — 完整实现）
 
+@MainActor
 @Observable
 final class SettingsViewModel {
     var serverUrl: String = ""
@@ -17,7 +18,7 @@ final class SettingsViewModel {
 
     private let locator: ServiceLocator
 
-    init(locator: ServiceLocator = .shared) {
+    init(locator: ServiceLocator) {
         self.locator = locator
     }
 

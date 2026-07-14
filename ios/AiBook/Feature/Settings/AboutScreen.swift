@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - AboutScreen（与安卓 AboutScreen.kt 对齐）
 
+@MainActor
 struct AboutScreen: View {
     var body: some View {
         List {

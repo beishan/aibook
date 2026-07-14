@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - OpdsAddSourceScreen（与安卓 OpdsAddSourceScreen.kt 对齐 — 完整实现）
 
+@MainActor
 struct OpdsAddSourceScreen: View {
     let connectionId: String?
     @Environment(ServiceLocator.self) private var locator

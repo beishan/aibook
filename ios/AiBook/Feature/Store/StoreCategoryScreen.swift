@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - StoreCategoryScreen（与安卓 StoreCategoryScreen.kt 对齐 — 完整实现）
 
+@MainActor
 struct StoreCategoryScreen: View {
     @State var filter: StoreCatalogFilter
     let onApply: (StoreCatalogFilter) -> Void

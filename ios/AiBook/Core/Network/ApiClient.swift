@@ -1,7 +1,8 @@
-import Foundation
+@preconcurrency import Foundation
 
 // MARK: - ApiClient（URLSession 封装，对应安卓 Retrofit + OkHttp）
 
+@MainActor
 final class ApiClient {
     private let session: URLSession
     private let configStore: ServerConfigStore
@@ -16,19 +17,25 @@ final class ApiClient {
 
     // MARK: - GET 请求
 
-    func get<T: Decodable>(_ path: String) async throws -> T {
+    func get<T: Decodable & Sendable>(_ path: String) async throws -> T {
         try await request(path: path, method: .get)
     }
 
     // MARK: - POST 请求
 
-    func post<T: Decodable>(_ path: String, body: (any Encodable)? = nil) async throws -> T {
+    func post<T: Decodable & Sendable>(
+        _ path: String,
+        body: (any Encodable & Sendable)? = nil
+    ) async throws -> T {
         try await request(path: path, method: .post, body: body)
     }
 
     // MARK: - PUT 请求
 
-    func put<T: Decodable>(_ path: String, body: (any Encodable)? = nil) async throws -> T {
+    func put<T: Decodable & Sendable>(
+        _ path: String,
+        body: (any Encodable & Sendable)? = nil
+    ) async throws -> T {
         try await request(path: path, method: .put, body: body)
     }
 
@@ -40,10 +47,10 @@ final class ApiClient {
 
     // MARK: - 通用请求
 
-    func request<T: Decodable>(
+    func request<T: Decodable & Sendable>(
         path: String,
         method: HttpMethod = .get,
-        body: (any Encodable)? = nil
+        body: (any Encodable & Sendable)? = nil
     ) async throws -> T {
         guard let baseUrl = configStore.serverUrl, !baseUrl.isEmpty else {
             throw ApiError.noServerUrl
@@ -124,7 +131,7 @@ final class ApiClient {
 
 // MARK: - HttpMethod
 
-enum HttpMethod: String {
+enum HttpMethod: String, Sendable {
     case get = "GET"
     case post = "POST"
     case put = "PUT"
@@ -133,7 +140,7 @@ enum HttpMethod: String {
 
 // MARK: - EmptyResponse
 
-struct EmptyResponse: Decodable {}
+struct EmptyResponse: Decodable, Sendable {}
 
 // MARK: - ApiError
 

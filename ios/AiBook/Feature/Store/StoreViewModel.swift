@@ -3,6 +3,7 @@ import Observation
 
 // MARK: - StoreViewModel（与安卓 StoreViewModel 对齐 — 完整实现）
 
+@MainActor
 @Observable
 final class StoreViewModel {
     var allBooks: [StoreBook] = []
@@ -15,7 +16,7 @@ final class StoreViewModel {
 
     private let locator: ServiceLocator
 
-    init(locator: ServiceLocator = .shared) {
+    init(locator: ServiceLocator) {
         self.locator = locator
     }
 

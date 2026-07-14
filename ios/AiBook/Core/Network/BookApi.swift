@@ -2,14 +2,14 @@ import Foundation
 
 // MARK: - BookApi（书籍 API，与安卓 BookApi 对齐）
 
-struct BookListResponse: Decodable {
+struct BookListResponse: Decodable, Sendable {
     let content: [BookDto]
     let totalElements: Int
     let totalPages: Int
     let number: Int
 }
 
-struct BookDto: Decodable {
+struct BookDto: Decodable, Sendable {
     let id: Int64
     let title: String
     let author: String?
@@ -20,16 +20,17 @@ struct BookDto: Decodable {
     let pageCount: Int?
 }
 
-struct ReadingProgressRequest: Encodable {
+struct ReadingProgressRequest: Encodable, Sendable {
     let chapterIndex: Int
     let chapterTitle: String?
     let progressPercent: Double
 }
 
-struct ReadingTimeRequest: Encodable {
+struct ReadingTimeRequest: Encodable, Sendable {
     let readingTimeSeconds: Int
 }
 
+@MainActor
 final class BookApi {
     private let client: ApiClient
 

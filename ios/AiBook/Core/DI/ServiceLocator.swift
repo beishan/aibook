@@ -5,6 +5,7 @@ import Observation
 // MARK: - ServiceLocator（与安卓 ServiceLocator.kt 对齐 — 手写单例 DI 容器）
 
 @MainActor
+@Observable
 final class ServiceLocator {
     static let shared = ServiceLocator()
 

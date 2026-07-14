@@ -12,6 +12,7 @@
 		B10000000000000000000001 /* BookFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* BookFormatTests.swift */; };
 		B10000000000000000000002 /* ImportPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* ImportPolicyTests.swift */; };
 		B10000000000000000000003 /* ShelfBookSorterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* ShelfBookSorterTests.swift */; };
+		B10000000000000000000004 /* SendableConformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* SendableConformanceTests.swift */; };
 		718575542FFF81BB0099570A /* AiBookUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575532FFF81BB0099570A /* AiBookUITests.swift */; };
 		718575562FFF81BB0099570A /* AiBookUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575552FFF81BB0099570A /* AiBookUITestsLaunchTests.swift */; };
 		718575B52FFF8F7C0099570A /* LocalBookImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575622FFF8F7B0099570A /* LocalBookImporter.swift */; };
@@ -100,6 +101,7 @@
 		B10000000000000000000011 /* BookFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookFormatTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000012 /* ImportPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportPolicyTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000013 /* ShelfBookSorterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfBookSorterTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000014 /* SendableConformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendableConformanceTests.swift; sourceTree = "<group>"; };
 		7185754F2FFF81BB0099570A /* AiBookUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AiBookUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		718575532FFF81BB0099570A /* AiBookUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiBookUITests.swift; sourceTree = "<group>"; };
 		718575552FFF81BB0099570A /* AiBookUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiBookUITestsLaunchTests.swift; sourceTree = "<group>"; };
@@ -238,6 +240,7 @@
 				B10000000000000000000011 /* BookFormatTests.swift */,
 				B10000000000000000000012 /* ImportPolicyTests.swift */,
 				B10000000000000000000013 /* ShelfBookSorterTests.swift */,
+				B10000000000000000000014 /* SendableConformanceTests.swift */,
 			);
 			path = AiBookTests;
 			sourceTree = "<group>";
@@ -701,6 +704,7 @@
 				B10000000000000000000001 /* BookFormatTests.swift in Sources */,
 				B10000000000000000000002 /* ImportPolicyTests.swift in Sources */,
 				B10000000000000000000003 /* ShelfBookSorterTests.swift in Sources */,
+				B10000000000000000000004 /* SendableConformanceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -781,7 +785,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -838,7 +842,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -871,7 +875,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = miaomiao.AiBook;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -899,7 +904,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = miaomiao.AiBook;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
@@ -912,12 +918,13 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = miaomiao.AiBookTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AiBook.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/AiBook";
 			};
@@ -931,12 +938,13 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = miaomiao.AiBookTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AiBook.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/AiBook";
 			};
@@ -953,7 +961,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = miaomiao.AiBookUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = AiBook;
 			};
@@ -970,7 +979,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = miaomiao.AiBookUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = AiBook;
 			};

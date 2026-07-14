@@ -2,6 +2,7 @@ import Foundation
 
 // MARK: - OpdsSyncCollector（与安卓 OpdsSyncCollector 对齐 — 递归遍历 OPDS 目录树）
 
+@MainActor
 final class OpdsSyncCollector {
     private let catalogService: OpdsCatalogService
     private let maxDepth: Int

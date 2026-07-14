@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - BookDetailScreen（与安卓 BookDetailScreen.kt 对齐 — 完整实现）
 
+@MainActor
 struct BookDetailScreen: View {
     let bookId: String
     @Environment(ServiceLocator.self) private var locator

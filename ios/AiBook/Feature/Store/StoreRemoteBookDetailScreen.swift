@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - StoreRemoteBookDetailScreen（与安卓 StoreRemoteBookDetailScreen.kt 对齐 — 完整实现）
 
+@MainActor
 struct StoreRemoteBookDetailScreen: View {
     let bookId: String
     @Environment(ServiceLocator.self) private var locator
@@ -183,7 +184,7 @@ struct StoreRemoteBookDetailScreen: View {
             await MainActor.run {
                 isDownloading = false
                 switch result {
-                case .added(let id), .restored(let id):
+                case .added, .restored:
                     // 设置远程关联
                     // TODO: 保存 remoteBookId 关联
                     dismiss()

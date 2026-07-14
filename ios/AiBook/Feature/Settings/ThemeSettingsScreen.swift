@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - ThemeSettingsScreen（与安卓 ReaderThemeSettingsScreen 对齐）
 
+@MainActor
 struct ThemeSettingsScreen: View {
     @Environment(ServiceLocator.self) private var locator
     @State private var themeMode: AppThemeMode = .system

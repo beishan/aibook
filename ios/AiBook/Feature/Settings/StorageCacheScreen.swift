@@ -2,6 +2,7 @@ import SwiftUI
 
 // MARK: - StorageCacheScreen（与安卓 StorageCacheScreen.kt 对齐）
 
+@MainActor
 struct StorageCacheScreen: View {
     @Environment(ServiceLocator.self) private var locator
     @State private var storageUsed: String = "计算中..."

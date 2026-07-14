@@ -1,4 +1,4 @@
-import Foundation
+@preconcurrency import Foundation
 
 // MARK: - ServerRepository（与安卓 ServerRepository 对齐 — 完整实现）
 

@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - ReaderChapter（与安卓 ReaderChapter 对齐）
 
-struct ReaderChapter: Identifiable {
+struct ReaderChapter: Identifiable, Sendable {
     var id: Int { index }
     let index: Int
     let title: String
@@ -13,7 +13,7 @@ struct ReaderChapter: Identifiable {
 
 // MARK: - ReaderPage（与安卓 ReaderPage 对齐）
 
-struct ReaderPage {
+struct ReaderPage: Sendable {
     let index: Int
     let text: String
     let progress: Double
@@ -21,7 +21,7 @@ struct ReaderPage {
 
 // MARK: - ReaderBookmark（与安卓 ReaderBookmark 对齐）
 
-struct ReaderBookmark: Identifiable {
+struct ReaderBookmark: Identifiable, Sendable {
     let id: String
     let bookId: String
     let chapterHref: String
@@ -33,7 +33,7 @@ struct ReaderBookmark: Identifiable {
 
 // MARK: - ReaderHighlight（与安卓 ReaderHighlight 对齐）
 
-struct ReaderHighlight: Identifiable {
+struct ReaderHighlight: Identifiable, Sendable {
     let id: String
     let bookId: String
     let chapterHref: String

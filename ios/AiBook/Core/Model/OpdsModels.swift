@@ -2,14 +2,14 @@ import Foundation
 
 // MARK: - OpdsFeed（与安卓 OpdsFeed 对齐）
 
-struct OpdsFeed {
+struct OpdsFeed: Sendable {
     let title: String?
     let entries: [OpdsEntry]
 }
 
 // MARK: - OpdsEntry（与安卓 OpdsEntry 对齐）
 
-struct OpdsEntry {
+struct OpdsEntry: Sendable {
     let title: String
     let author: String?
     let summary: String?
@@ -20,7 +20,7 @@ struct OpdsEntry {
 
 // MARK: - OpdsLink（与安卓 OpdsLink 对齐）
 
-struct OpdsLink {
+struct OpdsLink: Sendable {
     let href: String
     let type: String?
     let rel: String?
@@ -28,7 +28,7 @@ struct OpdsLink {
 
 // MARK: - OpdsConnection（与安卓 OpdsConnection 对齐）
 
-struct OpdsConnection: Identifiable {
+struct OpdsConnection: Identifiable, Sendable {
     let id: String
     var name: String
     var baseUrl: String
@@ -43,7 +43,7 @@ struct OpdsConnection: Identifiable {
 
 // MARK: - OpdsSyncState（与安卓枚举对齐）
 
-enum OpdsSyncState: String, Codable {
+enum OpdsSyncState: String, Codable, Sendable {
     case idle
     case syncing
     case success
