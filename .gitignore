@@ -12,6 +12,7 @@ target/
 dist/
 build/
 **/build/
+DerivedData/
 .gradle/
 **/.gradle/
 *.class
@@ -34,6 +35,10 @@ local.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# Xcode user state
+**/xcuserdata/
+*.xcuserstate
 
 # Docker
 docker/data/
