@@ -1419,7 +1419,9 @@ private fun ReaderContentsPage(
 //                }
 //            }
 //        }
-        ContentsProgressCard(state)
+        if (state.settings.showContentsProgress) {
+            ContentsProgressCard(state)
+        }
 //        Row(
 //            modifier = Modifier.fillMaxWidth(),
 //            horizontalArrangement = Arrangement.SpaceBetween,
@@ -1994,6 +1996,14 @@ private fun ReadingSettingsPage(
                 item { IconSegmentedSetting(settings.textAlignment, viewModel::setTextAlignment) }
                 item { SegmentedSetting("翻页方式", listOf("仿真", "滑动", "覆盖", "平移", "上下"), settings.pageTurnMode.ordinal) { viewModel.setPageTurnMode(PageTurnMode.entries[it]) } }
                 item { SegmentedSetting("目录样式", listOf("经典", "分卷"), settings.contentsStyle.ordinal) { viewModel.setContentsStyle(ReaderContentsStyle.entries[it]) } }
+                item {
+                    SwitchSetting(
+                        "显示目录阅读进度",
+                        "在目录顶部显示阅读章节、进度与时长",
+                        settings.showContentsProgress,
+                        viewModel::setShowContentsProgress
+                    )
+                }
                 if (state.book?.format == BookFormat.TXT) {
                     item { SwitchSetting("压缩 TXT 空行", "连续空白行最多保留一行", settings.compressTxtBlankLines, viewModel::setCompressTxtBlankLines) }
                     item { SwitchSetting("智能合并短行", "合并同段内被硬换行拆开的短句", settings.mergeTxtShortLines, viewModel::setMergeTxtShortLines) }

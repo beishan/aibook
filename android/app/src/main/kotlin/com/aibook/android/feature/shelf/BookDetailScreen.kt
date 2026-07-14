@@ -273,6 +273,7 @@ private fun loadChapterTitles(book: LocalBook): List<String> {
                 val text = file.readText()
                 TextChapterParser.parse(text).map { it.title }
             }
+            BookFormat.MOBI, BookFormat.AZW3 -> emptyList()
             else -> emptyList()
         }
     } catch (e: Exception) {

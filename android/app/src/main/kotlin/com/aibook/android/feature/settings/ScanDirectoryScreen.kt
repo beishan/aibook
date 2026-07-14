@@ -216,7 +216,7 @@ fun ScanDirectoryScreen(
                     Icon(Icons.Default.Lightbulb, null, tint = DesignTokens.Accent)
                     Column {
                         Text("提示", fontWeight = FontWeight.Bold)
-                        Text("支持扫描 EPUB、TXT、PDF、Markdown、HTML 文件，重复书籍会按内容哈希自动跳过。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("支持扫描 EPUB、TXT、PDF、MOBI、AZW3、Markdown、HTML 文件，重复书籍会按内容哈希自动跳过。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

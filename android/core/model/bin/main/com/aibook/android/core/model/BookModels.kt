@@ -6,6 +6,8 @@ enum class BookFormat(val extension: String, val displayName: String) {
     EPUB("epub", "EPUB"),
     TXT("txt", "TXT"),
     PDF("pdf", "PDF"),
+    MOBI("mobi", "MOBI"),
+    AZW3("azw3", "AZW3"),
     MARKDOWN("md", "Markdown"),
     HTML("html", "HTML"),
     HTM("htm", "HTML");
@@ -90,6 +92,7 @@ data class ReadingProgress(
     val chapterIndex: Int? = null,
     val lineIndex: Int? = null,
     val scrollOffset: Int = 0,
+    val pdfZoom: Float? = null,
     val percent: Float = 0f,
     val positionLabel: String? = null
 )
@@ -113,7 +116,8 @@ data class ReaderSettings(
     val compressTxtBlankLines: Boolean = true,
     val mergeTxtShortLines: Boolean = false,
     val indentTxtParagraphs: Boolean = false,
-    val contentsStyle: ReaderContentsStyle = ReaderContentsStyle.CLASSIC
+    val contentsStyle: ReaderContentsStyle = ReaderContentsStyle.CLASSIC,
+    val showContentsProgress: Boolean = true
 )
 
 enum class ReaderFontType {

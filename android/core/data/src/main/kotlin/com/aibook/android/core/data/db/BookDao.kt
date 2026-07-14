@@ -40,7 +40,7 @@ interface BookDao {
     @Query("DELETE FROM books WHERE id = :id")
     suspend fun deleteById(id: String)
 
-    @Query("UPDATE books SET status = :status, lastReadAt = :lastReadAt, progressPercent = :percent, progressChapterHref = :chapterHref, progressChapterTitle = :chapterTitle, progressChapterIndex = :chapterIndex, progressLineIndex = :lineIndex, progressScrollOffset = :scrollOffset, progressPositionLabel = :positionLabel WHERE id = :id")
+    @Query("UPDATE books SET status = :status, lastReadAt = :lastReadAt, progressPercent = :percent, progressChapterHref = :chapterHref, progressChapterTitle = :chapterTitle, progressChapterIndex = :chapterIndex, progressLineIndex = :lineIndex, progressScrollOffset = :scrollOffset, progressPdfZoom = :pdfZoom, progressPositionLabel = :positionLabel WHERE id = :id")
     suspend fun updateProgress(
         id: String,
         status: String,
@@ -51,6 +51,7 @@ interface BookDao {
         chapterIndex: Int?,
         lineIndex: Int?,
         scrollOffset: Int,
+        pdfZoom: Float?,
         positionLabel: String?
     )
 

@@ -50,6 +50,7 @@ dependencies {
     implementation(project(":core:network"))
     implementation(project(":core:data"))
     implementation(project(":core:reader"))
+    implementation(project(":core:mobi"))
 
     val composeBom = platform("androidx.compose:compose-bom:2025.01.01")
     implementation(composeBom)
@@ -74,4 +75,6 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     testImplementation(kotlin("test"))
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

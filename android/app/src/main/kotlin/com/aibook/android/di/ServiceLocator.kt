@@ -14,6 +14,10 @@ import com.aibook.android.core.data.repository.ReaderHighlightRepository
 import com.aibook.android.core.network.opds.OkHttpOpdsTransport
 import com.aibook.android.core.network.opds.OpdsCatalogService
 import com.aibook.android.core.network.opds.OpdsFeedParser
+import com.aibook.android.core.mobi.MobiBookContentLoader
+import com.aibook.android.core.mobi.NativeMobiDocumentParser
+import com.aibook.android.core.reader.BookContentLoaderRegistry
+import com.aibook.android.core.reader.MarkdownBookContentLoader
 import okhttp3.OkHttpClient
 
 class ServiceLocator(private val context: Context) {
@@ -50,6 +54,15 @@ class ServiceLocator(private val context: Context) {
 
     val readerHighlightRepository: ReaderHighlightRepository by lazy {
         ReaderHighlightRepository(database.readerHighlightDao())
+    }
+
+    val bookContentLoaderRegistry: BookContentLoaderRegistry by lazy {
+        BookContentLoaderRegistry(
+            listOf(
+                MarkdownBookContentLoader(),
+                MobiBookContentLoader(NativeMobiDocumentParser())
+            )
+        )
     }
 
     val opdsCatalogService: OpdsCatalogService by lazy {

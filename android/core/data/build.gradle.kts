@@ -13,6 +13,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -25,10 +29,15 @@ android {
     }
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:network"))
     implementation(project(":core:reader"))
+    implementation(project(":core:mobi"))
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     api("androidx.room:room-runtime:2.8.3")
     implementation("androidx.room:room-ktx:2.8.3")
@@ -38,4 +47,7 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation("androidx.room:room-testing:2.8.3")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.room:room-testing:2.8.3")
 }

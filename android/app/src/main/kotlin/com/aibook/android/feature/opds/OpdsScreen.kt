@@ -406,7 +406,7 @@ private fun SupportedFormatsCard(message: String) {
             )
             Column {
                 Text("支持的文件格式", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Text("EPUB / TXT / PDF / MOBI", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("EPUB / TXT / PDF / MOBI / AZW3 / Markdown", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("$message。文件过大或加密文件可能无法导入", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

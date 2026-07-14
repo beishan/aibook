@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 
 data class LocalBookImportState(
     val isImporting: Boolean = false,
-    val message: String = "支持 EPUB、TXT、PDF、Markdown、HTML"
+    val message: String = "支持 EPUB、TXT、PDF、MOBI、AZW3、Markdown、HTML；Markdown 图片建议通过扫描目录导入"
 )
 
 class LocalBookImportViewModel(
@@ -34,7 +34,7 @@ class LocalBookImportViewModel(
         if (uris.isEmpty()) return
         viewModelScope.launch {
             _state.value = _state.value.copy(isImporting = true)
-            val results = uris.map { uri -> bookRepository.importBook(uri) }
+            val results = bookRepository.importSelectedBooks(uris)
             val added = results.count { it is ImportResult.Added }
             val restored = results.count { it is ImportResult.Restored }
             val duplicate = results.count { it is ImportResult.Duplicate }
@@ -100,7 +100,14 @@ val supportedBookMimeTypes = arrayOf(
     "application/epub+zip",
     "text/plain",
     "application/pdf",
+    "application/x-mobipocket-ebook",
+    "application/vnd.amazon.ebook",
     "text/markdown",
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "image/bmp",
     "text/html",
     "application/xhtml+xml",
     "application/octet-stream"

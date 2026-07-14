@@ -26,6 +26,7 @@ data class BookEntity(
     val progressChapterIndex: Int? = null,
     val progressLineIndex: Int? = null,
     val progressScrollOffset: Int = 0,
+    val progressPdfZoom: Float? = null,
     val progressPositionLabel: String? = null,
     val source: String = "LOCAL",
     val remoteBookId: Long? = null,

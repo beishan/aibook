@@ -493,7 +493,12 @@ fun AboutScreen(onBack: () -> Unit) {
         SoftCard {
             DetailLine(Icons.Default.Info, "检查更新", "当前已是最新版本", trailing = "已是最新")
             DetailLine(Icons.Default.Menu, "版本更新记录", "查看历史版本更新内容")
-            DetailLine(Icons.Default.Policy, "开源许可证", "查看开源组件许可信息", showDivider = false)
+            DetailLine(
+                Icons.Default.Policy,
+                "开源许可证",
+                "libmobi · LGPL-3.0-or-later；commonmark-java · BSD-2-Clause",
+                showDivider = false
+            )
         }
         SoftCard {
             DetailLine(Icons.Default.Info, "帮助与反馈", "常见问题与使用帮助")

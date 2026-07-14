@@ -122,12 +122,23 @@ class ScanDirectoryRepository(
 
     private suspend fun scanTree(treeUri: Uri): ScanImportStats {
         val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
-        return scanDocumentChildren(treeUri, rootDocumentId)
+        val documents = mutableListOf<ScannedDocument>()
+        collectDocumentChildren(treeUri, rootDocumentId, relativeDirectory = "", documents)
+        val resources = AuthorizedTreeResourceIndex(
+            documents.map { TreeDocument(value = it.uri, relativePath = it.relativePath) }
+        )
+        return documents.fold(ScanImportStats()) { total, document ->
+            total.plus(importDocument(document, resources))
+        }
     }
 
-    private suspend fun scanDocumentChildren(treeUri: Uri, documentId: String): ScanImportStats {
+    private fun collectDocumentChildren(
+        treeUri: Uri,
+        documentId: String,
+        relativeDirectory: String,
+        documents: MutableList<ScannedDocument>
+    ) {
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
-        var total = ScanImportStats()
         context.contentResolver.query(
             childrenUri,
             arrayOf(
@@ -146,22 +157,37 @@ class ScanDirectoryRepository(
                 val childId = cursor.getString(idIndex)
                 val name = cursor.getString(nameIndex).orEmpty()
                 val mimeType = cursor.getString(mimeIndex).orEmpty()
-                total = if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                    total.plus(scanDocumentChildren(treeUri, childId))
+                if (!isSafeDocumentName(name)) continue
+                val relativePath = if (relativeDirectory.isEmpty()) name else "$relativeDirectory/$name"
+                if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
+                    collectDocumentChildren(treeUri, childId, relativePath, documents)
                 } else {
-                    total.plus(importDocument(treeUri, childId, name))
+                    documents += ScannedDocument(
+                        uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId),
+                        relativePath = relativePath,
+                        name = name
+                    )
                 }
             }
         }
-        return total
     }
 
-    private suspend fun importDocument(treeUri: Uri, documentId: String, name: String): ScanImportStats {
-        if (BookFormat.fromFileName(name) == null) {
+    private suspend fun importDocument(
+        document: ScannedDocument,
+        resources: AuthorizedTreeResourceIndex<Uri>
+    ): ScanImportStats {
+        if (BookFormat.fromFileName(document.name) == null) {
             return ScanImportStats(scanned = 1, unsupported = 1)
         }
-        val documentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
-        return runCatching { bookRepository.importBook(documentUri, name) }
+        return runCatching {
+            bookRepository.importBook(document.uri, document.name, resource@{ relativePath ->
+                resources.withResolved(
+                    document.relativePath,
+                    relativePath,
+                    context.contentResolver::openInputStream
+                )
+            })
+        }
             .fold(
                 onSuccess = { result ->
                     when (result) {
@@ -174,6 +200,10 @@ class ScanDirectoryRepository(
                 },
                 onFailure = { ScanImportStats(scanned = 1, failed = 1) }
             )
+    }
+
+    private fun isSafeDocumentName(name: String): Boolean {
+        return name.isNotBlank() && name != "." && name != ".." && '/' !in name && '\\' !in name
     }
 
     private fun resolveDirectoryName(uri: Uri): String {
@@ -212,4 +242,10 @@ class ScanDirectoryRepository(
             lastErrorMessage = lastErrorMessage
         )
     }
+
+    private data class ScannedDocument(
+        val uri: Uri,
+        val relativePath: String,
+        val name: String
+    )
 }

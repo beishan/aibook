@@ -50,6 +50,7 @@ class ReaderSettingsStore(private val dataStore: DataStore<Preferences>) {
         val APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
         val ACCENT_COLOR = stringPreferencesKey("accent_color")
         val CONTENTS_STYLE = stringPreferencesKey("contents_style")
+        val SHOW_CONTENTS_PROGRESS = booleanPreferencesKey("show_contents_progress")
     }
 
     val fontScale: Flow<Float> =
@@ -130,6 +131,9 @@ class ReaderSettingsStore(private val dataStore: DataStore<Preferences>) {
         ReaderContentsStyle.fromStoredValue(it[Keys.CONTENTS_STYLE])
     }
 
+    val showContentsProgress: Flow<Boolean> =
+        dataStore.data.map { it[Keys.SHOW_CONTENTS_PROGRESS] ?: true }
+
     suspend fun setFontScale(value: Float) {
         dataStore.edit { it[Keys.FONT_SCALE] = value }
     }
@@ -206,5 +210,9 @@ class ReaderSettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setContentsStyle(style: ReaderContentsStyle) {
         dataStore.edit { it[Keys.CONTENTS_STYLE] = style.name }
+    }
+
+    suspend fun setShowContentsProgress(show: Boolean) {
+        dataStore.edit { it[Keys.SHOW_CONTENTS_PROGRESS] = show }
     }
 }

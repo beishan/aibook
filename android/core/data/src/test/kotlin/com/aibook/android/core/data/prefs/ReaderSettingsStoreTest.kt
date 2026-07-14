@@ -25,4 +25,21 @@ class ReaderSettingsStoreTest {
         store.setContentsStyle(ReaderContentsStyle.GROUPED)
         assertEquals(ReaderContentsStyle.GROUPED, store.contentsStyle.first())
     }
+
+    @Test
+    fun `contents progress defaults to visible and persists hidden`() = runTest {
+        val file = Files.createTempDirectory("reader-progress-visibility")
+            .resolve("prefs.preferences_pb")
+            .toFile()
+        val store = ReaderSettingsStore(
+            PreferenceDataStoreFactory.create(
+                scope = backgroundScope,
+                produceFile = { file }
+            )
+        )
+
+        assertEquals(true, store.showContentsProgress.first())
+        store.setShowContentsProgress(false)
+        assertEquals(false, store.showContentsProgress.first())
+    }
 }

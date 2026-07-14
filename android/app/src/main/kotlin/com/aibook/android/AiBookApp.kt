@@ -36,6 +36,7 @@ import androidx.navigation.navArgument
 import com.aibook.android.feature.opds.OpdsScreen
 import com.aibook.android.feature.opds.OpdsAddSourceScreen
 import com.aibook.android.feature.reader.ReaderScreen
+import com.aibook.android.feature.reader.BookReaderRoute
 import com.aibook.android.feature.reader.ReaderThemeSettingsScreen
 import com.aibook.android.feature.settings.AboutScreen
 import com.aibook.android.feature.settings.PrivacyPermissionsScreen
@@ -299,9 +300,8 @@ fun AiBookApp() {
                 arguments = listOf(navArgument("bookId") { type = NavType.StringType })
             ) { backStackEntry ->
                 val bookId = backStackEntry.arguments?.getString("bookId").orEmpty()
-                ReaderScreen(
+                BookReaderRoute(
                     bookId = bookId,
-                    isRemote = false,
                     onBack = { navController.popBackStack() }
                 )
             }

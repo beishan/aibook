@@ -31,7 +31,7 @@ data class ShelfUiState(
     val folderSelection: ShelfFolderSelection = ShelfFolderSelection.All,
     val folderCounts: Map<String, Int> = emptyMap(),
     val query: String = "",
-    val importMessage: String = "支持 EPUB、TXT、PDF、Markdown、HTML",
+    val importMessage: String = "支持 EPUB、TXT、PDF、MOBI、AZW3、Markdown、HTML",
     val isLoading: Boolean = false,
     val sortOption: ShelfSortOption = ShelfSortOption.RECENT_READ,
     val managementMode: Boolean = false,
@@ -65,7 +65,7 @@ class ShelfViewModel(
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
-    private val _importMessage = MutableStateFlow("支持 EPUB、TXT、PDF、Markdown、HTML")
+    private val _importMessage = MutableStateFlow("支持 EPUB、TXT、PDF、MOBI、AZW3、Markdown、HTML")
     private val _isLoading = MutableStateFlow(false)
     private val _sortOption = MutableStateFlow(ShelfSortOption.RECENT_READ)
     private val _managementMode = MutableStateFlow(false)

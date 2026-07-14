@@ -2,6 +2,7 @@ package com.aibook.android.core.data.repository
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import com.aibook.android.core.data.db.BookDao
 import com.aibook.android.core.data.db.ShelfFolderDao
@@ -14,9 +15,17 @@ import com.aibook.android.core.model.ReadingProgress
 import com.aibook.android.core.model.ReadingStatus
 import com.aibook.android.core.model.ShelfFolder
 import com.aibook.android.core.reader.EpubImage
+import com.aibook.android.core.reader.EpubMetadata
 import com.aibook.android.core.reader.EpubMetadataParser
+import com.aibook.android.core.reader.MarkdownResourceReferences
+import com.aibook.android.core.mobi.MobiParseResult
+import com.aibook.android.core.mobi.NativeMobiDocumentParser
+import java.io.InputStream
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
 import java.time.Instant
@@ -33,8 +42,12 @@ sealed interface ImportResult {
 class BookRepository(
     private val context: Context,
     private val bookDao: BookDao,
-    private val shelfFolderDao: ShelfFolderDao
+    private val shelfFolderDao: ShelfFolderDao,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
+    private val parsedBookStorage = ParsedBookStorage(context.filesDir)
+    private val markdownCompanionStorage = MarkdownCompanionStorage(ioDispatcher)
+
     suspend fun addReadingDuration(bookId: String, seconds: Long) {
         if (seconds > 0) bookDao.addReadingDuration(bookId, seconds)
     }
@@ -61,21 +74,54 @@ class BookRepository(
         return bookDao.getById(id)?.toDomain()
     }
 
+    fun parsedBookDirectory(bookId: String): File = parsedBookStorage.directoryFor(bookId)
+
     fun observeBook(id: String): Flow<LocalBook?> {
         return bookDao.observeById(id).map { it?.toDomain() }
     }
 
-    suspend fun importBook(uri: Uri, fileName: String? = null): ImportResult {
+    suspend fun importSelectedBooks(uris: List<Uri>): List<ImportResult> = withContext(ioDispatcher) {
+        val selected = uris.mapNotNull { uri ->
+            val displayName = resolveDisplayName(uri) ?: return@mapNotNull null
+            SelectedDocument(
+                value = uri,
+                documentId = if (DocumentsContract.isDocumentUri(context, uri)) {
+                    runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull()
+                } else {
+                    null
+                },
+                displayName = displayName,
+                providerId = uri.authority
+            )
+        }
+        val resources = AuthorizedMarkdownResourceIndex(selected)
+        selected.mapNotNull { document ->
+            val format = BookFormat.fromFileName(document.displayName) ?: return@mapNotNull null
+            if (format == BookFormat.MARKDOWN) {
+                importBook(document.value, document.displayName) { relativePath ->
+                    resources.withResolved(document, relativePath, context.contentResolver::openInputStream)
+                }
+            } else {
+                importBook(document.value, document.displayName)
+            }
+        }
+    }
+
+    suspend fun importBook(
+        uri: Uri,
+        fileName: String? = null,
+        markdownResourceOpener: ((String) -> InputStream?)? = null
+    ): ImportResult = withContext(ioDispatcher) {
         val resolvedFileName = fileName?.takeIf { it.isNotBlank() }
             ?: resolveDisplayName(uri)
             ?: "imported-book"
         val format = BookFormat.fromFileName(resolvedFileName)
-            ?: return ImportResult.UnsupportedFormat(resolvedFileName)
+            ?: return@withContext ImportResult.UnsupportedFormat(resolvedFileName)
 
         val inputStream = context.contentResolver.openInputStream(uri)
-            ?: return ImportResult.Failed("无法读取文件")
+            ?: return@withContext ImportResult.Failed("无法读取文件")
 
-        val destFile = File(booksDir, "${UUID.randomUUID()}.${format.extension}")
+        val destFile = createDestinationFile(format)
         val sha256 = inputStream.use { input ->
             destFile.outputStream().use { output ->
                 val digest = MessageDigest.getInstance("SHA-256")
@@ -91,17 +137,24 @@ class BookRepository(
 
         val existing = bookDao.getBySha256(sha256)
         if (existing != null) {
-            destFile.delete()
+            deleteImportedFile(destFile)
             if (!existing.visibleInStore) {
                 bookDao.restoreStoreVisibility(existing.id)
-                return ImportResult.Restored(existing.copy(visibleInStore = true).toDomain())
+                return@withContext ImportResult.Restored(existing.copy(visibleInStore = true).toDomain())
             }
-            return ImportResult.Duplicate(existing.toDomain())
+            return@withContext ImportResult.Duplicate(existing.toDomain())
         }
 
-        val metadata = parseMetadataSafely(format, destFile.readBytes())
-        val title = metadata?.title ?: ImportPolicy.normalizedTitle(resolvedFileName)
         val bookId = UUID.nameUUIDFromBytes(sha256.toByteArray()).toString()
+        val metadataBytes = if (format == BookFormat.EPUB || format == BookFormat.MARKDOWN) destFile.readBytes() else byteArrayOf()
+        if (format == BookFormat.MARKDOWN) {
+            val references = MarkdownResourceReferences.extract(metadataBytes.toString(Charsets.UTF_8))
+            markdownCompanionStorage.copy(destFile, references) { relativePath ->
+                markdownResourceOpener?.invoke(relativePath)
+            }
+        }
+        val metadata = parseMetadataSafely(format, metadataBytes, destFile, bookId)
+        val title = ImportPolicy.preferredTitle(metadata?.title, resolvedFileName)
         val coverUri = metadata?.coverImage?.let { image -> runCatching { writeCoverImage(bookId, image) }.getOrNull() }
 
         val book = LocalBook(
@@ -117,30 +170,35 @@ class BookRepository(
         )
 
         bookDao.insert(book.toEntity())
-        return ImportResult.Added(book)
+        ImportResult.Added(book)
     }
 
-    suspend fun importDownloadedBook(fileName: String, bytes: ByteArray, fallbackTitle: String? = null): ImportResult {
+    suspend fun importDownloadedBook(
+        fileName: String,
+        bytes: ByteArray,
+        fallbackTitle: String? = null
+    ): ImportResult = withContext(ioDispatcher) {
         val format = BookFormat.fromFileName(fileName)
-            ?: return ImportResult.UnsupportedFormat(fileName)
+            ?: return@withContext ImportResult.UnsupportedFormat(fileName)
         val sha256 = sha256(bytes)
 
         val existing = bookDao.getBySha256(sha256)
         if (existing != null) {
             if (!existing.visibleInStore) {
                 bookDao.restoreStoreVisibility(existing.id)
-                return ImportResult.Restored(existing.copy(visibleInStore = true).toDomain())
+                return@withContext ImportResult.Restored(existing.copy(visibleInStore = true).toDomain())
             }
-            return ImportResult.Duplicate(existing.toDomain())
+            return@withContext ImportResult.Duplicate(existing.toDomain())
         }
 
-        val metadata = parseMetadataSafely(format, bytes)
-        val title = metadata?.title
-            ?: fallbackTitle?.takeIf { it.isNotBlank() }
-            ?: ImportPolicy.normalizedTitle(fileName)
-        val destFile = File(booksDir, "${UUID.randomUUID()}.${format.extension}")
-        destFile.writeBytes(bytes)
         val bookId = UUID.nameUUIDFromBytes(sha256.toByteArray()).toString()
+        val destFile = createDestinationFile(format)
+        destFile.writeBytes(bytes)
+        val metadata = parseMetadataSafely(format, bytes, destFile, bookId)
+        val title = ImportPolicy.preferredTitle(
+            metadata?.title ?: fallbackTitle,
+            fileName
+        )
         val coverUri = metadata?.coverImage?.let { image -> runCatching { writeCoverImage(bookId, image) }.getOrNull() }
 
         val book = LocalBook(
@@ -156,7 +214,7 @@ class BookRepository(
         )
 
         bookDao.insert(book.toEntity())
-        return ImportResult.Added(book)
+        ImportResult.Added(book)
     }
 
     suspend fun updateProgress(
@@ -166,7 +224,8 @@ class BookRepository(
         percent: Float,
         chapterIndex: Int? = null,
         lineIndex: Int? = null,
-        scrollOffset: Int = 0
+        scrollOffset: Int = 0,
+        pdfZoom: Float? = null
     ) {
         val clamped = percent.coerceIn(0f, 1f)
         val status = if (clamped >= 1f) ReadingStatus.FINISHED else ReadingStatus.READING
@@ -180,6 +239,7 @@ class BookRepository(
             chapterIndex = chapterIndex,
             lineIndex = lineIndex,
             scrollOffset = scrollOffset.coerceAtLeast(0),
+            pdfZoom = pdfZoom?.coerceIn(1f, 4f),
             positionLabel = "${(clamped * 100).toInt()}%"
         )
     }
@@ -220,7 +280,15 @@ class BookRepository(
         val book = bookDao.getById(id)
         if (book != null) {
             val file = File(book.uri)
-            if (file.exists()) file.delete()
+            if (file.exists()) deleteImportedFile(file)
+            book.coverUri?.let { coverPath ->
+                runCatching {
+                    val cover = File(coverPath).canonicalFile
+                    val root = coversDir.canonicalFile
+                    if (cover.path.startsWith(root.path + File.separator)) cover.delete()
+                }
+            }
+            parsedBookStorage.deleteForBook(id)
             bookDao.deleteById(id)
         }
     }
@@ -232,12 +300,73 @@ class BookRepository(
         return digest.joinToString("") { "%02x".format(it) }
     }
 
-    private fun parseMetadataSafely(format: BookFormat, bytes: ByteArray) =
-        if (format == BookFormat.EPUB) {
-            runCatching { EpubMetadataParser.parse(bytes) }.getOrNull()
+    private fun createDestinationFile(format: BookFormat): File {
+        return if (format == BookFormat.MARKDOWN) {
+            File(booksDir, "markdown-${UUID.randomUUID()}/book.md").also { it.parentFile?.mkdirs() }
         } else {
-            null
+            File(booksDir, "${UUID.randomUUID()}.${format.extension}")
         }
+    }
+
+    private fun deleteImportedFile(file: File) {
+        val parent = file.parentFile?.canonicalFile
+        val root = booksDir.canonicalFile
+        if (parent != null && parent.parentFile == root && parent.name.startsWith("markdown-")) {
+            parent.deleteRecursively()
+        } else {
+            file.delete()
+        }
+    }
+
+    private suspend fun parseMetadataSafely(
+        format: BookFormat,
+        bytes: ByteArray,
+        sourceFile: File?,
+        bookId: String
+    ): EpubMetadata? = when (format) {
+        BookFormat.EPUB -> runCatching { EpubMetadataParser.parse(bytes) }.getOrNull()
+        BookFormat.MARKDOWN -> {
+            val firstHeading = bytes.toString(Charsets.UTF_8)
+                .lineSequence()
+                .map(String::trim)
+                .firstOrNull { it.startsWith("# ") }
+                ?.removePrefix("# ")
+                ?.trim()
+                ?.takeIf(String::isNotBlank)
+            EpubMetadata(title = firstHeading)
+        }
+        BookFormat.MOBI, BookFormat.AZW3 -> sourceFile?.let { file ->
+            val output = File(context.cacheDir, "mobi-metadata-$bookId")
+            runCatching {
+                output.deleteRecursively()
+                when (val result = NativeMobiDocumentParser().parse(file.path, output.path)) {
+                    is MobiParseResult.Failure -> null
+                    is MobiParseResult.Success -> {
+                        val document = result.document
+                        val coverFile = document.coverPath?.let(::File)?.takeIf(File::isFile)
+                        EpubMetadata(
+                            title = document.title,
+                            author = document.author,
+                            description = document.description,
+                            coverImage = coverFile?.let {
+                                EpubImage(
+                                    href = it.name,
+                                    mediaType = when (it.extension.lowercase()) {
+                                        "png" -> "image/png"
+                                        "gif" -> "image/gif"
+                                        "bmp" -> "image/bmp"
+                                        else -> "image/jpeg"
+                                    },
+                                    bytes = it.readBytes()
+                                )
+                            }
+                        )
+                    }
+                }
+            }.getOrNull().also { output.deleteRecursively() }
+        }
+        else -> null
+    }
 
     private fun writeCoverImage(bookId: String, image: EpubImage): String? {
         if (image.bytes.isEmpty()) return null

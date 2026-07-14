@@ -27,6 +27,10 @@ import com.aibook.android.core.model.ReaderTheme
 import com.aibook.android.core.model.TextAlignment
 import com.aibook.android.core.reader.EpubBookContent
 import com.aibook.android.core.reader.EpubContentParser
+import com.aibook.android.core.reader.BookContentError
+import com.aibook.android.core.reader.BookContentLoaderRegistry
+import com.aibook.android.core.reader.BookContentRequest
+import com.aibook.android.core.reader.BookContentResult
 import com.aibook.android.core.reader.ReaderChapter
 import com.aibook.android.core.reader.ReaderChapterSelection
 import com.aibook.android.core.reader.ReaderBookmark
@@ -98,7 +102,8 @@ class ReaderViewModel(
     private val readerSettingsStore: ReaderSettingsStore,
     private val serverRepository: ServerRepository,
     private val readerBookmarkRepository: ReaderBookmarkRepository
-    , private val readerHighlightRepository: ReaderHighlightRepository
+    , private val readerHighlightRepository: ReaderHighlightRepository,
+    private val contentLoaderRegistry: BookContentLoaderRegistry
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReaderUiState())
@@ -130,6 +135,7 @@ class ReaderViewModel(
         viewModelScope.launch { readerSettingsStore.mergeTxtShortLines.collect { v -> _state.update { it.copy(settings = it.settings.copy(mergeTxtShortLines = v)) } } }
         viewModelScope.launch { readerSettingsStore.indentTxtParagraphs.collect { v -> _state.update { it.copy(settings = it.settings.copy(indentTxtParagraphs = v)) } } }
         viewModelScope.launch { readerSettingsStore.contentsStyle.collect { v -> _state.update { it.copy(settings = it.settings.copy(contentsStyle = v)) } } }
+        viewModelScope.launch { readerSettingsStore.showContentsProgress.collect { v -> _state.update { it.copy(settings = it.settings.copy(showContentsProgress = v)) } } }
     }
 
     fun loadLocalBook(bookId: String) {
@@ -185,8 +191,32 @@ class ReaderViewModel(
                         isLoading = false,
                         errorMessage = "PDF 阅读器正在开发中，当前请先导入 EPUB 或 TXT 阅读"
                     )
-                    BookFormat.TXT,
                     BookFormat.MARKDOWN,
+                    BookFormat.MOBI,
+                    BookFormat.AZW3 -> {
+                        val loader = contentLoaderRegistry.loaderFor(book.format)
+                        val result = loader?.load(
+                            BookContentRequest(
+                                bookId = book.id,
+                                file = file,
+                                format = book.format,
+                                contentHash = book.sha256,
+                                preferredChapterHref = book.progress.chapterHref,
+                                cacheDirectory = bookRepository.parsedBookDirectory(book.id)
+                            )
+                        ) ?: BookContentResult.Failure(BookContentError.UnsupportedVariant)
+                        when (result) {
+                            is BookContentResult.Success -> applyChapters(result.content.chapters, fallbackText = null)
+                            is BookContentResult.Failure -> {
+                                val error = result.error
+                                _state.value = _state.value.copy(
+                                isLoading = false,
+                                errorMessage = BookContentErrorText.forError(error)
+                            )
+                            }
+                        }
+                    }
+                    BookFormat.TXT,
                     BookFormat.HTML,
                     BookFormat.HTM -> {
                         val text = withContext(Dispatchers.IO) { readTxtFile(file) }
@@ -628,6 +658,10 @@ class ReaderViewModel(
         viewModelScope.launch { readerSettingsStore.setContentsStyle(style) }
     }
 
+    fun setShowContentsProgress(show: Boolean) {
+        viewModelScope.launch { readerSettingsStore.setShowContentsProgress(show) }
+    }
+
     fun setBookSpecific(bookSpecific: Boolean) {
         _state.update { it.copy(isBookSpecific = bookSpecific) }
     }
@@ -670,6 +704,7 @@ class ReaderViewModel(
                 readerSettingsStore.setMergeTxtShortLines(snapshot.mergeTxtShortLines)
                 readerSettingsStore.setIndentTxtParagraphs(snapshot.indentTxtParagraphs)
                 readerSettingsStore.setContentsStyle(snapshot.contentsStyle)
+                readerSettingsStore.setShowContentsProgress(snapshot.showContentsProgress)
             }
         }
     }
@@ -694,6 +729,7 @@ class ReaderViewModel(
             readerSettingsStore.setMergeTxtShortLines(defaults.mergeTxtShortLines)
             readerSettingsStore.setIndentTxtParagraphs(defaults.indentTxtParagraphs)
             readerSettingsStore.setContentsStyle(defaults.contentsStyle)
+            readerSettingsStore.setShowContentsProgress(defaults.showContentsProgress)
         }
     }
 
@@ -852,7 +888,8 @@ class ReaderViewModel(
                     locator.readerSettingsStore,
                     locator.serverRepository,
                     locator.readerBookmarkRepository,
-                    locator.readerHighlightRepository
+                    locator.readerHighlightRepository,
+                    locator.bookContentLoaderRegistry
                 )
             }
         }
