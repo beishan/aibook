@@ -9,7 +9,9 @@
 /* Begin PBXBuildFile section */
 		7185753D2FFF81BB0099570A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7185753C2FFF81BB0099570A /* Assets.xcassets */; };
 		718575402FFF81BB0099570A /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7185753F2FFF81BB0099570A /* Preview Assets.xcassets */; };
-		7185754A2FFF81BB0099570A /* AiBookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575492FFF81BB0099570A /* AiBookTests.swift */; };
+		B10000000000000000000001 /* BookFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* BookFormatTests.swift */; };
+		B10000000000000000000002 /* ImportPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* ImportPolicyTests.swift */; };
+		B10000000000000000000003 /* ShelfBookSorterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* ShelfBookSorterTests.swift */; };
 		718575542FFF81BB0099570A /* AiBookUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575532FFF81BB0099570A /* AiBookUITests.swift */; };
 		718575562FFF81BB0099570A /* AiBookUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575552FFF81BB0099570A /* AiBookUITestsLaunchTests.swift */; };
 		718575B52FFF8F7C0099570A /* LocalBookImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575622FFF8F7B0099570A /* LocalBookImporter.swift */; };
@@ -95,7 +97,9 @@
 		7185753C2FFF81BB0099570A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
 		7185753F2FFF81BB0099570A /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		718575452FFF81BB0099570A /* AiBookTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AiBookTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		718575492FFF81BB0099570A /* AiBookTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiBookTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000011 /* BookFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookFormatTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000012 /* ImportPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportPolicyTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000013 /* ShelfBookSorterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfBookSorterTests.swift; sourceTree = "<group>"; };
 		7185754F2FFF81BB0099570A /* AiBookUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AiBookUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		718575532FFF81BB0099570A /* AiBookUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiBookUITests.swift; sourceTree = "<group>"; };
 		718575552FFF81BB0099570A /* AiBookUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiBookUITestsLaunchTests.swift; sourceTree = "<group>"; };
@@ -231,7 +235,9 @@
 		718575482FFF81BB0099570A /* AiBookTests */ = {
 			isa = PBXGroup;
 			children = (
-				718575492FFF81BB0099570A /* AiBookTests.swift */,
+				B10000000000000000000011 /* BookFormatTests.swift */,
+				B10000000000000000000012 /* ImportPolicyTests.swift */,
+				B10000000000000000000013 /* ShelfBookSorterTests.swift */,
 			);
 			path = AiBookTests;
 			sourceTree = "<group>";
@@ -692,7 +698,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7185754A2FFF81BB0099570A /* AiBookTests.swift in Sources */,
+				B10000000000000000000001 /* BookFormatTests.swift in Sources */,
+				B10000000000000000000002 /* ImportPolicyTests.swift in Sources */,
+				B10000000000000000000003 /* ShelfBookSorterTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

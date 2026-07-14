@@ -18,18 +18,23 @@ enum ShelfBookSorter {
             return books.sorted { a, b in
                 let dateA = a.lastReadAt ?? .distantPast
                 let dateB = b.lastReadAt ?? .distantPast
-                return dateA > dateB
+                return dateA == dateB ? a.id < b.id : dateA > dateB
             }
         case .importedAt:
-            return books.sorted { $0.importedAt > $1.importedAt }
+            return books.sorted {
+                $0.importedAt == $1.importedAt ? $0.id < $1.id : $0.importedAt > $1.importedAt
+            }
         case .title:
-            return books.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            return books.sorted { a, b in
+                let comparison = a.title.localizedCaseInsensitiveCompare(b.title)
+                return comparison == .orderedSame ? a.id < b.id : comparison == .orderedAscending
+            }
         case .favoriteFirst:
             return books.sorted { a, b in
                 if a.favorite != b.favorite { return a.favorite }
                 let dateA = a.lastReadAt ?? a.importedAt
                 let dateB = b.lastReadAt ?? b.importedAt
-                return dateA > dateB
+                return dateA == dateB ? a.id < b.id : dateA > dateB
             }
         }
     }
