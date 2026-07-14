@@ -262,8 +262,15 @@ final class OpdsViewModel {
             try data.write(to: tempFile)
 
             // 导入到书库
-            let result = await MainActor.run { () -> ImportResult in
-                locator.bookRepository.importBook(from: tempFile, fileName: fileName)
+            let preparation = await BookImportPreparer().prepare(url: tempFile, fileName: fileName)
+            let result: ImportResult
+            switch preparation {
+            case .prepared(let prepared):
+                result = locator.bookRepository.importPrepared(prepared)
+            case .unsupported:
+                result = .unsupported
+            case .failed:
+                result = .failed
             }
 
             // 清理临时文件

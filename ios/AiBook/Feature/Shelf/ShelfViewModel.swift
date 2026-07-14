@@ -15,9 +15,11 @@ final class ShelfViewModel {
     var showFolderPicker: Bool = false
 
     private let locator: ServiceLocator
+    private let importer: LocalBookImporter
 
     init(locator: ServiceLocator) {
         self.locator = locator
+        self.importer = LocalBookImporter(locator: locator)
     }
 
     // MARK: - 计算属性
@@ -108,10 +110,9 @@ final class ShelfViewModel {
     }
 
     func importBooks(from urls: [URL]) {
-        for url in urls {
-            let fileName = url.lastPathComponent
-            _ = locator.bookRepository.importBook(from: url, fileName: fileName)
+        Task {
+            await importer.importBooks(from: urls)
+            load()
         }
-        load()
     }
 }

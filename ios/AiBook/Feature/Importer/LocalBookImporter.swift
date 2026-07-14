@@ -14,13 +14,16 @@ final class LocalBookImporter {
     var isImporting: Bool = false
 
     private let locator: ServiceLocator
+    private let preparer: BookImportPreparer
 
-    init(locator: ServiceLocator) {
+    init(locator: ServiceLocator, preparer: BookImportPreparer = BookImportPreparer()) {
         self.locator = locator
+        self.preparer = preparer
     }
 
-    @MainActor func importBooks(from urls: [URL]) {
+    func importBooks(from urls: [URL]) async {
         isImporting = true
+        defer { isImporting = false }
         addedCount = 0
         restoredCount = 0
         duplicateCount = 0
@@ -29,7 +32,17 @@ final class LocalBookImporter {
 
         for url in urls {
             let fileName = url.lastPathComponent
-            let result = locator.bookRepository.importBook(from: url, fileName: fileName)
+            let preparation = await preparer.prepare(url: url, fileName: fileName)
+
+            let result: ImportResult
+            switch preparation {
+            case .prepared(let prepared):
+                result = locator.bookRepository.importPrepared(prepared)
+            case .unsupported:
+                result = .unsupported
+            case .failed:
+                result = .failed
+            }
 
             switch result {
             case .added: addedCount += 1
@@ -39,8 +52,6 @@ final class LocalBookImporter {
             case .failed: failedCount += 1
             }
         }
-
-        isImporting = false
     }
 
     var summary: String {

@@ -1,6 +1,5 @@
 import Foundation
 import SwiftData
-import CryptoKit
 
 // MARK: - BookRepository
 
@@ -31,19 +30,9 @@ final class BookRepository {
 
     // MARK: - 导入
 
-    func importBook(from sourceUrl: URL, fileName: String) -> ImportResult {
-        guard let format = BookFormat.fromFileName(fileName) else {
-            return .unsupported
-        }
-
-        guard let data = try? Data(contentsOf: sourceUrl) else {
-            return .failed
-        }
-
-        let sha = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-
+    func importPrepared(_ prepared: PreparedBookImport) -> ImportResult {
         // 去重
-        if let existing = findEntityBySha256(sha) {
+        if let existing = findEntityBySha256(prepared.sha256) {
             if !existing.shelved {
                 existing.shelved = true
                 try? modelContext.save()
@@ -57,10 +46,10 @@ final class BookRepository {
         let booksDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("books", isDirectory: true)
         try? FileManager.default.createDirectory(at: booksDir, withIntermediateDirectories: true)
-        let destUrl = booksDir.appendingPathComponent("\(bookId).\(format.extension)")
+        let destUrl = booksDir.appendingPathComponent("\(bookId).\(prepared.format.extension)")
 
         do {
-            try data.write(to: destUrl)
+            try prepared.data.write(to: destUrl)
         } catch {
             return .failed
         }
@@ -68,16 +57,16 @@ final class BookRepository {
         // 创建实体
         let entity = BookEntity()
         entity.id = bookId
-        entity.formatRaw = format.rawValue
+        entity.formatRaw = prepared.format.rawValue
         entity.uri = destUrl.path
-        entity.sha256 = sha
+        entity.sha256 = prepared.sha256
         entity.shelved = true
         entity.importedAt = Date()
 
         // EPUB 元数据
-        if format == .epub {
+        if prepared.format == .epub {
             if let epub = try? EpubParser.parse(url: destUrl) {
-                entity.title = epub.title ?? ImportPolicy.normalizedTitle(from: fileName)
+                entity.title = epub.title ?? prepared.normalizedTitle
                 entity.author = epub.author ?? ""
                 if let coverData = epub.coverData {
                     let coversDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -88,10 +77,10 @@ final class BookRepository {
                     entity.coverUri = coverUrl.path
                 }
             } else {
-                entity.title = ImportPolicy.normalizedTitle(from: fileName)
+                entity.title = prepared.normalizedTitle
             }
         } else {
-            entity.title = ImportPolicy.normalizedTitle(from: fileName)
+            entity.title = prepared.normalizedTitle
         }
 
         modelContext.insert(entity)

@@ -175,8 +175,15 @@ struct StoreRemoteBookDetailScreen: View {
             try content.write(to: tempFile, atomically: true, encoding: .utf8)
 
             // 导入到书库
-            let result = await MainActor.run {
-                locator.bookRepository.importBook(from: tempFile, fileName: fileName)
+            let preparation = await BookImportPreparer().prepare(url: tempFile, fileName: fileName)
+            let result: ImportResult
+            switch preparation {
+            case .prepared(let prepared):
+                result = locator.bookRepository.importPrepared(prepared)
+            case .unsupported:
+                result = .unsupported
+            case .failed:
+                result = .failed
             }
 
             try? FileManager.default.removeItem(at: tempFile)
@@ -185,8 +192,6 @@ struct StoreRemoteBookDetailScreen: View {
                 isDownloading = false
                 switch result {
                 case .added, .restored:
-                    // 设置远程关联
-                    // TODO: 保存 remoteBookId 关联
                     dismiss()
                 case .duplicate:
                     errorMessage = "书籍已存在"

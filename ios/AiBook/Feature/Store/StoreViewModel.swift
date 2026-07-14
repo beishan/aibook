@@ -112,11 +112,12 @@ final class StoreViewModel {
             let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
             try data.write(to: tempFile)
 
-            await MainActor.run {
-                _ = locator.bookRepository.importBook(from: tempFile, fileName: fileName)
-                try? FileManager.default.removeItem(at: tempFile)
-                load()
+            let preparation = await BookImportPreparer().prepare(url: tempFile, fileName: fileName)
+            if case .prepared(let prepared) = preparation {
+                _ = locator.bookRepository.importPrepared(prepared)
             }
+            try? FileManager.default.removeItem(at: tempFile)
+            load()
         } catch {
             // 下载失败
         }

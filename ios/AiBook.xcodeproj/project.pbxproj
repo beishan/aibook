@@ -74,6 +74,7 @@
 		718575ED2FFF8F7C0099570A /* ReaderModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575AF2FFF8F7B0099570A /* ReaderModels.swift */; };
 		718575EE2FFF8F7C0099570A /* AiBookApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575B22FFF8F7C0099570A /* AiBookApp.swift */; };
 		718575EF2FFF8F7C0099570A /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575B32FFF8F7C0099570A /* ContentView.swift */; };
+		C10000000000000000000001 /* BookImportPreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000011 /* BookImportPreparer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -164,6 +165,7 @@
 		718575AF2FFF8F7B0099570A /* ReaderModels.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ReaderModels.swift; sourceTree = "<group>"; };
 		718575B22FFF8F7C0099570A /* AiBookApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AiBookApp.swift; sourceTree = "<group>"; };
 		718575B32FFF8F7C0099570A /* ContentView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		C10000000000000000000011 /* BookImportPreparer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookImportPreparer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -482,11 +484,20 @@
 			path = Reader;
 			sourceTree = "<group>";
 		};
+		C10000000000000000000012 /* Import */ = {
+			isa = PBXGroup;
+			children = (
+				C10000000000000000000011 /* BookImportPreparer.swift */,
+			);
+			path = Import;
+			sourceTree = "<group>";
+		};
 		718575B12FFF8F7B0099570A /* Core */ = {
 			isa = PBXGroup;
 			children = (
 				7185759D2FFF8F7B0099570A /* Data */,
 				7185759F2FFF8F7B0099570A /* DI */,
+				C10000000000000000000012 /* Import */,
 				718575A52FFF8F7B0099570A /* Model */,
 				718575AD2FFF8F7B0099570A /* Network */,
 				718575B02FFF8F7B0099570A /* Reader */,
@@ -671,6 +682,7 @@
 				718575E52FFF8F7C0099570A /* StoreModels.swift in Sources */,
 				718575D62FFF8F7C0099570A /* OpdsConnectionEntity.swift in Sources */,
 				718575ED2FFF8F7C0099570A /* ReaderModels.swift in Sources */,
+				C10000000000000000000001 /* BookImportPreparer.swift in Sources */,
 				718575DB2FFF8F7C0099570A /* BookRepository.swift in Sources */,
 				718575E92FFF8F7C0099570A /* ApiClient.swift in Sources */,
 				718575E22FFF8F7C0099570A /* ImportPolicy.swift in Sources */,
