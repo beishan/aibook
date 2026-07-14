@@ -23,6 +23,7 @@ struct ContentView: View {
             .tabItem {
                 Label("书架", systemImage: "book.fill")
             }
+            .accessibilityIdentifier("tab.shelf")
             .tag(Tab.shelf)
 
             // 书城
@@ -35,6 +36,7 @@ struct ContentView: View {
             .tabItem {
                 Label("书城", systemImage: "books.vertical")
             }
+            .accessibilityIdentifier("tab.store")
             .tag(Tab.store)
 
             // 发现
@@ -47,6 +49,7 @@ struct ContentView: View {
             .tabItem {
                 Label("发现", systemImage: "magnifyingglass")
             }
+            .accessibilityIdentifier("tab.opds")
             .tag(Tab.opds)
 
             // 设置
@@ -59,6 +62,7 @@ struct ContentView: View {
             .tabItem {
                 Label("设置", systemImage: "gearshape")
             }
+            .accessibilityIdentifier("tab.settings")
             .tag(Tab.settings)
         }
         .tint(DesignTokens.accent)

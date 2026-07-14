@@ -6,7 +6,7 @@
 
 | 层次 | 技术选型 |
 |---|---|
-| 语言 | Swift 5.10+ |
+| 语言 | Swift 6 |
 | UI | SwiftUI + @Observable |
 | 数据库 | SwiftData (iOS 17+) |
 | 网络 | URLSession + Codable |
@@ -41,6 +41,32 @@ AiBook/
 - Xcode 16+
 - iOS 17+ Deployment Target
 - Swift Package Manager 依赖管理
+
+## 本地开发
+
+1. 使用 Xcode 16 或更高版本打开 `ios/AiBook.xcodeproj`。
+2. 在 `AiBook` Target 的 Signing & Capabilities 中选择自己的开发团队，并按需修改 Bundle Identifier。
+3. 选择 iOS 17 或更高版本的模拟器，运行 `AiBook` Scheme。
+
+也可以在仓库根目录执行：
+
+```bash
+# 编译应用和测试目标
+xcodebuild build-for-testing \
+  -project ios/AiBook.xcodeproj \
+  -scheme AiBook \
+  -destination 'platform=iOS Simulator,name=iPhone 15 Pro' \
+  CODE_SIGNING_ALLOWED=NO
+
+# 运行单元测试和 UI 冒烟测试
+xcodebuild test \
+  -project ios/AiBook.xcodeproj \
+  -scheme AiBook \
+  -destination 'platform=iOS Simulator,name=iPhone 15 Pro' \
+  CODE_SIGNING_ALLOWED=NO
+```
+
+客户端连接私有服务器时，在“设置 → 同步与连接”中填写局域网服务地址和账号。测试账号、生产凭据与签名证书不得提交到仓库。
 
 ## 依赖库
 

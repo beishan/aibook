@@ -15,7 +15,6 @@
 		B10000000000000000000004 /* SendableConformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* SendableConformanceTests.swift */; };
 		B10000000000000000000005 /* PersistenceBootstrapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* PersistenceBootstrapTests.swift */; };
 		718575542FFF81BB0099570A /* AiBookUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575532FFF81BB0099570A /* AiBookUITests.swift */; };
-		718575562FFF81BB0099570A /* AiBookUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575552FFF81BB0099570A /* AiBookUITestsLaunchTests.swift */; };
 		718575B52FFF8F7C0099570A /* LocalBookImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575622FFF8F7B0099570A /* LocalBookImporter.swift */; };
 		718575B62FFF8F7C0099570A /* OpdsAddSourceScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575642FFF8F7B0099570A /* OpdsAddSourceScreen.swift */; };
 		718575B72FFF8F7C0099570A /* OpdsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718575652FFF8F7B0099570A /* OpdsScreen.swift */; };
@@ -108,7 +107,6 @@
 		B10000000000000000000015 /* PersistenceBootstrapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceBootstrapTests.swift; sourceTree = "<group>"; };
 		7185754F2FFF81BB0099570A /* AiBookUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AiBookUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		718575532FFF81BB0099570A /* AiBookUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiBookUITests.swift; sourceTree = "<group>"; };
-		718575552FFF81BB0099570A /* AiBookUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiBookUITestsLaunchTests.swift; sourceTree = "<group>"; };
 		718575622FFF8F7B0099570A /* LocalBookImporter.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LocalBookImporter.swift; sourceTree = "<group>"; };
 		718575642FFF8F7B0099570A /* OpdsAddSourceScreen.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OpdsAddSourceScreen.swift; sourceTree = "<group>"; };
 		718575652FFF8F7B0099570A /* OpdsScreen.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OpdsScreen.swift; sourceTree = "<group>"; };
@@ -256,7 +254,6 @@
 			isa = PBXGroup;
 			children = (
 				718575532FFF81BB0099570A /* AiBookUITests.swift */,
-				718575552FFF81BB0099570A /* AiBookUITestsLaunchTests.swift */,
 			);
 			path = AiBookUITests;
 			sourceTree = "<group>";
@@ -733,7 +730,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				718575542FFF81BB0099570A /* AiBookUITests.swift in Sources */,
-				718575562FFF81BB0099570A /* AiBookUITestsLaunchTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
