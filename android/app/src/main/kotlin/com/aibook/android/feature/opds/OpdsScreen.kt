@@ -65,19 +65,30 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.network.NetworkHeaders
+import coil3.network.httpHeaders
 import com.aibook.android.core.network.opds.OpdsConnection
 import com.aibook.android.core.network.opds.OpdsEntry
+import com.aibook.android.core.network.opds.OpdsRequestFactory
 import com.aibook.android.core.network.opds.OpdsSyncState
 import com.aibook.android.feature.importer.LocalBookImportViewModel
 import com.aibook.android.feature.importer.rememberLocalBookImportLauncher
@@ -991,8 +1002,16 @@ private fun CatalogBrowser(
     val connection = state.activeConnection
     val categoryEntries = feed.entries.filter { it.acquisitionLink == null && it.alternateLink != null }
     val bookEntries = feed.entries.filter { it.acquisitionLink != null }
-    val rankingEntries = bookEntries.take(3)
-    val recentEntries = bookEntries.take(4)
+    val availableFormats = remember(bookEntries) { bookEntries.map(::opdsFormatLabel).distinct().sorted() }
+    val catalogKey = state.navigationStack.lastOrNull() ?: connection?.baseUrl.orEmpty()
+    var selectedFormat by rememberSaveable(catalogKey) { mutableStateOf<String?>(null) }
+    var sort by rememberSaveable(catalogKey) { mutableStateOf(OpdsCatalogSort.MODIFIED) }
+    val displayedEntries = remember(bookEntries, selectedFormat, sort) {
+        presentOpdsEntries(bookEntries, selectedFormat, sort)
+    }
+    val recentEntries = remember(bookEntries) {
+        presentOpdsEntries(bookEntries, null, OpdsCatalogSort.MODIFIED).take(4)
+    }
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(20.dp)) {
         item {
@@ -1018,30 +1037,38 @@ private fun CatalogBrowser(
                 }
             }
         }
-        if (rankingEntries.isNotEmpty()) {
-            item {
-                CatalogRankingSection(rankingEntries)
-            }
-        }
         if (recentEntries.isNotEmpty()) {
             item {
-                CatalogRecentSection(recentEntries)
+                CatalogRecentSection(recentEntries, connection)
             }
         }
         item {
-            CatalogListHeader(bookEntries.size)
+            CatalogListHeader(
+                count = displayedEntries.size,
+                availableFormats = availableFormats,
+                selectedFormat = selectedFormat,
+                sort = sort,
+                onCycleFormat = {
+                    selectedFormat = when (val index = selectedFormat?.let(availableFormats::indexOf) ?: -1) {
+                        -1 -> availableFormats.firstOrNull()
+                        availableFormats.lastIndex -> null
+                        else -> availableFormats[index + 1]
+                    }
+                },
+                onToggleSort = {
+                    sort = if (sort == OpdsCatalogSort.MODIFIED) OpdsCatalogSort.TITLE else OpdsCatalogSort.MODIFIED
+                }
+            )
         }
-        if (bookEntries.isEmpty()) {
+        if (displayedEntries.isEmpty()) {
             item {
                 CatalogEmptyState(categoryEntries.isNotEmpty())
             }
         } else {
-            items(bookEntries, key = { "${it.title}-${it.acquisitionLink?.href.orEmpty()}" }) { entry ->
-                if (entry === bookEntries.lastOrNull() && feed.nextLink != null) {
-                    LaunchedEffect(entry.acquisitionLink?.href) { viewModel.loadNextPage() }
-                }
+            items(displayedEntries, key = { "${it.title}-${it.acquisitionLink?.href.orEmpty()}" }) { entry ->
                 CatalogBookRow(
                     entry = entry,
+                    connection = connection,
                     downloading = state.downloadingTitle == entry.title,
                     onDownload = { viewModel.downloadEntry(entry) }
                 )
@@ -1052,6 +1079,12 @@ private fun CatalogBrowser(
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), color = DesignTokens.Accent)
                     }
                 }
+            }
+        }
+        val nextLink = feed.nextLink
+        if (nextLink != null && !state.isLoadingNextPage) {
+            item {
+                LaunchedEffect(nextLink.href) { viewModel.loadNextPage() }
             }
         }
     }
@@ -1109,10 +1142,6 @@ private fun CatalogHeader(
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Search, contentDescription = "搜索", tint = Color.Black, modifier = Modifier.size(34.dp))
-                Icon(Icons.Default.MoreVert, contentDescription = "更多", tint = Color.Black, modifier = Modifier.size(34.dp))
-            }
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("来自 OPDS 源的图书内容", color = DesignTokens.SoftText, style = MaterialTheme.typography.titleMedium)
@@ -1166,94 +1195,42 @@ private fun CatalogChip(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun CatalogRankingSection(entries: List<OpdsEntry>) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionTitle("排行榜")
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = DesignTokens.WarmCard),
-            shape = RoundedCornerShape(18.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
-        ) {
-            LazyRow(
-                modifier = Modifier.padding(18.dp),
-                horizontalArrangement = Arrangement.spacedBy(18.dp)
-            ) {
-                items(entries, key = { it.title }) { entry ->
-                    RankingBookCard(entry = entry, rank = entries.indexOf(entry) + 1)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RankingBookCard(entry: OpdsEntry, rank: Int) {
-    Row(
-        modifier = Modifier
-            .width(230.dp)
-            .background(Color.White.copy(alpha = 0.64f), RoundedCornerShape(12.dp))
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box {
-            CatalogCover(entry.title, width = 76.dp, height = 116.dp)
-            Text(
-                rank.toString(),
-                modifier = Modifier
-                    .background(DesignTokens.Accent, RoundedCornerShape(topStart = 8.dp, bottomEnd = 8.dp))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-            Text(entry.title, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(entry.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("热度 ${String.format(Locale.getDefault(), "%.1f", 9.9f - rank * 0.2f)}", color = DesignTokens.SoftText)
-        }
-    }
-}
-
-@Composable
-private fun CatalogRecentSection(entries: List<OpdsEntry>) {
+private fun CatalogRecentSection(entries: List<OpdsEntry>, connection: OpdsConnection?) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionTitle("最近更新")
         LazyRow(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
             items(entries, key = { it.title }) { entry ->
-                RecentCatalogBook(entry)
+                RecentCatalogBook(entry, connection)
             }
         }
     }
 }
 
 @Composable
-private fun RecentCatalogBook(entry: OpdsEntry) {
+private fun RecentCatalogBook(entry: OpdsEntry, connection: OpdsConnection?) {
     Column(
         modifier = Modifier.width(128.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box {
-            CatalogCover(entry.title, width = 112.dp, height = 154.dp)
-            Text(
-                "新",
-                modifier = Modifier
-                    .background(DesignTokens.Accent, RoundedCornerShape(topStart = 8.dp, bottomEnd = 8.dp))
-                    .padding(horizontal = 7.dp, vertical = 4.dp),
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
+            CatalogCover(entry, connection, width = 112.dp, height = 154.dp)
         }
         Text(entry.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(entry.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text("昨天", color = DesignTokens.SoftText)
+        Text(formatOpdsModifiedAt(entry.modifiedAt), color = DesignTokens.SoftText)
     }
 }
 
 @Composable
-private fun CatalogListHeader(count: Int) {
+private fun CatalogListHeader(
+    count: Int,
+    availableFormats: List<String>,
+    selectedFormat: String?,
+    sort: OpdsCatalogSort,
+    onCycleFormat: () -> Unit,
+    onToggleSort: () -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1262,9 +1239,11 @@ private fun CatalogListHeader(count: Int) {
         Text("全部图书", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("共 $count 本", color = DesignTokens.SoftText)
-            Text("最新更新⌄", color = DesignTokens.SoftText)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("筛选", color = DesignTokens.SoftText)
+            TextButton(onClick = onToggleSort) {
+                Text(if (sort == OpdsCatalogSort.MODIFIED) "最新更新" else "书名排序")
+            }
+            TextButton(onClick = onCycleFormat, enabled = availableFormats.isNotEmpty()) {
+                Text(selectedFormat ?: "全部格式")
                 Icon(Icons.Default.FilterList, null, tint = DesignTokens.SoftText, modifier = Modifier.size(18.dp))
             }
         }
@@ -1274,6 +1253,7 @@ private fun CatalogListHeader(count: Int) {
 @Composable
 private fun CatalogBookRow(
     entry: OpdsEntry,
+    connection: OpdsConnection?,
     downloading: Boolean,
     onDownload: () -> Unit
 ) {
@@ -1288,12 +1268,12 @@ private fun CatalogBookRow(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            CatalogCover(entry.title, width = 86.dp, height = 118.dp)
+            CatalogCover(entry, connection, width = 86.dp, height = 118.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(entry.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(entry.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("更新于 昨天 22:15", color = DesignTokens.SoftText)
+                    Text(formatOpdsModifiedAt(entry.modifiedAt), color = DesignTokens.SoftText)
                     Text(opdsFormatLabel(entry), color = DesignTokens.SoftText)
                 }
                 entry.summary?.takeIf { it.isNotBlank() }?.let {
@@ -1333,21 +1313,17 @@ private fun CatalogEmptyState(hasCategories: Boolean) {
 
 @Composable
 private fun SectionTitle(title: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("查看全部", color = DesignTokens.SoftText)
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = DesignTokens.SoftText)
-        }
-    }
+    Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
 }
 
 @Composable
-private fun CatalogCover(title: String, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+private fun CatalogCover(
+    entry: OpdsEntry,
+    connection: OpdsConnection?,
+    width: androidx.compose.ui.unit.Dp,
+    height: androidx.compose.ui.unit.Dp
+) {
+    val title = entry.title
     val palettes = listOf(
         listOf(Color(0xFFBFDDE7), Color(0xFF5A9EB0)),
         listOf(Color(0xFF203746), Color(0xFF101820)),
@@ -1355,6 +1331,20 @@ private fun CatalogCover(title: String, width: androidx.compose.ui.unit.Dp, heig
         listOf(Color(0xFF9DBCC1), Color(0xFF38535B))
     )
     val colors = palettes[kotlin.math.abs(title.hashCode()) % palettes.size]
+    val context = LocalContext.current
+    val coverUrl = entry.coverLink?.href?.let { href ->
+        connection?.let { runCatching { OpdsRequestFactory.resolveUrl(it, href) }.getOrNull() } ?: href
+    }
+    val request = coverUrl?.let { url ->
+        ImageRequest.Builder(context)
+            .data(url)
+            .apply {
+                connection?.let(OpdsRequestFactory::basicAuthHeader)?.let { authorization ->
+                    httpHeaders(NetworkHeaders.Builder().set("Authorization", authorization).build())
+                }
+            }
+            .build()
+    }
     Box(
         modifier = Modifier
             .width(width)
@@ -1370,16 +1360,15 @@ private fun CatalogCover(title: String, width: androidx.compose.ui.unit.Dp, heig
             maxLines = 3,
             overflow = TextOverflow.Ellipsis
         )
-    }
-}
-
-private fun opdsFormatLabel(entry: OpdsEntry): String {
-    val type = entry.acquisitionLink?.type.orEmpty().lowercase()
-    return when {
-        "epub" in type -> "EPUB"
-        "pdf" in type -> "PDF"
-        "text" in type || "txt" in type -> "TXT"
-        type.isNotBlank() -> type.substringAfterLast('/').uppercase()
-        else -> "未知格式"
+        if (request != null) {
+            AsyncImage(
+                model = request,
+                contentDescription = title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(8.dp))
+            )
+        }
     }
 }

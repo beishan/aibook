@@ -62,6 +62,7 @@ class OpdsFeedParser {
         val entries = mutableListOf<OpdsEntry>()
         entries += publications(root["publications"] as? JsonArray, inheritedCategory = null)
         entries += navigation(root["navigation"] as? JsonArray)
+        entries += navigation(root["catalogs"] as? JsonArray)
         (root["groups"] as? JsonArray)?.forEach { groupElement ->
             val group = groupElement as? JsonObject ?: return@forEach
             val groupTitle = (group["metadata"] as? JsonObject)?.stringValue("title")

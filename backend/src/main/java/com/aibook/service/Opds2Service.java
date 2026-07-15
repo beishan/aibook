@@ -10,6 +10,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
@@ -109,7 +111,13 @@ public class Opds2Service {
      */
     public Map<String, Object> searchBooks(User user, String query, int page) {
         Page<Book> books = bookRepository.searchByKeyword(user, query, PageRequest.of(page, PAGE_SIZE));
-        return buildPublicationsFeed(books, "搜索: " + query, "/opds/v2/search", page);
+        String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
+        return buildPublicationsFeed(
+                books,
+                "搜索: " + query,
+                "/opds/v2/search?query=" + encodedQuery,
+                page
+        );
     }
 
     /**
@@ -125,13 +133,14 @@ public class Opds2Service {
         ));
 
         List<Map<String, String>> links = new ArrayList<>();
-        links.add(Map.of("rel", "self", "href", basePath + "?page=" + currentPage, "type", "application/opds+json"));
+        String pageSeparator = basePath.contains("?") ? "&page=" : "?page=";
+        links.add(Map.of("rel", "self", "href", basePath + pageSeparator + currentPage, "type", "application/opds+json"));
         links.add(Map.of("rel", "start", "href", "/opds/v2", "type", "application/opds+json"));
         if (page.hasNext()) {
-            links.add(Map.of("rel", "next", "href", basePath + "?page=" + (currentPage + 1), "type", "application/opds+json"));
+            links.add(Map.of("rel", "next", "href", basePath + pageSeparator + (currentPage + 1), "type", "application/opds+json"));
         }
         if (currentPage > 0) {
-            links.add(Map.of("rel", "prev", "href", basePath + "?page=" + (currentPage - 1), "type", "application/opds+json"));
+            links.add(Map.of("rel", "prev", "href", basePath + pageSeparator + (currentPage - 1), "type", "application/opds+json"));
         }
         feed.put("links", links);
 

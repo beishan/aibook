@@ -175,7 +175,12 @@ const testConnection = async (type: 'opds' | 'webdav') => {
         : {}
     })
 
-    if (response.status === 200) {
+    const contentType = String(response.headers['content-type'] || '').toLowerCase()
+    const validContentType = type === 'opds'
+      ? contentType.includes('application/atom+xml')
+      : !contentType.includes('text/html')
+
+    if (response.status === 200 && validContentType) {
       testResult.value = {
         success: true,
         message: `${type === 'opds' ? 'OPDS' : 'WebDAV'} 服务运行正常`
@@ -183,7 +188,9 @@ const testConnection = async (type: 'opds' | 'webdav') => {
     } else {
       testResult.value = {
         success: false,
-        message: `服务器返回状态码: ${response.status}`
+        message: contentType.includes('text/html')
+          ? '服务器返回了网页内容，请检查反向代理配置'
+          : `服务器响应格式不正确: ${contentType || '未知 Content-Type'}`
       }
     }
   } catch (error: any) {

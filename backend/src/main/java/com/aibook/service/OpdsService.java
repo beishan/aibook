@@ -12,6 +12,9 @@ import org.springframework.stereotype.Service;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -211,7 +214,9 @@ public class OpdsService {
             xml.append("  <entry>\n");
             xml.append("    <title>").append(escapeXml(book.getTitle())).append("</title>\n");
             xml.append("    <id>urn:aibook:book:").append(book.getId()).append("</id>\n");
-            xml.append("    <updated>").append(book.getUpdatedAt() != null ? book.getUpdatedAt() : book.getCreatedAt()).append("</updated>\n");
+            xml.append("    <updated>").append(formatAtomTimestamp(
+                    book.getUpdatedAt() != null ? book.getUpdatedAt() : book.getCreatedAt()
+            )).append("</updated>\n");
 
             if (book.getAuthor() != null) {
                 xml.append("    <author>\n");
@@ -254,5 +259,12 @@ public class OpdsService {
                    .replace(">", "&gt;")
                    .replace("\"", "&quot;")
                    .replace("'", "&apos;");
+    }
+
+    static String formatAtomTimestamp(LocalDateTime value) {
+        if (value == null) {
+            return java.time.Instant.EPOCH.toString();
+        }
+        return value.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
     }
 }

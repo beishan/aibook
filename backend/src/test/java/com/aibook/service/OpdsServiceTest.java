@@ -7,6 +7,7 @@ import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,9 @@ class OpdsServiceTest {
         assertThat(xml).contains("rel=\"http://opds-spec.org/acquisition/open-access\"");
         assertThat(xml).contains("rel=\"http://opds-spec.org/image\"");
         assertThat(xml).contains("rel=\"http://opds-spec.org/image/thumbnail\"");
+
+        String updated = xml.substring(xml.indexOf("<updated>") + 9, xml.indexOf("</updated>"));
+        assertThat(OffsetDateTime.parse(updated)).isNotNull();
     }
 
     @Test
@@ -74,6 +78,13 @@ class OpdsServiceTest {
         assertThat(xml).contains("<OpenSearchDescription");
         assertThat(xml).contains("template=\"/opds/search?query={searchTerms}\"");
         assertThat(xml).contains("application/atom+xml;profile=opds-catalog");
+    }
+
+    @Test
+    void bookTimestampUsesAtomCompatibleOffsetDateTime() {
+        String timestamp = OpdsService.formatAtomTimestamp(LocalDateTime.of(2026, 7, 7, 12, 30));
+
+        assertThat(OffsetDateTime.parse(timestamp)).isNotNull();
     }
 
     private User user() {

@@ -67,6 +67,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.navigation:navigation-compose:2.8.7")
     implementation("io.coil-kt.coil3:coil-compose:3.1.0")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.1.0")
     implementation("org.jsoup:jsoup:1.18.1")
     implementation("org.readium.kotlin-toolkit:readium-shared:3.1.0")
     implementation("org.readium.kotlin-toolkit:readium-streamer:3.1.0") {

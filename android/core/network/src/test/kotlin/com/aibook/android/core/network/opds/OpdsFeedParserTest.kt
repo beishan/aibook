@@ -148,4 +148,27 @@ class OpdsFeedParserTest {
         assertEquals("/covers/1.jpg", feed.entries.first().coverLink?.href)
         assertEquals("/popular", feed.entries.last().alternateLink?.href)
     }
+
+    @Test
+    fun `parses opds 2 catalogs emitted by backend`() {
+        val payload = """
+            {
+              "metadata": {"title": "汗牛充栋 - 书库"},
+              "catalogs": [{
+                "metadata": {"title": "所有书籍"},
+                "links": [{
+                  "rel": "subsection",
+                  "href": "/opds/v2/books",
+                  "type": "application/opds+json"
+                }]
+              }]
+            }
+        """.trimIndent()
+
+        val feed = OpdsFeedParser().parse(payload)
+
+        assertEquals("汗牛充栋 - 书库", feed.title)
+        assertEquals("所有书籍", feed.entries.single().title)
+        assertEquals("/opds/v2/books", feed.entries.single().alternateLink?.href)
+    }
 }
