@@ -52,9 +52,33 @@ class ScanDirectoryViewModel(
 
     fun addDirectory(uri: Uri) {
         viewModelScope.launch {
-            takePersistableReadPermission(uri)
+            if (!takePersistableReadPermission(uri)) {
+                _state.value = _state.value.copy(message = "无法保存目录读取权限，请重新选择文件夹")
+                return@launch
+            }
             val directory = repository.addDirectory(uri)
             _state.value = _state.value.copy(message = "已添加目录：${directory.name}")
+        }
+    }
+
+    fun reauthorizeDirectory(id: String, uri: Uri) {
+        viewModelScope.launch {
+            if (!takePersistableReadPermission(uri)) {
+                _state.value = _state.value.copy(message = "重新授权失败，请确认已允许读取该文件夹")
+                return@launch
+            }
+            val oldUri = _state.value.directories.firstOrNull { it.id == id }?.uri
+            val repaired = repository.reauthorizeDirectory(id, uri)
+            if (repaired == null) {
+                _state.value = _state.value.copy(message = "目录记录不存在")
+                return@launch
+            }
+            if (!oldUri.isNullOrBlank() && oldUri != uri.toString()) {
+                runCatching {
+                    app.contentResolver.releasePersistableUriPermission(Uri.parse(oldUri), Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            }
+            _state.value = _state.value.copy(message = "目录授权已恢复：${repaired.name}")
         }
     }
 
@@ -93,6 +117,10 @@ class ScanDirectoryViewModel(
         }
     }
 
+    fun refreshAuthorizationStates() {
+        viewModelScope.launch { repository.refreshAuthorizationStates() }
+    }
+
     fun clearMessage() {
         _state.value = _state.value.copy(message = null)
     }
@@ -112,13 +140,14 @@ class ScanDirectoryViewModel(
         }
     }
 
-    private fun takePersistableReadPermission(uri: Uri) {
-        runCatching {
+    private fun takePersistableReadPermission(uri: Uri): Boolean {
+        return runCatching {
             app.contentResolver.takePersistableUriPermission(
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
-        }
+            app.contentResolver.persistedUriPermissions.any { it.isReadPermission && it.uri == uri }
+        }.getOrDefault(false)
     }
 
     private fun ScanImportStats.toMessage(prefix: String): String {

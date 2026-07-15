@@ -50,6 +50,7 @@ import com.aibook.android.feature.store.BookStoreScreen
 import com.aibook.android.feature.store.StoreRemoteBookDetailScreen
 import com.aibook.android.feature.store.StoreCategoryScreen
 import com.aibook.android.feature.store.StoreSearchScreen
+import com.aibook.android.feature.downloads.DownloadManagerScreen
 import com.aibook.android.navigation.Screen
 import com.aibook.android.ui.design.DesignTokens
 
@@ -79,6 +80,7 @@ fun AiBookApp() {
         Screen.ScanDirectories.route -> Screen.Settings.route
         Screen.SyncConnectionSettings.route -> Screen.Settings.route
         Screen.StorageCache.route -> Screen.Settings.route
+        Screen.Downloads.route -> Screen.Settings.route
         Screen.PrivacyPermissions.route -> Screen.Settings.route
         Screen.About.route -> Screen.Settings.route
         else -> currentRoute
@@ -92,6 +94,7 @@ fun AiBookApp() {
             Screen.ScanDirectories.route,
             Screen.SyncConnectionSettings.route,
             Screen.StorageCache.route,
+            Screen.Downloads.route,
             Screen.PrivacyPermissions.route,
             Screen.About.route
         )
@@ -172,6 +175,7 @@ fun AiBookApp() {
                     BookStoreScreen(
                         onCategoryClick = { navController.navigate(Screen.StoreCategory.route) },
                         onSearchClick = { navController.navigate(Screen.StoreSearch.route) },
+                        onDownloadsClick = { navController.navigate(Screen.Downloads.route) },
                         onBookClick = { bookId ->
                             navController.navigate(Screen.BookDetail.createRoute(bookId))
                         },
@@ -212,6 +216,7 @@ fun AiBookApp() {
                         onScanDirectoriesClick = { navController.navigate(Screen.ScanDirectories.route) },
                         onSyncConnectionClick = { navController.navigate(Screen.SyncConnectionSettings.route) },
                         onStorageClick = { navController.navigate(Screen.StorageCache.route) },
+                        onDownloadsClick = { navController.navigate(Screen.Downloads.route) },
                         onPrivacyClick = { navController.navigate(Screen.PrivacyPermissions.route) },
                         onAboutClick = { navController.navigate(Screen.About.route) }
                     )
@@ -241,8 +246,14 @@ fun AiBookApp() {
             composable(Screen.StorageCache.route) {
                 PaddedScreen(paddingValues) {
                     StorageCacheScreen(
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onDownloadsClick = { navController.navigate(Screen.Downloads.route) }
                     )
+                }
+            }
+            composable(Screen.Downloads.route) {
+                PaddedScreen(paddingValues) {
+                    DownloadManagerScreen(onBack = { navController.popBackStack() })
                 }
             }
             composable(Screen.PrivacyPermissions.route) {

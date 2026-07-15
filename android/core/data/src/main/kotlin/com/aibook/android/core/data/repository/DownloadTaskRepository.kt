@@ -18,7 +18,9 @@ data class DownloadTask(
     val progress: Int,
     val downloadedBytes: Long,
     val totalBytes: Long?,
-    val errorMessage: String?
+    val errorMessage: String?,
+    val createdAt: Long,
+    val updatedAt: Long
 )
 
 class DownloadTaskRepository(private val dao: DownloadTaskDao) {
@@ -33,6 +35,6 @@ class DownloadTaskRepository(private val dao: DownloadTaskDao) {
     private fun DownloadTaskEntity.toDomain() = DownloadTask(
         id, remoteEntryId, connectionId, title, href, fileName,
         runCatching { DownloadStatus.valueOf(status) }.getOrDefault(DownloadStatus.FAILED),
-        progress, downloadedBytes, totalBytes, errorMessage
+        progress, downloadedBytes, totalBytes, errorMessage, createdAt, updatedAt
     )
 }

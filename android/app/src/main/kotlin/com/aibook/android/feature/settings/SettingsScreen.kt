@@ -104,6 +104,7 @@ fun SettingsScreen(
     onScanDirectoriesClick: () -> Unit = {},
     onSyncConnectionClick: () -> Unit = {},
     onStorageClick: () -> Unit = {},
+    onDownloadsClick: () -> Unit = {},
     onPrivacyClick: () -> Unit = {},
     onAboutClick: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
@@ -170,8 +171,14 @@ fun SettingsScreen(
                     Icons.Default.Storage,
                     "存储与缓存",
                     "管理本机缓存、导入书籍与下载文件",
-                    showDivider = false,
                     onClick = onStorageClick
+                )
+                SettingsLine(
+                    Icons.Default.Download,
+                    "下载管理",
+                    "查看进度，暂停、继续、重试或清理任务",
+                    showDivider = false,
+                    onClick = onDownloadsClick
                 )
             }
 
@@ -288,7 +295,7 @@ private fun SettingsLine(
 }
 
 @Composable
-fun StorageCacheScreen(onBack: () -> Unit) {
+fun StorageCacheScreen(onBack: () -> Unit, onDownloadsClick: () -> Unit = {}) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.get(context.applicationContext).bookRepository }
     val books by remember { repository.observeBooks() }.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -332,7 +339,8 @@ fun StorageCacheScreen(onBack: () -> Unit) {
                     }
                 }
             )
-            DetailLine(Icons.Default.Storage, "管理下载", "查看并删除应用管理的书籍文件", onClick = { showDownloads = true })
+            DetailLine(Icons.Default.Storage, "管理下载", "查看下载队列、进度与失败任务", onClick = onDownloadsClick)
+            DetailLine(Icons.Default.Book, "管理书籍文件", "查看并永久删除应用管理的书籍文件", onClick = { showDownloads = true })
             DetailLine(
                 Icons.Default.Folder, "下载位置",
                 if (downloadLocation == "external") "外部应用目录" else "内部应用目录",

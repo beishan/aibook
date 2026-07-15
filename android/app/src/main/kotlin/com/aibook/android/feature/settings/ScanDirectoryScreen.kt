@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,6 +44,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -51,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibook.android.core.data.repository.ScanDirectory
 import com.aibook.android.core.data.repository.DuplicateHandling
@@ -68,6 +72,16 @@ fun ScanDirectoryScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val directoryPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let { viewModel.addDirectory(it) }
+    }
+    var repairingDirectoryId by remember { mutableStateOf<String?>(null) }
+    val repairPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        val id = repairingDirectoryId
+        repairingDirectoryId = null
+        if (uri != null && id != null) viewModel.reauthorizeDirectory(id, uri)
+    }
+    LifecycleResumeEffect(Unit) {
+        viewModel.refreshAuthorizationStates()
+        onPauseOrDispose { }
     }
 
     LaunchedEffect(state.message) {
@@ -118,7 +132,7 @@ fun ScanDirectoryScreen(
                         icon = Icons.Default.Refresh,
                         title = if (state.isScanning && state.scanningDirectoryId == null) "正在扫描" else "立即扫描",
                         subtitle = "手动扫描所有已启用目录",
-                        enabled = !state.isScanning && state.directories.any { it.enabled },
+                        enabled = !state.isScanning && state.directories.any { it.enabled && !it.requiresAuthorization },
                         onClick = viewModel::scanAll
                     )
                     Spacer(
@@ -222,6 +236,10 @@ fun ScanDirectoryScreen(
                                 busy = state.isScanning,
                                 onScan = { viewModel.scanDirectory(item) },
                                 onToggle = { enabled -> viewModel.setDirectoryEnabled(item.id, enabled) },
+                                onReauthorize = {
+                                    repairingDirectoryId = item.id
+                                    repairPicker.launch(android.net.Uri.parse(item.uri))
+                                },
                                 onDelete = { viewModel.deleteDirectory(item.id) }
                             )
                             if (index != state.directories.lastIndex) {
@@ -296,6 +314,7 @@ private fun DirectoryRow(
     busy: Boolean,
     onScan: () -> Unit,
     onToggle: (Boolean) -> Unit,
+    onReauthorize: () -> Unit,
     onDelete: () -> Unit
 ) {
     Row(
@@ -326,19 +345,37 @@ private fun DirectoryRow(
             item.lastErrorMessage?.let {
                 Text("错误：$it", color = Color(0xFFB44A35), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
             }
+            if (item.requiresAuthorization) {
+                Row(
+                    modifier = Modifier.clickable(enabled = !busy, onClick = onReauthorize),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(Icons.Default.LockOpen, contentDescription = null, tint = Color(0xFFB44A35), modifier = Modifier.size(16.dp))
+                    Text("重新授权文件夹", color = Color(0xFFB44A35), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                }
+            }
         }
         Text(
-            if (item.enabled) "已开启" else "已关闭",
-            color = if (item.enabled) DesignTokens.Accent else MaterialTheme.colorScheme.onSurfaceVariant,
+            when {
+                item.requiresAuthorization -> "需授权"
+                item.enabled -> "已开启"
+                else -> "已关闭"
+            },
+            color = when {
+                item.requiresAuthorization -> Color(0xFFB44A35)
+                item.enabled -> DesignTokens.Accent
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
             style = MaterialTheme.typography.labelSmall
         )
         Switch(
             checked = item.enabled,
             onCheckedChange = onToggle,
-            enabled = !busy,
+            enabled = !busy && !item.requiresAuthorization,
             colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent)
         )
-        IconButton(onClick = onScan, enabled = item.enabled && !busy, modifier = Modifier.size(36.dp)) {
+        IconButton(onClick = onScan, enabled = item.enabled && !busy && !item.requiresAuthorization, modifier = Modifier.size(36.dp)) {
             if (scanning) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
             } else {

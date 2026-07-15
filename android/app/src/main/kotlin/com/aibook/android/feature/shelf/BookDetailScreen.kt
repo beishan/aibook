@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -62,6 +63,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibook.android.core.data.repository.BookFileStats
+import com.aibook.android.core.data.repository.RelocateBookResult
 import com.aibook.android.core.model.BookFormat
 import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.reader.EpubContentParser
@@ -72,6 +74,7 @@ import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SectionHeader
 import com.aibook.android.ui.design.SoftCard
 import com.aibook.android.ui.design.SourceBadge
+import com.aibook.android.feature.importer.supportedBookMimeTypes
 import java.io.File
 import java.time.Duration
 import java.time.Instant
@@ -100,6 +103,18 @@ fun BookDetailScreen(
     var showEdit by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var actionMessage by remember { mutableStateOf<String?>(null) }
+    var isRelocating by remember { mutableStateOf(false) }
+
+    val relocatePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null && currentBook != null) scope.launch {
+            isRelocating = true
+            actionMessage = when (val result = repository.relocateMissingBookFile(currentBook.id, uri)) {
+                is RelocateBookResult.Success -> "文件已重新定位，阅读进度和书籍信息已保留"
+                is RelocateBookResult.Failure -> "重新定位失败：${result.message}"
+            }
+            isRelocating = false
+        }
+    }
 
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null && currentBook != null) scope.launch {
@@ -128,6 +143,13 @@ fun BookDetailScreen(
                             leadingIcon = { Icon(Icons.Default.Edit, null) },
                             onClick = { showMore = false; showEdit = true }
                         )
+                        if (currentBook != null && !File(currentBook.uri).isFile) {
+                            DropdownMenuItem(
+                                text = { Text("重新定位文件") },
+                                leadingIcon = { Icon(Icons.Default.FolderOpen, null) },
+                                onClick = { showMore = false; relocatePicker.launch(supportedBookMimeTypes) }
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text("替换封面") },
                             leadingIcon = { Icon(Icons.Default.Image, null) },
@@ -154,6 +176,24 @@ fun BookDetailScreen(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(message, modifier = Modifier.weight(1f), color = DesignTokens.SoftText)
                     Text("关闭", color = DesignTokens.Accent, modifier = Modifier.clickable { actionMessage = null })
+                }
+            }
+        }
+
+        val fileMissing = !File(currentBook.uri).isFile
+        if (fileMissing) {
+            SoftCard(color = Color(0xFFFFF0EE)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("书籍文件已丢失", color = Color(0xFFB44A35), fontWeight = FontWeight.Bold)
+                    Text("请选择原书文件进行修复。书籍 ID、阅读进度、书签、批注和元数据都会保留。", color = DesignTokens.SoftText)
+                    Text(
+                        if (isRelocating) "正在校验并复制…" else "重新定位文件",
+                        modifier = Modifier
+                            .clickable(enabled = !isRelocating) { relocatePicker.launch(supportedBookMimeTypes) }
+                            .padding(vertical = 6.dp),
+                        color = DesignTokens.Accent,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -209,6 +249,7 @@ fun BookDetailScreen(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             FilledIconButton(
                 onClick = onReadClick,
+                enabled = !fileMissing,
                 modifier = Modifier.weight(1f).size(56.dp),
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = DesignTokens.Accent, contentColor = Color.White)
             ) { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "开始阅读") }

@@ -37,7 +37,7 @@ import java.util.concurrent.TimeUnit
 class DirectoryScanWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = runCatching {
         val stats = ServiceLocator.get(applicationContext).scanDirectoryRepository.scanAllEnabled()
-        TaskNotifications.show(applicationContext, SCAN_NOTIFICATION, "目录扫描完成", "扫描 ${stats.scanned} 个文件，新增 ${stats.added + stats.restored} 本")
+        TaskNotifications.show(applicationContext, SCAN_NOTIFICATION, "目录扫描完成", "扫描 ${stats.scanned} 个文件，新增 ${stats.added + stats.restored} 本，失败 ${stats.failed} 个")
         Result.success()
     }.getOrElse { Result.retry() }
 
@@ -198,6 +198,12 @@ class DownloadQueueManager(private val context: Context) {
     }
 
     suspend fun retry(id: String) = resume(id)
+
+    suspend fun remove(id: String) {
+        WorkManager.getInstance(context).cancelUniqueWork(workName(id))
+        partialFile(context, id).delete()
+        locator.downloadTaskRepository.delete(id)
+    }
 
     private fun enqueueWork(id: String) {
         val request = OneTimeWorkRequestBuilder<BookDownloadWorker>()

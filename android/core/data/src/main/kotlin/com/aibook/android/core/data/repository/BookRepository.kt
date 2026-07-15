@@ -54,6 +54,14 @@ sealed interface RelocateBookResult {
     data class Failure(val message: String) : RelocateBookResult
 }
 
+internal object BookRelocationValidator {
+    fun validateFormat(expectedFormat: String, selectedFormat: BookFormat): String? =
+        if (selectedFormat.name == expectedFormat) null else "请选择 $expectedFormat 格式的文件"
+
+    fun validateHash(expectedHash: String?, selectedHash: String): String? =
+        if (expectedHash.isNullOrBlank() || expectedHash == selectedHash) null else "所选文件与原书内容不一致"
+}
+
 data class BookFileStats(val fileSizeBytes: Long, val wordCount: Long?)
 
 class BookRepository(
@@ -112,8 +120,8 @@ class BookRepository(
         val displayName = resolveDisplayName(uri) ?: return@withContext RelocateBookResult.Failure("无法识别所选文件")
         val format = BookFormat.fromFileName(displayName)
             ?: return@withContext RelocateBookResult.Failure("不支持该文件格式")
-        if (format.name != existing.format) {
-            return@withContext RelocateBookResult.Failure("请选择 ${existing.format} 格式的文件")
+        BookRelocationValidator.validateFormat(existing.format, format)?.let {
+            return@withContext RelocateBookResult.Failure(it)
         }
         val input = context.contentResolver.openInputStream(uri)
             ?: return@withContext RelocateBookResult.Failure("无法读取所选文件")
@@ -135,9 +143,9 @@ class BookRepository(
             return@withContext RelocateBookResult.Failure("复制文件失败：${it.message ?: "未知错误"}")
         }
         val hash = digest.digest().joinToString("") { "%02x".format(it) }
-        if (!existing.sha256.isNullOrBlank() && existing.sha256 != hash) {
+        BookRelocationValidator.validateHash(existing.sha256, hash)?.let { message ->
             deleteImportedFile(destination)
-            return@withContext RelocateBookResult.Failure("所选文件与原书内容不一致")
+            return@withContext RelocateBookResult.Failure(message)
         }
         bookDao.updateFileLocation(existing.id, destination.absolutePath, hash)
         RelocateBookResult.Success(existing.copy(uri = destination.absolutePath, sha256 = hash).toDomain())

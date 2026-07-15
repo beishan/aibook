@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
@@ -82,6 +83,7 @@ import com.aibook.android.core.data.repository.DownloadStatus
 fun BookStoreScreen(
     onCategoryClick: () -> Unit = {},
     onSearchClick: () -> Unit = {},
+    onDownloadsClick: () -> Unit = {},
     onBookClick: (String) -> Unit = {},
     onRemoteBookClick: (String) -> Unit = {},
     viewModel: StoreViewModel = viewModel(factory = StoreViewModel.Factory)
@@ -118,6 +120,15 @@ fun BookStoreScreen(
         title = if (managementMode) "已选 ${selectedLocalBooks.size} 本" else "",
         modifier = Modifier.fillMaxSize(),
         actions = {
+            Icon(
+                Icons.Default.Download,
+                contentDescription = "下载管理",
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDownloadsClick
+                )
+            )
             Icon(
                 Icons.Default.Search,
                 contentDescription = "全局搜索",

@@ -21,7 +21,8 @@ data class ScanDirectory(
     val duplicateCount: Int,
     val unsupportedCount: Int,
     val failedCount: Int,
-    val lastErrorMessage: String?
+    val lastErrorMessage: String?,
+    val requiresAuthorization: Boolean
 )
 
 data class ScanImportStats(
@@ -75,12 +76,28 @@ class ScanDirectoryRepository(
         return directory.toDomain()
     }
 
+    suspend fun reauthorizeDirectory(id: String, uri: Uri): ScanDirectory? {
+        val existing = dao.getById(id) ?: return null
+        val updated = existing.copy(
+            uri = uri.toString(),
+            name = resolveDirectoryName(uri),
+            enabled = true,
+            lastErrorMessage = null
+        )
+        dao.insert(updated)
+        return updated.toDomain()
+    }
+
     suspend fun setEnabled(id: String, enabled: Boolean) {
         dao.setEnabled(id, enabled)
     }
 
     suspend fun deleteDirectory(id: String) {
         dao.deleteById(id)
+    }
+
+    suspend fun refreshAuthorizationStates() {
+        dao.getAll().forEach { dao.insert(it) }
     }
 
     suspend fun scanAllEnabled(duplicateHandling: DuplicateHandling = DuplicateHandling.CANCEL): ScanImportStats {
@@ -95,6 +112,10 @@ class ScanDirectoryRepository(
     }
 
     private suspend fun scan(directory: ScanDirectoryEntity, duplicateHandling: DuplicateHandling): ScanImportStats {
+        if (!hasPersistedReadPermission(Uri.parse(directory.uri))) {
+            dao.insert(directory.copy(lastScanAt = System.currentTimeMillis(), lastErrorMessage = AUTHORIZATION_ERROR))
+            return ScanImportStats(failed = 1)
+        }
         return try {
             val stats = scanTree(Uri.parse(directory.uri), duplicateHandling)
             dao.insert(
@@ -110,10 +131,11 @@ class ScanDirectoryRepository(
             )
             stats
         } catch (e: Exception) {
+            val message = if (e is SecurityException) AUTHORIZATION_ERROR else e.message ?: "扫描失败"
             dao.insert(
                 directory.copy(
                     lastScanAt = System.currentTimeMillis(),
-                    lastErrorMessage = e.message ?: "扫描失败"
+                    lastErrorMessage = message
                 )
             )
             ScanImportStats(failed = 1)
@@ -231,6 +253,7 @@ class ScanDirectoryRepository(
     }
 
     private fun ScanDirectoryEntity.toDomain(): ScanDirectory {
+        val authorized = hasPersistedReadPermission(Uri.parse(uri))
         return ScanDirectory(
             id = id,
             uri = uri,
@@ -242,8 +265,18 @@ class ScanDirectoryRepository(
             duplicateCount = duplicateCount,
             unsupportedCount = unsupportedCount,
             failedCount = failedCount,
-            lastErrorMessage = lastErrorMessage
+            lastErrorMessage = lastErrorMessage,
+            requiresAuthorization = !authorized || lastErrorMessage == AUTHORIZATION_ERROR
         )
+    }
+
+    private fun hasPersistedReadPermission(uri: Uri): Boolean =
+        context.contentResolver.persistedUriPermissions.any { permission ->
+            permission.isReadPermission && permission.uri == uri
+        }
+
+    companion object {
+        const val AUTHORIZATION_ERROR = "目录授权已失效，请重新授权"
     }
 
     private data class ScannedDocument(
