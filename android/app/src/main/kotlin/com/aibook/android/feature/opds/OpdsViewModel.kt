@@ -6,8 +6,6 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.aibook.android.core.data.repository.BookRepository
-import com.aibook.android.core.data.repository.ImportResult
 import com.aibook.android.core.data.repository.OpdsCatalogCacheRepository
 import com.aibook.android.core.data.repository.OpdsConnectionRepository
 import com.aibook.android.core.network.opds.OpdsCatalogService
@@ -16,13 +14,20 @@ import com.aibook.android.core.network.opds.OpdsDownloadNamer
 import com.aibook.android.core.network.opds.OpdsEntry
 import com.aibook.android.core.network.opds.OpdsFeed
 import com.aibook.android.core.network.opds.OpdsSyncState
+import com.aibook.android.core.network.opds.OpdsSyncMode
 import com.aibook.android.di.ServiceLocator
+import com.aibook.android.core.data.prefs.BackgroundTaskStore
+import com.aibook.android.background.BackgroundWorkScheduler
+import com.aibook.android.background.DownloadQueueManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class OpdsUiState(
     val connections: List<OpdsConnection> = emptyList(),
@@ -30,6 +35,7 @@ data class OpdsUiState(
     val currentFeed: OpdsFeed? = null,
     val navigationStack: List<String> = emptyList(),
     val isLoading: Boolean = false,
+    val isLoadingNextPage: Boolean = false,
     val errorMessage: String? = null,
     val statusMessage: String? = null,
     val downloadingTitle: String? = null,
@@ -39,14 +45,17 @@ data class OpdsUiState(
     val formName: String = "汗牛充栋",
     val formBaseUrl: String = "",
     val formUsername: String = "",
-    val formPassword: String = ""
+    val formPassword: String = "",
+    val opdsIntervalHours: Int = 0
 )
 
 class OpdsViewModel(
+    private val app: Application,
     private val connectionRepository: OpdsConnectionRepository,
-    private val bookRepository: BookRepository,
     private val catalogCacheRepository: OpdsCatalogCacheRepository,
-    private val catalogService: OpdsCatalogService
+    private val catalogService: OpdsCatalogService,
+    private val backgroundTaskStore: BackgroundTaskStore,
+    private val downloadQueueManager: DownloadQueueManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(OpdsUiState())
@@ -56,6 +65,21 @@ class OpdsViewModel(
                 state.copy(connections = connections)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OpdsUiState())
+
+    init {
+        viewModelScope.launch {
+            backgroundTaskStore.opdsIntervalHours.collect { hours ->
+                _state.value = _state.value.copy(opdsIntervalHours = hours)
+            }
+        }
+    }
+
+    fun setOpdsIntervalHours(hours: Int) {
+        viewModelScope.launch {
+            backgroundTaskStore.setOpdsIntervalHours(hours)
+            BackgroundWorkScheduler.configureOpds(app, hours, ServiceLocator.get(app).serverConfigStore.wifiOnlySync.first())
+        }
+    }
 
     fun showConnectionForm(show: Boolean) {
         _state.value = if (show) {
@@ -92,13 +116,26 @@ class OpdsViewModel(
                 _state.value = state.copy(errorMessage = "请填写 OPDS 地址")
                 return@launch
             }
-            val connection = connectionRepository.saveConnection(
-                name = state.formName,
-                baseUrl = state.formBaseUrl,
-                username = state.formUsername.ifBlank { null },
-                password = state.formPassword.ifBlank { null },
-                id = state.editingConnectionId
-            )
+            val connection = try {
+                val candidate = OpdsConnection(
+                    id = state.editingConnectionId ?: "connection-test",
+                    name = state.formName,
+                    baseUrl = state.formBaseUrl,
+                    username = state.formUsername.ifBlank { null },
+                    password = state.formPassword.ifBlank { null }
+                )
+                withContext(Dispatchers.IO) { catalogService.load(candidate) }
+                connectionRepository.saveConnection(
+                    name = state.formName,
+                    baseUrl = state.formBaseUrl,
+                    username = state.formUsername.ifBlank { null },
+                    password = state.formPassword.ifBlank { null },
+                    id = state.editingConnectionId
+                )
+            } catch (error: Exception) {
+                _state.value = state.copy(errorMessage = "连接测试失败，未保存：${error.message ?: "无法读取目录"}")
+                return@launch
+            }
             val wasEditing = state.editingConnectionId != null
             _state.value = _state.value.copy(
                 showConnectionForm = false,
@@ -183,15 +220,22 @@ class OpdsViewModel(
                     title = connection.name,
                     entries = collection.acquisitionEntries
                 )
-                val bookCount = collection.acquisitionEntries.size
+                val discoveredCount = collection.acquisitionEntries.size
                 val categoryCount = collection.catalogCount
-                catalogCacheRepository.replaceConnectionEntries(connection, feed)
+                val syncSummary = if (connection.syncMode == OpdsSyncMode.INCREMENTAL) {
+                    val result = catalogCacheRepository.mergeConnectionEntries(connection, feed)
+                    "新增 ${result.added} 本，更新 ${result.updated} 本"
+                } else {
+                    catalogCacheRepository.replaceConnectionEntries(connection, feed)
+                    "更新 $discoveredCount 本"
+                }
+                val bookCount = catalogCacheRepository.countByConnection(connection.id)
                 connectionRepository.markSyncSuccess(
                     connection.id,
                     lastSyncedAt = System.currentTimeMillis(),
                     bookCount = bookCount
                 )
-                _state.value = _state.value.copy(statusMessage = "同步完成：发现 $bookCount 本可下载书籍，$categoryCount 个目录")
+                _state.value = _state.value.copy(statusMessage = "同步完成：$syncSummary，共 $bookCount 本，$categoryCount 个目录")
             } catch (e: Exception) {
                 val message = e.message ?: "未知错误"
                 connectionRepository.markSyncFailed(connection.id, message)
@@ -229,40 +273,48 @@ class OpdsViewModel(
         browse(connection, href)
     }
 
+    fun loadNextPage() {
+        val state = _state.value
+        val connection = state.activeConnection ?: return
+        val current = state.currentFeed ?: return
+        val next = current.nextLink ?: return
+        if (state.isLoading || state.isLoadingNextPage) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoadingNextPage = true)
+            try {
+                val page = connectionRepository.browse(catalogService, connection, next.href)
+                val known = current.entries.mapNotNull { it.acquisitionLink?.href ?: it.alternateLink?.href }.toSet()
+                _state.value = _state.value.copy(
+                    currentFeed = current.copy(
+                        entries = current.entries + page.entries.filter {
+                            (it.acquisitionLink?.href ?: it.alternateLink?.href) !in known
+                        },
+                        nextLink = page.nextLink
+                    ),
+                    isLoadingNextPage = false
+                )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoadingNextPage = false,
+                    errorMessage = "加载下一页失败：${e.message ?: "未知错误"}"
+                )
+            }
+        }
+    }
+
     fun downloadEntry(entry: OpdsEntry) {
         val connection = _state.value.activeConnection ?: return
         val link = entry.acquisitionLink ?: return
 
         viewModelScope.launch {
-            _state.value = _state.value.copy(
-                downloadingTitle = entry.title,
-                errorMessage = null,
-                statusMessage = null
+            downloadQueueManager.enqueue(
+                remoteId = entry.identifier ?: "${connection.id}|${link.href}",
+                connectionId = connection.id,
+                title = entry.title,
+                href = link.href,
+                fileName = OpdsDownloadNamer.fileName(entry)
             )
-            try {
-                val bytes = catalogService.download(connection, link.href)
-                val result = bookRepository.importDownloadedBook(
-                    fileName = OpdsDownloadNamer.fileName(entry),
-                    bytes = bytes,
-                    fallbackTitle = entry.title
-                )
-                val message = when (result) {
-                    is ImportResult.Added -> "已下载到书架：${result.book.title}"
-                    is ImportResult.Restored -> "已恢复到书城：${result.book.title}"
-                    is ImportResult.Duplicate -> "书架中已存在：${result.existingBook.title}"
-                    is ImportResult.UnsupportedFormat -> "暂不支持该格式：${result.fileName}"
-                    is ImportResult.Failed -> "下载失败：${result.message}"
-                }
-                _state.value = _state.value.copy(
-                    downloadingTitle = null,
-                    statusMessage = message
-                )
-            } catch (e: Exception) {
-                _state.value = _state.value.copy(
-                    downloadingTitle = null,
-                    errorMessage = "下载失败：${e.message}"
-                )
-            }
+            _state.value = _state.value.copy(statusMessage = "已加入后台下载队列：${entry.title}")
         }
     }
 
@@ -326,10 +378,12 @@ class OpdsViewModel(
                 val app = this[APPLICATION_KEY] as Application
                 val locator = ServiceLocator.get(app)
                 OpdsViewModel(
+                    app,
                     locator.opdsConnectionRepository,
-                    locator.bookRepository,
                     locator.opdsCatalogCacheRepository,
-                    locator.opdsCatalogService
+                    locator.opdsCatalogService,
+                    locator.backgroundTaskStore,
+                    DownloadQueueManager(app)
                 )
             }
         }

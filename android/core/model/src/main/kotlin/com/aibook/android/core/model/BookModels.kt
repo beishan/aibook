@@ -39,6 +39,8 @@ data class LocalBook(
     val title: String,
     val author: String? = null,
     val description: String? = null,
+    val rating: Float? = null,
+    val tags: List<String> = emptyList(),
     val format: BookFormat,
     val uri: String,
     val sha256: String? = null,
@@ -132,6 +134,11 @@ data class ReaderFontOption(
     val type: ReaderFontType,
     val label: String,
     val description: String
+)
+
+data class ReaderImportedFont(
+    val name: String,
+    val path: String
 )
 
 object ReaderFontCatalog {

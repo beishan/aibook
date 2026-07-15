@@ -19,6 +19,16 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE shelved = 1 ORDER BY lastReadAt DESC, title ASC")
     fun observeShelved(): Flow<List<BookEntity>>
 
+    @Query("""
+        SELECT * FROM books
+        WHERE shelved = 1
+          AND (:query = '' OR title LIKE '%' || :query || '%' COLLATE NOCASE OR author LIKE '%' || :query || '%' COLLATE NOCASE)
+          AND (:folderMode = 0 OR (:folderMode = 1 AND folderId IS NULL) OR (:folderMode = 2 AND folderId = :folderId))
+        ORDER BY lastReadAt DESC, title ASC
+        LIMIT :limit OFFSET :offset
+    """)
+    fun observeShelvedPage(query: String, folderMode: Int, folderId: String?, limit: Int, offset: Int): Flow<List<BookEntity>>
+
     @Query("SELECT * FROM books WHERE id = :id")
     suspend fun getById(id: String): BookEntity?
 
@@ -66,6 +76,15 @@ interface BookDao {
 
     @Query("UPDATE books SET visibleInStore = 1 WHERE id = :id")
     suspend fun restoreStoreVisibility(id: String)
+
+    @Query("UPDATE books SET uri = :uri, sha256 = :sha256 WHERE id = :id")
+    suspend fun updateFileLocation(id: String, uri: String, sha256: String)
+
+    @Query("UPDATE books SET title = :title, author = :author, description = :description, rating = :rating, tags = :tags WHERE id = :id")
+    suspend fun updateMetadata(id: String, title: String, author: String?, description: String?, rating: Float?, tags: String)
+
+    @Query("UPDATE books SET coverUri = :coverUri WHERE id = :id")
+    suspend fun updateCover(id: String, coverUri: String?)
 
     @Query("UPDATE books SET visibleInStore = 0, shelved = 0, folderId = NULL WHERE id = :id")
     suspend fun removeFromStore(id: String)

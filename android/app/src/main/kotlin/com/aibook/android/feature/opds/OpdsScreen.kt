@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
@@ -144,6 +145,7 @@ fun OpdsScreen(
                 onEditConnection = viewModel::editConnection,
                 onToggleConnection = viewModel::toggleConnectionEnabled,
                 onSyncConnection = viewModel::syncConnection,
+                onSetSyncInterval = viewModel::setOpdsIntervalHours,
                 onShowError = viewModel::showErrorDetails,
                 onDeleteConnection = viewModel::deleteConnection
             )
@@ -175,6 +177,7 @@ private fun DiscoveryHome(
     onEditConnection: (OpdsConnection) -> Unit,
     onToggleConnection: (OpdsConnection, Boolean) -> Unit,
     onSyncConnection: (OpdsConnection) -> Unit,
+    onSetSyncInterval: (Int) -> Unit,
     onShowError: (OpdsConnection) -> Unit,
     onDeleteConnection: (String) -> Unit
 ) {
@@ -225,10 +228,29 @@ private fun DiscoveryHome(
 //                }
 //            }
 //        }
-        item {
-            SupportedFormatsCard(importState.message)
-        }
         item { SectionHeader("OPDS 数据源", "${state.connections.size} 个已配置") }
+        item {
+            SoftCard(color = Color.White) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(Icons.Default.Schedule, contentDescription = null, tint = DesignTokens.Accent)
+                        Column {
+                            Text("后台定时同步", fontWeight = FontWeight.Bold)
+                            Text("遵循设置中的“仅 Wi-Fi 同步”，完成或失败时发送通知", color = DesignTokens.SoftText)
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(0 to "关闭", 1 to "每小时", 6 to "每 6 小时", 24 to "每天").forEach { (hours, label) ->
+                            val selected = state.opdsIntervalHours == hours
+                            Text(label, modifier = Modifier
+                                .background(if (selected) DesignTokens.Accent else DesignTokens.Accent.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                                .clickable { onSetSyncInterval(hours) }
+                                .padding(horizontal = 12.dp, vertical = 9.dp), color = if (selected) Color.White else DesignTokens.Accent, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Button(onClick = onAddSourceClick) {
@@ -380,37 +402,6 @@ private fun FormatBadge(format: String) {
         color = DesignTokens.SoftText,
         style = MaterialTheme.typography.labelMedium
     )
-}
-
-@Composable
-private fun SupportedFormatsCard(message: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(18.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-    ) {
-        Row(
-            modifier = Modifier.padding(18.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.Info,
-                null,
-                modifier = Modifier
-                    .size(54.dp)
-                    .background(DesignTokens.Accent.copy(alpha = 0.18f), CircleShape)
-                    .padding(14.dp),
-                tint = DesignTokens.Accent
-            )
-            Column {
-                Text("支持的文件格式", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Text("EPUB / TXT / PDF / MOBI / AZW3 / Markdown", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("$message。文件过大或加密文件可能无法导入", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
 }
 
 @Composable
@@ -843,8 +834,12 @@ fun OpdsAddSourceScreen(
                     Icon(Icons.Default.Refresh, null, tint = DesignTokens.Accent, modifier = Modifier.padding(top = 4.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("同步模式", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        SyncChoice("完全同步（推荐）", "每次同步时会更新所有书目数据", selected = true)
-                        SyncChoice("增量同步", "仅同步新增或更新的书目数据", selected = false)
+                        SyncChoice("完全同步（推荐）", "每次同步时会更新所有书目数据", selected = state.syncMode == com.aibook.android.core.network.opds.OpdsSyncMode.FULL) {
+                            viewModel.setSyncMode(com.aibook.android.core.network.opds.OpdsSyncMode.FULL)
+                        }
+                        SyncChoice("增量同步", "仅写入新增或有变化的书目，并保留未返回条目", selected = state.syncMode == com.aibook.android.core.network.opds.OpdsSyncMode.INCREMENTAL) {
+                            viewModel.setSyncMode(com.aibook.android.core.network.opds.OpdsSyncMode.INCREMENTAL)
+                        }
                     }
                 }
                 Row(
@@ -858,10 +853,11 @@ fun OpdsAddSourceScreen(
                         Text("保存前请先测试连接，确保数据源可用", color = DesignTokens.SoftText)
                     }
                     Text(
-                        "测试连接",
+                        if (state.isTesting) "测试中…" else "测试连接",
                         modifier = Modifier
                             .border(1.dp, DesignTokens.Accent.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
                             .background(DesignTokens.Accent.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
+                            .clickable(enabled = !state.isTesting && !state.isSaving) { viewModel.testConnection() }
                             .padding(horizontal = 18.dp, vertical = 10.dp),
                         color = DesignTokens.Accent,
                         fontWeight = FontWeight.Bold
@@ -896,7 +892,7 @@ fun OpdsAddSourceScreen(
         }
         Button(
             onClick = { viewModel.save() },
-            enabled = !state.isSaving,
+            enabled = state.canSave,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
@@ -951,11 +947,11 @@ private fun OpdsInputRow(
 }
 
 @Composable
-private fun SyncChoice(title: String, subtitle: String, selected: Boolean) {
-    Row(verticalAlignment = Alignment.Top) {
+private fun SyncChoice(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
+    Row(modifier = Modifier.clickable(onClick = onClick), verticalAlignment = Alignment.Top) {
         RadioButton(
             selected = selected,
-            onClick = {},
+            onClick = onClick,
             colors = RadioButtonDefaults.colors(selectedColor = DesignTokens.Accent)
         )
         Column {
@@ -1041,11 +1037,21 @@ private fun CatalogBrowser(
             }
         } else {
             items(bookEntries, key = { "${it.title}-${it.acquisitionLink?.href.orEmpty()}" }) { entry ->
+                if (entry === bookEntries.lastOrNull() && feed.nextLink != null) {
+                    LaunchedEffect(entry.acquisitionLink?.href) { viewModel.loadNextPage() }
+                }
                 CatalogBookRow(
                     entry = entry,
                     downloading = state.downloadingTitle == entry.title,
                     onDownload = { viewModel.downloadEntry(entry) }
                 )
+            }
+            if (state.isLoadingNextPage) {
+                item {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = DesignTokens.Accent)
+                    }
+                }
             }
         }
     }

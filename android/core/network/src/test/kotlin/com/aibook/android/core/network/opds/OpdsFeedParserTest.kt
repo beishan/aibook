@@ -41,6 +41,22 @@ class OpdsFeedParserTest {
     }
 
     @Test
+    fun `parses next page link from feed`() {
+        val xml = """
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <title>分页书库</title>
+              <link rel="self" href="/opds?page=1" />
+              <link rel="next" href="/opds?page=2" type="application/atom+xml" />
+            </feed>
+        """.trimIndent()
+
+        val feed = OpdsFeedParser().parse(xml)
+
+        assertEquals("/opds?page=2", feed.nextLink?.href)
+        assertEquals("application/atom+xml", feed.nextLink?.type)
+    }
+
+    @Test
     fun `treats subsection links as navigation links`() {
         val xml = """
             <feed xmlns="http://www.w3.org/2005/Atom">
@@ -93,5 +109,43 @@ class OpdsFeedParserTest {
 
         assertEquals("/opds/books/1/download", feed.entries.single().acquisitionLink?.href)
         assertEquals("/books/1", feed.entries.single().alternateLink?.href)
+    }
+
+    @Test
+    fun `parses opds 2 json publications navigation groups and cursor`() {
+        val payload = """
+            {
+              "metadata": {"title": "JSON 书库"},
+              "links": [{"rel": "next", "href": "/opds?page=cursor-2", "type": "application/opds+json"}],
+              "publications": [{
+                "metadata": {
+                  "identifier": "urn:isbn:9780000000001",
+                  "title": "三体",
+                  "author": [{"name": "刘慈欣"}],
+                  "description": "科幻小说",
+                  "subject": [{"name": "科幻"}],
+                  "modified": "2026-07-15T00:00:00Z"
+                },
+                "links": [
+                  {"rel": "http://opds-spec.org/acquisition/open-access", "href": "/books/1.epub", "type": "application/epub+zip"},
+                  {"rel": ["cover", "thumbnail"], "href": "/covers/1.jpg", "type": "image/jpeg"}
+                ]
+              }],
+              "groups": [{
+                "metadata": {"title": "热门"},
+                "navigation": [{"title": "更多热门", "href": "/popular", "type": "application/opds+json"}]
+              }]
+            }
+        """.trimIndent()
+
+        val feed = OpdsFeedParser().parse(payload)
+
+        assertEquals("JSON 书库", feed.title)
+        assertEquals("/opds?page=cursor-2", feed.nextLink?.href)
+        assertEquals("urn:isbn:9780000000001", feed.entries.first().identifier)
+        assertEquals("刘慈欣", feed.entries.first().author)
+        assertEquals(listOf("科幻"), feed.entries.first().categories)
+        assertEquals("/covers/1.jpg", feed.entries.first().coverLink?.href)
+        assertEquals("/popular", feed.entries.last().alternateLink?.href)
     }
 }

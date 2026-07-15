@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.AddBusiness
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Folder
@@ -49,6 +50,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -63,6 +65,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibook.android.core.model.LocalBook
@@ -91,7 +94,7 @@ fun ShelfScreen(
         importViewModel.importBooks(uris)
     }
     val visibleBooks = state.filteredBooks
-    val featuredBooks = visibleBooks.take(2)
+    val featuredBooks = visibleBooks.take(3)
     val hasBooks = state.books.isNotEmpty()
     val allVisibleSelected = visibleBooks.isNotEmpty() && visibleBooks.all { it.id in state.selectedIds }
     val selectedFavorite = state.selectedBooks.isNotEmpty() && state.selectedBooks.all { it.favorite }
@@ -100,12 +103,15 @@ fun ShelfScreen(
     val prefs = remember { context.getSharedPreferences("shelf_prefs", android.content.Context.MODE_PRIVATE) }
     var viewMode by remember { mutableIntStateOf(prefs.getInt("reading_view_mode", 0)) }
     var showViewModeDialog by remember { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(state.query.isNotBlank()) }
 
     DesignPage(
         title = if (state.managementMode) "已选 ${state.selectedIds.size} 本" else "",
         modifier = Modifier.fillMaxSize(),
         actions = {
-            Icon(Icons.Default.Search, contentDescription = "搜索")
+            IconButton(onClick = { showSearch = !showSearch }) {
+                Icon(if (showSearch) Icons.Default.Close else Icons.Default.Search, contentDescription = if (showSearch) "关闭搜索" else "搜索书架")
+            }
             Icon(
                 imageVector = when (viewMode) {
                     0 -> Icons.Default.GridView
@@ -130,6 +136,19 @@ fun ShelfScreen(
         }
     ) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            if (showSearch) {
+                item {
+                    OutlinedTextField(
+                        value = state.query,
+                        onValueChange = viewModel::setQuery,
+                        modifier = Modifier.fillMaxWidth(),
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        placeholder = { Text("搜索书名或作者") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                }
+            }
             item {
                 Text(
                     text = "${visibleBooks.size} / ${state.books.size} 本书 · ${state.folders.size} 个文件夹 ›",
@@ -200,7 +219,8 @@ fun ShelfScreen(
                         onReadClick = { onReadClick(it.id) },
                         onSelect = { viewModel.toggleBookSelection(it.id) },
                         onFavoriteClick = { viewModel.setFavorite(it.id, !it.favorite) },
-                        onRemoveClick = { viewModel.toggleShelved(it.id, false) }
+                        onRemoveClick = { viewModel.toggleShelved(it.id, false) },
+                        onLoadMore = viewModel::loadNextPage
                     )
                 }
             }
@@ -272,7 +292,8 @@ private fun ReadingBooksView(
     onReadClick: (LocalBook) -> Unit,
     onSelect: (LocalBook) -> Unit,
     onFavoriteClick: (LocalBook) -> Unit,
-    onRemoveClick: (LocalBook) -> Unit
+    onRemoveClick: (LocalBook) -> Unit,
+    onLoadMore: () -> Unit
 ) {
     when (viewMode) {
         0, 3 -> LazyVerticalGrid(
@@ -283,6 +304,7 @@ private fun ReadingBooksView(
             modifier = Modifier.fillMaxWidth().height(620.dp)
         ) {
             gridItems(books, key = { it.id }) { book ->
+                if (book.id == books.lastOrNull()?.id) LaunchedEffect(book.id) { onLoadMore() }
                 ReadingBookCard(
                     book = book,
                     managementMode = managementMode,
@@ -302,6 +324,7 @@ private fun ReadingBooksView(
             modifier = Modifier.fillMaxWidth().height(620.dp)
         ) {
             items(books, key = { it.id }) { book ->
+                if (book.id == books.lastOrNull()?.id) LaunchedEffect(book.id) { onLoadMore() }
                 ShelfCoverListItem(
                     book = book,
                     managementMode = managementMode,
@@ -318,6 +341,7 @@ private fun ReadingBooksView(
             modifier = Modifier.fillMaxWidth().height(620.dp)
         ) {
             items(books, key = { it.id }) { book ->
+                if (book.id == books.lastOrNull()?.id) LaunchedEffect(book.id) { onLoadMore() }
                 ShelfCompactListItem(
                     book = book,
                     managementMode = managementMode,
@@ -746,15 +770,15 @@ private fun ContinueReadingCard(
                 width = null,
                 height = 96.dp,
                 imageUri = book.coverUri,
+                placeholderTitleMaxLength = Int.MAX_VALUE,
+                placeholderMaxLines = 5,
+                placeholderTextStyle = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onCoverClick)
-            )
-            Text(
-                text = book.title,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = "阅读进度 ${(book.progress.percent * 100).toInt()}%",

@@ -45,7 +45,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibook.android.core.data.repository.ScanDirectory
+import com.aibook.android.core.data.repository.DuplicateHandling
 import com.aibook.android.ui.design.DesignTokens
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -138,31 +138,62 @@ fun ScanDirectoryScreen(
                     )
                 }
             }
-//            Card(
-//                modifier = Modifier
-//                    .fillMaxWidth()
-//                    .shadow(8.dp, RoundedCornerShape(18.dp)),
-//                colors = CardDefaults.cardColors(containerColor = Color.White),
-//                shape = RoundedCornerShape(18.dp)
-//            ) {
-//                Row(
-//                    modifier = Modifier.padding(20.dp),
-//                    verticalAlignment = Alignment.CenterVertically,
-//                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-//                ) {
-//                    Icon(Icons.Default.Schedule, null, tint = DesignTokens.Accent, modifier = Modifier.size(34.dp))
-//                    Column(Modifier.weight(1f)) {
-//                        Text("启动应用时自动扫描", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-//                        Text("真实目录授权已保存，自动扫描任务后续可接入 WorkManager", color = DesignTokens.SoftText)
-//                    }
-//                    Switch(
-//                        checked = false,
-//                        onCheckedChange = {},
-//                        enabled = false,
-//                        colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent)
-//                    )
-//                }
-//            }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("扫描到重复书时", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    DuplicateHandling.entries.forEach { handling ->
+                        val selected = state.duplicateHandling == handling
+                        Text(
+                            handling.label,
+                            color = if (selected) Color.White else DesignTokens.Accent,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(if (selected) DesignTokens.Accent else DesignTokens.Accent.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                                .clickable(enabled = !state.isScanning) { viewModel.setDuplicateHandling(handling) }
+                                .padding(horizontal = 10.dp, vertical = 12.dp)
+                        )
+                    }
+                }
+                Text(
+                    when (state.duplicateHandling) {
+                        DuplicateHandling.KEEP_VERSION -> "为重复内容创建独立版本，保留原书。"
+                        DuplicateHandling.REPLACE -> "用扫描到的文件替换原文件，并保留阅读进度。"
+                        DuplicateHandling.CANCEL -> "跳过重复文件，不修改原书。"
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Icon(Icons.Default.Schedule, null, tint = DesignTokens.Accent, modifier = Modifier.size(34.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("后台自动扫描", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text("由 WorkManager 在后台执行，系统重启后仍会保留", color = DesignTokens.SoftText)
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("启动应用时扫描", modifier = Modifier.weight(1f))
+                        Switch(checked = state.autoScanOnStart, onCheckedChange = viewModel::setAutoScanOnStart, colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent))
+                    }
+                    Text("定时扫描", fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(0 to "关闭", 6 to "每 6 小时", 24 to "每天", 168 to "每周").forEach { (hours, label) ->
+                            val selected = state.scanIntervalHours == hours
+                            Text(label, modifier = Modifier
+                                .background(if (selected) DesignTokens.Accent else DesignTokens.Accent.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                                .clickable { viewModel.setScanIntervalHours(hours) }
+                                .padding(horizontal = 12.dp, vertical = 9.dp), color = if (selected) Color.White else DesignTokens.Accent, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -216,7 +247,7 @@ fun ScanDirectoryScreen(
                     Icon(Icons.Default.Lightbulb, null, tint = DesignTokens.Accent)
                     Column {
                         Text("提示", fontWeight = FontWeight.Bold)
-                        Text("支持扫描 EPUB、TXT、PDF、MOBI、AZW3、Markdown、HTML 文件，重复书籍会按内容哈希自动跳过。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("支持扫描 EPUB、TXT、PDF、MOBI、AZW3、Markdown、HTML 文件；重复书籍按上方选择处理。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.aibook.android.core.model.AccentColor
 import com.aibook.android.core.model.AppThemeMode
@@ -16,6 +17,7 @@ import com.aibook.android.core.model.ParagraphSpacing
 import com.aibook.android.core.model.ReaderContentsStyle
 import com.aibook.android.core.model.ReaderAutoScrollSpeed
 import com.aibook.android.core.model.ReaderFontType
+import com.aibook.android.core.model.ReaderImportedFont
 import com.aibook.android.core.model.ReaderOrientationMode
 import com.aibook.android.core.model.ReaderTheme
 import com.aibook.android.core.model.TextAlignment
@@ -33,6 +35,7 @@ class ReaderSettingsStore(private val dataStore: DataStore<Preferences>) {
         val FONT_TYPE = stringPreferencesKey("font_type")
         val CUSTOM_FONT_NAME = stringPreferencesKey("custom_font_name")
         val CUSTOM_FONT_PATH = stringPreferencesKey("custom_font_path")
+        val IMPORTED_FONTS = stringSetPreferencesKey("imported_fonts")
         val LINE_HEIGHT = floatPreferencesKey("line_height")
         val THEME = stringPreferencesKey("reader_theme")
         val PARAGRAPH_SPACING = stringPreferencesKey("paragraph_spacing")
@@ -66,6 +69,22 @@ class ReaderSettingsStore(private val dataStore: DataStore<Preferences>) {
 
     val customFontPath: Flow<String?> =
         dataStore.data.map { it[Keys.CUSTOM_FONT_PATH] }
+
+    val importedFonts: Flow<List<ReaderImportedFont>> = dataStore.data.map { preferences ->
+        val stored = preferences[Keys.IMPORTED_FONTS]
+            .orEmpty()
+            .mapNotNull(::decodeImportedFont)
+        val selectedName = preferences[Keys.CUSTOM_FONT_NAME]
+        val selectedPath = preferences[Keys.CUSTOM_FONT_PATH]
+        val selected = if (selectedName != null && selectedPath != null) {
+            ReaderImportedFont(selectedName, selectedPath)
+        } else {
+            null
+        }
+        (stored + listOfNotNull(selected))
+            .distinctBy { it.path }
+            .sortedBy { it.name.lowercase() }
+    }
 
     val lineHeight: Flow<Float> =
         dataStore.data.map { it[Keys.LINE_HEIGHT] ?: 1.45f }
@@ -147,6 +166,22 @@ class ReaderSettingsStore(private val dataStore: DataStore<Preferences>) {
             it[Keys.FONT_TYPE] = ReaderFontType.CUSTOM.name
             it[Keys.CUSTOM_FONT_NAME] = name
             it[Keys.CUSTOM_FONT_PATH] = path
+            it[Keys.IMPORTED_FONTS] = it[Keys.IMPORTED_FONTS]
+                .orEmpty()
+                .plus(encodeImportedFont(ReaderImportedFont(name, path)))
+        }
+    }
+
+    suspend fun addImportedFonts(fonts: List<ReaderImportedFont>) {
+        if (fonts.isEmpty()) return
+        dataStore.edit {
+            it[Keys.IMPORTED_FONTS] = it[Keys.IMPORTED_FONTS]
+                .orEmpty()
+                .plus(fonts.map(::encodeImportedFont))
+            val selected = fonts.first()
+            it[Keys.FONT_TYPE] = ReaderFontType.CUSTOM.name
+            it[Keys.CUSTOM_FONT_NAME] = selected.name
+            it[Keys.CUSTOM_FONT_PATH] = selected.path
         }
     }
 
@@ -215,4 +250,18 @@ class ReaderSettingsStore(private val dataStore: DataStore<Preferences>) {
     suspend fun setShowContentsProgress(show: Boolean) {
         dataStore.edit { it[Keys.SHOW_CONTENTS_PROGRESS] = show }
     }
+}
+
+private const val IMPORTED_FONT_SEPARATOR = '\u001F'
+
+private fun encodeImportedFont(font: ReaderImportedFont): String =
+    "${font.name.replace(IMPORTED_FONT_SEPARATOR, ' ')}$IMPORTED_FONT_SEPARATOR${font.path}"
+
+private fun decodeImportedFont(value: String): ReaderImportedFont? {
+    val separatorIndex = value.indexOf(IMPORTED_FONT_SEPARATOR)
+    if (separatorIndex <= 0 || separatorIndex == value.lastIndex) return null
+    return ReaderImportedFont(
+        name = value.substring(0, separatorIndex),
+        path = value.substring(separatorIndex + 1)
+    )
 }

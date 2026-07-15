@@ -20,6 +20,10 @@ class ParsedBookStorage(filesDirectory: File) {
         deleteWithoutFollowingLinks(directoryFor(bookId).toPath())
     }
 
+    fun clear() {
+        root.listFiles()?.forEach { deleteWithoutFollowingLinks(it.toPath()) }
+    }
+
     private fun deleteWithoutFollowingLinks(path: Path) {
         if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return
         if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(path)) {

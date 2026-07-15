@@ -68,6 +68,19 @@ class OpdsSyncCollectorTest {
         assertEquals(2, result.catalogCount)
     }
 
+    @Test
+    fun collectFollowsEveryNextPageAndDeduplicatesEntries() = runTest {
+        val feeds = mapOf(
+            null to OpdsFeed("page 1", listOf(book("一", "/one.epub")), OpdsLink("/page/2")),
+            "/page/2" to OpdsFeed("page 2", listOf(book("一的重复", "/one.epub"), book("二", "/two.epub")), OpdsLink("/page/3")),
+            "/page/3" to OpdsFeed("page 3", listOf(book("三", "/three.epub")))
+        )
+
+        val result = OpdsSyncCollector { href -> feeds.getValue(href) }.collect()
+
+        assertEquals(listOf("一的重复", "二", "三"), result.acquisitionEntries.map { it.title })
+    }
+
     private fun catalog(title: String, href: String) = OpdsEntry(
         title = title,
         alternateLink = OpdsLink(href = href)

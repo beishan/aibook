@@ -21,6 +21,7 @@ import com.aibook.android.core.model.ReaderContentsStyle
 import com.aibook.android.core.model.ReaderAutoScrollSpeed
 import com.aibook.android.core.model.ReaderFontCatalog
 import com.aibook.android.core.model.ReaderFontType
+import com.aibook.android.core.model.ReaderImportedFont
 import com.aibook.android.core.model.ReaderOrientationMode
 import com.aibook.android.core.model.ReaderSettings
 import com.aibook.android.core.model.ReaderTheme
@@ -63,6 +64,7 @@ data class ReaderUiState(
     val isRemote: Boolean = false,
     val remoteBookId: Long? = null,
     val settings: ReaderSettings = ReaderSettings(),
+    val importedFonts: List<ReaderImportedFont> = emptyList(),
     val isBookSpecific: Boolean = false,
     val hasSettingsDraft: Boolean = false,
     val bookmarks: List<ReaderBookmark> = emptyList(),
@@ -120,6 +122,7 @@ class ReaderViewModel(
         viewModelScope.launch { readerSettingsStore.fontType.collect { v -> _state.update { it.copy(settings = it.settings.copy(fontType = v)) } } }
         viewModelScope.launch { readerSettingsStore.customFontName.collect { v -> _state.update { it.copy(settings = it.settings.copy(customFontName = v)) } } }
         viewModelScope.launch { readerSettingsStore.customFontPath.collect { v -> _state.update { it.copy(settings = it.settings.copy(customFontPath = v)) } } }
+        viewModelScope.launch { readerSettingsStore.importedFonts.collect { v -> _state.update { it.copy(importedFonts = v) } } }
         viewModelScope.launch { readerSettingsStore.lineHeight.collect { v -> _state.update { it.copy(settings = it.settings.copy(lineHeight = v)) } } }
         viewModelScope.launch { readerSettingsStore.theme.collect { v -> _state.update { it.copy(settings = it.settings.copy(theme = v)) } } }
         viewModelScope.launch { readerSettingsStore.paragraphSpacing.collect { v -> _state.update { it.copy(settings = it.settings.copy(paragraphSpacing = v)) } } }
@@ -593,15 +596,25 @@ class ReaderViewModel(
         viewModelScope.launch { readerSettingsStore.setFontType(type) }
     }
 
-    fun importFont(uri: Uri) {
+    fun importFonts(uris: List<Uri>) {
+        if (uris.isEmpty()) return
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { copyFontToPrivateStorage(uri) }
-            result.onSuccess { imported ->
-                readerSettingsStore.setCustomFont(imported.name, imported.path)
-            }.onFailure { error ->
-                _state.update { it.copy(errorMessage = "字体导入失败：${error.message ?: error::class.java.simpleName}") }
+            val results = withContext(Dispatchers.IO) { uris.map(::copyFontToPrivateStorage) }
+            val imported = results.mapNotNull { it.getOrNull() }
+            if (imported.isNotEmpty()) {
+                readerSettingsStore.addImportedFonts(imported)
+            }
+            val failedCount = results.count { it.isFailure }
+            if (failedCount > 0) {
+                _state.update {
+                    it.copy(errorMessage = "字体导入完成：成功 ${imported.size} 个，失败 $failedCount 个")
+                }
             }
         }
+    }
+
+    fun selectImportedFont(font: ReaderImportedFont) {
+        viewModelScope.launch { readerSettingsStore.setCustomFont(font.name, font.path) }
     }
 
     fun setLineHeight(value: Float) {
@@ -737,12 +750,7 @@ class ReaderViewModel(
         return TextFileDecoder.decode(file.readBytes())
     }
 
-    private data class ImportedFont(
-        val name: String,
-        val path: String
-    )
-
-    private fun copyFontToPrivateStorage(uri: Uri): Result<ImportedFont> {
+    private fun copyFontToPrivateStorage(uri: Uri): Result<ReaderImportedFont> {
         return runCatching {
             val displayName = fontDisplayName(uri)
             require(ReaderFontCatalog.isSupportedFontFile(displayName)) {
@@ -755,7 +763,7 @@ class ReaderViewModel(
                 requireNotNull(input) { "无法读取字体文件" }
                 target.outputStream().use { output -> input.copyTo(output) }
             }
-            ImportedFont(
+            ReaderImportedFont(
                 name = displayName.substringBeforeLast('.').ifBlank { "本地导入字体" },
                 path = target.absolutePath
             )

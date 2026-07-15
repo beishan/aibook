@@ -8,7 +8,8 @@ import androidx.room.PrimaryKey
     tableName = "opds_catalog_entries",
     indices = [
         Index(value = ["connectionId"]),
-        Index(value = ["connectionId", "acquisitionHref"], unique = true)
+        Index(value = ["connectionId", "acquisitionHref"], unique = true),
+        Index(value = ["syncedAt", "title"])
     ]
 )
 data class OpdsCatalogEntryEntity(

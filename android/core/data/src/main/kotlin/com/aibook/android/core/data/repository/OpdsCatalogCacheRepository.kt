@@ -29,6 +29,29 @@ class OpdsCatalogCacheRepository(
         dao.replaceForConnection(connection.id, entries)
     }
 
+    suspend fun mergeConnectionEntries(
+        connection: OpdsConnection,
+        feed: OpdsFeed,
+        syncedAt: Long = System.currentTimeMillis()
+    ): OpdsMergeResult {
+        val existing = dao.getByConnection(connection.id).associateBy { it.id }
+        val incoming = feed.entries.filter { it.acquisitionLink != null }.map { it.toEntity(connection, syncedAt) }
+        var added = 0
+        var updated = 0
+        val changed = incoming.filter { row ->
+            val old = existing[row.id]
+            when {
+                old == null -> { added += 1; true }
+                old.copy(syncedAt = row.syncedAt) != row -> { updated += 1; true }
+                else -> false
+            }
+        }
+        if (changed.isNotEmpty()) dao.insertAll(changed)
+        return OpdsMergeResult(added, updated, incoming.size - added - updated, dao.countByConnection(connection.id))
+    }
+
+    suspend fun countByConnection(connectionId: String): Int = dao.countByConnection(connectionId)
+
     suspend fun deleteByConnection(connectionId: String) {
         dao.deleteByConnection(connectionId)
     }
@@ -36,10 +59,9 @@ class OpdsCatalogCacheRepository(
     private fun OpdsEntry.toEntity(connection: OpdsConnection, syncedAt: Long): OpdsCatalogEntryEntity {
         val acquisition = requireNotNull(acquisitionLink)
         val format = formatFrom(acquisition.type, acquisition.href)
-        val categories = listOfNotNull(alternateLink?.href?.substringAfterLast('/')?.takeIf { it.isNotBlank() })
-            .joinToString("|")
+        val categories = categories.joinToString("|")
         return OpdsCatalogEntryEntity(
-            id = stableId(connection.id, acquisition.href),
+            id = stableId(connection.id, identifier ?: acquisition.href),
             connectionId = connection.id,
             sourceName = connection.name,
             title = title,
@@ -71,9 +93,9 @@ class OpdsCatalogCacheRepository(
         )
     }
 
-    private fun stableId(connectionId: String, acquisitionHref: String): String {
+    private fun stableId(connectionId: String, remoteIdentifier: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
-            .digest("$connectionId|$acquisitionHref".toByteArray())
+            .digest("$connectionId|$remoteIdentifier".toByteArray())
         return digest.joinToString("") { "%02x".format(it) }
     }
 
@@ -93,6 +115,8 @@ class OpdsCatalogCacheRepository(
         }
     }
 }
+
+data class OpdsMergeResult(val added: Int, val updated: Int, val unchanged: Int, val total: Int)
 
 data class OpdsCatalogEntry(
     val id: String,

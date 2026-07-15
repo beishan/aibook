@@ -134,6 +134,11 @@ data class ReaderFontOption(
     val description: String
 )
 
+data class ReaderImportedFont(
+    val name: String,
+    val path: String
+)
+
 object ReaderFontCatalog {
     val builtInFonts: List<ReaderFontOption> = listOf(
         ReaderFontOption(ReaderFontType.SYSTEM, "系统字体", "使用设备默认字体"),

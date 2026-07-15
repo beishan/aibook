@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -115,7 +116,10 @@ fun BookCover(
     width: Dp? = 88.dp,
     height: Dp = 128.dp,
     imageUri: String? = null,
-    brush: Brush = Brush.verticalGradient(listOf(Color(0xFF28323A), Color(0xFF0F1418)))
+    brush: Brush = Brush.verticalGradient(listOf(Color(0xFF28323A), Color(0xFF0F1418))),
+    placeholderTitleMaxLength: Int = 6,
+    placeholderMaxLines: Int = 3,
+    placeholderTextStyle: TextStyle? = null
 ) {
     val sizeModifier = if (width != null) Modifier.size(width, height) else Modifier.fillMaxWidth().height(height)
 
@@ -140,11 +144,11 @@ fun BookCover(
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = title.take(6),
+            text = title.take(placeholderTitleMaxLength),
             color = Color.White,
-            style = MaterialTheme.typography.titleMedium,
+            style = placeholderTextStyle ?: MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            maxLines = 3,
+            maxLines = placeholderMaxLines,
             overflow = TextOverflow.Ellipsis
         )
     }

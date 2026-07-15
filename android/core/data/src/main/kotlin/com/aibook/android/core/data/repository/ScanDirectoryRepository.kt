@@ -83,20 +83,20 @@ class ScanDirectoryRepository(
         dao.deleteById(id)
     }
 
-    suspend fun scanAllEnabled(): ScanImportStats {
+    suspend fun scanAllEnabled(duplicateHandling: DuplicateHandling = DuplicateHandling.CANCEL): ScanImportStats {
         return dao.getAll()
             .filter { it.enabled }
-            .fold(ScanImportStats()) { stats, directory -> stats.plus(scan(directory)) }
+            .fold(ScanImportStats()) { stats, directory -> stats.plus(scan(directory, duplicateHandling)) }
     }
 
-    suspend fun scanDirectory(id: String): ScanImportStats {
+    suspend fun scanDirectory(id: String, duplicateHandling: DuplicateHandling = DuplicateHandling.CANCEL): ScanImportStats {
         val directory = dao.getById(id) ?: return ScanImportStats()
-        return scan(directory)
+        return scan(directory, duplicateHandling)
     }
 
-    private suspend fun scan(directory: ScanDirectoryEntity): ScanImportStats {
+    private suspend fun scan(directory: ScanDirectoryEntity, duplicateHandling: DuplicateHandling): ScanImportStats {
         return try {
-            val stats = scanTree(Uri.parse(directory.uri))
+            val stats = scanTree(Uri.parse(directory.uri), duplicateHandling)
             dao.insert(
                 directory.copy(
                     lastScanAt = System.currentTimeMillis(),
@@ -120,7 +120,7 @@ class ScanDirectoryRepository(
         }
     }
 
-    private suspend fun scanTree(treeUri: Uri): ScanImportStats {
+    private suspend fun scanTree(treeUri: Uri, duplicateHandling: DuplicateHandling): ScanImportStats {
         val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
         val documents = mutableListOf<ScannedDocument>()
         collectDocumentChildren(treeUri, rootDocumentId, relativeDirectory = "", documents)
@@ -128,7 +128,7 @@ class ScanDirectoryRepository(
             documents.map { TreeDocument(value = it.uri, relativePath = it.relativePath) }
         )
         return documents.fold(ScanImportStats()) { total, document ->
-            total.plus(importDocument(document, resources))
+            total.plus(importDocument(document, resources, duplicateHandling))
         }
     }
 
@@ -174,24 +174,27 @@ class ScanDirectoryRepository(
 
     private suspend fun importDocument(
         document: ScannedDocument,
-        resources: AuthorizedTreeResourceIndex<Uri>
+        resources: AuthorizedTreeResourceIndex<Uri>,
+        duplicateHandling: DuplicateHandling
     ): ScanImportStats {
         if (BookFormat.fromFileName(document.name) == null) {
             return ScanImportStats(scanned = 1, unsupported = 1)
         }
         return runCatching {
-            bookRepository.importBook(document.uri, document.name, resource@{ relativePath ->
-                resources.withResolved(
-                    document.relativePath,
-                    relativePath,
-                    context.contentResolver::openInputStream
-                )
-            })
+            bookRepository.importBook(
+                uri = document.uri,
+                fileName = document.name,
+                markdownResourceOpener = resource@{ relativePath ->
+                    resources.withResolved(document.relativePath, relativePath, context.contentResolver::openInputStream)
+                },
+                duplicateHandling = duplicateHandling
+            )
         }
             .fold(
                 onSuccess = { result ->
                     when (result) {
                         is ImportResult.Added -> ScanImportStats(scanned = 1, added = 1)
+                        is ImportResult.Replaced -> ScanImportStats(scanned = 1, added = 1)
                         is ImportResult.Restored -> ScanImportStats(scanned = 1, restored = 1)
                         is ImportResult.Duplicate -> ScanImportStats(scanned = 1, duplicate = 1)
                         is ImportResult.UnsupportedFormat -> ScanImportStats(scanned = 1, unsupported = 1)

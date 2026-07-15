@@ -13,6 +13,12 @@ abstract class OpdsCatalogEntryDao {
     @Query("SELECT * FROM opds_catalog_entries ORDER BY syncedAt DESC, title ASC")
     abstract fun observeAll(): Flow<List<OpdsCatalogEntryEntity>>
 
+    @Query("SELECT * FROM opds_catalog_entries WHERE connectionId = :connectionId")
+    abstract suspend fun getByConnection(connectionId: String): List<OpdsCatalogEntryEntity>
+
+    @Query("SELECT COUNT(*) FROM opds_catalog_entries WHERE connectionId = :connectionId")
+    abstract suspend fun countByConnection(connectionId: String): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insertAll(entries: List<OpdsCatalogEntryEntity>)
 

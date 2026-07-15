@@ -1,15 +1,12 @@
 package com.aibook.android.core.data.mapper
 
 import com.aibook.android.core.data.db.BookEntity
-import com.aibook.android.core.data.db.OpdsConnectionEntity
 import com.aibook.android.core.data.db.ShelfFolderEntity
 import com.aibook.android.core.model.BookFormat
 import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.ReadingProgress
 import com.aibook.android.core.model.ReadingStatus
 import com.aibook.android.core.model.ShelfFolder
-import com.aibook.android.core.network.opds.OpdsConnection
-import com.aibook.android.core.network.opds.OpdsSyncState
 import java.time.Instant
 
 fun BookEntity.toDomain(): LocalBook {
@@ -18,6 +15,8 @@ fun BookEntity.toDomain(): LocalBook {
         title = title,
         author = author,
         description = description,
+        rating = rating,
+        tags = tags.split('|').map(String::trim).filter(String::isNotBlank).distinct(),
         format = runCatching { BookFormat.valueOf(format) }.getOrDefault(BookFormat.TXT),
         uri = uri,
         sha256 = sha256,
@@ -49,6 +48,8 @@ fun LocalBook.toEntity(): BookEntity {
         title = title,
         author = author,
         description = description,
+        rating = rating,
+        tags = tags.map { it.trim().replace("|", "") }.filter { it.isNotBlank() }.distinct().joinToString("|"),
         format = format.name,
         uri = uri,
         sha256 = sha256,
@@ -86,35 +87,5 @@ fun ShelfFolder.toEntity(): ShelfFolderEntity {
         id = id,
         name = name,
         createdAt = createdAtEpochMillis
-    )
-}
-
-fun OpdsConnectionEntity.toDomain(): OpdsConnection {
-    return OpdsConnection(
-        id = id,
-        name = name,
-        baseUrl = baseUrl,
-        username = username,
-        password = password,
-        enabled = enabled,
-        lastSyncedAt = lastSyncedAt,
-        bookCount = bookCount,
-        syncState = runCatching { OpdsSyncState.valueOf(syncState) }.getOrDefault(OpdsSyncState.IDLE),
-        lastErrorMessage = lastErrorMessage
-    )
-}
-
-fun OpdsConnection.toEntity(): OpdsConnectionEntity {
-    return OpdsConnectionEntity(
-        id = id,
-        name = name,
-        baseUrl = baseUrl,
-        username = username,
-        password = password,
-        enabled = enabled,
-        lastSyncedAt = lastSyncedAt,
-        bookCount = bookCount,
-        syncState = syncState.name,
-        lastErrorMessage = lastErrorMessage
     )
 }

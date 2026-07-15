@@ -22,4 +22,22 @@ class EntityMappersPdfProgressTest {
         assertEquals(2.25f, domain.progress.pdfZoom)
         assertEquals(2.25f, domain.toEntity().progressPdfZoom)
     }
+
+    @Test
+    fun editableRatingAndTagsRoundTripThroughBookEntity() {
+        val entity = BookEntity(
+            id = "rated-book",
+            title = "有评分的书",
+            format = "EPUB",
+            uri = "/tmp/book.epub",
+            rating = 8.5f,
+            tags = "科幻|经典|科幻"
+        )
+
+        val domain = entity.toDomain()
+
+        assertEquals(8.5f, domain.rating)
+        assertEquals(listOf("科幻", "经典"), domain.tags)
+        assertEquals("科幻|经典", domain.toEntity().tags)
+    }
 }

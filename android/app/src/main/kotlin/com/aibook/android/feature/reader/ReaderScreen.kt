@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -31,6 +32,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -100,6 +102,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
@@ -110,6 +115,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibook.android.core.model.AccentColor
@@ -121,6 +128,7 @@ import com.aibook.android.core.model.ReaderContentsStyle
 import com.aibook.android.core.model.ReaderAutoScrollSpeed
 import com.aibook.android.core.model.ReaderFontCatalog
 import com.aibook.android.core.model.ReaderFontType
+import com.aibook.android.core.model.ReaderImportedFont
 import com.aibook.android.core.model.ReaderSettings
 import com.aibook.android.core.model.ReaderTheme
 import com.aibook.android.core.model.ReaderOrientationMode
@@ -1337,15 +1345,25 @@ private fun ReaderContentsPage(
 ) {
     val chapters = normalizedChapters(state)
     val colors = readerColors(state.settings.theme)
+    val searchFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var searchVisible by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     val visibleChapters = remember(chapters, query) {
         if (query.isBlank()) chapters else chapters.filter { it.title.contains(query, ignoreCase = true) }
+    }
+    LaunchedEffect(searchVisible) {
+        if (searchVisible) {
+            searchFocusRequester.requestFocus()
+            keyboardController?.show()
+        }
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.background)
+            .statusBarsPadding()
             .padding(horizontal = 28.dp, vertical = 25.dp),
         verticalArrangement = Arrangement.spacedBy(22.dp)
     ) {
@@ -1353,16 +1371,35 @@ private fun ReaderContentsPage(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .offset(x = (-18).dp)
+                    .size(36.dp)
+            ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = colors.foreground)
             }
             Text(
                 "目录",
-                modifier = Modifier.weight(2f),
-                style = MaterialTheme.typography.displaySmall,
+                modifier = Modifier
+                    .weight(2f)
+                    .offset(x = (-6).dp),
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.ExtraBold,
-                color = colors.foreground
+                color = colors.foreground,
+                maxLines = 1,
+                softWrap = false
             )
+            IconButton(
+                onClick = { searchVisible = true },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = "搜索章节",
+                    tint = colors.foreground
+                )
+            }
             Text("共 ${chapters.size} 章", color = colors.muted)
             Text(
                 "当前章节",
@@ -1383,14 +1420,29 @@ private fun ReaderContentsPage(
                 Text("书签 ${state.bookmarks.size}", color = colors.foreground)
             }
         }
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            placeholder = { Text("搜索章节") }
-        )
+        if (searchVisible) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(searchFocusRequester),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    IconButton(
+                        onClick = {
+                            query = ""
+                            searchVisible = false
+                            keyboardController?.hide()
+                        }
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "关闭章节搜索")
+                    }
+                },
+                placeholder = { Text("搜索章节") }
+            )
+        }
         if (query.isNotBlank()) {
             Text("找到 ${visibleChapters.size} 章", color = colors.muted, style = MaterialTheme.typography.labelMedium)
         }
@@ -1940,9 +1992,9 @@ private fun ReadingSettingsPage(
     var showFontDialog by remember { mutableStateOf(false) }
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val fontImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            viewModel.importFont(uri)
+    val fontImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.importFonts(uris)
             showFontDialog = false
         }
     }
@@ -2050,7 +2102,9 @@ private fun ReadingSettingsPage(
     if (showFontDialog) {
         FontSelectionDialog(
             settings = settings,
+            importedFonts = state.importedFonts,
             onSelect = { viewModel.setFontType(it); showFontDialog = false },
+            onSelectImported = { viewModel.selectImportedFont(it); showFontDialog = false },
             onImport = { fontImportLauncher.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/x-font-otf", "application/octet-stream")) },
             onDismiss = { showFontDialog = false }
         )
@@ -2854,90 +2908,240 @@ private fun indexToLineHeight(index: Int): Float = when (index) {
     else -> 1.45f
 }
 
+private enum class FontCategory(val label: String) {
+    ALL("全部"),
+    SYSTEM("系统"),
+    BUILT_IN("内置"),
+    LOCAL("本地")
+}
+
+private data class FontGridOption(
+    val key: String,
+    val title: String,
+    val category: FontCategory,
+    val type: ReaderFontType? = null,
+    val importedFont: ReaderImportedFont? = null
+)
+
 @Composable
 private fun FontSelectionDialog(
     settings: ReaderSettings,
+    importedFonts: List<ReaderImportedFont>,
     onSelect: (ReaderFontType) -> Unit,
+    onSelectImported: (ReaderImportedFont) -> Unit,
     onImport: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    var selectedCategory by remember { mutableStateOf(FontCategory.ALL) }
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val options = remember(importedFonts) {
+        ReaderFontCatalog.builtInFonts.map { option ->
+            FontGridOption(
+                key = "built-in-${option.type.name}",
+                title = option.label,
+                category = if (option.type == ReaderFontType.SYSTEM) FontCategory.SYSTEM else FontCategory.BUILT_IN,
+                type = option.type
+            )
+        } + importedFonts.map { font ->
+            FontGridOption(
+                key = "local-${font.path}",
+                title = font.name,
+                category = FontCategory.LOCAL,
+                importedFont = font
+            )
+        }
+    }
+    val visibleOptions = if (selectedCategory == FontCategory.ALL) {
+        options
+    } else {
+        options.filter { it.category == selectedCategory }
+    }
+
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text("选择字体", fontWeight = FontWeight.Bold)
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("选择阅读正文使用的字体。导入字体会复制到应用私有目录。", color = DesignTokens.SoftText)
-                ReaderFontCatalog.builtInFonts.forEach { option ->
-                    FontOptionCard(
-                        title = option.label,
-                        subtitle = option.description,
-                        selected = settings.fontType == option.type,
-                        onClick = { onSelect(option.type) }
-                    )
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(if (isLandscape) 0.88f else 0.94f)
+                .fillMaxHeight(if (isLandscape) 0.9f else 0.86f),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "关闭字体选择")
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("字体", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            "当前选择 · ${ReaderFontCatalog.selectedLabel(settings)}",
+                            color = DesignTokens.SoftText,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    TextButton(onClick = onImport) {
+                        Text("导入字体", color = DesignTokens.Accent)
+                    }
                 }
-                if (!settings.customFontPath.isNullOrBlank()) {
-                    FontOptionCard(
-                        title = settings.customFontName ?: "本地导入字体",
-                        subtitle = "从本地文件导入",
-                        selected = settings.fontType == ReaderFontType.CUSTOM,
-                        onClick = { onSelect(ReaderFontType.CUSTOM) }
-                    )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    FontCategory.entries.forEach { category ->
+                        val count = if (category == FontCategory.ALL) {
+                            options.size
+                        } else {
+                            options.count { it.category == category }
+                        }
+                        FontCategoryTab(
+                            label = "${category.label}($count)",
+                            selected = selectedCategory == category,
+                            modifier = Modifier.weight(1f),
+                            onClick = { selectedCategory = category }
+                        )
+                    }
                 }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onImport) {
-                Text("导入本地字体", color = DesignTokens.Accent)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("关闭", color = DesignTokens.SoftText)
+
+                if (visibleOptions.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            if (selectedCategory == FontCategory.LOCAL) "还没有导入本地字体" else "该分类暂无字体",
+                            color = DesignTokens.SoftText
+                        )
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(visibleOptions, key = { it.key }) { option ->
+                            val selected = if (option.importedFont != null) {
+                                settings.fontType == ReaderFontType.CUSTOM &&
+                                    settings.customFontPath == option.importedFont.path
+                            } else {
+                                settings.fontType == option.type
+                            }
+                            FontGridCard(
+                                option = option,
+                                selected = selected,
+                                onClick = {
+                                    option.importedFont?.let(onSelectImported)
+                                        ?: option.type?.let(onSelect)
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
-    )
+    }
 }
 
 @Composable
-private fun FontOptionCard(
-    title: String,
-    subtitle: String,
+private fun FontCategoryTab(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (selected) MaterialTheme.colorScheme.background else Color.Transparent)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(vertical = 12.dp, horizontal = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            label,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) MaterialTheme.colorScheme.onBackground else DesignTokens.SoftText,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun FontGridCard(
+    option: FontGridOption,
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    val previewFontFamily = remember(option.type, option.importedFont?.path) {
+        when (option.type) {
+            ReaderFontType.SERIF -> FontFamily.Serif
+            ReaderFontType.SANS_SERIF -> FontFamily.SansSerif
+            ReaderFontType.MONOSPACE -> FontFamily.Monospace
+            ReaderFontType.SYSTEM -> FontFamily.Default
+            else -> {
+                val file = option.importedFont?.path?.let(::File)
+                if (file != null && file.exists()) {
+                    runCatching { FontFamily(Typeface.createFromFile(file)) }.getOrDefault(FontFamily.Default)
+                } else {
+                    FontFamily.Default
+                }
+            }
+        }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .height(52.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
             ),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) DesignTokens.WarmCard else Color.White
+            containerColor = if (selected) DesignTokens.WarmCard else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
         ),
         border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (selected) DesignTokens.Accent.copy(alpha = 0.42f) else DesignTokens.Hairline
-        ),
-        shape = RoundedCornerShape(12.dp)
+            if (selected) 2.dp else 1.dp,
+            if (selected) DesignTokens.Accent else DesignTokens.Hairline
+        )
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp, vertical = 3.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Icon(
-                if (selected) Icons.Default.CheckCircle else Icons.Default.Check,
-                null,
-                tint = if (selected) DesignTokens.Accent else DesignTokens.SoftText
+            Text(
+                option.title,
+                fontFamily = previewFontFamily,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = if (selected) DesignTokens.Accent else MaterialTheme.colorScheme.onSurface
             )
-            Column {
-                Text(title, fontWeight = FontWeight.Bold)
-                Text(subtitle, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
-            }
         }
     }
 }

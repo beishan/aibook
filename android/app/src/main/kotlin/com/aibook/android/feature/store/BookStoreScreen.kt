@@ -48,6 +48,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -75,10 +76,12 @@ import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
 import com.aibook.android.ui.design.SourceBadge
+import com.aibook.android.core.data.repository.DownloadStatus
 
 @Composable
 fun BookStoreScreen(
     onCategoryClick: () -> Unit = {},
+    onSearchClick: () -> Unit = {},
     onBookClick: (String) -> Unit = {},
     onRemoteBookClick: (String) -> Unit = {},
     viewModel: StoreViewModel = viewModel(factory = StoreViewModel.Factory)
@@ -115,6 +118,15 @@ fun BookStoreScreen(
         title = if (managementMode) "已选 ${selectedLocalBooks.size} 本" else "",
         modifier = Modifier.fillMaxSize(),
         actions = {
+            Icon(
+                Icons.Default.Search,
+                contentDescription = "全局搜索",
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onSearchClick
+                )
+            )
             Icon(
                 viewModeIcon,
                 contentDescription = "切换视图",
@@ -212,7 +224,7 @@ fun BookStoreScreen(
                         gridItems(filteredBooks) { book ->
                             StoreBookCard(
                                 book = book,
-                                downloading = actionState.downloadingBookId == book.id,
+                                downloading = actionState.downloadTasks[book.id]?.status in setOf(DownloadStatus.QUEUED, DownloadStatus.RUNNING),
                                 managementMode = managementMode,
                                 selected = book.id in selectedIds,
                                 onBookClick = {
@@ -239,7 +251,7 @@ fun BookStoreScreen(
                         items(filteredBooks) { book ->
                             StoreListItem(
                                 book = book,
-                                downloading = actionState.downloadingBookId == book.id,
+                                downloading = actionState.downloadTasks[book.id]?.status in setOf(DownloadStatus.QUEUED, DownloadStatus.RUNNING),
                                 managementMode = managementMode,
                                 selected = book.id in selectedIds,
                                 onBookClick = {
@@ -266,7 +278,7 @@ fun BookStoreScreen(
                         items(filteredBooks) { book ->
                             StoreCompactListItem(
                                 book = book,
-                                downloading = actionState.downloadingBookId == book.id,
+                                downloading = actionState.downloadTasks[book.id]?.status in setOf(DownloadStatus.QUEUED, DownloadStatus.RUNNING),
                                 managementMode = managementMode,
                                 selected = book.id in selectedIds,
                                 onBookClick = {
@@ -295,7 +307,7 @@ fun BookStoreScreen(
                         gridItems(filteredBooks) { book ->
                             StoreSmallBookCard(
                                 book = book,
-                                downloading = actionState.downloadingBookId == book.id,
+                                downloading = actionState.downloadTasks[book.id]?.status in setOf(DownloadStatus.QUEUED, DownloadStatus.RUNNING),
                                 managementMode = managementMode,
                                 selected = book.id in selectedIds,
                                 onBookClick = {
@@ -536,11 +548,34 @@ fun StoreRemoteBookDetailScreen(
             }
         }
 
-        val downloading = actionState.downloadingBookId == book.id
+        val task = actionState.downloadTasks[book.id]
+        val downloading = task?.status in setOf(DownloadStatus.QUEUED, DownloadStatus.RUNNING)
+        if (task != null && task.status != DownloadStatus.COMPLETED) {
+            SoftCard(color = Color.White) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("下载任务 · ${task.progress}%", fontWeight = FontWeight.Bold)
+                    LinearProgressIndicator(progress = { task.progress / 100f }, modifier = Modifier.fillMaxWidth())
+                    task.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        when (task.status) {
+                            DownloadStatus.RUNNING, DownloadStatus.QUEUED -> TextButton(onClick = { viewModel.pauseDownload(book.id) }) { Text("暂停") }
+                            DownloadStatus.PAUSED -> TextButton(onClick = { viewModel.resumeDownload(book.id) }) { Text("继续") }
+                            DownloadStatus.FAILED -> TextButton(onClick = { viewModel.retryDownload(book.id) }) { Text("重试") }
+                            else -> Unit
+                        }
+                        if (task.status !in setOf(DownloadStatus.COMPLETED, DownloadStatus.CANCELLED)) {
+                            TextButton(onClick = { viewModel.cancelDownload(book.id) }) { Text("取消") }
+                        }
+                    }
+                }
+            }
+        }
         Text(
             when {
                 book.downloadedLocalId != null -> "打开本地书籍"
-                downloading -> "下载中..."
+                task?.status == DownloadStatus.PAUSED -> "继续下载"
+                task?.status == DownloadStatus.FAILED -> "重新下载"
+                downloading -> "下载中 ${task?.progress ?: 0}%"
                 else -> "下载到书架"
             },
             modifier = Modifier
@@ -554,8 +589,10 @@ fun StoreRemoteBookDetailScreen(
                     val localId = book.downloadedLocalId
                     if (localId != null) {
                         onOpenLocalBook(localId)
-                    } else {
-                        viewModel.downloadRemoteBook(book)
+                    } else when (task?.status) {
+                        DownloadStatus.PAUSED -> viewModel.resumeDownload(book.id)
+                        DownloadStatus.FAILED -> viewModel.retryDownload(book.id)
+                        else -> viewModel.downloadRemoteBook(book)
                     }
                 }
                 .padding(vertical = 15.dp),
@@ -854,6 +891,107 @@ fun StoreCategoryScreen(
         ) {
             gridItems(filteredBooks) { book ->
                 CategoryBookCard(book, openBook)
+            }
+        }
+    }
+}
+
+@Composable
+fun StoreSearchScreen(
+    onBack: () -> Unit,
+    onBookClick: (String) -> Unit = {},
+    onRemoteBookClick: (String) -> Unit = {},
+    viewModel: StoreViewModel = viewModel(factory = StoreViewModel.Factory)
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val query = uiState.filter.query
+    val results = if (query.isBlank()) emptyList() else uiState.filteredBooks
+    val authors = results.groupingBy { it.author }.eachCount().entries.sortedByDescending { it.value }.take(8)
+    val categories = results.flatMap { it.categories }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(8)
+    val sources = results.groupBy { it.sourceId }.mapNotNull { (id, books) ->
+        books.firstOrNull()?.let { Triple(id, it.sourceName, books.size) }
+    }.sortedByDescending { it.third }
+    val openBook: (StoreBook) -> Unit = { book ->
+        when {
+            book.kind == StoreItemKind.LOCAL -> onBookClick(book.id)
+            book.downloadedLocalId != null -> onBookClick(book.downloadedLocalId)
+            else -> onRemoteBookClick(book.id)
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().background(DesignTokens.AppBackground).padding(horizontal = 24.dp, vertical = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
+            Text("全局搜索", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
+        }
+        OutlinedTextField(
+            value = query,
+            onValueChange = viewModel::setQuery,
+            modifier = Modifier.fillMaxWidth(),
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            placeholder = { Text("搜索书名、作者、分类或 OPDS 源") },
+            singleLine = true,
+            shape = RoundedCornerShape(18.dp)
+        )
+        if (query.isBlank()) {
+            SoftCard(color = Color.White) { Text("输入关键词后，将按作者、分类、OPDS 源和书籍分组展示结果。", color = DesignTokens.SoftText) }
+        } else if (results.isEmpty()) {
+            SoftCard(color = Color.White) { Text("没有找到与“$query”相关的内容", color = DesignTokens.SoftText) }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 20.dp)
+            ) {
+                if (authors.isNotEmpty()) item {
+                    SearchGroup("作者", authors.map { it.key to it.value }) { author -> viewModel.setQuery(author) }
+                }
+                if (categories.isNotEmpty()) item {
+                    SearchGroup("分类", categories.map { it.key to it.value }) { category -> viewModel.setCategoryFilter(category) }
+                }
+                if (sources.isNotEmpty()) item {
+                    SearchGroup("OPDS 源", sources.map { it.second to it.third }) { sourceName ->
+                        sources.firstOrNull { it.second == sourceName }?.let { viewModel.setSourceFilter(it.first) }
+                    }
+                }
+                item {
+                    Text("书籍 · ${results.size}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                }
+                items(results, key = { "${it.kind}-${it.id}" }) { book ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth().clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { openBook(book) },
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(14.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
+                    ) {
+                        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            BookCover(title = book.title, imageUri = book.coverUri, width = 58.dp, height = 82.dp)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(book.author, color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("${book.sourceName} · ${book.format}", color = DesignTokens.Accent)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchGroup(title: String, entries: List<Pair<String, Int>>, onSelect: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(entries) { (label, count) ->
+                StoreChip(label = "$label · $count", selected = false, onClick = { onSelect(label) })
             }
         }
     }

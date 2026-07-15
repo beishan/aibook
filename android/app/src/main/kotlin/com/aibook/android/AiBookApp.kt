@@ -49,6 +49,7 @@ import com.aibook.android.feature.shelf.BookDetailScreen
 import com.aibook.android.feature.store.BookStoreScreen
 import com.aibook.android.feature.store.StoreRemoteBookDetailScreen
 import com.aibook.android.feature.store.StoreCategoryScreen
+import com.aibook.android.feature.store.StoreSearchScreen
 import com.aibook.android.navigation.Screen
 import com.aibook.android.ui.design.DesignTokens
 
@@ -72,7 +73,7 @@ fun AiBookApp() {
     val currentRoute = backStackEntry?.destination?.route
 
     val selectedBottomRoute = when (currentRoute) {
-        Screen.StoreCategory.route -> Screen.Store.route
+        Screen.StoreCategory.route, Screen.StoreSearch.route -> Screen.Store.route
         Screen.StoreRemoteBookDetail.route -> Screen.Store.route
         Screen.OpdsAddSource.route -> Screen.Opds.route
         Screen.ScanDirectories.route -> Screen.Settings.route
@@ -85,6 +86,7 @@ fun AiBookApp() {
     val bottomBarRoutes = bottomTabs.map { it.screen.route } +
         listOf(
             Screen.StoreCategory.route,
+            Screen.StoreSearch.route,
             Screen.StoreRemoteBookDetail.route,
             Screen.OpdsAddSource.route,
             Screen.ScanDirectories.route,
@@ -169,6 +171,7 @@ fun AiBookApp() {
                 PaddedScreen(paddingValues) {
                     BookStoreScreen(
                         onCategoryClick = { navController.navigate(Screen.StoreCategory.route) },
+                        onSearchClick = { navController.navigate(Screen.StoreSearch.route) },
                         onBookClick = { bookId ->
                             navController.navigate(Screen.BookDetail.createRoute(bookId))
                         },
@@ -185,6 +188,17 @@ fun AiBookApp() {
                         onBookClick = { bookId ->
                             navController.navigate(Screen.BookDetail.createRoute(bookId))
                         },
+                        onRemoteBookClick = { bookId ->
+                            navController.navigate(Screen.StoreRemoteBookDetail.createRoute(bookId))
+                        }
+                    )
+                }
+            }
+            composable(Screen.StoreSearch.route) {
+                PaddedScreen(paddingValues) {
+                    StoreSearchScreen(
+                        onBack = { navController.popBackStack() },
+                        onBookClick = { bookId -> navController.navigate(Screen.BookDetail.createRoute(bookId)) },
                         onRemoteBookClick = { bookId ->
                             navController.navigate(Screen.StoreRemoteBookDetail.createRoute(bookId))
                         }
@@ -291,7 +305,10 @@ fun AiBookApp() {
                         onReadClick = {
                             navController.navigate(Screen.Reader.createRoute(bookId))
                         },
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onRelatedBookClick = { relatedId ->
+                            navController.navigate(Screen.BookDetail.createRoute(relatedId))
+                        }
                     )
                 }
             }

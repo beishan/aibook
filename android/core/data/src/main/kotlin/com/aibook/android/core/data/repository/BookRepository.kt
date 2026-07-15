@@ -14,7 +14,9 @@ import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.ReadingProgress
 import com.aibook.android.core.model.ReadingStatus
 import com.aibook.android.core.model.ShelfFolder
+import com.aibook.android.core.model.ShelfFolderSelection
 import com.aibook.android.core.reader.EpubImage
+import com.aibook.android.core.reader.EpubContentParser
 import com.aibook.android.core.reader.EpubMetadata
 import com.aibook.android.core.reader.EpubMetadataParser
 import com.aibook.android.core.reader.MarkdownResourceReferences
@@ -24,6 +26,7 @@ import java.io.InputStream
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -33,11 +36,25 @@ import java.util.UUID
 
 sealed interface ImportResult {
     data class Added(val book: LocalBook) : ImportResult
+    data class Replaced(val book: LocalBook) : ImportResult
     data class Restored(val book: LocalBook) : ImportResult
     data class Duplicate(val existingBook: LocalBook) : ImportResult
     data class UnsupportedFormat(val fileName: String) : ImportResult
     data class Failed(val message: String) : ImportResult
 }
+
+enum class DuplicateHandling(val label: String) {
+    KEEP_VERSION("保留版本"),
+    REPLACE("替换原书"),
+    CANCEL("取消导入")
+}
+
+sealed interface RelocateBookResult {
+    data class Success(val book: LocalBook) : RelocateBookResult
+    data class Failure(val message: String) : RelocateBookResult
+}
+
+data class BookFileStats(val fileSizeBytes: Long, val wordCount: Long?)
 
 class BookRepository(
     private val context: Context,
@@ -66,12 +83,123 @@ class BookRepository(
         return bookDao.observeShelved().map { entities -> entities.map { it.toDomain() } }
     }
 
+    fun observeShelvedBookPage(
+        query: String,
+        folderSelection: ShelfFolderSelection,
+        limit: Int,
+        offset: Int = 0
+    ): Flow<List<LocalBook>> {
+        val folderMode = when (folderSelection) {
+            ShelfFolderSelection.All -> 0
+            ShelfFolderSelection.Unfiled -> 1
+            is ShelfFolderSelection.Folder -> 2
+        }
+        val folderId = (folderSelection as? ShelfFolderSelection.Folder)?.folderId
+        return bookDao.observeShelvedPage(query.trim(), folderMode, folderId, limit.coerceAtLeast(1), offset.coerceAtLeast(0))
+            .map { entities -> entities.map { it.toDomain() } }
+    }
+
     fun observeShelfFolders(): Flow<List<ShelfFolder>> {
         return shelfFolderDao.observeAll().map { entities -> entities.map { it.toDomain() } }
     }
 
     suspend fun getBook(id: String): LocalBook? {
         return bookDao.getById(id)?.toDomain()
+    }
+
+    suspend fun relocateMissingBookFile(bookId: String, uri: Uri): RelocateBookResult = withContext(ioDispatcher) {
+        val existing = bookDao.getById(bookId) ?: return@withContext RelocateBookResult.Failure("书籍不存在")
+        val displayName = resolveDisplayName(uri) ?: return@withContext RelocateBookResult.Failure("无法识别所选文件")
+        val format = BookFormat.fromFileName(displayName)
+            ?: return@withContext RelocateBookResult.Failure("不支持该文件格式")
+        if (format.name != existing.format) {
+            return@withContext RelocateBookResult.Failure("请选择 ${existing.format} 格式的文件")
+        }
+        val input = context.contentResolver.openInputStream(uri)
+            ?: return@withContext RelocateBookResult.Failure("无法读取所选文件")
+        val destination = createDestinationFile(format)
+        val digest = MessageDigest.getInstance("SHA-256")
+        runCatching {
+            input.use { source ->
+                destination.outputStream().use { output ->
+                    val buffer = ByteArray(8192)
+                    var count: Int
+                    while (source.read(buffer).also { count = it } != -1) {
+                        digest.update(buffer, 0, count)
+                        output.write(buffer, 0, count)
+                    }
+                }
+            }
+        }.getOrElse {
+            deleteImportedFile(destination)
+            return@withContext RelocateBookResult.Failure("复制文件失败：${it.message ?: "未知错误"}")
+        }
+        val hash = digest.digest().joinToString("") { "%02x".format(it) }
+        if (!existing.sha256.isNullOrBlank() && existing.sha256 != hash) {
+            deleteImportedFile(destination)
+            return@withContext RelocateBookResult.Failure("所选文件与原书内容不一致")
+        }
+        bookDao.updateFileLocation(existing.id, destination.absolutePath, hash)
+        RelocateBookResult.Success(existing.copy(uri = destination.absolutePath, sha256 = hash).toDomain())
+    }
+
+    suspend fun updateBookMetadata(
+        id: String,
+        title: String,
+        author: String?,
+        description: String?,
+        rating: Float?,
+        tags: List<String>
+    ) {
+        val normalizedTags = tags.map { it.trim().replace("|", "") }.filter { it.isNotBlank() }.distinct().joinToString("|")
+        bookDao.updateMetadata(
+            id = id,
+            title = title.trim().ifBlank { "未命名书籍" },
+            author = author?.trim()?.ifBlank { null },
+            description = description?.trim()?.ifBlank { null },
+            rating = rating?.coerceIn(0f, 10f),
+            tags = normalizedTags
+        )
+    }
+
+    suspend fun replaceBookCover(id: String, imageUri: Uri): Result<String> = withContext(ioDispatcher) {
+        runCatching {
+            val book = bookDao.getById(id) ?: error("书籍不存在")
+            val mime = context.contentResolver.getType(imageUri).orEmpty()
+            val extension = when (mime.lowercase()) {
+                "image/png" -> "png"
+                "image/webp" -> "webp"
+                "image/gif" -> "gif"
+                else -> "jpg"
+            }
+            val destination = File(coversDir, "$id-${System.currentTimeMillis()}.$extension")
+            context.contentResolver.openInputStream(imageUri)?.use { input ->
+                destination.outputStream().use(input::copyTo)
+            } ?: error("无法读取封面")
+            bookDao.updateCover(id, destination.absolutePath)
+            book.coverUri?.let { oldPath ->
+                val old = File(oldPath)
+                if (old.isFile && old.canonicalPath.startsWith(coversDir.canonicalPath + File.separator)) old.delete()
+            }
+            destination.absolutePath
+        }
+    }
+
+    suspend fun bookFileStats(book: LocalBook): BookFileStats = withContext(ioDispatcher) {
+        val file = File(book.uri)
+        if (!file.isFile) return@withContext BookFileStats(0, null)
+        val wordCount = runCatching {
+            when (book.format) {
+                BookFormat.EPUB -> {
+                    val parsed = EpubContentParser.parse(file.readBytes())
+                    parsed.chapters.sumOf { chapter -> chapter.content.count { !it.isWhitespace() }.toLong() }
+                }
+                BookFormat.TXT, BookFormat.MARKDOWN, BookFormat.HTML, BookFormat.HTM ->
+                    file.readText().count { !it.isWhitespace() }.toLong()
+                else -> null
+            }
+        }.getOrNull()
+        BookFileStats(file.length(), wordCount)
     }
 
     fun parsedBookDirectory(bookId: String): File = parsedBookStorage.directoryFor(bookId)
@@ -98,9 +226,13 @@ class BookRepository(
         selected.mapNotNull { document ->
             val format = BookFormat.fromFileName(document.displayName) ?: return@mapNotNull null
             if (format == BookFormat.MARKDOWN) {
-                importBook(document.value, document.displayName) { relativePath ->
-                    resources.withResolved(document, relativePath, context.contentResolver::openInputStream)
-                }
+                importBook(
+                    uri = document.value,
+                    fileName = document.displayName,
+                    markdownResourceOpener = { relativePath ->
+                        resources.withResolved(document, relativePath, context.contentResolver::openInputStream)
+                    }
+                )
             } else {
                 importBook(document.value, document.displayName)
             }
@@ -110,7 +242,8 @@ class BookRepository(
     suspend fun importBook(
         uri: Uri,
         fileName: String? = null,
-        markdownResourceOpener: ((String) -> InputStream?)? = null
+        markdownResourceOpener: ((String) -> InputStream?)? = null,
+        duplicateHandling: DuplicateHandling = DuplicateHandling.CANCEL
     ): ImportResult = withContext(ioDispatcher) {
         val resolvedFileName = fileName?.takeIf { it.isNotBlank() }
             ?: resolveDisplayName(uri)
@@ -137,15 +270,33 @@ class BookRepository(
 
         val existing = bookDao.getBySha256(sha256)
         if (existing != null) {
-            deleteImportedFile(destFile)
-            if (!existing.visibleInStore) {
-                bookDao.restoreStoreVisibility(existing.id)
-                return@withContext ImportResult.Restored(existing.copy(visibleInStore = true).toDomain())
+            when (duplicateHandling) {
+                DuplicateHandling.CANCEL -> {
+                    deleteImportedFile(destFile)
+                    if (!existing.visibleInStore) {
+                        bookDao.restoreStoreVisibility(existing.id)
+                        return@withContext ImportResult.Restored(existing.copy(visibleInStore = true).toDomain())
+                    }
+                    return@withContext ImportResult.Duplicate(existing.toDomain())
+                }
+                DuplicateHandling.REPLACE -> {
+                    val oldFile = File(existing.uri)
+                    if (format == BookFormat.MARKDOWN) {
+                        val references = MarkdownResourceReferences.extract(destFile.readText())
+                        markdownCompanionStorage.copy(destFile, references) { relativePath ->
+                            markdownResourceOpener?.invoke(relativePath)
+                        }
+                    }
+                    val updated = existing.copy(uri = destFile.absolutePath, visibleInStore = true)
+                    bookDao.insert(updated)
+                    if (oldFile.exists() && oldFile.absolutePath != destFile.absolutePath) deleteImportedFile(oldFile)
+                    return@withContext ImportResult.Replaced(updated.toDomain())
+                }
+                DuplicateHandling.KEEP_VERSION -> Unit
             }
-            return@withContext ImportResult.Duplicate(existing.toDomain())
         }
 
-        val bookId = UUID.nameUUIDFromBytes(sha256.toByteArray()).toString()
+        val bookId = if (existing != null) UUID.randomUUID().toString() else UUID.nameUUIDFromBytes(sha256.toByteArray()).toString()
         val metadataBytes = if (format == BookFormat.EPUB || format == BookFormat.MARKDOWN) destFile.readBytes() else byteArrayOf()
         if (format == BookFormat.MARKDOWN) {
             val references = MarkdownResourceReferences.extract(metadataBytes.toString(Charsets.UTF_8))
@@ -192,7 +343,7 @@ class BookRepository(
         }
 
         val bookId = UUID.nameUUIDFromBytes(sha256.toByteArray()).toString()
-        val destFile = createDestinationFile(format)
+        val destFile = createDestinationFile(format, downloadRoot())
         destFile.writeBytes(bytes)
         val metadata = parseMetadataSafely(format, bytes, destFile, bookId)
         val title = ImportPolicy.preferredTitle(
@@ -293,6 +444,12 @@ class BookRepository(
         }
     }
 
+    suspend fun deleteAllLibraryData() = withContext(ioDispatcher) {
+        bookDao.observeAll().first().forEach { book -> deleteBook(book.id) }
+        shelfFolderDao.deleteAll()
+        parsedBookStorage.clear()
+    }
+
     suspend fun count(): Int = bookDao.count()
 
     private fun sha256(bytes: ByteArray): String {
@@ -300,17 +457,33 @@ class BookRepository(
         return digest.joinToString("") { "%02x".format(it) }
     }
 
-    private fun createDestinationFile(format: BookFormat): File {
+    private fun createDestinationFile(format: BookFormat, root: File = booksDir): File {
+        root.mkdirs()
         return if (format == BookFormat.MARKDOWN) {
-            File(booksDir, "markdown-${UUID.randomUUID()}/book.md").also { it.parentFile?.mkdirs() }
+            File(root, "markdown-${UUID.randomUUID()}/book.md").also { it.parentFile?.mkdirs() }
         } else {
-            File(booksDir, "${UUID.randomUUID()}.${format.extension}")
+            File(root, "${UUID.randomUUID()}.${format.extension}")
+        }
+    }
+
+    private fun downloadRoot(): File {
+        val location = context.getSharedPreferences("storage_settings", Context.MODE_PRIVATE)
+            .getString("download_location", "internal")
+        return if (location == "external") {
+            context.getExternalFilesDir("Downloads") ?: File(context.filesDir, "downloads")
+        } else {
+            File(context.filesDir, "downloads")
         }
     }
 
     private fun deleteImportedFile(file: File) {
         val parent = file.parentFile?.canonicalFile
-        val root = booksDir.canonicalFile
+        val roots = listOfNotNull(
+            booksDir,
+            File(context.filesDir, "downloads"),
+            context.getExternalFilesDir("Downloads")
+        ).map { it.canonicalFile }
+        val root = roots.firstOrNull { file.canonicalPath.startsWith(it.path + File.separator) } ?: return
         if (parent != null && parent.parentFile == root && parent.name.startsWith("markdown-")) {
             parent.deleteRecursively()
         } else {

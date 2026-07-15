@@ -9,8 +9,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aibook.android.core.data.repository.ScanDirectory
+import com.aibook.android.core.data.repository.DuplicateHandling
 import com.aibook.android.core.data.repository.ScanDirectoryRepository
 import com.aibook.android.core.data.repository.ScanImportStats
+import com.aibook.android.core.data.prefs.BackgroundTaskStore
+import com.aibook.android.background.BackgroundWorkScheduler
 import com.aibook.android.di.ServiceLocator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,12 +26,16 @@ data class ScanDirectoryUiState(
     val directories: List<ScanDirectory> = emptyList(),
     val isScanning: Boolean = false,
     val scanningDirectoryId: String? = null,
+    val duplicateHandling: DuplicateHandling = DuplicateHandling.CANCEL,
+    val autoScanOnStart: Boolean = false,
+    val scanIntervalHours: Int = 0,
     val message: String? = null
 )
 
 class ScanDirectoryViewModel(
     private val app: Application,
-    private val repository: ScanDirectoryRepository
+    private val repository: ScanDirectoryRepository,
+    private val backgroundTaskStore: BackgroundTaskStore
 ) : ViewModel() {
     private val _state = MutableStateFlow(ScanDirectoryUiState())
     val state: StateFlow<ScanDirectoryUiState> = repository.observeDirectories()
@@ -37,6 +44,11 @@ class ScanDirectoryViewModel(
                 state.copy(directories = directories)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScanDirectoryUiState())
+
+    init {
+        viewModelScope.launch { backgroundTaskStore.autoScanOnStart.collect { value -> _state.value = _state.value.copy(autoScanOnStart = value) } }
+        viewModelScope.launch { backgroundTaskStore.scanIntervalHours.collect { value -> _state.value = _state.value.copy(scanIntervalHours = value) } }
+    }
 
     fun addDirectory(uri: Uri) {
         viewModelScope.launch {
@@ -49,7 +61,7 @@ class ScanDirectoryViewModel(
     fun scanAll() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isScanning = true, scanningDirectoryId = null, message = null)
-            val stats = repository.scanAllEnabled()
+            val stats = repository.scanAllEnabled(_state.value.duplicateHandling)
             _state.value = _state.value.copy(
                 isScanning = false,
                 message = stats.toMessage("扫描完成")
@@ -60,7 +72,7 @@ class ScanDirectoryViewModel(
     fun scanDirectory(directory: ScanDirectory) {
         viewModelScope.launch {
             _state.value = _state.value.copy(isScanning = true, scanningDirectoryId = directory.id, message = null)
-            val stats = repository.scanDirectory(directory.id)
+            val stats = repository.scanDirectory(directory.id, _state.value.duplicateHandling)
             _state.value = _state.value.copy(
                 isScanning = false,
                 scanningDirectoryId = null,
@@ -85,6 +97,21 @@ class ScanDirectoryViewModel(
         _state.value = _state.value.copy(message = null)
     }
 
+    fun setDuplicateHandling(value: DuplicateHandling) {
+        if (!_state.value.isScanning) _state.value = _state.value.copy(duplicateHandling = value)
+    }
+
+    fun setAutoScanOnStart(enabled: Boolean) {
+        viewModelScope.launch { backgroundTaskStore.setAutoScanOnStart(enabled) }
+    }
+
+    fun setScanIntervalHours(hours: Int) {
+        viewModelScope.launch {
+            backgroundTaskStore.setScanIntervalHours(hours)
+            BackgroundWorkScheduler.configureScan(app, hours)
+        }
+    }
+
     private fun takePersistableReadPermission(uri: Uri) {
         runCatching {
             app.contentResolver.takePersistableUriPermission(
@@ -104,7 +131,8 @@ class ScanDirectoryViewModel(
                 val app = this[APPLICATION_KEY] as Application
                 ScanDirectoryViewModel(
                     app = app,
-                    repository = ServiceLocator.get(app).scanDirectoryRepository
+                    repository = ServiceLocator.get(app).scanDirectoryRepository,
+                    backgroundTaskStore = ServiceLocator.get(app).backgroundTaskStore
                 )
             }
         }

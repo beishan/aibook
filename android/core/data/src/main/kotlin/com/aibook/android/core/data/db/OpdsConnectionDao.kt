@@ -21,14 +21,18 @@ interface OpdsConnectionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(connection: OpdsConnectionEntity)
 
-    @Query("UPDATE opds_connections SET name = :name, baseUrl = :baseUrl, username = :username, password = :password WHERE id = :id")
+    @Query("UPDATE opds_connections SET name = :name, baseUrl = :baseUrl, username = :username, passwordCiphertext = :passwordCiphertext, syncMode = :syncMode WHERE id = :id")
     suspend fun updateConnectionFields(
         id: String,
         name: String,
         baseUrl: String,
         username: String?,
-        password: String?
+        passwordCiphertext: String?,
+        syncMode: String
     )
+
+    @Query("UPDATE opds_connections SET passwordCiphertext = :passwordCiphertext WHERE id = :id")
+    suspend fun updatePasswordCiphertext(id: String, passwordCiphertext: String?)
 
     @Query("UPDATE opds_connections SET enabled = :enabled WHERE id = :id")
     suspend fun updateEnabled(id: String, enabled: Boolean)

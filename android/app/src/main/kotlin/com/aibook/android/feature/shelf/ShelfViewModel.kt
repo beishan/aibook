@@ -3,6 +3,8 @@ package com.aibook.android.feature.shelf
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -21,12 +23,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class ShelfUiState(
     val books: List<LocalBook> = emptyList(),
+    val visibleBooks: List<LocalBook> = emptyList(),
     val folders: List<ShelfFolder> = emptyList(),
     val folderSelection: ShelfFolderSelection = ShelfFolderSelection.All,
     val folderCounts: Map<String, Int> = emptyMap(),
@@ -38,14 +42,12 @@ data class ShelfUiState(
     val selectedIds: Set<String> = emptySet()
 ) {
     val filteredBooks: List<LocalBook>
-        get() = ShelfBookSorter.sort(
-            ShelfFolderCatalog.filterBooks(books, folderSelection).filter {
-                query.isBlank() ||
-                    it.title.contains(query, ignoreCase = true) ||
-                    it.author?.contains(query, ignoreCase = true) == true
-            },
-            sortOption
-        )
+        get() = ShelfBookSorter.sort(visibleBooks, sortOption)
+
+    val hasMore: Boolean
+        get() = visibleBooks.size < ShelfFolderCatalog.filterBooks(books, folderSelection).count {
+            query.isBlank() || it.title.contains(query, true) || it.author?.contains(query, true) == true
+        }
 
     val selectedBooks: List<LocalBook>
         get() = books.filter { it.id in selectedIds }
@@ -60,17 +62,20 @@ private data class ShelfControlState(
     val folderSelection: ShelfFolderSelection
 )
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ShelfViewModel(
-    private val bookRepository: BookRepository
+    private val bookRepository: BookRepository,
+    private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val _query = MutableStateFlow("")
+    private val _query = MutableStateFlow(savedStateHandle["shelf.query"] ?: "")
     private val _importMessage = MutableStateFlow("支持 EPUB、TXT、PDF、MOBI、AZW3、Markdown、HTML")
     private val _isLoading = MutableStateFlow(false)
     private val _sortOption = MutableStateFlow(ShelfSortOption.RECENT_READ)
     private val _managementMode = MutableStateFlow(false)
     private val _selectedIds = MutableStateFlow<Set<String>>(emptySet())
     private val _folderSelection = MutableStateFlow<ShelfFolderSelection>(ShelfFolderSelection.All)
+    private val _pageLimit = MutableStateFlow(40)
 
     private val baseControls = combine(
         _query,
@@ -93,12 +98,19 @@ class ShelfViewModel(
         controls.copy(folderSelection = folderSelection)
     }
 
+    private val pagedBooks = combine(_query, _folderSelection, _pageLimit) { query, folder, limit ->
+        Triple(query, folder, limit)
+    }.flatMapLatest { (query, folder, limit) ->
+        bookRepository.observeShelvedBookPage(query, folder, limit)
+    }
+
     val uiState: StateFlow<ShelfUiState> = combine(
         bookRepository.observeShelvedBooks(),
         bookRepository.observeShelfFolders(),
         controls,
-        _selectedIds
-    ) { books, folders, controls, selectedIds ->
+        _selectedIds,
+        pagedBooks
+    ) { books, folders, controls, selectedIds, visibleBooks ->
         val visibleIds = books.map { it.id }.toSet()
         val validSelection = when (val selection = controls.folderSelection) {
             is ShelfFolderSelection.Folder -> if (folders.any { it.id == selection.folderId }) selection else ShelfFolderSelection.All
@@ -106,6 +118,7 @@ class ShelfViewModel(
         }
         ShelfUiState(
             books = books,
+            visibleBooks = visibleBooks,
             folders = folders,
             folderSelection = validSelection,
             folderCounts = ShelfFolderCatalog.folderCounts(books),
@@ -119,7 +132,9 @@ class ShelfViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ShelfUiState())
 
     fun setQuery(query: String) {
+        savedStateHandle["shelf.query"] = query
         _query.value = query
+        _pageLimit.value = 40
     }
 
     fun importBook(uri: Uri, fileName: String) {
@@ -128,6 +143,7 @@ class ShelfViewModel(
             val result = bookRepository.importBook(uri, fileName)
             _importMessage.value = when (result) {
                 is ImportResult.Added -> "已加入书架：${result.book.title}"
+                is ImportResult.Replaced -> "已替换：${result.book.title}"
                 is ImportResult.Restored -> "已恢复到书城：${result.book.title}"
                 is ImportResult.Duplicate -> "书架中已存在：${result.existingBook.title}"
                 is ImportResult.UnsupportedFormat -> "当前文件格式暂不支持：${result.fileName}"
@@ -170,7 +186,12 @@ class ShelfViewModel(
 
     fun selectFolder(selection: ShelfFolderSelection) {
         _folderSelection.value = selection
+        _pageLimit.value = 40
         _selectedIds.value = emptySet()
+    }
+
+    fun loadNextPage() {
+        if (uiState.value.hasMore) _pageLimit.value += 40
     }
 
     fun setSelectedFavorite(favorite: Boolean) {
@@ -227,7 +248,7 @@ class ShelfViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as Application
-                ShelfViewModel(ServiceLocator.get(app).bookRepository)
+                ShelfViewModel(ServiceLocator.get(app).bookRepository, createSavedStateHandle())
             }
         }
     }

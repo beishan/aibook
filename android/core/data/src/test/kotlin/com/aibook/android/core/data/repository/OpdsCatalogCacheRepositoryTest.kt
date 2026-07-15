@@ -110,6 +110,12 @@ class OpdsCatalogCacheRepositoryTest {
 
         override fun observeAll(): Flow<List<OpdsCatalogEntryEntity>> = flow
 
+        override suspend fun getByConnection(connectionId: String): List<OpdsCatalogEntryEntity> =
+            rows.values.filter { it.connectionId == connectionId }
+
+        override suspend fun countByConnection(connectionId: String): Int =
+            rows.values.count { it.connectionId == connectionId }
+
         override suspend fun insertAll(entries: List<OpdsCatalogEntryEntity>) {
             entries.forEach { rows[it.id] = it }
             flow.value = rows.values.toList()

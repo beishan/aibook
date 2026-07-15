@@ -36,6 +36,7 @@ class LocalBookImportViewModel(
             _state.value = _state.value.copy(isImporting = true)
             val results = bookRepository.importSelectedBooks(uris)
             val added = results.count { it is ImportResult.Added }
+            val replaced = results.count { it is ImportResult.Replaced }
             val restored = results.count { it is ImportResult.Restored }
             val duplicate = results.count { it is ImportResult.Duplicate }
             val unsupported = results.filterIsInstance<ImportResult.UnsupportedFormat>()
@@ -45,6 +46,7 @@ class LocalBookImportViewModel(
                 isImporting = false,
                 message = importSummary(
                     added = added,
+                    replaced = replaced,
                     restored = restored,
                     duplicate = duplicate,
                     unsupported = unsupported,
@@ -56,19 +58,21 @@ class LocalBookImportViewModel(
 
     private fun importSummary(
         added: Int,
+        replaced: Int,
         restored: Int,
         duplicate: Int,
         unsupported: List<ImportResult.UnsupportedFormat>,
         failed: List<ImportResult.Failed>
     ): String {
-        if (added == 1 && restored == 0 && duplicate == 0 && unsupported.isEmpty() && failed.isEmpty()) {
+        if (added == 1 && replaced == 0 && restored == 0 && duplicate == 0 && unsupported.isEmpty() && failed.isEmpty()) {
             return "已导入 1 本书"
         }
-        if (added == 0 && restored == 1 && duplicate == 0 && unsupported.isEmpty() && failed.isEmpty()) {
+        if (added == 0 && replaced == 0 && restored == 1 && duplicate == 0 && unsupported.isEmpty() && failed.isEmpty()) {
             return "已恢复 1 本书到书城"
         }
         val parts = buildList {
             if (added > 0) add("导入 $added 本")
+            if (replaced > 0) add("替换 $replaced 本")
             if (restored > 0) add("恢复 $restored 本")
             if (duplicate > 0) add("重复 $duplicate 本")
             if (unsupported.isNotEmpty()) add("不支持 ${unsupported.size} 个")

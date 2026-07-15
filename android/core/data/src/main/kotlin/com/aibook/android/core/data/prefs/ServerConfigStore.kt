@@ -7,13 +7,18 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.aibook.android.core.data.security.PassthroughSecretCipher
+import com.aibook.android.core.data.security.SecretCipher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.serverConfigStore: DataStore<Preferences> by preferencesDataStore(name = "server_config")
 
-class ServerConfigStore(private val context: Context) {
+class ServerConfigStore(
+    private val context: Context,
+    private val secretCipher: SecretCipher = PassthroughSecretCipher
+) {
 
     private object Keys {
         val SERVER_URL = stringPreferencesKey("server_url")
@@ -26,7 +31,11 @@ class ServerConfigStore(private val context: Context) {
     }
 
     val serverUrl: Flow<String> = context.serverConfigStore.data.map { it[Keys.SERVER_URL] ?: "" }
-    val jwtToken: Flow<String?> = context.serverConfigStore.data.map { it[Keys.JWT_TOKEN] }
+    val jwtToken: Flow<String?> = context.serverConfigStore.data.map { preferences ->
+        preferences[Keys.JWT_TOKEN]?.let { stored ->
+            runCatching { secretCipher.decrypt(stored) }.getOrNull()
+        }
+    }
     val username: Flow<String?> = context.serverConfigStore.data.map { it[Keys.USERNAME] }
     val email: Flow<String?> = context.serverConfigStore.data.map { it[Keys.EMAIL] }
     val wifiOnlySync: Flow<Boolean> = context.serverConfigStore.data.map { it[Keys.WIFI_ONLY] ?: true }
@@ -43,7 +52,7 @@ class ServerConfigStore(private val context: Context) {
 
     suspend fun setAuth(token: String, username: String?, email: String?) {
         context.serverConfigStore.edit { prefs ->
-            prefs[Keys.JWT_TOKEN] = token
+            prefs[Keys.JWT_TOKEN] = secretCipher.encrypt(token)
             if (username != null) prefs[Keys.USERNAME] = username
             if (email != null) prefs[Keys.EMAIL] = email
         }
@@ -71,5 +80,12 @@ class ServerConfigStore(private val context: Context) {
 
     suspend fun tokenSync(): String? {
         return jwtToken.first()
+    }
+
+    suspend fun migratePlaintextToken() {
+        val stored = context.serverConfigStore.data.first()[Keys.JWT_TOKEN] ?: return
+        if (!secretCipher.isEncrypted(stored)) {
+            context.serverConfigStore.edit { it[Keys.JWT_TOKEN] = secretCipher.encrypt(stored) }
+        }
     }
 }

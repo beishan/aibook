@@ -21,7 +21,7 @@ class OpdsConnectionRepositoryTest {
                 name = "旧源",
                 baseUrl = "https://old.example/opds",
                 username = "old-user",
-                password = "old-pass",
+                passwordCiphertext = "old-pass",
                 enabled = false,
                 lastSyncedAt = 123L,
                 bookCount = 8,
@@ -107,11 +107,16 @@ class OpdsConnectionRepositoryTest {
             name: String,
             baseUrl: String,
             username: String?,
-            password: String?
+            passwordCiphertext: String?,
+            syncMode: String
         ) {
             rows[id]?.let {
-                insert(it.copy(name = name, baseUrl = baseUrl, username = username, password = password))
+                insert(it.copy(name = name, baseUrl = baseUrl, username = username, passwordCiphertext = passwordCiphertext, syncMode = syncMode))
             }
+        }
+
+        override suspend fun updatePasswordCiphertext(id: String, passwordCiphertext: String?) {
+            rows[id]?.let { insert(it.copy(passwordCiphertext = passwordCiphertext)) }
         }
 
         override suspend fun updateEnabled(id: String, enabled: Boolean) {

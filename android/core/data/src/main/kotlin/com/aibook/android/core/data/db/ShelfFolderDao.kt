@@ -17,4 +17,7 @@ interface ShelfFolderDao {
 
     @Query("DELETE FROM shelf_folders WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM shelf_folders")
+    suspend fun deleteAll()
 }

@@ -10,11 +10,12 @@ data class OpdsConnectionEntity(
     val name: String,
     val baseUrl: String,
     val username: String? = null,
-    val password: String? = null,
+    val passwordCiphertext: String? = null,
     val enabled: Boolean = true,
     val lastSyncedAt: Long? = null,
     val bookCount: Int = 0,
     val syncState: String = "IDLE",
     val lastErrorMessage: String? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val syncMode: String = "FULL"
 )
