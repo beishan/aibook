@@ -23,7 +23,12 @@ interface BookDao {
         SELECT * FROM books
         WHERE shelved = 1
           AND (:query = '' OR title LIKE '%' || :query || '%' COLLATE NOCASE OR author LIKE '%' || :query || '%' COLLATE NOCASE)
-          AND (:folderMode = 0 OR (:folderMode = 1 AND folderId IS NULL) OR (:folderMode = 2 AND folderId = :folderId))
+          AND (
+            :folderMode = 0
+            OR (:folderMode = 1 AND folderId IS NULL)
+            OR (:folderMode = 2 AND folderId = :folderId)
+            OR (:folderMode = 3 AND favorite = 1)
+          )
         ORDER BY lastReadAt DESC, title ASC
         LIMIT :limit OFFSET :offset
     """)

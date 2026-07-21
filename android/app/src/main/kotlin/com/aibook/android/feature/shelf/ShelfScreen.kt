@@ -109,9 +109,11 @@ fun ShelfScreen(
         title = if (state.managementMode) "已选 ${state.selectedIds.size} 本" else "",
         modifier = Modifier.fillMaxSize(),
         actions = {
-            IconButton(onClick = { showSearch = !showSearch }) {
-                Icon(if (showSearch) Icons.Default.Close else Icons.Default.Search, contentDescription = if (showSearch) "关闭搜索" else "搜索书架")
-            }
+            Icon(
+                if (showSearch) Icons.Default.Close else Icons.Default.Search,
+                contentDescription = if (showSearch) "关闭搜索" else "搜索书架",
+                modifier = Modifier.clickable { showSearch = !showSearch }
+            )
             Icon(
                 imageVector = when (viewMode) {
                     0 -> Icons.Default.GridView
@@ -162,6 +164,7 @@ fun ShelfScreen(
                         folders = state.folders,
                         folderCounts = state.folderCounts,
                         selection = state.folderSelection,
+                        favoriteCount = state.books.count { it.favorite },
                         unfiledCount = state.books.count { it.folderId == null },
                         totalCount = state.books.size,
                         onSelect = viewModel::selectFolder
@@ -197,7 +200,6 @@ fun ShelfScreen(
                         featuredBooks.forEach { book ->
                             ContinueReadingCard(
                                 book = book,
-                                onCoverClick = { onBookClick(book.id) },
                                 onReadClick = { onReadClick(book.id) },
                                 modifier = Modifier.weight(1f)
                             )
@@ -476,6 +478,7 @@ private fun ShelfFolderFilterRow(
     folders: List<ShelfFolder>,
     folderCounts: Map<String, Int>,
     selection: ShelfFolderSelection,
+    favoriteCount: Int,
     unfiledCount: Int,
     totalCount: Int,
     onSelect: (ShelfFolderSelection) -> Unit
@@ -487,6 +490,14 @@ private fun ShelfFolderFilterRow(
                 count = totalCount,
                 selected = selection == ShelfFolderSelection.All,
                 onClick = { onSelect(ShelfFolderSelection.All) }
+            )
+        }
+        item {
+            ShelfFolderChip(
+                label = "收藏",
+                count = favoriteCount,
+                selected = selection == ShelfFolderSelection.Favorites,
+                onClick = { onSelect(ShelfFolderSelection.Favorites) }
             )
         }
         item {
@@ -744,7 +755,6 @@ private fun ImportLocalBookCard(
 @Composable
 private fun ContinueReadingCard(
     book: LocalBook,
-    onCoverClick: () -> Unit,
     onReadClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -755,20 +765,21 @@ private fun ContinueReadingCard(
                 shape = RoundedCornerShape(DesignTokens.CardRadius),
                 ambientColor = Color.Black.copy(alpha = 0.08f),
                 spotColor = Color.Black.copy(alpha = 0.08f)
-            ),
+            )
+            .clickable(onClick = onReadClick),
         shape = RoundedCornerShape(DesignTokens.CardRadius),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             BookCover(
                 title = book.title,
                 width = null,
-                height = 96.dp,
+                height = 84.dp,
                 imageUri = book.coverUri,
                 placeholderTitleMaxLength = Int.MAX_VALUE,
                 placeholderMaxLines = 5,
@@ -776,9 +787,7 @@ private fun ContinueReadingCard(
                     fontSize = 12.sp,
                     lineHeight = 14.sp
                 ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onCoverClick)
+                modifier = Modifier.fillMaxWidth()
             )
             Text(
                 text = "阅读进度 ${(book.progress.percent * 100).toInt()}%",
@@ -786,14 +795,6 @@ private fun ContinueReadingCard(
                 style = MaterialTheme.typography.bodySmall
             )
             WarmProgress(book.progress.percent, Modifier.fillMaxWidth())
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.BottomEnd
-            ) {
-                Button(onClick = onReadClick, modifier = Modifier.height(32.dp)) {
-                    Text("继续阅读")
-                }
-            }
         }
     }
 }

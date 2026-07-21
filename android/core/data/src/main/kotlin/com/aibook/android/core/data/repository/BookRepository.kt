@@ -101,6 +101,7 @@ class BookRepository(
             ShelfFolderSelection.All -> 0
             ShelfFolderSelection.Unfiled -> 1
             is ShelfFolderSelection.Folder -> 2
+            ShelfFolderSelection.Favorites -> 3
         }
         val folderId = (folderSelection as? ShelfFolderSelection.Folder)?.folderId
         return bookDao.observeShelvedPage(query.trim(), folderMode, folderId, limit.coerceAtLeast(1), offset.coerceAtLeast(0))
