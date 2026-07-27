@@ -16,6 +16,7 @@ sealed class Screen(val route: String) {
     }
     data object Settings : Screen("settings")
     data object ThemeSettings : Screen("theme-settings")
+    data object ShelfSettings : Screen("shelf-settings")
     data object ScanDirectories : Screen("scan-directories")
     data object SyncConnectionSettings : Screen("sync-connection-settings")
     data object StorageCache : Screen("storage-cache")

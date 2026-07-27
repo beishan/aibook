@@ -85,6 +85,7 @@ import androidx.core.content.ContextCompat
 import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.data.repository.CacheCleanupWorker
 import com.aibook.android.di.ServiceLocator
+import com.aibook.android.feature.shelf.ShelfPreferences
 import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
@@ -101,6 +102,7 @@ import org.json.JSONObject
 @Composable
 fun SettingsScreen(
     onThemeClick: () -> Unit = {},
+    onShelfSettingsClick: () -> Unit = {},
     onScanDirectoriesClick: () -> Unit = {},
     onSyncConnectionClick: () -> Unit = {},
     onStorageClick: () -> Unit = {},
@@ -139,8 +141,14 @@ fun SettingsScreen(
                     Icons.Default.FormatSize,
                     "字体与排版",
                     "字号 ${"%.0f".format(state.fontScale * 100)}% · 行距 ${"%.2f".format(state.lineHeight)}",
-                    showDivider = false,
                     onClick = onThemeClick
+                )
+                SettingsLine(
+                    Icons.Default.Book,
+                    "书架设置",
+                    "设置书架页面的内容显示",
+                    showDivider = false,
+                    onClick = onShelfSettingsClick
                 )
             }
 
@@ -200,6 +208,36 @@ fun SettingsScreen(
                 subtitle = "版本信息、用户协议与帮助",
                 trailing = "版本 $versionName",
                 onClick = onAboutClick
+            )
+        }
+    }
+}
+
+@Composable
+fun ShelfSettingsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val preferences = remember(context) { ShelfPreferences.preferences(context) }
+    var showContinueReadingCards by remember {
+        mutableStateOf(ShelfPreferences.showContinueReadingCards(preferences))
+    }
+
+    SettingsSubPage(
+        title = "书架设置",
+        subtitle = "自定义书架页面的内容显示",
+        onBack = onBack
+    ) {
+        SectionLabel("页面显示")
+        SoftCard {
+            SwitchLine(
+                icon = Icons.Default.Book,
+                title = "显示正在阅读卡片",
+                subtitle = "在书架页面顶部显示最近阅读的书籍",
+                checked = showContinueReadingCards,
+                showDivider = false,
+                onCheckedChange = { show ->
+                    showContinueReadingCards = show
+                    ShelfPreferences.setShowContinueReadingCards(preferences, show)
+                }
             )
         }
     }

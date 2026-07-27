@@ -50,6 +50,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -77,7 +78,6 @@ import com.aibook.android.feature.importer.supportedBookMimeTypes
 import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
-import com.aibook.android.ui.design.SectionHeader
 import com.aibook.android.ui.design.SoftCard
 import com.aibook.android.ui.design.WarmProgress
 
@@ -100,10 +100,23 @@ fun ShelfScreen(
     val selectedFavorite = state.selectedBooks.isNotEmpty() && state.selectedBooks.all { it.favorite }
     var showMoveDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("shelf_prefs", android.content.Context.MODE_PRIVATE) }
+    val prefs = remember(context) { ShelfPreferences.preferences(context) }
     var viewMode by remember { mutableIntStateOf(prefs.getInt("reading_view_mode", 0)) }
+    var showContinueReadingCards by remember {
+        mutableStateOf(ShelfPreferences.showContinueReadingCards(prefs))
+    }
     var showViewModeDialog by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(state.query.isNotBlank()) }
+
+    DisposableEffect(prefs) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
+            if (key == ShelfPreferences.KEY_SHOW_CONTINUE_READING_CARDS) {
+                showContinueReadingCards = ShelfPreferences.showContinueReadingCards(preferences)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
 
     DesignPage(
         title = if (state.managementMode) "已选 ${state.selectedIds.size} 本" else "",
@@ -151,13 +164,6 @@ fun ShelfScreen(
                     )
                 }
             }
-            item {
-                Text(
-                    text = "${visibleBooks.size} / ${state.books.size} 本书 · ${state.folders.size} 个文件夹 ›",
-                    color = DesignTokens.SoftText,
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
             if (hasBooks) {
                 item {
                     ShelfFolderFilterRow(
@@ -194,7 +200,7 @@ fun ShelfScreen(
                     }
                 }
             }
-            if (featuredBooks.isNotEmpty() && !state.managementMode) {
+            if (showContinueReadingCards && featuredBooks.isNotEmpty() && !state.managementMode) {
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         featuredBooks.forEach { book ->
@@ -208,7 +214,6 @@ fun ShelfScreen(
                 }
             }
             if (visibleBooks.isNotEmpty()) {
-                item { SectionHeader("正在阅读") }
                 item {
                     ReadingBooksView(
                         books = visibleBooks,

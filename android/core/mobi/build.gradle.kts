@@ -17,6 +17,9 @@ android {
         externalNativeBuild {
             ndkBuild {
                 arguments += "NDK_APPLICATION_MK:=src/main/cpp/Application.mk"
+                if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
+                    arguments += "HOST_OS=windows"
+                }
             }
         }
     }
