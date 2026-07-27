@@ -16,6 +16,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
@@ -56,7 +57,10 @@ public class BasicAuthFilter extends OncePerRequestFilter {
             if (StringUtils.hasText(authHeader) && authHeader.startsWith("Basic ")) {
                 try {
                     String base64Credentials = authHeader.substring(6);
-                    String credentials = new String(Base64.getDecoder().decode(base64Credentials));
+                    String credentials = new String(
+                        Base64.getDecoder().decode(base64Credentials),
+                        StandardCharsets.UTF_8
+                    );
                     String[] parts = credentials.split(":", 2);
 
                     if (parts.length == 2) {

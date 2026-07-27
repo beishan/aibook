@@ -24,7 +24,7 @@ class OkHttpOpdsTransport(
     ): ByteArray {
         val request = request(url, authorizationHeader)
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw OpdsNetworkException("OPDS request failed: HTTP ${response.code}")
+            checkSuccessful(response.code, authorizationHeader)
             val body = response.body
             val total = body.contentLength().takeIf { it >= 0 }
             val output = ByteArrayOutputStream(total?.coerceAtMost(Int.MAX_VALUE.toLong())?.toInt() ?: 32 * 1024)
@@ -56,7 +56,7 @@ class OkHttpOpdsTransport(
         val builder = requestBuilder(url, authorizationHeader)
         if (existing > 0) builder.header("Range", "bytes=$existing-")
         client.newCall(builder.build()).execute().use { response ->
-            if (!response.isSuccessful) throw OpdsNetworkException("OPDS request failed: HTTP ${response.code}")
+            checkSuccessful(response.code, authorizationHeader)
             val resumed = existing > 0 && response.code == 206
             val start = if (resumed) existing else 0L
             val bodyLength = response.body.contentLength().takeIf { it >= 0 }
@@ -92,9 +92,7 @@ class OkHttpOpdsTransport(
         }
 
         client.newCall(requestBuilder.build()).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw OpdsNetworkException("OPDS request failed: HTTP ${response.code}")
-            }
+            checkSuccessful(response.code, authorizationHeader)
 
             return response.body.bytes()
         }
@@ -110,6 +108,24 @@ class OkHttpOpdsTransport(
         .url(url)
         .header("Accept", "application/atom+xml, application/opds+json, application/xml;q=0.9, */*;q=0.5")
         .apply { if (!authorizationHeader.isNullOrBlank()) header("Authorization", authorizationHeader) }
+
+    private fun checkSuccessful(code: Int, authorizationHeader: String?) {
+        if (code in 200..299) return
+        if (code == 401) {
+            val message = if (authorizationHeader.isNullOrBlank()) {
+                "OPDS 需要登录，请填写用户名和密码"
+            } else {
+                "OPDS 登录失败：用户名或密码错误，或反向代理未转发 Authorization"
+            }
+            throw OpdsAuthenticationException(message, credentialsSupplied = !authorizationHeader.isNullOrBlank())
+        }
+        throw OpdsNetworkException("OPDS request failed: HTTP $code")
+    }
 }
 
-class OpdsNetworkException(message: String) : RuntimeException(message)
+open class OpdsNetworkException(message: String) : RuntimeException(message)
+
+class OpdsAuthenticationException(
+    message: String,
+    val credentialsSupplied: Boolean
+) : OpdsNetworkException(message)
