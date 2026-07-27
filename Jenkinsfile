@@ -12,6 +12,7 @@ pipeline {
         string(name: 'NAS_HOST', defaultValue: '192.168.31.155', description: '飞牛 NAS 局域网 IP 或域名')
         string(name: 'FRONTEND_PORT', defaultValue: '8291', description: '前端对外端口')
         string(name: 'BACKEND_PORT', defaultValue: '8292', description: '后端对外端口')
+        string(name: 'BOOKS_PATH', defaultValue: '/vol1/1000/books', description: '书籍存储路径')
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '紧急部署时跳过后端测试')
     }
 
