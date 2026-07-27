@@ -52,6 +52,7 @@ public class BasicAuthFilter extends OncePerRequestFilter {
             }
 
             if (StringUtils.hasText(authHeader) && authHeader.startsWith("Basic ")) {
+                String attemptedUsername = null;
                 try {
                     String base64Credentials = authHeader.substring(6);
                     String credentials = new String(
@@ -63,6 +64,7 @@ public class BasicAuthFilter extends OncePerRequestFilter {
                     if (parts.length == 2) {
                         String username = parts[0];
                         String password = parts[1];
+                        attemptedUsername = username;
 
                         UsernamePasswordAuthenticationToken authenticationRequest =
                             UsernamePasswordAuthenticationToken.unauthenticated(username, password);
@@ -74,7 +76,12 @@ public class BasicAuthFilter extends OncePerRequestFilter {
                         );
                     }
                 } catch (Exception e) {
-                    log.debug("Basic Auth 认证失败: {}", e.getMessage());
+                    log.warn(
+                        "Basic Auth 认证失败: user={}, path={}, reason={}",
+                        attemptedUsername != null ? attemptedUsername : "<无法解析>",
+                        path,
+                        e.getClass().getSimpleName()
+                    );
                 }
             }
 
