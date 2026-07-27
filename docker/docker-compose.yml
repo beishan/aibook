@@ -51,8 +51,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_USER:?请配置 MINIO_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:?请配置 MINIO_PASSWORD}
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${MINIO_API_PORT:-9200}:9200"
+      - "${MINIO_CONSOLE_PORT:-9201}:9201"
     volumes:
       - minio_data:/data
     healthcheck:
