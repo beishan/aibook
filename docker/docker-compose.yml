@@ -70,6 +70,8 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
+    group_add:
+      - "${BOOKS_GID:?请配置有权读取书库目录的宿主机用户组 GID}"
     container_name: aibook-backend
     restart: unless-stopped
     environment:

@@ -63,6 +63,26 @@ Jenkins 容器需要能够控制 NAS 的 Docker。常见做法是挂载：
 不同飞牛 NAS 的存储路径可能不同，应以文件管理器显示的真实绝对路径为准。
 `BOOKS_PATH` 是 Docker 宿主机路径，不是 Jenkins 容器内路径。
 
+后端以非 root 用户运行。为避免依赖容器 UID，部署使用书库目录的宿主机用户组
+GID 授权。先查询目录的数字 GID：
+
+```bash
+stat -c '%g' /vol1/docker/aibook/books
+```
+
+将输出填写到生产环境文件的 `BOOKS_GID`，然后授予该组递归读取和目录进入
+权限，并让以后新增的内容继承权限：
+
+```bash
+sudo setfacl -R -m g:BOOKS_GID:rX,m::rX /vol1/docker/aibook/books
+sudo setfacl -m d:g:BOOKS_GID:rX,d:m::rX /vol1/docker/aibook/books
+```
+
+把命令中的 `BOOKS_GID` 替换为实际数字，例如 `1001`。如果应用需要修改书库
+原文件，可将 `rX` 改成 `rwX`；仅扫描和阅读时建议保持只读权限。新增书籍目录
+时，优先放在 `BOOKS_PATH` 下，以自动继承默认 ACL。若新增的是另一个宿主机
+路径，需要为它执行相同的 ACL 命令，并在 Compose 中增加对应的绑定挂载。
+
 应用的 PostgreSQL、Redis、MinIO、上传文件、数据库备份和部署状态使用以下
 Docker Volume：
 
@@ -80,7 +100,8 @@ aibook-deploy-state
 ## 四、创建生产环境凭据
 
 1. 复制仓库中的 `docker/.env.production.example`。
-2. 替换所有中文占位值，并填写 NAS 的真实 `BOOKS_PATH`。
+2. 替换所有中文占位值，填写 NAS 的真实 `BOOKS_PATH` 和书库组的数字
+   `BOOKS_GID`。
 3. 在 Jenkins 打开：
    `Manage Jenkins → Credentials → System → Global credentials`。
 4. 新增 `Secret file` 类型凭据。
@@ -245,6 +266,18 @@ docker start aibook-backend
 
 确认配置的是 NAS 宿主机绝对路径。即使 Jenkins 容器中不存在该路径，只要
 Docker 守护进程所在的 NAS 宿主机存在即可。
+
+如果日志出现 `AccessDeniedException: /scanfolder`，确认后端已经加入配置的
+附加组，并检查宿主机 ACL：
+
+```bash
+docker exec aibook-backend id
+getfacl -p /vol1/docker/aibook/books
+docker exec aibook-backend ls /scanfolder
+```
+
+ACL 中应存在与 `BOOKS_GID` 对应且有效权限为 `r-x` 的组条目。修改
+`BOOKS_GID` 后必须重新创建后端容器，单纯重启不会更新附加组。
 
 ### 健康检查一直是 `starting`
 
