@@ -262,7 +262,7 @@ case "${ACTION}" in
             "${PROJECT_DIR}/backend"
         ;;
     build)
-        compose build --pull backend frontend
+        compose build backend frontend
         ;;
     deploy)
         deploy_release
