@@ -6,14 +6,15 @@ import kotlin.test.assertEquals
 class ShelfFolderCatalogTest {
 
     @Test
-    fun filterBooksByAllUnfiledAndFolder() {
+    fun filterBooksByAllFavoritesUnfiledAndFolder() {
         val books = listOf(
             shelfBook("book-1", "未分组", folderId = null),
-            shelfBook("book-2", "科幻", folderId = "folder-sci-fi"),
+            shelfBook("book-2", "科幻", folderId = "folder-sci-fi", favorite = true),
             shelfBook("book-3", "历史", folderId = "folder-history")
         )
 
         assertEquals(listOf("未分组", "科幻", "历史"), ShelfFolderCatalog.filterBooks(books, ShelfFolderSelection.All).map { it.title })
+        assertEquals(listOf("科幻"), ShelfFolderCatalog.filterBooks(books, ShelfFolderSelection.Favorites).map { it.title })
         assertEquals(listOf("未分组"), ShelfFolderCatalog.filterBooks(books, ShelfFolderSelection.Unfiled).map { it.title })
         assertEquals(listOf("科幻"), ShelfFolderCatalog.filterBooks(books, ShelfFolderSelection.Folder("folder-sci-fi")).map { it.title })
     }
@@ -32,11 +33,12 @@ class ShelfFolderCatalogTest {
         assertEquals(null, counts["folder-missing"])
     }
 
-    private fun shelfBook(id: String, title: String, folderId: String?) = LocalBook(
+    private fun shelfBook(id: String, title: String, folderId: String?, favorite: Boolean = false) = LocalBook(
         id = id,
         title = title,
         format = BookFormat.EPUB,
         uri = "/tmp/$id.epub",
-        folderId = folderId
+        folderId = folderId,
+        favorite = favorite
     )
 }

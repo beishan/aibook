@@ -29,6 +29,10 @@ logs/
 .env
 .env.local
 .env.*.local
+docker/.env.production
+docker/.env.production.*
+!docker/.env.production.example
+.aibook-previous-images
 local.properties
 **/local.properties
 

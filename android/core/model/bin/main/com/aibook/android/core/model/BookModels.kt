@@ -39,6 +39,8 @@ data class LocalBook(
     val title: String,
     val author: String? = null,
     val description: String? = null,
+    val rating: Float? = null,
+    val tags: List<String> = emptyList(),
     val format: BookFormat,
     val uri: String,
     val sha256: String? = null,
@@ -62,6 +64,7 @@ data class ShelfFolder(
 
 sealed interface ShelfFolderSelection {
     data object All : ShelfFolderSelection
+    data object Favorites : ShelfFolderSelection
     data object Unfiled : ShelfFolderSelection
     data class Folder(val folderId: String) : ShelfFolderSelection
 }
@@ -73,6 +76,7 @@ object ShelfFolderCatalog {
     ): List<LocalBook> {
         return when (selection) {
             ShelfFolderSelection.All -> books
+            ShelfFolderSelection.Favorites -> books.filter { it.favorite }
             ShelfFolderSelection.Unfiled -> books.filter { it.folderId == null }
             is ShelfFolderSelection.Folder -> books.filter { it.folderId == selection.folderId }
         }

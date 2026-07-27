@@ -1,8 +1,8 @@
 # 后端 Dockerfile
 # 使用多阶段构建
 
-# 第一阶段：构建
-FROM maven:3.9-eclipse-temurin-21 AS builder
+# 第一阶段：准备构建环境
+FROM maven:3.9-eclipse-temurin-21 AS build-base
 
 WORKDIR /app
 
@@ -10,11 +10,18 @@ WORKDIR /app
 COPY pom.xml .
 RUN mvn dependency:go-offline -B
 
-# 复制源代码并构建
+# 复制源代码
 COPY src ./src
+
+# Jenkins 单独构建此阶段来执行测试，确保测试与生产构建都使用 Java 21。
+FROM build-base AS test
+RUN mvn test -B
+
+# 第二阶段：构建应用
+FROM build-base AS builder
 RUN mvn clean package -DskipTests -B
 
-# 第二阶段：运行
+# 第三阶段：运行
 FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
