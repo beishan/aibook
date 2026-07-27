@@ -171,4 +171,36 @@ class OpdsFeedParserTest {
         assertEquals("所有书籍", feed.entries.single().title)
         assertEquals("/opds/v2/books", feed.entries.single().alternateLink?.href)
     }
+
+    @Test
+    fun `uses opds 2 images array when publication links omit a cover`() {
+        val payload = """
+            {
+              "metadata": {"title": "标准 OPDS 2 书库"},
+              "publications": [{
+                "metadata": {
+                  "title": "基地",
+                  "author": {"name": "艾萨克·阿西莫夫"}
+                },
+                "links": [{
+                  "rel": "http://opds-spec.org/acquisition/open-access",
+                  "href": "/books/foundation.epub",
+                  "type": "application/epub+zip"
+                }],
+                "images": [{
+                  "href": "/covers/foundation.jpg",
+                  "type": "image/jpeg",
+                  "width": 600,
+                  "height": 900
+                }]
+              }]
+            }
+        """.trimIndent()
+
+        val feed = OpdsFeedParser().parse(payload)
+
+        assertEquals("艾萨克·阿西莫夫", feed.entries.single().author)
+        assertEquals("/covers/foundation.jpg", feed.entries.single().coverLink?.href)
+        assertEquals("image/jpeg", feed.entries.single().coverLink?.type)
+    }
 }

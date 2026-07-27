@@ -12,9 +12,9 @@ class OpdsCatalogService(
         } else {
             OpdsRequestFactory.resolveUrl(connection, href)
         }
-        val xml = transport.get(url, OpdsRequestFactory.basicAuthHeader(connection))
+        val payload = transport.get(url, OpdsRequestFactory.basicAuthHeader(connection))
 
-        return parser.parse(xml)
+        return parser.parse(payload)
     }
 
     fun download(connection: OpdsConnection, href: String): ByteArray {

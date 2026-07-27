@@ -7,7 +7,7 @@ Date: 2026-07-07
 Make OPDS usable end to end for 汗牛充栋:
 
 - Third-party OPDS 1.2 clients can authenticate, browse the private catalog, search, paginate, see covers when available, and download book files.
-- The Android client can save an OPDS source, browse catalogs, recurse through catalog sections during sync, cache downloadable entries, and download books into the local library.
+- The Android client can save an OPDS 1.2 or OPDS 2.0 source, browse catalogs, recurse through catalog sections during sync, cache downloadable entries, and download books into the local library.
 - OPDS 2.0 remains available as a JSON catalog for clients that support it, with correct response metadata and links.
 
 This work focuses on OPDS catalog and download flows only. It does not include WebDAV, KOReader progress sync, annotations sync, or a new server-side OPDS source management UI.
@@ -104,6 +104,7 @@ Publication objects should include:
 - `load(connection, null)` fetches `connection.baseUrl`.
 - `load(connection, href)` resolves relative and absolute links against the connection.
 - Basic Auth header is attached when username and password are present.
+- Payload format is detected automatically: Atom XML is parsed as OPDS 1.2 and JSON is parsed as OPDS 2.0.
 
 `OpdsFeedParser` should parse the OPDS 1.2 fields needed for browsing and downloads:
 
@@ -114,6 +115,12 @@ Publication objects should include:
 - Acquisition link.
 - Alternate or subsection navigation link.
 - Cover image or thumbnail link.
+
+For OPDS 2.0 it should parse:
+
+- Feed metadata and pagination links.
+- Publications, navigation entries, catalogs, and groups.
+- Contributors, descriptions, subjects, acquisition links, and cover images from either `links` or `images`.
 
 ### Sync
 
@@ -199,7 +206,6 @@ Android tests:
 
 ## Non-Goals
 
-- OPDS 2.0 parsing on Android.
 - WebDAV implementation.
 - KOReader progress/highlight sync.
 - Server-side management UI for OPDS sources.
