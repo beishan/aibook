@@ -6,11 +6,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -28,8 +26,7 @@ import java.util.Base64;
 @Slf4j
 public class BasicAuthFilter extends OncePerRequestFilter {
 
-    private final UserDetailsService userDetailsService;
-    private final PasswordEncoder passwordEncoder;
+    private final AuthenticationManager authenticationManager;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -67,19 +64,14 @@ public class BasicAuthFilter extends OncePerRequestFilter {
                         String username = parts[0];
                         String password = parts[1];
 
-                        UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-
-                        if (passwordEncoder.matches(password, userDetails.getPassword())) {
-                            UsernamePasswordAuthenticationToken authentication =
-                                new UsernamePasswordAuthenticationToken(
-                                    userDetails,
-                                    null,
-                                    userDetails.getAuthorities()
-                                );
-
-                            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                            SecurityContextHolder.getContext().setAuthentication(authentication);
-                        }
+                        UsernamePasswordAuthenticationToken authenticationRequest =
+                            UsernamePasswordAuthenticationToken.unauthenticated(username, password);
+                        authenticationRequest.setDetails(
+                            new WebAuthenticationDetailsSource().buildDetails(request)
+                        );
+                        SecurityContextHolder.getContext().setAuthentication(
+                            authenticationManager.authenticate(authenticationRequest)
+                        );
                     }
                 } catch (Exception e) {
                     log.debug("Basic Auth 认证失败: {}", e.getMessage());
