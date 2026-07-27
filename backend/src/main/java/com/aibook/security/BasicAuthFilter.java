@@ -90,6 +90,12 @@ public class BasicAuthFilter extends OncePerRequestFilter {
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.setHeader("WWW-Authenticate", "Basic realm=\"Aibook\"");
+                response.setHeader(
+                    "X-Aibook-Auth-Status",
+                    StringUtils.hasText(authHeader) && authHeader.startsWith("Basic ")
+                        ? "invalid"
+                        : "missing"
+                );
                 return;
             }
         }

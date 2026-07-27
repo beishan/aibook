@@ -34,7 +34,11 @@ class OkHttpOpdsTransportResumeTest {
     @Test
     fun `reports whether credentials were supplied when server returns 401`() {
         val server = MockWebServer()
-        server.enqueue(MockResponse().setResponseCode(401))
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(401)
+                .addHeader("X-Aibook-Auth-Status", "invalid")
+        )
         server.start()
         try {
             val error = assertFailsWith<OpdsAuthenticationException> {
@@ -45,7 +49,30 @@ class OkHttpOpdsTransportResumeTest {
             }
 
             assertTrue(error.credentialsSupplied)
-            assertContains(error.message.orEmpty(), "用户名或密码错误")
+            assertContains(error.message.orEmpty(), "已收到登录信息")
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun `identifies proxy that removed authorization before backend`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(401)
+                .addHeader("X-Aibook-Auth-Status", "missing")
+        )
+        server.start()
+        try {
+            val error = assertFailsWith<OpdsAuthenticationException> {
+                OkHttpOpdsTransport(OkHttpClient()).get(
+                    server.url("/opds/v2").toString(),
+                    "Basic cmVhZGVyOnNlY3JldA=="
+                )
+            }
+
+            assertContains(error.message.orEmpty(), "服务端未收到 Authorization")
         } finally {
             server.close()
         }
