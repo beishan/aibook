@@ -42,6 +42,7 @@ import com.aibook.android.feature.settings.AboutScreen
 import com.aibook.android.feature.settings.PrivacyPermissionsScreen
 import com.aibook.android.feature.settings.ScanDirectoryScreen
 import com.aibook.android.feature.settings.SettingsScreen
+import com.aibook.android.feature.settings.ShelfSettingsScreen
 import com.aibook.android.feature.settings.StorageCacheScreen
 import com.aibook.android.feature.settings.SyncConnectionSettingsScreen
 import com.aibook.android.feature.shelf.ShelfScreen
@@ -78,6 +79,7 @@ fun AiBookApp() {
         Screen.StoreRemoteBookDetail.route -> Screen.Store.route
         Screen.OpdsAddSource.route -> Screen.Opds.route
         Screen.ScanDirectories.route -> Screen.Settings.route
+        Screen.ShelfSettings.route -> Screen.Settings.route
         Screen.SyncConnectionSettings.route -> Screen.Settings.route
         Screen.StorageCache.route -> Screen.Settings.route
         Screen.Downloads.route -> Screen.Settings.route
@@ -91,6 +93,7 @@ fun AiBookApp() {
             Screen.StoreSearch.route,
             Screen.StoreRemoteBookDetail.route,
             Screen.OpdsAddSource.route,
+            Screen.ShelfSettings.route,
             Screen.ScanDirectories.route,
             Screen.SyncConnectionSettings.route,
             Screen.StorageCache.route,
@@ -213,6 +216,7 @@ fun AiBookApp() {
                 PaddedScreen(paddingValues) {
                     SettingsScreen(
                         onThemeClick = { navController.navigate(Screen.ThemeSettings.route) },
+                        onShelfSettingsClick = { navController.navigate(Screen.ShelfSettings.route) },
                         onScanDirectoriesClick = { navController.navigate(Screen.ScanDirectories.route) },
                         onSyncConnectionClick = { navController.navigate(Screen.SyncConnectionSettings.route) },
                         onStorageClick = { navController.navigate(Screen.StorageCache.route) },
@@ -225,6 +229,13 @@ fun AiBookApp() {
             composable(Screen.ThemeSettings.route) {
                 PaddedScreen(paddingValues) {
                     ReaderThemeSettingsScreen(
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable(Screen.ShelfSettings.route) {
+                PaddedScreen(paddingValues) {
+                    ShelfSettingsScreen(
                         onBack = { navController.popBackStack() }
                     )
                 }
