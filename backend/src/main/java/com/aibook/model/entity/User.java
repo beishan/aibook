@@ -59,6 +59,16 @@ public class User implements UserDetails {
     private String avatarUrl;
 
     /**
+     * Web 端主题偏好（modern、warm、natural）
+     */
+    private String webTheme;
+
+    /**
+     * Web 端书库显示方式（card、list）
+     */
+    private String libraryViewMode;
+
+    /**
      * 角色 (USER, ADMIN)
      */
     @Enumerated(EnumType.STRING)

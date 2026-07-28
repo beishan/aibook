@@ -70,7 +70,7 @@
         <button
           class="btn"
           :class="{ active: viewMode === 'card' }"
-          @click="viewMode = 'card'"
+          @click="preferencesStore.setLibraryViewMode('card')"
         >
           <span>▦</span>
           <span>卡片</span>
@@ -78,7 +78,7 @@
         <button
           class="btn"
           :class="{ active: viewMode === 'list' }"
-          @click="viewMode = 'list'"
+          @click="preferencesStore.setLibraryViewMode('list')"
         >
           <span>☰</span>
           <span>列表</span>
@@ -287,10 +287,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import { useCategoryStore } from '@/stores/category'
+import { usePreferencesStore } from '@/stores/preferences'
 import FileUpload from '@/components/FileUpload.vue'
 import BatchScraperDialog from '@/components/BatchScraperDialog.vue'
 import { getCoverUrl } from '@/utils/cover'
@@ -299,14 +301,14 @@ const route = useRoute()
 const router = useRouter()
 const bookStore = useBookStore()
 const categoryStore = useCategoryStore()
+const preferencesStore = usePreferencesStore()
+const { libraryViewMode: viewMode } = storeToRefs(preferencesStore)
 
 const searchKeyword = ref('')
 const filterFormat = ref('')
 const filterStatus = ref('')
 const filterCategoryId = ref('')
 const sortBy = ref('createdAt')
-const VIEW_MODE_KEY = 'ai-book-view-mode'
-const viewMode = ref<'card' | 'list'>((localStorage.getItem(VIEW_MODE_KEY) as 'card' | 'list') || 'card')
 const currentPage = ref(1)
 const pageSize = ref(18)
 const showUploadDialog = ref(false)
@@ -509,11 +511,8 @@ watch(
   { immediate: true }
 )
 
-watch(viewMode, (newMode) => {
-  localStorage.setItem(VIEW_MODE_KEY, newMode)
-})
-
 onMounted(() => {
+  void preferencesStore.hydrate()
   categoryStore.refresh()
   if (!route.query.search) {
     loadBooks()

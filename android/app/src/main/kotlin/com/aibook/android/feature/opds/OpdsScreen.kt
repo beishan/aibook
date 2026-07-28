@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -41,6 +43,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
@@ -53,6 +56,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
@@ -77,6 +81,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -744,6 +749,7 @@ fun OpdsAddSourceScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val isEditing = connectionId != null
+    val isConnectionTested = state.testedFingerprint == state.fingerprint()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
@@ -772,166 +778,210 @@ fun OpdsAddSourceScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 26.dp, top = 28.dp, end = 26.dp, bottom = 132.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
-        ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-            }
-            Spacer(
-                Modifier
-                    .height(42.dp)
-                    .width(1.dp)
-                    .background(DesignTokens.Hairline)
-            )
-            Text(
-                if (isEditing) "编辑 OPDS 数据源" else "添加 OPDS 数据源",
-                modifier = Modifier.padding(start = 18.dp),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.ExtraBold
-            )
-        }
-        Text(
-            "OPDS（开放出版发行数据系统）是一个用于电子书目录访问和获取元数据的开放标准协议。",
-            color = DesignTokens.SoftText,
-            style = MaterialTheme.typography.titleMedium,
-            lineHeight = MaterialTheme.typography.titleLarge.lineHeight
-        )
-        Text("了解更多关于 OPDS 〉", color = DesignTokens.Accent, fontWeight = FontWeight.Bold)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(20.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
+                .padding(horizontal = 20.dp, vertical = 20.dp)
+                .padding(bottom = 128.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 640.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                OpdsInputRow(
-                    icon = Icons.Default.Book,
-                    label = "数据源名称 *",
-                    value = state.formName,
-                    placeholder = "例如：我的电子书库",
-                    trailing = "${state.formName.length}/50",
-                    onValueChange = { viewModel.updateFormField("name", it.take(50)) }
-                )
-                OpdsInputRow(
-                    icon = Icons.Default.Link,
-                    label = "服务器 URL *",
-                    value = state.formBaseUrl,
-                    placeholder = "例如：https://example.com/opds",
-                    helper = "以 http:// 或 https:// 开头，指向 OPDS 目录地址",
-                    onValueChange = { viewModel.updateFormField("baseUrl", it) }
-                )
-                OpdsInputRow(
-                    icon = Icons.Default.Person,
-                    label = "用户名（可选）",
-                    value = state.formUsername,
-                    placeholder = "请输入用户名",
-                    helper = "如果服务器需要验证",
-                    onValueChange = { viewModel.updateFormField("username", it) }
-                )
-                OpdsInputRow(
-                    icon = Icons.Default.Lock,
-                    label = "密码（可选）",
-                    value = state.formPassword,
-                    placeholder = "请输入密码",
-                    helper = "如果服务器需要验证",
-                    password = true,
-                    trailingIcon = { Icon(Icons.Default.VisibilityOff, null, tint = DesignTokens.SoftText) },
-                    onValueChange = { viewModel.updateFormField("password", it) }
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                    Icon(Icons.Default.Refresh, null, tint = DesignTokens.Accent, modifier = Modifier.padding(top = 4.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("同步模式", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        SyncChoice("完全同步（推荐）", "每次同步时会更新所有书目数据", selected = state.syncMode == com.aibook.android.core.network.opds.OpdsSyncMode.FULL) {
-                            viewModel.setSyncMode(com.aibook.android.core.network.opds.OpdsSyncMode.FULL)
-                        }
-                        SyncChoice("增量同步", "仅写入新增或有变化的书目，并保留未返回条目", selected = state.syncMode == com.aibook.android.core.network.opds.OpdsSyncMode.INCREMENTAL) {
-                            viewModel.setSyncMode(com.aibook.android.core.network.opds.OpdsSyncMode.INCREMENTAL)
-                        }
-                    }
-                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(18.dp)
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Wifi, null, tint = DesignTokens.Accent)
-                    Column(Modifier.weight(1f)) {
-                        Text("连接测试", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text("保存前请先测试连接，确保数据源可用", color = DesignTokens.SoftText)
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
-                    Text(
-                        if (state.isTesting) "测试中…" else "测试连接",
-                        modifier = Modifier
-                            .border(1.dp, DesignTokens.Accent.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-                            .background(DesignTokens.Accent.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
-                            .clickable(enabled = !state.isTesting && !state.isSaving) { viewModel.testConnection() }
-                            .padding(horizontal = 18.dp, vertical = 10.dp),
-                        color = DesignTokens.Accent,
-                        fontWeight = FontWeight.Bold
+                    Column(modifier = Modifier.padding(start = 8.dp)) {
+                        Text(
+                            if (isEditing) "编辑 OPDS 数据源" else "添加 OPDS 数据源",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            "连接你的在线电子书目录",
+                            color = DesignTokens.SoftText,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+
+                OpdsFormCard {
+                    OpdsFormSectionHeader(
+                        icon = Icons.Default.Book,
+                        title = "基本信息",
+                        subtitle = "填写数据源名称和 OPDS 目录地址"
+                    )
+                    OpdsInputField(
+                        icon = Icons.Default.Book,
+                        label = "数据源名称",
+                        value = state.formName,
+                        placeholder = "例如：我的电子书库",
+                        required = true,
+                        trailing = "${state.formName.length}/50",
+                        onValueChange = { viewModel.updateFormField("name", it.take(50)) }
+                    )
+                    OpdsInputField(
+                        icon = Icons.Default.Link,
+                        label = "服务器 URL",
+                        value = state.formBaseUrl,
+                        placeholder = "https://example.com/opds",
+                        helper = "以 http:// 或 https:// 开头",
+                        required = true,
+                        onValueChange = { viewModel.updateFormField("baseUrl", it.trim()) }
                     )
                 }
-            }
-        }
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4E8)),
-            shape = RoundedCornerShape(18.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(18.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.Info,
-                    null,
+
+                OpdsFormCard {
+                    OpdsFormSectionHeader(
+                        icon = Icons.Default.Lock,
+                        title = "身份认证",
+                        subtitle = "公开目录可直接留空"
+                    )
+                    OpdsInputField(
+                        icon = Icons.Default.Person,
+                        label = "用户名",
+                        value = state.formUsername,
+                        placeholder = "请输入用户名",
+                        onValueChange = { viewModel.updateFormField("username", it) }
+                    )
+                    OpdsInputField(
+                        icon = Icons.Default.Lock,
+                        label = "密码",
+                        value = state.formPassword,
+                        placeholder = "请输入密码",
+                        password = true,
+                        onValueChange = { viewModel.updateFormField("password", it) }
+                    )
+                }
+
+                OpdsFormCard {
+                    OpdsFormSectionHeader(
+                        icon = Icons.Default.Refresh,
+                        title = "同步模式",
+                        subtitle = "选择目录内容的更新方式"
+                    )
+                    SyncChoice(
+                        "完全同步（推荐）",
+                        "每次同步时更新所有书目数据",
+                        selected = state.syncMode == com.aibook.android.core.network.opds.OpdsSyncMode.FULL
+                    ) {
+                        viewModel.setSyncMode(com.aibook.android.core.network.opds.OpdsSyncMode.FULL)
+                    }
+                    SyncChoice(
+                        "增量同步",
+                        "只写入新增或有变化的书目",
+                        selected = state.syncMode == com.aibook.android.core.network.opds.OpdsSyncMode.INCREMENTAL
+                    ) {
+                        viewModel.setSyncMode(com.aibook.android.core.network.opds.OpdsSyncMode.INCREMENTAL)
+                    }
+                }
+
+                OpdsFormCard {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            if (isConnectionTested) Icons.Default.CheckCircle else Icons.Default.Wifi,
+                            contentDescription = null,
+                            tint = if (isConnectionTested) DesignTokens.Success else DesignTokens.Accent
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                if (isConnectionTested) "连接测试通过" else "测试连接",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                if (isConnectionTested) "当前连接信息可以正常访问"
+                                else "保存前需要确认数据源可用",
+                                color = DesignTokens.SoftText,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = viewModel::testConnection,
+                            enabled = !state.isTesting && !state.isSaving,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (state.isTesting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(if (isConnectionTested) "重新测试" else "开始测试")
+                            }
+                        }
+                    }
+                }
+
+                Row(
                     modifier = Modifier
-                        .size(54.dp)
-                        .background(Color(0xFFF2D2AA), CircleShape)
+                        .fillMaxWidth()
+                        .background(Color(0xFFFFF4E8), RoundedCornerShape(14.dp))
                         .padding(14.dp),
-                    tint = DesignTokens.Accent
-                )
-                Column {
-                    Text("支持的 OPDS 版本", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    Text("本应用支持 OPDS 1.0 和 OPDS 2.0 标准。\n部分私人服务器可能需要特定配置才能访问。", color = DesignTokens.SoftText)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = DesignTokens.Accent)
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("支持 OPDS 1.0 和 OPDS 2.0", fontWeight = FontWeight.Bold)
+                        Text(
+                            "部分私人服务器可能需要用户名和密码。",
+                            color = DesignTokens.SoftText,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
-        }
         }
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .background(DesignTokens.AppBackground)
-                .padding(horizontal = 26.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+                .border(width = 1.dp, color = DesignTokens.Hairline)
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Button(
-                onClick = { viewModel.save() },
-                enabled = state.canSave,
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
-                shape = RoundedCornerShape(16.dp)
+                    .widthIn(max = 640.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                if (state.isSaving) {
-                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
-                } else {
-                    Text(if (isEditing) "保存修改" else "保存并启用", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = viewModel::save,
+                    enabled = state.canSave,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    if (state.isSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            if (isEditing) "保存修改" else "保存并启用",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
-            }
-            TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                Text("取消", color = DesignTokens.Accent)
+                TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+                    Text("取消", color = DesignTokens.Accent)
+                }
             }
         }
         SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.TopCenter))
@@ -939,50 +989,118 @@ fun OpdsAddSourceScreen(
 }
 
 @Composable
-private fun OpdsInputRow(
+private fun OpdsFormCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun OpdsFormSectionHeader(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = DesignTokens.Accent,
+            modifier = Modifier
+                .size(36.dp)
+                .background(DesignTokens.Accent.copy(alpha = 0.10f), RoundedCornerShape(10.dp))
+                .padding(8.dp)
+        )
+        Column {
+            Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Text(subtitle, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun OpdsInputField(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     value: String,
     placeholder: String,
     helper: String? = null,
     trailing: String? = null,
+    required: Boolean = false,
     password: Boolean = false,
-    trailingIcon: @Composable (() -> Unit)? = null,
     onValueChange: (String) -> Unit
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-        Icon(icon, null, tint = DesignTokens.Accent, modifier = Modifier.padding(top = 34.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(label, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = value,
-                onValueChange = onValueChange,
-                placeholder = { Text(placeholder) },
-                singleLine = true,
-                visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-                trailingIcon = {
-                    if (trailingIcon != null) trailingIcon()
-                    else if (trailing != null) Text(trailing, color = DesignTokens.SoftText)
-                },
-                shape = RoundedCornerShape(14.dp)
-            )
-            helper?.let { Text(it, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall) }
-        }
-    }
+    var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    OutlinedTextField(
+        modifier = Modifier.fillMaxWidth(),
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(if (required) "$label *" else "$label（可选）") },
+        placeholder = { Text(placeholder) },
+        supportingText = helper?.let {
+            { Text(it) }
+        },
+        leadingIcon = { Icon(icon, contentDescription = null, tint = DesignTokens.Accent) },
+        trailingIcon = {
+            when {
+                password -> IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(
+                        if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = if (passwordVisible) "隐藏密码" else "显示密码"
+                    )
+                }
+                trailing != null -> Text(
+                    trailing,
+                    modifier = Modifier.padding(end = 12.dp),
+                    color = DesignTokens.SoftText,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        },
+        singleLine = true,
+        visualTransformation = if (password && !passwordVisible) {
+            PasswordVisualTransformation()
+        } else {
+            VisualTransformation.None
+        },
+        shape = RoundedCornerShape(14.dp)
+    )
 }
 
 @Composable
 private fun SyncChoice(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
-    Row(modifier = Modifier.clickable(onClick = onClick), verticalAlignment = Alignment.Top) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                if (selected) DesignTokens.Accent.copy(alpha = 0.08f) else Color.Transparent,
+                RoundedCornerShape(12.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         RadioButton(
             selected = selected,
             onClick = onClick,
             colors = RadioButtonDefaults.colors(selectedColor = DesignTokens.Accent)
         )
-        Column {
+        Column(modifier = Modifier.padding(start = 4.dp)) {
             Text(title, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = DesignTokens.SoftText)
+            Text(subtitle, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

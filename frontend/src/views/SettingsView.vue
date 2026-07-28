@@ -238,10 +238,12 @@ import { message, confirm } from '@/utils/message'
 import api from '@/utils/api'
 import DirectoryBrowser from '@/components/DirectoryBrowser.vue'
 import { useThemeStore } from '@/stores/theme'
+import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
 import { THEMES, type ThemeId } from '@/types/theme'
 
 const themeStore = useThemeStore()
+const preferencesStore = usePreferencesStore()
 const categoryStore = useCategoryStore()
 const themes = THEMES
 
@@ -262,7 +264,7 @@ const getLayoutName = (layout: string) => {
 }
 
 const handleThemeChange = (id: ThemeId) => {
-  themeStore.setTheme(id)
+  preferencesStore.setTheme(id)
   message.success(`已切换到「${themes.find(t => t.id === id)?.name}」主题`)
 }
 

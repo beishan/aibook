@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/utils/api'
+import { usePreferencesStore } from '@/stores/preferences'
 
 interface UserInfo {
   id: number
@@ -21,6 +22,7 @@ export const useUserStore = defineStore('user', () => {
     const data = response.data
     token.value = data.token
     localStorage.setItem('token', data.token)
+    await usePreferencesStore().hydrate(true)
     userInfo.value = {
       id: 0,
       username: data.username,
@@ -41,6 +43,7 @@ export const useUserStore = defineStore('user', () => {
     const data = response.data
     token.value = data.token
     localStorage.setItem('token', data.token)
+    await usePreferencesStore().hydrate(true)
     userInfo.value = {
       id: 0,
       username: data.username,
@@ -55,6 +58,7 @@ export const useUserStore = defineStore('user', () => {
     token.value = ''
     userInfo.value = null
     localStorage.removeItem('token')
+    usePreferencesStore().resetHydration()
   }
 
   // 检查是否已登录
