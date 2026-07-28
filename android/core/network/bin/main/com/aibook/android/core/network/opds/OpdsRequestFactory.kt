@@ -5,7 +5,7 @@ import java.util.Base64
 
 object OpdsRequestFactory {
     fun basicAuthHeader(connection: OpdsConnection): String? {
-        val username = connection.username?.takeIf { it.isNotBlank() } ?: return null
+        val username = connection.username?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val password = connection.password ?: return null
         val token = Base64.getEncoder().encodeToString("$username:$password".toByteArray(Charsets.UTF_8))
 
