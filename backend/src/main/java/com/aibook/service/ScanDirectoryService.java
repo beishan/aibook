@@ -136,6 +136,7 @@ public class ScanDirectoryService {
             "newBooks", scanResult.getNewCount(),
             "skippedBooks", scanResult.getSkippedCount(),
             "failedBooks", scanResult.getFailedCount(),
+            "threadCount", scanResult.getThreadCount(),
             "bookCount", scanResult.getNewCount() + scanResult.getSkippedCount()
         );
     }

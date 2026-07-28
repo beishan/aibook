@@ -3,6 +3,8 @@ package com.aibook.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aibook.model.entity.Book;
@@ -13,6 +15,9 @@ import com.aibook.repository.UserRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -82,5 +87,73 @@ class FileScannerServiceTest {
 
         assertThat(result.getSkippedCount()).isEqualTo(1);
         assertThat(existing.getCategory()).isSameAs(existingCategory);
+    }
+
+    @Test
+    void scanProcessesFilesWithConfiguredConcurrency() throws Exception {
+        for (int index = 0; index < 4; index++) {
+            Files.writeString(
+                    tempDir.resolve("book-" + index + ".epub"),
+                    "epub-content-" + index);
+        }
+        User user = User.builder()
+                .id(1L)
+                .username("reader")
+                .scanThreadCount(3)
+                .build();
+        BookRepository bookRepository = mock(BookRepository.class);
+        AtomicInteger activeWorkers = new AtomicInteger();
+        AtomicInteger maxActiveWorkers = new AtomicInteger();
+        CountDownLatch concurrentWorkers = new CountDownLatch(2);
+        when(bookRepository.findByFileHash(any())).thenReturn(Optional.empty());
+        when(bookRepository.save(any(Book.class))).thenAnswer(invocation -> {
+            int active = activeWorkers.incrementAndGet();
+            maxActiveWorkers.accumulateAndGet(active, Math::max);
+            concurrentWorkers.countDown();
+            concurrentWorkers.await(2, TimeUnit.SECONDS);
+            activeWorkers.decrementAndGet();
+            return invocation.getArgument(0);
+        });
+
+        FileScannerService service = new FileScannerService(
+                bookRepository,
+                mock(UserRepository.class),
+                mock(MetadataService.class),
+                mock(TxtParserService.class));
+
+        FileScannerService.ScanResult result =
+                service.scanDirectory(tempDir.toString(), user);
+
+        assertThat(result.getThreadCount()).isEqualTo(3);
+        assertThat(result.getNewCount()).isEqualTo(4);
+        assertThat(maxActiveWorkers.get()).isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    void concurrentScanImportsDuplicateContentOnlyOnce() throws Exception {
+        Files.writeString(tempDir.resolve("副本一.epub"), "same-content");
+        Files.writeString(tempDir.resolve("副本二.epub"), "same-content");
+        User user = User.builder()
+                .id(1L)
+                .username("reader")
+                .scanThreadCount(2)
+                .build();
+        BookRepository bookRepository = mock(BookRepository.class);
+        when(bookRepository.findByFileHash(any())).thenReturn(Optional.empty());
+        when(bookRepository.save(any(Book.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        FileScannerService service = new FileScannerService(
+                bookRepository,
+                mock(UserRepository.class),
+                mock(MetadataService.class),
+                mock(TxtParserService.class));
+
+        FileScannerService.ScanResult result =
+                service.scanDirectory(tempDir.toString(), user);
+
+        assertThat(result.getNewCount()).isEqualTo(1);
+        assertThat(result.getSkippedCount()).isEqualTo(1);
+        verify(bookRepository, times(1)).save(any(Book.class));
     }
 }

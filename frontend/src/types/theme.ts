@@ -15,7 +15,7 @@ export const THEMES: ThemeDefinition[] = [
     id: 'modern',
     name: '现代简约',
     icon: '⬜',
-    description: '干净利落，Notion/Linear 风格',
+    description: 'Element Plus 组件化管理界面',
     layout: 'sidebar'
   },
   {

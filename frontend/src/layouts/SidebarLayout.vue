@@ -1,130 +1,153 @@
 <template>
-  <div class="layout-container" :class="{ collapsed: sidebarCollapsed }">
-    <!-- 左侧边栏 -->
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="logo" @click="router.push('/')">
-          <span class="logo-icon">📚</span>
-          <Transition name="fade">
-            <span v-if="!sidebarCollapsed" class="logo-text">汗牛充栋</span>
-          </Transition>
-        </div>
-      </div>
+  <el-container class="modern-layout" :class="{ collapsed: sidebarCollapsed }">
+    <el-aside class="modern-sidebar" :width="sidebarWidth">
+      <el-button text class="brand-button" @click="router.push('/')">
+        <el-icon :size="24"><Reading /></el-icon>
+        <span v-if="!sidebarCollapsed" class="brand-name">汗牛充栋</span>
+      </el-button>
 
-      <nav class="sidebar-nav">
-        <router-link
+      <el-menu
+        class="desktop-menu"
+        :default-active="activeMenu"
+        :collapse="sidebarCollapsed"
+        :collapse-transition="false"
+        @select="handleMenuSelect"
+      >
+        <el-menu-item
           v-for="item in menuItems"
           :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          :class="{ active: isActiveRoute(item.path) }"
-          :title="item.title"
+          :index="item.path"
         >
-          <span class="nav-icon">{{ item.icon }}</span>
-          <Transition name="fade">
-            <span v-if="!sidebarCollapsed" class="nav-text">{{ item.title }}</span>
-          </Transition>
-        </router-link>
-      </nav>
+          <el-icon><component :is="item.icon" /></el-icon>
+          <template #title>{{ item.title }}</template>
+        </el-menu-item>
+      </el-menu>
 
       <div class="sidebar-footer">
-        <button class="collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed">
-          <span :class="{ 'rotated': sidebarCollapsed }">◀</span>
-        </button>
+        <el-button
+          text
+          class="collapse-button"
+          :aria-label="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
+          @click="sidebarCollapsed = !sidebarCollapsed"
+        >
+          <el-icon>
+            <Expand v-if="sidebarCollapsed" />
+            <Fold v-else />
+          </el-icon>
+          <span v-if="!sidebarCollapsed">收起侧边栏</span>
+        </el-button>
       </div>
-    </aside>
+    </el-aside>
 
-    <!-- 主内容区 -->
-    <div class="main-wrapper">
-      <!-- 顶部栏 -->
-      <header class="top-bar">
-        <div class="top-bar-left">
-          <!-- 移动端菜单按钮 -->
-          <button class="mobile-menu-btn" @click="showMobileMenu = !showMobileMenu">
-            ☰
-          </button>
-        </div>
+    <el-container class="modern-workspace">
+      <el-header class="modern-header">
+        <el-button
+          text
+          class="mobile-menu-button"
+          aria-label="打开导航菜单"
+          @click="showMobileMenu = true"
+        >
+          <el-icon :size="20"><Menu /></el-icon>
+        </el-button>
 
-        <div class="top-bar-right">
-          <div class="search-box">
-            <span class="search-icon">🔍</span>
-            <input
-              v-model="searchKeyword"
-              type="text"
-              class="search-input"
-              placeholder="搜索书籍..."
-              @keyup.enter="handleSearch"
-            />
-          </div>
-
-          <div class="user-menu" @click="showDropdown = !showDropdown">
-            <div class="user-avatar">
-              {{ userStore.userInfo?.username?.charAt(0)?.toUpperCase() || 'U' }}
-            </div>
-
-            <Transition name="fade">
-              <div v-if="showDropdown" class="dropdown-menu">
-                <div class="dropdown-item" @click="handleLogout">
-                  <span class="dropdown-icon">🚪</span>
-                  <span>退出登录</span>
-                </div>
-              </div>
-            </Transition>
-          </div>
-        </div>
-      </header>
-
-      <!-- 内容区 -->
-      <main class="layout-main">
-        <router-view v-slot="{ Component }">
-          <Transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </Transition>
-        </router-view>
-      </main>
-    </div>
-
-    <!-- 移动端侧边栏遮罩 -->
-    <Transition name="fade">
-      <div
-        v-if="showMobileMenu"
-        class="mobile-overlay"
-        @click="showMobileMenu = false"
-      />
-    </Transition>
-
-    <!-- 移动端侧边栏 -->
-    <Transition name="slide">
-      <aside v-if="showMobileMenu" class="mobile-sidebar">
-        <div class="mobile-sidebar-header">
-          <div class="logo">
-            <span class="logo-icon">📚</span>
-            <span class="logo-text">汗牛充栋</span>
-          </div>
-          <button class="close-btn" @click="showMobileMenu = false">✕</button>
-        </div>
-
-        <nav class="mobile-nav">
-          <router-link
-            v-for="item in menuItems"
-            :key="item.path"
-            :to="item.path"
-            class="mobile-nav-item"
-            :class="{ active: isActiveRoute(item.path) }"
-            @click="showMobileMenu = false"
+        <div class="header-actions">
+          <el-input
+            v-model="searchKeyword"
+            class="global-search"
+            clearable
+            placeholder="搜索书籍"
+            @keyup.enter="handleSearch"
           >
-            <span class="nav-icon">{{ item.icon }}</span>
-            <span class="nav-text">{{ item.title }}</span>
-          </router-link>
-        </nav>
-      </aside>
-    </Transition>
-  </div>
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+
+          <el-dropdown trigger="click" @command="handleUserCommand">
+            <el-button text circle class="user-button" aria-label="用户菜单">
+              <el-avatar :size="34" class="user-avatar">
+                {{ userInitial }}
+              </el-avatar>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout" :icon="SwitchButton">
+                  退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </el-header>
+
+      <el-main class="modern-main">
+        <div class="content-shell">
+          <router-view v-slot="{ Component }">
+            <Transition name="fade" mode="out-in">
+              <component :is="Component" />
+            </Transition>
+          </router-view>
+        </div>
+      </el-main>
+    </el-container>
+
+    <el-drawer
+      v-model="showMobileMenu"
+      direction="ltr"
+      size="280px"
+      :with-header="false"
+      class="modern-mobile-drawer"
+    >
+      <div class="mobile-brand">
+        <div class="mobile-brand-title">
+          <el-icon :size="24"><Reading /></el-icon>
+          <span>汗牛充栋</span>
+        </div>
+        <el-button
+          text
+          circle
+          aria-label="关闭导航菜单"
+          @click="showMobileMenu = false"
+        >
+          <el-icon><Close /></el-icon>
+        </el-button>
+      </div>
+
+      <el-menu
+        class="mobile-menu"
+        :default-active="activeMenu"
+        @select="handleMenuSelect"
+      >
+        <el-menu-item
+          v-for="item in menuItems"
+          :key="item.path"
+          :index="item.path"
+        >
+          <el-icon><component :is="item.icon" /></el-icon>
+          <template #title>{{ item.title }}</template>
+        </el-menu-item>
+      </el-menu>
+    </el-drawer>
+  </el-container>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import {
+  Close,
+  Collection,
+  Expand,
+  Fold,
+  FolderOpened,
+  House,
+  Link,
+  Menu,
+  Reading,
+  Search,
+  Setting,
+  SwitchButton,
+} from '@element-plus/icons-vue'
 import { confirm } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
 
@@ -133,27 +156,48 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const searchKeyword = ref('')
-const showDropdown = ref(false)
 const sidebarCollapsed = ref(false)
 const showMobileMenu = ref(false)
 
 const menuItems = [
-  { path: '/', icon: '🏠', title: '首页' },
-  { path: '/books', icon: '📚', title: '书库' },
-  { path: '/shelf', icon: '📖', title: '书架' },
-  { path: '/categories', icon: '🗂️', title: '分类' },
-  { path: '/connections', icon: '🔗', title: '连接' },
-  { path: '/settings', icon: '⚙️', title: '设置' },
+  { path: '/', icon: House, title: '首页' },
+  { path: '/books', icon: Collection, title: '书库' },
+  { path: '/shelf', icon: Reading, title: '书架' },
+  { path: '/categories', icon: FolderOpened, title: '分类' },
+  { path: '/connections', icon: Link, title: '连接' },
+  { path: '/settings', icon: Setting, title: '设置' },
 ]
 
-const isActiveRoute = (path: string) => {
-  if (path === '/') return route.path === '/'
-  return route.path.startsWith(path)
+const sidebarWidth = computed(() => (sidebarCollapsed.value ? '64px' : '224px'))
+
+const activeMenu = computed(() => {
+  const matched = menuItems.find(item =>
+    item.path === '/' ? route.path === '/' : route.path.startsWith(item.path)
+  )
+  return matched?.path || ''
+})
+
+const userInitial = computed(
+  () => userStore.userInfo?.username?.charAt(0)?.toUpperCase() || 'U'
+)
+
+const handleMenuSelect = (path: string) => {
+  showMobileMenu.value = false
+  if (route.path !== path) {
+    router.push(path)
+  }
 }
 
 const handleSearch = () => {
-  if (searchKeyword.value.trim()) {
-    router.push({ path: '/books', query: { search: searchKeyword.value } })
+  const keyword = searchKeyword.value.trim()
+  if (keyword) {
+    router.push({ path: '/books', query: { search: keyword } })
+  }
+}
+
+const handleUserCommand = (command: string) => {
+  if (command === 'logout') {
+    void handleLogout()
   }
 }
 
@@ -163,375 +207,195 @@ const handleLogout = async () => {
     userStore.logout()
     router.push('/login')
   }
-  showDropdown.value = false
 }
-
-const handleClickOutside = (e: MouseEvent) => {
-  const target = e.target as HTMLElement
-  if (!target.closest('.user-menu')) {
-    showDropdown.value = false
-  }
-}
-
-onMounted(() => document.addEventListener('click', handleClickOutside))
-onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 </script>
 
 <style scoped>
-.layout-container {
-  display: flex;
+.modern-layout {
   min-height: 100vh;
-  background: var(--bg-page-gradient);
+  background: var(--bg-page);
 }
 
-/* 侧边栏 */
-.sidebar {
+.modern-sidebar {
   position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 240px;
-  background: var(--nav-bg);
-  border-right: 1px solid var(--border-color);
+  inset: 0 auto 0 0;
+  z-index: 100;
   display: flex;
   flex-direction: column;
-  z-index: 100;
+  overflow: hidden;
+  background: var(--nav-bg);
+  border-right: 1px solid var(--border-color);
   transition: width var(--transition-normal);
 }
 
-.layout-container.collapsed .sidebar {
-  width: 64px;
-}
-
-.sidebar-header {
-  padding: var(--spacing-md);
-  border-bottom: 1px solid var(--border-color);
+.brand-button {
+  justify-content: flex-start;
+  width: calc(100% - 16px);
   height: 60px;
-  display: flex;
-  align-items: center;
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  cursor: pointer;
+  margin: 0 8px;
+  padding: 0 12px;
   overflow: hidden;
-  white-space: nowrap;
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
 }
 
-.logo-icon {
-  font-size: 24px;
-  flex-shrink: 0;
+.brand-button:hover {
+  color: var(--primary);
+  background: var(--primary-alpha-10);
 }
 
-.logo-text {
+.brand-name {
+  margin-left: 10px;
+  overflow: hidden;
   font-size: var(--font-size-lg);
   font-weight: 700;
-  color: var(--text-primary);
-}
-
-.sidebar-nav {
-  flex: 1;
-  padding: var(--spacing-sm);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow-y: auto;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  text-decoration: none;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  transition: all var(--transition-fast);
-  overflow: hidden;
   white-space: nowrap;
 }
 
-.nav-item:hover {
-  background: var(--surface-hover);
+.desktop-menu,
+.mobile-menu {
+  flex: 1;
+  border-right: none;
+  background: transparent;
+}
+
+.desktop-menu:not(.el-menu--collapse) {
+  width: 100%;
+}
+
+.desktop-menu :deep(.el-menu-item),
+.mobile-menu :deep(.el-menu-item) {
+  height: 44px;
+  margin: 3px 8px;
+  color: var(--text-secondary);
+  border-radius: var(--radius-md);
+}
+
+.desktop-menu :deep(.el-menu-item:hover),
+.mobile-menu :deep(.el-menu-item:hover) {
   color: var(--text-primary);
+  background: var(--surface-hover);
 }
 
-.nav-item.active {
-  background: var(--primary-alpha-10);
+.desktop-menu :deep(.el-menu-item.is-active),
+.mobile-menu :deep(.el-menu-item.is-active) {
   color: var(--primary);
+  background: var(--primary-alpha-10);
 }
 
-.nav-icon {
-  font-size: 18px;
-  flex-shrink: 0;
-  width: 24px;
-  text-align: center;
+.desktop-menu.el-menu--collapse :deep(.el-menu-item) {
+  justify-content: center;
+  padding: 0;
 }
 
 .sidebar-footer {
-  padding: var(--spacing-sm);
+  padding: 8px;
   border-top: 1px solid var(--border-color);
 }
 
-.collapse-btn {
+.collapse-button {
+  justify-content: flex-start;
   width: 100%;
-  padding: 8px;
-  border: none;
-  background: transparent;
   color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
-  font-size: 12px;
 }
 
-.collapse-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
+.collapse-button span {
+  margin-left: 8px;
 }
 
-.collapse-btn .rotated {
-  display: inline-block;
-  transform: rotate(180deg);
-}
-
-/* 主内容区 */
-.main-wrapper {
-  flex: 1;
-  margin-left: 240px;
-  display: flex;
-  flex-direction: column;
+.modern-workspace {
+  min-width: 0;
   min-height: 100vh;
+  margin-left: 224px;
   transition: margin-left var(--transition-normal);
 }
 
-.layout-container.collapsed .main-wrapper {
+.collapsed .modern-workspace {
   margin-left: 64px;
 }
 
-/* 顶部栏 */
-.top-bar {
+.modern-header {
   position: sticky;
   top: 0;
   z-index: 50;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--spacing-lg);
   height: 60px;
+  padding: 0 var(--spacing-lg);
   background: var(--surface-card);
   border-bottom: 1px solid var(--border-color);
 }
 
-.top-bar-left {
-  display: flex;
-  align-items: center;
-}
-
-.mobile-menu-btn {
+.mobile-menu-button {
   display: none;
-  padding: 8px;
-  border: none;
-  background: transparent;
-  font-size: 20px;
-  cursor: pointer;
-  color: var(--text-primary);
 }
 
-.top-bar-right {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-}
-
-/* 搜索框 */
-.search-box {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.search-icon {
-  position: absolute;
-  left: 12px;
-  font-size: 14px;
-  pointer-events: none;
-}
-
-.search-input {
-  width: 200px;
-  padding: 8px 14px 8px 36px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  background: var(--surface-card);
-  transition: all var(--transition-normal);
-  outline: none;
-  color: var(--text-primary);
-}
-
-.search-input:focus {
-  width: 260px;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-alpha-10);
-}
-
-.search-input::placeholder {
-  color: var(--text-tertiary);
-}
-
-/* 用户菜单 */
-.user-menu {
-  position: relative;
-  display: flex;
-  align-items: center;
-  padding: 4px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.user-menu:hover {
-  background: var(--surface-hover);
-}
-
-.user-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  background: var(--primary-gradient);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 600;
-  font-size: var(--font-size-base);
-}
-
-.dropdown-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: var(--spacing-sm);
-  min-width: 160px;
-  background: var(--surface-elevated);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
-
-.dropdown-item {
+.header-actions {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: 12px 16px;
-  color: var(--danger);
-  cursor: pointer;
-  transition: all var(--transition-fast);
+  margin-left: auto;
 }
 
-.dropdown-item:hover {
-  background: var(--surface-hover);
+.global-search {
+  width: 220px;
+  transition: width var(--transition-normal);
 }
 
-.dropdown-icon {
-  font-size: 16px;
+.global-search:focus-within {
+  width: 280px;
 }
 
-/* 内容区 */
-.layout-main {
-  flex: 1;
+.global-search :deep(.el-input__wrapper) {
+  background: var(--bg-page);
+  box-shadow: 0 0 0 1px var(--border-color) inset;
+}
+
+.global-search :deep(.el-input__wrapper.is-focus) {
+  background: var(--surface-card);
+  box-shadow: 0 0 0 1px var(--primary) inset;
+}
+
+.user-button {
+  width: 42px;
+  height: 42px;
+}
+
+.user-avatar {
+  color: #ffffff;
+  background: var(--primary);
+}
+
+.modern-main {
   padding: var(--spacing-lg);
-  max-width: 1200px;
+  overflow: visible;
+}
+
+.content-shell {
   width: 100%;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
-/* 移动端遮罩 */
-.mobile-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 150;
-}
-
-/* 移动端侧边栏 */
-.mobile-sidebar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 280px;
-  background: var(--nav-bg);
-  z-index: 200;
-  display: flex;
-  flex-direction: column;
-  box-shadow: var(--shadow-xl);
-}
-
-.mobile-sidebar-header {
+.mobile-brand {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-md);
-  border-bottom: 1px solid var(--border-color);
   height: 60px;
+  padding: 0 8px 0 12px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
 }
 
-.close-btn {
-  padding: 8px;
-  border: none;
-  background: transparent;
-  font-size: 18px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  border-radius: var(--radius-md);
-}
-
-.close-btn:hover {
-  background: var(--surface-hover);
-}
-
-.mobile-nav {
-  flex: 1;
-  padding: var(--spacing-sm);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.mobile-nav-item {
+.mobile-brand-title {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
-  padding: 12px 16px;
-  border-radius: var(--radius-md);
-  text-decoration: none;
-  color: var(--text-secondary);
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  transition: all var(--transition-fast);
+  gap: 10px;
+  font-size: var(--font-size-lg);
+  font-weight: 700;
 }
 
-.mobile-nav-item:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.mobile-nav-item.active {
-  background: var(--primary-alpha-10);
-  color: var(--primary);
-}
-
-/* 动画 */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;
@@ -542,44 +406,51 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   opacity: 0;
 }
 
-.slide-enter-active,
-.slide-leave-active {
-  transition: transform 0.3s ease;
+:global(.modern-mobile-drawer .el-drawer__body) {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: var(--nav-bg);
 }
 
-.slide-enter-from,
-.slide-leave-to {
-  transform: translateX(-100%);
-}
-
-/* 响应式 */
 @media (max-width: 768px) {
-  .sidebar {
+  .modern-sidebar {
     display: none;
   }
 
-  .main-wrapper {
+  .modern-workspace,
+  .collapsed .modern-workspace {
     margin-left: 0;
   }
 
-  .layout-container.collapsed .main-wrapper {
-    margin-left: 0;
+  .mobile-menu-button {
+    display: inline-flex;
   }
 
-  .mobile-menu-btn {
-    display: block;
+  .global-search {
+    width: 160px;
   }
 
-  .search-input {
-    width: 140px;
+  .global-search:focus-within {
+    width: 190px;
   }
 
-  .search-input:focus {
-    width: 180px;
-  }
-
-  .layout-main {
+  .modern-main {
     padding: var(--spacing-md);
+  }
+}
+
+@media (max-width: 480px) {
+  .modern-header {
+    padding: 0 var(--spacing-sm);
+  }
+
+  .global-search {
+    width: 128px;
+  }
+
+  .global-search:focus-within {
+    width: 150px;
   }
 }
 </style>

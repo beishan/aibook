@@ -34,6 +34,7 @@ class UserServiceTest {
 
         assertEquals("warm", result.getTheme());
         assertEquals("list", result.getLibraryViewMode());
+        assertEquals(2, result.getScanThreadCount());
     }
 
     @Test
@@ -52,5 +53,28 @@ class UserServiceTest {
                 () -> service.updatePreferences(
                         "reader",
                         UserPreferencesDTO.builder().theme("unknown").build()));
+    }
+
+    @Test
+    void rejectsScanThreadCountOutsideAllowedRange() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        UserService service = new UserService(repository);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updatePreferences(
+                        "reader",
+                        UserPreferencesDTO.builder().scanThreadCount(0).build()));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updatePreferences(
+                        "reader",
+                        UserPreferencesDTO.builder().scanThreadCount(17).build()));
     }
 }

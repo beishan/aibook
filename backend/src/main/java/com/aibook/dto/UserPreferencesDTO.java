@@ -18,4 +18,5 @@ public class UserPreferencesDTO {
 
     private String theme;
     private String libraryViewMode;
+    private Integer scanThreadCount;
 }

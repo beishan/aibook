@@ -74,6 +74,32 @@
           </button>
         </div>
 
+        <div class="scan-performance-settings">
+          <div>
+            <div class="form-label">扫描并发线程数</div>
+            <div class="form-hint">
+              同时处理的书籍文件数量，范围 1–16；NAS 建议设置为 2–4。
+            </div>
+          </div>
+          <div class="scan-thread-control">
+            <input
+              v-model.number="scanThreadCountDraft"
+              type="number"
+              min="1"
+              max="16"
+              step="1"
+              class="input scan-thread-input"
+            />
+            <button
+              class="btn btn-primary"
+              :disabled="savingScanSettings"
+              @click="handleSaveScanSettings"
+            >
+              {{ savingScanSettings ? '保存中...' : '保存' }}
+            </button>
+          </div>
+        </div>
+
         <div v-if="loading" class="loading">
           <div class="loading-spinner"></div>
           <p>加载中...</p>
@@ -273,6 +299,8 @@ const loading = ref(false)
 const adding = ref(false)
 const showAddDialog = ref(false)
 const directories = ref<any[]>([])
+const scanThreadCountDraft = ref(preferencesStore.scanThreadCount)
+const savingScanSettings = ref(false)
 
 const newDir = reactive({ path: '' })
 const selectedPath = ref('')
@@ -299,6 +327,25 @@ const loadDirectories = async () => {
     console.error('Failed to load directories:', error)
   } finally {
     loading.value = false
+  }
+}
+
+const handleSaveScanSettings = async () => {
+  const value = Number(scanThreadCountDraft.value)
+  if (!Number.isInteger(value) || value < 1 || value > 16) {
+    message.warning('扫描线程数必须是 1 到 16 之间的整数')
+    return
+  }
+
+  savingScanSettings.value = true
+  try {
+    await api.put('/api/user/preferences', { scanThreadCount: value })
+    preferencesStore.setScanThreadCount(value, false)
+    message.success('扫描线程数已保存')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '扫描线程数保存失败')
+  } finally {
+    savingScanSettings.value = false
   }
 }
 
@@ -352,7 +399,9 @@ const handleScan = async (row: any) => {
   try {
     const res = await api.post(`/api/scan-directories/${row.id}/scan`)
     if (res.data.success) {
-      message.success(`扫描完成，找到 ${res.data.bookCount} 本书籍文件`)
+      message.success(
+        `扫描完成（${res.data.threadCount || 1} 线程），找到 ${res.data.bookCount} 本书籍文件`
+      )
       await loadDirectories()
     } else {
       message.error(res.data.message)
@@ -396,7 +445,9 @@ const formatTime = (timeStr: string) => {
   return new Date(timeStr).toLocaleString('zh-CN')
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await preferencesStore.hydrate()
+  scanThreadCountDraft.value = preferencesStore.scanThreadCount
   loadDirectories()
   categoryStore.refresh()
 })
@@ -445,6 +496,34 @@ onMounted(() => {
   border-bottom: 1px solid var(--border-color-light);
   font-weight: 600;
   font-size: var(--font-size-lg);
+}
+
+.scan-performance-settings {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-xl);
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color-light);
+  background: var(--surface-hover);
+}
+
+.form-hint {
+  margin-top: var(--spacing-xs);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.scan-thread-control {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: var(--spacing-sm);
+}
+
+.scan-thread-input {
+  width: 96px;
 }
 
 /* 加载中和空状态 */
@@ -794,6 +873,21 @@ onMounted(() => {
 }
 
 @media (max-width: 640px) {
+  .scan-performance-settings {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+
+  .scan-thread-control {
+    width: 100%;
+  }
+
+  .scan-thread-input {
+    flex: 1;
+    width: auto;
+  }
+
   .directory-item {
     flex-direction: column;
     align-items: flex-start;

@@ -69,6 +69,11 @@ public class User implements UserDetails {
     private String libraryViewMode;
 
     /**
+     * 后端目录扫描工作线程数
+     */
+    private Integer scanThreadCount;
+
+    /**
      * 角色 (USER, ADMIN)
      */
     @Enumerated(EnumType.STRING)

@@ -1,5 +1,6 @@
 package com.aibook.service;
 
+import com.aibook.config.ScanSettings;
 import com.aibook.dto.UserPreferencesDTO;
 import com.aibook.model.entity.User;
 import com.aibook.repository.UserRepository;
@@ -60,6 +61,17 @@ public class UserService implements UserDetailsService {
                     LIBRARY_VIEW_MODES);
             user.setLibraryViewMode(request.getLibraryViewMode());
         }
+        if (request.getScanThreadCount() != null) {
+            if (!ScanSettings.isValidThreadCount(request.getScanThreadCount())) {
+                throw new IllegalArgumentException(
+                        "扫描线程数必须在 "
+                                + ScanSettings.MIN_THREAD_COUNT
+                                + " 到 "
+                                + ScanSettings.MAX_THREAD_COUNT
+                                + " 之间");
+            }
+            user.setScanThreadCount(request.getScanThreadCount());
+        }
 
         return toPreferences(userRepository.save(user));
     }
@@ -68,6 +80,8 @@ public class UserService implements UserDetailsService {
         return UserPreferencesDTO.builder()
                 .theme(user.getWebTheme())
                 .libraryViewMode(user.getLibraryViewMode())
+                .scanThreadCount(
+                        ScanSettings.normalizeThreadCount(user.getScanThreadCount()))
                 .build();
     }
 

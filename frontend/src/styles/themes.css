@@ -67,6 +67,35 @@
 
 /* 现代简约 - Notion/Linear 风格 */
 [data-theme="modern"] {
+  /* Element Plus 组件主题 */
+  --el-color-primary: #2563eb;
+  --el-color-primary-light-3: #60a5fa;
+  --el-color-primary-light-5: #93c5fd;
+  --el-color-primary-light-7: #bfdbfe;
+  --el-color-primary-light-8: #dbeafe;
+  --el-color-primary-light-9: #eff6ff;
+  --el-color-primary-dark-2: #1d4ed8;
+  --el-color-success: #16a34a;
+  --el-color-warning: #d97706;
+  --el-color-danger: #dc2626;
+  --el-color-info: #6b7280;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #f5f5f5;
+  --el-fill-color-blank: #ffffff;
+  --el-fill-color-light: #f5f7fa;
+  --el-fill-color-lighter: #fafafa;
+  --el-fill-color-dark: #ebedf0;
+  --el-text-color-primary: #1a1a1a;
+  --el-text-color-regular: #4b5563;
+  --el-text-color-secondary: #6b7280;
+  --el-text-color-placeholder: #9ca3af;
+  --el-border-color: #dcdfe6;
+  --el-border-color-light: #e5e7eb;
+  --el-border-color-lighter: #f0f2f5;
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
+  --el-box-shadow-light: 0 2px 12px rgba(0, 0, 0, 0.08);
+
   /* 圆角 - 更方正 */
   --radius-sm: 4px;
   --radius-md: 6px;

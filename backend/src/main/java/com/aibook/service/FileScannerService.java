@@ -1,5 +1,6 @@
 package com.aibook.service;
 
+import com.aibook.config.ScanSettings;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.Category;
 import com.aibook.model.entity.User;
@@ -12,10 +13,16 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -44,6 +51,7 @@ public class FileScannerService {
         "txt", "epub", "mobi", "azw3", "pdf", "docx", "doc",
         "html", "htm", "cbz", "cbr", "md"
     );
+    private static final AtomicInteger SCAN_POOL_SEQUENCE = new AtomicInteger();
 
     /**
      * 手动触发扫描
@@ -119,20 +127,56 @@ public class FileScannerService {
      */
     private void scanDirectory(
             Path dir, User user, Category defaultCategory, ScanResult result) throws IOException {
+        int threadCount = ScanSettings.normalizeThreadCount(user.getScanThreadCount());
+        result.setThreadCount(threadCount);
+
         try (Stream<Path> walk = Files.walk(dir)) {
             List<Path> files = walk
                 .filter(Files::isRegularFile)
                 .filter(this::isSupportedFormat)
                 .collect(Collectors.toList());
 
-            for (Path file : files) {
-                try {
-                    processFile(file, user, defaultCategory, result);
-                } catch (Exception e) {
-                    log.error("处理文件失败: {}", file, e);
-                    result.addFailed(file.toString(), e.getMessage());
-                }
+            if (files.isEmpty()) {
+                return;
             }
+
+            Set<String> claimedHashes = ConcurrentHashMap.newKeySet();
+            ExecutorService executor = Executors.newFixedThreadPool(
+                    Math.min(threadCount, files.size()),
+                    runnable -> {
+                        Thread thread = new Thread(
+                                runnable,
+                                "book-scan-" + SCAN_POOL_SEQUENCE.incrementAndGet());
+                        thread.setDaemon(true);
+                        return thread;
+                    });
+
+            try {
+                for (Path file : files) {
+                    executor.submit(
+                            () -> processFile(
+                                    file,
+                                    user,
+                                    defaultCategory,
+                                    claimedHashes,
+                                    result));
+                }
+            } finally {
+                executor.shutdown();
+                awaitScanCompletion(executor);
+            }
+        }
+    }
+
+    private void awaitScanCompletion(ExecutorService executor) {
+        try {
+            while (!executor.awaitTermination(1, TimeUnit.MINUTES)) {
+                log.info("目录扫描仍在进行中...");
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("目录扫描被中断", e);
         }
     }
 
@@ -140,10 +184,21 @@ public class FileScannerService {
      * 处理单个文件
      */
     private void processFile(
-            Path file, User user, Category defaultCategory, ScanResult result) {
+            Path file,
+            User user,
+            Category defaultCategory,
+            Set<String> claimedHashes,
+            ScanResult result) {
+        String claimedHash = null;
         try {
             String fileHash = calculateFileHash(file);
             String format = getFileFormat(file);
+
+            if (!claimedHashes.add(fileHash)) {
+                result.addSkipped(file.toString());
+                return;
+            }
+            claimedHash = fileHash;
 
             // 检查是否已存在
             Optional<Book> existingBook = bookRepository.findByFileHash(fileHash);
@@ -171,6 +226,9 @@ public class FileScannerService {
             log.info("成功导入书籍: {}", book.getTitle());
 
         } catch (Exception e) {
+            if (claimedHash != null) {
+                claimedHashes.remove(claimedHash);
+            }
             log.error("处理文件失败: {}", file, e);
             result.addFailed(file.toString(), e.getMessage());
         }
@@ -232,8 +290,14 @@ public class FileScannerService {
      */
     private String calculateFileHash(Path file) throws IOException, NoSuchAlgorithmException {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] fileBytes = Files.readAllBytes(file);
-        byte[] hashBytes = digest.digest(fileBytes);
+        byte[] buffer = new byte[64 * 1024];
+        try (InputStream input = Files.newInputStream(file)) {
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        byte[] hashBytes = digest.digest();
 
         StringBuilder sb = new StringBuilder();
         for (byte b : hashBytes) {
@@ -282,10 +346,15 @@ public class FileScannerService {
     public static class ScanResult {
         private long startTime;
         private long endTime;
-        private List<String> newBooks = new ArrayList<>();
-        private List<String> skippedBooks = new ArrayList<>();
-        private List<Map<String, String>> failedBooks = new ArrayList<>();
-        private List<Map<String, String>> errors = new ArrayList<>();
+        private int threadCount = ScanSettings.DEFAULT_THREAD_COUNT;
+        private final List<String> newBooks =
+                Collections.synchronizedList(new ArrayList<>());
+        private final List<String> skippedBooks =
+                Collections.synchronizedList(new ArrayList<>());
+        private final List<Map<String, String>> failedBooks =
+                Collections.synchronizedList(new ArrayList<>());
+        private final List<Map<String, String>> errors =
+                Collections.synchronizedList(new ArrayList<>());
 
         public void addNew(String path) {
             newBooks.add(path);
@@ -296,17 +365,15 @@ public class FileScannerService {
         }
 
         public void addFailed(String path, String reason) {
-            Map<String, String> failed = new HashMap<>();
-            failed.put("path", path);
-            failed.put("reason", reason);
-            failedBooks.add(failed);
+            failedBooks.add(Map.of(
+                    "path", path,
+                    "reason", Objects.toString(reason, "未知错误")));
         }
 
         public void addError(String path, String message) {
-            Map<String, String> error = new HashMap<>();
-            error.put("path", path);
-            error.put("message", message);
-            errors.add(error);
+            errors.add(Map.of(
+                    "path", path,
+                    "message", Objects.toString(message, "未知错误")));
         }
 
         public long getDuration() {
