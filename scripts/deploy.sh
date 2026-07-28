@@ -15,6 +15,14 @@ BACKUP_RETENTION_COUNT="${BACKUP_RETENTION_COUNT:-10}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-36}"
 HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-5}"
 IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
+COMPOSE_OVERRIDE_FILE=""
+
+cleanup_temp_files() {
+    if [[ -n "${COMPOSE_OVERRIDE_FILE}" && -f "${COMPOSE_OVERRIDE_FILE}" ]]; then
+        rm -f "${COMPOSE_OVERRIDE_FILE}"
+    fi
+}
+trap cleanup_temp_files EXIT
 
 if docker compose version >/dev/null 2>&1; then
     COMPOSE_COMMAND=(docker compose)
@@ -30,12 +38,173 @@ if [[ ! -r "${ENV_FILE}" ]]; then
     exit 1
 fi
 
+trim_whitespace() {
+    local value="$1"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "${value}"
+}
+
+env_file_value() {
+    local key="$1"
+    sed -n "s/^${key}=//p" "${ENV_FILE}" | tail -n 1
+}
+
+yaml_quote() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    printf '"%s"' "${value}"
+}
+
+validate_mount_path() {
+    local label="$1"
+    local path="$2"
+
+    if [[ "${path}" != /* ]]; then
+        echo "错误：${label}必须是绝对路径：${path}" >&2
+        return 1
+    fi
+    if [[ "${path}" == "/" ]]; then
+        echo "错误：${label}不能挂载文件系统根目录。" >&2
+        return 1
+    fi
+    if [[ "${path}" == *$'\n'* || "${path}" == *$'\r'* || "${path}" == *$'\t'* ]]; then
+        echo "错误：${label}不能包含控制字符：${path}" >&2
+        return 1
+    fi
+    if [[ "/${path#/}/" == */../* ]]; then
+        echo "错误：${label}不能包含 .. 路径段：${path}" >&2
+        return 1
+    fi
+}
+
+prepare_books_override() {
+    local mounts_config
+    local gids_config
+    local raw_line
+    local line
+    local source_path
+    local target_path
+    local mount_mode
+    local extra_part
+    local gid
+    local read_only
+    local mount_count=0
+    local gid_count=0
+    local normalized_mounts
+    local normalized_gids
+    local seen_targets=$'\n'
+    local seen_gids=$'\n'
+
+    mounts_config="${BOOKS_MOUNTS:-$(env_file_value BOOKS_MOUNTS)}"
+    gids_config="${BOOKS_GIDS:-$(env_file_value BOOKS_GIDS)}"
+    normalized_mounts="${mounts_config//;/$'\n'}"
+    normalized_gids="${gids_config//[;,]/$'\n'}"
+    normalized_gids="${normalized_gids// /$'\n'}"
+
+    if [[ -z "$(trim_whitespace "${normalized_mounts}")" \
+            && -z "$(trim_whitespace "${normalized_gids}")" ]]; then
+        return
+    fi
+
+    COMPOSE_OVERRIDE_FILE="$(mktemp)"
+    printf '%s\n' "services:" "  backend:" > "${COMPOSE_OVERRIDE_FILE}"
+
+    while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
+        line="$(trim_whitespace "${raw_line}")"
+        if [[ -z "${line}" || "${line}" == \#* ]]; then
+            continue
+        fi
+
+        IFS=':' read -r source_path target_path mount_mode extra_part <<< "${line}"
+        source_path="$(trim_whitespace "${source_path:-}")"
+        target_path="$(trim_whitespace "${target_path:-}")"
+        mount_mode="$(trim_whitespace "${mount_mode:-ro}")"
+
+        if [[ -n "${extra_part:-}" || -z "${source_path}" || -z "${target_path}" ]]; then
+            echo "错误：BOOKS_MOUNTS 格式应为 宿主机路径:容器路径[:ro|rw]：${line}" >&2
+            return 1
+        fi
+        validate_mount_path "书库宿主机路径" "${source_path}"
+        validate_mount_path "书库容器路径" "${target_path}"
+
+        if [[ "${target_path}" != /scanfolder/* ]]; then
+            echo "错误：附加书库容器路径必须位于 /scanfolder/ 下：${target_path}" >&2
+            return 1
+        fi
+        if [[ "${mount_mode}" != "ro" && "${mount_mode}" != "rw" ]]; then
+            echo "错误：挂载模式只支持 ro 或 rw：${mount_mode}" >&2
+            return 1
+        fi
+        if [[ "${seen_targets}" == *$'\n'"${target_path}"$'\n'* ]]; then
+            echo "错误：BOOKS_MOUNTS 中容器路径重复：${target_path}" >&2
+            return 1
+        fi
+        seen_targets+="${target_path}"$'\n'
+
+        if ((mount_count == 0)); then
+            printf '%s\n' "    volumes:" >> "${COMPOSE_OVERRIDE_FILE}"
+        fi
+        if [[ "${mount_mode}" == "ro" ]]; then
+            read_only=true
+        else
+            read_only=false
+        fi
+        {
+            printf '      - type: bind\n'
+            printf '        source: %s\n' "$(yaml_quote "${source_path}")"
+            printf '        target: %s\n' "$(yaml_quote "${target_path}")"
+            printf '        read_only: %s\n' "${read_only}"
+            printf '        bind:\n'
+            printf '          create_host_path: false\n'
+        } >> "${COMPOSE_OVERRIDE_FILE}"
+        echo "  附加书库：${source_path} -> ${target_path} (${mount_mode})"
+        mount_count=$((mount_count + 1))
+    done <<< "${normalized_mounts}"
+
+    while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
+        gid="$(trim_whitespace "${raw_line}")"
+        if [[ -z "${gid}" || "${gid}" == \#* ]]; then
+            continue
+        fi
+        if [[ ! "${gid}" =~ ^[0-9]+$ ]]; then
+            echo "错误：BOOKS_GIDS 只能包含数字 GID：${gid}" >&2
+            return 1
+        fi
+        if [[ "${seen_gids}" == *$'\n'"${gid}"$'\n'* ]]; then
+            continue
+        fi
+        seen_gids+="${gid}"$'\n'
+
+        if ((gid_count == 0)); then
+            printf '%s\n' "    group_add:" >> "${COMPOSE_OVERRIDE_FILE}"
+        fi
+        printf '      - %s\n' "$(yaml_quote "${gid}")" >> "${COMPOSE_OVERRIDE_FILE}"
+        gid_count=$((gid_count + 1))
+    done <<< "${normalized_gids}"
+
+    if ((mount_count == 0 && gid_count == 0)); then
+        rm -f "${COMPOSE_OVERRIDE_FILE}"
+        COMPOSE_OVERRIDE_FILE=""
+        return
+    fi
+
+    echo "已生成附加书库挂载配置：${mount_count} 个目录，${gid_count} 个附加 GID。"
+}
+
+prepare_books_override
+
 compose() {
-    "${COMPOSE_COMMAND[@]}" \
-        --project-name "${COMPOSE_PROJECT_NAME}" \
-        --env-file "${ENV_FILE}" \
-        --file "${COMPOSE_FILE}" \
-        "$@"
+    local compose_args=(
+        --project-name "${COMPOSE_PROJECT_NAME}"
+        --env-file "${ENV_FILE}"
+        --file "${COMPOSE_FILE}"
+    )
+    if [[ -n "${COMPOSE_OVERRIDE_FILE}" ]]; then
+        compose_args+=(--file "${COMPOSE_OVERRIDE_FILE}")
+    fi
+    "${COMPOSE_COMMAND[@]}" "${compose_args[@]}" "$@"
 }
 
 container_image() {

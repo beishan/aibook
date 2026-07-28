@@ -12,8 +12,18 @@ pipeline {
         string(name: 'NAS_HOST', defaultValue: '192.168.31.155', description: '飞牛 NAS 局域网 IP 或域名')
         string(name: 'FRONTEND_PORT', defaultValue: '8291', description: '前端对外端口')
         string(name: 'BACKEND_PORT', defaultValue: '8292', description: '后端对外端口')
-        string(name: 'BOOKS_PATH', defaultValue: '/vol1/1000/books', description: '书籍存储路径')
-        string(name: 'BOOKS_GID', defaultValue: '1001', description: '书库目录所属用户组 GID')
+        string(name: 'BOOKS_PATH', defaultValue: '/vol1/1000/books', description: '主书库路径，映射到 /scanfolder')
+        string(name: 'BOOKS_GID', defaultValue: '1001', description: '主书库目录所属用户组 GID')
+        text(
+            name: 'BOOKS_MOUNTS',
+            defaultValue: '',
+            description: '附加书库，每行：宿主机绝对路径:/scanfolder/子目录[:ro|rw]；默认 ro'
+        )
+        string(
+            name: 'BOOKS_GIDS',
+            defaultValue: '',
+            description: '附加书库所需的数字 GID，多个值使用逗号分隔'
+        )
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '紧急部署时跳过后端测试')
     }
 

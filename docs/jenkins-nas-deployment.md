@@ -20,8 +20,8 @@ Jenkins Pipeline 会完成以下工作：
 
 | 容器 | 用途 | 默认对外端口 |
 |---|---|---:|
-| `aibook-frontend` | Web 前端与 API 反向代理 | `8091` |
-| `aibook-backend` | Spring Boot API | `8092` |
+| `aibook-frontend` | Web 前端与 API 反向代理 | `8291` |
+| `aibook-backend` | Spring Boot API | `8292` |
 | `aibook-postgres` | PostgreSQL 16 | 不对外暴露 |
 | `aibook-redis` | Redis 7 | 不对外暴露 |
 | `aibook-minio` | MinIO API / 控制台 | `9000` / `9001` |
@@ -54,14 +54,15 @@ Jenkins 容器需要能够控制 NAS 的 Docker。常见做法是挂载：
 
 ## 三、创建 NAS 数据目录
 
-在飞牛 NAS 上创建书籍目录，例如：
+在飞牛 NAS 上创建主书籍目录，例如：
 
 ```text
 /vol1/docker/aibook/books
 ```
 
 不同飞牛 NAS 的存储路径可能不同，应以文件管理器显示的真实绝对路径为准。
-`BOOKS_PATH` 是 Docker 宿主机路径，不是 Jenkins 容器内路径。
+`BOOKS_PATH` 是 Docker 宿主机路径，不是 Jenkins 容器内路径。主目录固定映射
+到容器内的 `/scanfolder`。
 
 后端以非 root 用户运行。为避免依赖容器 UID，部署使用书库目录的宿主机用户组
 GID 授权。先查询目录的数字 GID：
@@ -80,8 +81,37 @@ sudo setfacl -m d:g:BOOKS_GID:rX,d:m::rX /vol1/docker/aibook/books
 
 把命令中的 `BOOKS_GID` 替换为实际数字，例如 `1001`。如果应用需要修改书库
 原文件，可将 `rX` 改成 `rwX`；仅扫描和阅读时建议保持只读权限。新增书籍目录
-时，优先放在 `BOOKS_PATH` 下，以自动继承默认 ACL。若新增的是另一个宿主机
-路径，需要为它执行相同的 ACL 命令，并在 Compose 中增加对应的绑定挂载。
+时，优先放在 `BOOKS_PATH` 下，以自动继承默认 ACL。
+
+如果书籍分布在不同宿主机目录或存储卷，可以通过 Jenkins 的
+`BOOKS_MOUNTS` 多行参数增加任意数量的附加挂载：
+
+```text
+/vol1/1000/novels:/scanfolder/novels:ro
+/vol1/1000/history:/scanfolder/history:ro
+/vol2/1000/comics:/scanfolder/comics:ro
+```
+
+每行格式为：
+
+```text
+宿主机绝对路径:容器绝对路径[:ro|rw]
+```
+
+- 容器路径必须是 `/scanfolder/` 下的独立子目录，不能重复。
+- 未填写模式时默认为 `ro`；仅扫描和阅读时建议保持只读。
+- 部署脚本禁止根目录、相对路径和包含 `..` 的路径。
+- 使用长格式 bind mount，宿主机目录不存在时部署会失败，不会静默创建空目录。
+
+附加目录与主目录 GID 不同时，把所需数字 GID 使用逗号填写到
+`BOOKS_GIDS`，例如：
+
+```text
+1001,1002,1003
+```
+
+每个附加目录仍需在 NAS 上配置对应的 ACL。部署后可在“设置 → 扫描目录”
+中添加 `/scanfolder/novels`、`/scanfolder/history` 等容器路径。
 
 应用的 PostgreSQL、Redis、MinIO、上传文件、数据库备份和部署状态使用以下
 Docker Volume：
@@ -101,7 +131,8 @@ aibook-deploy-state
 
 1. 复制仓库中的 `docker/.env.production.example`。
 2. 替换所有中文占位值，填写 NAS 的真实 `BOOKS_PATH` 和书库组的数字
-   `BOOKS_GID`。
+   `BOOKS_GID`。附加目录也可以填写到 `BOOKS_MOUNTS` 和 `BOOKS_GIDS`；
+   环境文件中多个挂载使用分号分隔。
 3. 在 Jenkins 打开：
    `Manage Jenkins → Credentials → System → Global credentials`。
 4. 新增 `Secret file` 类型凭据。
@@ -144,12 +175,17 @@ git@github.com:beishan/aibook.git
 | 参数 | 默认值 | 说明 |
 |---|---|---|
 | `NAS_HOST` | `192.168.31.155` | Jenkins 用于访问部署结果的 NAS 地址 |
-| `FRONTEND_PORT` | `8091` | Web 前端端口 |
-| `BACKEND_PORT` | `8092` | 后端健康检查端口 |
+| `FRONTEND_PORT` | `8291` | Web 前端端口 |
+| `BACKEND_PORT` | `8292` | 后端健康检查端口 |
+| `BOOKS_PATH` | `/vol1/1000/books` | 主书库宿主机路径，映射到 `/scanfolder` |
+| `BOOKS_GID` | `1001` | 主书库目录的数字 GID |
+| `BOOKS_MOUNTS` | 空 | 附加书库多行挂载配置 |
+| `BOOKS_GIDS` | 空 | 附加目录 GID，多个值用逗号分隔 |
 | `SKIP_TESTS` | `false` | 仅在紧急发布时跳过后端测试 |
 
-Jenkins 参数会覆盖 Secret file 中同名的端口配置。端口被其他应用占用时，
-在执行构建时修改参数即可。
+非空 Jenkins 参数会覆盖 Secret file 中同名配置。`BOOKS_MOUNTS` 留空时会读取
+Secret file 中的单行分号格式，便于固定配置；临时发版也可以直接在 Jenkins
+多行输入框中调整。端口被其他应用占用时，在执行构建时修改参数即可。
 
 ## 六、首次部署
 
@@ -163,8 +199,8 @@ Jenkins 参数会覆盖 Secret file 中同名的端口配置。端口被其他�
 部署完成后访问：
 
 ```text
-http://192.168.31.155:8091/
-http://192.168.31.155:8092/actuator/health
+http://192.168.31.155:8291/
+http://192.168.31.155:8292/actuator/health
 http://192.168.31.155:9001/
 ```
 
@@ -262,7 +298,7 @@ docker start aibook-backend
 
 ## 十一、常见问题
 
-### `BOOKS_PATH` 挂载失败
+### `BOOKS_PATH` 或 `BOOKS_MOUNTS` 挂载失败
 
 确认配置的是 NAS 宿主机绝对路径。即使 Jenkins 容器中不存在该路径，只要
 Docker 守护进程所在的 NAS 宿主机存在即可。
@@ -274,10 +310,13 @@ Docker 守护进程所在的 NAS 宿主机存在即可。
 docker exec aibook-backend id
 getfacl -p /vol1/docker/aibook/books
 docker exec aibook-backend ls /scanfolder
+docker inspect --format '{{range .Mounts}}{{println .Source "->" .Destination "RW=" .RW}}{{end}}' aibook-backend
 ```
 
 ACL 中应存在与 `BOOKS_GID` 对应且有效权限为 `r-x` 的组条目。修改
-`BOOKS_GID` 后必须重新创建后端容器，单纯重启不会更新附加组。
+`BOOKS_GID` 或 `BOOKS_GIDS` 后必须重新创建后端容器，单纯重启不会更新附加组。
+如果部署脚本提示宿主机路径不存在，应检查路径拼写以及该路径是否真实存在于
+Docker 守护进程所在的 NAS，而不是只存在于 Jenkins 容器内。
 
 ### 健康检查一直是 `starting`
 
