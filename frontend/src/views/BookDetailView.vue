@@ -67,6 +67,20 @@
           <div class="book-tags">
             <span class="tag tag-primary">{{ book.format.toUpperCase() }}</span>
             <span v-if="book.language" class="tag tag-info">{{ book.language }}</span>
+            <select
+              class="category-select"
+              :value="book.categoryId || ''"
+              @change="handleCategoryChange"
+            >
+              <option value="">未分类</option>
+              <option
+                v-for="category in categoryStore.flatTree"
+                :key="category.id"
+                :value="category.id"
+              >
+                {{ `${'　'.repeat(category.depth)}${category.name}` }}
+              </option>
+            </select>
             <span v-for="tag in book.tagNames" :key="tag" class="tag tag-success">
               {{ tag }}
             </span>
@@ -306,6 +320,7 @@ import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
+import { useCategoryStore } from '@/stores/category'
 import { scrapeBook, downloadCover } from '@/utils/scraper'
 import { getCoverUrl } from '@/utils/cover'
 import ScraperDialog from '@/components/ScraperDialog.vue'
@@ -313,6 +328,7 @@ import ScraperDialog from '@/components/ScraperDialog.vue'
 const route = useRoute()
 const router = useRouter()
 const bookStore = useBookStore()
+const categoryStore = useCategoryStore()
 
 const book = ref<any>(null)
 const loading = ref(true)
@@ -372,6 +388,19 @@ const handleToggleWanted = async () => {
     message.success('操作成功')
   } catch (error) {
     message.error('操作失败')
+  }
+}
+
+const handleCategoryChange = async (event: Event) => {
+  const value = (event.target as HTMLSelectElement).value
+  try {
+    book.value = await bookStore.updateBookCategory(
+      book.value.id,
+      value ? Number(value) : undefined,
+    )
+    message.success('分类已更新')
+  } catch {
+    message.error('分类更新失败')
   }
 }
 
@@ -601,7 +630,10 @@ const formatDate = (dateStr?: string) => {
   return date.toLocaleString('zh-CN')
 }
 
-onMounted(loadBook)
+onMounted(() => {
+  loadBook()
+  categoryStore.refresh()
+})
 </script>
 
 <style scoped>
@@ -609,6 +641,14 @@ onMounted(loadBook)
   max-width: 1000px;
   margin: 0 auto;
   padding: var(--spacing-lg) 0;
+}
+
+.category-select {
+  padding: 5px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  background: var(--surface-card);
+  color: var(--text-primary);
 }
 
 /* 加载中和空状态 */

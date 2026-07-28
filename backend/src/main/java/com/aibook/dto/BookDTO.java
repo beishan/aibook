@@ -31,7 +31,9 @@ public class BookDTO {
     private String language;
     private Integer rating;
     private String readingStatus;
+    private Long categoryId;
     private String categoryName;
+    private String categoryPath;
     private List<String> tagNames;
     private Boolean isFavorite;
     private Boolean isWanted;

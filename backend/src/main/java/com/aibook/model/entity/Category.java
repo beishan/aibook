@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
@@ -49,6 +50,18 @@ public class Category {
     private Integer sortOrder = 0;
 
     /**
+     * 是否来自系统预置分类
+     */
+    @Builder.Default
+    private Boolean builtIn = false;
+
+    /**
+     * 是否启用
+     */
+    @Builder.Default
+    private Boolean enabled = true;
+
+    /**
      * 所属用户
      */
     @ManyToOne(fetch = FetchType.LAZY)
@@ -57,4 +70,7 @@ public class Category {
 
     @CreationTimestamp
     private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    private LocalDateTime updatedAt;
 }

@@ -1,6 +1,7 @@
 package com.aibook.repository;
 
 import com.aibook.model.entity.Book;
+import com.aibook.model.entity.Category;
 import com.aibook.model.entity.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -62,6 +63,21 @@ public interface BookRepository extends JpaRepository<Book, Long> {
      * 根据用户和分类查询书籍
      */
     Page<Book> findByUserAndCategoryId(User user, Long categoryId, Pageable pageable);
+
+    /**
+     * 根据多个分类查询书籍（包含子分类筛选）。
+     */
+    Page<Book> findByUserAndCategoryIdIn(User user, List<Long> categoryIds, Pageable pageable);
+
+    /**
+     * 获取某分类下的书籍，用于分类删除和合并。
+     */
+    List<Book> findByUserAndCategory(User user, Category category);
+
+    /**
+     * 统计某分类下的书籍。
+     */
+    long countByUserAndCategory(User user, Category category);
 
     /**
      * 根据用户和标签查询书籍

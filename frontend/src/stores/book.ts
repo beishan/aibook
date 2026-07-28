@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/utils/api'
 
-interface Book {
+export interface Book {
   id: number
   title: string
   author?: string
@@ -17,7 +17,9 @@ interface Book {
   language?: string
   rating?: number
   readingStatus: string
+  categoryId?: number
   categoryName?: string
+  categoryPath?: string
   tagNames: string[]
   isFavorite: boolean
   isWanted: boolean
@@ -44,11 +46,22 @@ export const useBookStore = defineStore('book', () => {
   const pageSize = ref(10)
 
   // 获取书籍列表
-  async function fetchBooks(page = 0, size = 10, sortBy = 'createdAt', sortDir = 'desc') {
+  async function fetchBooks(
+    page = 0,
+    size = 10,
+    sortBy = 'createdAt',
+    sortDir = 'desc',
+    filters: {
+      format?: string
+      status?: string
+      categoryId?: number
+      includeChildren?: boolean
+    } = {},
+  ) {
     loading.value = true
     try {
       const response = await api.get('/api/books', {
-        params: { page, size, sortBy, sortDir },
+        params: { page, size, sortBy, sortDir, ...filters },
       })
       const data: BookPage = response.data
       books.value = data.content
@@ -135,6 +148,32 @@ export const useBookStore = defineStore('book', () => {
     return updatedBook
   }
 
+  async function updateBookCategory(id: number, categoryId?: number) {
+    const response = await api.put(`/api/books/${id}/category`, {
+      categoryId: categoryId || null,
+    })
+    const updatedBook = response.data
+    const index = books.value.findIndex((book) => book.id === id)
+    if (index !== -1) {
+      books.value[index] = updatedBook
+    }
+    if (currentBook.value?.id === id) {
+      currentBook.value = updatedBook
+    }
+    return updatedBook
+  }
+
+  async function updateBookCategories(bookIds: number[], categoryId?: number) {
+    const response = await api.put('/api/books/batch/category', {
+      bookIds,
+      categoryId: categoryId || null,
+    })
+    const updatedBooks: Book[] = response.data
+    const updatedById = new Map(updatedBooks.map((book) => [book.id, book]))
+    books.value = books.value.map((book) => updatedById.get(book.id) || book)
+    return updatedBooks
+  }
+
   return {
     books,
     currentBook,
@@ -149,5 +188,7 @@ export const useBookStore = defineStore('book', () => {
     toggleWanted,
     deleteBook,
     updateBookMetadata,
+    updateBookCategory,
+    updateBookCategories,
   }
 })

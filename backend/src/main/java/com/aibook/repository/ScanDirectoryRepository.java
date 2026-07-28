@@ -1,6 +1,7 @@
 package com.aibook.repository;
 
 import com.aibook.model.entity.ScanDirectory;
+import com.aibook.model.entity.Category;
 import com.aibook.model.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -22,9 +23,15 @@ public interface ScanDirectoryRepository extends JpaRepository<ScanDirectory, Lo
 
     Optional<ScanDirectory> findByUserAndPath(User user, String path);
 
+    Optional<ScanDirectory> findByIdAndUser(Long id, User user);
+
+    List<ScanDirectory> findByUserAndDefaultCategory(User user, Category defaultCategory);
+
     long countByUser(User user);
     /**
      * 检查路径是否已存在
      */
     boolean existsByPath(String path);
+
+    boolean existsByUserAndPath(User user, String path);
 }

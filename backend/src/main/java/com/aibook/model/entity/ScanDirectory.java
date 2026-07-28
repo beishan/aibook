@@ -1,6 +1,7 @@
 package com.aibook.model.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -54,6 +55,14 @@ public class ScanDirectory {
     private Integer bookCount = 0;
 
     /**
+     * 新扫描入库书籍的默认分类。
+     */
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "default_category_id")
+    private Category defaultCategory;
+
+    /**
      * 所属用户
      */
     @JsonIgnore
@@ -68,4 +77,14 @@ public class ScanDirectory {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @JsonProperty("defaultCategoryId")
+    public Long defaultCategoryId() {
+        return defaultCategory == null ? null : defaultCategory.getId();
+    }
+
+    @JsonProperty("defaultCategoryName")
+    public String defaultCategoryName() {
+        return defaultCategory == null ? null : defaultCategory.getName();
+    }
 }

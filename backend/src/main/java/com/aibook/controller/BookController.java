@@ -1,6 +1,7 @@
 package com.aibook.controller;
 
 import com.aibook.dto.BatchScrapeRequest;
+import com.aibook.dto.BookCategoryRequest;
 import com.aibook.dto.BookDTO;
 import com.aibook.dto.ScrapeTaskDTO;
 import com.aibook.model.entity.Book;
@@ -66,6 +67,7 @@ public class BookController {
             @RequestParam(required = false) String format,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Long categoryId,
+            @RequestParam(defaultValue = "false") boolean includeChildren,
             @RequestParam(required = false) Long tagId) {
 
         User user = userService.findByUsername(authentication.getName());
@@ -81,7 +83,8 @@ public class BookController {
             Book.ReadingStatus readingStatus = Book.ReadingStatus.valueOf(status);
             books = bookService.getBooksByStatus(user, readingStatus, pageRequest);
         } else if (categoryId != null) {
-            books = bookService.getBooksByCategory(user, categoryId, pageRequest);
+            books = bookService.getBooksByCategory(
+                    user, categoryId, includeChildren, pageRequest);
         } else if (tagId != null) {
             books = bookService.getBooksByTag(user, tagId, pageRequest);
         } else {
@@ -229,6 +232,31 @@ public class BookController {
         Book.ReadingStatus status = Book.ReadingStatus.valueOf(body.get("status"));
         BookDTO book = bookService.updateReadingStatus(id, status, user);
         return ResponseEntity.ok(book);
+    }
+
+    /**
+     * 设置或清除单本书籍分类。
+     */
+    @PutMapping("/{id}/category")
+    public ResponseEntity<BookDTO> updateBookCategory(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestBody BookCategoryRequest request) {
+        User user = userService.findByUsername(authentication.getName());
+        return ResponseEntity.ok(
+                bookService.updateBookCategory(id, request.getCategoryId(), user));
+    }
+
+    /**
+     * 批量设置或清除书籍分类。
+     */
+    @PutMapping("/batch/category")
+    public ResponseEntity<List<BookDTO>> updateBookCategories(
+            Authentication authentication,
+            @Valid @RequestBody BookCategoryRequest request) {
+        User user = userService.findByUsername(authentication.getName());
+        return ResponseEntity.ok(bookService.updateBookCategories(
+                request.getBookIds(), request.getCategoryId(), user));
     }
 
     /**

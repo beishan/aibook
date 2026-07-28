@@ -93,10 +93,27 @@
                   {{ row.enabled ? '启用' : '禁用' }}
                 </span>
                 <span class="meta-text">{{ row.bookCount }} 本书</span>
+                <span class="meta-text">
+                  默认分类：{{ row.defaultCategoryName || '未分类' }}
+                </span>
                 <span class="meta-text">{{ row.lastScanTime ? formatTime(row.lastScanTime) : '未扫描' }}</span>
               </div>
             </div>
             <div class="directory-actions">
+              <select
+                class="select-input directory-category-select"
+                :value="row.defaultCategoryId || ''"
+                @change="handleDefaultCategoryChange(row, $event)"
+              >
+                <option value="">新书不分类</option>
+                <option
+                  v-for="category in categoryStore.flatTree"
+                  :key="category.id"
+                  :value="category.id"
+                >
+                  {{ category.path }}
+                </option>
+              </select>
               <button class="btn btn-text" @click="handleScan(row)" :disabled="row._scanning">
                 {{ row._scanning ? '扫描中...' : '立即扫描' }}
               </button>
@@ -181,6 +198,20 @@
 
             <div class="dialog-body">
               <DirectoryBrowser @select="handleDirectorySelect" />
+              <div class="form-group default-category-field">
+                <label class="form-label">新书默认分类</label>
+                <select v-model="selectedDefaultCategoryId" class="select-input">
+                  <option value="">暂不分类</option>
+                  <option
+                    v-for="category in categoryStore.flatTree"
+                    :key="category.id"
+                    :value="String(category.id)"
+                  >
+                    {{ category.path }}
+                  </option>
+                </select>
+                <p class="field-hint">只影响之后新扫描入库的书，不覆盖已有书籍分类。</p>
+              </div>
             </div>
 
             <div class="dialog-footer">
@@ -207,9 +238,11 @@ import { message, confirm } from '@/utils/message'
 import api from '@/utils/api'
 import DirectoryBrowser from '@/components/DirectoryBrowser.vue'
 import { useThemeStore } from '@/stores/theme'
+import { useCategoryStore } from '@/stores/category'
 import { THEMES, type ThemeId } from '@/types/theme'
 
 const themeStore = useThemeStore()
+const categoryStore = useCategoryStore()
 const themes = THEMES
 
 const tabs = [
@@ -241,6 +274,7 @@ const directories = ref<any[]>([])
 
 const newDir = reactive({ path: '' })
 const selectedPath = ref('')
+const selectedDefaultCategoryId = ref('')
 
 const schedulerConfig = reactive({
   enabled: true,
@@ -279,16 +313,35 @@ const handleAddDirectory = async () => {
   }
   adding.value = true
   try {
-    await api.post('/api/scan-directories', { path: pathToAdd })
+    await api.post('/api/scan-directories', {
+      path: pathToAdd,
+      defaultCategoryId: selectedDefaultCategoryId.value
+        ? Number(selectedDefaultCategoryId.value)
+        : null,
+    })
     message.success('添加成功')
     newDir.path = ''
     selectedPath.value = ''
+    selectedDefaultCategoryId.value = ''
     showAddDialog.value = false
     await loadDirectories()
   } catch (error: any) {
     message.error(error.response?.data?.message || '添加失败')
   } finally {
     adding.value = false
+  }
+}
+
+const handleDefaultCategoryChange = async (row: any, event: Event) => {
+  const value = (event.target as HTMLSelectElement).value
+  try {
+    await api.put(`/api/scan-directories/${row.id}/default-category`, {
+      categoryId: value ? Number(value) : null,
+    })
+    message.success('默认分类已更新')
+    await loadDirectories()
+  } catch {
+    message.error('默认分类更新失败')
   }
 }
 
@@ -341,7 +394,10 @@ const formatTime = (timeStr: string) => {
   return new Date(timeStr).toLocaleString('zh-CN')
 }
 
-onMounted(loadDirectories)
+onMounted(() => {
+  loadDirectories()
+  categoryStore.refresh()
+})
 </script>
 
 <style scoped>
@@ -479,7 +535,26 @@ onMounted(loadDirectories)
 
 .directory-actions {
   display: flex;
+  align-items: center;
   gap: var(--spacing-sm);
+}
+
+.directory-category-select {
+  max-width: 180px;
+}
+
+.default-category-field {
+  margin-top: var(--spacing-lg);
+}
+
+.default-category-field .select-input {
+  width: 100%;
+}
+
+.field-hint {
+  margin-top: var(--spacing-xs);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
 }
 
 .btn-danger {
@@ -726,6 +801,7 @@ onMounted(loadDirectories)
   .directory-actions {
     width: 100%;
     justify-content: flex-end;
+    flex-wrap: wrap;
   }
 }
 </style>

@@ -26,12 +26,13 @@ public class ScanDirectoryService {
 
     private final ScanDirectoryRepository scanDirectoryRepository;
     private final FileScannerService fileScannerService;
+    private final CategoryService categoryService;
 
     /**
      * 获取所有扫描目录
      */
-    public List<ScanDirectory> getAllDirectories() {
-        return scanDirectoryRepository.findAll();
+    public List<ScanDirectory> getAllDirectories(User user) {
+        return scanDirectoryRepository.findByUser(user);
     }
 
     /**
@@ -52,7 +53,7 @@ public class ScanDirectoryService {
      * 添加扫描目录
      */
     @Transactional
-    public ScanDirectory addDirectory(User user, String path) {
+    public ScanDirectory addDirectory(User user, String path, Long defaultCategoryId) {
         if (path == null || path.isBlank()) {
             throw new IllegalArgumentException("目录路径不能为空");
         }
@@ -64,7 +65,7 @@ public class ScanDirectoryService {
         }
 
         // 检查是否已存在
-        if (scanDirectoryRepository.existsByPath(path)) {
+        if (scanDirectoryRepository.existsByUserAndPath(user, path)) {
             throw new IllegalArgumentException("该目录已添加");
         }
 
@@ -75,6 +76,9 @@ public class ScanDirectoryService {
         ScanDirectory directory = ScanDirectory.builder()
                 .path(path)
                 .enabled(exists)
+                .defaultCategory(defaultCategoryId == null
+                        ? null
+                        : categoryService.getOwnedCategory(defaultCategoryId, user))
                 .user(user)
                 .bookCount(0)
                 .build();
@@ -89,8 +93,8 @@ public class ScanDirectoryService {
      * 删除扫描目录（所有用户都可以操作）
      */
     @Transactional
-    public void deleteDirectory(Long id) {
-        ScanDirectory dir = scanDirectoryRepository.findById(id)
+    public void deleteDirectory(Long id, User user) {
+        ScanDirectory dir = scanDirectoryRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
         scanDirectoryRepository.delete(dir);
         log.info("删除扫描目录: {}", dir.getPath());
@@ -101,7 +105,7 @@ public class ScanDirectoryService {
      */
     @Transactional
     public Map<String, Object> scanDirectory(Long id, User user) {
-        ScanDirectory dir = scanDirectoryRepository.findById(id)
+        ScanDirectory dir = scanDirectoryRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
 
         Path dirPath = Paths.get(dir.getPath());
@@ -114,7 +118,8 @@ public class ScanDirectoryService {
 
         // 调用 FileScannerService 实际导入书籍
         log.info("开始扫描目录并导入书籍: {}", dir.getPath());
-        FileScannerService.ScanResult scanResult = fileScannerService.scanDirectory(dir.getPath(), user);
+        FileScannerService.ScanResult scanResult = fileScannerService.scanDirectory(
+                dir.getPath(), user, dir.getDefaultCategory());
 
         // 更新扫描目录记录
         dir.setLastScanTime(LocalDateTime.now());
@@ -139,11 +144,24 @@ public class ScanDirectoryService {
      * 切换启用状态（所有用户都可以操作）
      */
     @Transactional
-    public ScanDirectory toggleEnabled(Long id) {
-        ScanDirectory dir = scanDirectoryRepository.findById(id)
+    public ScanDirectory toggleEnabled(Long id, User user) {
+        ScanDirectory dir = scanDirectoryRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
 
         dir.setEnabled(!dir.getEnabled());
+        return scanDirectoryRepository.save(dir);
+    }
+
+    /**
+     * 更新扫描目录的新书默认分类。
+     */
+    @Transactional
+    public ScanDirectory updateDefaultCategory(Long id, Long categoryId, User user) {
+        ScanDirectory dir = scanDirectoryRepository.findByIdAndUser(id, user)
+                .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
+        dir.setDefaultCategory(categoryId == null
+                ? null
+                : categoryService.getOwnedCategory(categoryId, user));
         return scanDirectoryRepository.save(dir);
     }
 

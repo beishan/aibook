@@ -28,8 +28,8 @@ public class ScanDirectoryController {
      * 获取所有扫描目录
      */
     @GetMapping
-    public ResponseEntity<List<ScanDirectory>> getAllDirectories() {
-        return ResponseEntity.ok(scanDirectoryService.getAllDirectories());
+    public ResponseEntity<List<ScanDirectory>> getAllDirectories(Authentication authentication) {
+        return ResponseEntity.ok(scanDirectoryService.getAllDirectories(getUserFromAuth(authentication)));
     }
 
     /**
@@ -38,21 +38,25 @@ public class ScanDirectoryController {
     @PostMapping
     public ResponseEntity<ScanDirectory> addDirectory(
             Authentication authentication,
-            @RequestBody Map<String, String> body) {
-        String path = body.get("path");
+            @RequestBody Map<String, Object> body) {
+        String path = body.get("path") == null ? null : body.get("path").toString();
         if (path == null || path.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
         User user = getUserFromAuth(authentication);
-        return ResponseEntity.ok(scanDirectoryService.addDirectory(user, path));
+        Long categoryId = body.get("defaultCategoryId") == null
+                ? null
+                : Long.valueOf(body.get("defaultCategoryId").toString());
+        return ResponseEntity.ok(scanDirectoryService.addDirectory(user, path, categoryId));
     }
 
     /**
      * 删除扫描目录
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteDirectory(@PathVariable Long id) {
-        scanDirectoryService.deleteDirectory(id);
+    public ResponseEntity<Void> deleteDirectory(
+            Authentication authentication, @PathVariable Long id) {
+        scanDirectoryService.deleteDirectory(id, getUserFromAuth(authentication));
         return ResponseEntity.noContent().build();
     }
 
@@ -72,9 +76,23 @@ public class ScanDirectoryController {
      * 切换启用状态
      */
     @PutMapping("/{id}/toggle")
-    public ResponseEntity<ScanDirectory> toggleEnabled(@PathVariable Long id) {
-        ScanDirectory dir = scanDirectoryService.toggleEnabled(id);
+    public ResponseEntity<ScanDirectory> toggleEnabled(
+            Authentication authentication, @PathVariable Long id) {
+        ScanDirectory dir =
+                scanDirectoryService.toggleEnabled(id, getUserFromAuth(authentication));
         return ResponseEntity.ok(dir);
+    }
+
+    @PutMapping("/{id}/default-category")
+    public ResponseEntity<ScanDirectory> updateDefaultCategory(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+        Long categoryId = body.get("categoryId") == null
+                ? null
+                : Long.valueOf(body.get("categoryId").toString());
+        return ResponseEntity.ok(scanDirectoryService.updateDefaultCategory(
+                id, categoryId, getUserFromAuth(authentication)));
     }
 
     private User getUserFromAuth(Authentication authentication) {

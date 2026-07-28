@@ -2,6 +2,7 @@ package com.aibook.service;
 
 import com.aibook.dto.BookDTO;
 import com.aibook.model.entity.Book;
+import com.aibook.model.entity.Category;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookHighlightRepository;
 import com.aibook.repository.BookRepository;
@@ -10,8 +11,10 @@ import com.aibook.repository.ReadingProgressRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -27,6 +30,7 @@ public class BookService {
     private final ReadingProgressRepository readingProgressRepository;
     private final BookmarkRepository bookmarkRepository;
     private final BookHighlightRepository bookHighlightRepository;
+    private final CategoryService categoryService;
 
     /**
      * 获取用户书籍列表
@@ -71,8 +75,13 @@ public class BookService {
     /**
      * 根据分类筛选书籍
      */
-    public Page<BookDTO> getBooksByCategory(User user, Long categoryId, Pageable pageable) {
-        Page<Book> books = bookRepository.findByUserAndCategoryId(user, categoryId, pageable);
+    public Page<BookDTO> getBooksByCategory(
+            User user, Long categoryId, boolean includeChildren, Pageable pageable) {
+        categoryService.getOwnedCategory(categoryId, user);
+        Page<Book> books = includeChildren
+                ? bookRepository.findByUserAndCategoryIdIn(
+                        user, categoryService.getCategoryAndDescendantIds(categoryId, user), pageable)
+                : bookRepository.findByUserAndCategoryId(user, categoryId, pageable);
         return books.map(this::convertToDTO);
     }
 
@@ -204,6 +213,44 @@ public class BookService {
     }
 
     /**
+     * 设置或清除单本书籍分类。
+     */
+    @Transactional
+    public BookDTO updateBookCategory(Long id, Long categoryId, User user) {
+        Book book = getBookEntity(id, user);
+        Category category = categoryId == null
+                ? null
+                : categoryService.getOwnedCategory(categoryId, user);
+        book.setCategory(category);
+        return convertToDTO(bookRepository.save(book));
+    }
+
+    /**
+     * 批量设置或清除书籍分类。
+     */
+    @Transactional
+    public List<BookDTO> updateBookCategories(
+            List<Long> bookIds, Long categoryId, User user) {
+        if (bookIds == null || bookIds.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "书籍ID列表不能为空");
+        }
+
+        Category category = categoryId == null
+                ? null
+                : categoryService.getOwnedCategory(categoryId, user);
+        List<Book> books = bookRepository.findByIdInAndUser(bookIds, user);
+        if (books.size() != bookIds.stream().distinct().count()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "部分书籍不存在或无权访问");
+        }
+
+        books.forEach(book -> book.setCategory(category));
+        return bookRepository.saveAll(books).stream()
+                .map(this::convertToDTO)
+                .toList();
+    }
+
+    /**
      * 转换为 DTO
      */
     public BookDTO convertToDTO(Book book) {
@@ -222,7 +269,9 @@ public class BookService {
                 .language(book.getLanguage())
                 .rating(book.getRating())
                 .readingStatus(book.getReadingStatus().name())
+                .categoryId(book.getCategory() != null ? book.getCategory().getId() : null)
                 .categoryName(book.getCategory() != null ? book.getCategory().getName() : null)
+                .categoryPath(buildCategoryPath(book.getCategory()))
                 .tagNames(book.getTags().stream().map(tag -> tag.getName()).collect(Collectors.toList()))
                 .isFavorite(book.getIsFavorite())
                 .isWanted(book.getIsWanted())
@@ -231,5 +280,18 @@ public class BookService {
                 .createdAt(book.getCreatedAt())
                 .updatedAt(book.getUpdatedAt())
                 .build();
+    }
+
+    private String buildCategoryPath(Category category) {
+        if (category == null) {
+            return null;
+        }
+        List<String> names = new java.util.ArrayList<>();
+        Category current = category;
+        while (current != null) {
+            names.add(0, current.getName());
+            current = current.getParent();
+        }
+        return String.join(" / ", names);
     }
 }

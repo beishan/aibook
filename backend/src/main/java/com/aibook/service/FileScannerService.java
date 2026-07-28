@@ -1,6 +1,7 @@
 package com.aibook.service;
 
 import com.aibook.model.entity.Book;
+import com.aibook.model.entity.Category;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.UserRepository;
@@ -55,7 +56,7 @@ public class FileScannerService {
             Path dir = Paths.get(dirPath);
             if (Files.exists(dir) && Files.isDirectory(dir)) {
                 try {
-                    scanDirectory(dir, user, result);
+                    scanDirectory(dir, user, null, result);
                 } catch (IOException e) {
                     log.error("扫描目录失败: {}", dirPath, e);
                     result.addError(dirPath, e.getMessage());
@@ -74,13 +75,20 @@ public class FileScannerService {
      * 扫描指定目录（供 ScanDirectoryService 调用）
      */
     public ScanResult scanDirectory(String dirPath, User user) {
+        return scanDirectory(dirPath, user, null);
+    }
+
+    /**
+     * 扫描指定目录，并为新导入书籍设置默认分类。
+     */
+    public ScanResult scanDirectory(String dirPath, User user, Category defaultCategory) {
         ScanResult result = new ScanResult();
         result.setStartTime(System.currentTimeMillis());
 
         Path dir = Paths.get(dirPath);
         if (Files.exists(dir) && Files.isDirectory(dir)) {
             try {
-                scanDirectory(dir, user, result);
+                scanDirectory(dir, user, defaultCategory, result);
             } catch (IOException e) {
                 log.error("扫描目录失败: {}", dirPath, e);
                 result.addError(dirPath, e.getMessage());
@@ -109,7 +117,8 @@ public class FileScannerService {
     /**
      * 扫描单个目录
      */
-    private void scanDirectory(Path dir, User user, ScanResult result) throws IOException {
+    private void scanDirectory(
+            Path dir, User user, Category defaultCategory, ScanResult result) throws IOException {
         try (Stream<Path> walk = Files.walk(dir)) {
             List<Path> files = walk
                 .filter(Files::isRegularFile)
@@ -118,7 +127,7 @@ public class FileScannerService {
 
             for (Path file : files) {
                 try {
-                    processFile(file, user, result);
+                    processFile(file, user, defaultCategory, result);
                 } catch (Exception e) {
                     log.error("处理文件失败: {}", file, e);
                     result.addFailed(file.toString(), e.getMessage());
@@ -130,7 +139,8 @@ public class FileScannerService {
     /**
      * 处理单个文件
      */
-    private void processFile(Path file, User user, ScanResult result) {
+    private void processFile(
+            Path file, User user, Category defaultCategory, ScanResult result) {
         try {
             String fileHash = calculateFileHash(file);
             String format = getFileFormat(file);
@@ -149,6 +159,7 @@ public class FileScannerService {
                 .filePath(file.toString())
                 .fileSize(Files.size(file))
                 .fileHash(fileHash)
+                .category(defaultCategory)
                 .user(user)
                 .build();
 

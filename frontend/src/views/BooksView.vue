@@ -25,7 +25,7 @@
             @keyup.enter="handleSearch"
           />
         </div>
-        <select v-model="filterFormat" class="select-input">
+        <select v-model="filterFormat" class="select-input" @change="handleFilterChange('format')">
           <option value="">全部格式</option>
           <option value="epub">EPUB</option>
           <option value="pdf">PDF</option>
@@ -35,11 +35,21 @@
           <option value="html">HTML</option>
           <option value="md">Markdown</option>
         </select>
-        <select v-model="filterStatus" class="select-input">
+        <select v-model="filterStatus" class="select-input" @change="handleFilterChange('status')">
           <option value="">全部状态</option>
           <option value="UNREADING">未读</option>
           <option value="READING">正在阅读</option>
           <option value="FINISHED">已读完</option>
+        </select>
+        <select v-model="filterCategoryId" class="select-input" @change="handleFilterChange('category')">
+          <option value="">全部分类</option>
+          <option
+            v-for="category in categoryStore.flatTree"
+            :key="category.id"
+            :value="String(category.id)"
+          >
+            {{ `${'　'.repeat(category.depth)}${category.name}` }}
+          </option>
         </select>
         <select v-model="sortBy" class="select-input" @change="loadBooks">
           <option value="createdAt">添加时间</option>
@@ -100,6 +110,20 @@
       <div class="batch-actions">
         <button class="btn btn-text" @click="selectAllCurrentPage">全选当前页</button>
         <button class="btn btn-text" @click="clearSelection">取消全选</button>
+        <select v-model="batchCategoryId" class="select-input batch-category-select">
+          <option value="">设为未分类</option>
+          <option
+            v-for="category in categoryStore.flatTree"
+            :key="category.id"
+            :value="String(category.id)"
+          >
+            {{ category.path }}
+          </option>
+        </select>
+        <button class="btn" @click="applyBatchCategory">
+          <span>🗂️</span>
+          <span>设置分类</span>
+        </button>
         <button class="btn btn-primary" @click="openBatchScraper('selected')">
           <span>✨</span>
           <span>批量刮削</span>
@@ -149,6 +173,7 @@
         <div class="book-info">
           <div class="book-title" :title="book.title">{{ book.title }}</div>
           <div class="book-author">{{ book.author || '未知作者' }}</div>
+          <div v-if="book.categoryName" class="book-category">{{ book.categoryPath || book.categoryName }}</div>
           <div class="book-actions">
             <button
               class="action-btn"
@@ -209,6 +234,7 @@
           <span class="tag" :class="getStatusClass(row.readingStatus)">
             {{ getStatusText(row.readingStatus) }}
           </span>
+          <span v-if="row.categoryName" class="tag tag-info">{{ row.categoryName }}</span>
           <span class="book-date">{{ formatDate(row.createdAt) }}</span>
         </div>
         <div class="book-list-actions">
@@ -264,6 +290,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
+import { useCategoryStore } from '@/stores/category'
 import FileUpload from '@/components/FileUpload.vue'
 import BatchScraperDialog from '@/components/BatchScraperDialog.vue'
 import { getCoverUrl } from '@/utils/cover'
@@ -271,10 +298,12 @@ import { getCoverUrl } from '@/utils/cover'
 const route = useRoute()
 const router = useRouter()
 const bookStore = useBookStore()
+const categoryStore = useCategoryStore()
 
 const searchKeyword = ref('')
 const filterFormat = ref('')
 const filterStatus = ref('')
+const filterCategoryId = ref('')
 const sortBy = ref('createdAt')
 const VIEW_MODE_KEY = 'ai-book-view-mode'
 const viewMode = ref<'card' | 'list'>((localStorage.getItem(VIEW_MODE_KEY) as 'card' | 'list') || 'card')
@@ -287,6 +316,7 @@ const selectionMode = ref(false)
 const selectedBooks = ref<Set<number>>(new Set())
 const showBatchScraperDialog = ref(false)
 const batchScraperMode = ref<'selected' | 'all-incomplete'>('selected')
+const batchCategoryId = ref('')
 
 const totalPages = computed(() => Math.ceil(bookStore.totalElements / pageSize.value))
 
@@ -299,7 +329,12 @@ const loadBooks = async () => {
   if (searchKeyword.value) {
     await bookStore.searchBooks(searchKeyword.value, currentPage.value - 1, pageSize.value)
   } else {
-    await bookStore.fetchBooks(currentPage.value - 1, pageSize.value, sortBy.value, 'desc')
+    await bookStore.fetchBooks(currentPage.value - 1, pageSize.value, sortBy.value, 'desc', {
+      format: filterFormat.value || undefined,
+      status: filterStatus.value || undefined,
+      categoryId: filterCategoryId.value ? Number(filterCategoryId.value) : undefined,
+      includeChildren: Boolean(filterCategoryId.value),
+    })
   }
 }
 
@@ -308,10 +343,19 @@ const handleSearch = () => {
   loadBooks()
 }
 
+const handleFilterChange = (type: 'format' | 'status' | 'category') => {
+  if (type !== 'format') filterFormat.value = ''
+  if (type !== 'status') filterStatus.value = ''
+  if (type !== 'category') filterCategoryId.value = ''
+  currentPage.value = 1
+  loadBooks()
+}
+
 const resetFilters = () => {
   searchKeyword.value = ''
   filterFormat.value = ''
   filterStatus.value = ''
+  filterCategoryId.value = ''
   sortBy.value = 'createdAt'
   currentPage.value = 1
   loadBooks()
@@ -359,6 +403,19 @@ const selectAllCurrentPage = () => {
 
 const clearSelection = () => {
   selectedBooks.value.clear()
+}
+
+const applyBatchCategory = async () => {
+  try {
+    await bookStore.updateBookCategories(
+      Array.from(selectedBooks.value),
+      batchCategoryId.value ? Number(batchCategoryId.value) : undefined,
+    )
+    message.success('书籍分类已更新')
+    clearSelection()
+  } catch {
+    message.error('设置分类失败')
+  }
 }
 
 const openBatchScraper = (mode: 'selected' | 'all-incomplete') => {
@@ -457,6 +514,7 @@ watch(viewMode, (newMode) => {
 })
 
 onMounted(() => {
+  categoryStore.refresh()
   if (!route.query.search) {
     loadBooks()
   }
@@ -668,6 +726,11 @@ onMounted(() => {
   background: var(--primary-alpha-10);
 }
 
+.batch-category-select {
+  min-width: 180px;
+  padding: 8px 12px;
+}
+
 /* 复选框样式 */
 .book-select-checkbox {
   position: absolute;
@@ -817,6 +880,15 @@ onMounted(() => {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   margin-bottom: var(--spacing-sm);
+}
+
+.book-category {
+  margin-bottom: var(--spacing-sm);
+  color: var(--primary);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .book-actions {
