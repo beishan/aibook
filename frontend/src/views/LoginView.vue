@@ -59,11 +59,12 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { message } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 const loading = ref(false)
@@ -104,7 +105,13 @@ const handleLogin = async () => {
   try {
     await userStore.login(loginForm.username, loginForm.password)
     message.success('登录成功')
-    router.push('/')
+    const redirect = route.query.redirect
+    const target = typeof redirect === 'string'
+      && redirect.startsWith('/')
+      && !redirect.startsWith('//')
+      ? redirect
+      : '/'
+    await router.replace(target)
   } catch (error: any) {
     message.error(error.response?.data?.message || '登录失败')
   } finally {

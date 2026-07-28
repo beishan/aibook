@@ -1,6 +1,11 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
+import { clearStoredAuthSession } from '@/utils/authSession'
+
+let authExpiryHandled = false
+
+const isAuthEndpoint = (url?: string) => url?.startsWith('/api/auth/') === true
 
 const api = axios.create({
   baseURL: '',
@@ -27,18 +32,32 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
+    if (isAuthEndpoint(response.config.url)) {
+      authExpiryHandled = false
+    }
     return response
   },
   (error) => {
     const message = error.response?.data?.message || '请求失败'
+    const status = error.response?.status
+    const authRequest = isAuthEndpoint(error.config?.url)
 
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      router.push('/login')
-      ElMessage.error('登录已过期，请重新登录')
-    } else if (error.response?.status === 403) {
+    if (status === 401 && !authRequest) {
+      clearStoredAuthSession()
+
+      if (!authExpiryHandled) {
+        authExpiryHandled = true
+        const currentRoute = router.currentRoute.value
+        const redirect = currentRoute.path === '/login' ? undefined : currentRoute.fullPath
+        void router.replace({
+          path: '/login',
+          query: redirect ? { redirect } : undefined,
+        })
+        ElMessage.error('登录已过期，请重新登录')
+      }
+    } else if (status === 403) {
       ElMessage.error('没有权限执行此操作')
-    } else {
+    } else if (!(status === 401 && authRequest)) {
       ElMessage.error(message)
     }
 

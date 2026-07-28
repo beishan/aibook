@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/utils/api'
 import { usePreferencesStore } from '@/stores/preferences'
+import { AUTH_EXPIRED_EVENT } from '@/utils/authSession'
 
 interface UserInfo {
   id: number
@@ -60,6 +61,8 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('token')
     usePreferencesStore().resetHydration()
   }
+
+  window.addEventListener(AUTH_EXPIRED_EVENT, logout)
 
   // 检查是否已登录
   function isLoggedIn() {
