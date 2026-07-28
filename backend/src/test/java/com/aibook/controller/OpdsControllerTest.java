@@ -21,6 +21,8 @@ import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.http.converter.ResourceHttpMessageConverter;
 import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
@@ -28,7 +30,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -45,7 +46,7 @@ class OpdsControllerTest {
         opds2Service = new StubOpds2Service();
         bookLookup = new StubBookLookup();
         UserService userService = new StubUserService();
-        BasicAuthFilter basicAuthFilter = new BasicAuthFilter(new StubUserDetailsService(), new PlainPasswordEncoder());
+        BasicAuthFilter basicAuthFilter = new BasicAuthFilter(authenticationManager());
         OpdsController controller = new OpdsController(
             opdsService,
             opds2Service,
@@ -73,6 +74,13 @@ class OpdsControllerTest {
         mockMvc.perform(get("/opds"))
             .andExpect(status().isUnauthorized())
             .andExpect(header().string("WWW-Authenticate", "Basic realm=\"Aibook\""));
+    }
+
+    @Test
+    void opdsRejectsInvalidBasicAuthPassword() throws Exception {
+        mockMvc.perform(get("/opds/v2").with(httpBasic("reader", "wrong-password")))
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().string("X-Aibook-Auth-Status", "invalid"));
     }
 
     @Test
@@ -130,6 +138,21 @@ class OpdsControllerTest {
         return new UsernamePasswordAuthenticationToken("reader", null);
     }
 
+    private static AuthenticationManager authenticationManager() {
+        return authentication -> {
+            if (!"reader".equals(authentication.getName())
+                    || !"secret".equals(authentication.getCredentials())) {
+                throw new BadCredentialsException("用户名或密码错误");
+            }
+            UserDetails user = new StubUserDetailsService().loadUserByUsername(authentication.getName());
+            return UsernamePasswordAuthenticationToken.authenticated(
+                user,
+                null,
+                user.getAuthorities()
+            );
+        };
+    }
+
     private static class StubOpdsService extends OpdsService {
         private String searchDescription = "";
 
@@ -184,18 +207,6 @@ class OpdsControllerTest {
                 .password("secret")
                 .roles("USER")
                 .build();
-        }
-    }
-
-    private static class PlainPasswordEncoder implements PasswordEncoder {
-        @Override
-        public String encode(CharSequence rawPassword) {
-            return rawPassword.toString();
-        }
-
-        @Override
-        public boolean matches(CharSequence rawPassword, String encodedPassword) {
-            return rawPassword.toString().equals(encodedPassword);
         }
     }
 

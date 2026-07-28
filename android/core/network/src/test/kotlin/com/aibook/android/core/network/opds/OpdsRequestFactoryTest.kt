@@ -29,6 +29,19 @@ class OpdsRequestFactoryTest {
     }
 
     @Test
+    fun `trims surrounding whitespace from basic auth username`() {
+        val connection = OpdsConnection(
+            id = "home",
+            name = "家庭书库",
+            baseUrl = "http://192.168.1.100:8080/opds/v2",
+            username = "  reader  ",
+            password = "secret"
+        )
+
+        assertEquals("Basic cmVhZGVyOnNlY3JldA==", OpdsRequestFactory.basicAuthHeader(connection))
+    }
+
+    @Test
     fun `resolves relative opds links against base url`() {
         val connection = OpdsConnection(
             id = "home",

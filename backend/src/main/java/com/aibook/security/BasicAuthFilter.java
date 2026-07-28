@@ -6,16 +6,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
@@ -27,8 +26,7 @@ import java.util.Base64;
 @Slf4j
 public class BasicAuthFilter extends OncePerRequestFilter {
 
-    private final UserDetailsService userDetailsService;
-    private final PasswordEncoder passwordEncoder;
+    private final AuthenticationManager authenticationManager;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -54,31 +52,36 @@ public class BasicAuthFilter extends OncePerRequestFilter {
             }
 
             if (StringUtils.hasText(authHeader) && authHeader.startsWith("Basic ")) {
+                String attemptedUsername = null;
                 try {
                     String base64Credentials = authHeader.substring(6);
-                    String credentials = new String(Base64.getDecoder().decode(base64Credentials));
+                    String credentials = new String(
+                        Base64.getDecoder().decode(base64Credentials),
+                        StandardCharsets.UTF_8
+                    );
                     String[] parts = credentials.split(":", 2);
 
                     if (parts.length == 2) {
                         String username = parts[0];
                         String password = parts[1];
+                        attemptedUsername = username;
 
-                        UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-
-                        if (passwordEncoder.matches(password, userDetails.getPassword())) {
-                            UsernamePasswordAuthenticationToken authentication =
-                                new UsernamePasswordAuthenticationToken(
-                                    userDetails,
-                                    null,
-                                    userDetails.getAuthorities()
-                                );
-
-                            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                            SecurityContextHolder.getContext().setAuthentication(authentication);
-                        }
+                        UsernamePasswordAuthenticationToken authenticationRequest =
+                            UsernamePasswordAuthenticationToken.unauthenticated(username, password);
+                        authenticationRequest.setDetails(
+                            new WebAuthenticationDetailsSource().buildDetails(request)
+                        );
+                        SecurityContextHolder.getContext().setAuthentication(
+                            authenticationManager.authenticate(authenticationRequest)
+                        );
                     }
                 } catch (Exception e) {
-                    log.debug("Basic Auth 认证失败: {}", e.getMessage());
+                    log.warn(
+                        "Basic Auth 认证失败: user={}, path={}, reason={}",
+                        attemptedUsername != null ? attemptedUsername : "<无法解析>",
+                        path,
+                        e.getClass().getSimpleName()
+                    );
                 }
             }
 
@@ -86,6 +89,12 @@ public class BasicAuthFilter extends OncePerRequestFilter {
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.setHeader("WWW-Authenticate", "Basic realm=\"Aibook\"");
+                response.setHeader(
+                    "X-Aibook-Auth-Status",
+                    StringUtils.hasText(authHeader) && authHeader.startsWith("Basic ")
+                        ? "invalid"
+                        : "missing"
+                );
                 return;
             }
         }

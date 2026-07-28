@@ -81,6 +81,7 @@ class OpdsFeedParser {
         val publication = element as? JsonObject ?: return@mapNotNull null
         val metadata = publication["metadata"] as? JsonObject ?: JsonObject(emptyMap())
         val links = links(publication["links"] as? JsonArray)
+        val images = links(publication["images"] as? JsonArray)
         val title = metadata.stringValue("title")?.takeIf(String::isNotBlank) ?: return@mapNotNull null
         OpdsEntry(
             title = title,
@@ -89,7 +90,9 @@ class OpdsFeedParser {
             summary = metadata.stringValue("description"),
             acquisitionLink = links.firstOrNull { it.isAcquisition() },
             alternateLink = links.firstOrNull { it.relTokens().any { rel -> rel == "alternate" || rel == "self" } },
-            coverLink = links.firstOrNull { it.isCover() },
+            coverLink = links.firstOrNull { it.isCover() }
+                ?: images.firstOrNull { it.type.orEmpty().startsWith("image/") }
+                ?: images.firstOrNull(),
             categories = (subjects(metadata["subject"]) + listOfNotNull(inheritedCategory)).distinct(),
             modifiedAt = metadata.stringValue("modified")
         )

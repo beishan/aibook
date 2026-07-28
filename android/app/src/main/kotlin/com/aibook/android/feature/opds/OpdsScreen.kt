@@ -763,13 +763,18 @@ fun OpdsAddSourceScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(DesignTokens.AppBackground)
-            .padding(horizontal = 26.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 26.dp, top = 28.dp, end = 26.dp, bottom = 132.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -901,25 +906,35 @@ fun OpdsAddSourceScreen(
                 }
             }
         }
-        Button(
-            onClick = { viewModel.save() },
-            enabled = state.canSave,
+        }
+        Column(
             modifier = Modifier
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
-            shape = RoundedCornerShape(16.dp)
+                .background(DesignTokens.AppBackground)
+                .padding(horizontal = 26.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            if (state.isSaving) {
-                CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
-            } else {
-                Text(if (isEditing) "保存修改" else "保存并启用", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Button(
+                onClick = { viewModel.save() },
+                enabled = state.canSave,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                if (state.isSaving) {
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                } else {
+                    Text(if (isEditing) "保存修改" else "保存并启用", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+            }
+            TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+                Text("取消", color = DesignTokens.Accent)
             }
         }
-        TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-            Text("取消", color = DesignTokens.Accent)
-        }
-        SnackbarHost(snackbarHostState)
+        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.TopCenter))
     }
 }
 

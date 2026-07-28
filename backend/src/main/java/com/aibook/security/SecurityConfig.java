@@ -22,9 +22,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     @Bean
-    public BasicAuthFilter basicAuthFilter(UserDetailsService userDetailsService,
-                                           PasswordEncoder passwordEncoder) {
-        return new BasicAuthFilter(userDetailsService, passwordEncoder);
+    public BasicAuthFilter basicAuthFilter(AuthenticationManager authenticationManager) {
+        return new BasicAuthFilter(authenticationManager);
     }
 
     @Bean
