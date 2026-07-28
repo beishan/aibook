@@ -44,10 +44,22 @@ pipeline {
                         script: 'git rev-parse --short=12 HEAD',
                         returnStdout: true
                     ).trim()
+                    def commitSubject = sh(
+                        script: 'git log -1 --pretty=%s',
+                        returnStdout: true
+                    ).trim().replaceAll(/\s+/, ' ')
+                    def maxTitleLength = 48
+                    def abbreviatedSubject = commitSubject.length() > maxTitleLength
+                        ? "${commitSubject.take(maxTitleLength)}…"
+                        : commitSubject
+                    if (!abbreviatedSubject) {
+                        abbreviatedSubject = shortCommit
+                    }
                     env.RELEASE_TAG = "${env.BUILD_NUMBER}-${shortCommit}"
                     env.BACKEND_IMAGE = "aibook-backend:${env.RELEASE_TAG}"
                     env.FRONTEND_IMAGE = "aibook-frontend:${env.RELEASE_TAG}"
-                    currentBuild.displayName = "#${env.BUILD_NUMBER} ${shortCommit}"
+                    currentBuild.displayName = "#${env.BUILD_NUMBER} ${abbreviatedSubject}"
+                    currentBuild.description = "提交 ${shortCommit}"
                 }
             }
         }
