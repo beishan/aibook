@@ -81,7 +81,7 @@
       </el-header>
 
       <el-main class="modern-main">
-        <div class="content-shell">
+        <div class="content-shell" :class="{ 'library-content-shell': route.path === '/books' }">
           <router-view v-slot="{ Component }">
             <Transition name="fade" mode="out-in">
               <component :is="Component" />
@@ -376,6 +376,10 @@ const handleLogout = async () => {
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
+}
+
+.content-shell.library-content-shell {
+  max-width: none;
 }
 
 .mobile-brand {

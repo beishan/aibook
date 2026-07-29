@@ -55,7 +55,7 @@
     </header>
 
     <!-- 内容区 -->
-    <main class="layout-main">
+    <main class="layout-main" :class="{ 'library-layout-main': route.path === '/books' }">
       <router-view v-slot="{ Component }">
         <Transition name="fade" mode="out-in">
           <component :is="Component" />
@@ -319,6 +319,10 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
+}
+
+.layout-main.library-layout-main {
+  max-width: none;
 }
 
 /* 动画 */

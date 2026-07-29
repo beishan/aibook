@@ -870,7 +870,8 @@ onMounted(() => {
 
 <style scoped>
 .books-view {
-  max-width: 1400px;
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
   padding: var(--spacing-lg) 0;
 }
