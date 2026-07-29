@@ -74,6 +74,16 @@ public class User implements UserDetails {
     private Integer scanThreadCount;
 
     /**
+     * 系统界面字体资源 ID。
+     */
+    private Long uiFontId;
+
+    /**
+     * 阅读器默认字体资源 ID。
+     */
+    private Long readerFontId;
+
+    /**
      * 角色 (USER, ADMIN)
      */
     @Enumerated(EnumType.STRING)

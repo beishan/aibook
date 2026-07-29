@@ -27,7 +27,12 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 # 创建非 root 用户
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+ENV TZ=Asia/Shanghai
+RUN apk add --no-cache tzdata \
+    && cp "/usr/share/zoneinfo/${TZ}" /etc/localtime \
+    && echo "${TZ}" > /etc/timezone \
+    && addgroup -S appgroup \
+    && adduser -S appuser -G appgroup
 
 # 复制构建好的 jar 包
 COPY --from=builder /app/target/*.jar app.jar

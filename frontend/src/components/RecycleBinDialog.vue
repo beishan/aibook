@@ -119,6 +119,7 @@ import { Delete, DeleteFilled, RefreshRight, Search } from '@element-plus/icons-
 import { useBookStore, type Book } from '@/stores/book'
 import { getCoverUrl } from '@/utils/cover'
 import { confirm, message } from '@/utils/message'
+import { formatChinaDateTime } from '@/utils/dateTime'
 
 defineProps<{ visible: boolean }>()
 const emit = defineEmits<{
@@ -209,7 +210,7 @@ const reloadAfterRemoval = async (removedCount: number) => {
 
 const formatDateTime = (value?: string) => {
   if (!value) return '-'
-  return new Date(value).toLocaleString('zh-CN', {
+  return formatChinaDateTime(value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

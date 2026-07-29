@@ -28,6 +28,11 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+        jdbc:
+          time_zone: ${APP_TIME_ZONE:Asia/Shanghai}
+
+  jackson:
+    time-zone: ${APP_TIME_ZONE:Asia/Shanghai}
 
   cache:
     type: redis
@@ -63,6 +68,7 @@ upload:
 scanning:
   enabled: true
   cron: "0 0 2 * * ?"  # 每天凌晨2点
+  time-zone: ${APP_TIME_ZONE:Asia/Shanghai}
   directories: /books/fiction,/books/tech
 
 logging:

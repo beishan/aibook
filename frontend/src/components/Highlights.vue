@@ -41,6 +41,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { message, confirm } from '@/utils/message'
+import { formatChinaDateTime } from '@/utils/dateTime'
 import api from '@/utils/api'
 
 const props = defineProps<{
@@ -91,8 +92,7 @@ const handleDelete = async (highlight: Highlight) => {
 }
 
 const formatTime = (timeStr: string) => {
-  const date = new Date(timeStr)
-  return date.toLocaleString('zh-CN')
+  return formatChinaDateTime(timeStr)
 }
 
 onMounted(loadHighlights)

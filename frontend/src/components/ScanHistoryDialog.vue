@@ -108,6 +108,7 @@ import { ref } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { message } from '@/utils/message'
+import { formatChinaDateTime as formatDateTimeInChina } from '@/utils/dateTime'
 
 interface ScanDirectoryOption {
   id: number
@@ -186,7 +187,7 @@ const statusType = (value: string): 'success' | 'danger' | 'warning' | 'info' =>
 }
 
 const formatDateTime = (value?: string) =>
-  value ? new Date(value).toLocaleString('zh-CN') : '-'
+  value ? formatDateTimeInChina(value) : '-'
 
 const formatDuration = (value?: number) => {
   if (value == null) return '进行中'

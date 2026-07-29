@@ -24,6 +24,26 @@ pipeline {
             defaultValue: '',
             description: '附加书库所需的数字 GID，多个值使用逗号分隔'
         )
+        string(
+            name: 'FONTS_PATH',
+            defaultValue: '',
+            description: '可选主字体目录宿主机路径；配置后只读映射到 /fontfolder'
+        )
+        string(
+            name: 'FONTS_GID',
+            defaultValue: '',
+            description: '主字体目录所属用户组 GID；配置 FONTS_PATH 时必填'
+        )
+        text(
+            name: 'FONT_MOUNTS',
+            defaultValue: '',
+            description: '可选附加字体目录，每行：宿主机绝对路径:/fontfolder/子目录[:ro]；始终只读'
+        )
+        string(
+            name: 'FONT_GIDS',
+            defaultValue: '',
+            description: '附加字体目录所需的数字 GID，多个值使用逗号分隔'
+        )
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '紧急部署时跳过后端测试')
     }
 

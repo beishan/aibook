@@ -1,0 +1,11 @@
+services:
+  backend:
+    group_add:
+      - "${FONTS_GID:?配置 FONTS_PATH 时必须同时配置字体目录数字 GID FONTS_GID}"
+    volumes:
+      - type: bind
+        source: "${FONTS_PATH:?请配置飞牛 NAS 宿主机字体目录 FONTS_PATH}"
+        target: /fontfolder
+        read_only: true
+        bind:
+          create_host_path: false

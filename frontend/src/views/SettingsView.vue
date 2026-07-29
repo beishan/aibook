@@ -63,6 +63,11 @@
       </div>
     </div>
 
+    <!-- 字体管理 -->
+    <div v-show="activeTab === 'fonts'" class="tab-content">
+      <FontManagementPanel />
+    </div>
+
     <!-- 扫描目录 -->
     <div v-show="activeTab === 'directories'" class="tab-content">
       <div class="card glass">
@@ -310,10 +315,12 @@
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
+import { formatChinaDateTime } from '@/utils/dateTime'
 import api from '@/utils/api'
 import DirectoryBrowser from '@/components/DirectoryBrowser.vue'
 import ScanHistoryDialog from '@/components/ScanHistoryDialog.vue'
 import ConnectionsView from '@/views/ConnectionsView.vue'
+import FontManagementPanel from '@/components/FontManagementPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
@@ -328,6 +335,7 @@ const themes = THEMES
 
 const tabs = [
   { key: 'theme', label: '主题风格', icon: '🎨' },
+  { key: 'fonts', label: '字体管理', icon: '🔤' },
   { key: 'directories', label: '扫描目录', icon: '📂' },
   { key: 'connections', label: 'OPDS 连接', icon: '🔗' },
   { key: 'scheduler', label: '定时任务', icon: '⏰' },
@@ -605,8 +613,7 @@ const handleSaveScheduler = () => {
 }
 
 const formatTime = (timeStr: string) => {
-  if (!timeStr) return ''
-  return new Date(timeStr).toLocaleString('zh-CN')
+  return formatChinaDateTime(timeStr)
 }
 
 const formatScanFile = (path: string) => path.split(/[\\/]/).pop() || path

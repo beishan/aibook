@@ -113,6 +113,43 @@ sudo setfacl -m d:g:BOOKS_GID:rX,d:m::rX /vol1/docker/aibook/books
 每个附加目录仍需在 NAS 上配置对应的 ACL。部署后可在“设置 → 扫描目录”
 中添加 `/scanfolder/novels`、`/scanfolder/history` 等容器路径。
 
+### 可选字体目录
+
+字体既可以在网页中上传，也可以从 NAS 目录扫描。若需要扫描 NAS 字体，设置
+`FONTS_PATH` 和 `FONTS_GID`，主字体目录会只读映射到 `/fontfolder`：
+
+```text
+FONTS_PATH=/vol1/docker/aibook/fonts
+FONTS_GID=1001
+```
+
+字体目录不需要配置时，将两个参数同时留空即可，部署和网页上传字体功能不受
+影响。部署脚本只在配置主字体目录后合并
+`docker/docker-compose.fonts.yml`，因此基础 Compose 配置不依赖任何字体变量。
+字体文件只需读取权限，建议在 NAS 上配置组 ACL：
+
+```bash
+sudo setfacl -R -m g:FONTS_GID:rX,m::rX /vol1/docker/aibook/fonts
+sudo setfacl -m d:g:FONTS_GID:rX,d:m::rX /vol1/docker/aibook/fonts
+```
+
+多个字体目录通过 `FONT_MOUNTS` 和 `FONT_GIDS` 配置：
+
+```text
+/vol1/1000/fonts-cn:/fontfolder/chinese:ro
+/vol2/1000/fonts-en:/fontfolder/latin:ro
+```
+
+- 容器路径必须位于 `/fontfolder/` 下且不能重复。
+- 字体挂载始终只读；省略模式时默认 `ro`，显式填写 `rw` 会被拒绝。
+- 宿主机和容器路径必须是绝对路径，不能是根目录或包含 `..` 路径段。
+- `FONTS_GID`、`FONT_GIDS` 只接受有效数字 GID。
+- 使用长格式 bind mount；宿主机目录不存在时部署失败，不会自动创建空目录。
+
+附加字体目录所需的组 GID 使用逗号填写，例如
+`FONT_GIDS=1001,1002`。部署后在“设置 → 字体管理”中配置 `/fontfolder` 或
+`/fontfolder/chinese` 等容器内扫描路径。
+
 应用的 PostgreSQL、Redis、MinIO、上传文件、数据库备份和部署状态使用以下
 Docker Volume：
 
@@ -132,7 +169,8 @@ aibook-deploy-state
 1. 复制仓库中的 `docker/.env.production.example`。
 2. 替换所有中文占位值，填写 NAS 的真实 `BOOKS_PATH` 和书库组的数字
    `BOOKS_GID`。附加目录也可以填写到 `BOOKS_MOUNTS` 和 `BOOKS_GIDS`；
-   环境文件中多个挂载使用分号分隔。
+   环境文件中多个挂载使用分号分隔。需要扫描 NAS 字体时再填写
+   `FONTS_PATH`、`FONTS_GID`、`FONT_MOUNTS` 和 `FONT_GIDS`。
 3. 在 Jenkins 打开：
    `Manage Jenkins → Credentials → System → Global credentials`。
 4. 新增 `Secret file` 类型凭据。
@@ -181,11 +219,17 @@ git@github.com:beishan/aibook.git
 | `BOOKS_GID` | `1001` | 主书库目录的数字 GID |
 | `BOOKS_MOUNTS` | 空 | 附加书库多行挂载配置 |
 | `BOOKS_GIDS` | 空 | 附加目录 GID，多个值用逗号分隔 |
+| `FONTS_PATH` | 空 | 可选主字体目录，只读映射到 `/fontfolder` |
+| `FONTS_GID` | 空 | 主字体目录的数字 GID；配置路径时必填 |
+| `FONT_MOUNTS` | 空 | 可选附加字体目录多行挂载配置，始终只读 |
+| `FONT_GIDS` | 空 | 附加字体目录 GID，多个值用逗号分隔 |
 | `SKIP_TESTS` | `false` | 仅在紧急发布时跳过后端测试 |
 
 非空 Jenkins 参数会覆盖 Secret file 中同名配置。`BOOKS_MOUNTS` 留空时会读取
 Secret file 中的单行分号格式，便于固定配置；临时发版也可以直接在 Jenkins
-多行输入框中调整。端口被其他应用占用时，在执行构建时修改参数即可。
+多行输入框中调整。字体参数使用相同规则；`FONTS_PATH`、`FONTS_GID` 都留空
+时不会生成字体挂载，也不会出现 Compose 缺少变量的错误。端口被其他应用占用
+时，在执行构建时修改参数即可。
 
 ## 六、首次部署
 
@@ -317,6 +361,19 @@ ACL 中应存在与 `BOOKS_GID` 对应且有效权限为 `r-x` 的组条目。�
 `BOOKS_GID` 或 `BOOKS_GIDS` 后必须重新创建后端容器，单纯重启不会更新附加组。
 如果部署脚本提示宿主机路径不存在，应检查路径拼写以及该路径是否真实存在于
 Docker 守护进程所在的 NAS，而不是只存在于 Jenkins 容器内。
+
+### `FONTS_PATH` 或 `FONT_MOUNTS` 挂载失败
+
+字体目录与书库目录使用相同的组权限机制，但始终以只读方式挂载。先确认
+`FONTS_PATH` 和 `FONTS_GID` 已同时配置，再检查容器内权限和实际挂载：
+
+```bash
+docker exec aibook-backend id
+docker exec aibook-backend ls -la /fontfolder
+docker inspect --format '{{range .Mounts}}{{if eq .Destination "/fontfolder"}}{{println .Source "->" .Destination "RW=" .RW}}{{end}}{{end}}' aibook-backend
+```
+
+预期 `RW=false`。修改 `FONTS_GID` 或 `FONT_GIDS` 后需要重新创建后端容器。
 
 ### 健康检查一直是 `starting`
 

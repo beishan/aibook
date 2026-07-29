@@ -5,10 +5,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 /**
  * 全局异常处理器
@@ -46,6 +48,15 @@ public class GlobalExceptionHandler {
                     "error", "Bad request",
                     "message", ex.getMessage() != null ? ex.getMessage() : "Invalid request"
                 ));
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatus(
+            ResponseStatusException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", ex.getStatusCode().toString());
+        body.put("message", ex.getReason() == null ? "请求处理失败" : ex.getReason());
+        return ResponseEntity.status(ex.getStatusCode()).body(body);
     }
 
     @ExceptionHandler(Exception.class)

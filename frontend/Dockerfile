@@ -17,6 +17,11 @@ RUN npm run build
 # 第二阶段：运行（使用 Nginx）
 FROM nginx:alpine
 
+ENV TZ=Asia/Shanghai
+RUN apk add --no-cache tzdata \
+    && cp "/usr/share/zoneinfo/${TZ}" /etc/localtime \
+    && echo "${TZ}" > /etc/timezone
+
 # 复制构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html
 

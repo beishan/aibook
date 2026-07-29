@@ -5,6 +5,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${PROJECT_DIR}/docker/docker-compose.yml"
+FONTS_COMPOSE_FILE="${PROJECT_DIR}/docker/docker-compose.fonts.yml"
 ACTION="${1:-deploy}"
 ENV_FILE="${2:-${PROJECT_DIR}/docker/.env.production}"
 STATE_FILE="${3:-${PROJECT_DIR}/.aibook-previous-images}"
@@ -16,6 +17,7 @@ HEALTH_RETRIES="${HEALTH_RETRIES:-36}"
 HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-5}"
 IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
 COMPOSE_OVERRIDE_FILE=""
+USE_FONTS_COMPOSE=false
 
 cleanup_temp_files() {
     if [[ -n "${COMPOSE_OVERRIDE_FILE}" && -f "${COMPOSE_OVERRIDE_FILE}" ]]; then
@@ -69,8 +71,16 @@ validate_mount_path() {
         echo "错误：${label}不能挂载文件系统根目录。" >&2
         return 1
     fi
-    if [[ "${path}" == *$'\n'* || "${path}" == *$'\r'* || "${path}" == *$'\t'* ]]; then
+    if [[ "${path}" =~ [[:cntrl:]] ]]; then
         echo "错误：${label}不能包含控制字符：${path}" >&2
+        return 1
+    fi
+    if [[ "${path}" == *//* || "${path}" == */ ]]; then
+        echo "错误：${label}必须是规范化路径，不能包含连续斜杠或以斜杠结尾：${path}" >&2
+        return 1
+    fi
+    if [[ "/${path#/}/" == */./* ]]; then
+        echo "错误：${label}不能包含 . 路径段：${path}" >&2
         return 1
     fi
     if [[ "/${path#/}/" == */../* ]]; then
@@ -79,37 +89,76 @@ validate_mount_path() {
     fi
 }
 
-prepare_books_override() {
-    local mounts_config
-    local gids_config
+validate_gid() {
+    local label="$1"
+    local gid="$2"
+
+    if [[ ! "${gid}" =~ ^(0|[1-9][0-9]*)$ ]]; then
+        echo "错误：${label}只能是数字 GID，且不能包含前导零：${gid}" >&2
+        return 1
+    fi
+    if ((${#gid} > 10)) \
+        || { ((${#gid} == 10)) && [[ "${gid}" > "4294967294" ]]; }; then
+        echo "错误：${label}超出 Linux GID 范围：${gid}" >&2
+        return 1
+    fi
+}
+
+OVERRIDE_MOUNT_SOURCES=()
+OVERRIDE_MOUNT_TARGETS=()
+OVERRIDE_MOUNT_READ_ONLY=()
+OVERRIDE_MOUNT_DESCRIPTIONS=()
+OVERRIDE_GIDS=()
+OVERRIDE_GID_DESCRIPTIONS=()
+SEEN_OVERRIDE_TARGETS=$'\n'
+SEEN_OVERRIDE_GIDS=$'\n'
+
+add_override_mount() {
+    local source_path="$1"
+    local target_path="$2"
+    local read_only="$3"
+    local description="$4"
+
+    if [[ "${SEEN_OVERRIDE_TARGETS}" == *$'\n'"${target_path}"$'\n'* ]]; then
+        echo "错误：动态挂载的容器路径重复：${target_path}" >&2
+        return 1
+    fi
+    SEEN_OVERRIDE_TARGETS+="${target_path}"$'\n'
+
+    OVERRIDE_MOUNT_SOURCES+=("${source_path}")
+    OVERRIDE_MOUNT_TARGETS+=("${target_path}")
+    OVERRIDE_MOUNT_READ_ONLY+=("${read_only}")
+    OVERRIDE_MOUNT_DESCRIPTIONS+=("${description}")
+}
+
+add_override_gid() {
+    local gid="$1"
+    local description="$2"
+
+    if [[ "${SEEN_OVERRIDE_GIDS}" == *$'\n'"${gid}"$'\n'* ]]; then
+        return
+    fi
+    SEEN_OVERRIDE_GIDS+="${gid}"$'\n'
+    OVERRIDE_GIDS+=("${gid}")
+    OVERRIDE_GID_DESCRIPTIONS+=("${description}")
+}
+
+collect_mounts_config() {
+    local config_name="$1"
+    local mounts_config="$2"
+    local target_root="$3"
+    local description="$4"
+    local force_read_only="$5"
     local raw_line
     local line
     local source_path
     local target_path
     local mount_mode
     local extra_part
-    local gid
     local read_only
-    local mount_count=0
-    local gid_count=0
     local normalized_mounts
-    local normalized_gids
-    local seen_targets=$'\n'
-    local seen_gids=$'\n'
 
-    mounts_config="${BOOKS_MOUNTS:-$(env_file_value BOOKS_MOUNTS)}"
-    gids_config="${BOOKS_GIDS:-$(env_file_value BOOKS_GIDS)}"
     normalized_mounts="${mounts_config//;/$'\n'}"
-    normalized_gids="${gids_config//[;,]/$'\n'}"
-    normalized_gids="${normalized_gids// /$'\n'}"
-
-    if [[ -z "$(trim_whitespace "${normalized_mounts}")" \
-            && -z "$(trim_whitespace "${normalized_gids}")" ]]; then
-        return
-    fi
-
-    COMPOSE_OVERRIDE_FILE="$(mktemp)"
-    printf '%s\n' "services:" "  backend:" > "${COMPOSE_OVERRIDE_FILE}"
 
     while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
         line="$(trim_whitespace "${raw_line}")"
@@ -123,77 +172,135 @@ prepare_books_override() {
         mount_mode="$(trim_whitespace "${mount_mode:-ro}")"
 
         if [[ -n "${extra_part:-}" || -z "${source_path}" || -z "${target_path}" ]]; then
-            echo "错误：BOOKS_MOUNTS 格式应为 宿主机路径:容器路径[:ro|rw]：${line}" >&2
+            echo "错误：${config_name} 格式应为 宿主机路径:容器路径[:ro|rw]：${line}" >&2
             return 1
         fi
-        validate_mount_path "书库宿主机路径" "${source_path}"
-        validate_mount_path "书库容器路径" "${target_path}"
+        validate_mount_path "${description}宿主机路径" "${source_path}"
+        validate_mount_path "${description}容器路径" "${target_path}"
 
-        if [[ "${target_path}" != /scanfolder/* ]]; then
-            echo "错误：附加书库容器路径必须位于 /scanfolder/ 下：${target_path}" >&2
+        if [[ "${target_path}" != "${target_root}/"* ]]; then
+            echo "错误：${description}容器路径必须位于 ${target_root}/ 下：${target_path}" >&2
             return 1
         fi
         if [[ "${mount_mode}" != "ro" && "${mount_mode}" != "rw" ]]; then
             echo "错误：挂载模式只支持 ro 或 rw：${mount_mode}" >&2
             return 1
         fi
-        if [[ "${seen_targets}" == *$'\n'"${target_path}"$'\n'* ]]; then
-            echo "错误：BOOKS_MOUNTS 中容器路径重复：${target_path}" >&2
+        if [[ "${force_read_only}" == "true" && "${mount_mode}" != "ro" ]]; then
+            echo "错误：${config_name} 仅支持只读挂载 ro：${line}" >&2
             return 1
         fi
-        seen_targets+="${target_path}"$'\n'
 
-        if ((mount_count == 0)); then
-            printf '%s\n' "    volumes:" >> "${COMPOSE_OVERRIDE_FILE}"
-        fi
         if [[ "${mount_mode}" == "ro" ]]; then
             read_only=true
         else
             read_only=false
         fi
-        {
-            printf '      - type: bind\n'
-            printf '        source: %s\n' "$(yaml_quote "${source_path}")"
-            printf '        target: %s\n' "$(yaml_quote "${target_path}")"
-            printf '        read_only: %s\n' "${read_only}"
-            printf '        bind:\n'
-            printf '          create_host_path: false\n'
-        } >> "${COMPOSE_OVERRIDE_FILE}"
-        echo "  附加书库：${source_path} -> ${target_path} (${mount_mode})"
-        mount_count=$((mount_count + 1))
+        add_override_mount \
+            "${source_path}" \
+            "${target_path}" \
+            "${read_only}" \
+            "${description}：${source_path} -> ${target_path} (${mount_mode})"
     done <<< "${normalized_mounts}"
+}
 
+collect_gids_config() {
+    local config_name="$1"
+    local gids_config="$2"
+    local description="$3"
+    local normalized_gids
+    local raw_line
+    local gid
+
+    normalized_gids="${gids_config//[;,]/$'\n'}"
+    normalized_gids="${normalized_gids// /$'\n'}"
     while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
         gid="$(trim_whitespace "${raw_line}")"
         if [[ -z "${gid}" || "${gid}" == \#* ]]; then
             continue
         fi
-        if [[ ! "${gid}" =~ ^[0-9]+$ ]]; then
-            echo "错误：BOOKS_GIDS 只能包含数字 GID：${gid}" >&2
+        validate_gid "${config_name}" "${gid}"
+        add_override_gid "${gid}" "${description} GID ${gid}"
+    done <<< "${normalized_gids}"
+}
+
+prepare_mounts_override() {
+    local books_mounts
+    local books_gids
+    local fonts_path
+    local fonts_gid
+    local font_mounts
+    local font_gids
+    local index
+
+    books_mounts="${BOOKS_MOUNTS:-$(env_file_value BOOKS_MOUNTS)}"
+    books_gids="${BOOKS_GIDS:-$(env_file_value BOOKS_GIDS)}"
+    fonts_path="$(trim_whitespace "${FONTS_PATH:-$(env_file_value FONTS_PATH)}")"
+    fonts_gid="$(trim_whitespace "${FONTS_GID:-$(env_file_value FONTS_GID)}")"
+    font_mounts="${FONT_MOUNTS:-$(env_file_value FONT_MOUNTS)}"
+    font_gids="${FONT_GIDS:-$(env_file_value FONT_GIDS)}"
+
+    collect_mounts_config \
+        "BOOKS_MOUNTS" "${books_mounts}" "/scanfolder" "附加书库" "false"
+    collect_gids_config "BOOKS_GIDS" "${books_gids}" "附加书库"
+
+    if [[ -n "${fonts_path}" || -n "${fonts_gid}" ]]; then
+        if [[ -z "${fonts_path}" || -z "${fonts_gid}" ]]; then
+            echo "错误：FONTS_PATH 与 FONTS_GID 必须同时配置，或同时留空。" >&2
             return 1
         fi
-        if [[ "${seen_gids}" == *$'\n'"${gid}"$'\n'* ]]; then
-            continue
-        fi
-        seen_gids+="${gid}"$'\n'
+        validate_mount_path "主字体目录宿主机路径" "${fonts_path}"
+        validate_gid "FONTS_GID" "${fonts_gid}"
+        export FONTS_PATH="${fonts_path}"
+        export FONTS_GID="${fonts_gid}"
+        USE_FONTS_COMPOSE=true
+        echo "  主字体目录：${fonts_path} -> /fontfolder (ro)"
+        echo "  主字体目录 GID ${fonts_gid}"
+    fi
 
-        if ((gid_count == 0)); then
-            printf '%s\n' "    group_add:" >> "${COMPOSE_OVERRIDE_FILE}"
-        fi
-        printf '      - %s\n' "$(yaml_quote "${gid}")" >> "${COMPOSE_OVERRIDE_FILE}"
-        gid_count=$((gid_count + 1))
-    done <<< "${normalized_gids}"
+    collect_mounts_config \
+        "FONT_MOUNTS" "${font_mounts}" "/fontfolder" "附加字体目录" "true"
+    collect_gids_config "FONT_GIDS" "${font_gids}" "附加字体目录"
 
-    if ((mount_count == 0 && gid_count == 0)); then
-        rm -f "${COMPOSE_OVERRIDE_FILE}"
-        COMPOSE_OVERRIDE_FILE=""
+    if ((${#OVERRIDE_MOUNT_SOURCES[@]} == 0 && ${#OVERRIDE_GIDS[@]} == 0)); then
         return
     fi
 
-    echo "已生成附加书库挂载配置：${mount_count} 个目录，${gid_count} 个附加 GID。"
+    COMPOSE_OVERRIDE_FILE="$(mktemp)"
+    printf '%s\n' "services:" "  backend:" > "${COMPOSE_OVERRIDE_FILE}"
+
+    if ((${#OVERRIDE_MOUNT_SOURCES[@]} > 0)); then
+        printf '%s\n' "    volumes:" >> "${COMPOSE_OVERRIDE_FILE}"
+        for index in "${!OVERRIDE_MOUNT_SOURCES[@]}"; do
+            {
+                printf '      - type: bind\n'
+                printf '        source: %s\n' \
+                    "$(yaml_quote "${OVERRIDE_MOUNT_SOURCES[${index}]}")"
+                printf '        target: %s\n' \
+                    "$(yaml_quote "${OVERRIDE_MOUNT_TARGETS[${index}]}")"
+                printf '        read_only: %s\n' \
+                    "${OVERRIDE_MOUNT_READ_ONLY[${index}]}"
+                printf '        bind:\n'
+                printf '          create_host_path: false\n'
+            } >> "${COMPOSE_OVERRIDE_FILE}"
+            echo "  ${OVERRIDE_MOUNT_DESCRIPTIONS[${index}]}"
+        done
+    fi
+
+    if ((${#OVERRIDE_GIDS[@]} > 0)); then
+        printf '%s\n' "    group_add:" >> "${COMPOSE_OVERRIDE_FILE}"
+        for index in "${!OVERRIDE_GIDS[@]}"; do
+            printf '      - %s\n' \
+                "$(yaml_quote "${OVERRIDE_GIDS[${index}]}")" \
+                >> "${COMPOSE_OVERRIDE_FILE}"
+            echo "  ${OVERRIDE_GID_DESCRIPTIONS[${index}]}"
+        done
+    fi
+
+    echo "已生成动态目录配置：${#OVERRIDE_MOUNT_SOURCES[@]} 个目录，${#OVERRIDE_GIDS[@]} 个附加 GID。"
 }
 
-prepare_books_override
+prepare_mounts_override
 
 compose() {
     local compose_args=(
@@ -201,6 +308,9 @@ compose() {
         --env-file "${ENV_FILE}"
         --file "${COMPOSE_FILE}"
     )
+    if [[ "${USE_FONTS_COMPOSE}" == "true" ]]; then
+        compose_args+=(--file "${FONTS_COMPOSE_FILE}")
+    fi
     if [[ -n "${COMPOSE_OVERRIDE_FILE}" ]]; then
         compose_args+=(--file "${COMPOSE_OVERRIDE_FILE}")
     fi

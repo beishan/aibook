@@ -136,7 +136,9 @@ public class FileScannerService {
     /**
      * 定时扫描（每天凌晨2点）
      */
-    @Scheduled(cron = "${scanning.cron:0 0 2 * * ?}")
+    @Scheduled(
+            cron = "${scanning.cron:0 0 2 * * ?}",
+            zone = "${scanning.time-zone:Asia/Shanghai}")
     public void scheduledScan() {
         if (!scanningEnabled) {
             return;

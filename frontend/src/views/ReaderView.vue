@@ -317,7 +317,7 @@
                       class="font-btn"
                       :class="{ active: settings.fontFamily === font.value }"
                       :style="{ fontFamily: font.preview }"
-                      @click="settings.fontFamily = font.value"
+                      @click="selectReaderFont(font)"
                     >
                       {{ font.label }}
                     </button>
@@ -445,13 +445,18 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookStore } from '@/stores/book'
 import { useThemeStore } from '@/stores/theme'
+import { usePreferencesStore } from '@/stores/preferences'
+import { useFontStore } from '@/stores/font'
 import api from '@/utils/api'
 import { message, confirm } from '@/utils/message'
+import { formatChinaDateTime } from '@/utils/dateTime'
 
 const route = useRoute()
 const router = useRouter()
 const bookStore = useBookStore()
 const themeStore = useThemeStore()
+const preferencesStore = usePreferencesStore()
+const fontStore = useFontStore()
 
 // 章节接口定义
 interface Chapter {
@@ -528,13 +533,50 @@ const pdfUrl = computed(() => {
 })
 
 // 字体选项
-const fontOptions = [
+const builtInFontOptions = [
   { value: 'default', label: '默认', preview: 'inherit' },
   { value: 'SimSun, serif', label: '宋体', preview: 'SimSun, serif' },
   { value: 'SimHei, sans-serif', label: '黑体', preview: 'SimHei, sans-serif' },
   { value: 'KaiTi, serif', label: '楷体', preview: 'KaiTi, serif' },
   { value: 'FangSong, serif', label: '仿宋', preview: 'FangSong, serif' },
 ]
+
+const managedFontValue = (id: number) => `managed:${id}`
+
+const managedFontId = (value: string) => {
+  const match = /^managed:(\d+)$/.exec(value)
+  return match ? Number(match[1]) : null
+}
+
+const resolveReaderFontFamily = (value: string) => {
+  const id = managedFontId(value)
+  if (id != null) return `${fontStore.cssFamily(id)}, serif`
+  return value === 'default' ? 'inherit' : value
+}
+
+const fontOptions = computed(() => [
+  ...builtInFontOptions,
+  ...fontStore.availableFonts.map(font => ({
+    value: managedFontValue(font.id),
+    label: font.displayName,
+    preview: fontStore.cssFamily(font.id),
+    fontId: font.id,
+  })),
+])
+
+const selectReaderFont = async (font: { value: string; fontId?: number }) => {
+  try {
+    if (font.fontId != null) {
+      await fontStore.loadFont(font.fontId)
+      preferencesStore.setReaderFontId(font.fontId)
+    } else {
+      preferencesStore.setReaderFontId(null)
+    }
+    settings.value.fontFamily = font.value
+  } catch {
+    message.error('字体加载失败，请检查字体文件是否可用')
+  }
+}
 
 // 主题选项
 const themeOptions = [
@@ -610,7 +652,7 @@ const readerStyle = computed(() => {
   const widthOption = widthOptions.find(w => w.value === settings.value.contentWidth) || widthOptions[1]
   const isDoubleScreen = settings.value.screenMode === 'double'
   return {
-    fontFamily: settings.value.fontFamily === 'default' ? 'inherit' : settings.value.fontFamily,
+    fontFamily: resolveReaderFontFamily(settings.value.fontFamily),
     fontSize: `${settings.value.fontSize}px`,
     lineHeight: settings.value.lineHeight,
     backgroundColor: colors.bg,
@@ -1613,9 +1655,15 @@ const toggleFullscreen = () => {
 const applyThemeToContent = (contents: any) => {
   if (!contents || !contents.css) return
 
-  const fontFamily = settings.value.fontFamily === 'default'
-    ? 'serif'
-    : settings.value.fontFamily.split(',')[0].trim()
+  const selectedManagedFontId = managedFontId(settings.value.fontFamily)
+  const fontFamily = selectedManagedFontId != null
+    ? fontStore.cssFamily(selectedManagedFontId)
+    : settings.value.fontFamily === 'default'
+      ? 'serif'
+      : settings.value.fontFamily.split(',')[0].trim()
+  const loadedManagedFont = selectedManagedFontId == null
+    ? undefined
+    : fontStore.getLoadedFont(selectedManagedFontId)
 
   const colors = getResolvedColors(settings.value.backgroundColor)
 
@@ -1630,6 +1678,14 @@ const applyThemeToContent = (contents: any) => {
     if (doc) {
       const style = doc.createElement('style')
       style.textContent = `
+        ${loadedManagedFont ? `
+        @font-face {
+          font-family: ${fontFamily};
+          src: url("${loadedManagedFont.objectUrl}");
+          font-style: normal;
+          font-weight: normal;
+          font-display: swap;
+        }` : ''}
         * {
           font-family: ${fontFamily}, serif !important;
           font-size: ${settings.value.fontSize}px !important;
@@ -1672,8 +1728,7 @@ const applyEpubTheme = () => {
 }
 
 const formatTime = (timeStr: string) => {
-  const date = new Date(timeStr)
-  return date.toLocaleString('zh-CN')
+  return formatChinaDateTime(timeStr)
 }
 
 watch(() => settings.value, () => {
@@ -1725,9 +1780,29 @@ const handleResize = () => {
   }
 }
 
-onMounted(() => {
+const initializeReader = async () => {
   loadReaderSettings()
-  loadBook()
+  try {
+    await preferencesStore.hydrate()
+    await fontStore.fetchFonts()
+    const preferredFontId = preferencesStore.readerFontId
+    if (preferredFontId != null) {
+      await fontStore.loadFont(preferredFontId)
+      settings.value.fontFamily = managedFontValue(preferredFontId)
+    } else if (managedFontId(settings.value.fontFamily) != null) {
+      settings.value.fontFamily = 'default'
+    }
+  } catch (error) {
+    console.error('Failed to initialize reader font:', error)
+    if (managedFontId(settings.value.fontFamily) != null) {
+      settings.value.fontFamily = 'default'
+    }
+  }
+  await loadBook()
+}
+
+onMounted(() => {
+  void initializeReader()
   document.addEventListener('keydown', handleKeydown)
   window.addEventListener('resize', handleResize)
 

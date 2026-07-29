@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/utils/api'
 import { useThemeStore } from '@/stores/theme'
+import { useFontStore } from '@/stores/font'
 import { THEMES, type ThemeId } from '@/types/theme'
 
 export type LibraryViewMode = 'card' | 'list'
@@ -10,6 +11,8 @@ interface UserPreferences {
   theme: ThemeId | null
   libraryViewMode: LibraryViewMode | null
   scanThreadCount: number | null
+  uiFontId: number | null
+  readerFontId: number | null
 }
 
 const LIBRARY_VIEW_MODE_KEY = 'ai-book-view-mode'
@@ -33,6 +36,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const themeStore = useThemeStore()
   const libraryViewMode = ref<LibraryViewMode>(readLocalLibraryViewMode())
   const scanThreadCount = ref(DEFAULT_SCAN_THREAD_COUNT)
+  const uiFontId = ref<number | null>(null)
+  const readerFontId = ref<number | null>(null)
   const hydrated = ref(false)
   let saveQueue: Promise<unknown> = Promise.resolve()
 
@@ -64,6 +69,17 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (syncRemote) persistRemote({ scanThreadCount: value })
   }
 
+  const setUiFontId = (value: number | null, syncRemote = true) => {
+    uiFontId.value = value
+    void useFontStore().applySystemFont(value)
+    if (syncRemote) persistRemote({ uiFontId: value })
+  }
+
+  const setReaderFontId = (value: number | null, syncRemote = true) => {
+    readerFontId.value = value
+    if (syncRemote) persistRemote({ readerFontId: value })
+  }
+
   const hydrate = async (force = false) => {
     if (hydrated.value && !force) return
     if (!localStorage.getItem('token')) return
@@ -90,6 +106,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.scanThreadCount = scanThreadCount.value
       }
 
+      setUiFontId(Number.isInteger(data.uiFontId) ? data.uiFontId : null, false)
+      setReaderFontId(
+        Number.isInteger(data.readerFontId) ? data.readerFontId : null,
+        false
+      )
+
       hydrated.value = true
 
       if (Object.keys(missingPreferences).length > 0) {
@@ -102,15 +124,22 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   const resetHydration = () => {
     hydrated.value = false
+    uiFontId.value = null
+    readerFontId.value = null
+    void useFontStore().applySystemFont(null)
   }
 
   return {
     libraryViewMode,
     scanThreadCount,
+    uiFontId,
+    readerFontId,
     hydrated,
     setTheme,
     setLibraryViewMode,
     setScanThreadCount,
+    setUiFontId,
+    setReaderFontId,
     hydrate,
     resetHydration,
   }

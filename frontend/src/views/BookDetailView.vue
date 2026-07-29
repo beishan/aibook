@@ -385,6 +385,7 @@ import { useTagStore } from '@/stores/tag'
 import api from '@/utils/api'
 import { scrapeBook, downloadCover } from '@/utils/scraper'
 import { getCoverUrl } from '@/utils/cover'
+import { formatChinaDateTime } from '@/utils/dateTime'
 import ScraperDialog from '@/components/ScraperDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 
@@ -752,8 +753,7 @@ const formatFileSize = (bytes?: number) => {
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '未知'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN')
+  return formatChinaDateTime(dateStr)
 }
 
 onMounted(() => {

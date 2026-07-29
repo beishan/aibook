@@ -3,8 +3,9 @@ package com.aibook.service;
 import com.aibook.config.ScanSettings;
 import com.aibook.dto.UserPreferencesDTO;
 import com.aibook.model.entity.User;
+import com.aibook.repository.FontAssetRepository;
 import com.aibook.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -17,13 +18,28 @@ import java.util.Set;
  * 用户服务
  */
 @Service
-@RequiredArgsConstructor
 public class UserService implements UserDetailsService {
 
     private static final Set<String> WEB_THEMES = Set.of("modern", "warm", "natural");
     private static final Set<String> LIBRARY_VIEW_MODES = Set.of("card", "list");
 
     private final UserRepository userRepository;
+    private final FontAssetRepository fontAssetRepository;
+
+    /**
+     * 保留单参数构造器，兼容轻量控制器测试中的 StubUserService。
+     */
+    public UserService(UserRepository userRepository) {
+        this(userRepository, null);
+    }
+
+    @Autowired
+    public UserService(
+            UserRepository userRepository,
+            FontAssetRepository fontAssetRepository) {
+        this.userRepository = userRepository;
+        this.fontAssetRepository = fontAssetRepository;
+    }
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -72,6 +88,14 @@ public class UserService implements UserDetailsService {
             }
             user.setScanThreadCount(request.getScanThreadCount());
         }
+        if (request.hasUiFontId()) {
+            validateFont(request.getUiFontId());
+            user.setUiFontId(request.getUiFontId());
+        }
+        if (request.hasReaderFontId()) {
+            validateFont(request.getReaderFontId());
+            user.setReaderFontId(request.getReaderFontId());
+        }
 
         return toPreferences(userRepository.save(user));
     }
@@ -82,7 +106,28 @@ public class UserService implements UserDetailsService {
                 .libraryViewMode(user.getLibraryViewMode())
                 .scanThreadCount(
                         ScanSettings.normalizeThreadCount(user.getScanThreadCount()))
+                .uiFontId(activeFontId(user.getUiFontId()))
+                .readerFontId(activeFontId(user.getReaderFontId()))
                 .build();
+    }
+
+    private void validateFont(Long id) {
+        if (id == null) {
+            return;
+        }
+        if (fontAssetRepository == null
+                || fontAssetRepository.findByIdAndEnabledTrue(id).isEmpty()) {
+            throw new IllegalArgumentException("字体不存在或未启用: " + id);
+        }
+    }
+
+    private Long activeFontId(Long id) {
+        if (id == null || fontAssetRepository == null) {
+            return id;
+        }
+        return fontAssetRepository.findByIdAndEnabledTrue(id).isPresent()
+                ? id
+                : null;
     }
 
     private void requireAllowed(String label, String value, Set<String> allowedValues) {

@@ -196,7 +196,7 @@
       <div
         v-for="book in bookStore.books"
         :key="book.id"
-        class="book-card glass"
+        class="book-card"
         :class="{ selected: selectionMode && selectedBooks.has(book.id) }"
         @click="handleCardClick(book.id)"
       >
@@ -210,7 +210,14 @@
         </div>
 
         <div class="book-cover">
-          <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" class="cover-image" />
+          <img
+            v-if="book.coverUrl"
+            :src="getCoverUrl(book.coverUrl)"
+            alt="封面"
+            class="cover-image"
+            loading="lazy"
+            decoding="async"
+          />
           <div v-else class="no-cover">
             <span>{{ book.title.charAt(0) }}</span>
           </div>
@@ -304,7 +311,13 @@
         </div>
 
         <div class="book-cover-small">
-          <img v-if="row.coverUrl" :src="getCoverUrl(row.coverUrl)" alt="封面" />
+          <img
+            v-if="row.coverUrl"
+            :src="getCoverUrl(row.coverUrl)"
+            alt="封面"
+            loading="lazy"
+            decoding="async"
+          />
           <div v-else class="no-cover-small">{{ row.title.charAt(0) }}</div>
         </div>
         <div class="book-list-info">
@@ -455,6 +468,7 @@ import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { MoreFilled } from '@element-plus/icons-vue'
 import { message, confirm } from '@/utils/message'
+import { formatChinaDate } from '@/utils/dateTime'
 import { useBookStore, type Book } from '@/stores/book'
 import { useCategoryStore } from '@/stores/category'
 import { useTagStore } from '@/stores/tag'
@@ -811,9 +825,7 @@ const getStatusText = (status: string) => {
 }
 
 const formatDate = (dateStr: string) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN')
+  return formatChinaDate(dateStr)
 }
 
 const getTagStyle = (color?: string) => {
@@ -1216,13 +1228,17 @@ onMounted(() => {
 .book-card {
   position: relative;
   background: var(--surface-card);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
   border: var(--glass-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
   cursor: pointer;
-  transition: all var(--transition-normal);
+  contain: layout paint style;
+  content-visibility: auto;
+  contain-intrinsic-size: 250px;
+  transition:
+    transform var(--transition-normal),
+    box-shadow var(--transition-normal),
+    border-color var(--transition-normal);
 }
 
 .book-card:hover {
@@ -1272,8 +1288,6 @@ onMounted(() => {
   background: rgba(15, 23, 42, 0.42);
   border: 1px solid rgba(255, 255, 255, 0.68);
   border-radius: 4px;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
 }
 
 .book-info {
@@ -1329,10 +1343,8 @@ onMounted(() => {
   justify-content: flex-end;
   gap: 6px;
   padding: 9px 10px;
-  background: rgba(15, 23, 42, 0.58);
+  background: rgba(15, 23, 42, 0.72);
   border-bottom: 1px solid rgba(255, 255, 255, 0.22);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   opacity: 0;
   transform: translateY(-105%);
   transition:
