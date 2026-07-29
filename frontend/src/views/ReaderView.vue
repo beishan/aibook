@@ -798,27 +798,28 @@ const loadBook = async () => {
     // 先获取书籍信息
     book.value = await bookStore.fetchBookById(id)
 
-    // 并行加载进度、书签、高亮和内容
-    const promises = [
-      loadSavedProgress(id),
+    // 阅读进度会影响 EPUB 首次定位，先发起请求但不阻塞书籍下载。
+    const progressPromise = loadSavedProgress(id)
+    const accessoryPromises = [
+      progressPromise,
       loadBookmarks(id),
-      loadHighlights(id)
+      loadHighlights(id),
     ]
 
     // 根据格式加载内容
     if (book.value.format === 'txt' || book.value.format === 'md') {
-      promises.push(loadTextContent())
+      accessoryPromises.push(loadTextContent())
     } else if (book.value.format === 'html') {
-      promises.push(loadHtmlContent())
+      accessoryPromises.push(loadHtmlContent())
     }
 
-    // 等待所有请求完成
-    await Promise.all(promises)
-
-    // EPUB 需要在 DOM 更新后初始化
+    // EPUB 文件、解析模块和附属数据并行加载，减少进入阅读页后的空白等待。
     if (book.value.format === 'epub') {
       await nextTick()
-      initEpub()
+      await initEpub(progressPromise)
+      void Promise.all(accessoryPromises)
+    } else {
+      await Promise.all(accessoryPromises)
     }
 
     // 记录开始阅读时间
@@ -1268,20 +1269,31 @@ const loadHtmlContent = async () => {
   }
 }
 
-const initEpub = async () => {
+const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
   try {
-    const ePub = (await import('epubjs')).default
-
     const token = localStorage.getItem('token')
-    const response = await fetch(`/api/books/${book.value.id}/content`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const arrayBuffer = await response.arrayBuffer()
+    const contentVersion = encodeURIComponent(
+      `${book.value.fileSize || 0}-${book.value.updatedAt || ''}`,
+    )
+    const contentUrl = `/api/books/${book.value.id}/content?v=${contentVersion}`
+
+    // epub.js 代码块和书籍二进制并行获取，浏览器可复用后端的版本化缓存。
+    const [epubModule, arrayBuffer] = await Promise.all([
+      import('epubjs'),
+      fetch(contentUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'default',
+      }).then(async response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return response.arrayBuffer()
+      }),
+    ])
+    const ePub = epubModule.default
 
     bookInstance = ePub(arrayBuffer)
 
-    await bookInstance.ready
+    // 解析 EPUB 与读取用户进度并行；仅在决定首个展示位置前等待进度。
+    await Promise.all([bookInstance.ready, progressReady])
 
     const navigation = bookInstance.navigation
     if (navigation && navigation.toc) {

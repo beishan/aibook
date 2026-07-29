@@ -27,17 +27,21 @@ import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.context.request.WebRequest;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -310,7 +314,8 @@ public class BookController {
     @GetMapping("/{id}/content")
     public ResponseEntity<Resource> getBookContent(
             Authentication authentication,
-            @PathVariable Long id) {
+            @PathVariable Long id,
+            WebRequest webRequest) throws IOException {
 
         User user = userService.findByUsername(authentication.getName());
         BookDTO bookDTO = bookService.getBookById(id, user);
@@ -322,10 +327,30 @@ public class BookController {
 
         FileSystemResource resource = new FileSystemResource(filePath.toFile());
         String contentType = MimeTypeUtil.getContentTypeWithCharset(bookDTO.getFormat());
+        long lastModified = Files.getLastModifiedTime(filePath).toMillis();
+        long fileSize = Files.size(filePath);
+        String etag = "\""
+                + Long.toHexString(fileSize)
+                + "-"
+                + Long.toHexString(lastModified)
+                + "\"";
+        CacheControl cacheControl = CacheControl.maxAge(Duration.ofDays(1))
+                .cachePrivate();
+
+        if (webRequest.checkNotModified(etag, lastModified)) {
+            return ResponseEntity.status(304)
+                    .eTag(etag)
+                    .lastModified(lastModified)
+                    .cacheControl(cacheControl)
+                    .build();
+        }
 
         ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_TYPE, contentType)
-                .header(HttpHeaders.CACHE_CONTROL, "max-age=3600");
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .eTag(etag)
+                .lastModified(lastModified)
+                .cacheControl(cacheControl);
 
         // PDF 文件需要 inline 显示，而不是下载
         if ("pdf".equalsIgnoreCase(bookDTO.getFormat())) {

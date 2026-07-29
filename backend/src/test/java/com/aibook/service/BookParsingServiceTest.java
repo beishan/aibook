@@ -130,6 +130,114 @@ class BookParsingServiceTest {
         assertEquals(1, toc.get(2).getDepth());
     }
 
+    @Test
+    void shouldReadNcxWithStandardDoctypeWithoutLoadingExternalDtd() throws Exception {
+        Path file = tempDir.resolve("ncx-doctype.epub");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(file))) {
+            addEntry(zip, "META-INF/container.xml", """
+                    <?xml version="1.0"?>
+                    <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+                      <rootfiles>
+                        <rootfile full-path="OEBPS/content.opf"/>
+                      </rootfiles>
+                    </container>
+                    """);
+            addEntry(zip, "OEBPS/content.opf", """
+                    <?xml version="1.0"?>
+                    <package xmlns="http://www.idpf.org/2007/opf">
+                      <metadata/>
+                      <manifest>
+                        <item id="toc" href="toc.ncx"
+                              media-type="application/x-dtbncx+xml"/>
+                        <item id="chapter1" href="chapter1.xhtml"
+                              media-type="application/xhtml+xml"/>
+                      </manifest>
+                      <spine toc="toc">
+                        <itemref idref="chapter1"/>
+                      </spine>
+                    </package>
+                    """);
+            addEntry(zip, "OEBPS/toc.ncx", """
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN"
+                      "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
+                    <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">
+                      <navMap>
+                        <navPoint id="chapter-1">
+                          <navLabel><text>第一章 开始</text></navLabel>
+                          <content src="chapter1.xhtml"/>
+                        </navPoint>
+                      </navMap>
+                    </ncx>
+                    """);
+        }
+        Book book = Book.builder()
+                .title("带 NCX 目录的书籍")
+                .format("epub")
+                .filePath(file.toString())
+                .build();
+
+        var toc = service().getTableOfContents(book);
+
+        assertEquals(1, toc.size());
+        assertEquals("第一章 开始", toc.get(0).getTitle());
+        assertEquals("chapter1.xhtml", toc.get(0).getHref());
+    }
+
+    @Test
+    void shouldNotResolveExternalEntityDeclaredByEpubXml() throws Exception {
+        Path secret = tempDir.resolve("secret.txt");
+        Files.writeString(secret, "不应读取的外部内容", StandardCharsets.UTF_8);
+        Path file = tempDir.resolve("external-entity.epub");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(file))) {
+            addEntry(zip, "META-INF/container.xml", """
+                    <?xml version="1.0"?>
+                    <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+                      <rootfiles>
+                        <rootfile full-path="content.opf"/>
+                      </rootfiles>
+                    </container>
+                    """);
+            addEntry(zip, "content.opf", """
+                    <?xml version="1.0"?>
+                    <package xmlns="http://www.idpf.org/2007/opf">
+                      <metadata/>
+                      <manifest>
+                        <item id="toc" href="toc.ncx"
+                              media-type="application/x-dtbncx+xml"/>
+                        <item id="chapter1" href="chapter1.xhtml"
+                              media-type="application/xhtml+xml"/>
+                      </manifest>
+                      <spine toc="toc"><itemref idref="chapter1"/></spine>
+                    </package>
+                    """);
+            addEntry(zip, "toc.ncx", """
+                    <?xml version="1.0"?>
+                    <!DOCTYPE ncx [
+                      <!ENTITY external SYSTEM "%s">
+                    ]>
+                    <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">
+                      <navMap>
+                        <navPoint id="chapter-1">
+                          <navLabel><text>&external;</text></navLabel>
+                          <content src="chapter1.xhtml"/>
+                        </navPoint>
+                      </navMap>
+                    </ncx>
+                    """.formatted(secret.toUri()));
+        }
+        Book book = Book.builder()
+                .title("外部实体测试")
+                .format("epub")
+                .filePath(file.toString())
+                .build();
+
+        var toc = service().getTableOfContents(book);
+
+        assertEquals(1, toc.size());
+        assertEquals("第 1 章", toc.get(0).getTitle());
+    }
+
     private BookParsingService service() {
         BookRepository repository = mock(BookRepository.class);
         when(repository.save(any(Book.class))).thenAnswer(invocation -> invocation.getArgument(0));

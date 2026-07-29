@@ -201,32 +201,13 @@
           <div v-else class="no-cover">
             <span>{{ book.title.charAt(0) }}</span>
           </div>
-          <div class="book-format">{{ book.format.toUpperCase() }}</div>
-        </div>
-
-        <div class="book-info">
-          <div class="book-title" :title="book.title">{{ book.title }}</div>
-          <div class="book-author">{{ book.author || '未知作者' }}</div>
-          <div v-if="book.categoryName" class="book-category">{{ book.categoryPath || book.categoryName }}</div>
-          <div v-if="book.tags?.length" class="book-tag-list">
-            <span
-              v-for="tag in book.tags.slice(0, 3)"
-              :key="tag.id"
-              class="book-tag-chip"
-              :style="getTagStyle(tag.color)"
-            >
-              {{ tag.name }}
-            </span>
-            <span v-if="book.tags.length > 3" class="book-tag-more">
-              +{{ book.tags.length - 3 }}
-            </span>
-          </div>
-          <div class="book-actions">
+          <div class="book-cover-actions" @click.stop>
             <button
               class="action-btn"
               :class="{ 'active-favorite': book.isFavorite }"
               @click.stop="handleToggleFavorite(book.id)"
-              title="收藏"
+              :aria-label="book.isFavorite ? '取消收藏' : '收藏'"
+              :title="book.isFavorite ? '取消收藏' : '收藏'"
             >
               <span class="action-icon">{{ book.isFavorite ? '⭐' : '☆' }}</span>
             </button>
@@ -234,13 +215,15 @@
               class="action-btn"
               :class="{ 'active-wanted': book.isWanted }"
               @click.stop="handleToggleWanted(book.id)"
-              title="想读"
+              :aria-label="book.isWanted ? '取消想读' : '想读'"
+              :title="book.isWanted ? '取消想读' : '想读'"
             >
               <span class="action-icon">{{ book.isWanted ? '🔖' : '📑' }}</span>
             </button>
             <button
               class="action-btn"
               :class="{ 'is-processing': processingBookId === book.id }"
+              aria-label="更多操作"
               title="更多操作"
               @click.stop
             >
@@ -263,6 +246,26 @@
                 </template>
               </el-dropdown>
             </button>
+          </div>
+          <div class="book-format">{{ book.format.toUpperCase() }}</div>
+        </div>
+
+        <div class="book-info">
+          <div class="book-title" :title="book.title">{{ book.title }}</div>
+          <div class="book-author">{{ book.author || '未知作者' }}</div>
+          <div v-if="book.categoryName" class="book-category">{{ book.categoryPath || book.categoryName }}</div>
+          <div v-if="book.tags?.length" class="book-tag-list">
+            <span
+              v-for="tag in book.tags.slice(0, 3)"
+              :key="tag.id"
+              class="book-tag-chip"
+              :style="getTagStyle(tag.color)"
+            >
+              {{ tag.name }}
+            </span>
+            <span v-if="book.tags.length > 3" class="book-tag-more">
+              +{{ book.tags.length - 3 }}
+            </span>
           </div>
         </div>
       </div>
@@ -1050,6 +1053,7 @@ onMounted(() => {
 .book-cover {
   height: 200px;
   position: relative;
+  overflow: hidden;
 }
 
 .cover-image {
@@ -1145,28 +1149,48 @@ onMounted(() => {
   font-size: 10px;
 }
 
-.book-actions {
+.book-cover-actions {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: 0;
+  left: 0;
   display: flex;
+  justify-content: flex-end;
   gap: 6px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-color-light);
+  padding: 9px 10px;
+  background: rgba(15, 23, 42, 0.58);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  transform: translateY(-105%);
+  transition:
+    transform 0.24s ease,
+    opacity 0.2s ease;
+}
+
+.book-card:hover .book-cover-actions,
+.book-card:focus-within .book-cover-actions {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .action-btn {
-  flex: 1;
+  flex: 0 0 34px;
+  width: 34px;
   height: 34px;
-  padding: 0 8px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
   cursor: pointer;
   font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.96);
   position: relative;
   overflow: hidden;
 }
@@ -1182,7 +1206,8 @@ onMounted(() => {
 
 .action-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .action-btn:hover::before {
@@ -1202,13 +1227,15 @@ onMounted(() => {
 }
 
 .action-btn.active-favorite {
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-  color: #d97706;
+  background: rgba(254, 243, 199, 0.88);
+  border-color: rgba(253, 230, 138, 0.94);
+  color: #b45309;
 }
 
 .action-btn.active-wanted {
-  background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%);
-  color: #db2777;
+  background: rgba(252, 231, 243, 0.88);
+  border-color: rgba(251, 207, 232, 0.94);
+  color: #be185d;
 }
 
 .more-trigger {
@@ -1216,7 +1243,7 @@ onMounted(() => {
   width: 30px;
   height: 30px;
   place-items: center;
-  color: var(--text-secondary);
+  color: inherit;
   outline: none;
 }
 
@@ -1359,6 +1386,19 @@ onMounted(() => {
 
   .book-list-meta {
     display: none;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .book-cover-actions {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .book-cover-actions {
+    transition: none;
   }
 }
 </style>
