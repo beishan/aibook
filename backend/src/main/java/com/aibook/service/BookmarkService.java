@@ -68,8 +68,7 @@ public class BookmarkService {
     }
 
     private Book findBook(User user, Long bookId) {
-        return bookRepository.findById(bookId)
-                .filter(b -> b.getUser().getId().equals(user.getId()))
+        return bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElseThrow(() -> new ResourceNotFoundException("书籍", bookId));
     }
 }

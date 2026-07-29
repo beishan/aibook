@@ -1,7 +1,7 @@
 <template>
-  <div class="connections-view">
+  <div class="connections-view" :class="{ embedded }">
     <!-- 页面头部 -->
-    <div class="page-header">
+    <div v-if="!embedded" class="page-header">
       <div>
         <h1 class="page-title">客户端连接</h1>
         <p class="page-subtitle">配置第三方阅读器连接到汗牛充栋书库</p>
@@ -140,6 +140,10 @@ import { ref, computed } from 'vue'
 import { message } from '@/utils/message'
 import api from '@/utils/api'
 
+withDefaults(defineProps<{ embedded?: boolean }>(), {
+  embedded: false,
+})
+
 const showTestResult = ref(false)
 const testResult = ref<{ success: boolean; message: string } | null>(null)
 
@@ -208,6 +212,11 @@ const testConnection = async (type: 'opds' | 'webdav') => {
   max-width: 1200px;
   margin: 0 auto;
   padding: var(--spacing-lg) 0;
+}
+
+.connections-view.embedded {
+  max-width: none;
+  padding: 0;
 }
 
 /* 页面头部 */

@@ -88,7 +88,8 @@ public class WebDavService {
 
         // /formats/epub -> 列出该格式的书籍
         String format = segments[1];
-        List<Book> books = bookRepository.findByUserAndFormat(user, format, PageRequest.of(0, 1000)).getContent();
+        List<Book> books = bookRepository.findByUserAndFormatAndDeletedAtIsNull(
+                user, format, PageRequest.of(0, 1000)).getContent();
         return books.stream()
                 .map(this::bookToResource)
                 .toList();
@@ -121,8 +122,9 @@ public class WebDavService {
             return List.of();
         }
 
-        List<Book> books = bookRepository.findByUserAndCategoryId(user, matchedCategory.get().getId(),
-                PageRequest.of(0, 1000)).getContent();
+        List<Book> books = bookRepository.findByUserAndCategoryIdAndDeletedAtIsNull(
+                user, matchedCategory.get().getId(), PageRequest.of(0, 1000))
+                .getContent();
         return books.stream()
                 .map(this::bookToResource)
                 .toList();
@@ -221,7 +223,9 @@ public class WebDavService {
         String filename = Paths.get(path).getFileName().toString();
         Optional<Book> bookOpt = bookRepository.findByUserAndFilename(user, filename);
         if (bookOpt.isPresent()) {
-            bookRepository.delete(bookOpt.get());
+            Book book = bookOpt.get();
+            book.setDeletedAt(LocalDateTime.now());
+            bookRepository.save(book);
             return true;
         }
         return false;

@@ -97,8 +97,7 @@ public class BookListService {
                 .filter(bl -> bl.getUser().equals(user))
                 .orElseThrow(() -> new RuntimeException("书单不存在"));
 
-        Book book = bookRepository.findById(bookId)
-                .filter(b -> b.getUser().equals(user))
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElseThrow(() -> new RuntimeException("书籍不存在"));
 
         if (!bookList.getBooks().contains(book)) {

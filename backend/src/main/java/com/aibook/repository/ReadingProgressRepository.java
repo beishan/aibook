@@ -22,7 +22,7 @@ public interface ReadingProgressRepository extends JpaRepository<ReadingProgress
     /**
      * 根据用户查询最近阅读的书籍
      */
-    Optional<ReadingProgress> findTopByUserOrderByLastReadAtDesc(User user);
+    Optional<ReadingProgress> findTopByUserAndBookDeletedAtIsNullOrderByLastReadAtDesc(User user);
 
     /**
      * 根据书籍删除所有阅读进度

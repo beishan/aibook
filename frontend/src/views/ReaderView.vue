@@ -9,14 +9,23 @@
           <span>返回</span>
         </button>
         <div class="reader-title">
-          <span>{{ book.title }}</span>
-          <span
-            v-if="performancePaginationMode"
-            class="performance-mode-badge"
-            title="长文本已自动使用分页渲染，避免一次创建过多页面节点"
-          >
-            性能模式
-          </span>
+          <div class="reader-title-main">
+            <span class="reader-book-name">{{ book.title }}</span>
+            <span
+              v-if="performancePaginationMode"
+              class="performance-mode-badge"
+              title="长文本已自动使用分页渲染，避免一次创建过多页面节点"
+            >
+              性能模式
+            </span>
+          </div>
+          <div class="reader-title-meta">
+            <span class="reader-current-chapter" :title="headerChapterName">
+              {{ headerChapterName }}
+            </span>
+            <span class="reader-title-separator">·</span>
+            <span class="reader-header-progress">{{ headerProgress }}%</span>
+          </div>
         </div>
         <div class="reader-actions">
           <button
@@ -276,7 +285,10 @@
             <button class="btn btn-icon" @click="showSettings = true" title="设置">
               <span>⚙️</span>
             </button>
-            <span class="floating-progress">{{ progress }}%</span>
+            <div class="floating-reading-info">
+              <span class="floating-book-title">{{ book.title }}</span>
+              <span class="floating-progress">{{ headerChapterName }} · {{ headerProgress }}%</span>
+            </div>
             <button class="btn btn-icon" @click="toggleFullscreen" title="退出全屏">
               <span>⊡</span>
             </button>
@@ -488,6 +500,11 @@ const currentLocation = ref('')
 const currentChapterName = ref('')
 const isFullscreen = ref(false)
 const showFullscreenControls = ref(false)
+const headerChapterName = computed(() => currentChapterName.value.trim() || '正文')
+const headerProgress = computed(() => {
+  const value = Number(progress.value)
+  return Number.isFinite(value) ? Math.min(100, Math.max(0, Math.round(value))) : 0
+})
 
 // 翻页模式相关
 const currentPage = ref(0)
@@ -502,6 +519,7 @@ const highlights = ref<Highlight[]>([])
 const epubContainer = ref<HTMLElement>()
 let bookInstance: any = null
 let rendition: any = null
+const epubKeyboardDocuments = new Set<Document>()
 
 const pdfUrl = computed(() => {
   if (!book.value) return ''
@@ -703,7 +721,15 @@ const checkAndAdjustPageSize = () => {
 const goToPage = (page: number) => {
   if (page >= 0 && page < totalPages.value) {
     currentPage.value = page
-    progress.value = Math.round((page / (totalPages.value - 1)) * 100)
+    const pageSize = calculatePageSize()
+    const currentContentIndex = page * pageSize
+    const chapter = [...tocItems.value]
+      .reverse()
+      .find(item => item.index <= currentContentIndex)
+    if (chapter) currentChapterName.value = chapter.title
+    progress.value = totalPages.value <= 1
+      ? 100
+      : Math.round((page / (totalPages.value - 1)) * 100)
     saveProgress(progress.value, currentChapterName.value)
     // 滚动到顶部
     const readerBody = document.querySelector('.reader-body')
@@ -726,6 +752,13 @@ const handleKeydown = (e: KeyboardEvent) => {
   // 如果设置面板打开，不处理按键
   if (showSettings.value) return
 
+  const target = e.target as HTMLElement | null
+  if (
+    target?.closest('input, textarea, select, button, [contenteditable="true"]')
+  ) {
+    return
+  }
+
   // EPUB 格式
   if (book.value?.format === 'epub' && rendition) {
     if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
@@ -739,7 +772,7 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 
   // TXT/MD 翻页模式
-    if (isPaginationMode.value) {
+  if (isPaginationMode.value) {
     if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
       e.preventDefault()
       prevTextPage()
@@ -776,6 +809,29 @@ const handleKeydown = (e: KeyboardEvent) => {
     e.preventDefault()
     readerBody.scrollTop = readerBody.scrollHeight
   }
+}
+
+const bindEpubKeyboard = (contents: any) => {
+  const document = contents?.document as Document | undefined
+  if (!document || epubKeyboardDocuments.has(document)) return
+
+  document.addEventListener('keydown', handleKeydown, true)
+  epubKeyboardDocuments.add(document)
+}
+
+const unbindEpubKeyboard = (contents: any) => {
+  const document = contents?.document as Document | undefined
+  if (!document || !epubKeyboardDocuments.has(document)) return
+
+  document.removeEventListener('keydown', handleKeydown, true)
+  epubKeyboardDocuments.delete(document)
+}
+
+const clearEpubKeyboardBindings = () => {
+  epubKeyboardDocuments.forEach(document => {
+    document.removeEventListener('keydown', handleKeydown, true)
+  })
+  epubKeyboardDocuments.clear()
 }
 
 // 面板显示状态
@@ -860,7 +916,12 @@ const loadSavedProgress = async (bookId: number) => {
       if (data.totalProgress > 0) {
         progress.value = data.totalProgress
       }
-      if (data.currentChapter) {
+      if (data.currentChapterTitle) {
+        currentChapterName.value = data.currentChapterTitle
+      } else if (data.currentChapter && !data.currentChapter.startsWith('epubcfi(')) {
+        currentChapterName.value = data.currentChapter
+      }
+      if (book.value?.format === 'epub' && data.currentChapter) {
         savedCfi.value = data.currentChapter
         console.log('[Reader] Saved CFI:', savedCfi.value)
       }
@@ -998,6 +1059,7 @@ const saveProgress = (totalProgress: number, currentChapter?: string) => {
         },
         body: JSON.stringify({
           currentChapter: currentChapter || '',
+          currentChapterTitle: currentChapterName.value || '',
           chapterProgress: 0,
           totalProgress: Math.round(totalProgress)
         })
@@ -1295,6 +1357,10 @@ const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
     // 解析 EPUB 与读取用户进度并行；仅在决定首个展示位置前等待进度。
     await Promise.all([bookInstance.ready, progressReady])
 
+    // 部分 EPUB 未在 manifest 中完整声明图片，epub.js 不会自动替换这些路径。
+    // 在章节序列化前直接从归档创建 Blob URL，同时兼容 SVG xlink:href。
+    bookInstance.spine.hooks.content.register(resolveEpubChapterImages)
+
     const navigation = bookInstance.navigation
     if (navigation && navigation.toc) {
       tocItems.value = flattenToc(navigation.toc)
@@ -1312,6 +1378,12 @@ const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
 
     rendition.on('relocated', (location: any) => {
       if (location && location.start) {
+        const currentTocItem = findEpubTocItem(location.start.href)
+        if (currentTocItem) {
+          currentChapterName.value = currentTocItem.title
+          currentTocHref.value = currentTocItem.href || ''
+        }
+        savedCfi.value = location.start.cfi
         currentLocation.value = location.start.displayed
           ? `${location.start.displayed.page} / ${location.start.displayed.total}`
           : ''
@@ -1325,6 +1397,10 @@ const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
 
     rendition.hooks.content.register((contents: any) => {
       applyThemeToContent(contents)
+      bindEpubKeyboard(contents)
+    })
+    rendition.hooks.unloaded.register((view: any) => {
+      unbindEpubKeyboard(view?.contents)
     })
 
     // 先显示内容，让用户立即看到书
@@ -1363,6 +1439,58 @@ const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
   }
 }
 
+const resolveEpubChapterImages = async (document: Document, section: any) => {
+  if (!bookInstance?.archive || !document || !section?.url) return
+
+  const imageReferences: Array<{
+    element: Element
+    attribute: 'src' | 'href' | 'xlink:href'
+  }> = []
+
+  document.querySelectorAll('img[src], input[type="image"][src]').forEach(element => {
+    imageReferences.push({ element, attribute: 'src' })
+  })
+  document.querySelectorAll('svg image').forEach(element => {
+    if (element.hasAttribute('href')) {
+      imageReferences.push({ element, attribute: 'href' })
+    } else if (element.hasAttribute('xlink:href')) {
+      imageReferences.push({ element, attribute: 'xlink:href' })
+    }
+  })
+
+  await Promise.all(imageReferences.map(async ({ element, attribute }) => {
+    const originalUrl = element.getAttribute(attribute)
+    if (
+      !originalUrl
+      || /^(?:data:|blob:|https?:|\/\/|#)/i.test(originalUrl)
+    ) {
+      return
+    }
+
+    try {
+      const cleanUrl = originalUrl
+        .split('#', 1)[0]
+        .split('?', 1)[0]
+        .replace(/\\/g, '/')
+      const sectionUrl = new URL(section.url, 'https://epub.local/')
+      const archivePath = new URL(cleanUrl, sectionUrl).pathname
+      const blobUrl = await bookInstance.archive.createUrl(archivePath)
+
+      if (attribute === 'xlink:href') {
+        element.setAttributeNS(
+          'http://www.w3.org/1999/xlink',
+          'xlink:href',
+          blobUrl,
+        )
+      } else {
+        element.setAttribute(attribute, blobUrl)
+      }
+    } catch (error) {
+      console.warn('[Reader] EPUB image could not be resolved:', originalUrl, error)
+    }
+  }))
+}
+
 const flattenToc = (toc: any[], result: any[] = []): any[] => {
   for (const item of toc) {
     result.push({ label: item.label.trim(), href: item.href, title: item.label.trim() })
@@ -1371,6 +1499,29 @@ const flattenToc = (toc: any[], result: any[] = []): any[] => {
     }
   }
   return result
+}
+
+const normalizeEpubHref = (href?: string): string => {
+  if (!href) return ''
+  const path = href.split('#', 1)[0].replace(/^\/+/, '')
+  try {
+    return decodeURIComponent(path)
+  } catch {
+    return path
+  }
+}
+
+const findEpubTocItem = (href?: string): Chapter | undefined => {
+  const currentHref = normalizeEpubHref(href)
+  if (!currentHref) return undefined
+
+  return tocItems.value.find(item => {
+    const tocHref = normalizeEpubHref(item.href)
+    if (!tocHref) return false
+    return tocHref === currentHref
+      || tocHref.endsWith(`/${currentHref}`)
+      || currentHref.endsWith(`/${tocHref}`)
+  })
 }
 
 const togglePanel = (panel: 'toc' | 'bookmarks' | 'highlights') => {
@@ -1420,8 +1571,9 @@ const jumpToTextChapter = async (
 
 const goToTocItem = async (item: Chapter | any) => {
   if (book.value?.format === 'epub' && rendition) {
-    await rendition.display(item.href)
+    currentChapterName.value = item.title
     currentTocHref.value = item.href
+    await rendition.display(item.href)
   } else if (book.value?.format === 'txt' || book.value?.format === 'md') {
     await jumpToTextChapter(item)
   }
@@ -1486,6 +1638,20 @@ const applyThemeToContent = (contents: any) => {
         }
         body {
           background: ${colors.bg} !important;
+        }
+        img,
+        svg {
+          max-width: 100% !important;
+          max-height: 100% !important;
+          object-fit: contain !important;
+        }
+        img {
+          height: auto !important;
+        }
+        figure {
+          max-width: 100% !important;
+          margin-left: auto !important;
+          margin-right: auto !important;
         }
         p {
           margin-bottom: ${settings.value.paragraphSpacing}px !important;
@@ -1589,7 +1755,10 @@ onBeforeUnmount(() => {
         Authorization: `Bearer ${token}`
       },
       body: JSON.stringify({
-        currentChapter: savedCfi.value || '',
+        currentChapter: book.value.format === 'epub'
+          ? savedCfi.value || ''
+          : currentChapterName.value || '',
+        currentChapterTitle: currentChapterName.value || '',
         chapterProgress: 0,
         totalProgress: Math.round(progress.value)
       })
@@ -1612,6 +1781,7 @@ onBeforeUnmount(() => {
   }
 
   if (bookInstance) {
+    clearEpubKeyboardBindings()
     bookInstance.destroy()
     bookInstance = null
     rendition = null
@@ -1730,28 +1900,64 @@ onBeforeUnmount(() => {
 
 .reader-title {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: center;
-  gap: 8px;
-  font-size: var(--font-size-lg);
-  font-weight: 600;
+  gap: 3px;
   color: var(--text-primary);
   flex: 0 1 auto;
   text-align: center;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 8px var(--spacing-md);
+  padding: 7px var(--spacing-md);
   margin: 0 var(--spacing-md);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   pointer-events: auto;
-  max-width: min(48vw, 560px);
+  width: min(46vw, 620px);
 }
 
-.reader-title > span:first-child {
+.reader-title-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reader-book-name {
+  overflow: hidden;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-title-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.reader-current-chapter {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-title-separator {
+  color: var(--text-tertiary);
+}
+
+.reader-header-progress {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 .performance-mode-badge {
@@ -2288,6 +2494,27 @@ onBeforeUnmount(() => {
   font-weight: 500;
 }
 
+.floating-reading-info {
+  display: grid;
+  min-width: 0;
+  max-width: min(50vw, 480px);
+  gap: 2px;
+  text-align: center;
+}
+
+.floating-book-title,
+.floating-progress {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floating-book-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 /* 设置面板 */
 .settings-overlay {
   position: fixed;
@@ -2640,6 +2867,27 @@ onBeforeUnmount(() => {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .reader-header {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+  }
+
+  .reader-title {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: center;
+    width: min(100%, 520px);
+    margin: 0;
+  }
+
+  .reader-actions {
+    justify-self: end;
+  }
+
   .side-panel {
     position: absolute;
     left: 0;

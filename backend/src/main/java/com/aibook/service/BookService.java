@@ -7,6 +7,7 @@ import com.aibook.model.entity.Category;
 import com.aibook.model.entity.Tag;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookHighlightRepository;
+import com.aibook.repository.BookListRepository;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookmarkRepository;
 import com.aibook.repository.ReadingProgressRepository;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -34,6 +36,7 @@ public class BookService {
     private final ReadingProgressRepository readingProgressRepository;
     private final BookmarkRepository bookmarkRepository;
     private final BookHighlightRepository bookHighlightRepository;
+    private final BookListRepository bookListRepository;
     private final CategoryService categoryService;
     private final TagService tagService;
 
@@ -41,7 +44,7 @@ public class BookService {
      * 获取用户书籍列表
      */
     public Page<BookDTO> getBooks(User user, Pageable pageable) {
-        Page<Book> books = bookRepository.findByUser(user, pageable);
+        Page<Book> books = bookRepository.findByUserAndDeletedAtIsNull(user, pageable);
         return books.map(this::convertToDTO);
     }
 
@@ -49,7 +52,8 @@ public class BookService {
      * 根据格式筛选书籍
      */
     public Page<BookDTO> getBooksByFormat(User user, String format, Pageable pageable) {
-        Page<Book> books = bookRepository.findByUserAndFormat(user, format, pageable);
+        Page<Book> books = bookRepository.findByUserAndFormatAndDeletedAtIsNull(
+                user, format, pageable);
         return books.map(this::convertToDTO);
     }
 
@@ -57,7 +61,8 @@ public class BookService {
      * 根据阅读状态筛选书籍
      */
     public Page<BookDTO> getBooksByStatus(User user, Book.ReadingStatus status, Pageable pageable) {
-        Page<Book> books = bookRepository.findByUserAndReadingStatus(user, status, pageable);
+        Page<Book> books = bookRepository.findByUserAndReadingStatusAndDeletedAtIsNull(
+                user, status, pageable);
         return books.map(this::convertToDTO);
     }
 
@@ -65,7 +70,8 @@ public class BookService {
      * 获取收藏书籍
      */
     public Page<BookDTO> getFavoriteBooks(User user, Pageable pageable) {
-        Page<Book> books = bookRepository.findByUserAndIsFavorite(user, true, pageable);
+        Page<Book> books = bookRepository.findByUserAndIsFavoriteAndDeletedAtIsNull(
+                user, true, pageable);
         return books.map(this::convertToDTO);
     }
 
@@ -73,7 +79,8 @@ public class BookService {
      * 获取想读书籍
      */
     public Page<BookDTO> getWantedBooks(User user, Pageable pageable) {
-        Page<Book> books = bookRepository.findByUserAndIsWanted(user, true, pageable);
+        Page<Book> books = bookRepository.findByUserAndIsWantedAndDeletedAtIsNull(
+                user, true, pageable);
         return books.map(this::convertToDTO);
     }
 
@@ -84,9 +91,10 @@ public class BookService {
             User user, Long categoryId, boolean includeChildren, Pageable pageable) {
         categoryService.getOwnedCategory(categoryId, user);
         Page<Book> books = includeChildren
-                ? bookRepository.findByUserAndCategoryIdIn(
+                ? bookRepository.findByUserAndCategoryIdInAndDeletedAtIsNull(
                         user, categoryService.getCategoryAndDescendantIds(categoryId, user), pageable)
-                : bookRepository.findByUserAndCategoryId(user, categoryId, pageable);
+                : bookRepository.findByUserAndCategoryIdAndDeletedAtIsNull(
+                        user, categoryId, pageable);
         return books.map(this::convertToDTO);
     }
 
@@ -110,8 +118,7 @@ public class BookService {
      * 获取书籍详情
      */
     public BookDTO getBookById(Long id, User user) {
-        Book book = bookRepository.findById(id)
-                .filter(b -> b.getUser().equals(user))
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(id, user)
                 .orElseThrow(() -> new RuntimeException("书籍不存在"));
         return convertToDTO(book);
     }
@@ -120,8 +127,7 @@ public class BookService {
      * 获取书籍实体（用于刮削等操作）
      */
     public Book getBookEntity(Long id, User user) {
-        return bookRepository.findById(id)
-                .filter(b -> b.getUser().equals(user))
+        return bookRepository.findByIdAndUserAndDeletedAtIsNull(id, user)
                 .orElseThrow(() -> new RuntimeException("书籍不存在"));
     }
 
@@ -129,7 +135,7 @@ public class BookService {
      * 获取用户所有书籍
      */
     public List<BookDTO> getAllBooks(User user) {
-        List<Book> books = bookRepository.findByUser(user);
+        List<Book> books = bookRepository.findByUserAndDeletedAtIsNull(user);
         return books.stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
@@ -140,9 +146,7 @@ public class BookService {
      */
     @Transactional
     public BookDTO toggleFavorite(Long id, User user) {
-        Book book = bookRepository.findById(id)
-                .filter(b -> b.getUser().equals(user))
-                .orElseThrow(() -> new RuntimeException("书籍不存在"));
+        Book book = getBookEntity(id, user);
 
         book.setIsFavorite(!Boolean.TRUE.equals(book.getIsFavorite()));
         bookRepository.save(book);
@@ -154,9 +158,7 @@ public class BookService {
      */
     @Transactional
     public BookDTO toggleWanted(Long id, User user) {
-        Book book = bookRepository.findById(id)
-                .filter(b -> b.getUser().equals(user))
-                .orElseThrow(() -> new RuntimeException("书籍不存在"));
+        Book book = getBookEntity(id, user);
 
         book.setIsWanted(!Boolean.TRUE.equals(book.getIsWanted()));
         bookRepository.save(book);
@@ -164,19 +166,101 @@ public class BookService {
     }
 
     /**
-     * 删除书籍
+     * 将书籍移入回收站。只更新数据库状态，绝不删除原始文件。
      */
     @Transactional
     public void deleteBook(Long id, User user) {
-        Book book = bookRepository.findById(id)
-                .filter(b -> b.getUser().equals(user))
-                .orElseThrow(() -> new RuntimeException("书籍不存在"));
+        Book book = getBookEntity(id, user);
+        book.setDeletedAt(LocalDateTime.now());
+        bookRepository.save(book);
+    }
 
-        // 先删除关联的阅读进度、书签和高亮记录
+    @Transactional
+    public void moveBooksToTrash(List<Long> bookIds, User user) {
+        List<Long> distinctIds = validateBookIds(bookIds);
+        List<Book> books = bookRepository.findByIdInAndUser(distinctIds, user);
+        if (books.size() != distinctIds.size()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "部分书籍不存在、已在回收站或无权访问");
+        }
+        LocalDateTime deletedAt = LocalDateTime.now();
+        books.forEach(book -> book.setDeletedAt(deletedAt));
+        bookRepository.saveAll(books);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<BookDTO> getTrash(
+            User user, String keyword, Pageable pageable) {
+        return bookRepository.findTrash(
+                        user, keyword == null ? "" : keyword.trim(), pageable)
+                .map(this::convertToDTO);
+    }
+
+    @Transactional(readOnly = true)
+    public long getTrashCount(User user) {
+        return bookRepository.countByUserAndDeletedAtIsNotNullAndPurgedAtIsNull(user);
+    }
+
+    @Transactional
+    public List<BookDTO> restoreBooks(List<Long> bookIds, User user) {
+        List<Book> books = getOwnedTrashBooks(bookIds, user);
+        books.forEach(book -> book.setDeletedAt(null));
+        return bookRepository.saveAll(books).stream()
+                .map(this::convertToDTO)
+                .toList();
+    }
+
+    /**
+     * 从回收站永久移除。清理业务关联并保留防重复导入墓碑，
+     * 绝不删除 filePath 指向的原始文件。
+     */
+    @Transactional
+    public void permanentlyDeleteBooks(List<Long> bookIds, User user) {
+        List<Book> books = getOwnedTrashBooks(bookIds, user);
+        books.forEach(this::purgeDatabaseRecordOnly);
+    }
+
+    /**
+     * 清空当前用户回收站。清理业务关联并保留防重复导入墓碑，
+     * 不删除原始文件。
+     */
+    @Transactional
+    public void emptyTrash(User user) {
+        bookRepository.findByUserAndDeletedAtIsNotNullAndPurgedAtIsNull(user)
+                .forEach(this::purgeDatabaseRecordOnly);
+    }
+
+    private List<Book> getOwnedTrashBooks(List<Long> bookIds, User user) {
+        List<Long> distinctIds = validateBookIds(bookIds);
+        List<Book> books = bookRepository.findTrashByIds(distinctIds, user);
+        if (books.size() != distinctIds.size()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "部分书籍不在回收站或无权访问");
+        }
+        return books;
+    }
+
+    private List<Long> validateBookIds(List<Long> bookIds) {
+        if (bookIds == null || bookIds.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "书籍ID列表不能为空");
+        }
+        return bookIds.stream().distinct().toList();
+    }
+
+    private void purgeDatabaseRecordOnly(Book book) {
         readingProgressRepository.deleteByBook(book);
         bookmarkRepository.deleteByBook(book);
         bookHighlightRepository.deleteByBook(book);
-        bookRepository.delete(book);
+        bookListRepository.deleteBookAssociations(book.getId());
+        book.setTags(new java.util.LinkedHashSet<>());
+        book.setCategory(null);
+        book.setIsFavorite(false);
+        book.setIsWanted(false);
+        book.setNotes(null);
+        book.setChapterInfo(null);
+        book.setPurgedAt(LocalDateTime.now());
+        bookRepository.save(book);
     }
 
     /**
@@ -184,9 +268,7 @@ public class BookService {
      */
     @Transactional
     public BookDTO updateBookMetadata(Long id, BookDTO bookDTO, User user) {
-        Book book = bookRepository.findById(id)
-                .filter(b -> b.getUser().equals(user))
-                .orElseThrow(() -> new RuntimeException("书籍不存在"));
+        Book book = getBookEntity(id, user);
 
         if (bookDTO.getTitle() != null) book.setTitle(bookDTO.getTitle());
         if (bookDTO.getAuthor() != null) book.setAuthor(bookDTO.getAuthor());
@@ -208,9 +290,7 @@ public class BookService {
      */
     @Transactional
     public BookDTO updateReadingStatus(Long id, Book.ReadingStatus status, User user) {
-        Book book = bookRepository.findById(id)
-                .filter(b -> b.getUser().equals(user))
-                .orElseThrow(() -> new RuntimeException("书籍不存在"));
+        Book book = getBookEntity(id, user);
 
         book.setReadingStatus(status);
         bookRepository.save(book);
@@ -340,6 +420,7 @@ public class BookService {
                 .notes(book.getNotes())
                 .chapterInfo(book.getChapterInfo())
                 .chapterCount(book.getChapterCount())
+                .deletedAt(book.getDeletedAt())
                 .createdAt(book.getCreatedAt())
                 .updatedAt(book.getUpdatedAt())
                 .build();

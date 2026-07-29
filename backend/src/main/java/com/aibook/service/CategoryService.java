@@ -287,7 +287,8 @@ public class CategoryService {
     }
 
     private void transferBooks(Category source, Category target, User user) {
-        List<Book> books = bookRepository.findByUserAndCategory(user, source);
+        List<Book> books = bookRepository.findByUserAndCategoryAndDeletedAtIsNull(
+                user, source);
         books.forEach(book -> book.setCategory(target));
         bookRepository.saveAll(books);
     }
@@ -370,7 +371,8 @@ public class CategoryService {
 
     private CategoryDTO toDTO(Category category, boolean includeCounts) {
         long directBookCount = includeCounts
-                ? bookRepository.countByUserAndCategory(category.getUser(), category)
+                ? bookRepository.countByUserAndCategoryAndDeletedAtIsNull(
+                        category.getUser(), category)
                 : 0;
         return CategoryDTO.builder()
                 .id(category.getId())

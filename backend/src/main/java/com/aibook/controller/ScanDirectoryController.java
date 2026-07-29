@@ -1,11 +1,15 @@
 package com.aibook.controller;
 
+import com.aibook.dto.ScanRecordDTO;
 import com.aibook.model.entity.ScanDirectory;
 import com.aibook.model.entity.User;
 import com.aibook.service.ScanDirectoryService;
 import com.aibook.service.ScanDirectoryTaskService;
 import com.aibook.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -84,6 +88,27 @@ public class ScanDirectoryController {
         return ResponseEntity.ok(scanDirectoryTaskService.getProgress(
                 id,
                 getUserFromAuth(authentication)));
+    }
+
+    /**
+     * 分页查询当前用户的扫描记录。
+     */
+    @GetMapping("/scan-history")
+    public ResponseEntity<Page<ScanRecordDTO>> getScanHistory(
+            Authentication authentication,
+            @RequestParam(required = false) Long directoryId,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        PageRequest pageRequest = PageRequest.of(
+                page,
+                Math.min(Math.max(size, 1), 100),
+                Sort.by("startedAt").descending());
+        return ResponseEntity.ok(scanDirectoryTaskService.getHistory(
+                getUserFromAuth(authentication),
+                directoryId,
+                status,
+                pageRequest));
     }
 
     /**

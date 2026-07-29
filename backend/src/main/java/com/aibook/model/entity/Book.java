@@ -161,6 +161,18 @@ public class Book {
      */
     private Integer chapterCount;
 
+    /**
+     * 移入系统回收站的时间；为空表示书籍正常可用。
+     * 回收站只管理数据库记录，绝不删除 filePath 指向的原始文件。
+     */
+    private LocalDateTime deletedAt;
+
+    /**
+     * 从回收站永久移除的时间。保留最小书籍记录和文件哈希作为墓碑，
+     * 避免目录扫描再次导入；原始文件仍不会被删除。
+     */
+    private LocalDateTime purgedAt;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

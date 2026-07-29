@@ -110,7 +110,7 @@
           <div class="book-actions">
             <button class="btn btn-primary btn-large" @click="handleRead">
               <span>📖</span>
-              <span>开始阅读</span>
+              <span>{{ hasReadingProgress ? '继续阅读' : '开始阅读' }}</span>
             </button>
             <button class="btn" :class="book.isFavorite ? 'btn-warning' : ''" @click="handleToggleFavorite">
               <span>{{ book.isFavorite ? '⭐' : '☆' }}</span>
@@ -143,8 +143,25 @@
             </button>
             <button class="btn btn-danger" @click="handleDelete">
               <span>🗑️</span>
-              <span>删除书籍</span>
+              <span>移入回收站</span>
             </button>
+          </div>
+
+          <div v-if="hasReadingProgress" class="current-reading-card">
+            <div class="current-reading-icon">📖</div>
+            <div class="current-reading-content">
+              <span class="current-reading-label">当前正在阅读</span>
+              <strong class="current-reading-title">{{ currentReadingChapter }}</strong>
+              <el-progress
+                :percentage="readingProgress?.totalProgress || 0"
+                :stroke-width="7"
+                :show-text="false"
+              />
+            </div>
+            <div class="current-reading-meta">
+              <span>{{ readingProgress?.totalProgress || 0 }}%</span>
+              <button class="btn btn-text" @click="handleRead">继续阅读 ›</button>
+            </div>
           </div>
 
           <div class="book-rating">
@@ -231,16 +248,33 @@
               <span>共 {{ tocItems.length }} 章</span>
             </div>
             <button
-              v-for="(chapter, index) in tocItems"
-              :key="`${chapter.href || chapter.title}-${index}`"
+              v-for="(chapter, index) in paginatedTocItems"
+              :key="`${chapter.index}-${chapter.href || chapter.title}`"
               class="toc-row"
+              :class="{ 'is-current': isCurrentChapter(chapter) }"
               :style="{ paddingLeft: `${18 + (chapter.depth || 0) * 22}px` }"
               @click="openChapter(chapter)"
             >
-              <span class="toc-number">{{ String(index + 1).padStart(2, '0') }}</span>
+              <span class="toc-number">
+                {{ String((tocCurrentPage - 1) * tocPageSize + index + 1).padStart(2, '0') }}
+              </span>
               <span class="toc-title">{{ chapter.title }}</span>
-              <span class="toc-read-action">阅读 ›</span>
+              <span class="toc-read-action">
+                {{ isCurrentChapter(chapter) ? '阅读中' : '阅读 ›' }}
+              </span>
             </button>
+            <div class="toc-pagination">
+              <el-pagination
+                v-model:current-page="tocCurrentPage"
+                v-model:page-size="tocPageSize"
+                :page-sizes="tocPageSizeOptions"
+                :total="tocItems.length"
+                :pager-count="5"
+                layout="total, sizes, prev, pager, next"
+                background
+                @size-change="handleTocPageSizeChange"
+              />
+            </div>
           </div>
         </div>
 
@@ -333,60 +367,16 @@
       @refresh="loadBook"
     />
 
-    <!-- 添加到书单对话框 -->
-    <Teleport to="body">
-      <Transition name="fade">
-        <div v-if="showAddToListDialog" class="dialog-overlay" @click.self="showAddToListDialog = false">
-          <div class="dialog">
-            <div class="dialog-header">
-              <span>📚 添加到书单</span>
-              <button class="dialog-close" @click="showAddToListDialog = false">✕</button>
-            </div>
-            <div class="dialog-body">
-              <div v-if="loadingLists" class="loading-lists">
-                <div class="loading-spinner-small"></div>
-                <span>加载书单...</span>
-              </div>
-              <div v-else-if="bookLists.length === 0" class="empty-lists">
-                <p>暂无书单</p>
-                <button class="btn btn-primary btn-sm" @click="goToCreateList">创建书单</button>
-              </div>
-              <div v-else class="lists-selector">
-                <div
-                  v-for="list in bookLists"
-                  :key="list.id"
-                  class="list-option"
-                  :class="{ selected: selectedListId === list.id }"
-                  @click="selectedListId = list.id"
-                >
-                  <span class="list-icon">📚</span>
-                  <div class="list-info">
-                    <div class="list-name">{{ list.name }}</div>
-                    <div class="list-count">{{ list.bookCount }} 本书</div>
-                  </div>
-                  <span v-if="selectedListId === list.id" class="check-icon">✓</span>
-                </div>
-              </div>
-            </div>
-            <div class="dialog-footer">
-              <button class="btn" @click="showAddToListDialog = false">取消</button>
-              <button
-                class="btn btn-primary"
-                @click="handleAddToList"
-                :disabled="!selectedListId || addingToList"
-              >
-                {{ addingToList ? '添加中...' : '确定' }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
+    <AddToBookListDialog
+      :visible="showAddToListDialog"
+      :book="book"
+      @close="showAddToListDialog = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { computed, ref, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
@@ -396,6 +386,7 @@ import api from '@/utils/api'
 import { scrapeBook, downloadCover } from '@/utils/scraper'
 import { getCoverUrl } from '@/utils/cover'
 import ScraperDialog from '@/components/ScraperDialog.vue'
+import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -423,14 +414,40 @@ interface TocItem {
   depth?: number
 }
 
+interface ReadingProgress {
+  currentChapter?: string
+  currentChapterTitle?: string
+  totalProgress?: number
+  lastReadAt?: string
+}
+
 const tocItems = ref<TocItem[]>([])
+const readingProgress = ref<ReadingProgress | null>(null)
+const tocCurrentPage = ref(1)
+const tocPageSize = ref(20)
+const tocPageSizeOptions = [20, 50, 100]
+const paginatedTocItems = computed(() => {
+  const start = (tocCurrentPage.value - 1) * tocPageSize.value
+  return tocItems.value.slice(start, start + tocPageSize.value)
+})
+const currentReadingChapter = computed(() => {
+  const title = readingProgress.value?.currentChapterTitle?.trim()
+  if (title) return title
+
+  const legacyChapter = readingProgress.value?.currentChapter?.trim()
+  if (legacyChapter && !legacyChapter.startsWith('epubcfi(')) return legacyChapter
+
+  return '章节信息将在继续阅读后更新'
+})
+const hasReadingProgress = computed(() => Boolean(
+  readingProgress.value?.lastReadAt
+  || readingProgress.value?.currentChapterTitle
+  || readingProgress.value?.currentChapter
+  || (readingProgress.value?.totalProgress || 0) > 0,
+))
 
 // 书单相关
 const showAddToListDialog = ref(false)
-const bookLists = ref<any[]>([])
-const selectedListId = ref<number | null>(null)
-const loadingLists = ref(false)
-const addingToList = ref(false)
 const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 
 // 编辑书名相关
@@ -451,11 +468,40 @@ const loadBook = async () => {
     book.value = await bookStore.fetchBookById(id)
     notes.value = book.value.notes || ''
     selectedTagIds.value = (book.value.tags || []).map((tag: any) => tag.id)
-    await loadToc()
+    await Promise.all([loadToc(), loadReadingProgress()])
+    syncTocPageToCurrentChapter()
   } catch (error) {
     console.error('Failed to load book:', error)
   } finally {
     loading.value = false
+  }
+}
+
+const loadReadingProgress = async () => {
+  if (!book.value) return
+  try {
+    const response = await api.get(`/api/reading-progress/book/${book.value.id}`)
+    readingProgress.value = response.data || null
+  } catch (error) {
+    readingProgress.value = null
+    console.error('Failed to load reading progress:', error)
+  }
+}
+
+const isCurrentChapter = (chapter: TocItem) => {
+  const title = readingProgress.value?.currentChapterTitle
+    || (
+      readingProgress.value?.currentChapter?.startsWith('epubcfi(')
+        ? ''
+        : readingProgress.value?.currentChapter
+    )
+  return Boolean(title && chapter.title.trim() === title.trim())
+}
+
+const syncTocPageToCurrentChapter = () => {
+  const currentIndex = tocItems.value.findIndex(isCurrentChapter)
+  if (currentIndex >= 0) {
+    tocCurrentPage.value = Math.floor(currentIndex / tocPageSize.value) + 1
   }
 }
 
@@ -467,6 +513,7 @@ const loadToc = async () => {
   if (!book.value) return
   tocLoading.value = true
   tocError.value = ''
+  tocCurrentPage.value = 1
   try {
     const response = await api.get(`/api/books/${book.value.id}/toc`)
     tocItems.value = response.data || []
@@ -476,6 +523,10 @@ const loadToc = async () => {
   } finally {
     tocLoading.value = false
   }
+}
+
+const handleTocPageSizeChange = () => {
+  syncTocPageToCurrentChapter()
 }
 
 const openChapter = (chapter: TocItem) => {
@@ -536,77 +587,20 @@ const handleTagsChange = async () => {
 }
 
 const handleDelete = async () => {
-  const result = await confirm('确定要删除这本书吗？删除后无法恢复。')
+  const result = await confirm(
+    '确定将这本书移入回收站吗？\n\nNAS 上的原始文件不会被删除或移动，可随时恢复。',
+    '移入回收站',
+  )
   if (result) {
     try {
       await bookStore.deleteBook(book.value.id)
-      message.success('删除成功')
+      message.success('已移入回收站')
       router.push('/books')
     } catch (error) {
-      message.error('删除失败')
+      message.error('移入回收站失败')
     }
   }
 }
-
-// 加载书单列表
-const loadBookLists = async () => {
-  loadingLists.value = true
-  try {
-    const token = localStorage.getItem('token')
-    const response = await fetch('/api/booklists', {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    if (response.ok) {
-      bookLists.value = await response.json()
-    }
-  } catch (error) {
-    console.error('Failed to load book lists:', error)
-  } finally {
-    loadingLists.value = false
-  }
-}
-
-// 添加到书单
-const handleAddToList = async () => {
-  if (!selectedListId.value || !book.value) return
-
-  addingToList.value = true
-  try {
-    const token = localStorage.getItem('token')
-    const response = await fetch(`/api/booklists/${selectedListId.value}/books/${book.value.id}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    })
-
-    if (response.ok) {
-      message.success('已添加到书单')
-      showAddToListDialog.value = false
-      selectedListId.value = null
-    } else {
-      const data = await response.json()
-      message.error(data.message || '添加失败')
-    }
-  } catch (error) {
-    message.error('添加失败')
-  } finally {
-    addingToList.value = false
-  }
-}
-
-// 跳转到创建书单
-const goToCreateList = () => {
-  showAddToListDialog.value = false
-  router.push('/shelf')
-}
-
-// 监听对话框打开，加载书单
-watch(showAddToListDialog, (newVal) => {
-  if (newVal) {
-    loadBookLists()
-  }
-})
 
 const setRating = async (rating: number) => {
   try {
@@ -867,6 +861,20 @@ onMounted(() => {
   background: var(--primary-alpha-10);
 }
 
+.toc-row.is-current {
+  color: var(--primary);
+  background: var(--primary-alpha-10);
+}
+
+.toc-row.is-current .toc-title {
+  font-weight: 600;
+}
+
+.toc-row.is-current .toc-read-action {
+  opacity: 1;
+  transform: translateX(0);
+}
+
 .toc-number {
   color: var(--text-tertiary);
   font-size: 12px;
@@ -890,6 +898,18 @@ onMounted(() => {
 .toc-row:hover .toc-read-action {
   opacity: 1;
   transform: translateX(0);
+}
+
+.toc-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 18px;
+  border-top: 1px solid var(--border-color);
+  overflow-x: auto;
+}
+
+.toc-pagination :deep(.el-pagination) {
+  flex-shrink: 0;
 }
 
 .book-tag-select {
@@ -1108,6 +1128,63 @@ onMounted(() => {
   margin-bottom: var(--spacing-lg);
 }
 
+.current-reading-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  max-width: 680px;
+  margin-bottom: var(--spacing-lg);
+  padding: 14px 16px;
+  border: 1px solid var(--primary-alpha-20);
+  border-radius: var(--radius-lg);
+  background: var(--primary-alpha-10);
+}
+
+.current-reading-icon {
+  display: flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--surface-card);
+  font-size: 19px;
+}
+
+.current-reading-content {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.current-reading-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.current-reading-title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.current-reading-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.current-reading-meta .btn {
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
 .btn-large {
   padding: 14px 28px;
   font-size: var(--font-size-lg);
@@ -1292,6 +1369,21 @@ onMounted(() => {
   .book-rating {
     justify-content: center;
   }
+
+  .current-reading-card {
+    grid-template-columns: auto minmax(0, 1fr);
+    text-align: left;
+  }
+
+  .current-reading-meta {
+    grid-column: 2;
+    justify-content: space-between;
+  }
+
+  .toc-pagination {
+    justify-content: flex-start;
+    padding: 14px 12px;
+  }
 }
 
 /* 弹窗样式 */
@@ -1367,16 +1459,6 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-/* 书单选择器 */
-.loading-lists {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-xl);
-  color: var(--text-secondary);
-}
-
 .loading-spinner-small {
   width: 20px;
   height: 20px;
@@ -1390,63 +1472,6 @@ onMounted(() => {
   to {
     transform: rotate(360deg);
   }
-}
-
-.empty-lists {
-  text-align: center;
-  padding: var(--spacing-xl);
-  color: var(--text-secondary);
-}
-
-.lists-selector {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.list-option {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-md);
-  background: var(--bg-secondary);
-  border: 2px solid transparent;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.list-option:hover {
-  background: var(--bg-tertiary);
-}
-
-.list-option.selected {
-  border-color: var(--primary);
-  background: var(--primary-alpha-10);
-}
-
-.list-icon {
-  font-size: 24px;
-}
-
-.list-info {
-  flex: 1;
-}
-
-.list-name {
-  font-weight: 500;
-  color: var(--text-primary);
-  margin-bottom: var(--spacing-xs);
-}
-
-.list-count {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-}
-
-.check-icon {
-  color: var(--primary);
-  font-weight: 600;
 }
 
 /* 动画 */

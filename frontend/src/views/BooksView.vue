@@ -6,10 +6,19 @@
         <h1 class="page-title">书库</h1>
         <p class="page-subtitle">共 {{ bookStore.totalElements }} 本书</p>
       </div>
-      <button class="btn btn-primary" @click="showUploadDialog = true">
-        <span>📤</span>
-        <span>上传书籍</span>
-      </button>
+      <div class="page-header-actions">
+        <button class="btn recycle-bin-button" @click="showRecycleBin = true">
+          <span>🗑️</span>
+          <span>回收站</span>
+          <span v-if="bookStore.trashCount > 0" class="trash-count">
+            {{ bookStore.trashCount > 99 ? '99+' : bookStore.trashCount }}
+          </span>
+        </button>
+        <button class="btn btn-primary" @click="showUploadDialog = true">
+          <span>📤</span>
+          <span>上传书籍</span>
+        </button>
+      </div>
     </div>
 
     <!-- 筛选区 -->
@@ -162,6 +171,10 @@
           <span>✨</span>
           <span>批量刮削</span>
         </button>
+        <button class="btn batch-trash-button" @click="moveSelectedToTrash">
+          <span>🗑️</span>
+          <span>移入回收站</span>
+        </button>
       </div>
     </div>
 
@@ -241,19 +254,20 @@
                     <el-dropdown-item command="scrape">✨ 刮削元数据</el-dropdown-item>
                     <el-dropdown-item command="reparse">🔄 重新解析</el-dropdown-item>
                     <el-dropdown-item command="edit">✏️ 编辑书籍</el-dropdown-item>
-                    <el-dropdown-item divided command="delete">🗑️ 删除书籍</el-dropdown-item>
+                    <el-dropdown-item command="add-to-list">📚 加入书单</el-dropdown-item>
+                    <el-dropdown-item divided command="delete">🗑️ 移入回收站</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
             </button>
           </div>
-          <div class="book-format">{{ book.format.toUpperCase() }}</div>
+          <div class="book-meta-badge" :title="getCardMetaLabel(book)">
+            {{ getCardMetaLabel(book) }}
+          </div>
         </div>
 
         <div class="book-info">
           <div class="book-title" :title="book.title">{{ book.title }}</div>
-          <div class="book-author">{{ book.author || '未知作者' }}</div>
-          <div v-if="book.categoryName" class="book-category">{{ book.categoryPath || book.categoryName }}</div>
           <div v-if="book.tags?.length" class="book-tag-list">
             <span
               v-for="tag in book.tags.slice(0, 3)"
@@ -314,6 +328,24 @@
           <span class="book-date">{{ formatDate(row.createdAt) }}</span>
         </div>
         <div class="book-list-actions">
+          <button
+            class="btn btn-text list-state-button"
+            :class="{ 'is-favorite': row.isFavorite }"
+            :title="row.isFavorite ? '取消收藏' : '收藏'"
+            @click.stop="handleToggleFavorite(row.id)"
+          >
+            <span>{{ row.isFavorite ? '⭐' : '☆' }}</span>
+            <span class="list-action-label">{{ row.isFavorite ? '已收藏' : '收藏' }}</span>
+          </button>
+          <button
+            class="btn btn-text list-state-button"
+            :class="{ 'is-wanted': row.isWanted }"
+            :title="row.isWanted ? '取消想读' : '想读'"
+            @click.stop="handleToggleWanted(row.id)"
+          >
+            <span>{{ row.isWanted ? '🔖' : '📑' }}</span>
+            <span class="list-action-label">{{ row.isWanted ? '已想读' : '想读' }}</span>
+          </button>
           <button class="btn btn-text" @click.stop="$router.push(`/reader/${row.id}`)">阅读</button>
           <el-dropdown
             trigger="click"
@@ -330,7 +362,8 @@
                 <el-dropdown-item command="scrape">✨ 刮削元数据</el-dropdown-item>
                 <el-dropdown-item command="reparse">🔄 重新解析</el-dropdown-item>
                 <el-dropdown-item command="edit">✏️ 编辑书籍</el-dropdown-item>
-                <el-dropdown-item divided command="delete">🗑️ 删除书籍</el-dropdown-item>
+                <el-dropdown-item command="add-to-list">📚 加入书单</el-dropdown-item>
+                <el-dropdown-item divided command="delete">🗑️ 移入回收站</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -340,11 +373,22 @@
 
     <!-- 分页 -->
     <div class="pagination" v-if="bookStore.totalElements > 0">
+      <label class="page-size-control">
+        <span>每页</span>
+        <select v-model.number="pageSize" class="page-size-select" @change="handlePageSizeChange">
+          <option v-for="size in pageSizeOptions" :key="size" :value="size">
+            {{ size }} 条
+          </option>
+        </select>
+      </label>
       <button class="btn" :disabled="currentPage <= 1" @click="prevPage">
         <span>‹</span>
         <span>上一页</span>
       </button>
-      <span class="page-info">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页</span>
+      <span class="page-info">
+        第 {{ currentPage }} / {{ totalPages }} 页
+        · {{ pageRangeStart }}–{{ pageRangeEnd }} 条
+      </span>
       <button class="btn" :disabled="currentPage >= totalPages" @click="nextPage">
         <span>下一页</span>
         <span>›</span>
@@ -390,6 +434,18 @@
       @close="closeEditDialog"
       @saved="handleBookSaved"
     />
+
+    <RecycleBinDialog
+      :visible="showRecycleBin"
+      @close="showRecycleBin = false"
+      @changed="handleTrashChanged"
+    />
+
+    <AddToBookListDialog
+      :visible="showAddToListDialog"
+      :book="bookToAddToList"
+      @close="closeAddToListDialog"
+    />
   </div>
 </template>
 
@@ -407,6 +463,8 @@ import FileUpload from '@/components/FileUpload.vue'
 import BatchScraperDialog from '@/components/BatchScraperDialog.vue'
 import BookEditDialog from '@/components/BookEditDialog.vue'
 import ScraperDialog from '@/components/ScraperDialog.vue'
+import RecycleBinDialog from '@/components/RecycleBinDialog.vue'
+import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import { getCoverUrl } from '@/utils/cover'
 import { scrapeBook } from '@/utils/scraper'
 
@@ -425,11 +483,16 @@ const filterCategoryId = ref('')
 const filterTagId = ref('')
 const sortBy = ref('createdAt')
 const currentPage = ref(1)
-const pageSize = ref(18)
+const pageSizeOptions = [12, 18, 24, 36, 60]
+const storedPageSize = Number(localStorage.getItem('aibook-library-page-size'))
+const pageSize = ref(pageSizeOptions.includes(storedPageSize) ? storedPageSize : 18)
 const showUploadDialog = ref(false)
+const showRecycleBin = ref(false)
 const showScraperDialog = ref(false)
 const showEditDialog = ref(false)
 const editingBook = ref<Book | null>(null)
+const showAddToListDialog = ref(false)
+const bookToAddToList = ref<Book | null>(null)
 const processingBookId = ref<number | null>(null)
 const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 
@@ -443,6 +506,33 @@ const batchTagIds = ref<number[]>([])
 const batchTagMode = ref<'ADD' | 'REMOVE' | 'REPLACE'>('ADD')
 
 const totalPages = computed(() => Math.ceil(bookStore.totalElements / pageSize.value))
+const pageRangeStart = computed(() => (currentPage.value - 1) * pageSize.value + 1)
+const pageRangeEnd = computed(() =>
+  Math.min(currentPage.value * pageSize.value, bookStore.totalElements)
+)
+
+const getCardMetaLabel = (book: Book) => {
+  const parts: string[] = []
+  const author = book.author?.trim()
+  const normalizedAuthor = author?.toLowerCase()
+  if (
+    author
+    && !['未知', '未知作者', 'unknown', 'unknown author'].includes(normalizedAuthor || '')
+  ) {
+    parts.push(author)
+  }
+
+  if (book.format?.trim()) {
+    parts.push(book.format.trim().toUpperCase())
+  }
+
+  const category = (book.categoryPath || book.categoryName)?.trim()
+  if (category && category !== '未分类') {
+    parts.push(category)
+  }
+
+  return parts.join('｜')
+}
 
 const handleUploadSuccess = () => {
   showUploadDialog.value = false
@@ -532,6 +622,23 @@ const clearSelection = () => {
   selectedBooks.value.clear()
 }
 
+const moveSelectedToTrash = async () => {
+  const bookIds = Array.from(selectedBooks.value)
+  const accepted = await confirm(
+    `确定将选中的 ${bookIds.length} 本书移入回收站吗？\n\nNAS 上的原始文件不会被删除或移动，可随时从回收站恢复。`,
+    '移入回收站',
+  )
+  if (!accepted) return
+  try {
+    await bookStore.moveBooksToTrash(bookIds)
+    clearSelection()
+    message.success(`已将 ${bookIds.length} 本书移入回收站`)
+    await loadBooks()
+  } catch {
+    message.error('批量移入回收站失败')
+  }
+}
+
 const applyBatchCategory = async () => {
   try {
     await bookStore.updateBookCategories(
@@ -597,13 +704,16 @@ const handleListClick = (bookId: number) => {
 }
 
 const handleDelete = async (id: number) => {
-  const result = await confirm('确定要删除这本书吗？')
+  const result = await confirm(
+    '确定将这本书移入回收站吗？\n\nNAS 上的原始文件不会被删除或移动，可随时恢复。',
+    '移入回收站',
+  )
   if (result) {
     try {
       await bookStore.deleteBook(id)
-      message.success('删除成功')
+      message.success('已移入回收站')
     } catch (error) {
-      message.error('删除失败')
+      message.error('移入回收站失败')
     }
   }
 }
@@ -620,10 +730,19 @@ const handleMoreCommand = async (command: string, book: Book) => {
       editingBook.value = book
       showEditDialog.value = true
       break
+    case 'add-to-list':
+      bookToAddToList.value = book
+      showAddToListDialog.value = true
+      break
     case 'delete':
       await handleDelete(book.id)
       break
   }
+}
+
+const closeAddToListDialog = () => {
+  showAddToListDialog.value = false
+  bookToAddToList.value = null
 }
 
 const handleScrapeBook = async (book: Book) => {
@@ -662,6 +781,11 @@ const handleBookSaved = (book: Book) => {
   const index = bookStore.books.findIndex(item => item.id === book.id)
   if (index !== -1) bookStore.books[index] = book
   void tagStore.fetchTags()
+}
+
+const handleTrashChanged = () => {
+  void bookStore.fetchTrashCount()
+  void loadBooks()
 }
 
 const getStatusClass = (status: string) => {
@@ -715,6 +839,13 @@ const nextPage = () => {
   }
 }
 
+const handlePageSizeChange = () => {
+  localStorage.setItem('aibook-library-page-size', String(pageSize.value))
+  currentPage.value = 1
+  selectedBooks.value.clear()
+  loadBooks()
+}
+
 watch(
   () => route.query.search,
   (newSearch) => {
@@ -730,6 +861,7 @@ onMounted(() => {
   void preferencesStore.hydrate()
   categoryStore.refresh()
   tagStore.fetchTags()
+  bookStore.fetchTrashCount()
   if (!route.query.search) {
     loadBooks()
   }
@@ -749,6 +881,33 @@ onMounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: var(--spacing-xl);
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.recycle-bin-button {
+  position: relative;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.trash-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--danger, #ef4444);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .page-title {
@@ -955,6 +1114,26 @@ onMounted(() => {
   padding: 8px 12px;
 }
 
+.batch-trash-button {
+  color: var(--danger, #dc2626);
+  border-color: color-mix(in srgb, var(--danger, #dc2626) 45%, transparent);
+}
+
+@media (max-width: 640px) {
+  .page-header {
+    gap: var(--spacing-md);
+    flex-direction: column;
+  }
+
+  .page-header-actions {
+    width: 100%;
+  }
+
+  .page-header-actions .btn {
+    flex: 1;
+  }
+}
+
 /* 复选框样式 */
 .book-select-checkbox {
   position: absolute;
@@ -1074,16 +1253,21 @@ onMounted(() => {
   font-weight: 600;
 }
 
-.book-format {
+.book-meta-badge {
   position: absolute;
   bottom: 8px;
   left: 8px;
-  padding: 2px 6px;
+  right: 8px;
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  padding: 3px 7px;
+  overflow: hidden;
   color: rgba(255, 255, 255, 0.95);
   font-size: 10px;
   font-weight: 500;
   line-height: 1.3;
-  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   background: rgba(15, 23, 42, 0.42);
   border: 1px solid rgba(255, 255, 255, 0.68);
   border-radius: 4px;
@@ -1100,21 +1284,6 @@ onMounted(() => {
   font-weight: 500;
   color: var(--text-primary);
   margin-bottom: var(--spacing-xs);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.book-author {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin-bottom: var(--spacing-sm);
-}
-
-.book-category {
-  margin-bottom: var(--spacing-sm);
-  color: var(--primary);
-  font-size: var(--font-size-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1350,7 +1519,22 @@ onMounted(() => {
 
 .book-list-actions {
   display: flex;
+  align-items: center;
   gap: var(--spacing-sm);
+}
+
+.list-state-button {
+  white-space: nowrap;
+}
+
+.list-state-button.is-favorite {
+  background: rgba(254, 243, 199, 0.7);
+  color: #b45309;
+}
+
+.list-state-button.is-wanted {
+  background: rgba(252, 231, 243, 0.7);
+  color: #be185d;
 }
 
 .btn-danger {
@@ -1367,6 +1551,26 @@ onMounted(() => {
   justify-content: center;
   align-items: center;
   gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.page-size-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--text-on-page-bg-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.page-size-select {
+  min-width: 78px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  outline: none;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  cursor: pointer;
 }
 
 .page-info {
@@ -1385,6 +1589,10 @@ onMounted(() => {
   }
 
   .book-list-meta {
+    display: none;
+  }
+
+  .list-action-label {
     display: none;
   }
 }

@@ -218,7 +218,7 @@ class OpdsControllerTest {
                 BookRepository.class.getClassLoader(),
                 new Class<?>[] {BookRepository.class},
                 (proxy, method, args) -> {
-                    if ("findById".equals(method.getName())) {
+                    if ("findByIdAndUserAndDeletedAtIsNull".equals(method.getName())) {
                         return Optional.ofNullable(book);
                     }
                     throw new UnsupportedOperationException(method.getName());

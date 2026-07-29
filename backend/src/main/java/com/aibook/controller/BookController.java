@@ -2,6 +2,7 @@ package com.aibook.controller;
 
 import com.aibook.dto.BatchScrapeRequest;
 import com.aibook.dto.BookCategoryRequest;
+import com.aibook.dto.BookIdsRequest;
 import com.aibook.dto.BookTagsRequest;
 import com.aibook.dto.BookDTO;
 import com.aibook.dto.BookTocItemDTO;
@@ -156,6 +157,72 @@ public class BookController {
     }
 
     /**
+     * 获取回收站书籍。
+     */
+    @GetMapping("/trash")
+    public ResponseEntity<Page<BookDTO>> getTrash(
+            Authentication authentication,
+            @RequestParam(defaultValue = "") String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        User user = userService.findByUsername(authentication.getName());
+        PageRequest pageRequest = PageRequest.of(
+                page, size, Sort.by("deletedAt").descending());
+        return ResponseEntity.ok(
+                bookService.getTrash(user, keyword, pageRequest));
+    }
+
+    @GetMapping("/trash/count")
+    public ResponseEntity<Map<String, Long>> getTrashCount(
+            Authentication authentication) {
+        User user = userService.findByUsername(authentication.getName());
+        return ResponseEntity.ok(Map.of("count", bookService.getTrashCount(user)));
+    }
+
+    /**
+     * 批量移入回收站。只更新数据库，不删除原始文件。
+     */
+    @PostMapping("/trash/move")
+    public ResponseEntity<Void> moveBooksToTrash(
+            Authentication authentication,
+            @Valid @RequestBody BookIdsRequest request) {
+        User user = userService.findByUsername(authentication.getName());
+        bookService.moveBooksToTrash(request.getBookIds(), user);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/trash/restore")
+    public ResponseEntity<List<BookDTO>> restoreBooks(
+            Authentication authentication,
+            @Valid @RequestBody BookIdsRequest request) {
+        User user = userService.findByUsername(authentication.getName());
+        return ResponseEntity.ok(
+                bookService.restoreBooks(request.getBookIds(), user));
+    }
+
+    /**
+     * 从回收站永久移除；保留防止扫描重复导入的墓碑，原始文件始终保留。
+     */
+    @PostMapping("/trash/permanent")
+    public ResponseEntity<Void> permanentlyDeleteBooks(
+            Authentication authentication,
+            @Valid @RequestBody BookIdsRequest request) {
+        User user = userService.findByUsername(authentication.getName());
+        bookService.permanentlyDeleteBooks(request.getBookIds(), user);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 清空回收站；保留防止扫描重复导入的墓碑，原始文件始终保留。
+     */
+    @DeleteMapping("/trash")
+    public ResponseEntity<Void> emptyTrash(Authentication authentication) {
+        User user = userService.findByUsername(authentication.getName());
+        bookService.emptyTrash(user);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
      * 获取书籍详情
      */
     @GetMapping("/{id}")
@@ -217,7 +284,7 @@ public class BookController {
     }
 
     /**
-     * 删除书籍
+     * 将书籍移入回收站，原始文件始终保留。
      */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteBook(

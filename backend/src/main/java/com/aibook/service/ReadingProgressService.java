@@ -26,8 +26,7 @@ public class ReadingProgressService {
      * 获取阅读进度
      */
     public ReadingProgress getProgress(Long bookId, User user) {
-        Book book = bookRepository.findById(bookId)
-                .filter(b -> b.getUser().equals(user))
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElseThrow(() -> new RuntimeException("书籍不存在"));
 
         return readingProgressRepository.findByUserAndBook(user, book)
@@ -35,6 +34,7 @@ public class ReadingProgressService {
                         .book(book)
                         .user(user)
                         .currentChapter("")
+                        .currentChapterTitle("")
                         .chapterProgress(0)
                         .totalProgress(0)
                         .readingTimeSeconds(0L)
@@ -46,9 +46,9 @@ public class ReadingProgressService {
      */
     @Transactional
     public ReadingProgress saveProgress(Long bookId, User user, String currentChapter,
-                                       Integer chapterProgress, Integer totalProgress) {
-        Book book = bookRepository.findById(bookId)
-                .filter(b -> b.getUser().equals(user))
+                                       String currentChapterTitle, Integer chapterProgress,
+                                       Integer totalProgress) {
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElseThrow(() -> new RuntimeException("书籍不存在"));
 
         ReadingProgress progress = readingProgressRepository.findByUserAndBook(user, book)
@@ -58,6 +58,14 @@ public class ReadingProgressService {
                         .build());
 
         progress.setCurrentChapter(currentChapter);
+        if (currentChapterTitle != null && !currentChapterTitle.isBlank()) {
+            progress.setCurrentChapterTitle(currentChapterTitle);
+        } else if (currentChapter != null
+                && !currentChapter.isBlank()
+                && !currentChapter.startsWith("epubcfi(")) {
+            // 兼容尚未传递独立章节标题的文本阅读客户端。
+            progress.setCurrentChapterTitle(currentChapter);
+        }
         progress.setChapterProgress(chapterProgress);
         progress.setTotalProgress(totalProgress);
         progress.setLastReadAt(LocalDateTime.now());
@@ -79,8 +87,7 @@ public class ReadingProgressService {
      */
     @Transactional
     public ReadingProgress updateReadingTime(Long bookId, User user, long additionalSeconds) {
-        Book book = bookRepository.findById(bookId)
-                .filter(b -> b.getUser().equals(user))
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElseThrow(() -> new RuntimeException("书籍不存在"));
 
         ReadingProgress progress = readingProgressRepository.findByUserAndBook(user, book)
@@ -99,6 +106,7 @@ public class ReadingProgressService {
      * 获取最近阅读的书籍
      */
     public Optional<ReadingProgress> getRecentlyRead(User user) {
-        return readingProgressRepository.findTopByUserOrderByLastReadAtDesc(user);
+        return readingProgressRepository
+                .findTopByUserAndBookDeletedAtIsNullOrderByLastReadAtDesc(user);
     }
 }

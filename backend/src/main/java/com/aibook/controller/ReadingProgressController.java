@@ -46,13 +46,14 @@ public class ReadingProgressController {
         User user = userService.findByUsername(authentication.getName());
 
         String currentChapter = (String) body.get("currentChapter");
+        String currentChapterTitle = (String) body.get("currentChapterTitle");
         Integer chapterProgress = body.get("chapterProgress") != null ?
             Integer.valueOf(body.get("chapterProgress").toString()) : 0;
         Integer totalProgress = body.get("totalProgress") != null ?
             Integer.valueOf(body.get("totalProgress").toString()) : 0;
 
         ReadingProgress progress = readingProgressService.saveProgress(
-            bookId, user, currentChapter, chapterProgress, totalProgress);
+            bookId, user, currentChapter, currentChapterTitle, chapterProgress, totalProgress);
         return ResponseEntity.ok(progress);
     }
 

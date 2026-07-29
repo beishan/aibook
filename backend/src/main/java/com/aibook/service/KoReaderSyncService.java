@@ -158,7 +158,7 @@ public class KoReaderSyncService {
      */
     private Book findBookByDocumentId(User user, String documentId) {
         // 尝试通过文件哈希查找
-        Optional<Book> bookByHash = bookRepository.findByFileHash(documentId);
+        Optional<Book> bookByHash = bookRepository.findByFileHashAndDeletedAtIsNull(documentId);
         if (bookByHash.isPresent() && bookByHash.get().getUser().getId().equals(user.getId())) {
             return bookByHash.get();
         }
@@ -166,10 +166,9 @@ public class KoReaderSyncService {
         // 尝试通过 ID 查找
         try {
             Long id = Long.parseLong(documentId);
-            Optional<Book> bookById = bookRepository.findById(id);
-            if (bookById.isPresent() && bookById.get().getUser().getId().equals(user.getId())) {
-                return bookById.get();
-            }
+            Optional<Book> bookById =
+                    bookRepository.findByIdAndUserAndDeletedAtIsNull(id, user);
+            if (bookById.isPresent()) return bookById.get();
         } catch (NumberFormatException ignored) {
         }
 
@@ -180,7 +179,7 @@ public class KoReaderSyncService {
         }
 
         // 最后回退：遍历所有书籍
-        var books = bookRepository.findByUser(user);
+        var books = bookRepository.findByUserAndDeletedAtIsNull(user);
         for (Book book : books) {
             String filename = book.getTitle() + "." + book.getFormat();
             if (filename.equals(documentId) || book.getFilePath().endsWith(documentId)) {

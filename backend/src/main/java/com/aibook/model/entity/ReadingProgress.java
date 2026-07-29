@@ -43,9 +43,14 @@ public class ReadingProgress {
     private User user;
 
     /**
-     * 当前章节
+     * 当前阅读定位。EPUB 保存 CFI，文本书籍保存章节名称。
      */
     private String currentChapter;
+
+    /**
+     * 当前章节的可读标题。
+     */
+    private String currentChapterTitle;
 
     /**
      * 章节内进度百分比 (0-100)

@@ -3,12 +3,19 @@ package com.aibook.service;
 import com.aibook.config.ScanSettings;
 import com.aibook.exception.ResourceNotFoundException;
 import com.aibook.model.entity.ScanDirectory;
+import com.aibook.model.entity.ScanRecord;
 import com.aibook.model.entity.User;
 import com.aibook.repository.ScanDirectoryRepository;
+import com.aibook.repository.ScanRecordRepository;
+import com.aibook.dto.ScanRecordDTO;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -18,6 +25,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 /**
@@ -32,6 +41,7 @@ public class ScanDirectoryTaskService {
 
     private final ScanDirectoryRepository scanDirectoryRepository;
     private final FileScannerService fileScannerService;
+    private final ScanRecordRepository scanRecordRepository;
     private final Map<ScanTaskKey, ScanTask> tasks = new ConcurrentHashMap<>();
     private final ExecutorService taskExecutor = Executors.newFixedThreadPool(
             2,
@@ -61,8 +71,25 @@ public class ScanDirectoryTaskService {
             throw new IllegalArgumentException("目录不存在: " + directory.getPath());
         }
 
+        ScanRecord record = ScanRecord.builder()
+                .taskId(UUID.randomUUID().toString())
+                .directoryId(directoryId)
+                .directoryPath(directory.getPath())
+                .user(user)
+                .status(ScanRecord.Status.PENDING)
+                .message("等待扫描")
+                .totalCount(0)
+                .scannedCount(0)
+                .newBooks(0)
+                .skippedBooks(0)
+                .failedBooks(0)
+                .threadCount(ScanSettings.normalizeThreadCount(user.getScanThreadCount()))
+                .startedAt(LocalDateTime.now())
+                .build();
+        scanRecordRepository.save(record);
+
         ScanTask task = new ScanTask(
-                UUID.randomUUID().toString(),
+                record,
                 directoryId,
                 userId,
                 directory.getPath(),
@@ -83,19 +110,61 @@ public class ScanDirectoryTaskService {
         if (task == null) {
             Map<String, Object> idle = new LinkedHashMap<>();
             idle.put("directoryId", directoryId);
-            idle.put("status", ScanTaskStatus.IDLE.name());
+            idle.put("status", "IDLE");
             idle.put("progress", 0);
             idle.put("totalCount", 0);
             idle.put("scannedCount", 0);
             return idle;
         }
+        if (task.isActive()) {
+            persistRecord(task, false);
+        }
         return task.toMap();
     }
 
+    public Page<ScanRecordDTO> getHistory(
+            User user,
+            Long directoryId,
+            String statusValue,
+            Pageable pageable) {
+        ScanRecord.Status status = null;
+        if (statusValue != null && !statusValue.isBlank()) {
+            try {
+                status = ScanRecord.Status.valueOf(statusValue.trim().toUpperCase());
+            } catch (IllegalArgumentException exception) {
+                throw new IllegalArgumentException("不支持的扫描状态: " + statusValue);
+            }
+        }
+        return scanRecordRepository.findHistory(user, directoryId, status, pageable)
+                .map(this::toDTO);
+    }
+
+    @PostConstruct
+    public void markInterruptedTasksAsFailed() {
+        List<ScanRecord> interrupted = scanRecordRepository.findByStatusIn(
+                List.of(ScanRecord.Status.PENDING, ScanRecord.Status.RUNNING));
+        if (interrupted.isEmpty()) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        interrupted.forEach(record -> {
+            record.setStatus(ScanRecord.Status.FAILED);
+            record.setMessage("服务重启，扫描任务已中断");
+            record.setFinishedAt(now);
+            if (record.getStartedAt() != null) {
+                record.setDurationMs(
+                        Duration.between(record.getStartedAt(), now).toMillis());
+            }
+        });
+        scanRecordRepository.saveAll(interrupted);
+    }
+
     private void executeTask(ScanTask task) {
-        task.status = ScanTaskStatus.RUNNING;
+        task.status = ScanRecord.Status.RUNNING;
         task.message = "正在扫描";
         task.startedAt = System.currentTimeMillis();
+        task.record.setStartedAt(LocalDateTime.now());
+        persistRecord(task, false);
         try {
             fileScannerService.scanDirectory(
                     task.path,
@@ -105,19 +174,20 @@ public class ScanDirectoryTaskService {
                     task.result);
 
             if (task.result.getErrors().isEmpty()) {
-                task.status = ScanTaskStatus.COMPLETED;
+                task.status = ScanRecord.Status.COMPLETED;
                 task.message = "扫描完成";
                 updateDirectory(task);
             } else {
-                task.status = ScanTaskStatus.FAILED;
+                task.status = ScanRecord.Status.FAILED;
                 task.message = task.result.getErrors().get(0).get("message");
             }
         } catch (Exception e) {
-            task.status = ScanTaskStatus.FAILED;
+            task.status = ScanRecord.Status.FAILED;
             task.message = e.getMessage() == null ? "扫描失败" : e.getMessage();
             log.error("目录扫描任务失败: taskId={}, path={}", task.taskId, task.path, e);
         } finally {
             task.finishedAt = System.currentTimeMillis();
+            persistRecord(task, true);
             log.info(
                     "目录扫描任务结束: taskId={}, status={}, scanned={}/{}",
                     task.taskId,
@@ -125,6 +195,47 @@ public class ScanDirectoryTaskService {
                     task.result.getScannedCount(),
                     task.result.getTotalCount());
         }
+    }
+
+    private void persistRecord(ScanTask task, boolean finished) {
+        ScanRecord record = task.record;
+        record.setStatus(task.status);
+        record.setMessage(task.message);
+        record.setTotalCount(task.result.getTotalCount());
+        record.setScannedCount(task.result.getScannedCount());
+        record.setNewBooks(task.result.getNewCount());
+        record.setSkippedBooks(task.result.getSkippedCount());
+        record.setFailedBooks(task.result.getFailedCount());
+        if (finished) {
+            record.setFinishedAt(LocalDateTime.now());
+            record.setDurationMs(Math.max(0, task.finishedAt - task.startedAt));
+            List<Map<String, String>> details = new ArrayList<>();
+            details.addAll(task.result.getErrors());
+            details.addAll(task.result.getFailedBooks());
+            record.setErrorDetails(details.isEmpty() ? null : details.toString());
+        }
+        scanRecordRepository.save(record);
+    }
+
+    private ScanRecordDTO toDTO(ScanRecord record) {
+        return ScanRecordDTO.builder()
+                .id(record.getId())
+                .taskId(record.getTaskId())
+                .directoryId(record.getDirectoryId())
+                .directoryPath(record.getDirectoryPath())
+                .status(record.getStatus().name())
+                .message(record.getMessage())
+                .totalCount(record.getTotalCount())
+                .scannedCount(record.getScannedCount())
+                .newBooks(record.getNewBooks())
+                .skippedBooks(record.getSkippedBooks())
+                .failedBooks(record.getFailedBooks())
+                .threadCount(record.getThreadCount())
+                .durationMs(record.getDurationMs())
+                .startedAt(record.getStartedAt())
+                .finishedAt(record.getFinishedAt())
+                .errorDetails(record.getErrorDetails())
+                .build();
     }
 
     private void updateDirectory(ScanTask task) {
@@ -148,16 +259,9 @@ public class ScanDirectoryTaskService {
     private record ScanTaskKey(Long directoryId, Long userId) {
     }
 
-    private enum ScanTaskStatus {
-        IDLE,
-        PENDING,
-        RUNNING,
-        COMPLETED,
-        FAILED
-    }
-
     private static final class ScanTask {
 
+        private final ScanRecord record;
         private final String taskId;
         private final Long directoryId;
         private final Long userId;
@@ -166,19 +270,20 @@ public class ScanDirectoryTaskService {
         private final int threadCount;
         private final FileScannerService.ScanResult result =
                 new FileScannerService.ScanResult();
-        private volatile ScanTaskStatus status = ScanTaskStatus.PENDING;
+        private volatile ScanRecord.Status status = ScanRecord.Status.PENDING;
         private volatile String message = "等待扫描";
         private volatile long startedAt;
         private volatile long finishedAt;
 
         private ScanTask(
-                String taskId,
+                ScanRecord record,
                 Long directoryId,
                 Long userId,
                 String path,
                 Long defaultCategoryId,
                 int threadCount) {
-            this.taskId = taskId;
+            this.record = record;
+            this.taskId = record.getTaskId();
             this.directoryId = directoryId;
             this.userId = userId;
             this.path = path;
@@ -187,8 +292,8 @@ public class ScanDirectoryTaskService {
         }
 
         private boolean isActive() {
-            return status == ScanTaskStatus.PENDING
-                    || status == ScanTaskStatus.RUNNING;
+            return status == ScanRecord.Status.PENDING
+                    || status == ScanRecord.Status.RUNNING;
         }
 
         private Map<String, Object> toMap() {

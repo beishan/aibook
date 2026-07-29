@@ -53,7 +53,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'connections',
         name: 'Connections',
-        component: () => import('@/views/ConnectionsView.vue'),
+        redirect: { path: '/settings', query: { tab: 'connections' } },
       },
       {
         path: 'categories',

@@ -164,8 +164,7 @@ public class OpdsController {
 
         User user = getUserFromAuth(authentication);
 
-        Book book = bookRepository.findById(id)
-                .filter(b -> b.getUser().getId().equals(user.getId()))
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(id, user)
                 .orElse(null);
 
         if (book == null) {

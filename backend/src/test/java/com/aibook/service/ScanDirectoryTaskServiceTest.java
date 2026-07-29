@@ -5,17 +5,21 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aibook.model.entity.ScanDirectory;
+import com.aibook.model.entity.ScanRecord;
 import com.aibook.model.entity.User;
 import com.aibook.repository.ScanDirectoryRepository;
+import com.aibook.repository.ScanRecordRepository;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 
 class ScanDirectoryTaskServiceTest {
 
@@ -36,6 +40,7 @@ class ScanDirectoryTaskServiceTest {
                 .build();
         ScanDirectoryRepository repository = mock(ScanDirectoryRepository.class);
         FileScannerService fileScannerService = mock(FileScannerService.class);
+        ScanRecordRepository scanRecordRepository = mock(ScanRecordRepository.class);
         when(repository.findByIdAndUser(2L, user))
                 .thenReturn(Optional.of(directory));
         when(repository.findByIdAndUserId(2L, 1L))
@@ -60,7 +65,8 @@ class ScanDirectoryTaskServiceTest {
                 });
 
         ScanDirectoryTaskService service =
-                new ScanDirectoryTaskService(repository, fileScannerService);
+                new ScanDirectoryTaskService(
+                        repository, fileScannerService, scanRecordRepository);
         try {
             Map<String, Object> started = service.startScan(2L, user);
             assertThat(started.get("status")).isIn("PENDING", "RUNNING");
@@ -76,6 +82,17 @@ class ScanDirectoryTaskServiceTest {
             assertThat(progress.get("failedBooks")).isEqualTo(1);
             assertThat(directory.getBookCount()).isEqualTo(2);
             verify(repository).save(directory);
+            ArgumentCaptor<ScanRecord> recordCaptor =
+                    ArgumentCaptor.forClass(ScanRecord.class);
+            verify(scanRecordRepository, atLeast(3)).save(recordCaptor.capture());
+            ScanRecord finalRecord = recordCaptor.getValue();
+            assertThat(finalRecord.getStatus()).isEqualTo(ScanRecord.Status.COMPLETED);
+            assertThat(finalRecord.getTotalCount()).isEqualTo(3);
+            assertThat(finalRecord.getScannedCount()).isEqualTo(3);
+            assertThat(finalRecord.getNewBooks()).isEqualTo(1);
+            assertThat(finalRecord.getSkippedBooks()).isEqualTo(1);
+            assertThat(finalRecord.getFailedBooks()).isEqualTo(1);
+            assertThat(finalRecord.getDurationMs()).isNotNull();
         } finally {
             service.shutdown();
         }

@@ -44,8 +44,7 @@ public class ScraperController {
             @PathVariable Long bookId,
             @AuthenticationPrincipal User user) {
 
-        Book book = bookRepository.findById(bookId)
-                .filter(b -> b.getUser().getId().equals(user.getId()))
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElse(null);
 
         if (book == null) {
@@ -76,9 +75,7 @@ public class ScraperController {
             @RequestBody List<Long> bookIds,
             @AuthenticationPrincipal User user) {
 
-        List<Book> books = bookRepository.findAllById(bookIds).stream()
-                .filter(b -> b.getUser().getId().equals(user.getId()))
-                .toList();
+        List<Book> books = bookRepository.findByIdInAndUser(bookIds, user);
 
         if (books.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -138,8 +135,7 @@ public class ScraperController {
             @PathVariable Long bookId,
             @AuthenticationPrincipal User user) {
 
-        Book book = bookRepository.findById(bookId)
-                .filter(b -> b.getUser().getId().equals(user.getId()))
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElse(null);
 
         if (book == null) {
@@ -193,8 +189,7 @@ public class ScraperController {
             @PathVariable Long bookId,
             @AuthenticationPrincipal User user) {
 
-        Book book = bookRepository.findById(bookId)
-                .filter(b -> b.getUser().getId().equals(user.getId()))
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElse(null);
 
         if (book == null) {

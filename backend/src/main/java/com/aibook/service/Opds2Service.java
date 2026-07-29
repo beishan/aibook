@@ -77,7 +77,8 @@ public class Opds2Service {
      * 所有书籍
      */
     public Map<String, Object> getBooksCatalog(User user, int page) {
-        Page<Book> books = bookRepository.findByUser(user, PageRequest.of(page, PAGE_SIZE));
+        Page<Book> books = bookRepository.findByUserAndDeletedAtIsNull(
+                user, PageRequest.of(page, PAGE_SIZE));
         return buildPublicationsFeed(books, "所有书籍", "/opds/v2/books", page);
     }
 
@@ -85,7 +86,8 @@ public class Opds2Service {
      * 按格式获取书籍
      */
     public Map<String, Object> getBooksByFormat(User user, String format, int page) {
-        Page<Book> books = bookRepository.findByUserAndFormat(user, format, PageRequest.of(page, PAGE_SIZE));
+        Page<Book> books = bookRepository.findByUserAndFormatAndDeletedAtIsNull(
+                user, format, PageRequest.of(page, PAGE_SIZE));
         return buildPublicationsFeed(books, format.toUpperCase() + " 书籍", "/opds/v2/formats/" + format, page);
     }
 
@@ -93,7 +95,8 @@ public class Opds2Service {
      * 收藏书籍
      */
     public Map<String, Object> getFavoriteBooks(User user, int page) {
-        Page<Book> books = bookRepository.findByUserAndIsFavorite(user, true, PageRequest.of(page, PAGE_SIZE));
+        Page<Book> books = bookRepository.findByUserAndIsFavoriteAndDeletedAtIsNull(
+                user, true, PageRequest.of(page, PAGE_SIZE));
         return buildPublicationsFeed(books, "我的收藏", "/opds/v2/favorites", page);
     }
 
@@ -101,7 +104,8 @@ public class Opds2Service {
      * 正在阅读的书籍
      */
     public Map<String, Object> getReadingBooks(User user, int page) {
-        Page<Book> books = bookRepository.findByUserAndReadingStatus(user, Book.ReadingStatus.READING,
+        Page<Book> books = bookRepository.findByUserAndReadingStatusAndDeletedAtIsNull(
+                user, Book.ReadingStatus.READING,
                 PageRequest.of(page, PAGE_SIZE));
         return buildPublicationsFeed(books, "正在阅读", "/opds/v2/reading", page);
     }

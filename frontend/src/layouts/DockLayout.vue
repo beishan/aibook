@@ -85,7 +85,6 @@ const menuItems = [
   { path: '/shelf', icon: '📖', title: '书架' },
   { path: '/categories', icon: '🗂️', title: '分类' },
   { path: '/tags', icon: '🏷️', title: '标签' },
-  { path: '/connections', icon: '🔗', title: '连接' },
   { path: '/settings', icon: '⚙️', title: '设置' },
 ]
 

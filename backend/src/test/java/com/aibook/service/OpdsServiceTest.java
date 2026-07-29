@@ -113,7 +113,7 @@ class OpdsServiceTest {
             BookRepository.class.getClassLoader(),
             new Class<?>[] {BookRepository.class},
             (proxy, method, args) -> {
-                if ("findByUser".equals(method.getName())) {
+                if ("findByUserAndDeletedAtIsNull".equals(method.getName())) {
                     return booksPage;
                 }
                 if ("searchByKeyword".equals(method.getName())) {

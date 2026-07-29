@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
@@ -55,6 +56,7 @@ public class BookList {
         joinColumns = @JoinColumn(name = "book_list_id"),
         inverseJoinColumns = @JoinColumn(name = "book_id")
     )
+    @SQLRestriction("deleted_at IS NULL")
     @Builder.Default
     private List<Book> books = new ArrayList<>();
 

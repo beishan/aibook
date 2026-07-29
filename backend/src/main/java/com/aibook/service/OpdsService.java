@@ -136,7 +136,8 @@ public class OpdsService {
      * 获取书籍列表（分页）
      */
     public String getBooksCatalog(User user, int page) {
-        Page<Book> books = bookRepository.findByUser(user, PageRequest.of(page, PAGE_SIZE));
+        Page<Book> books = bookRepository.findByUserAndDeletedAtIsNull(
+                user, PageRequest.of(page, PAGE_SIZE));
         return buildBooksFeed(books, "所有书籍", "urn:aibook:all", "/opds/books", page);
     }
 
@@ -144,7 +145,8 @@ public class OpdsService {
      * 按格式获取书籍（分页）
      */
     public String getBooksByFormat(User user, String format, int page) {
-        Page<Book> books = bookRepository.findByUserAndFormat(user, format, PageRequest.of(page, PAGE_SIZE));
+        Page<Book> books = bookRepository.findByUserAndFormatAndDeletedAtIsNull(
+                user, format, PageRequest.of(page, PAGE_SIZE));
         return buildBooksFeed(books, format.toUpperCase() + " 书籍", "urn:aibook:format:" + format,
                 "/opds/formats/" + format, page);
     }
@@ -153,7 +155,8 @@ public class OpdsService {
      * 获取收藏书籍（分页）
      */
     public String getFavoriteBooks(User user, int page) {
-        Page<Book> books = bookRepository.findByUserAndIsFavorite(user, true, PageRequest.of(page, PAGE_SIZE));
+        Page<Book> books = bookRepository.findByUserAndIsFavoriteAndDeletedAtIsNull(
+                user, true, PageRequest.of(page, PAGE_SIZE));
         return buildBooksFeed(books, "我的收藏", "urn:aibook:favorites", "/opds/favorites", page);
     }
 
@@ -161,7 +164,8 @@ public class OpdsService {
      * 获取正在阅读的书籍（分页）
      */
     public String getReadingBooks(User user, int page) {
-        Page<Book> books = bookRepository.findByUserAndReadingStatus(user, Book.ReadingStatus.READING,
+        Page<Book> books = bookRepository.findByUserAndReadingStatusAndDeletedAtIsNull(
+                user, Book.ReadingStatus.READING,
                 PageRequest.of(page, PAGE_SIZE));
         return buildBooksFeed(books, "正在阅读", "urn:aibook:reading", "/opds/reading", page);
     }

@@ -41,6 +41,7 @@ public class BookDTO {
     private String notes;
     private String chapterInfo;
     private Integer chapterCount;
+    private LocalDateTime deletedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

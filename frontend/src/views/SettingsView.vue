@@ -15,7 +15,7 @@
         :key="tab.key"
         class="tab-item"
         :class="{ active: activeTab === tab.key }"
-        @click="activeTab = tab.key"
+        @click="selectTab(tab.key)"
       >
         <span class="tab-icon">{{ tab.icon }}</span>
         <span>{{ tab.label }}</span>
@@ -68,10 +68,16 @@
       <div class="card glass">
         <div class="card-header">
           <span>📁 监控目录配置</span>
-          <button class="btn btn-primary" @click="showAddDialog = true">
-            <span>➕</span>
-            <span>添加目录</span>
-          </button>
+          <div class="directory-header-actions">
+            <button class="btn" @click="showScanHistory = true">
+              <span>📋</span>
+              <span>扫描记录</span>
+            </button>
+            <button class="btn btn-primary" @click="showAddDialog = true">
+              <span>➕</span>
+              <span>添加目录</span>
+            </button>
+          </div>
         </div>
 
         <div class="scan-performance-settings">
@@ -124,37 +130,6 @@
                 </span>
                 <span class="meta-text">{{ row.lastScanTime ? formatTime(row.lastScanTime) : '未扫描' }}</span>
               </div>
-              <div
-                v-if="row._scanProgress && row._scanProgress.status !== 'IDLE'"
-                class="scan-progress-panel"
-              >
-                <div class="scan-progress-header">
-                  <span>{{ getScanStatusText(row._scanProgress.status) }}</span>
-                  <strong>{{ row._scanProgress.progress }}%</strong>
-                </div>
-                <el-progress
-                  :percentage="row._scanProgress.progress"
-                  :stroke-width="8"
-                  :show-text="false"
-                  :status="getScanProgressStatus(row._scanProgress.status)"
-                />
-                <div class="scan-progress-stats">
-                  <span>总数 {{ row._scanProgress.totalCount }}</span>
-                  <span>
-                    已扫描
-                    {{ row._scanProgress.scannedCount }}/{{ row._scanProgress.totalCount }}
-                  </span>
-                  <span>新增 {{ row._scanProgress.newBooks || 0 }}</span>
-                  <span>跳过 {{ row._scanProgress.skippedBooks || 0 }}</span>
-                  <span>失败 {{ row._scanProgress.failedBooks || 0 }}</span>
-                </div>
-                <div
-                  v-if="row._scanning && row._scanProgress.currentFile"
-                  class="scan-current-file"
-                >
-                  当前：{{ formatScanFile(row._scanProgress.currentFile) }}
-                </div>
-              </div>
             </div>
             <div class="directory-actions">
               <select
@@ -179,9 +154,45 @@
               </button>
               <button class="btn btn-text btn-danger" @click="handleRemove(row)">删除</button>
             </div>
+            <div
+              v-if="row._scanProgress && row._scanProgress.status !== 'IDLE'"
+              class="scan-progress-panel"
+            >
+              <div class="scan-progress-header">
+                <span>{{ getScanStatusText(row._scanProgress.status) }}</span>
+                <strong>{{ row._scanProgress.progress }}%</strong>
+              </div>
+              <el-progress
+                :percentage="row._scanProgress.progress"
+                :stroke-width="8"
+                :show-text="false"
+                :status="getScanProgressStatus(row._scanProgress.status)"
+              />
+              <div class="scan-progress-stats">
+                <span>总数 {{ row._scanProgress.totalCount }}</span>
+                <span>
+                  已扫描
+                  {{ row._scanProgress.scannedCount }}/{{ row._scanProgress.totalCount }}
+                </span>
+                <span>新增 {{ row._scanProgress.newBooks || 0 }}</span>
+                <span>跳过 {{ row._scanProgress.skippedBooks || 0 }}</span>
+                <span>失败 {{ row._scanProgress.failedBooks || 0 }}</span>
+              </div>
+              <div
+                v-if="row._scanning && row._scanProgress.currentFile"
+                class="scan-current-file"
+              >
+                当前：{{ formatScanFile(row._scanProgress.currentFile) }}
+              </div>
+            </div>
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- OPDS 与第三方客户端连接 -->
+    <div v-show="activeTab === 'connections'" class="tab-content">
+      <ConnectionsView embedded />
     </div>
 
     <!-- 定时任务 -->
@@ -286,20 +297,31 @@
         </div>
       </Transition>
     </Teleport>
+
+    <ScanHistoryDialog
+      :visible="showScanHistory"
+      :directories="directories"
+      @close="showScanHistory = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import api from '@/utils/api'
 import DirectoryBrowser from '@/components/DirectoryBrowser.vue'
+import ScanHistoryDialog from '@/components/ScanHistoryDialog.vue'
+import ConnectionsView from '@/views/ConnectionsView.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
 import { THEMES, type ThemeId } from '@/types/theme'
 
 const themeStore = useThemeStore()
+const route = useRoute()
+const router = useRouter()
 const preferencesStore = usePreferencesStore()
 const categoryStore = useCategoryStore()
 const themes = THEMES
@@ -307,6 +329,7 @@ const themes = THEMES
 const tabs = [
   { key: 'theme', label: '主题风格', icon: '🎨' },
   { key: 'directories', label: '扫描目录', icon: '📂' },
+  { key: 'connections', label: 'OPDS 连接', icon: '🔗' },
   { key: 'scheduler', label: '定时任务', icon: '⏰' },
   { key: 'info', label: '系统信息', icon: 'ℹ️' },
 ]
@@ -325,10 +348,34 @@ const handleThemeChange = (id: ThemeId) => {
   message.success(`已切换到「${themes.find(t => t.id === id)?.name}」主题`)
 }
 
-const activeTab = ref('theme')
+const tabKeys = new Set(tabs.map(tab => tab.key))
+const activeTab = ref(
+  typeof route.query.tab === 'string' && tabKeys.has(route.query.tab)
+    ? route.query.tab
+    : 'theme'
+)
+
+const selectTab = (tab: string) => {
+  activeTab.value = tab
+  void router.replace({
+    query: {
+      ...route.query,
+      tab: tab === 'theme' ? undefined : tab,
+    },
+  })
+}
+
+watch(
+  () => route.query.tab,
+  tab => {
+    activeTab.value =
+      typeof tab === 'string' && tabKeys.has(tab) ? tab : 'theme'
+  }
+)
 const loading = ref(false)
 const adding = ref(false)
 const showAddDialog = ref(false)
+const showScanHistory = ref(false)
 const directories = ref<any[]>([])
 const scanThreadCountDraft = ref(preferencesStore.scanThreadCount)
 const savingScanSettings = ref(false)
@@ -641,6 +688,12 @@ onUnmounted(() => {
   font-size: var(--font-size-lg);
 }
 
+.directory-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
 .scan-performance-settings {
   display: flex;
   align-items: center;
@@ -718,9 +771,11 @@ onUnmounted(() => {
 }
 
 .directory-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   justify-content: space-between;
   align-items: center;
+  gap: var(--spacing-md) var(--spacing-lg);
   padding: var(--spacing-lg);
   border-bottom: 1px solid var(--border-color-light);
   transition: background var(--transition-fast);
@@ -759,8 +814,10 @@ onUnmounted(() => {
 }
 
 .scan-progress-panel {
-  max-width: 560px;
-  margin-top: var(--spacing-md);
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
   padding: var(--spacing-md);
   background: var(--surface-hover);
   border: 1px solid var(--border-color-light);
@@ -1072,15 +1129,25 @@ onUnmounted(() => {
   }
 
   .directory-item {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     align-items: flex-start;
     gap: var(--spacing-md);
   }
 
   .directory-actions {
+    grid-column: 1;
     width: 100%;
     justify-content: flex-end;
     flex-wrap: wrap;
+  }
+
+  .scan-progress-panel {
+    grid-column: 1;
+  }
+
+  .directory-header-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
   }
 }
 </style>

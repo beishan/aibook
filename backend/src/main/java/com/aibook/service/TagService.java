@@ -113,7 +113,8 @@ public class TagService {
                 .id(tag.getId())
                 .name(tag.getName())
                 .color(tag.getColor())
-                .bookCount(bookRepository.countByUserAndTagsContaining(user, tag))
+                .bookCount(bookRepository.countByUserAndTagsContainingAndDeletedAtIsNull(
+                        user, tag))
                 .createdAt(tag.getCreatedAt())
                 .build();
     }

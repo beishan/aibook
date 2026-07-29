@@ -54,7 +54,8 @@ class CategoryServiceTest {
                             .filter(category -> category.getParent() == parent)
                             .toList());
                 });
-        when(bookRepository.countByUserAndCategory(any(User.class), any(Category.class)))
+        when(bookRepository.countByUserAndCategoryAndDeletedAtIsNull(
+                any(User.class), any(Category.class)))
                 .thenReturn(0L);
 
         CategoryService service = new CategoryService(
@@ -113,7 +114,8 @@ class CategoryServiceTest {
         when(categoryRepository.findByIdAndUser(1L, user)).thenReturn(Optional.of(category));
         when(categoryRepository.findByUserAndParentOrderBySortOrderAscNameAsc(user, category))
                 .thenReturn(List.of());
-        when(bookRepository.findByUserAndCategory(user, category)).thenReturn(List.of(book));
+        when(bookRepository.findByUserAndCategoryAndDeletedAtIsNull(user, category))
+                .thenReturn(List.of(book));
 
         CategoryService service = new CategoryService(
                 categoryRepository, bookRepository, mock(ScanDirectoryRepository.class));

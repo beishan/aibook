@@ -28,6 +28,7 @@ export interface Book {
   notes?: string
   chapterInfo?: string
   chapterCount?: number
+  deletedAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -47,6 +48,7 @@ export const useBookStore = defineStore('book', () => {
   const totalElements = ref(0)
   const currentPage = ref(0)
   const pageSize = ref(10)
+  const trashCount = ref(0)
 
   // 获取书籍列表
   async function fetchBooks(
@@ -131,11 +133,49 @@ export const useBookStore = defineStore('book', () => {
     return updatedBook
   }
 
-  // 删除书籍
+  // 移入系统回收站（NAS 原始文件不作改动）
   async function deleteBook(id: number) {
     await api.delete(`/api/books/${id}`)
     books.value = books.value.filter((b) => b.id !== id)
-    totalElements.value--
+    totalElements.value = Math.max(0, totalElements.value - 1)
+    trashCount.value++
+  }
+
+  async function fetchTrash(page = 0, size = 20, keyword = '') {
+    const response = await api.get('/api/books/trash', {
+      params: { page, size, keyword },
+    })
+    return response.data as BookPage
+  }
+
+  async function fetchTrashCount() {
+    const response = await api.get('/api/books/trash/count')
+    trashCount.value = Number(response.data.count || 0)
+    return trashCount.value
+  }
+
+  async function moveBooksToTrash(bookIds: number[]) {
+    await api.post('/api/books/trash/move', { bookIds })
+    const removed = new Set(bookIds)
+    books.value = books.value.filter(book => !removed.has(book.id))
+    totalElements.value = Math.max(0, totalElements.value - removed.size)
+    trashCount.value += removed.size
+  }
+
+  async function restoreTrashBooks(bookIds: number[]) {
+    const response = await api.post('/api/books/trash/restore', { bookIds })
+    trashCount.value = Math.max(0, trashCount.value - bookIds.length)
+    return response.data as Book[]
+  }
+
+  async function permanentlyRemoveTrashBooks(bookIds: number[]) {
+    await api.post('/api/books/trash/permanent', { bookIds })
+    trashCount.value = Math.max(0, trashCount.value - bookIds.length)
+  }
+
+  async function emptyTrash() {
+    await api.delete('/api/books/trash')
+    trashCount.value = 0
   }
 
   // 更新书籍元数据
@@ -236,12 +276,19 @@ export const useBookStore = defineStore('book', () => {
     totalElements,
     currentPage,
     pageSize,
+    trashCount,
     fetchBooks,
     searchBooks,
     fetchBookById,
     toggleFavorite,
     toggleWanted,
     deleteBook,
+    fetchTrash,
+    fetchTrashCount,
+    moveBooksToTrash,
+    restoreTrashBooks,
+    permanentlyRemoveTrashBooks,
+    emptyTrash,
     updateBookMetadata,
     updateBookCategory,
     updateBookCategories,
