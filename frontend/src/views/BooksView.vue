@@ -51,6 +51,16 @@
             {{ `${'　'.repeat(category.depth)}${category.name}` }}
           </option>
         </select>
+        <select v-model="filterTagId" class="select-input" @change="handleFilterChange('tag')">
+          <option value="">全部标签</option>
+          <option
+            v-for="tag in tagStore.tags"
+            :key="tag.id"
+            :value="String(tag.id)"
+          >
+            {{ tag.name }}
+          </option>
+        </select>
         <select v-model="sortBy" class="select-input" @change="loadBooks">
           <option value="createdAt">添加时间</option>
           <option value="title">书名</option>
@@ -124,6 +134,30 @@
           <span>🗂️</span>
           <span>设置分类</span>
         </button>
+        <el-select
+          v-model="batchTagIds"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          placeholder="选择标签"
+          class="batch-tag-select"
+        >
+          <el-option
+            v-for="tag in tagStore.tags"
+            :key="tag.id"
+            :label="tag.name"
+            :value="tag.id"
+          />
+        </el-select>
+        <select v-model="batchTagMode" class="select-input batch-tag-mode">
+          <option value="ADD">添加标签</option>
+          <option value="REMOVE">移除标签</option>
+          <option value="REPLACE">替换标签</option>
+        </select>
+        <button class="btn" :disabled="batchTagIds.length === 0" @click="applyBatchTags">
+          <span>🏷️</span>
+          <span>应用标签</span>
+        </button>
         <button class="btn btn-primary" @click="openBatchScraper('selected')">
           <span>✨</span>
           <span>批量刮削</span>
@@ -174,6 +208,19 @@
           <div class="book-title" :title="book.title">{{ book.title }}</div>
           <div class="book-author">{{ book.author || '未知作者' }}</div>
           <div v-if="book.categoryName" class="book-category">{{ book.categoryPath || book.categoryName }}</div>
+          <div v-if="book.tags?.length" class="book-tag-list">
+            <span
+              v-for="tag in book.tags.slice(0, 3)"
+              :key="tag.id"
+              class="book-tag-chip"
+              :style="getTagStyle(tag.color)"
+            >
+              {{ tag.name }}
+            </span>
+            <span v-if="book.tags.length > 3" class="book-tag-more">
+              +{{ book.tags.length - 3 }}
+            </span>
+          </div>
           <div class="book-actions">
             <button
               class="action-btn"
@@ -192,11 +239,29 @@
               <span class="action-icon">{{ book.isWanted ? '🔖' : '📑' }}</span>
             </button>
             <button
-              class="action-btn action-btn-delete"
-              @click.stop="handleDelete(book.id)"
-              title="删除"
+              class="action-btn"
+              :class="{ 'is-processing': processingBookId === book.id }"
+              title="更多操作"
+              @click.stop
             >
-              <span class="action-icon">🗑️</span>
+              <el-dropdown
+                trigger="click"
+                :disabled="processingBookId === book.id"
+                @click.stop
+                @command="command => handleMoreCommand(command, book)"
+              >
+                <span class="more-trigger">
+                  <el-icon><MoreFilled /></el-icon>
+                </span>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="scrape">✨ 刮削元数据</el-dropdown-item>
+                    <el-dropdown-item command="reparse">🔄 重新解析</el-dropdown-item>
+                    <el-dropdown-item command="edit">✏️ 编辑书籍</el-dropdown-item>
+                    <el-dropdown-item divided command="delete">🗑️ 删除书籍</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </button>
           </div>
         </div>
@@ -235,11 +300,37 @@
             {{ getStatusText(row.readingStatus) }}
           </span>
           <span v-if="row.categoryName" class="tag tag-info">{{ row.categoryName }}</span>
+          <span
+            v-for="tag in row.tags?.slice(0, 3)"
+            :key="tag.id"
+            class="book-tag-chip"
+            :style="getTagStyle(tag.color)"
+          >
+            {{ tag.name }}
+          </span>
           <span class="book-date">{{ formatDate(row.createdAt) }}</span>
         </div>
         <div class="book-list-actions">
           <button class="btn btn-text" @click.stop="$router.push(`/reader/${row.id}`)">阅读</button>
-          <button class="btn btn-text btn-danger" @click.stop="handleDelete(row.id)">删除</button>
+          <el-dropdown
+            trigger="click"
+            :disabled="processingBookId === row.id"
+            @click.stop
+            @command="command => handleMoreCommand(command, row)"
+          >
+            <button class="btn btn-text more-list-button" @click.stop>
+              <el-icon><MoreFilled /></el-icon>
+              <span>{{ processingBookId === row.id ? '处理中' : '更多' }}</span>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="scrape">✨ 刮削元数据</el-dropdown-item>
+                <el-dropdown-item command="reparse">🔄 重新解析</el-dropdown-item>
+                <el-dropdown-item command="edit">✏️ 编辑书籍</el-dropdown-item>
+                <el-dropdown-item divided command="delete">🗑️ 删除书籍</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
     </div>
@@ -282,25 +373,45 @@
       @close="showBatchScraperDialog = false"
       @complete="handleBatchScraperComplete"
     />
+
+    <ScraperDialog
+      ref="scraperDialog"
+      :visible="showScraperDialog"
+      @close="showScraperDialog = false"
+      @refresh="loadBooks"
+    />
+
+    <BookEditDialog
+      :visible="showEditDialog"
+      :book="editingBook"
+      @close="closeEditDialog"
+      @saved="handleBookSaved"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
+import { MoreFilled } from '@element-plus/icons-vue'
 import { message, confirm } from '@/utils/message'
-import { useBookStore } from '@/stores/book'
+import { useBookStore, type Book } from '@/stores/book'
 import { useCategoryStore } from '@/stores/category'
+import { useTagStore } from '@/stores/tag'
 import { usePreferencesStore } from '@/stores/preferences'
 import FileUpload from '@/components/FileUpload.vue'
 import BatchScraperDialog from '@/components/BatchScraperDialog.vue'
+import BookEditDialog from '@/components/BookEditDialog.vue'
+import ScraperDialog from '@/components/ScraperDialog.vue'
 import { getCoverUrl } from '@/utils/cover'
+import { scrapeBook } from '@/utils/scraper'
 
 const route = useRoute()
 const router = useRouter()
 const bookStore = useBookStore()
 const categoryStore = useCategoryStore()
+const tagStore = useTagStore()
 const preferencesStore = usePreferencesStore()
 const { libraryViewMode: viewMode } = storeToRefs(preferencesStore)
 
@@ -308,10 +419,16 @@ const searchKeyword = ref('')
 const filterFormat = ref('')
 const filterStatus = ref('')
 const filterCategoryId = ref('')
+const filterTagId = ref('')
 const sortBy = ref('createdAt')
 const currentPage = ref(1)
 const pageSize = ref(18)
 const showUploadDialog = ref(false)
+const showScraperDialog = ref(false)
+const showEditDialog = ref(false)
+const editingBook = ref<Book | null>(null)
+const processingBookId = ref<number | null>(null)
+const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 
 // 多选相关状态
 const selectionMode = ref(false)
@@ -319,6 +436,8 @@ const selectedBooks = ref<Set<number>>(new Set())
 const showBatchScraperDialog = ref(false)
 const batchScraperMode = ref<'selected' | 'all-incomplete'>('selected')
 const batchCategoryId = ref('')
+const batchTagIds = ref<number[]>([])
+const batchTagMode = ref<'ADD' | 'REMOVE' | 'REPLACE'>('ADD')
 
 const totalPages = computed(() => Math.ceil(bookStore.totalElements / pageSize.value))
 
@@ -336,6 +455,7 @@ const loadBooks = async () => {
       status: filterStatus.value || undefined,
       categoryId: filterCategoryId.value ? Number(filterCategoryId.value) : undefined,
       includeChildren: Boolean(filterCategoryId.value),
+      tagId: filterTagId.value ? Number(filterTagId.value) : undefined,
     })
   }
 }
@@ -345,10 +465,11 @@ const handleSearch = () => {
   loadBooks()
 }
 
-const handleFilterChange = (type: 'format' | 'status' | 'category') => {
+const handleFilterChange = (type: 'format' | 'status' | 'category' | 'tag') => {
   if (type !== 'format') filterFormat.value = ''
   if (type !== 'status') filterStatus.value = ''
   if (type !== 'category') filterCategoryId.value = ''
+  if (type !== 'tag') filterTagId.value = ''
   currentPage.value = 1
   loadBooks()
 }
@@ -358,6 +479,7 @@ const resetFilters = () => {
   filterFormat.value = ''
   filterStatus.value = ''
   filterCategoryId.value = ''
+  filterTagId.value = ''
   sortBy.value = 'createdAt'
   currentPage.value = 1
   loadBooks()
@@ -420,6 +542,31 @@ const applyBatchCategory = async () => {
   }
 }
 
+const applyBatchTags = async () => {
+  if (batchTagIds.value.length === 0) {
+    message.warning('请先选择标签')
+    return
+  }
+  try {
+    await bookStore.updateBookTagsBatch(
+      Array.from(selectedBooks.value),
+      batchTagIds.value,
+      batchTagMode.value,
+    )
+    const actionText = {
+      ADD: '添加',
+      REMOVE: '移除',
+      REPLACE: '替换',
+    }[batchTagMode.value]
+    message.success(`已批量${actionText}标签`)
+    batchTagIds.value = []
+    clearSelection()
+    await tagStore.fetchTags()
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '批量设置标签失败')
+  }
+}
+
 const openBatchScraper = (mode: 'selected' | 'all-incomplete') => {
   batchScraperMode.value = mode
   showBatchScraperDialog.value = true
@@ -458,6 +605,62 @@ const handleDelete = async (id: number) => {
   }
 }
 
+const handleMoreCommand = async (command: string, book: Book) => {
+  switch (command) {
+    case 'scrape':
+      await handleScrapeBook(book)
+      break
+    case 'reparse':
+      await handleReparseBook(book)
+      break
+    case 'edit':
+      editingBook.value = book
+      showEditDialog.value = true
+      break
+    case 'delete':
+      await handleDelete(book.id)
+      break
+  }
+}
+
+const handleScrapeBook = async (book: Book) => {
+  showScraperDialog.value = true
+  processingBookId.value = book.id
+  await nextTick()
+  try {
+    await scraperDialog.value?.startScrape(() => scrapeBook(book.id))
+  } finally {
+    processingBookId.value = null
+  }
+}
+
+const handleReparseBook = async (book: Book) => {
+  processingBookId.value = book.id
+  try {
+    const result = await bookStore.reparseBook(book.id)
+    const chapterText =
+      typeof result.chapterCount === 'number'
+        ? `，共 ${result.chapterCount} 章`
+        : ''
+    message.success(`${result.message || '解析完成'}${chapterText}`)
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '重新解析失败')
+  } finally {
+    processingBookId.value = null
+  }
+}
+
+const closeEditDialog = () => {
+  showEditDialog.value = false
+  editingBook.value = null
+}
+
+const handleBookSaved = (book: Book) => {
+  const index = bookStore.books.findIndex(item => item.id === book.id)
+  if (index !== -1) bookStore.books[index] = book
+  void tagStore.fetchTags()
+}
+
 const getStatusClass = (status: string) => {
   switch (status) {
     case 'READING':
@@ -484,6 +687,15 @@ const formatDate = (dateStr: string) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
   return date.toLocaleDateString('zh-CN')
+}
+
+const getTagStyle = (color?: string) => {
+  const safeColor = /^#[0-9a-fA-F]{6}$/.test(color || '') ? color! : '#64748B'
+  return {
+    color: safeColor,
+    borderColor: `${safeColor}80`,
+    backgroundColor: `${safeColor}14`,
+  }
 }
 
 const prevPage = () => {
@@ -514,6 +726,7 @@ watch(
 onMounted(() => {
   void preferencesStore.hydrate()
   categoryStore.refresh()
+  tagStore.fetchTags()
   if (!route.query.search) {
     loadBooks()
   }
@@ -730,6 +943,15 @@ onMounted(() => {
   padding: 8px 12px;
 }
 
+.batch-tag-select {
+  width: 210px;
+}
+
+.batch-tag-mode {
+  min-width: 112px;
+  padding: 8px 12px;
+}
+
 /* 复选框样式 */
 .book-select-checkbox {
   position: absolute;
@@ -894,6 +1116,35 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.book-tag-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  margin-bottom: var(--spacing-xs);
+  overflow: hidden;
+}
+
+.book-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 92px;
+  padding: 2px 6px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.book-tag-more {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
 .book-actions {
   display: flex;
   gap: 6px;
@@ -960,19 +1211,24 @@ onMounted(() => {
   color: #db2777;
 }
 
-.action-btn-delete {
-  opacity: 0;
-  background: transparent;
+.more-trigger {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: var(--text-secondary);
+  outline: none;
 }
 
-.book-card:hover .action-btn-delete {
-  opacity: 1;
-  background: var(--bg-secondary);
+.action-btn.is-processing {
+  opacity: 0.55;
+  cursor: wait;
 }
 
-.action-btn-delete:hover {
-  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%) !important;
-  color: #dc2626;
+.more-list-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* 书籍列表 */

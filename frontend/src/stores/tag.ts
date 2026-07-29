@@ -2,11 +2,12 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/utils/api'
 
-interface Tag {
+export interface Tag {
   id: number
   name: string
-  color?: string
-  createdAt: string
+  color: string
+  bookCount?: number
+  createdAt?: string
 }
 
 export const useTagStore = defineStore('tag', () => {
@@ -26,19 +27,21 @@ export const useTagStore = defineStore('tag', () => {
   }
 
   // 创建标签
-  async function createTag(name: string, color?: string) {
+  async function createTag(name: string, color = '#64748B') {
     const response = await api.post('/api/tags', { name, color })
     tags.value.push(response.data)
+    tags.value.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
     return response.data
   }
 
   // 更新标签
-  async function updateTag(id: number, name: string, color?: string) {
+  async function updateTag(id: number, name: string, color = '#64748B') {
     const response = await api.put(`/api/tags/${id}`, { name, color })
     const index = tags.value.findIndex((t) => t.id === id)
     if (index !== -1) {
       tags.value[index] = response.data
     }
+    tags.value.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
     return response.data
   }
 

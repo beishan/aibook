@@ -34,11 +34,13 @@ public class BookDTO {
     private Long categoryId;
     private String categoryName;
     private String categoryPath;
+    private List<TagDTO> tags;
     private List<String> tagNames;
     private Boolean isFavorite;
     private Boolean isWanted;
     private String notes;
     private String chapterInfo;
+    private Integer chapterCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

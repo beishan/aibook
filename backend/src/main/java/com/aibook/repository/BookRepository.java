@@ -2,6 +2,7 @@ package com.aibook.repository;
 
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.Category;
+import com.aibook.model.entity.Tag;
 import com.aibook.model.entity.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -78,6 +79,11 @@ public interface BookRepository extends JpaRepository<Book, Long> {
      * 统计某分类下的书籍。
      */
     long countByUserAndCategory(User user, Category category);
+
+    /**
+     * 统计使用指定标签的书籍。
+     */
+    long countByUserAndTagsContaining(User user, Tag tag);
 
     /**
      * 根据用户和标签查询书籍

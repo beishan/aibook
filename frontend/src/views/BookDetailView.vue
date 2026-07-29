@@ -81,9 +81,30 @@
                 {{ `${'　'.repeat(category.depth)}${category.name}` }}
               </option>
             </select>
-            <span v-for="tag in book.tagNames" :key="tag" class="tag tag-success">
-              {{ tag }}
-            </span>
+            <el-select
+              v-model="selectedTagIds"
+              multiple
+              filterable
+              collapse-tags
+              collapse-tags-tooltip
+              placeholder="添加标签"
+              class="book-tag-select"
+              :disabled="savingTags"
+              @change="handleTagsChange"
+            >
+              <el-option
+                v-for="tag in tagStore.tags"
+                :key="tag.id"
+                :label="tag.name"
+                :value="tag.id"
+              >
+                <span class="tag-option-dot" :style="{ backgroundColor: tag.color }"></span>
+                <span>{{ tag.name }}</span>
+              </el-option>
+            </el-select>
+            <button class="btn btn-text tag-manage-link" @click="$router.push('/tags')">
+              管理标签
+            </button>
           </div>
 
           <div class="book-actions">
@@ -213,6 +234,10 @@
               <span class="info-label">文件大小</span>
               <span class="info-value">{{ formatFileSize(book.fileSize) }}</span>
             </div>
+            <div v-if="book.chapterCount !== undefined && book.chapterCount !== null" class="info-item list-item">
+              <span class="info-label">章节数</span>
+              <span class="info-value">{{ book.chapterCount }} 章</span>
+            </div>
             <div class="info-item list-item">
               <span class="info-label">添加时间</span>
               <span class="info-value">{{ formatDate(book.createdAt) }}</span>
@@ -321,6 +346,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import { useCategoryStore } from '@/stores/category'
+import { useTagStore } from '@/stores/tag'
 import { scrapeBook, downloadCover } from '@/utils/scraper'
 import { getCoverUrl } from '@/utils/cover'
 import ScraperDialog from '@/components/ScraperDialog.vue'
@@ -329,6 +355,7 @@ const route = useRoute()
 const router = useRouter()
 const bookStore = useBookStore()
 const categoryStore = useCategoryStore()
+const tagStore = useTagStore()
 
 const book = ref<any>(null)
 const loading = ref(true)
@@ -351,6 +378,8 @@ const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 const editingTitle = ref(false)
 const editTitleValue = ref('')
 const savingTitle = ref(false)
+const selectedTagIds = ref<number[]>([])
+const savingTags = ref(false)
 
 const loadBook = async () => {
   const id = Number(route.params.id)
@@ -362,6 +391,7 @@ const loadBook = async () => {
   try {
     book.value = await bookStore.fetchBookById(id)
     notes.value = book.value.notes || ''
+    selectedTagIds.value = (book.value.tags || []).map((tag: any) => tag.id)
   } catch (error) {
     console.error('Failed to load book:', error)
   } finally {
@@ -401,6 +431,22 @@ const handleCategoryChange = async (event: Event) => {
     message.success('分类已更新')
   } catch {
     message.error('分类更新失败')
+  }
+}
+
+const handleTagsChange = async () => {
+  const previousIds = (book.value.tags || []).map((tag: any) => tag.id)
+  savingTags.value = true
+  try {
+    book.value = await bookStore.updateBookTags(book.value.id, selectedTagIds.value)
+    selectedTagIds.value = (book.value.tags || []).map((tag: any) => tag.id)
+    message.success('标签已更新')
+    await tagStore.fetchTags()
+  } catch (error: any) {
+    selectedTagIds.value = previousIds
+    message.error(error.response?.data?.message || '标签更新失败')
+  } finally {
+    savingTags.value = false
   }
 }
 
@@ -633,6 +679,7 @@ const formatDate = (dateStr?: string) => {
 onMounted(() => {
   loadBook()
   categoryStore.refresh()
+  tagStore.fetchTags()
 })
 </script>
 
@@ -649,6 +696,22 @@ onMounted(() => {
   border-radius: var(--radius-full);
   background: var(--surface-card);
   color: var(--text-primary);
+}
+
+.book-tag-select {
+  width: 240px;
+}
+
+.tag-option-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+}
+
+.tag-manage-link {
+  padding: 4px 8px;
 }
 
 /* 加载中和空状态 */

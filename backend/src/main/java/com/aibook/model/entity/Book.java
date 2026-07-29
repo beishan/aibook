@@ -156,6 +156,11 @@ public class Book {
     @Column(columnDefinition = "TEXT")
     private String chapterInfo;
 
+    /**
+     * 解析得到的章节数量。
+     */
+    private Integer chapterCount;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

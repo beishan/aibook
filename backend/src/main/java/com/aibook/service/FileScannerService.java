@@ -37,6 +37,7 @@ public class FileScannerService {
     private final ScannedBookPersistenceService scannedBookPersistenceService;
     private final MetadataService metadataService;
     private final TxtParserService txtParserService;
+    private final BookParsingService bookParsingService;
 
     @Value("#{'${scanning.directories:/books/fiction,/books/tech}'.split(',')}")
     private List<String> scanDirectories;
@@ -279,8 +280,9 @@ public class FileScannerService {
                     try {
                         String chapterInfo = txtParserService.parseChapters(file);
                         book.setChapterInfo(chapterInfo);
-                        log.info("TXT章节解析成功: {}，章节数: {}", file,
-                                chapterInfo.split("\"title\"").length - 1);
+                        int chapterCount = chapterInfo.split("\"title\"").length - 1;
+                        book.setChapterCount(chapterCount);
+                        log.info("TXT章节解析成功: {}，章节数: {}", file, chapterCount);
                     } catch (Exception e) {
                         log.warn("TXT章节解析失败: {}", file, e);
                     }
@@ -297,9 +299,11 @@ public class FileScannerService {
      * 提取 EPUB 元数据
      */
     private void extractEpubMetadata(Path file, Book book) throws IOException {
-        // TODO: 使用 EPUB 解析库提取元数据
-        // 这里先留空，后续可以集成 epublib 或类似库
-        log.debug("EPUB 元数据提取功能待实现: {}", file);
+        try {
+            bookParsingService.parseEpubMetadata(book, file, new ArrayList<>());
+        } catch (Exception exception) {
+            throw new IOException("EPUB 元数据提取失败", exception);
+        }
     }
 
     /**

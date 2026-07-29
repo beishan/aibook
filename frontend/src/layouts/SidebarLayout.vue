@@ -143,6 +143,7 @@ import {
   House,
   Link,
   Menu,
+  PriceTag,
   Reading,
   Search,
   Setting,
@@ -164,6 +165,7 @@ const menuItems = [
   { path: '/books', icon: Collection, title: '书库' },
   { path: '/shelf', icon: Reading, title: '书架' },
   { path: '/categories', icon: FolderOpened, title: '分类' },
+  { path: '/tags', icon: PriceTag, title: '标签' },
   { path: '/connections', icon: Link, title: '连接' },
   { path: '/settings', icon: Setting, title: '设置' },
 ]

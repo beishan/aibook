@@ -2,11 +2,14 @@ package com.aibook.controller;
 
 import com.aibook.dto.BatchScrapeRequest;
 import com.aibook.dto.BookCategoryRequest;
+import com.aibook.dto.BookTagsRequest;
 import com.aibook.dto.BookDTO;
 import com.aibook.dto.ScrapeTaskDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
+import com.aibook.service.BookCoverService;
+import com.aibook.service.BookParsingService;
 import com.aibook.service.BookService;
 import com.aibook.service.TxtParserService;
 import com.aibook.service.UserService;
@@ -27,6 +30,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.File;
@@ -34,6 +38,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -53,6 +58,8 @@ public class BookController {
     private final BatchScrapeTaskService batchScrapeTaskService;
     private final TxtParserService txtParserService;
     private final BookRepository bookRepository;
+    private final BookParsingService bookParsingService;
+    private final BookCoverService bookCoverService;
 
     /**
      * 获取书籍列表
@@ -260,6 +267,31 @@ public class BookController {
     }
 
     /**
+     * 替换单本书籍的全部标签。
+     */
+    @PutMapping("/{id}/tags")
+    public ResponseEntity<BookDTO> updateBookTags(
+            Authentication authentication,
+            @PathVariable Long id,
+            @Valid @RequestBody BookTagsRequest request) {
+        User user = userService.findByUsername(authentication.getName());
+        return ResponseEntity.ok(
+                bookService.updateBookTags(id, request.getTagIds(), user));
+    }
+
+    /**
+     * 批量添加、移除或替换书籍标签。
+     */
+    @PutMapping("/batch/tags")
+    public ResponseEntity<List<BookDTO>> updateBookTags(
+            Authentication authentication,
+            @Valid @RequestBody BookTagsRequest request) {
+        User user = userService.findByUsername(authentication.getName());
+        return ResponseEntity.ok(bookService.updateBookTags(
+                request.getBookIds(), request.getTagIds(), request.getMode(), user));
+    }
+
+    /**
      * 获取书籍文件内容（用于在线阅读）
      */
     @GetMapping("/{id}/content")
@@ -340,6 +372,7 @@ public class BookController {
         try {
             String chapterInfo = txtParserService.parseChapters(Paths.get(book.getFilePath()));
             book.setChapterInfo(chapterInfo);
+            book.setChapterCount(chapterInfo.split("\"title\"").length - 1);
             bookRepository.save(book);
 
             return ResponseEntity.ok(Map.of(
@@ -353,6 +386,40 @@ public class BookController {
                     "message", "解析失败: " + e.getMessage()
             ));
         }
+    }
+
+    /**
+     * 从原始文件重新解析书籍元数据和章节信息。
+     */
+    @PostMapping("/{id}/reparse")
+    public ResponseEntity<Map<String, Object>> reparseBook(
+            Authentication authentication,
+            @PathVariable Long id) {
+        User user = userService.findByUsername(authentication.getName());
+        Book book = bookService.getBookEntity(id, user);
+        BookParsingService.ParseResult result = bookParsingService.reparse(book);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("success", true);
+        body.put("message", result.getMessage());
+        body.put("updatedFields", result.getUpdatedFields());
+        body.put("chapterCount", result.getChapterCount());
+        body.put("book", bookService.convertToDTO(result.getBook()));
+        return ResponseEntity.ok(body);
+    }
+
+    /**
+     * 上传并替换书籍封面。
+     */
+    @PostMapping(value = "/{id}/cover-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<BookDTO> uploadCover(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file) {
+        User user = userService.findByUsername(authentication.getName());
+        Book book = bookService.getBookEntity(id, user);
+        return ResponseEntity.ok(
+                bookService.convertToDTO(bookCoverService.upload(book, file)));
     }
 
     /**

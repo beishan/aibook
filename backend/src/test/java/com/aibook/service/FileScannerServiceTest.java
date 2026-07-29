@@ -56,7 +56,8 @@ class FileScannerServiceTest {
                 bookRepository,
                 persistenceService,
                 mock(MetadataService.class),
-                mock(TxtParserService.class));
+                mock(TxtParserService.class),
+                mock(BookParsingService.class));
 
         FileScannerService.ScanResult result =
                 service.scanDirectory(tempDir.toString(), user, category.getId());
@@ -93,7 +94,8 @@ class FileScannerServiceTest {
                 bookRepository,
                 mock(ScannedBookPersistenceService.class),
                 mock(MetadataService.class),
-                mock(TxtParserService.class));
+                mock(TxtParserService.class),
+                mock(BookParsingService.class));
 
         FileScannerService.ScanResult result =
                 service.scanDirectory(
@@ -137,7 +139,8 @@ class FileScannerServiceTest {
                 bookRepository,
                 persistenceService,
                 mock(MetadataService.class),
-                mock(TxtParserService.class));
+                mock(TxtParserService.class),
+                mock(BookParsingService.class));
 
         FileScannerService.ScanResult result =
                 service.scanDirectory(tempDir.toString(), user);
@@ -167,7 +170,8 @@ class FileScannerServiceTest {
                 bookRepository,
                 persistenceService,
                 mock(MetadataService.class),
-                mock(TxtParserService.class));
+                mock(TxtParserService.class),
+                mock(BookParsingService.class));
 
         FileScannerService.ScanResult result =
                 service.scanDirectory(tempDir.toString(), user);

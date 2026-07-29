@@ -1,16 +1,17 @@
 package com.aibook.controller;
 
-import com.aibook.model.entity.Tag;
+import com.aibook.dto.TagDTO;
+import com.aibook.dto.TagRequest;
 import com.aibook.model.entity.User;
 import com.aibook.service.TagService;
 import com.aibook.service.UserService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 标签控制器
@@ -28,9 +29,9 @@ public class TagController {
      * 获取所有标签
      */
     @GetMapping
-    public ResponseEntity<List<Tag>> getTags(Authentication authentication) {
+    public ResponseEntity<List<TagDTO>> getTags(Authentication authentication) {
         User user = userService.findByUsername(authentication.getName());
-        List<Tag> tags = tagService.getTags(user);
+        List<TagDTO> tags = tagService.getTags(user);
         return ResponseEntity.ok(tags);
     }
 
@@ -38,11 +39,11 @@ public class TagController {
      * 创建标签
      */
     @PostMapping
-    public ResponseEntity<Tag> createTag(
+    public ResponseEntity<TagDTO> createTag(
             Authentication authentication,
-            @RequestBody Map<String, String> body) {
+            @Valid @RequestBody TagRequest request) {
         User user = userService.findByUsername(authentication.getName());
-        Tag tag = tagService.createTag(user, body.get("name"), body.get("color"));
+        TagDTO tag = tagService.createTag(user, request.getName(), request.getColor());
         return ResponseEntity.ok(tag);
     }
 
@@ -50,12 +51,13 @@ public class TagController {
      * 更新标签
      */
     @PutMapping("/{id}")
-    public ResponseEntity<Tag> updateTag(
+    public ResponseEntity<TagDTO> updateTag(
             Authentication authentication,
             @PathVariable Long id,
-            @RequestBody Map<String, String> body) {
+            @Valid @RequestBody TagRequest request) {
         User user = userService.findByUsername(authentication.getName());
-        Tag tag = tagService.updateTag(id, body.get("name"), body.get("color"), user);
+        TagDTO tag = tagService.updateTag(
+                id, request.getName(), request.getColor(), user);
         return ResponseEntity.ok(tag);
     }
 

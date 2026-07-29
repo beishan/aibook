@@ -1,8 +1,10 @@
 package com.aibook.service;
 
 import com.aibook.dto.BookDTO;
+import com.aibook.dto.TagDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.Category;
+import com.aibook.model.entity.Tag;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookHighlightRepository;
 import com.aibook.repository.BookRepository;
@@ -17,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -31,6 +35,7 @@ public class BookService {
     private final BookmarkRepository bookmarkRepository;
     private final BookHighlightRepository bookHighlightRepository;
     private final CategoryService categoryService;
+    private final TagService tagService;
 
     /**
      * 获取用户书籍列表
@@ -251,6 +256,52 @@ public class BookService {
     }
 
     /**
+     * 替换单本书籍的全部标签。
+     */
+    @Transactional
+    public BookDTO updateBookTags(Long id, List<Long> tagIds, User user) {
+        Book book = getBookEntity(id, user);
+        book.setTags(tagService.getOwnedTags(tagIds, user));
+        return convertToDTO(bookRepository.save(book));
+    }
+
+    /**
+     * 批量添加、移除或替换书籍标签。
+     */
+    @Transactional
+    public List<BookDTO> updateBookTags(
+            List<Long> bookIds, List<Long> tagIds, String mode, User user) {
+        if (bookIds == null || bookIds.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "书籍ID列表不能为空");
+        }
+
+        List<Long> distinctBookIds = bookIds.stream().distinct().toList();
+        List<Book> books = bookRepository.findByIdInAndUser(distinctBookIds, user);
+        if (books.size() != distinctBookIds.size()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "部分书籍不存在或无权访问");
+        }
+
+        Set<Tag> tags = tagService.getOwnedTags(tagIds, user);
+        String operation = mode == null ? "ADD" : mode.toUpperCase(Locale.ROOT);
+        if (!Set.of("ADD", "REMOVE", "REPLACE").contains(operation)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "标签操作方式必须是 ADD、REMOVE 或 REPLACE");
+        }
+
+        books.forEach(book -> {
+            switch (operation) {
+                case "REMOVE" -> book.getTags().removeAll(tags);
+                case "REPLACE" -> book.setTags(new java.util.LinkedHashSet<>(tags));
+                default -> book.getTags().addAll(tags);
+            }
+        });
+        return bookRepository.saveAll(books).stream()
+                .map(this::convertToDTO)
+                .toList();
+    }
+
+    /**
      * 转换为 DTO
      */
     public BookDTO convertToDTO(Book book) {
@@ -272,11 +323,23 @@ public class BookService {
                 .categoryId(book.getCategory() != null ? book.getCategory().getId() : null)
                 .categoryName(book.getCategory() != null ? book.getCategory().getName() : null)
                 .categoryPath(buildCategoryPath(book.getCategory()))
-                .tagNames(book.getTags().stream().map(tag -> tag.getName()).collect(Collectors.toList()))
+                .tags(book.getTags().stream()
+                        .map(tag -> TagDTO.builder()
+                                .id(tag.getId())
+                                .name(tag.getName())
+                                .color(tag.getColor())
+                                .build())
+                        .sorted(java.util.Comparator.comparing(TagDTO::getName))
+                        .toList())
+                .tagNames(book.getTags().stream()
+                        .map(Tag::getName)
+                        .sorted()
+                        .collect(Collectors.toList()))
                 .isFavorite(book.getIsFavorite())
                 .isWanted(book.getIsWanted())
                 .notes(book.getNotes())
                 .chapterInfo(book.getChapterInfo())
+                .chapterCount(book.getChapterCount())
                 .createdAt(book.getCreatedAt())
                 .updatedAt(book.getUpdatedAt())
                 .build();
