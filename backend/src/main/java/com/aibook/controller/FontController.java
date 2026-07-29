@@ -3,9 +3,7 @@ package com.aibook.controller;
 import com.aibook.dto.FontAssetDTO;
 import com.aibook.dto.FontAssetUpdateRequest;
 import com.aibook.dto.FontScanResultDTO;
-import com.aibook.model.entity.User;
 import com.aibook.service.FontService;
-import com.aibook.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.CacheControl;
@@ -13,7 +11,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,7 +33,6 @@ import java.util.concurrent.TimeUnit;
 public class FontController {
 
     private final FontService fontService;
-    private final UserService userService;
 
     @GetMapping
     public ResponseEntity<List<FontAssetDTO>> list() {
@@ -45,12 +41,10 @@ public class FontController {
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<List<FontAssetDTO>> upload(
-            Authentication authentication,
             @RequestParam(name = "files", required = false)
             List<MultipartFile> files,
             @RequestParam(name = "file", required = false)
             MultipartFile singleFile) {
-        requireAdmin(authentication);
         List<MultipartFile> all = new ArrayList<>();
         if (files != null) {
             all.addAll(files);
@@ -62,8 +56,7 @@ public class FontController {
     }
 
     @PostMapping("/scan")
-    public ResponseEntity<FontScanResultDTO> scan(Authentication authentication) {
-        requireAdmin(authentication);
+    public ResponseEntity<FontScanResultDTO> scan() {
         return ResponseEntity.ok(fontService.scan());
     }
 
@@ -92,27 +85,15 @@ public class FontController {
 
     @PutMapping("/{id}")
     public ResponseEntity<FontAssetDTO> update(
-            Authentication authentication,
             @PathVariable Long id,
             @RequestBody FontAssetUpdateRequest request) {
-        requireAdmin(authentication);
         return ResponseEntity.ok(fontService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(
-            Authentication authentication, @PathVariable Long id) {
-        requireAdmin(authentication);
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
         fontService.delete(id);
         return ResponseEntity.noContent().build();
-    }
-
-    private void requireAdmin(Authentication authentication) {
-        User user = userService.findByUsername(authentication.getName());
-        if (user.getRole() != User.Role.ADMIN) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                    HttpStatus.FORBIDDEN, "仅管理员可以管理字体");
-        }
     }
 
     private String extension(java.nio.file.Path path) {
