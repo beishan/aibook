@@ -177,6 +177,14 @@
           </div>
           <div
             class="tab-item"
+            :class="{ active: activeTab === 'toc' }"
+            @click="activeTab = 'toc'"
+          >
+            目录
+            <span v-if="tocItems.length" class="tab-count">{{ tocItems.length }}</span>
+          </div>
+          <div
+            class="tab-item"
             :class="{ active: activeTab === 'info' }"
             @click="activeTab = 'info'"
           >
@@ -196,6 +204,43 @@
           <div class="book-description">
             <p v-if="book.description">{{ book.description }}</p>
             <p v-else class="no-description">暂无简介</p>
+          </div>
+        </div>
+
+        <!-- 目录 -->
+        <div v-show="activeTab === 'toc'" class="tab-content">
+          <div v-if="tocLoading" class="toc-loading">
+            <div class="loading-spinner-small"></div>
+            <span>正在读取书籍目录...</span>
+          </div>
+          <div v-else-if="tocError" class="toc-empty">
+            <span class="toc-empty-icon">⚠️</span>
+            <p>{{ tocError }}</p>
+            <button class="btn btn-text" @click="loadToc">重新加载</button>
+          </div>
+          <div v-else-if="tocItems.length === 0" class="toc-empty">
+            <span class="toc-empty-icon">📑</span>
+            <p>这本书暂未解析出章节目录</p>
+            <span class="toc-empty-hint">
+              EPUB、TXT 和 Markdown 格式可通过“重新解析”更新目录。
+            </span>
+          </div>
+          <div v-else class="book-toc">
+            <div class="toc-summary">
+              <span>章节目录</span>
+              <span>共 {{ tocItems.length }} 章</span>
+            </div>
+            <button
+              v-for="(chapter, index) in tocItems"
+              :key="`${chapter.href || chapter.title}-${index}`"
+              class="toc-row"
+              :style="{ paddingLeft: `${18 + (chapter.depth || 0) * 22}px` }"
+              @click="openChapter(chapter)"
+            >
+              <span class="toc-number">{{ String(index + 1).padStart(2, '0') }}</span>
+              <span class="toc-title">{{ chapter.title }}</span>
+              <span class="toc-read-action">阅读 ›</span>
+            </button>
           </div>
         </div>
 
@@ -347,6 +392,7 @@ import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import { useCategoryStore } from '@/stores/category'
 import { useTagStore } from '@/stores/tag'
+import api from '@/utils/api'
 import { scrapeBook, downloadCover } from '@/utils/scraper'
 import { getCoverUrl } from '@/utils/cover'
 import ScraperDialog from '@/components/ScraperDialog.vue'
@@ -365,6 +411,19 @@ const scraping = ref(false)
 const reparsing = ref(false)
 const downloadingCover = ref(false)
 const showScraperDialog = ref(false)
+const tocLoading = ref(false)
+const tocError = ref('')
+
+interface TocItem {
+  index: number
+  title: string
+  href?: string
+  startIndex?: number
+  endIndex?: number
+  depth?: number
+}
+
+const tocItems = ref<TocItem[]>([])
 
 // 书单相关
 const showAddToListDialog = ref(false)
@@ -392,6 +451,7 @@ const loadBook = async () => {
     book.value = await bookStore.fetchBookById(id)
     notes.value = book.value.notes || ''
     selectedTagIds.value = (book.value.tags || []).map((tag: any) => tag.id)
+    await loadToc()
   } catch (error) {
     console.error('Failed to load book:', error)
   } finally {
@@ -401,6 +461,31 @@ const loadBook = async () => {
 
 const handleRead = () => {
   router.push(`/reader/${book.value.id}`)
+}
+
+const loadToc = async () => {
+  if (!book.value) return
+  tocLoading.value = true
+  tocError.value = ''
+  try {
+    const response = await api.get(`/api/books/${book.value.id}/toc`)
+    tocItems.value = response.data || []
+  } catch (error: any) {
+    tocItems.value = []
+    tocError.value = error.response?.data?.message || '目录读取失败'
+  } finally {
+    tocLoading.value = false
+  }
+}
+
+const openChapter = (chapter: TocItem) => {
+  const query = book.value.format === 'epub' && chapter.href
+    ? { chapterHref: chapter.href }
+    : { chapterTitle: chapter.title }
+  router.push({
+    path: `/reader/${book.value.id}`,
+    query,
+  })
 }
 
 const handleToggleFavorite = async () => {
@@ -647,6 +732,7 @@ const handleReparse = async () => {
     const result = await response.json()
     if (result.success) {
       book.value.chapterInfo = result.chapterInfo
+      await loadToc()
       message.success('章节解析完成')
     } else {
       message.error(result.message || '解析失败')
@@ -696,6 +782,114 @@ onMounted(() => {
   border-radius: var(--radius-full);
   background: var(--surface-card);
   color: var(--text-primary);
+}
+
+.tab-count {
+  min-width: 20px;
+  margin-left: 5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--primary);
+  font-size: 11px;
+  background: var(--primary-alpha-10);
+}
+
+.toc-loading,
+.toc-empty {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text-secondary);
+}
+
+.toc-empty p {
+  margin: 0;
+}
+
+.toc-empty-icon {
+  font-size: 34px;
+}
+
+.toc-empty-hint {
+  font-size: 12px;
+}
+
+.book-toc {
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+}
+
+.toc-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.toc-summary span:first-child {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.toc-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding-top: 13px;
+  padding-right: 18px;
+  padding-bottom: 13px;
+  border: none;
+  border-bottom: 1px solid var(--border-color-light);
+  color: var(--text-primary);
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.toc-row:last-child {
+  border-bottom: none;
+}
+
+.toc-row:hover {
+  color: var(--primary);
+  background: var(--primary-alpha-10);
+}
+
+.toc-number {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.toc-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toc-read-action {
+  color: var(--text-secondary);
+  font-size: 12px;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.toc-row:hover .toc-read-action {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .book-tag-select {

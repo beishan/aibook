@@ -1,8 +1,10 @@
 package com.aibook.service;
 
+import com.aibook.dto.BookTocItemDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.repository.BookRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Builder;
 import lombok.Data;
@@ -14,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import javax.xml.XMLConstants;
@@ -137,6 +140,213 @@ public class BookParsingService {
             updatedFields.add("chapterCount");
             extractEpubCover(book, zipFile, opfPath, opf, updatedFields);
         }
+    }
+
+    /**
+     * 读取可供客户端展示和跳转的书籍目录。
+     */
+    public List<BookTocItemDTO> getTableOfContents(Book book) {
+        Path file = Paths.get(book.getFilePath());
+        if (!Files.isRegularFile(file)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "书籍原始文件不存在");
+        }
+        try {
+            return switch (book.getFormat().toLowerCase(Locale.ROOT)) {
+                case "txt", "md" -> readTextTableOfContents(book, file);
+                case "epub" -> readEpubTableOfContents(file);
+                default -> List.of();
+            };
+        } catch (Exception exception) {
+            log.error("读取书籍目录失败: {}", book.getFilePath(), exception);
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "目录读取失败: " + exception.getMessage(),
+                    exception);
+        }
+    }
+
+    private List<BookTocItemDTO> readTextTableOfContents(
+            Book book, Path file) throws Exception {
+        String chapterInfo = book.getChapterInfo();
+        if (chapterInfo == null || chapterInfo.isBlank()) {
+            chapterInfo = txtParserService.parseChapters(file);
+        }
+        JsonNode chapters = objectMapper.readTree(chapterInfo);
+        List<BookTocItemDTO> result = new ArrayList<>();
+        if (chapters == null || !chapters.isArray()) {
+            return result;
+        }
+        for (int index = 0; index < chapters.size(); index++) {
+            JsonNode chapter = chapters.get(index);
+            result.add(BookTocItemDTO.builder()
+                    .index(index)
+                    .title(chapter.path("title").asText("第 " + (index + 1) + " 章"))
+                    .startIndex(chapter.path("startIndex").asInt(0))
+                    .endIndex(chapter.path("endIndex").asInt(0))
+                    .depth(0)
+                    .build());
+        }
+        return result;
+    }
+
+    private List<BookTocItemDTO> readEpubTableOfContents(Path file) throws Exception {
+        try (ZipFile zipFile = new ZipFile(file.toFile())) {
+            Document container = parseXml(zipFile, "META-INF/container.xml");
+            Element rootFile = (Element) container
+                    .getElementsByTagNameNS("*", "rootfile")
+                    .item(0);
+            if (rootFile == null) {
+                return List.of();
+            }
+
+            String opfPath = rootFile.getAttribute("full-path");
+            Document opf = parseXml(zipFile, opfPath);
+            Map<String, ManifestItem> manifest = readManifest(opf);
+
+            ManifestItem navigation = manifest.values().stream()
+                    .filter(item -> containsToken(item.properties(), "nav"))
+                    .findFirst()
+                    .orElse(null);
+            if (navigation != null) {
+                List<BookTocItemDTO> items = readEpubNavigation(
+                        zipFile, opfPath, navigation.href());
+                if (!items.isEmpty()) {
+                    return items;
+                }
+            }
+
+            ManifestItem ncx = findNcxItem(opf, manifest);
+            if (ncx != null) {
+                List<BookTocItemDTO> items = readNcxNavigation(
+                        zipFile, opfPath, ncx.href());
+                if (!items.isEmpty()) {
+                    return items;
+                }
+            }
+
+            return buildSpineFallback(opf, manifest);
+        }
+    }
+
+    private List<BookTocItemDTO> readEpubNavigation(
+            ZipFile zipFile, String opfPath, String navigationHref) throws Exception {
+        Document navigation = parseXml(
+                zipFile, resolveZipPath(opfPath, navigationHref));
+        Element tocNavigation = null;
+        NodeList navNodes = navigation.getElementsByTagNameNS("*", "nav");
+        for (int index = 0; index < navNodes.getLength(); index++) {
+            Element candidate = (Element) navNodes.item(index);
+            String type = candidate.getAttribute("epub:type");
+            if (type.isBlank()) {
+                type = candidate.getAttributeNS(
+                        "http://www.idpf.org/2007/ops", "type");
+            }
+            if (containsToken(type, "toc")) {
+                tocNavigation = candidate;
+                break;
+            }
+        }
+        if (tocNavigation == null && navNodes.getLength() > 0) {
+            tocNavigation = (Element) navNodes.item(0);
+        }
+        if (tocNavigation == null) {
+            return List.of();
+        }
+
+        List<BookTocItemDTO> result = new ArrayList<>();
+        NodeList links = tocNavigation.getElementsByTagNameNS("*", "a");
+        for (int index = 0; index < links.getLength(); index++) {
+            Element link = (Element) links.item(index);
+            String title = link.getTextContent().trim();
+            String href = link.getAttribute("href");
+            if (title.isBlank() || href.isBlank()) {
+                continue;
+            }
+            result.add(BookTocItemDTO.builder()
+                    .index(result.size())
+                    .title(title)
+                    .href(href)
+                    .depth(Math.max(0, countAncestors(link, "ol") - 1))
+                    .build());
+        }
+        return result;
+    }
+
+    private ManifestItem findNcxItem(
+            Document opf, Map<String, ManifestItem> manifest) {
+        NodeList spineNodes = opf.getElementsByTagNameNS("*", "spine");
+        if (spineNodes.getLength() > 0) {
+            String tocId = ((Element) spineNodes.item(0)).getAttribute("toc");
+            if (!tocId.isBlank() && manifest.containsKey(tocId)) {
+                return manifest.get(tocId);
+            }
+        }
+        return manifest.values().stream()
+                .filter(item -> "application/x-dtbncx+xml".equals(item.mediaType()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private List<BookTocItemDTO> readNcxNavigation(
+            ZipFile zipFile, String opfPath, String ncxHref) throws Exception {
+        Document ncx = parseXml(zipFile, resolveZipPath(opfPath, ncxHref));
+        NodeList points = ncx.getElementsByTagNameNS("*", "navPoint");
+        List<BookTocItemDTO> result = new ArrayList<>();
+        for (int index = 0; index < points.getLength(); index++) {
+            Element point = (Element) points.item(index);
+            NodeList labels = point.getElementsByTagNameNS("*", "navLabel");
+            NodeList contents = point.getElementsByTagNameNS("*", "content");
+            if (labels.getLength() == 0 || contents.getLength() == 0) {
+                continue;
+            }
+            String title = labels.item(0).getTextContent().trim();
+            String href = ((Element) contents.item(0)).getAttribute("src");
+            if (title.isBlank() || href.isBlank()) {
+                continue;
+            }
+            result.add(BookTocItemDTO.builder()
+                    .index(result.size())
+                    .title(title)
+                    .href(href)
+                    .depth(countAncestors(point, "navPoint"))
+                    .build());
+        }
+        return result;
+    }
+
+    private List<BookTocItemDTO> buildSpineFallback(
+            Document opf, Map<String, ManifestItem> manifest) {
+        NodeList spineItems = opf.getElementsByTagNameNS("*", "itemref");
+        List<BookTocItemDTO> result = new ArrayList<>();
+        for (int index = 0; index < spineItems.getLength(); index++) {
+            String idref = ((Element) spineItems.item(index)).getAttribute("idref");
+            ManifestItem item = manifest.get(idref);
+            if (item == null) {
+                continue;
+            }
+            result.add(BookTocItemDTO.builder()
+                    .index(result.size())
+                    .title("第 " + (result.size() + 1) + " 章")
+                    .href(item.href())
+                    .depth(0)
+                    .build());
+        }
+        return result;
+    }
+
+    private int countAncestors(Node node, String localName) {
+        int count = 0;
+        Node current = node.getParentNode();
+        while (current != null) {
+            String currentName = current.getLocalName() != null
+                    ? current.getLocalName()
+                    : current.getNodeName();
+            if (localName.equals(currentName)) {
+                count++;
+            }
+            current = current.getParentNode();
+        }
+        return count;
     }
 
     private void extractEpubCover(

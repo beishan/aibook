@@ -37,10 +37,12 @@ class BookParsingServiceTest {
                 .filePath(file.toString())
                 .build();
 
-        BookParsingService.ParseResult result = service().reparse(book);
+        BookParsingService parsingService = service();
+        BookParsingService.ParseResult result = parsingService.reparse(book);
 
         assertEquals(2, result.getChapterCount());
         assertEquals(2, result.getBook().getChapterCount());
+        assertEquals(2, parsingService.getTableOfContents(book).size());
     }
 
     @Test
@@ -66,6 +68,14 @@ class BookParsingServiceTest {
                       </metadata>
                       <manifest>
                         <item id="cover-image" href="images/cover.png" media-type="image/png"/>
+                        <item id="navigation" href="nav.xhtml"
+                              media-type="application/xhtml+xml" properties="nav"/>
+                        <item id="chapter1" href="text/chapter1.xhtml"
+                              media-type="application/xhtml+xml"/>
+                        <item id="chapter2" href="text/chapter2.xhtml"
+                              media-type="application/xhtml+xml"/>
+                        <item id="chapter3" href="text/chapter3.xhtml"
+                              media-type="application/xhtml+xml"/>
                       </manifest>
                       <spine>
                         <itemref idref="chapter1"/>
@@ -73,6 +83,25 @@ class BookParsingServiceTest {
                         <itemref idref="chapter3"/>
                       </spine>
                     </package>
+                    """);
+            addEntry(zip, "OEBPS/nav.xhtml", """
+                    <?xml version="1.0"?>
+                    <html xmlns="http://www.w3.org/1999/xhtml"
+                          xmlns:epub="http://www.idpf.org/2007/ops">
+                      <body>
+                        <nav epub:type="toc">
+                          <ol>
+                            <li><a href="text/chapter1.xhtml">第一章</a></li>
+                            <li>
+                              <a href="text/chapter2.xhtml">第二章</a>
+                              <ol>
+                                <li><a href="text/chapter3.xhtml">第二章附录</a></li>
+                              </ol>
+                            </li>
+                          </ol>
+                        </nav>
+                      </body>
+                    </html>
                     """);
             zip.putNextEntry(new ZipEntry("OEBPS/images/cover.png"));
             zip.write(new byte[] {
@@ -86,13 +115,19 @@ class BookParsingServiceTest {
                 .filePath(file.toString())
                 .build();
 
-        BookParsingService.ParseResult result = service().reparse(book);
+        BookParsingService parsingService = service();
+        BookParsingService.ParseResult result = parsingService.reparse(book);
 
         assertEquals("重新解析的书名", result.getBook().getTitle());
         assertEquals("测试作者", result.getBook().getAuthor());
         assertEquals(3, result.getChapterCount());
         assertTrue(result.getBook().getCoverUrl().startsWith("covers/"));
         assertTrue(Files.exists(tempDir.resolve(result.getBook().getCoverUrl())));
+        var toc = parsingService.getTableOfContents(book);
+        assertEquals(3, toc.size());
+        assertEquals("第一章", toc.get(0).getTitle());
+        assertEquals("text/chapter3.xhtml", toc.get(2).getHref());
+        assertEquals(1, toc.get(2).getDepth());
     }
 
     private BookParsingService service() {

@@ -8,7 +8,16 @@
           <span>‹</span>
           <span>返回</span>
         </button>
-        <div class="reader-title">{{ book.title }}</div>
+        <div class="reader-title">
+          <span>{{ book.title }}</span>
+          <span
+            v-if="performancePaginationMode"
+            class="performance-mode-badge"
+            title="长文本已自动使用分页渲染，避免一次创建过多页面节点"
+          >
+            性能模式
+          </span>
+        </div>
         <div class="reader-actions">
           <button
             v-if="book.format === 'epub' || tocItems.length > 0"
@@ -171,7 +180,7 @@
         </Transition>
 
         <!-- 阅读器内容 -->
-        <div class="reader-body" :class="{ 'pagination-mode': settings.paginationMode }" :style="readerStyle" @scroll="handleScroll">
+        <div class="reader-body" :class="{ 'pagination-mode': isPaginationMode }" :style="readerStyle" @scroll="handleScroll">
           <!-- EPUB 阅读器 -->
           <div v-if="book.format === 'epub'" ref="epubContainer" class="epub-container"></div>
 
@@ -184,7 +193,7 @@
               <p v-else :id="'para-' + getOriginalIndex(localIndex)">{{ paragraph }}</p>
             </template>
             <!-- 翻页模式提示 -->
-            <div v-if="settings.paginationMode && totalPages > 1" class="pagination-hint">
+            <div v-if="isPaginationMode && totalPages > 1" class="pagination-hint">
               <span>← → 或 空格键 翻页 | 共 {{ totalPages }} 页</span>
             </div>
           </div>
@@ -209,7 +218,7 @@
       <!-- 阅读器底部 -->
       <footer class="reader-footer glass" v-show="!isFullscreen">
         <!-- TXT/MD 翻页模式 -->
-        <template v-if="(book.format === 'txt' || book.format === 'md') && settings.paginationMode">
+        <template v-if="(book.format === 'txt' || book.format === 'md') && isPaginationMode">
           <button class="btn" @click="prevTextPage" :disabled="currentPage === 0">
             <span>‹</span>
             <span>上一页</span>
@@ -398,7 +407,7 @@
                 <div class="form-group" v-if="book?.format === 'txt' || book?.format === 'md'">
                   <label class="form-label toggle-label">
                     <span>翻页模式</span>
-                    <button class="toggle-switch" :class="{ on: settings.paginationMode }" @click="settings.paginationMode = !settings.paginationMode">
+                    <button class="toggle-switch" :class="{ on: isPaginationMode }" @click="togglePaginationMode">
                       <span class="toggle-knob"></span>
                     </button>
                   </label>
@@ -483,6 +492,7 @@ const showFullscreenControls = ref(false)
 // 翻页模式相关
 const currentPage = ref(0)
 const totalPages = ref(0)
+const performancePaginationMode = ref(false)
 
 // 书签和高亮数据
 const bookmarks = ref<Bookmark[]>([])
@@ -552,6 +562,14 @@ const settings = ref({
   screenMode: 'single', // 屏幕模式: single(一屏), double(两屏)
 })
 
+const isPaginationMode = computed(
+  () => settings.value.paginationMode || performancePaginationMode.value
+)
+
+const LARGE_TEXT_PARAGRAPH_THRESHOLD = 1200
+const LARGE_TEXT_FILE_SIZE_THRESHOLD = 2 * 1024 * 1024
+const MAX_PARAGRAPH_LENGTH = 4000
+
 // 内容宽度选项
 const widthOptions = [
   { value: 'narrow', label: '窄', maxWidth: '700px' },
@@ -618,7 +636,7 @@ const saveReaderSettings = () => {
 
 // 翻页模式相关计算
 const currentPageContent = computed(() => {
-  if (!settings.value.paginationMode || book.value?.format === 'epub') {
+  if (!isPaginationMode.value || book.value?.format === 'epub') {
     return content.value
   }
   const pageSize = calculatePageSize()
@@ -629,7 +647,7 @@ const currentPageContent = computed(() => {
 
 // 获取当前页中某个本地索引对应原始 content 数组的索引
 const getOriginalIndex = (localIndex: number): number => {
-  if (!settings.value.paginationMode || book.value?.format === 'epub') {
+  if (!isPaginationMode.value || book.value?.format === 'epub') {
     return localIndex
   }
   const pageSize = calculatePageSize()
@@ -656,7 +674,7 @@ const calculatePageSize = (): number => {
 }
 
 const updateTotalPages = () => {
-  if (settings.value.paginationMode && content.value.length > 0) {
+  if (isPaginationMode.value && content.value.length > 0) {
     const pageSize = calculatePageSize()
     totalPages.value = Math.ceil(content.value.length / pageSize)
   } else {
@@ -666,7 +684,7 @@ const updateTotalPages = () => {
 
 // 检查内容是否溢出，如果溢出则减少每页内容
 const checkAndAdjustPageSize = () => {
-  if (!settings.value.paginationMode) return
+  if (!isPaginationMode.value) return
 
   const readerBody = document.querySelector('.reader-body')
   if (!readerBody) return
@@ -721,7 +739,7 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 
   // TXT/MD 翻页模式
-  if (settings.value.paginationMode) {
+    if (isPaginationMode.value) {
     if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
       e.preventDefault()
       prevTextPage()
@@ -809,6 +827,20 @@ const loadBook = async () => {
     console.error('Failed to load book:', error)
   } finally {
     loading.value = false
+    await nextTick()
+    await applyRequestedChapter()
+  }
+}
+
+const applyRequestedChapter = async () => {
+  if (!book.value) return
+  const chapterTitle = typeof route.query.chapterTitle === 'string'
+    ? route.query.chapterTitle
+    : ''
+
+  if ((book.value.format === 'txt' || book.value.format === 'md') && chapterTitle) {
+    const chapter = tocItems.value.find(item => item.title === chapterTitle)
+    if (chapter) await jumpToTextChapter(chapter, 'auto')
   }
 }
 
@@ -1032,7 +1064,7 @@ const mapChaptersToParagraphs = (
   backendChapters: { title: string; startIndex: number; endIndex: number }[],
   processedText: string
 ): Chapter[] => {
-  const paragraphs = processedText.split(/\n\n+/)
+  const paragraphs = splitTextIntoParagraphs(processedText)
   const result: Chapter[] = []
 
   for (const ch of backendChapters) {
@@ -1051,6 +1083,20 @@ const mapChaptersToParagraphs = (
 
   return result
 }
+
+const splitTextIntoParagraphs = (text: string): string[] =>
+  text
+    .split(/\n\n+/)
+    .flatMap(paragraph => {
+      const trimmed = paragraph.trim()
+      if (!trimmed) return []
+      if (trimmed.length <= MAX_PARAGRAPH_LENGTH) return [trimmed]
+      const chunks: string[] = []
+      for (let start = 0; start < trimmed.length; start += MAX_PARAGRAPH_LENGTH) {
+        chunks.push(trimmed.slice(start, start + MAX_PARAGRAPH_LENGTH))
+      }
+      return chunks
+    })
 
 /**
  * 判断是否为章节标题
@@ -1079,7 +1125,8 @@ const loadTextContent = async () => {
 
     if (response.ok) {
       const data = await response.json()
-      content.value = data.text.split(/\n\n+/).filter((p: string) => p.trim())
+      content.value = splitTextIntoParagraphs(data.text)
+      enableLargeTextPerformanceMode()
 
       if (data.chapterInfo && data.chapterInfo !== '[]') {
         try {
@@ -1100,7 +1147,8 @@ const loadTextContent = async () => {
         headers: { Authorization: `Bearer ${token}` }
       })
       const text = await rawResponse.text()
-      content.value = text.split(/\n\n+/).filter(p => p.trim())
+      content.value = splitTextIntoParagraphs(text)
+      enableLargeTextPerformanceMode()
       tocItems.value = parseChapters(content.value)
     }
 
@@ -1113,12 +1161,37 @@ const loadTextContent = async () => {
   }
 }
 
+const enableLargeTextPerformanceMode = () => {
+  if (settings.value.paginationMode) {
+    performancePaginationMode.value = false
+    return
+  }
+  performancePaginationMode.value =
+    content.value.length >= LARGE_TEXT_PARAGRAPH_THRESHOLD
+    || Number(book.value?.fileSize || 0) >= LARGE_TEXT_FILE_SIZE_THRESHOLD
+  if (performancePaginationMode.value) {
+    currentPage.value = 0
+  }
+}
+
+const togglePaginationMode = () => {
+  if (performancePaginationMode.value && !settings.value.paginationMode) {
+    performancePaginationMode.value = false
+    updateTotalPages()
+    return
+  }
+  settings.value.paginationMode = !settings.value.paginationMode
+  if (settings.value.paginationMode) {
+    performancePaginationMode.value = false
+  }
+}
+
 /**
  * 恢复滚动位置
  */
 const restoreScrollPosition = () => {
   if (progress.value > 0) {
-    if (settings.value.paginationMode && totalPages.value > 0) {
+    if (isPaginationMode.value && totalPages.value > 0) {
       // 翻页模式下恢复到对应页码
       currentPage.value = Math.floor((progress.value / 100) * (totalPages.value - 1))
     } else {
@@ -1243,7 +1316,13 @@ const initEpub = async () => {
     })
 
     // 先显示内容，让用户立即看到书
-    if (savedCfi.value) {
+    const requestedChapterHref = typeof route.query.chapterHref === 'string'
+      ? route.query.chapterHref
+      : ''
+    if (requestedChapterHref) {
+      await rendition.display(requestedChapterHref)
+      currentTocHref.value = requestedChapterHref
+    } else if (savedCfi.value) {
       try {
         await rendition.display(savedCfi.value)
       } catch (e) {
@@ -1307,15 +1386,32 @@ const closeAllPanels = () => {
   showHighlights.value = false
 }
 
-const goToTocItem = (item: Chapter | any) => {
+const jumpToTextChapter = async (
+  item: Chapter,
+  behavior: ScrollBehavior = 'smooth',
+) => {
+  if (isPaginationMode.value) {
+    const pageSize = calculatePageSize()
+    currentPage.value = Math.floor(item.index / pageSize)
+    updateTotalPages()
+    await nextTick()
+  }
+  const element = document.getElementById('chapter-' + item.index)
+  if (element) {
+    element.scrollIntoView({
+      behavior,
+      block: 'start',
+    })
+  }
+  currentChapterName.value = item.title
+}
+
+const goToTocItem = async (item: Chapter | any) => {
   if (book.value?.format === 'epub' && rendition) {
-    rendition.display(item.href)
+    await rendition.display(item.href)
     currentTocHref.value = item.href
   } else if (book.value?.format === 'txt' || book.value?.format === 'md') {
-    const element = document.getElementById('chapter-' + item.index)
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' })
-    }
+    await jumpToTextChapter(item)
   }
 }
 
@@ -1409,7 +1505,7 @@ watch(() => settings.value, () => {
 }, { deep: true })
 
 // 监听翻页模式变化
-watch(() => settings.value.paginationMode, (newVal) => {
+watch(isPaginationMode, (newVal) => {
   if (newVal) {
     updateTotalPages()
     // 切换到翻页模式，根据当前进度计算页码
@@ -1434,7 +1530,7 @@ watch(content, () => {
 
 // 监听当前页内容变化，检查是否溢出
 watch(currentPageContent, () => {
-  if (settings.value.paginationMode) {
+  if (isPaginationMode.value) {
     nextTick(() => {
       checkAndAdjustPageSize()
     })
@@ -1443,7 +1539,7 @@ watch(currentPageContent, () => {
 
 // 监听窗口大小变化
 const handleResize = () => {
-  if (settings.value.paginationMode) {
+  if (isPaginationMode.value) {
     updateTotalPages()
     if (currentPage.value >= totalPages.value) {
       currentPage.value = Math.max(0, totalPages.value - 1)
@@ -1621,6 +1717,10 @@ onBeforeUnmount(() => {
 }
 
 .reader-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--text-primary);
@@ -1635,6 +1735,23 @@ onBeforeUnmount(() => {
   background: var(--bg-secondary);
   pointer-events: auto;
   max-width: min(48vw, 560px);
+}
+
+.reader-title > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.performance-mode-badge {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid var(--primary-alpha-30);
+  border-radius: 999px;
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.3;
+  background: var(--primary-alpha-10);
 }
 
 .reader-actions {

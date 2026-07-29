@@ -4,6 +4,7 @@ import com.aibook.dto.BatchScrapeRequest;
 import com.aibook.dto.BookCategoryRequest;
 import com.aibook.dto.BookTagsRequest;
 import com.aibook.dto.BookDTO;
+import com.aibook.dto.BookTocItemDTO;
 import com.aibook.dto.ScrapeTaskDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
@@ -161,6 +162,18 @@ public class BookController {
         User user = userService.findByUsername(authentication.getName());
         BookDTO book = bookService.getBookById(id, user);
         return ResponseEntity.ok(book);
+    }
+
+    /**
+     * 获取书籍章节目录。
+     */
+    @GetMapping("/{id}/toc")
+    public ResponseEntity<List<BookTocItemDTO>> getBookTableOfContents(
+            Authentication authentication,
+            @PathVariable Long id) {
+        User user = userService.findByUsername(authentication.getName());
+        Book book = bookService.getBookEntity(id, user);
+        return ResponseEntity.ok(bookParsingService.getTableOfContents(book));
     }
 
     /**

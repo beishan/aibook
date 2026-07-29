@@ -82,6 +82,24 @@
               </div>
               <div class="form-group">
                 <label class="form-label">标签颜色</label>
+                <div class="color-palette" role="listbox" aria-label="常用标签颜色">
+                  <button
+                    v-for="color in presetColors"
+                    :key="color.value"
+                    type="button"
+                    class="color-swatch"
+                    :class="{ selected: isSelectedColor(color.value) }"
+                    :style="{ backgroundColor: color.value }"
+                    :title="`${color.name} ${color.value}`"
+                    role="option"
+                    :aria-label="color.name"
+                    :aria-selected="isSelectedColor(color.value)"
+                    @click="form.color = color.value"
+                  >
+                    <span v-if="isSelectedColor(color.value)" class="color-check">✓</span>
+                  </button>
+                </div>
+                <div class="custom-color-label">自定义颜色</div>
                 <div class="color-field">
                   <input v-model="form.color" type="color" class="color-picker" />
                   <input
@@ -119,6 +137,35 @@ const dialogVisible = ref(false)
 const editingId = ref<number>()
 const saving = ref(false)
 const form = reactive({ name: '', color: '#64748B' })
+const presetColors = [
+  { name: '石板灰', value: '#64748B' },
+  { name: '中性灰', value: '#737373' },
+  { name: '红色', value: '#EF4444' },
+  { name: '深红', value: '#DC2626' },
+  { name: '橙色', value: '#F97316' },
+  { name: '琥珀', value: '#F59E0B' },
+  { name: '黄色', value: '#EAB308' },
+  { name: '青柠', value: '#84CC16' },
+  { name: '绿色', value: '#22C55E' },
+  { name: '翠绿', value: '#10B981' },
+  { name: '青色', value: '#14B8A6' },
+  { name: '湖蓝', value: '#06B6D4' },
+  { name: '天蓝', value: '#0EA5E9' },
+  { name: '蓝色', value: '#3B82F6' },
+  { name: '靛蓝', value: '#6366F1' },
+  { name: '紫罗兰', value: '#8B5CF6' },
+  { name: '紫色', value: '#A855F7' },
+  { name: '品红', value: '#D946EF' },
+  { name: '粉色', value: '#EC4899' },
+  { name: '玫红', value: '#F43F5E' },
+  { name: '棕色', value: '#A16207' },
+  { name: '咖啡色', value: '#92400E' },
+  { name: '深青', value: '#0F766E' },
+  { name: '深蓝', value: '#1D4ED8' },
+]
+
+const isSelectedColor = (color: string) =>
+  form.color.toUpperCase() === color.toUpperCase()
 
 const usedTagCount = computed(() =>
   tagStore.tags.filter(tag => (tag.bookCount || 0) > 0).length
@@ -296,6 +343,58 @@ onMounted(() => tagStore.fetchTags())
   gap: 10px;
 }
 
+.color-palette {
+  display: grid;
+  grid-template-columns: repeat(8, 32px);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.color-swatch {
+  position: relative;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.color-swatch:hover {
+  z-index: 1;
+  transform: scale(1.12);
+}
+
+.color-swatch.selected {
+  border-color: var(--surface-card);
+  box-shadow:
+    0 0 0 2px var(--primary),
+    0 3px 8px rgba(15, 23, 42, 0.2);
+}
+
+.color-swatch:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.color-check {
+  color: white;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+
+.custom-color-label {
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .color-picker {
   width: 44px;
   height: 38px;
@@ -313,6 +412,10 @@ onMounted(() => tagStore.fetchTags())
 @media (max-width: 640px) {
   .summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .color-palette {
+    grid-template-columns: repeat(6, 32px);
   }
 
   .tag-row {
