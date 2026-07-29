@@ -124,6 +124,37 @@
                 </span>
                 <span class="meta-text">{{ row.lastScanTime ? formatTime(row.lastScanTime) : '未扫描' }}</span>
               </div>
+              <div
+                v-if="row._scanProgress && row._scanProgress.status !== 'IDLE'"
+                class="scan-progress-panel"
+              >
+                <div class="scan-progress-header">
+                  <span>{{ getScanStatusText(row._scanProgress.status) }}</span>
+                  <strong>{{ row._scanProgress.progress }}%</strong>
+                </div>
+                <el-progress
+                  :percentage="row._scanProgress.progress"
+                  :stroke-width="8"
+                  :show-text="false"
+                  :status="getScanProgressStatus(row._scanProgress.status)"
+                />
+                <div class="scan-progress-stats">
+                  <span>总数 {{ row._scanProgress.totalCount }}</span>
+                  <span>
+                    已扫描
+                    {{ row._scanProgress.scannedCount }}/{{ row._scanProgress.totalCount }}
+                  </span>
+                  <span>新增 {{ row._scanProgress.newBooks || 0 }}</span>
+                  <span>跳过 {{ row._scanProgress.skippedBooks || 0 }}</span>
+                  <span>失败 {{ row._scanProgress.failedBooks || 0 }}</span>
+                </div>
+                <div
+                  v-if="row._scanning && row._scanProgress.currentFile"
+                  class="scan-current-file"
+                >
+                  当前：{{ formatScanFile(row._scanProgress.currentFile) }}
+                </div>
+              </div>
             </div>
             <div class="directory-actions">
               <select
@@ -141,7 +172,7 @@
                 </option>
               </select>
               <button class="btn btn-text" @click="handleScan(row)" :disabled="row._scanning">
-                {{ row._scanning ? '扫描中...' : '立即扫描' }}
+                {{ row._scanning ? `${row._scanProgress?.progress || 0}%` : '立即扫描' }}
               </button>
               <button class="btn btn-text" @click="handleToggle(row)">
                 {{ row.enabled ? '禁用' : '启用' }}
@@ -259,7 +290,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { message, confirm } from '@/utils/message'
 import api from '@/utils/api'
 import DirectoryBrowser from '@/components/DirectoryBrowser.vue'
@@ -301,6 +332,7 @@ const showAddDialog = ref(false)
 const directories = ref<any[]>([])
 const scanThreadCountDraft = ref(preferencesStore.scanThreadCount)
 const savingScanSettings = ref(false)
+const scanPollTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
 const newDir = reactive({ path: '' })
 const selectedPath = ref('')
@@ -318,16 +350,98 @@ const schedulerTime = computed({
   },
 })
 
-const loadDirectories = async () => {
-  loading.value = true
+const loadDirectories = async (showLoading = true) => {
+  if (showLoading) loading.value = true
   try {
     const res = await api.get('/api/scan-directories')
-    directories.value = res.data.map((d: any) => ({ ...d, _scanning: false }))
+    const existingRows = new Map(directories.value.map(row => [row.id, row]))
+    directories.value = res.data.map((directory: any) => {
+      const existing = existingRows.get(directory.id)
+      if (existing) {
+        return Object.assign(existing, directory)
+      }
+      return {
+        ...directory,
+        _scanning: false,
+        _scanProgress: null,
+        _scanPollFailures: 0,
+      }
+    })
   } catch (error) {
     console.error('Failed to load directories:', error)
   } finally {
-    loading.value = false
+    if (showLoading) loading.value = false
   }
+}
+
+const isScanActive = (status: string) =>
+  status === 'PENDING' || status === 'RUNNING'
+
+const stopScanPolling = (directoryId: number) => {
+  const timer = scanPollTimers.get(directoryId)
+  if (timer) clearTimeout(timer)
+  scanPollTimers.delete(directoryId)
+}
+
+const scheduleScanPoll = (row: any) => {
+  stopScanPolling(row.id)
+  scanPollTimers.set(
+    row.id,
+    setTimeout(() => void pollScanProgress(row), 800)
+  )
+}
+
+const pollScanProgress = async (row: any) => {
+  stopScanPolling(row.id)
+  const wasActive = row._scanning
+  try {
+    const { data } = await api.get(`/api/scan-directories/${row.id}/scan-progress`)
+    row._scanProgress = data
+    row._scanning = isScanActive(data.status)
+    row._scanPollFailures = 0
+
+    if (row._scanning) {
+      scheduleScanPoll(row)
+      return
+    }
+
+    if (wasActive) {
+      if (data.status === 'COMPLETED') {
+        message.success(
+          `扫描完成：共 ${data.totalCount} 本，新增 ${data.newBooks || 0} 本，失败 ${data.failedBooks || 0} 本`
+        )
+      } else if (data.status === 'FAILED') {
+        message.error(data.message || '扫描失败')
+      }
+      await loadDirectories(false)
+    }
+  } catch (error) {
+    row._scanPollFailures = (row._scanPollFailures || 0) + 1
+    if (row._scanning && row._scanPollFailures <= 3) {
+      scheduleScanPoll(row)
+      return
+    }
+    row._scanning = false
+    message.error('获取扫描进度失败')
+  }
+}
+
+const restoreScanProgress = async () => {
+  await Promise.all(
+    directories.value.map(async row => {
+      try {
+        const { data } = await api.get(
+          `/api/scan-directories/${row.id}/scan-progress`
+        )
+        if (data.status === 'IDLE') return
+        row._scanProgress = data
+        row._scanning = isScanActive(data.status)
+        if (row._scanning) scheduleScanPoll(row)
+      } catch (error) {
+        console.error(`Failed to restore scan progress for ${row.id}:`, error)
+      }
+    })
+  )
 }
 
 const handleSaveScanSettings = async () => {
@@ -395,21 +509,23 @@ const handleDefaultCategoryChange = async (row: any, event: Event) => {
 }
 
 const handleScan = async (row: any) => {
+  stopScanPolling(row.id)
   row._scanning = true
   try {
     const res = await api.post(`/api/scan-directories/${row.id}/scan`)
-    if (res.data.success) {
+    row._scanProgress = res.data
+    row._scanning = isScanActive(res.data.status)
+    if (row._scanning) {
+      scheduleScanPoll(row)
+    } else if (res.data.status === 'COMPLETED') {
       message.success(
-        `扫描完成（${res.data.threadCount || 1} 线程），找到 ${res.data.bookCount} 本书籍文件`
+        `扫描完成：共 ${res.data.totalCount} 本，新增 ${res.data.newBooks || 0} 本`
       )
-      await loadDirectories()
-    } else {
-      message.error(res.data.message)
+      await loadDirectories(false)
     }
   } catch (error: any) {
-    message.error(error.response?.data?.message || '扫描失败')
-  } finally {
     row._scanning = false
+    message.error(error.response?.data?.message || '扫描失败')
   }
 }
 
@@ -427,6 +543,7 @@ const handleRemove = async (row: any) => {
   const result = await confirm(`确定要删除目录 ${row.path} 吗？`)
   if (result) {
     try {
+      stopScanPolling(row.id)
       await api.delete(`/api/scan-directories/${row.id}`)
       message.success('删除成功')
       await loadDirectories()
@@ -445,11 +562,37 @@ const formatTime = (timeStr: string) => {
   return new Date(timeStr).toLocaleString('zh-CN')
 }
 
+const formatScanFile = (path: string) => path.split(/[\\/]/).pop() || path
+
+const getScanStatusText = (status: string) => {
+  const labels: Record<string, string> = {
+    PENDING: '等待扫描',
+    RUNNING: '正在扫描',
+    COMPLETED: '扫描完成',
+    FAILED: '扫描失败',
+  }
+  return labels[status] || status
+}
+
+const getScanProgressStatus = (
+  status: string
+): 'success' | 'exception' | undefined => {
+  if (status === 'COMPLETED') return 'success'
+  if (status === 'FAILED') return 'exception'
+  return undefined
+}
+
 onMounted(async () => {
   await preferencesStore.hydrate()
   scanThreadCountDraft.value = preferencesStore.scanThreadCount
-  loadDirectories()
-  categoryStore.refresh()
+  await loadDirectories()
+  await restoreScanProgress()
+  await categoryStore.refresh()
+})
+
+onUnmounted(() => {
+  scanPollTimers.forEach(timer => clearTimeout(timer))
+  scanPollTimers.clear()
 })
 </script>
 
@@ -606,12 +749,52 @@ onMounted(async () => {
 .directory-meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--spacing-md);
 }
 
 .meta-text {
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
+}
+
+.scan-progress-panel {
+  max-width: 560px;
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--surface-hover);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
+}
+
+.scan-progress-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.scan-progress-header strong {
+  color: var(--primary);
+}
+
+.scan-progress-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm) var(--spacing-md);
+  margin-top: var(--spacing-sm);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.scan-current-file {
+  margin-top: var(--spacing-xs);
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .directory-actions {

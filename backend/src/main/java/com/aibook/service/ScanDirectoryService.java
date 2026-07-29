@@ -119,7 +119,7 @@ public class ScanDirectoryService {
         // 调用 FileScannerService 实际导入书籍
         log.info("开始扫描目录并导入书籍: {}", dir.getPath());
         FileScannerService.ScanResult scanResult = fileScannerService.scanDirectory(
-                dir.getPath(), user, dir.getDefaultCategory());
+                dir.getPath(), user, dir.defaultCategoryId());
 
         // 更新扫描目录记录
         dir.setLastScanTime(LocalDateTime.now());

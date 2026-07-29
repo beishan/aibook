@@ -3,6 +3,7 @@ package com.aibook.controller;
 import com.aibook.model.entity.ScanDirectory;
 import com.aibook.model.entity.User;
 import com.aibook.service.ScanDirectoryService;
+import com.aibook.service.ScanDirectoryTaskService;
 import com.aibook.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,7 @@ import java.util.Map;
 public class ScanDirectoryController {
 
     private final ScanDirectoryService scanDirectoryService;
+    private final ScanDirectoryTaskService scanDirectoryTaskService;
     private final UserService userService;
 
     /**
@@ -68,8 +70,20 @@ public class ScanDirectoryController {
             Authentication authentication,
             @PathVariable Long id) {
         User user = getUserFromAuth(authentication);
-        Map<String, Object> result = scanDirectoryService.scanDirectory(id, user);
-        return ResponseEntity.ok(result);
+        Map<String, Object> task = scanDirectoryTaskService.startScan(id, user);
+        return ResponseEntity.accepted().body(task);
+    }
+
+    /**
+     * 查询扫描进度。
+     */
+    @GetMapping("/{id}/scan-progress")
+    public ResponseEntity<Map<String, Object>> getScanProgress(
+            Authentication authentication,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(scanDirectoryTaskService.getProgress(
+                id,
+                getUserFromAuth(authentication)));
     }
 
     /**

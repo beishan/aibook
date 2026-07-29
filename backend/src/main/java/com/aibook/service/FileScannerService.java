@@ -2,10 +2,8 @@ package com.aibook.service;
 
 import com.aibook.config.ScanSettings;
 import com.aibook.model.entity.Book;
-import com.aibook.model.entity.Category;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
-import com.aibook.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,7 +34,7 @@ import java.util.stream.Stream;
 public class FileScannerService {
 
     private final BookRepository bookRepository;
-    private final UserRepository userRepository;
+    private final ScannedBookPersistenceService scannedBookPersistenceService;
     private final MetadataService metadataService;
     private final TxtParserService txtParserService;
 
@@ -59,12 +57,14 @@ public class FileScannerService {
     public ScanResult scan(User user) {
         ScanResult result = new ScanResult();
         result.setStartTime(System.currentTimeMillis());
+        Long userId = Objects.requireNonNull(user.getId(), "扫描用户 ID 不能为空");
+        int threadCount = ScanSettings.normalizeThreadCount(user.getScanThreadCount());
 
         for (String dirPath : scanDirectories) {
             Path dir = Paths.get(dirPath);
             if (Files.exists(dir) && Files.isDirectory(dir)) {
                 try {
-                    scanDirectory(dir, user, null, result);
+                    scanDirectory(dir, userId, null, threadCount, result);
                 } catch (IOException e) {
                     log.error("扫描目录失败: {}", dirPath, e);
                     result.addError(dirPath, e.getMessage());
@@ -89,14 +89,36 @@ public class FileScannerService {
     /**
      * 扫描指定目录，并为新导入书籍设置默认分类。
      */
-    public ScanResult scanDirectory(String dirPath, User user, Category defaultCategory) {
-        ScanResult result = new ScanResult();
+    public ScanResult scanDirectory(String dirPath, User user, Long defaultCategoryId) {
+        return scanDirectory(
+                dirPath,
+                Objects.requireNonNull(user.getId(), "扫描用户 ID 不能为空"),
+                ScanSettings.normalizeThreadCount(user.getScanThreadCount()),
+                defaultCategoryId,
+                new ScanResult());
+    }
+
+    /**
+     * 使用给定的实时结果对象扫描目录，供异步扫描任务查询进度。
+     */
+    public ScanResult scanDirectory(
+            String dirPath,
+            Long userId,
+            int threadCount,
+            Long defaultCategoryId,
+            ScanResult result) {
         result.setStartTime(System.currentTimeMillis());
+        threadCount = ScanSettings.normalizeThreadCount(threadCount);
 
         Path dir = Paths.get(dirPath);
         if (Files.exists(dir) && Files.isDirectory(dir)) {
             try {
-                scanDirectory(dir, user, defaultCategory, result);
+                scanDirectory(
+                        dir,
+                        userId,
+                        defaultCategoryId,
+                        threadCount,
+                        result);
             } catch (IOException e) {
                 log.error("扫描目录失败: {}", dirPath, e);
                 result.addError(dirPath, e.getMessage());
@@ -126,8 +148,11 @@ public class FileScannerService {
      * 扫描单个目录
      */
     private void scanDirectory(
-            Path dir, User user, Category defaultCategory, ScanResult result) throws IOException {
-        int threadCount = ScanSettings.normalizeThreadCount(user.getScanThreadCount());
+            Path dir,
+            Long userId,
+            Long defaultCategoryId,
+            int threadCount,
+            ScanResult result) throws IOException {
         result.setThreadCount(threadCount);
 
         try (Stream<Path> walk = Files.walk(dir)) {
@@ -135,6 +160,7 @@ public class FileScannerService {
                 .filter(Files::isRegularFile)
                 .filter(this::isSupportedFormat)
                 .collect(Collectors.toList());
+            result.setTotalCount(files.size());
 
             if (files.isEmpty()) {
                 return;
@@ -156,8 +182,8 @@ public class FileScannerService {
                     executor.submit(
                             () -> processFile(
                                     file,
-                                    user,
-                                    defaultCategory,
+                                    userId,
+                                    defaultCategoryId,
                                     claimedHashes,
                                     result));
                 }
@@ -185,8 +211,8 @@ public class FileScannerService {
      */
     private void processFile(
             Path file,
-            User user,
-            Category defaultCategory,
+            Long userId,
+            Long defaultCategoryId,
             Set<String> claimedHashes,
             ScanResult result) {
         String claimedHash = null;
@@ -214,14 +240,12 @@ public class FileScannerService {
                 .filePath(file.toString())
                 .fileSize(Files.size(file))
                 .fileHash(fileHash)
-                .category(defaultCategory)
-                .user(user)
                 .build();
 
             // 尝试提取元数据
             extractMetadata(file, book);
 
-            bookRepository.save(book);
+            scannedBookPersistenceService.save(book, userId, defaultCategoryId);
             result.addNew(file.toString());
             log.info("成功导入书籍: {}", book.getTitle());
 
@@ -231,6 +255,8 @@ public class FileScannerService {
             }
             log.error("处理文件失败: {}", file, e);
             result.addFailed(file.toString(), e.getMessage());
+        } finally {
+            result.markScanned(file.toString());
         }
     }
 
@@ -344,9 +370,12 @@ public class FileScannerService {
      */
     @lombok.Data
     public static class ScanResult {
-        private long startTime;
-        private long endTime;
-        private int threadCount = ScanSettings.DEFAULT_THREAD_COUNT;
+        private volatile long startTime;
+        private volatile long endTime;
+        private volatile int threadCount = ScanSettings.DEFAULT_THREAD_COUNT;
+        private volatile int totalCount;
+        private volatile String currentFile;
+        private final AtomicInteger scannedCount = new AtomicInteger();
         private final List<String> newBooks =
                 Collections.synchronizedList(new ArrayList<>());
         private final List<String> skippedBooks =
@@ -374,6 +403,23 @@ public class FileScannerService {
             errors.add(Map.of(
                     "path", path,
                     "message", Objects.toString(message, "未知错误")));
+        }
+
+        public void markScanned(String path) {
+            currentFile = path;
+            scannedCount.incrementAndGet();
+        }
+
+        public int getScannedCount() {
+            return scannedCount.get();
+        }
+
+        public int getProgressPercent() {
+            if (totalCount == 0) {
+                return endTime > 0 ? 100 : 0;
+            }
+            return Math.min(100, (int) Math.round(
+                    getScannedCount() * 100.0 / totalCount));
         }
 
         public long getDuration() {

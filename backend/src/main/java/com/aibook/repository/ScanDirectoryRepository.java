@@ -25,6 +25,8 @@ public interface ScanDirectoryRepository extends JpaRepository<ScanDirectory, Lo
 
     Optional<ScanDirectory> findByIdAndUser(Long id, User user);
 
+    Optional<ScanDirectory> findByIdAndUserId(Long id, Long userId);
+
     List<ScanDirectory> findByUserAndDefaultCategory(User user, Category defaultCategory);
 
     long countByUser(User user);

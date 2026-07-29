@@ -167,7 +167,7 @@
           <div v-else class="no-cover">
             <span>{{ book.title.charAt(0) }}</span>
           </div>
-          <div class="book-format tag">{{ book.format.toUpperCase() }}</div>
+          <div class="book-format">{{ book.format.toUpperCase() }}</div>
         </div>
 
         <div class="book-info">
@@ -850,15 +850,19 @@ onMounted(() => {
 
 .book-format {
   position: absolute;
-  top: var(--spacing-md);
-  right: var(--spacing-md);
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  color: white;
-  font-size: var(--font-size-xs);
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
+  bottom: 8px;
+  left: 8px;
+  padding: 2px 6px;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.04em;
+  background: rgba(15, 23, 42, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .book-info {
