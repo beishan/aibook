@@ -398,14 +398,29 @@
         <span>‹</span>
         <span>上一页</span>
       </button>
-      <span class="page-info">
-        第 {{ currentPage }} / {{ totalPages }} 页
-        · {{ pageRangeStart }}–{{ pageRangeEnd }} 条
-      </span>
+      <nav class="page-number-list" aria-label="书库分页">
+        <template v-for="item in visiblePageItems" :key="item.key">
+          <span v-if="item.type === 'ellipsis'" class="page-ellipsis" aria-hidden="true">…</span>
+          <button
+            v-else
+            class="page-number-button"
+            :class="{ active: item.page === currentPage }"
+            :aria-current="item.page === currentPage ? 'page' : undefined"
+            :aria-label="`跳转到第 ${item.page} 页`"
+            @click="goToPage(item.page)"
+          >
+            {{ item.page }}
+          </button>
+        </template>
+      </nav>
       <button class="btn" :disabled="currentPage >= totalPages" @click="nextPage">
         <span>下一页</span>
         <span>›</span>
       </button>
+      <span class="page-info">
+        第 {{ currentPage }} / {{ totalPages }} 页
+        · {{ pageRangeStart }}–{{ pageRangeEnd }} 条
+      </span>
     </div>
 
     <!-- 上传对话框 -->
@@ -524,6 +539,54 @@ const pageRangeStart = computed(() => (currentPage.value - 1) * pageSize.value +
 const pageRangeEnd = computed(() =>
   Math.min(currentPage.value * pageSize.value, bookStore.totalElements)
 )
+type PageItem =
+  | { type: 'page'; page: number; key: string }
+  | { type: 'ellipsis'; key: string }
+
+const visiblePageItems = computed<PageItem[]>(() => {
+  const pageCount = totalPages.value
+  if (pageCount <= 7) {
+    return Array.from({ length: pageCount }, (_, index) => ({
+      type: 'page',
+      page: index + 1,
+      key: `page-${index + 1}`,
+    }))
+  }
+
+  if (currentPage.value <= 4) {
+    return [
+      ...Array.from({ length: 5 }, (_, index) => ({
+        type: 'page' as const,
+        page: index + 1,
+        key: `page-${index + 1}`,
+      })),
+      { type: 'ellipsis', key: 'ellipsis-end' },
+      { type: 'page', page: pageCount, key: `page-${pageCount}` },
+    ]
+  }
+
+  if (currentPage.value >= pageCount - 3) {
+    return [
+      { type: 'page', page: 1, key: 'page-1' },
+      { type: 'ellipsis', key: 'ellipsis-start' },
+      ...Array.from({ length: 5 }, (_, index) => {
+        const page = pageCount - 4 + index
+        return { type: 'page' as const, page, key: `page-${page}` }
+      }),
+    ]
+  }
+
+  return [
+    { type: 'page', page: 1, key: 'page-1' },
+    { type: 'ellipsis', key: 'ellipsis-start' },
+    ...[-1, 0, 1].map(offset => {
+      const page = currentPage.value + offset
+      return { type: 'page' as const, page, key: `page-${page}` }
+    }),
+    { type: 'ellipsis', key: 'ellipsis-end' },
+    { type: 'page', page: pageCount, key: `page-${pageCount}` },
+  ]
+})
 
 const getCardMetaLabel = (book: Book) => {
   const parts: string[] = []
@@ -849,6 +912,12 @@ const nextPage = () => {
     currentPage.value++
     loadBooks()
   }
+}
+
+const goToPage = (page: number) => {
+  if (page < 1 || page > totalPages.value || page === currentPage.value) return
+  currentPage.value = page
+  loadBooks()
 }
 
 const handlePageSizeChange = () => {
@@ -1589,6 +1658,44 @@ onMounted(() => {
 .page-info {
   color: var(--text-on-page-bg-secondary);
   font-size: var(--font-size-sm);
+}
+
+.page-number-list {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.page-number-button {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.page-number-button:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-alpha-10);
+}
+
+.page-number-button.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+  cursor: default;
+}
+
+.page-ellipsis {
+  min-width: 24px;
+  color: var(--text-on-page-bg-secondary);
+  text-align: center;
 }
 
 /* 响应式 */
