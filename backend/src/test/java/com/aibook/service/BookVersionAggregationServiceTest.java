@@ -29,7 +29,8 @@ class BookVersionAggregationServiceTest {
         User user = User.builder().id(7L).username("reader").build();
         Book primary = book(1L, " 三体 ", "刘慈欣", "epub", user);
         primary.setDescription("短简介");
-        Book duplicate = book(2L, "三体", "刘慈欣", "pdf", user);
+        Book duplicate = book(2L, "扫描文件", null, "pdf", user);
+        duplicate.setFilePath("/books/三体-刘慈欣-精校版.pdf");
         duplicate.setDescription("这是另一个版本中更完整的内容简介");
         duplicate.setIsFavorite(true);
         Book differentAuthor = book(3L, "三体", "其他作者", "txt", user);
@@ -86,6 +87,50 @@ class BookVersionAggregationServiceTest {
                 primary.getDescription());
         assertEquals(true, primary.getIsFavorite());
         assertEquals(null, differentAuthor.getDeletedAt());
+    }
+
+    @Test
+    void shouldAggregateHighlySimilarTitlesWhenAuthorMatches() {
+        User user = User.builder().id(8L).username("reader-2").build();
+        Book primary = book(21L, "深入理解计算机系统", "Randal Bryant", "epub", user);
+        Book similar = book(22L, "深入理解计算机系統", "Randal Bryant", "pdf", user);
+        BookVersion primaryVersion = version(31L, primary, true);
+        BookVersion similarVersion = version(32L, similar, true);
+
+        BookRepository bookRepository = mock(BookRepository.class);
+        BookVersionRepository versionRepository = mock(BookVersionRepository.class);
+        BookVersionService versionService = mock(BookVersionService.class);
+        ReadingProgressRepository progressRepository =
+                mock(ReadingProgressRepository.class);
+        BookmarkRepository bookmarkRepository = mock(BookmarkRepository.class);
+        BookHighlightRepository highlightRepository =
+                mock(BookHighlightRepository.class);
+        BookListRepository bookListRepository = mock(BookListRepository.class);
+
+        when(bookRepository.findByUserAndDeletedAtIsNull(user))
+                .thenReturn(List.of(primary, similar));
+        when(versionService.ensurePrimaryVersion(primary)).thenReturn(primaryVersion);
+        when(versionService.ensurePrimaryVersion(similar)).thenReturn(similarVersion);
+        when(versionRepository.findByBookOrderByPrimaryVersionDescCreatedAtAsc(similar))
+                .thenReturn(List.of(similarVersion));
+        when(progressRepository.findByUserAndBook(any(User.class), any(Book.class)))
+                .thenReturn(Optional.empty());
+        when(bookmarkRepository.findByBook(any(Book.class))).thenReturn(List.of());
+        when(highlightRepository.findByBook(any(Book.class))).thenReturn(List.of());
+        when(bookListRepository.findByUser(user)).thenReturn(List.of());
+
+        var result = new BookVersionAggregationService(
+                bookRepository,
+                versionRepository,
+                versionService,
+                progressRepository,
+                bookmarkRepository,
+                highlightRepository,
+                bookListRepository)
+                .rebuild(user);
+
+        assertEquals(1, result.getMergedBooks());
+        assertSame(primary, similarVersion.getBook());
     }
 
     private Book book(

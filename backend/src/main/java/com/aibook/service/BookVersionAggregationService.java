@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.text.Normalizer;
 import java.time.LocalDateTime;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * 将历史上作为独立书籍导入的同一本书重新聚合为多个可阅读版本。
@@ -142,6 +144,17 @@ public class BookVersionAggregationService {
             }
         }
 
+        for (int left = 0; left < books.size(); left++) {
+            for (int right = left + 1; right < books.size(); right++) {
+                if (unionFind.find(left) == unionFind.find(right)) {
+                    continue;
+                }
+                if (isSimilarBook(books.get(left), books.get(right))) {
+                    unionFind.union(left, right);
+                }
+            }
+        }
+
         Map<Integer, List<Book>> grouped = new LinkedHashMap<>();
         for (int index = 0; index < books.size(); index++) {
             grouped.computeIfAbsent(unionFind.find(index), ignored -> new ArrayList<>())
@@ -172,10 +185,150 @@ public class BookVersionAggregationService {
 
     private String normalizeAuthor(String author) {
         String normalized = normalizeText(author);
+        normalized = normalized
+                .replaceFirst("^(作者|author)", "")
+                .replaceFirst("(编著|著|作者)$", "");
         return switch (normalized) {
             case "未知", "未知作者", "unknown", "unknownauthor" -> "";
             default -> normalized;
         };
+    }
+
+    private boolean isSimilarBook(Book left, Book right) {
+        String leftAuthor = normalizeAuthor(left.getAuthor());
+        String rightAuthor = normalizeAuthor(right.getAuthor());
+        if (!leftAuthor.isBlank()
+                && !rightAuthor.isBlank()
+                && !leftAuthor.equals(rightAuthor)) {
+            return false;
+        }
+
+        boolean sameKnownAuthor = !leftAuthor.isBlank()
+                && leftAuthor.equals(rightAuthor);
+        boolean bothAuthorsUnknown = leftAuthor.isBlank() && rightAuthor.isBlank();
+        String knownAuthor = leftAuthor.isBlank() ? rightAuthor : leftAuthor;
+        if (!bothAuthorsUnknown && !sameKnownAuthor) {
+            Book unknownAuthorBook = leftAuthor.isBlank() ? left : right;
+            if (!containsAuthorInIdentity(unknownAuthorBook, knownAuthor)) {
+                return false;
+            }
+        }
+
+        Set<String> leftCores = identityCores(left, leftAuthor, rightAuthor);
+        Set<String> rightCores = identityCores(right, leftAuthor, rightAuthor);
+        for (String leftCore : leftCores) {
+            for (String rightCore : rightCores) {
+                if (leftCore.equals(rightCore) && leftCore.length() >= 2) {
+                    return true;
+                }
+                int minimumLength = Math.min(leftCore.length(), rightCore.length());
+                if (minimumLength < 4) {
+                    continue;
+                }
+                double similarity = levenshteinSimilarity(leftCore, rightCore);
+                double threshold = sameKnownAuthor
+                        ? 0.78
+                        : bothAuthorsUnknown ? 0.92 : 0.86;
+                if (similarity >= threshold) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean containsAuthorInIdentity(Book book, String normalizedAuthor) {
+        if (normalizedAuthor == null || normalizedAuthor.isBlank()) {
+            return false;
+        }
+        return normalizeText(book.getTitle()).contains(normalizedAuthor)
+                || normalizeText(fileStem(book.getFilePath())).contains(normalizedAuthor);
+    }
+
+    private Set<String> identityCores(
+            Book book, String leftAuthor, String rightAuthor) {
+        Set<String> cores = new LinkedHashSet<>();
+        addIdentityCore(cores, book.getTitle(), leftAuthor, rightAuthor);
+        addIdentityCore(cores, fileStem(book.getFilePath()), leftAuthor, rightAuthor);
+        return cores;
+    }
+
+    private void addIdentityCore(
+            Set<String> cores,
+            String value,
+            String leftAuthor,
+            String rightAuthor) {
+        String core = normalizeText(value);
+        if (!leftAuthor.isBlank()) {
+            core = core.replace(leftAuthor, "");
+        }
+        if (!rightAuthor.isBlank()) {
+            core = core.replace(rightAuthor, "");
+        }
+        core = stripVersionNoise(core);
+        if (!core.isBlank()) {
+            cores.add(core);
+        }
+    }
+
+    private String stripVersionNoise(String value) {
+        String normalized = value;
+        List<String> suffixes = List.of(
+                "完整版", "精校版", "校对版", "修订版", "插图版",
+                "典藏版", "电子版", "网络版", "出版版", "高清版",
+                "epub", "pdf", "mobi", "azw3", "txt", "markdown", "md");
+        boolean changed;
+        do {
+            changed = false;
+            for (String suffix : suffixes) {
+                if (normalized.endsWith(suffix)
+                        && normalized.length() > suffix.length()) {
+                    normalized = normalized.substring(
+                            0, normalized.length() - suffix.length());
+                    changed = true;
+                }
+            }
+        } while (changed);
+        return normalized;
+    }
+
+    private String fileStem(String filePath) {
+        if (filePath == null || filePath.isBlank()) {
+            return "";
+        }
+        try {
+            String filename = Paths.get(filePath).getFileName().toString();
+            int dot = filename.lastIndexOf('.');
+            return dot > 0 ? filename.substring(0, dot) : filename;
+        } catch (Exception ignored) {
+            return filePath;
+        }
+    }
+
+    private double levenshteinSimilarity(String left, String right) {
+        if (left.equals(right)) {
+            return 1;
+        }
+        int[] previous = new int[right.length() + 1];
+        int[] current = new int[right.length() + 1];
+        for (int column = 0; column <= right.length(); column++) {
+            previous[column] = column;
+        }
+        for (int row = 1; row <= left.length(); row++) {
+            current[0] = row;
+            for (int column = 1; column <= right.length(); column++) {
+                int replacementCost =
+                        left.charAt(row - 1) == right.charAt(column - 1) ? 0 : 1;
+                current[column] = Math.min(
+                        Math.min(current[column - 1] + 1, previous[column] + 1),
+                        previous[column - 1] + replacementCost);
+            }
+            int[] swap = previous;
+            previous = current;
+            current = swap;
+        }
+        int maximumLength = Math.max(left.length(), right.length());
+        return 1.0 - ((double) previous[right.length()] / maximumLength);
     }
 
     private String normalizeText(String value) {
