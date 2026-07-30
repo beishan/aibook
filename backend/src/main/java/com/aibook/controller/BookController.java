@@ -8,11 +8,13 @@ import com.aibook.dto.BookDTO;
 import com.aibook.dto.BookTocItemDTO;
 import com.aibook.dto.ScrapeTaskDTO;
 import com.aibook.model.entity.Book;
+import com.aibook.model.entity.BookVersion;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
 import com.aibook.service.BookCoverService;
 import com.aibook.service.BookParsingService;
 import com.aibook.service.BookService;
+import com.aibook.service.BookVersionService;
 import com.aibook.service.TxtParserService;
 import com.aibook.service.UserService;
 import com.aibook.service.scraper.BatchScrapeTaskService;
@@ -66,6 +68,7 @@ public class BookController {
     private final BookRepository bookRepository;
     private final BookParsingService bookParsingService;
     private final BookCoverService bookCoverService;
+    private final BookVersionService bookVersionService;
 
     /**
      * 获取书籍列表
@@ -241,10 +244,13 @@ public class BookController {
     @GetMapping("/{id}/toc")
     public ResponseEntity<List<BookTocItemDTO>> getBookTableOfContents(
             Authentication authentication,
-            @PathVariable Long id) {
+            @PathVariable Long id,
+            @RequestParam(required = false) Long versionId) {
         User user = userService.findByUsername(authentication.getName());
         Book book = bookService.getBookEntity(id, user);
-        return ResponseEntity.ok(bookParsingService.getTableOfContents(book));
+        BookVersion version = bookVersionService.resolveVersion(book, versionId);
+        return ResponseEntity.ok(bookParsingService.getTableOfContents(
+                bookVersionService.toReadableBook(book, version)));
     }
 
     /**
@@ -382,18 +388,20 @@ public class BookController {
     public ResponseEntity<Resource> getBookContent(
             Authentication authentication,
             @PathVariable Long id,
+            @RequestParam(required = false) Long versionId,
             WebRequest webRequest) throws IOException {
 
         User user = userService.findByUsername(authentication.getName());
-        BookDTO bookDTO = bookService.getBookById(id, user);
+        Book book = bookService.getBookEntity(id, user);
+        BookVersion version = bookVersionService.resolveVersion(book, versionId);
 
-        Path filePath = Paths.get(bookDTO.getFilePath());
+        Path filePath = Paths.get(version.getFilePath());
         if (!Files.exists(filePath)) {
             return ResponseEntity.notFound().build();
         }
 
         FileSystemResource resource = new FileSystemResource(filePath.toFile());
-        String contentType = MimeTypeUtil.getContentTypeWithCharset(bookDTO.getFormat());
+        String contentType = MimeTypeUtil.getContentTypeWithCharset(version.getFormat());
         long lastModified = Files.getLastModifiedTime(filePath).toMillis();
         long fileSize = Files.size(filePath);
         String etag = "\""
@@ -420,7 +428,7 @@ public class BookController {
                 .cacheControl(cacheControl);
 
         // PDF 文件需要 inline 显示，而不是下载
-        if ("pdf".equalsIgnoreCase(bookDTO.getFormat())) {
+        if ("pdf".equalsIgnoreCase(version.getFormat())) {
             responseBuilder.header(HttpHeaders.CONTENT_DISPOSITION, "inline");
         }
 
@@ -433,12 +441,14 @@ public class BookController {
     @GetMapping("/{id}/content-processed")
     public ResponseEntity<Map<String, String>> getProcessedContent(
             Authentication authentication,
-            @PathVariable Long id) {
+            @PathVariable Long id,
+            @RequestParam(required = false) Long versionId) {
 
         User user = userService.findByUsername(authentication.getName());
-        BookDTO bookDTO = bookService.getBookById(id, user);
+        Book book = bookService.getBookEntity(id, user);
+        BookVersion version = bookVersionService.resolveVersion(book, versionId);
 
-        Path filePath = Paths.get(bookDTO.getFilePath());
+        Path filePath = Paths.get(version.getFilePath());
         if (!Files.exists(filePath)) {
             return ResponseEntity.notFound().build();
         }
@@ -448,7 +458,8 @@ public class BookController {
             String processedText = txtParserService.processText(rawText);
             return ResponseEntity.ok(Map.of(
                     "text", processedText,
-                    "chapterInfo", bookDTO.getChapterInfo() != null ? bookDTO.getChapterInfo() : "[]"
+                    "chapterInfo",
+                    version.getChapterInfo() != null ? version.getChapterInfo() : "[]"
             ));
         } catch (Exception e) {
             log.error("处理TXT内容失败: {}", filePath, e);

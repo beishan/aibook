@@ -1,6 +1,5 @@
 package com.aibook.controller;
 
-import com.aibook.model.entity.ReadingProgress;
 import com.aibook.model.entity.User;
 import com.aibook.service.ReadingProgressService;
 import com.aibook.service.UserService;
@@ -27,11 +26,13 @@ public class ReadingProgressController {
      * 获取阅读进度
      */
     @GetMapping("/book/{bookId}")
-    public ResponseEntity<ReadingProgress> getProgress(
+    public ResponseEntity<com.aibook.dto.ReadingProgressDTO> getProgress(
             Authentication authentication,
-            @PathVariable Long bookId) {
+            @PathVariable Long bookId,
+            @RequestParam(required = false) Long versionId) {
         User user = userService.findByUsername(authentication.getName());
-        ReadingProgress progress = readingProgressService.getProgress(bookId, user);
+        com.aibook.dto.ReadingProgressDTO progress =
+                readingProgressService.getProgress(bookId, versionId, user);
         return ResponseEntity.ok(progress);
     }
 
@@ -39,9 +40,10 @@ public class ReadingProgressController {
      * 保存阅读进度
      */
     @PostMapping("/book/{bookId}")
-    public ResponseEntity<ReadingProgress> saveProgress(
+    public ResponseEntity<com.aibook.dto.ReadingProgressDTO> saveProgress(
             Authentication authentication,
             @PathVariable Long bookId,
+            @RequestParam(required = false) Long versionId,
             @RequestBody Map<String, Object> body) {
         User user = userService.findByUsername(authentication.getName());
 
@@ -52,8 +54,10 @@ public class ReadingProgressController {
         Integer totalProgress = body.get("totalProgress") != null ?
             Integer.valueOf(body.get("totalProgress").toString()) : 0;
 
-        ReadingProgress progress = readingProgressService.saveProgress(
-            bookId, user, currentChapter, currentChapterTitle, chapterProgress, totalProgress);
+        com.aibook.dto.ReadingProgressDTO progress =
+                readingProgressService.saveProgress(
+                        bookId, versionId, user, currentChapter,
+                        currentChapterTitle, chapterProgress, totalProgress);
         return ResponseEntity.ok(progress);
     }
 
@@ -61,15 +65,17 @@ public class ReadingProgressController {
      * 更新阅读时长
      */
     @PutMapping("/book/{bookId}/time")
-    public ResponseEntity<ReadingProgress> updateReadingTime(
+    public ResponseEntity<com.aibook.dto.ReadingProgressDTO> updateReadingTime(
             Authentication authentication,
             @PathVariable Long bookId,
+            @RequestParam(required = false) Long versionId,
             @RequestBody Map<String, Long> body) {
         User user = userService.findByUsername(authentication.getName());
         Long additionalSeconds = body.get("seconds");
 
-        ReadingProgress progress = readingProgressService.updateReadingTime(
-            bookId, user, additionalSeconds);
+        com.aibook.dto.ReadingProgressDTO progress =
+                readingProgressService.updateReadingTime(
+                        bookId, versionId, user, additionalSeconds);
         return ResponseEntity.ok(progress);
     }
 }

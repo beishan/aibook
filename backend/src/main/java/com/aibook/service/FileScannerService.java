@@ -4,8 +4,9 @@ import com.aibook.config.ScanSettings;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
-import lombok.RequiredArgsConstructor;
+import com.aibook.repository.BookVersionRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -29,15 +30,46 @@ import java.util.stream.Stream;
  * 扫描配置的目录，发现并导入书籍文件
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class FileScannerService {
 
     private final BookRepository bookRepository;
+    private final BookVersionRepository bookVersionRepository;
     private final ScannedBookPersistenceService scannedBookPersistenceService;
     private final MetadataService metadataService;
     private final TxtParserService txtParserService;
     private final BookParsingService bookParsingService;
+
+    @Autowired
+    public FileScannerService(
+            BookRepository bookRepository,
+            BookVersionRepository bookVersionRepository,
+            ScannedBookPersistenceService scannedBookPersistenceService,
+            MetadataService metadataService,
+            TxtParserService txtParserService,
+            BookParsingService bookParsingService) {
+        this.bookRepository = bookRepository;
+        this.bookVersionRepository = bookVersionRepository;
+        this.scannedBookPersistenceService = scannedBookPersistenceService;
+        this.metadataService = metadataService;
+        this.txtParserService = txtParserService;
+        this.bookParsingService = bookParsingService;
+    }
+
+    FileScannerService(
+            BookRepository bookRepository,
+            ScannedBookPersistenceService scannedBookPersistenceService,
+            MetadataService metadataService,
+            TxtParserService txtParserService,
+            BookParsingService bookParsingService) {
+        this(
+                bookRepository,
+                null,
+                scannedBookPersistenceService,
+                metadataService,
+                txtParserService,
+                bookParsingService);
+    }
 
     @Value("#{'${scanning.directories:/books/fiction,/books/tech}'.split(',')}")
     private List<String> scanDirectories;
@@ -231,7 +263,9 @@ public class FileScannerService {
 
             // 检查是否已存在
             Optional<Book> existingBook = bookRepository.findByFileHash(fileHash);
-            if (existingBook.isPresent()) {
+            if (existingBook.isPresent()
+                    || (bookVersionRepository != null
+                    && bookVersionRepository.findByFileHash(fileHash).isPresent())) {
                 result.addSkipped(file.toString());
                 return;
             }

@@ -11,6 +11,9 @@
         <div class="reader-title">
           <div class="reader-title-main">
             <span class="reader-book-name">{{ book.title }}</span>
+            <span v-if="selectedVersion" class="reader-version-badge">
+              {{ selectedVersion.format.toUpperCase() }} · {{ selectedVersion.displayName }}
+            </span>
             <span
               v-if="performancePaginationMode"
               class="performance-mode-badge"
@@ -489,7 +492,21 @@ interface Highlight {
   createdAt: string
 }
 
+interface BookVersion {
+  id: number
+  displayName: string
+  format: string
+  fileSize?: number
+  primaryVersion: boolean
+  chapterCount?: number
+}
+
 const book = ref<any>(null)
+const versions = ref<BookVersion[]>([])
+const selectedVersionId = ref<number | null>(null)
+const selectedVersion = computed(() =>
+  versions.value.find(version => version.id === selectedVersionId.value) || null,
+)
 const loading = ref(true)
 const content = ref<string[]>([])
 const htmlContent = ref('')
@@ -529,8 +546,18 @@ const epubKeyboardDocuments = new Set<Document>()
 const pdfUrl = computed(() => {
   if (!book.value) return ''
   const token = localStorage.getItem('token')
-  return `/api/books/${book.value.id}/content?token=${token}`
+  const params = new URLSearchParams({ token: token || '' })
+  if (selectedVersionId.value) {
+    params.set('versionId', String(selectedVersionId.value))
+  }
+  return `/api/books/${book.value.id}/content?${params.toString()}`
 })
+
+const withVersion = (url: string) => {
+  if (!selectedVersionId.value) return url
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}versionId=${selectedVersionId.value}`
+}
 
 // 字体选项
 const builtInFontOptions = [
@@ -895,6 +922,25 @@ const loadBook = async () => {
   try {
     // 先获取书籍信息
     book.value = await bookStore.fetchBookById(id)
+    const versionsResponse = await api.get(`/api/books/${id}/versions`)
+    versions.value = versionsResponse.data || []
+    const requestedVersionId = Number(route.query.versionId)
+    const requestedVersion = versions.value.find(
+      version => version.id === requestedVersionId,
+    )
+    const version = requestedVersion
+      || versions.value.find(item => item.primaryVersion)
+      || versions.value[0]
+    if (!version) {
+      throw new Error('书籍没有可阅读版本')
+    }
+    selectedVersionId.value = version.id
+    book.value = {
+      ...book.value,
+      format: version.format,
+      fileSize: version.fileSize,
+      chapterCount: version.chapterCount,
+    }
 
     // 阅读进度会影响 EPUB 首次定位，先发起请求但不阻塞书籍下载。
     const progressPromise = loadSavedProgress(id)
@@ -949,9 +995,12 @@ const applyRequestedChapter = async () => {
 const loadSavedProgress = async (bookId: number) => {
   try {
     const token = localStorage.getItem('token')
-    const response = await fetch(`/api/reading-progress/book/${bookId}`, {
+    const response = await fetch(
+      withVersion(`/api/reading-progress/book/${bookId}`),
+      {
       headers: { Authorization: `Bearer ${token}` }
-    })
+      },
+    )
     if (response.ok) {
       const data = await response.json()
       console.log('[Reader] Loaded progress:', data)
@@ -1093,7 +1142,7 @@ const saveProgress = (totalProgress: number, currentChapter?: string) => {
   saveTimer = setTimeout(async () => {
     try {
       const token = localStorage.getItem('token')
-      await fetch(`/api/reading-progress/book/${book.value.id}`, {
+      await fetch(withVersion(`/api/reading-progress/book/${book.value.id}`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1123,7 +1172,7 @@ const saveReadingTime = async () => {
 
   try {
     const token = localStorage.getItem('token')
-    await fetch(`/api/reading-progress/book/${book.value.id}/time`, {
+    await fetch(withVersion(`/api/reading-progress/book/${book.value.id}/time`), {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -1224,7 +1273,9 @@ const loadTextContent = async () => {
   try {
     const token = localStorage.getItem('token')
 
-    const response = await fetch(`/api/books/${book.value.id}/content-processed`, {
+    const response = await fetch(withVersion(
+      `/api/books/${book.value.id}/content-processed`,
+    ), {
       headers: { Authorization: `Bearer ${token}` }
     })
 
@@ -1248,9 +1299,12 @@ const loadTextContent = async () => {
         tocItems.value = parseChapters(content.value)
       }
     } else {
-      const rawResponse = await fetch(`/api/books/${book.value.id}/content`, {
+      const rawResponse = await fetch(
+        withVersion(`/api/books/${book.value.id}/content`),
+        {
         headers: { Authorization: `Bearer ${token}` }
-      })
+        },
+      )
       const text = await rawResponse.text()
       content.value = splitTextIntoParagraphs(text)
       enableLargeTextPerformanceMode()
@@ -1363,9 +1417,12 @@ const handleProgressChange = () => {
 const loadHtmlContent = async () => {
   try {
     const token = localStorage.getItem('token')
-    const response = await fetch(`/api/books/${book.value.id}/content`, {
+    const response = await fetch(
+      withVersion(`/api/books/${book.value.id}/content`),
+      {
       headers: { Authorization: `Bearer ${token}` }
-    })
+      },
+    )
     htmlContent.value = await response.text()
   } catch (error) {
     console.error('Failed to load HTML content:', error)
@@ -1379,7 +1436,9 @@ const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
     const contentVersion = encodeURIComponent(
       `${book.value.fileSize || 0}-${book.value.updatedAt || ''}`,
     )
-    const contentUrl = `/api/books/${book.value.id}/content?v=${contentVersion}`
+    const contentUrl = withVersion(
+      `/api/books/${book.value.id}/content?v=${contentVersion}`,
+    )
 
     // epub.js 代码块和书籍二进制并行获取，浏览器可复用后端的版本化缓存。
     const [epubModule, arrayBuffer] = await Promise.all([
@@ -1639,7 +1698,7 @@ const goBack = () => {
 
 const handleDownload = () => {
   if (!book.value) return
-  window.open(`/api/books/${book.value.id}/content`, '_blank')
+  window.open(withVersion(`/api/books/${book.value.id}/content`), '_blank')
 }
 
 const toggleFullscreen = () => {
@@ -1822,7 +1881,7 @@ onBeforeUnmount(() => {
   const token = localStorage.getItem('token')
 
   if (book.value && progress.value > 0 && token) {
-    fetch(`/api/reading-progress/book/${book.value.id}`, {
+    fetch(withVersion(`/api/reading-progress/book/${book.value.id}`), {
       method: 'POST',
       keepalive: true,
       headers: {
@@ -1843,7 +1902,7 @@ onBeforeUnmount(() => {
   if (book.value && readingStartTime > 0 && token) {
     const elapsedSeconds = Math.floor((Date.now() - readingStartTime) / 1000)
     if (elapsedSeconds >= 5) {
-      fetch(`/api/reading-progress/book/${book.value.id}/time`, {
+      fetch(withVersion(`/api/reading-progress/book/${book.value.id}/time`), {
         method: 'PUT',
         keepalive: true,
         headers: {
@@ -2003,6 +2062,19 @@ onBeforeUnmount(() => {
   overflow: hidden;
   font-size: var(--font-size-base);
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-version-badge {
+  overflow: hidden;
+  flex: 0 1 auto;
+  max-width: 220px;
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

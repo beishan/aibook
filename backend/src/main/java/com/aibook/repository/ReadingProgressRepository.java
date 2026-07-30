@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.util.List;
 
 /**
  * 阅读进度 Repository
@@ -18,6 +19,8 @@ public interface ReadingProgressRepository extends JpaRepository<ReadingProgress
      * 根据用户和书籍查询阅读进度
      */
     Optional<ReadingProgress> findByUserAndBook(User user, Book book);
+
+    List<ReadingProgress> findAllByBook(Book book);
 
     /**
      * 根据用户查询最近阅读的书籍

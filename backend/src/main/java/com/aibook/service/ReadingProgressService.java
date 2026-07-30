@@ -1,10 +1,13 @@
 package com.aibook.service;
 
 import com.aibook.model.entity.Book;
+import com.aibook.model.entity.BookVersion;
 import com.aibook.model.entity.ReadingProgress;
 import com.aibook.model.entity.User;
+import com.aibook.model.entity.VersionReadingProgress;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.ReadingProgressRepository;
+import com.aibook.repository.VersionReadingProgressRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,40 +23,45 @@ import java.util.Optional;
 public class ReadingProgressService {
 
     private final ReadingProgressRepository readingProgressRepository;
+    private final VersionReadingProgressRepository versionProgressRepository;
     private final BookRepository bookRepository;
+    private final BookVersionService bookVersionService;
 
     /**
      * 获取阅读进度
      */
-    public ReadingProgress getProgress(Long bookId, User user) {
+    @Transactional
+    public com.aibook.dto.ReadingProgressDTO getProgress(
+            Long bookId, Long versionId, User user) {
         Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElseThrow(() -> new RuntimeException("书籍不存在"));
+        BookVersion version = bookVersionService.resolveVersion(book, versionId);
 
-        return readingProgressRepository.findByUserAndBook(user, book)
-                .orElse(ReadingProgress.builder()
-                        .book(book)
-                        .user(user)
-                        .currentChapter("")
-                        .currentChapterTitle("")
-                        .chapterProgress(0)
-                        .totalProgress(0)
-                        .readingTimeSeconds(0L)
-                        .build());
+        return versionProgressRepository.findByUserAndVersion(user, version)
+                .map(this::toDTO)
+                .orElseGet(() -> emptyProgress(book, version));
     }
 
     /**
      * 保存阅读进度
      */
     @Transactional
-    public ReadingProgress saveProgress(Long bookId, User user, String currentChapter,
-                                       String currentChapterTitle, Integer chapterProgress,
-                                       Integer totalProgress) {
+    public com.aibook.dto.ReadingProgressDTO saveProgress(
+            Long bookId,
+            Long versionId,
+            User user,
+            String currentChapter,
+            String currentChapterTitle,
+            Integer chapterProgress,
+            Integer totalProgress) {
         Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElseThrow(() -> new RuntimeException("书籍不存在"));
+        BookVersion version = bookVersionService.resolveVersion(book, versionId);
 
-        ReadingProgress progress = readingProgressRepository.findByUserAndBook(user, book)
-                .orElse(ReadingProgress.builder()
-                        .book(book)
+        VersionReadingProgress progress =
+                versionProgressRepository.findByUserAndVersion(user, version)
+                .orElse(VersionReadingProgress.builder()
+                        .version(version)
                         .user(user)
                         .build());
 
@@ -79,27 +87,36 @@ public class ReadingProgressService {
             bookRepository.save(book);
         }
 
-        return readingProgressRepository.save(progress);
+        VersionReadingProgress saved = versionProgressRepository.save(progress);
+        syncAggregateProgress(book, user, saved);
+        return toDTO(saved);
     }
 
     /**
      * 更新阅读时长
      */
     @Transactional
-    public ReadingProgress updateReadingTime(Long bookId, User user, long additionalSeconds) {
+    public com.aibook.dto.ReadingProgressDTO updateReadingTime(
+            Long bookId, Long versionId, User user, long additionalSeconds) {
         Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElseThrow(() -> new RuntimeException("书籍不存在"));
+        BookVersion version = bookVersionService.resolveVersion(book, versionId);
 
-        ReadingProgress progress = readingProgressRepository.findByUserAndBook(user, book)
-                .orElse(ReadingProgress.builder()
-                        .book(book)
+        VersionReadingProgress progress =
+                versionProgressRepository.findByUserAndVersion(user, version)
+                .orElse(VersionReadingProgress.builder()
+                        .version(version)
                         .user(user)
                         .build());
 
-        progress.setReadingTimeSeconds(progress.getReadingTimeSeconds() + additionalSeconds);
+        long currentSeconds = progress.getReadingTimeSeconds() == null
+                ? 0L : progress.getReadingTimeSeconds();
+        progress.setReadingTimeSeconds(currentSeconds + additionalSeconds);
         progress.setLastReadAt(LocalDateTime.now());
 
-        return readingProgressRepository.save(progress);
+        VersionReadingProgress saved = versionProgressRepository.save(progress);
+        syncAggregateProgress(book, user, saved);
+        return toDTO(saved);
     }
 
     /**
@@ -108,5 +125,51 @@ public class ReadingProgressService {
     public Optional<ReadingProgress> getRecentlyRead(User user) {
         return readingProgressRepository
                 .findTopByUserAndBookDeletedAtIsNullOrderByLastReadAtDesc(user);
+    }
+
+    private void syncAggregateProgress(
+            Book book, User user, VersionReadingProgress versionProgress) {
+        ReadingProgress aggregate = readingProgressRepository.findByUserAndBook(user, book)
+                .orElse(ReadingProgress.builder()
+                        .book(book)
+                        .user(user)
+                        .build());
+        aggregate.setCurrentChapter(versionProgress.getCurrentChapter());
+        aggregate.setCurrentChapterTitle(versionProgress.getCurrentChapterTitle());
+        aggregate.setChapterProgress(versionProgress.getChapterProgress());
+        aggregate.setTotalProgress(versionProgress.getTotalProgress());
+        aggregate.setReadingTimeSeconds(versionProgress.getReadingTimeSeconds());
+        aggregate.setLastReadAt(versionProgress.getLastReadAt());
+        readingProgressRepository.save(aggregate);
+    }
+
+    private com.aibook.dto.ReadingProgressDTO emptyProgress(
+            Book book, BookVersion version) {
+        return com.aibook.dto.ReadingProgressDTO.builder()
+                .bookId(book.getId())
+                .versionId(version.getId())
+                .currentChapter("")
+                .currentChapterTitle("")
+                .chapterProgress(0)
+                .totalProgress(0)
+                .readingTimeSeconds(0L)
+                .build();
+    }
+
+    private com.aibook.dto.ReadingProgressDTO toDTO(
+            VersionReadingProgress progress) {
+        return com.aibook.dto.ReadingProgressDTO.builder()
+                .id(progress.getId())
+                .bookId(progress.getVersion().getBook().getId())
+                .versionId(progress.getVersion().getId())
+                .currentChapter(progress.getCurrentChapter())
+                .currentChapterTitle(progress.getCurrentChapterTitle())
+                .chapterProgress(progress.getChapterProgress())
+                .totalProgress(progress.getTotalProgress())
+                .readingTimeSeconds(progress.getReadingTimeSeconds())
+                .lastReadAt(progress.getLastReadAt())
+                .createdAt(progress.getCreatedAt())
+                .updatedAt(progress.getUpdatedAt())
+                .build();
     }
 }

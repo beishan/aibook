@@ -65,7 +65,10 @@
           </div>
 
           <div class="book-tags">
-            <span class="tag tag-primary">{{ book.format.toUpperCase() }}</span>
+            <span class="tag tag-primary">{{ selectedVersionFormat.toUpperCase() }}</span>
+            <span v-if="versions.length > 1" class="tag tag-info">
+              {{ versions.length }} 个版本
+            </span>
             <span v-if="book.language" class="tag tag-info">{{ book.language }}</span>
             <select
               class="category-select"
@@ -129,7 +132,8 @@
               <span>{{ downloadingCover ? '下载中...' : '下载封面' }}</span>
             </button>
             <button
-              v-if="book.format === 'txt' || book.format === 'md'"
+              v-if="selectedVersion?.primaryVersion
+                && (selectedVersionFormat === 'txt' || selectedVersionFormat === 'md')"
               class="btn"
               @click="handleReparse"
               :disabled="reparsing"
@@ -146,6 +150,61 @@
               <span>移入回收站</span>
             </button>
           </div>
+
+          <section class="version-panel">
+            <div class="version-panel-header">
+              <div>
+                <h2>文件版本</h2>
+                <p>选择要阅读的文件，每个版本会分别保存阅读进度。</p>
+              </div>
+              <label class="btn version-upload-button" :class="{ disabled: uploadingVersion }">
+                <span>＋</span>
+                <span>{{ uploadingVersion ? '上传中...' : '添加版本' }}</span>
+                <input
+                  type="file"
+                  accept=".txt,.epub,.pdf,.mobi,.azw3,.docx,.doc,.html,.htm,.md,.cbz,.cbr"
+                  :disabled="uploadingVersion"
+                  @change="handleVersionUpload"
+                />
+              </label>
+            </div>
+            <div class="version-list">
+              <div
+                v-for="version in versions"
+                :key="version.id"
+                class="version-item"
+                :class="{ active: version.id === selectedVersionId }"
+                role="button"
+                tabindex="0"
+                @click="selectVersion(version.id)"
+                @keyup.enter="selectVersion(version.id)"
+                @keyup.space.prevent="selectVersion(version.id)"
+              >
+                <div class="version-format">{{ version.format.toUpperCase() }}</div>
+                <div class="version-content">
+                  <strong>{{ version.displayName }}</strong>
+                  <span>
+                    {{ formatFileSize(version.fileSize) }}
+                    <template v-if="version.chapterCount != null">
+                      · {{ version.chapterCount }} 章
+                    </template>
+                  </span>
+                </div>
+                <span v-if="version.primaryVersion" class="version-primary-badge">原始版本</span>
+                <span v-if="version.id === selectedVersionId" class="version-selected-badge">
+                  当前阅读
+                </span>
+                <button
+                  v-if="!version.primaryVersion"
+                  class="version-delete-button"
+                  title="移除该版本"
+                  @click.stop="deleteVersion(version)"
+                >
+                  🗑️
+                </button>
+              </div>
+            </div>
+          </section>
 
           <div v-if="hasReadingProgress" class="current-reading-card">
             <div class="current-reading-icon">📖</div>
@@ -303,7 +362,7 @@
             </div>
             <div class="info-item list-item">
               <span class="info-label">格式</span>
-              <span class="info-value">{{ book.format.toUpperCase() }}</span>
+              <span class="info-value">{{ selectedVersionFormat.toUpperCase() }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">语言</span>
@@ -311,11 +370,15 @@
             </div>
             <div class="info-item list-item">
               <span class="info-label">文件大小</span>
-              <span class="info-value">{{ formatFileSize(book.fileSize) }}</span>
+              <span class="info-value">{{ formatFileSize(selectedVersion?.fileSize) }}</span>
             </div>
-            <div v-if="book.chapterCount !== undefined && book.chapterCount !== null" class="info-item list-item">
+            <div
+              v-if="selectedVersion?.chapterCount !== undefined
+                && selectedVersion?.chapterCount !== null"
+              class="info-item list-item"
+            >
               <span class="info-label">章节数</span>
-              <span class="info-value">{{ book.chapterCount }} 章</span>
+              <span class="info-value">{{ selectedVersion.chapterCount }} 章</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">添加时间</span>
@@ -422,8 +485,28 @@ interface ReadingProgress {
   lastReadAt?: string
 }
 
+interface BookVersion {
+  id: number
+  displayName: string
+  format: string
+  fileSize?: number
+  fileHash?: string
+  primaryVersion: boolean
+  chapterCount?: number
+  createdAt?: string
+}
+
 const tocItems = ref<TocItem[]>([])
 const readingProgress = ref<ReadingProgress | null>(null)
+const versions = ref<BookVersion[]>([])
+const selectedVersionId = ref<number | null>(null)
+const uploadingVersion = ref(false)
+const selectedVersion = computed(() =>
+  versions.value.find(version => version.id === selectedVersionId.value) || null,
+)
+const selectedVersionFormat = computed(() =>
+  selectedVersion.value?.format || book.value?.format || '',
+)
 const tocCurrentPage = ref(1)
 const tocPageSize = ref(20)
 const tocPageSizeOptions = [20, 50, 100]
@@ -469,6 +552,7 @@ const loadBook = async () => {
     book.value = await bookStore.fetchBookById(id)
     notes.value = book.value.notes || ''
     selectedTagIds.value = (book.value.tags || []).map((tag: any) => tag.id)
+    await loadVersions()
     await Promise.all([loadToc(), loadReadingProgress()])
     syncTocPageToCurrentChapter()
   } catch (error) {
@@ -478,10 +562,26 @@ const loadBook = async () => {
   }
 }
 
-const loadReadingProgress = async () => {
+const loadVersions = async () => {
   if (!book.value) return
+  const response = await api.get(`/api/books/${book.value.id}/versions`)
+  versions.value = response.data || []
+  const requestedVersionId = Number(route.query.versionId)
+  const requestedVersion = versions.value.find(version => version.id === requestedVersionId)
+  const currentVersion = versions.value.find(version => version.id === selectedVersionId.value)
+  selectedVersionId.value = requestedVersion?.id
+    || currentVersion?.id
+    || versions.value.find(version => version.primaryVersion)?.id
+    || versions.value[0]?.id
+    || null
+}
+
+const loadReadingProgress = async () => {
+  if (!book.value || !selectedVersionId.value) return
   try {
-    const response = await api.get(`/api/reading-progress/book/${book.value.id}`)
+    const response = await api.get(`/api/reading-progress/book/${book.value.id}`, {
+      params: { versionId: selectedVersionId.value },
+    })
     readingProgress.value = response.data || null
   } catch (error) {
     readingProgress.value = null
@@ -507,16 +607,23 @@ const syncTocPageToCurrentChapter = () => {
 }
 
 const handleRead = () => {
-  router.push(`/reader/${book.value.id}`)
+  router.push({
+    path: `/reader/${book.value.id}`,
+    query: selectedVersionId.value
+      ? { versionId: String(selectedVersionId.value) }
+      : undefined,
+  })
 }
 
 const loadToc = async () => {
-  if (!book.value) return
+  if (!book.value || !selectedVersionId.value) return
   tocLoading.value = true
   tocError.value = ''
   tocCurrentPage.value = 1
   try {
-    const response = await api.get(`/api/books/${book.value.id}/toc`)
+    const response = await api.get(`/api/books/${book.value.id}/toc`, {
+      params: { versionId: selectedVersionId.value },
+    })
     tocItems.value = response.data || []
   } catch (error: any) {
     tocItems.value = []
@@ -531,13 +638,75 @@ const handleTocPageSizeChange = () => {
 }
 
 const openChapter = (chapter: TocItem) => {
-  const query = book.value.format === 'epub' && chapter.href
+  const query: Record<string, string> = selectedVersionFormat.value === 'epub' && chapter.href
     ? { chapterHref: chapter.href }
     : { chapterTitle: chapter.title }
+  if (selectedVersionId.value) {
+    query.versionId = String(selectedVersionId.value)
+  }
   router.push({
     path: `/reader/${book.value.id}`,
     query,
   })
+}
+
+const selectVersion = async (versionId: number) => {
+  if (versionId === selectedVersionId.value) return
+  selectedVersionId.value = versionId
+  readingProgress.value = null
+  await router.replace({
+    query: { ...route.query, versionId: String(versionId) },
+  })
+  await Promise.all([loadToc(), loadReadingProgress()])
+  syncTocPageToCurrentChapter()
+}
+
+const handleVersionUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !book.value) return
+
+  uploadingVersion.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await api.post(
+      `/api/books/${book.value.id}/versions`,
+      formData,
+    )
+    await loadVersions()
+    await selectVersion(response.data.id)
+    message.success('新版本已添加')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '版本上传失败')
+  } finally {
+    uploadingVersion.value = false
+    input.value = ''
+  }
+}
+
+const deleteVersion = async (version: BookVersion) => {
+  const approved = await confirm(
+    `确定移除版本“${version.displayName}”吗？\n\n只移除版本记录，不会删除原始文件。`,
+  )
+  if (!approved || !book.value) return
+
+  try {
+    await api.delete(`/api/books/${book.value.id}/versions/${version.id}`)
+    const wasSelected = version.id === selectedVersionId.value
+    await loadVersions()
+    if (wasSelected && selectedVersionId.value) {
+      await router.replace({
+        query: { ...route.query, versionId: String(selectedVersionId.value) },
+      })
+      readingProgress.value = null
+      await Promise.all([loadToc(), loadReadingProgress()])
+      syncTocPageToCurrentChapter()
+    }
+    message.success('版本已移除')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '移除版本失败')
+  }
 }
 
 const handleToggleFavorite = async () => {
@@ -727,6 +896,7 @@ const handleReparse = async () => {
     const result = await response.json()
     if (result.success) {
       book.value.chapterInfo = result.chapterInfo
+      await loadVersions()
       await loadToc()
       message.success('章节解析完成')
     } else {
@@ -1128,6 +1298,144 @@ onMounted(() => {
   margin-bottom: var(--spacing-lg);
 }
 
+.version-panel {
+  max-width: 760px;
+  margin-bottom: var(--spacing-lg);
+  padding: 16px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
+}
+
+.version-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: 12px;
+}
+
+.version-panel-header h2 {
+  margin: 0 0 4px;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.version-panel-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.version-upload-button {
+  flex-shrink: 0;
+}
+
+.version-upload-button.disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.version-upload-button input {
+  display: none;
+}
+
+.version-list {
+  display: grid;
+  gap: 8px;
+}
+
+.version-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  cursor: pointer;
+  transition: border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.version-item:hover,
+.version-item.active {
+  border-color: var(--primary);
+  background: var(--primary-alpha-10);
+}
+
+.version-item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.version-format {
+  display: flex;
+  width: 48px;
+  height: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.version-content {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+  text-align: left;
+}
+
+.version-content strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-content span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.version-primary-badge,
+.version-selected-badge {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+}
+
+.version-primary-badge {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.version-selected-badge {
+  background: var(--primary);
+  color: white;
+}
+
+.version-delete-button {
+  flex-shrink: 0;
+  padding: 5px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+.version-delete-button:hover {
+  background: rgba(255, 59, 48, 0.1);
+}
+
 .current-reading-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1378,6 +1686,20 @@ onMounted(() => {
   .current-reading-meta {
     grid-column: 2;
     justify-content: space-between;
+  }
+
+  .version-panel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .version-upload-button {
+    justify-content: center;
+  }
+
+  .version-primary-badge,
+  .version-selected-badge {
+    display: none;
   }
 
   .toc-pagination {

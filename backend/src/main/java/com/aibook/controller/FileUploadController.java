@@ -3,6 +3,7 @@ package com.aibook.controller;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
+import com.aibook.repository.BookVersionRepository;
 import com.aibook.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,7 @@ import java.util.UUID;
 public class FileUploadController {
 
     private final BookRepository bookRepository;
+    private final BookVersionRepository bookVersionRepository;
     private final UserService userService;
 
     @Value("${upload.path:./uploads}")
@@ -74,7 +76,8 @@ public class FileUploadController {
                 String fileHash = calculateFileHash(filePath);
 
                 // 检查是否已存在
-                if (bookRepository.findByFileHash(fileHash).isPresent()) {
+                if (bookRepository.findByFileHash(fileHash).isPresent()
+                        || bookVersionRepository.findByFileHash(fileHash).isPresent()) {
                     Files.deleteIfExists(filePath);
                     results.add(Map.of(
                         "filename", originalFilename,
