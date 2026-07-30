@@ -114,6 +114,19 @@ public interface BookRepository extends JpaRepository<Book, Long> {
      */
     List<Book> findByUserAndDeletedAtIsNull(User user);
 
+    @Query("""
+            SELECT b.id AS id,
+                   b.title AS title,
+                   b.author AS author,
+                   b.isbn AS isbn,
+                   b.filePath AS filePath
+            FROM Book b
+            WHERE b.user.id = :userId AND b.deletedAt IS NULL
+            ORDER BY b.id
+            """)
+    List<BookVersionIdentityProjection> findVersionIdentitiesByUserId(
+            @Param("userId") Long userId);
+
     /**
      * 根据用户和文件名查找书籍（title.format）
      */

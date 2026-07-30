@@ -41,12 +41,23 @@ interface BookPage {
   size: number
 }
 
-export interface BookVersionRebuildResult {
-  scannedBooks: number
-  rebuiltGroups: number
+export interface BookVersionRebuildTask {
+  taskId: string
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'FAILED'
+  message: string
+  totalBooks: number
+  processedBooks: number
+  matchedGroups: number
+  completedGroups: number
   mergedBooks: number
   aggregatedVersions: number
-  remainingBooks: number
+  skippedBooks: number
+  failedBooks: number
+  currentBookTitle?: string
+  startedAt: number
+  finishedAt: number
+  elapsedMs: number
+  errors: string[]
 }
 
 export const useBookStore = defineStore('book', () => {
@@ -258,9 +269,14 @@ export const useBookStore = defineStore('book', () => {
     return response.data
   }
 
-  async function rebuildBookVersions() {
+  async function startBookVersionRebuild() {
     const response = await api.post('/api/books/versions/rebuild')
-    return response.data as BookVersionRebuildResult
+    return response.data as BookVersionRebuildTask
+  }
+
+  async function getBookVersionRebuildTask(taskId: string) {
+    const response = await api.get(`/api/books/versions/rebuild/${taskId}`)
+    return response.data as BookVersionRebuildTask
   }
 
   async function uploadBookCover(id: number, file: File) {
@@ -308,7 +324,8 @@ export const useBookStore = defineStore('book', () => {
     updateBookTags,
     updateBookTagsBatch,
     reparseBook,
-    rebuildBookVersions,
+    startBookVersionRebuild,
+    getBookVersionRebuildTask,
     uploadBookCover,
   }
 })

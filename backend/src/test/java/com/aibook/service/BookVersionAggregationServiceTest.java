@@ -7,6 +7,7 @@ import com.aibook.repository.BookHighlightRepository;
 import com.aibook.repository.BookListRepository;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookVersionRepository;
+import com.aibook.repository.BookVersionIdentityProjection;
 import com.aibook.repository.BookmarkRepository;
 import com.aibook.repository.ReadingProgressRepository;
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,7 @@ import static org.mockito.Mockito.when;
 class BookVersionAggregationServiceTest {
 
     @Test
-    void shouldAggregateCompatibleBooksAndKeepDifferentAuthorsSeparate() {
+    void shouldAggregateOnePairWithoutHoldingTheWholeLibrary() {
         User user = User.builder().id(7L).username("reader").build();
         Book primary = book(1L, " 三体 ", "刘慈欣", "epub", user);
         primary.setDescription("短简介");
@@ -33,11 +34,9 @@ class BookVersionAggregationServiceTest {
         duplicate.setFilePath("/books/三体-刘慈欣-精校版.pdf");
         duplicate.setDescription("这是另一个版本中更完整的内容简介");
         duplicate.setIsFavorite(true);
-        Book differentAuthor = book(3L, "三体", "其他作者", "txt", user);
 
         BookVersion primaryVersion = version(11L, primary, true);
         BookVersion duplicateVersion = version(12L, duplicate, true);
-        BookVersion differentVersion = version(13L, differentAuthor, true);
 
         BookRepository bookRepository = mock(BookRepository.class);
         BookVersionRepository versionRepository = mock(BookVersionRepository.class);
@@ -49,11 +48,10 @@ class BookVersionAggregationServiceTest {
                 mock(BookHighlightRepository.class);
         BookListRepository bookListRepository = mock(BookListRepository.class);
 
-        when(bookRepository.findByUserAndDeletedAtIsNull(user))
-                .thenReturn(List.of(primary, duplicate, differentAuthor));
+        when(bookRepository.findByIdInAndUser(List.of(1L, 2L), user))
+                .thenReturn(List.of(primary, duplicate));
         when(versionService.ensurePrimaryVersion(primary)).thenReturn(primaryVersion);
         when(versionService.ensurePrimaryVersion(duplicate)).thenReturn(duplicateVersion);
-        when(versionService.ensurePrimaryVersion(differentAuthor)).thenReturn(differentVersion);
         when(versionRepository.findByBookOrderByPrimaryVersionDescCreatedAtAsc(duplicate))
                 .thenReturn(List.of(duplicateVersion));
         when(progressRepository.findByUserAndBook(any(User.class), any(Book.class)))
@@ -71,13 +69,9 @@ class BookVersionAggregationServiceTest {
                 highlightRepository,
                 bookListRepository);
 
-        var result = service.rebuild(user);
+        int aggregatedVersions = service.aggregatePair(1L, 2L, user);
 
-        assertEquals(3, result.getScannedBooks());
-        assertEquals(1, result.getRebuiltGroups());
-        assertEquals(1, result.getMergedBooks());
-        assertEquals(1, result.getAggregatedVersions());
-        assertEquals(2, result.getRemainingBooks());
+        assertEquals(1, aggregatedVersions);
         assertSame(primary, duplicateVersion.getBook());
         assertFalse(duplicateVersion.getPrimaryVersion());
         assertNotNull(duplicate.getDeletedAt());
@@ -86,17 +80,10 @@ class BookVersionAggregationServiceTest {
                 "这是另一个版本中更完整的内容简介",
                 primary.getDescription());
         assertEquals(true, primary.getIsFavorite());
-        assertEquals(null, differentAuthor.getDeletedAt());
     }
 
     @Test
-    void shouldAggregateHighlySimilarTitlesWhenAuthorMatches() {
-        User user = User.builder().id(8L).username("reader-2").build();
-        Book primary = book(21L, "深入理解计算机系统", "Randal Bryant", "epub", user);
-        Book similar = book(22L, "深入理解计算机系統", "Randal Bryant", "pdf", user);
-        BookVersion primaryVersion = version(31L, primary, true);
-        BookVersion similarVersion = version(32L, similar, true);
-
+    void shouldBuildLightweightPlanFromFilenameSimilarityAndAuthorRules() {
         BookRepository bookRepository = mock(BookRepository.class);
         BookVersionRepository versionRepository = mock(BookVersionRepository.class);
         BookVersionService versionService = mock(BookVersionService.class);
@@ -107,19 +94,24 @@ class BookVersionAggregationServiceTest {
                 mock(BookHighlightRepository.class);
         BookListRepository bookListRepository = mock(BookListRepository.class);
 
-        when(bookRepository.findByUserAndDeletedAtIsNull(user))
-                .thenReturn(List.of(primary, similar));
-        when(versionService.ensurePrimaryVersion(primary)).thenReturn(primaryVersion);
-        when(versionService.ensurePrimaryVersion(similar)).thenReturn(similarVersion);
-        when(versionRepository.findByBookOrderByPrimaryVersionDescCreatedAtAsc(similar))
-                .thenReturn(List.of(similarVersion));
-        when(progressRepository.findByUserAndBook(any(User.class), any(Book.class)))
-                .thenReturn(Optional.empty());
-        when(bookmarkRepository.findByBook(any(Book.class))).thenReturn(List.of());
-        when(highlightRepository.findByBook(any(Book.class))).thenReturn(List.of());
-        when(bookListRepository.findByUser(user)).thenReturn(List.of());
+        List<BookVersionIdentityProjection> projections = List.of(
+                projection(21L, "三体", "刘慈欣", "/books/三体.epub"),
+                projection(22L, "扫描文件", null, "/books/三体-刘慈欣-精校版.txt"),
+                projection(23L, "三体", "其他作者", "/books/另一位作者的三体.txt"),
+                projection(
+                        24L,
+                        "深入理解计算机系统",
+                        "Randal Bryant",
+                        "/books/csapp.epub"),
+                projection(
+                        25L,
+                        "深入理解计算机系統",
+                        "Randal Bryant",
+                        "/books/csapp.pdf"));
+        when(bookRepository.findVersionIdentitiesByUserId(8L))
+                .thenReturn(projections);
 
-        var result = new BookVersionAggregationService(
+        var plan = new BookVersionAggregationService(
                 bookRepository,
                 versionRepository,
                 versionService,
@@ -127,10 +119,30 @@ class BookVersionAggregationServiceTest {
                 bookmarkRepository,
                 highlightRepository,
                 bookListRepository)
-                .rebuild(user);
+                .buildPlan(8L);
 
-        assertEquals(1, result.getMergedBooks());
-        assertSame(primary, similarVersion.getBook());
+        assertEquals(5, plan.totalBooks());
+        assertEquals(
+                List.of(21L, 22L),
+                plan.groups().stream()
+                        .filter(group -> group.bookIds().contains(21L))
+                        .findFirst()
+                        .orElseThrow()
+                        .bookIds());
+        assertEquals(
+                List.of(24L, 25L),
+                plan.groups().stream()
+                        .filter(group -> group.bookIds().contains(24L))
+                        .findFirst()
+                        .orElseThrow()
+                        .bookIds());
+        assertEquals(
+                List.of(23L),
+                plan.groups().stream()
+                        .filter(group -> group.bookIds().contains(23L))
+                        .findFirst()
+                        .orElseThrow()
+                        .bookIds());
     }
 
     private Book book(
@@ -160,5 +172,16 @@ class BookVersionAggregationServiceTest {
                 .fileHash(book.getFileHash())
                 .primaryVersion(primary)
                 .build();
+    }
+
+    private BookVersionIdentityProjection projection(
+            Long id, String title, String author, String filePath) {
+        BookVersionIdentityProjection projection =
+                mock(BookVersionIdentityProjection.class);
+        when(projection.getId()).thenReturn(id);
+        when(projection.getTitle()).thenReturn(title);
+        when(projection.getAuthor()).thenReturn(author);
+        when(projection.getFilePath()).thenReturn(filePath);
+        return projection;
     }
 }

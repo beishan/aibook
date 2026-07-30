@@ -9,12 +9,11 @@
       <div class="page-header-actions">
         <button
           class="btn"
-          :disabled="rebuildingVersions"
           title="遍历书库并自动聚合同一本书的不同文件版本"
-          @click="handleRebuildVersions"
+          @click="showVersionRebuildDialog = true"
         >
           <span>🧩</span>
-          <span>{{ rebuildingVersions ? '重建中...' : '重建多版本' }}</span>
+          <span>重建多版本</span>
         </button>
         <button class="btn recycle-bin-button" @click="showRecycleBin = true">
           <span>🗑️</span>
@@ -483,6 +482,12 @@
       :book="bookToAddToList"
       @close="closeAddToListDialog"
     />
+
+    <BookVersionRebuildDialog
+      :visible="showVersionRebuildDialog"
+      @close="showVersionRebuildDialog = false"
+      @complete="handleVersionRebuildComplete"
+    />
   </div>
 </template>
 
@@ -503,6 +508,7 @@ import BookEditDialog from '@/components/BookEditDialog.vue'
 import ScraperDialog from '@/components/ScraperDialog.vue'
 import RecycleBinDialog from '@/components/RecycleBinDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
+import BookVersionRebuildDialog from '@/components/BookVersionRebuildDialog.vue'
 import { getCoverUrl } from '@/utils/cover'
 import { scrapeBook } from '@/utils/scraper'
 
@@ -532,7 +538,7 @@ const editingBook = ref<Book | null>(null)
 const showAddToListDialog = ref(false)
 const bookToAddToList = ref<Book | null>(null)
 const processingBookId = ref<number | null>(null)
-const rebuildingVersions = ref(false)
+const showVersionRebuildDialog = ref(false)
 const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 
 // 多选相关状态
@@ -626,34 +632,10 @@ const handleUploadSuccess = () => {
   loadBooks()
 }
 
-const handleRebuildVersions = async () => {
-  const accepted = await confirm(
-    '将遍历当前书库，按 ISBN 或书名与作者自动识别同一本书，并合并为多个版本。'
-      + '\n\n被聚合的重复书籍记录将不再单独显示；书籍文件不会被移动或删除，'
-      + '阅读进度会保留到各自版本。是否继续？',
-    '重建多版本',
-  )
-  if (!accepted) return
-
-  rebuildingVersions.value = true
-  try {
-    const result = await bookStore.rebuildBookVersions()
-    currentPage.value = 1
-    selectedBooks.value.clear()
-    await loadBooks()
-    if (result.mergedBooks === 0) {
-      message.success(`已检查 ${result.scannedBooks} 本书，没有发现需要聚合的版本`)
-    } else {
-      message.success(
-        `重建完成：聚合 ${result.rebuiltGroups} 组、`
-          + `${result.mergedBooks} 本重复书籍，共归入 ${result.aggregatedVersions} 个版本`,
-      )
-    }
-  } catch (error: any) {
-    message.error(error.response?.data?.message || '重建多版本失败')
-  } finally {
-    rebuildingVersions.value = false
-  }
+const handleVersionRebuildComplete = () => {
+  currentPage.value = 1
+  selectedBooks.value.clear()
+  void loadBooks()
 }
 
 const loadBooks = async () => {

@@ -6,7 +6,7 @@ import com.aibook.dto.BookIdsRequest;
 import com.aibook.dto.BookTagsRequest;
 import com.aibook.dto.BookDTO;
 import com.aibook.dto.BookTocItemDTO;
-import com.aibook.dto.BookVersionRebuildResultDTO;
+import com.aibook.dto.BookVersionRebuildTaskDTO;
 import com.aibook.dto.ScrapeTaskDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.BookVersion;
@@ -15,7 +15,7 @@ import com.aibook.repository.BookRepository;
 import com.aibook.service.BookCoverService;
 import com.aibook.service.BookParsingService;
 import com.aibook.service.BookService;
-import com.aibook.service.BookVersionAggregationService;
+import com.aibook.service.BookVersionRebuildTaskService;
 import com.aibook.service.BookVersionService;
 import com.aibook.service.TxtParserService;
 import com.aibook.service.UserService;
@@ -71,7 +71,7 @@ public class BookController {
     private final BookParsingService bookParsingService;
     private final BookCoverService bookCoverService;
     private final BookVersionService bookVersionService;
-    private final BookVersionAggregationService bookVersionAggregationService;
+    private final BookVersionRebuildTaskService bookVersionRebuildTaskService;
 
     /**
      * 获取书籍列表
@@ -117,10 +117,18 @@ public class BookController {
      * 遍历当前用户书库，将历史独立记录中的同一本书聚合为多个版本。
      */
     @PostMapping("/versions/rebuild")
-    public ResponseEntity<BookVersionRebuildResultDTO> rebuildBookVersions(
+    public ResponseEntity<BookVersionRebuildTaskDTO> rebuildBookVersions(
             Authentication authentication) {
         User user = userService.findByUsername(authentication.getName());
-        return ResponseEntity.ok(bookVersionAggregationService.rebuild(user));
+        return ResponseEntity.accepted().body(bookVersionRebuildTaskService.start(user));
+    }
+
+    @GetMapping("/versions/rebuild/{taskId}")
+    public ResponseEntity<BookVersionRebuildTaskDTO> getBookVersionRebuildProgress(
+            Authentication authentication,
+            @PathVariable String taskId) {
+        User user = userService.findByUsername(authentication.getName());
+        return ResponseEntity.ok(bookVersionRebuildTaskService.get(taskId, user));
     }
 
     /**

@@ -1,6 +1,5 @@
 package com.aibook.service;
 
-import com.aibook.dto.BookVersionRebuildResultDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.BookHighlight;
 import com.aibook.model.entity.BookList;
@@ -11,17 +10,18 @@ import com.aibook.repository.BookHighlightRepository;
 import com.aibook.repository.BookListRepository;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookVersionRepository;
+import com.aibook.repository.BookVersionIdentityProjection;
 import com.aibook.repository.BookmarkRepository;
 import com.aibook.repository.ReadingProgressRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -46,59 +46,66 @@ public class BookVersionAggregationService {
     private final BookHighlightRepository bookHighlightRepository;
     private final BookListRepository bookListRepository;
 
-    @Transactional
-    public BookVersionRebuildResultDTO rebuild(User user) {
-        List<Book> books = bookRepository.findByUserAndDeletedAtIsNull(user).stream()
-                .sorted(Comparator.comparing(
-                        Book::getId, Comparator.nullsLast(Long::compareTo)))
+    public RebuildPlan buildPlan(Long userId) {
+        List<BookVersionIdentityProjection> identities =
+                bookRepository.findVersionIdentitiesByUserId(userId);
+        List<Book> lightweightBooks = identities.stream()
+                .map(identity -> Book.builder()
+                        .id(identity.getId())
+                        .title(identity.getTitle())
+                        .author(identity.getAuthor())
+                        .isbn(identity.getIsbn())
+                        .filePath(identity.getFilePath())
+                        .format("")
+                        .build())
                 .toList();
-        if (books.isEmpty()) {
-            return result(0, 0, 0, 0, 0);
+        List<RebuildGroup> groups = buildGroups(lightweightBooks).stream()
+                .map(group -> new RebuildGroup(
+                        group.get(0).getTitle(),
+                        group.stream().map(Book::getId).toList()))
+                .toList();
+        return new RebuildPlan(identities.size(), groups);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void ensurePrimaryVersion(Long bookId, User user) {
+        List<Book> books = bookRepository.findByIdInAndUser(List.of(bookId), user);
+        if (!books.isEmpty()) {
+            bookVersionService.ensurePrimaryVersion(books.get(0));
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int aggregatePair(Long primaryId, Long duplicateId, User user) {
+        List<Book> books = bookRepository.findByIdInAndUser(
+                List.of(primaryId, duplicateId), user);
+        Map<Long, Book> byId = books.stream()
+                .collect(java.util.stream.Collectors.toMap(Book::getId, book -> book));
+        Book primary = byId.get(primaryId);
+        Book duplicate = byId.get(duplicateId);
+        if (primary == null || duplicate == null) {
+            return 0;
         }
 
-        List<List<Book>> groups = buildGroups(books);
-        int rebuiltGroups = 0;
-        int mergedBooks = 0;
-        int aggregatedVersions = 0;
-
-        for (List<Book> group : groups) {
-            Book primary = group.get(0);
-            bookVersionService.ensurePrimaryVersion(primary);
-            if (group.size() == 1) {
-                continue;
-            }
-
-            rebuiltGroups++;
-            for (int index = 1; index < group.size(); index++) {
-                Book duplicate = group.get(index);
-                bookVersionService.ensurePrimaryVersion(duplicate);
-                List<BookVersion> duplicateVersions =
-                        bookVersionRepository
-                                .findByBookOrderByPrimaryVersionDescCreatedAtAsc(duplicate);
-                for (BookVersion version : duplicateVersions) {
-                    version.setBook(primary);
-                    version.setPrimaryVersion(false);
-                }
-                bookVersionRepository.saveAll(duplicateVersions);
-                aggregatedVersions += duplicateVersions.size();
-
-                mergeMetadata(primary, duplicate);
-                mergeReadingProgress(primary, duplicate, user);
-                moveBookmarks(primary, duplicate);
-                moveHighlights(primary, duplicate, user);
-                replaceInBookLists(primary, duplicate, user);
-                hideAggregatedBook(duplicate);
-                mergedBooks++;
-            }
-            bookRepository.save(primary);
+        bookVersionService.ensurePrimaryVersion(primary);
+        bookVersionService.ensurePrimaryVersion(duplicate);
+        List<BookVersion> duplicateVersions =
+                bookVersionRepository
+                        .findByBookOrderByPrimaryVersionDescCreatedAtAsc(duplicate);
+        for (BookVersion version : duplicateVersions) {
+            version.setBook(primary);
+            version.setPrimaryVersion(false);
         }
+        bookVersionRepository.saveAll(duplicateVersions);
 
-        return result(
-                books.size(),
-                rebuiltGroups,
-                mergedBooks,
-                aggregatedVersions,
-                books.size() - mergedBooks);
+        mergeMetadata(primary, duplicate);
+        mergeReadingProgress(primary, duplicate, user);
+        moveBookmarks(primary, duplicate);
+        moveHighlights(primary, duplicate, user);
+        replaceInBookLists(primary, duplicate, user);
+        hideAggregatedBook(duplicate);
+        bookRepository.save(primary);
+        return duplicateVersions.size();
     }
 
     private List<List<Book>> buildGroups(List<Book> books) {
@@ -484,20 +491,9 @@ public class BookVersionAggregationService {
         bookRepository.save(duplicate);
     }
 
-    private BookVersionRebuildResultDTO result(
-            int scannedBooks,
-            int rebuiltGroups,
-            int mergedBooks,
-            int aggregatedVersions,
-            int remainingBooks) {
-        return BookVersionRebuildResultDTO.builder()
-                .scannedBooks(scannedBooks)
-                .rebuiltGroups(rebuiltGroups)
-                .mergedBooks(mergedBooks)
-                .aggregatedVersions(aggregatedVersions)
-                .remainingBooks(remainingBooks)
-                .build();
-    }
+    public record RebuildPlan(int totalBooks, List<RebuildGroup> groups) {}
+
+    public record RebuildGroup(String primaryTitle, List<Long> bookIds) {}
 
     private static final class UnionFind {
         private final int[] parent;
