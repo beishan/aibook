@@ -1697,6 +1697,10 @@ onMounted(() => {
   font-size: var(--font-size-base);
 }
 
+.book-description > p {
+  white-space: pre-line;
+}
+
 .no-description {
   display: flex;
   flex-direction: column;

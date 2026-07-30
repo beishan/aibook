@@ -462,12 +462,12 @@ public class BookParsingService {
                 new String(content, StandardCharsets.UTF_8));
         document.select("script, style, nav").remove();
         List<String> paragraphs = document.select("p").stream()
-                .map(org.jsoup.nodes.Element::text)
-                .map(String::trim)
+                .map(org.jsoup.nodes.Element::wholeText)
+                .map(this::normalizeWhitespace)
                 .filter(value -> !value.isBlank())
                 .toList();
         String description = paragraphs.isEmpty()
-                ? document.body().text()
+                ? document.body().wholeText()
                 : String.join("\n\n", paragraphs);
         description = normalizeWhitespace(description);
         if (chapter.title() != null && !chapter.title().isBlank()) {
@@ -488,18 +488,31 @@ public class BookParsingService {
         if (value == null || value.isBlank()) {
             return null;
         }
-        String normalized = Jsoup.parseBodyFragment(value).text();
+        var document = Jsoup.parseBodyFragment(value);
+        document.select("script, style").remove();
+        List<String> paragraphs = document.select("p").stream()
+                .map(org.jsoup.nodes.Element::wholeText)
+                .map(this::normalizeWhitespace)
+                .filter(paragraph -> !paragraph.isBlank())
+                .toList();
+        String normalized = paragraphs.isEmpty()
+                ? document.body().wholeText()
+                : String.join("\n\n", paragraphs);
         normalized = normalizeWhitespace(normalized);
         return normalized.isBlank() ? null : normalized;
     }
 
     private String normalizeWhitespace(String value) {
-        return value == null
-                ? null
-                : value.replace('\u00A0', ' ')
-                        .replaceAll("[\\t\\x0B\\f\\r ]+", " ")
-                        .replaceAll(" *\\n+ *", "\n\n")
-                        .trim();
+        if (value == null) {
+            return null;
+        }
+        return value.replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .replace('\u00A0', ' ')
+                .replaceAll("[\\t\\x0B\\f\\p{Zs}]+", " ")
+                .replaceAll(" *\\n *", "\n")
+                .replaceAll("\\n{3,}", "\n\n")
+                .trim();
     }
 
     private boolean isMeaningfulDescription(String value) {

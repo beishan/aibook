@@ -183,6 +183,10 @@ class BookParsingServiceTest {
                       <body>
                         <h1>内容简介</h1>
                         <p>这是从 EPUB 简介章节提取的第一段内容。</p>
+                        <p>   </p>
+                        <p>
+
+                        </p>
                         <p>第二段内容会保留为独立段落。</p>
                       </body>
                     </html>
@@ -223,7 +227,11 @@ class BookParsingServiceTest {
                     <?xml version="1.0"?>
                     <package xmlns="http://www.idpf.org/2007/opf">
                       <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-                        <dc:description><![CDATA[<p>来自元数据的<strong>内容简介</strong>，应优先使用。</p>]]></dc:description>
+                        <dc:description><![CDATA[
+                          <p>来自元数据的<strong>内容简介</strong>，应优先使用。</p>
+                          <p></p><p>   </p>
+                          <p>多余的空段落会被忽略。</p>
+                        ]]></dc:description>
                       </metadata>
                       <manifest/>
                       <spine/>
@@ -239,7 +247,7 @@ class BookParsingServiceTest {
         BookParsingService.ParseResult result = service().reparse(book);
 
         assertEquals(
-                "来自元数据的内容简介，应优先使用。",
+                "来自元数据的内容简介，应优先使用。\n\n多余的空段落会被忽略。",
                 result.getBook().getDescription());
     }
 
