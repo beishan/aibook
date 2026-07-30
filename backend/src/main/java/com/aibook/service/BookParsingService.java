@@ -10,6 +10,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Jsoup;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +46,9 @@ import java.util.zip.ZipFile;
 @Slf4j
 public class BookParsingService {
 
+    private static final int MAX_DESCRIPTION_CHAPTER_BYTES = 2 * 1024 * 1024;
+    private static final int MAX_DESCRIPTION_LENGTH = 3000;
+
     private final BookRepository bookRepository;
     private final TxtParserService txtParserService;
     private final ObjectMapper objectMapper;
@@ -72,7 +76,7 @@ public class BookParsingService {
             Book saved = bookRepository.save(book);
             String message = switch (format) {
                 case "txt", "md" -> "文本信息与章节已重新解析";
-                case "epub" -> "EPUB 元数据与章节数已重新解析";
+                case "epub" -> "EPUB 元数据、内容简介与章节已重新解析";
                 default -> "文件信息已刷新，当前格式暂不支持章节解析";
             };
             return ParseResult.builder()
@@ -135,7 +139,18 @@ public class BookParsingService {
                             updatedFields);
                 }
             }
-            updateIfPresent(book.getDescription(), text(opf, "description"), book::setDescription, "description", updatedFields);
+            Map<String, ManifestItem> manifest = readManifest(opf);
+            String description = normalizeDescription(text(opf, "description"));
+            if (!isMeaningfulDescription(description)) {
+                description = extractEpubDescription(
+                        zipFile, opfPath, opf, manifest);
+            }
+            updateIfPresent(
+                    book.getDescription(),
+                    description,
+                    book::setDescription,
+                    "description",
+                    updatedFields);
 
             int chapterCount = opf.getElementsByTagNameNS("*", "itemref").getLength();
             book.setChapterCount(chapterCount);
@@ -287,6 +302,209 @@ public class BookParsingService {
                 .filter(item -> "application/x-dtbncx+xml".equals(item.mediaType()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private String extractEpubDescription(
+            ZipFile zipFile,
+            String opfPath,
+            Document opf,
+            Map<String, ManifestItem> manifest) {
+        try {
+            DescriptionChapter best = null;
+
+            ManifestItem navigation = manifest.values().stream()
+                    .filter(item -> containsToken(item.properties(), "nav"))
+                    .findFirst()
+                    .orElse(null);
+            if (navigation != null) {
+                String navigationPath = resolveZipPath(opfPath, navigation.href());
+                Document navigationDocument = parseXml(zipFile, navigationPath);
+                NodeList links = navigationDocument.getElementsByTagNameNS("*", "a");
+                for (int index = 0; index < links.getLength(); index++) {
+                    Element link = (Element) links.item(index);
+                    best = betterDescriptionChapter(
+                            best,
+                            link.getTextContent(),
+                            link.getAttribute("href"),
+                            navigationPath);
+                }
+            }
+
+            ManifestItem ncx = findNcxItem(opf, manifest);
+            if (ncx != null) {
+                String ncxPath = resolveZipPath(opfPath, ncx.href());
+                Document ncxDocument = parseXml(zipFile, ncxPath);
+                NodeList points = ncxDocument.getElementsByTagNameNS("*", "navPoint");
+                for (int index = 0; index < points.getLength(); index++) {
+                    Element point = (Element) points.item(index);
+                    NodeList labels = point.getElementsByTagNameNS("*", "navLabel");
+                    NodeList contents = point.getElementsByTagNameNS("*", "content");
+                    if (labels.getLength() == 0 || contents.getLength() == 0) {
+                        continue;
+                    }
+                    best = betterDescriptionChapter(
+                            best,
+                            labels.item(0).getTextContent(),
+                            ((Element) contents.item(0)).getAttribute("src"),
+                            ncxPath);
+                }
+            }
+
+            for (ManifestItem item : manifest.values()) {
+                if (!isHtmlItem(item)) {
+                    continue;
+                }
+                int score = descriptionChapterScore(item.id() + " " + item.href());
+                if (score < 0 || (best != null && score <= best.score())) {
+                    continue;
+                }
+                best = new DescriptionChapter(
+                        item.id(),
+                        resolveZipPath(opfPath, item.href()),
+                        score);
+            }
+
+            return best == null
+                    ? null
+                    : readDescriptionChapter(zipFile, best);
+        } catch (Exception exception) {
+            log.warn("从 EPUB 简介章节提取内容失败: {}", exception.getMessage());
+            return null;
+        }
+    }
+
+    private DescriptionChapter betterDescriptionChapter(
+            DescriptionChapter current,
+            String title,
+            String href,
+            String containingEntryPath) {
+        int score = descriptionChapterScore(title);
+        if (score < 0 || href == null || href.isBlank()
+                || (current != null && score <= current.score())) {
+            return current;
+        }
+        return new DescriptionChapter(
+                title.trim(),
+                resolveZipPath(containingEntryPath, href),
+                score);
+    }
+
+    private int descriptionChapterScore(String title) {
+        if (title == null || title.isBlank()) {
+            return -1;
+        }
+        String normalized = title.toLowerCase(Locale.ROOT)
+                .replaceAll("[\\s\\p{P}\\p{S}]+", "");
+        if (normalized.contains("作者简介")
+                || normalized.contains("译者简介")
+                || normalized.contains("人物简介")) {
+            return -1;
+        }
+        if (normalized.equals("内容简介")
+                || normalized.equals("书籍简介")
+                || normalized.equals("图书简介")
+                || normalized.equals("本书简介")
+                || normalized.equals("作品简介")
+                || normalized.equals("内容提要")
+                || normalized.equals("内容梗概")) {
+            return 120;
+        }
+        if (normalized.contains("内容简介")
+                || normalized.contains("书籍简介")
+                || normalized.contains("图书简介")
+                || normalized.contains("本书简介")
+                || normalized.contains("作品简介")
+                || normalized.contains("内容提要")
+                || normalized.contains("内容梗概")) {
+            return 110;
+        }
+        if (normalized.equals("aboutthisbook")
+                || normalized.equals("bookdescription")
+                || normalized.equals("synopsis")
+                || normalized.equals("summary")) {
+            return 100;
+        }
+        if (normalized.equals("简介")
+                || normalized.equals("description")
+                || normalized.equals("introduction")) {
+            return 90;
+        }
+        if (normalized.contains("aboutthisbook")
+                || normalized.contains("bookdescription")
+                || normalized.contains("synopsis")
+                || normalized.contains("summary")) {
+            return 80;
+        }
+        return -1;
+    }
+
+    private boolean isHtmlItem(ManifestItem item) {
+        return "application/xhtml+xml".equalsIgnoreCase(item.mediaType())
+                || "text/html".equalsIgnoreCase(item.mediaType());
+    }
+
+    private String readDescriptionChapter(
+            ZipFile zipFile, DescriptionChapter chapter) throws Exception {
+        ZipEntry entry = zipFile.getEntry(chapter.entryPath());
+        if (entry == null
+                || entry.getSize() > MAX_DESCRIPTION_CHAPTER_BYTES) {
+            return null;
+        }
+        byte[] content;
+        try (InputStream input = zipFile.getInputStream(entry)) {
+            content = input.readNBytes(MAX_DESCRIPTION_CHAPTER_BYTES + 1);
+        }
+        if (content.length > MAX_DESCRIPTION_CHAPTER_BYTES) {
+            return null;
+        }
+
+        var document = Jsoup.parse(
+                new String(content, StandardCharsets.UTF_8));
+        document.select("script, style, nav").remove();
+        List<String> paragraphs = document.select("p").stream()
+                .map(org.jsoup.nodes.Element::text)
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .toList();
+        String description = paragraphs.isEmpty()
+                ? document.body().text()
+                : String.join("\n\n", paragraphs);
+        description = normalizeWhitespace(description);
+        if (chapter.title() != null && !chapter.title().isBlank()) {
+            description = description.replaceFirst(
+                    "^\\s*" + java.util.regex.Pattern.quote(chapter.title().trim())
+                            + "\\s*[:：]?\\s*",
+                    "");
+        }
+        if (!isMeaningfulDescription(description)) {
+            return null;
+        }
+        return description.length() > MAX_DESCRIPTION_LENGTH
+                ? description.substring(0, MAX_DESCRIPTION_LENGTH).trim() + "…"
+                : description;
+    }
+
+    private String normalizeDescription(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = Jsoup.parseBodyFragment(value).text();
+        normalized = normalizeWhitespace(normalized);
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    private String normalizeWhitespace(String value) {
+        return value == null
+                ? null
+                : value.replace('\u00A0', ' ')
+                        .replaceAll("[\\t\\x0B\\f\\r ]+", " ")
+                        .replaceAll(" *\\n+ *", "\n\n")
+                        .trim();
+    }
+
+    private boolean isMeaningfulDescription(String value) {
+        return value != null
+                && value.replaceAll("\\s+", "").length() >= 12;
     }
 
     private List<BookTocItemDTO> readNcxNavigation(
@@ -442,10 +660,10 @@ public class BookParsingService {
         return false;
     }
 
-    private String resolveZipPath(String opfPath, String href) {
+    private String resolveZipPath(String containingEntryPath, String href) {
         String cleanHref = URLDecoder.decode(
                 href.split("#", 2)[0], StandardCharsets.UTF_8);
-        Path parent = Paths.get(opfPath).getParent();
+        Path parent = Paths.get(containingEntryPath).getParent();
         Path resolved = parent == null
                 ? Paths.get(cleanHref).normalize()
                 : parent.resolve(cleanHref).normalize();
@@ -518,6 +736,9 @@ public class BookParsingService {
 
     private record ManifestItem(
             String id, String href, String mediaType, String properties) {}
+
+    private record DescriptionChapter(
+            String title, String entryPath, int score) {}
 
     @Data
     @Builder

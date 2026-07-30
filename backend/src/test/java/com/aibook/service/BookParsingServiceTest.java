@@ -131,6 +131,119 @@ class BookParsingServiceTest {
     }
 
     @Test
+    void shouldExtractDescriptionFromEpubIntroductionChapter() throws Exception {
+        Path file = tempDir.resolve("description-chapter.epub");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(file))) {
+            addEntry(zip, "META-INF/container.xml", """
+                    <?xml version="1.0"?>
+                    <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+                      <rootfiles>
+                        <rootfile full-path="OEBPS/content.opf"/>
+                      </rootfiles>
+                    </container>
+                    """);
+            addEntry(zip, "OEBPS/content.opf", """
+                    <?xml version="1.0"?>
+                    <package xmlns="http://www.idpf.org/2007/opf">
+                      <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                        <dc:title>带简介章节的书</dc:title>
+                      </metadata>
+                      <manifest>
+                        <item id="navigation" href="navigation/nav.xhtml"
+                              media-type="application/xhtml+xml" properties="nav"/>
+                        <item id="introduction" href="text/introduction.xhtml"
+                              media-type="application/xhtml+xml"/>
+                        <item id="chapter1" href="text/chapter1.xhtml"
+                              media-type="application/xhtml+xml"/>
+                      </manifest>
+                      <spine>
+                        <itemref idref="introduction"/>
+                        <itemref idref="chapter1"/>
+                      </spine>
+                    </package>
+                    """);
+            addEntry(zip, "OEBPS/navigation/nav.xhtml", """
+                    <?xml version="1.0"?>
+                    <html xmlns="http://www.w3.org/1999/xhtml"
+                          xmlns:epub="http://www.idpf.org/2007/ops">
+                      <body>
+                        <nav epub:type="toc">
+                          <ol>
+                            <li><a href="../text/introduction.xhtml">内容简介</a></li>
+                            <li><a href="../text/chapter1.xhtml">第一章</a></li>
+                          </ol>
+                        </nav>
+                      </body>
+                    </html>
+                    """);
+            addEntry(zip, "OEBPS/text/introduction.xhtml", """
+                    <?xml version="1.0"?>
+                    <html xmlns="http://www.w3.org/1999/xhtml">
+                      <head><title>内容简介</title></head>
+                      <body>
+                        <h1>内容简介</h1>
+                        <p>这是从 EPUB 简介章节提取的第一段内容。</p>
+                        <p>第二段内容会保留为独立段落。</p>
+                      </body>
+                    </html>
+                    """);
+            addEntry(zip, "OEBPS/text/chapter1.xhtml", """
+                    <html xmlns="http://www.w3.org/1999/xhtml">
+                      <body><p>正文内容</p></body>
+                    </html>
+                    """);
+        }
+        Book book = Book.builder()
+                .title("旧书名")
+                .format("epub")
+                .filePath(file.toString())
+                .build();
+
+        BookParsingService.ParseResult result = service().reparse(book);
+
+        assertEquals(
+                "这是从 EPUB 简介章节提取的第一段内容。\n\n第二段内容会保留为独立段落。",
+                result.getBook().getDescription());
+        assertTrue(result.getUpdatedFields().contains("description"));
+    }
+
+    @Test
+    void shouldPreferAndNormalizeEpubMetadataDescription() throws Exception {
+        Path file = tempDir.resolve("metadata-description.epub");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(file))) {
+            addEntry(zip, "META-INF/container.xml", """
+                    <?xml version="1.0"?>
+                    <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+                      <rootfiles>
+                        <rootfile full-path="content.opf"/>
+                      </rootfiles>
+                    </container>
+                    """);
+            addEntry(zip, "content.opf", """
+                    <?xml version="1.0"?>
+                    <package xmlns="http://www.idpf.org/2007/opf">
+                      <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                        <dc:description><![CDATA[<p>来自元数据的<strong>内容简介</strong>，应优先使用。</p>]]></dc:description>
+                      </metadata>
+                      <manifest/>
+                      <spine/>
+                    </package>
+                    """);
+        }
+        Book book = Book.builder()
+                .title("元数据简介测试")
+                .format("epub")
+                .filePath(file.toString())
+                .build();
+
+        BookParsingService.ParseResult result = service().reparse(book);
+
+        assertEquals(
+                "来自元数据的内容简介，应优先使用。",
+                result.getBook().getDescription());
+    }
+
+    @Test
     void shouldReadNcxWithStandardDoctypeWithoutLoadingExternalDtd() throws Exception {
         Path file = tempDir.resolve("ncx-doctype.epub");
         try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(file))) {

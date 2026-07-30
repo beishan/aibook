@@ -32,12 +32,11 @@
                   🖼️ {{ downloadingCover ? '下载中...' : '下载封面' }}
                 </el-dropdown-item>
                 <el-dropdown-item
-                  v-if="selectedVersion?.primaryVersion
-                    && (selectedVersionFormat === 'txt' || selectedVersionFormat === 'md')"
-                  command="reparse"
+                  v-if="selectedVersion?.primaryVersion"
+                  command="reparse-book"
                   :disabled="reparsing"
                 >
-                  📑 {{ reparsing ? '解析中...' : '重新解析章节' }}
+                  🔄 {{ reparsing ? '解析中...' : '重新解析书籍' }}
                 </el-dropdown-item>
                 <el-dropdown-item divided command="delete">
                   <span class="danger-menu-item">🗑️ 移入回收站</span>
@@ -307,7 +306,20 @@
         <div v-show="activeTab === 'description'" class="tab-content">
           <div class="book-description">
             <p v-if="book.description">{{ book.description }}</p>
-            <p v-else class="no-description">暂无简介</p>
+            <div v-else class="no-description">
+              <span>暂无简介</span>
+              <button
+                v-if="selectedVersion?.primaryVersion"
+                class="btn btn-sm"
+                :disabled="reparsing"
+                @click="handleReparseBook"
+              >
+                🔄 {{ reparsing ? '解析中...' : '重新解析书籍' }}
+              </button>
+              <small v-if="selectedVersionFormat === 'epub'">
+                可尝试从 EPUB 的简介章节中提取。
+              </small>
+            </div>
           </div>
         </div>
 
@@ -326,7 +338,7 @@
             <span class="toc-empty-icon">📑</span>
             <p>这本书暂未解析出章节目录</p>
             <span class="toc-empty-hint">
-              EPUB、TXT 和 Markdown 格式可通过“重新解析”更新目录。
+              EPUB、TXT 和 Markdown 格式可通过“重新解析书籍”更新目录。
             </span>
           </div>
           <div v-else class="book-toc">
@@ -651,8 +663,8 @@ const handleBookActionCommand = (command: string) => {
     case 'cover':
       void handleDownloadCover()
       break
-    case 'reparse':
-      void handleReparse()
+    case 'reparse-book':
+      void handleReparseBook()
       break
     case 'delete':
       void handleDelete()
@@ -929,26 +941,15 @@ const handleDownloadCover = async () => {
   }
 }
 
-const handleReparse = async () => {
-  if (!book.value) return
+const handleReparseBook = async () => {
+  if (!book.value || !selectedVersion.value?.primaryVersion) return
   reparsing.value = true
   try {
-    const token = localStorage.getItem('token')
-    const response = await fetch(`/api/books/${book.value.id}/parse-chapters`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    const result = await response.json()
-    if (result.success) {
-      book.value.chapterInfo = result.chapterInfo
-      await loadVersions()
-      await loadToc()
-      message.success('章节解析完成')
-    } else {
-      message.error(result.message || '解析失败')
-    }
-  } catch {
-    message.error('解析失败')
+    const result = await bookStore.reparseBook(book.value.id)
+    await loadBook()
+    message.success(result.message || '书籍重新解析完成')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '书籍重新解析失败')
   } finally {
     reparsing.value = false
   }
@@ -1697,8 +1698,15 @@ onMounted(() => {
 }
 
 .no-description {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
   color: var(--text-tertiary);
-  font-style: italic;
+}
+
+.no-description small {
+  color: var(--text-tertiary);
 }
 
 /* 信息列表 */
