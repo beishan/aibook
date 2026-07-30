@@ -19,6 +19,8 @@ public interface BookmarkRepository extends JpaRepository<Bookmark, Long> {
      */
     List<Bookmark> findByUserAndBookOrderByCreatedAtDesc(User user, Book book);
 
+    List<Bookmark> findByBook(Book book);
+
     /**
      * 删除用户在某本书中的指定书签
      */

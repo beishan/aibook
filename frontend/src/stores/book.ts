@@ -41,6 +41,14 @@ interface BookPage {
   size: number
 }
 
+export interface BookVersionRebuildResult {
+  scannedBooks: number
+  rebuiltGroups: number
+  mergedBooks: number
+  aggregatedVersions: number
+  remainingBooks: number
+}
+
 export const useBookStore = defineStore('book', () => {
   const books = ref<Book[]>([])
   const currentBook = ref<Book | null>(null)
@@ -250,6 +258,11 @@ export const useBookStore = defineStore('book', () => {
     return response.data
   }
 
+  async function rebuildBookVersions() {
+    const response = await api.post('/api/books/versions/rebuild')
+    return response.data as BookVersionRebuildResult
+  }
+
   async function uploadBookCover(id: number, file: File) {
     const formData = new FormData()
     formData.append('file', file)
@@ -295,6 +308,7 @@ export const useBookStore = defineStore('book', () => {
     updateBookTags,
     updateBookTagsBatch,
     reparseBook,
+    rebuildBookVersions,
     uploadBookCover,
   }
 })

@@ -20,6 +20,8 @@ public interface BookHighlightRepository extends JpaRepository<BookHighlight, Lo
      */
     List<BookHighlight> findByUserAndBookOrderByCreatedAtDesc(User user, Book book);
 
+    List<BookHighlight> findByBook(Book book);
+
     /**
      * 根据 CFI 范围查找高亮（用于去重）
      */
