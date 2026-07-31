@@ -26,7 +26,10 @@ public class BookListService {
      */
     @Transactional(readOnly = true)
     public List<BookList> getBookLists(User user) {
-        return bookListRepository.findByUser(user);
+        List<BookList> bookLists = bookListRepository.findByUser(user);
+        // 对话框需要根据成员书籍判断“已加入”状态，必须在事务内加载懒集合。
+        bookLists.forEach(bookList -> bookList.getBooks().size());
+        return bookLists;
     }
 
     /**
