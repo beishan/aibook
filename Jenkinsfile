@@ -26,12 +26,12 @@ pipeline {
         )
         string(
             name: 'FONTS_PATH',
-            defaultValue: '',
+            defaultValue: '/vol1/1000/books/fonts',
             description: '可选主字体目录宿主机路径；配置后只读映射到 /fontfolder'
         )
         string(
             name: 'FONTS_GID',
-            defaultValue: '',
+            defaultValue: '1001',
             description: '主字体目录所属用户组 GID；配置 FONTS_PATH 时必填'
         )
         text(
