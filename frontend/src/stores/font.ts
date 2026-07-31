@@ -26,6 +26,12 @@ export interface FontScanDirectory {
   lastError?: string
 }
 
+export interface FontDirectoryNode {
+  name: string
+  path: string
+  leaf: boolean
+}
+
 interface LoadedFont {
   family: string
   objectUrl: string
@@ -63,6 +69,14 @@ export const useFontStore = defineStore('fonts', () => {
   const fetchDirectories = async () => {
     const { data } = await api.get<FontScanDirectory[]>('/api/font-scan-directories')
     directories.value = data
+    return data
+  }
+
+  const browseDirectories = async (path?: string) => {
+    const { data } = await api.get<FontDirectoryNode[]>(
+      '/api/font-scan-directories/tree',
+      { params: path ? { path } : undefined }
+    )
     return data
   }
 
@@ -200,6 +214,7 @@ export const useFontStore = defineStore('fonts', () => {
     availableFonts,
     fetchFonts,
     fetchDirectories,
+    browseDirectories,
     getFont,
     cssFamily,
     loadFont,

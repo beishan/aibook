@@ -21,13 +21,13 @@
             >
               性能模式
             </span>
-          </div>
-          <div class="reader-title-meta">
-            <span class="reader-current-chapter" :title="headerChapterName">
-              {{ headerChapterName }}
-            </span>
-            <span class="reader-title-separator">·</span>
-            <span class="reader-header-progress">{{ headerProgress }}%</span>
+            <div class="reader-title-meta">
+              <span class="reader-current-chapter" :title="headerChapterName">
+                {{ headerChapterName }}
+              </span>
+              <span class="reader-title-separator">·</span>
+              <span class="reader-header-progress">{{ headerProgress }}%</span>
+            </div>
           </div>
         </div>
         <div class="reader-actions">
@@ -2034,32 +2034,32 @@ onBeforeUnmount(() => {
 
 .reader-title {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   justify-content: center;
-  gap: 3px;
   color: var(--text-primary);
   flex: 0 1 auto;
-  text-align: center;
   overflow: hidden;
   padding: 7px var(--spacing-md);
   margin: 0 var(--spacing-md);
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   pointer-events: auto;
-  width: min(46vw, 620px);
+  width: min(56vw, 760px);
 }
 
 .reader-title-main {
   display: flex;
+  flex: 1;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
   min-width: 0;
 }
 
 .reader-book-name {
   overflow: hidden;
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: var(--font-size-base);
   font-weight: 600;
   text-overflow: ellipsis;
@@ -2081,9 +2081,12 @@ onBeforeUnmount(() => {
 
 .reader-title-meta {
   display: flex;
+  flex: 0 1 42%;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 6px;
+  max-width: 42%;
+  margin-left: auto;
   min-width: 0;
   color: var(--text-secondary);
   font-size: 12px;
@@ -2669,9 +2672,7 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: transparent;
   display: flex;
   justify-content: flex-end;
   z-index: 2000;

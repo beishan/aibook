@@ -31,6 +31,21 @@
         </div>
       </div>
 
+      <div v-if="!tagStore.loading && tagStore.tags.length > 0" class="tag-list-tools">
+        <el-input
+          v-model="searchKeyword"
+          clearable
+          class="tag-search-input"
+          placeholder="输入标签名称进行模糊查询"
+          aria-label="查询标签"
+        >
+          <template #prefix>🔍</template>
+        </el-input>
+        <span class="query-result-count">
+          {{ searchKeyword.trim() ? `找到 ${filteredTags.length} 个标签` : `共 ${filteredTags.length} 个标签` }}
+        </span>
+      </div>
+
       <div v-if="tagStore.loading" class="loading">
         <div class="loading-spinner"></div>
         <p>正在加载标签...</p>
@@ -42,23 +57,40 @@
         <button class="btn btn-primary" @click="openCreate">创建第一个标签</button>
       </div>
 
-      <div v-else class="tag-list">
-        <div v-for="tag in tagStore.tags" :key="tag.id" class="tag-row">
-          <div class="tag-main">
-            <span
-              class="tag-preview"
-              :style="tagStyle(tag.color)"
-            >
-              {{ tag.name }}
-            </span>
-          </div>
-          <span class="tag-count">{{ tag.bookCount || 0 }} 本</span>
-          <div class="tag-actions">
-            <button class="btn btn-text" @click="openEdit(tag)">编辑</button>
-            <button class="btn btn-text btn-danger" @click="removeTag(tag)">删除</button>
+      <div v-else-if="filteredTags.length === 0" class="empty query-empty">
+        <div class="empty-icon">🔍</div>
+        <p>未找到名称中包含“{{ searchKeyword.trim() }}”的标签</p>
+        <button class="btn" @click="searchKeyword = ''">清除查询</button>
+      </div>
+
+      <template v-else>
+        <div class="tag-list">
+          <div v-for="tag in pagedTags" :key="tag.id" class="tag-row">
+            <div class="tag-main">
+              <span
+                class="tag-preview"
+                :style="tagStyle(tag.color)"
+              >
+                {{ tag.name }}
+              </span>
+            </div>
+            <span class="tag-count">{{ tag.bookCount || 0 }} 本</span>
+            <div class="tag-actions">
+              <button class="btn btn-text" @click="openEdit(tag)">编辑</button>
+              <button class="btn btn-text btn-danger" @click="removeTag(tag)">删除</button>
+            </div>
           </div>
         </div>
-      </div>
+        <div class="tag-pagination">
+          <el-pagination
+            v-model:current-page="currentPage"
+            v-model:page-size="pageSize"
+            :page-sizes="pageSizeOptions"
+            :total="filteredTags.length"
+            layout="total, sizes, prev, pager, next"
+          />
+        </div>
+      </template>
     </div>
 
     <Teleport to="body">
@@ -128,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { confirm, message } from '@/utils/message'
 import { useTagStore, type Tag } from '@/stores/tag'
 
@@ -136,6 +168,10 @@ const tagStore = useTagStore()
 const dialogVisible = ref(false)
 const editingId = ref<number>()
 const saving = ref(false)
+const searchKeyword = ref('')
+const currentPage = ref(1)
+const pageSize = ref(10)
+const pageSizeOptions = [10, 20, 50]
 const form = reactive({ name: '', color: '#64748B' })
 const presetColors = [
   { name: '石板灰', value: '#64748B' },
@@ -173,6 +209,17 @@ const usedTagCount = computed(() =>
 const taggedBookCount = computed(() =>
   tagStore.tags.reduce((sum, tag) => sum + (tag.bookCount || 0), 0)
 )
+const filteredTags = computed(() => {
+  const keyword = searchKeyword.value.trim().toLocaleLowerCase()
+  if (!keyword) return tagStore.tags
+  return tagStore.tags.filter(tag =>
+    tag.name.toLocaleLowerCase().includes(keyword)
+  )
+})
+const pagedTags = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredTags.value.slice(start, start + pageSize.value)
+})
 
 const tagStyle = (color?: string) => {
   const safeColor = /^#[0-9a-fA-F]{6}$/.test(color || '') ? color! : '#64748B'
@@ -241,6 +288,18 @@ const removeTag = async (tag: Tag) => {
   }
 }
 
+watch(searchKeyword, () => {
+  currentPage.value = 1
+})
+
+watch(
+  [() => filteredTags.value.length, pageSize],
+  () => {
+    const totalPages = Math.max(1, Math.ceil(filteredTags.value.length / pageSize.value))
+    if (currentPage.value > totalPages) currentPage.value = totalPages
+  }
+)
+
 onMounted(() => tagStore.fetchTags())
 </script>
 
@@ -304,6 +363,28 @@ onMounted(() => tagStore.fetchTags())
   margin-top: 5px;
 }
 
+.tag-list-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.tag-search-input {
+  width: min(420px, 100%);
+}
+
+.query-result-count {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 .tag-list {
   border-top: 1px solid var(--border-color);
 }
@@ -333,6 +414,16 @@ onMounted(() => tagStore.fetchTags())
 
 .tag-actions {
   gap: 8px;
+}
+
+.tag-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 18px;
+}
+
+.query-empty {
+  padding-block: 40px;
 }
 
 .tag-dialog {
@@ -416,6 +507,20 @@ onMounted(() => tagStore.fetchTags())
 
   .color-palette {
     grid-template-columns: repeat(6, 32px);
+  }
+
+  .tag-list-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tag-search-input {
+    width: 100%;
+  }
+
+  .tag-pagination {
+    justify-content: flex-start;
+    overflow-x: auto;
   }
 
   .tag-row {

@@ -1,5 +1,6 @@
 package com.aibook.controller;
 
+import com.aibook.dto.FontDirectoryNodeDTO;
 import com.aibook.dto.FontScanDirectoryDTO;
 import com.aibook.dto.FontScanDirectoryRequest;
 import com.aibook.service.FontService;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -25,6 +27,12 @@ public class FontScanDirectoryController {
     @GetMapping
     public ResponseEntity<List<FontScanDirectoryDTO>> list() {
         return ResponseEntity.ok(fontService.listDirectories());
+    }
+
+    @GetMapping("/tree")
+    public ResponseEntity<List<FontDirectoryNodeDTO>> tree(
+            @RequestParam(required = false) String path) {
+        return ResponseEntity.ok(fontService.browseDirectories(path));
     }
 
     @PostMapping

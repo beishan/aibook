@@ -2,6 +2,7 @@ package com.aibook.service;
 
 import com.aibook.dto.FontAssetDTO;
 import com.aibook.dto.FontAssetUpdateRequest;
+import com.aibook.dto.FontDirectoryNodeDTO;
 import com.aibook.dto.FontScanDirectoryDTO;
 import com.aibook.dto.FontScanResultDTO;
 import com.aibook.exception.ResourceNotFoundException;
@@ -22,6 +23,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.DigestInputStream;
@@ -29,6 +31,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
@@ -116,6 +119,7 @@ public class FontService {
             }
             FontFileInspector.FontMetadata metadata =
                     inspector.inspect(temporary, originalPath.toString());
+            String displayName = preferredDisplayName(originalPath, metadata);
             String originalExtension = originalPath.toString()
                     .substring(originalPath.toString().lastIndexOf('.') + 1)
                     .toLowerCase(Locale.ROOT);
@@ -129,13 +133,15 @@ public class FontService {
                 FontAsset existing = duplicate.get();
                 if (fileExistsAndAllowed(existing)) {
                     existing.setAvailable(true);
+                    applyPreferredDisplayName(existing, displayName);
                     return fontAssetRepository.save(existing);
                 }
                 Path destination = directory.resolve(
                         UUID.randomUUID() + "." + metadata.format()).normalize();
                 move(temporary, destination);
                 temporary = null;
-                applyMetadata(existing, metadata, hash, Files.size(destination));
+                applyMetadata(
+                        existing, metadata, displayName, hash, Files.size(destination));
                 existing.setSourceType(FontAsset.SourceType.UPLOADED);
                 existing.setFilePath(destination.toString());
                 existing.setScanDirectoryId(null);
@@ -149,7 +155,7 @@ public class FontService {
             move(temporary, destination);
             temporary = null;
             FontAsset asset = FontAsset.builder()
-                    .displayName(metadata.fontFamily())
+                    .displayName(displayName)
                     .fontFamily(metadata.fontFamily())
                     .fontWeight(metadata.fontWeight())
                     .fontStyle(metadata.fontStyle())
@@ -238,6 +244,28 @@ public class FontService {
         return directoryRepository.findAllByOrderByPathAsc().stream()
                 .map(this::toDto)
                 .toList();
+    }
+
+    public List<FontDirectoryNodeDTO> browseDirectories(String value) {
+        Path root = scanRoot();
+        if (value == null || value.isBlank()) {
+            return List.of(toDirectoryNode(root));
+        }
+
+        Path parent = validateBrowseDirectory(value, root);
+        try (Stream<Path> paths = Files.list(parent)) {
+            return paths
+                    .filter(path -> !path.getFileName().toString().startsWith("."))
+                    .filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
+                    .filter(Files::isReadable)
+                    .sorted(Comparator.comparing(
+                            path -> path.getFileName().toString(),
+                            String.CASE_INSENSITIVE_ORDER))
+                    .map(this::toDirectoryNode)
+                    .toList();
+        } catch (IOException | SecurityException exception) {
+            throw new IllegalArgumentException("字体目录无法读取", exception);
+        }
     }
 
     @Transactional
@@ -348,6 +376,7 @@ public class FontService {
             AtomicInteger updated,
             AtomicInteger skipped) throws IOException {
         FontFileInspector.FontMetadata metadata = inspector.inspect(path);
+        String displayName = preferredDisplayName(path.getFileName(), metadata);
         String hash = sha256(path);
         var byPath = fontAssetRepository.findBySourceTypeAndFilePath(
                 FontAsset.SourceType.SCANNED, path.toString());
@@ -355,6 +384,7 @@ public class FontService {
             FontAsset asset = byPath.get();
             if (hash.equals(asset.getFileHash())) {
                 asset.setAvailable(true);
+                applyPreferredDisplayName(asset, displayName);
                 fontAssetRepository.save(asset);
                 skipped.incrementAndGet();
                 return;
@@ -365,7 +395,7 @@ public class FontService {
                 skipped.incrementAndGet();
                 return;
             }
-            applyMetadata(asset, metadata, hash, Files.size(path));
+            applyMetadata(asset, metadata, displayName, hash, Files.size(path));
             asset.setAvailable(true);
             fontAssetRepository.save(asset);
             updated.incrementAndGet();
@@ -375,7 +405,7 @@ public class FontService {
         if (duplicate.isPresent()) {
             FontAsset asset = duplicate.get();
             if (!fileExistsAndAllowed(asset)) {
-                applyMetadata(asset, metadata, hash, Files.size(path));
+                applyMetadata(asset, metadata, displayName, hash, Files.size(path));
                 asset.setSourceType(FontAsset.SourceType.SCANNED);
                 asset.setFilePath(path.toString());
                 asset.setScanDirectoryId(directory.getId());
@@ -388,7 +418,7 @@ public class FontService {
             return;
         }
         FontAsset asset = FontAsset.builder()
-                .displayName(metadata.fontFamily())
+                .displayName(displayName)
                 .fontFamily(metadata.fontFamily())
                 .fontWeight(metadata.fontWeight())
                 .fontStyle(metadata.fontStyle())
@@ -408,15 +438,37 @@ public class FontService {
     private void applyMetadata(
             FontAsset asset,
             FontFileInspector.FontMetadata metadata,
+            String displayName,
             String hash,
             long size) {
-        asset.setDisplayName(metadata.fontFamily());
+        asset.setDisplayName(displayName);
         asset.setFontFamily(metadata.fontFamily());
         asset.setFontWeight(metadata.fontWeight());
         asset.setFontStyle(metadata.fontStyle());
         asset.setFormat(metadata.format());
         asset.setFileHash(hash);
         asset.setFileSize(size);
+    }
+
+    private String preferredDisplayName(
+            Path filename,
+            FontFileInspector.FontMetadata metadata) {
+        String value = filename == null || filename.getFileName() == null
+                ? ""
+                : filename.getFileName().toString().trim();
+        int dot = value.lastIndexOf('.');
+        if (dot > 0) {
+            value = value.substring(0, dot).trim();
+        }
+        return value.isEmpty() ? metadata.fontFamily() : value;
+    }
+
+    private void applyPreferredDisplayName(FontAsset asset, String displayName) {
+        if (asset.getDisplayName() == null
+                || asset.getDisplayName().isBlank()
+                || Objects.equals(asset.getDisplayName(), asset.getFontFamily())) {
+            asset.setDisplayName(displayName);
+        }
     }
 
     private Path validateDirectory(String value) {
@@ -445,6 +497,50 @@ public class FontService {
             return real;
         } catch (IOException | SecurityException exception) {
             throw new IllegalArgumentException("字体目录不存在或没有读取权限", exception);
+        }
+    }
+
+    private Path validateBrowseDirectory(String value, Path root) {
+        Path path;
+        try {
+            path = Path.of(value.trim());
+        } catch (RuntimeException exception) {
+            throw new IllegalArgumentException("字体目录路径无效", exception);
+        }
+        if (!path.isAbsolute()) {
+            throw new IllegalArgumentException("字体目录必须使用容器内绝对路径");
+        }
+        try {
+            Path real = path.toRealPath();
+            if (!real.startsWith(root)
+                    || !Files.isDirectory(real, LinkOption.NOFOLLOW_LINKS)
+                    || !Files.isReadable(real)) {
+                throw new IllegalArgumentException("只能浏览字体扫描根目录内的目录");
+            }
+            return real;
+        } catch (IOException | SecurityException exception) {
+            throw new IllegalArgumentException("字体目录不存在或没有读取权限", exception);
+        }
+    }
+
+    private FontDirectoryNodeDTO toDirectoryNode(Path path) {
+        return FontDirectoryNodeDTO.builder()
+                .name(path.getFileName() == null
+                        ? path.toString()
+                        : path.getFileName().toString())
+                .path(path.toString())
+                .leaf(!hasDirectoryChildren(path))
+                .build();
+    }
+
+    private boolean hasDirectoryChildren(Path path) {
+        try (Stream<Path> children = Files.list(path)) {
+            return children.anyMatch(child ->
+                    !child.getFileName().toString().startsWith(".")
+                            && Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
+                            && Files.isReadable(child));
+        } catch (IOException | SecurityException exception) {
+            return false;
         }
     }
 
