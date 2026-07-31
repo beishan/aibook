@@ -11,6 +11,7 @@ public class UserPreferencesDTO {
 
     private String theme;
     private String libraryViewMode;
+    private Integer libraryPageSize;
     private Integer scanThreadCount;
     private Long uiFontId;
     private Long readerFontId;
@@ -41,6 +42,14 @@ public class UserPreferencesDTO {
 
     public void setLibraryViewMode(String libraryViewMode) {
         this.libraryViewMode = libraryViewMode;
+    }
+
+    public Integer getLibraryPageSize() {
+        return libraryPageSize;
+    }
+
+    public void setLibraryPageSize(Integer libraryPageSize) {
+        this.libraryPageSize = libraryPageSize;
     }
 
     public Integer getScanThreadCount() {
@@ -91,6 +100,11 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder libraryViewMode(String libraryViewMode) {
             value.setLibraryViewMode(libraryViewMode);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder libraryPageSize(Integer libraryPageSize) {
+            value.setLibraryPageSize(libraryPageSize);
             return this;
         }
 

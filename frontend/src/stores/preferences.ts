@@ -5,29 +5,43 @@ import { useThemeStore } from '@/stores/theme'
 import { useFontStore } from '@/stores/font'
 import { THEMES, type ThemeId } from '@/types/theme'
 
-export type LibraryViewMode = 'card' | 'list'
+export type LibraryViewMode = 'card' | 'compact-card' | 'list'
+export const LIBRARY_PAGE_SIZE_OPTIONS = [12, 18, 24, 36, 60] as const
+export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
 
 interface UserPreferences {
   theme: ThemeId | null
   libraryViewMode: LibraryViewMode | null
+  libraryPageSize: number | null
   scanThreadCount: number | null
   uiFontId: number | null
   readerFontId: number | null
 }
 
 const LIBRARY_VIEW_MODE_KEY = 'ai-book-view-mode'
+const LIBRARY_PAGE_SIZE_KEY = 'aibook-library-page-size'
+const DEFAULT_LIBRARY_PAGE_SIZE: LibraryPageSize = 18
 const DEFAULT_SCAN_THREAD_COUNT = 2
 
 const readLocalLibraryViewMode = (): LibraryViewMode => {
   const saved = localStorage.getItem(LIBRARY_VIEW_MODE_KEY)
-  return saved === 'list' || saved === 'card' ? saved : 'card'
+  return saved === 'list' || saved === 'card' || saved === 'compact-card' ? saved : 'card'
+}
+
+const isLibraryPageSize = (value: unknown): value is LibraryPageSize =>
+  typeof value === 'number'
+  && LIBRARY_PAGE_SIZE_OPTIONS.some(size => size === value)
+
+const readLocalLibraryPageSize = (): LibraryPageSize => {
+  const saved = Number(localStorage.getItem(LIBRARY_PAGE_SIZE_KEY))
+  return isLibraryPageSize(saved) ? saved : DEFAULT_LIBRARY_PAGE_SIZE
 }
 
 const isTheme = (value: unknown): value is ThemeId =>
   typeof value === 'string' && THEMES.some(theme => theme.id === value)
 
 const isLibraryViewMode = (value: unknown): value is LibraryViewMode =>
-  value === 'card' || value === 'list'
+  value === 'card' || value === 'compact-card' || value === 'list'
 
 const isScanThreadCount = (value: unknown): value is number =>
   Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 16
@@ -35,6 +49,7 @@ const isScanThreadCount = (value: unknown): value is number =>
 export const usePreferencesStore = defineStore('preferences', () => {
   const themeStore = useThemeStore()
   const libraryViewMode = ref<LibraryViewMode>(readLocalLibraryViewMode())
+  const libraryPageSize = ref<LibraryPageSize>(readLocalLibraryPageSize())
   const scanThreadCount = ref(DEFAULT_SCAN_THREAD_COUNT)
   const uiFontId = ref<number | null>(null)
   const readerFontId = ref<number | null>(null)
@@ -61,6 +76,13 @@ export const usePreferencesStore = defineStore('preferences', () => {
     libraryViewMode.value = mode
     localStorage.setItem(LIBRARY_VIEW_MODE_KEY, mode)
     if (syncRemote) persistRemote({ libraryViewMode: mode })
+  }
+
+  const setLibraryPageSize = (value: LibraryPageSize, syncRemote = true) => {
+    if (!isLibraryPageSize(value)) return
+    libraryPageSize.value = value
+    localStorage.setItem(LIBRARY_PAGE_SIZE_KEY, String(value))
+    if (syncRemote) persistRemote({ libraryPageSize: value })
   }
 
   const setScanThreadCount = (value: number, syncRemote = true) => {
@@ -100,6 +122,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.libraryViewMode = libraryViewMode.value
       }
 
+      if (isLibraryPageSize(data.libraryPageSize)) {
+        setLibraryPageSize(data.libraryPageSize, false)
+      } else {
+        missingPreferences.libraryPageSize = libraryPageSize.value
+      }
+
       if (isScanThreadCount(data.scanThreadCount)) {
         setScanThreadCount(data.scanThreadCount, false)
       } else {
@@ -131,12 +159,14 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   return {
     libraryViewMode,
+    libraryPageSize,
     scanThreadCount,
     uiFontId,
     readerFontId,
     hydrated,
     setTheme,
     setLibraryViewMode,
+    setLibraryPageSize,
     setScanThreadCount,
     setUiFontId,
     setReaderFontId,

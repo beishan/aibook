@@ -104,6 +104,14 @@
         </button>
         <button
           class="btn"
+          :class="{ active: viewMode === 'compact-card' }"
+          @click="preferencesStore.setLibraryViewMode('compact-card')"
+        >
+          <span>▪︎</span>
+          <span>小卡片</span>
+        </button>
+        <button
+          class="btn"
           :class="{ active: viewMode === 'list' }"
           @click="preferencesStore.setLibraryViewMode('list')"
         >
@@ -200,7 +208,11 @@
     </div>
 
     <!-- 卡片视图 -->
-    <div v-else-if="viewMode === 'card'" class="books-grid">
+    <div
+      v-else-if="viewMode !== 'list'"
+      class="books-grid"
+      :class="{ 'books-grid-compact': viewMode === 'compact-card' }"
+    >
       <div
         v-for="book in bookStore.books"
         :key="book.id"
@@ -501,7 +513,11 @@ import { formatChinaDate } from '@/utils/dateTime'
 import { useBookStore, type Book } from '@/stores/book'
 import { useCategoryStore } from '@/stores/category'
 import { useTagStore } from '@/stores/tag'
-import { usePreferencesStore } from '@/stores/preferences'
+import {
+  LIBRARY_PAGE_SIZE_OPTIONS,
+  usePreferencesStore,
+  type LibraryPageSize,
+} from '@/stores/preferences'
 import FileUpload from '@/components/FileUpload.vue'
 import BatchScraperDialog from '@/components/BatchScraperDialog.vue'
 import BookEditDialog from '@/components/BookEditDialog.vue'
@@ -518,7 +534,10 @@ const bookStore = useBookStore()
 const categoryStore = useCategoryStore()
 const tagStore = useTagStore()
 const preferencesStore = usePreferencesStore()
-const { libraryViewMode: viewMode } = storeToRefs(preferencesStore)
+const {
+  libraryViewMode: viewMode,
+  libraryPageSize: pageSize,
+} = storeToRefs(preferencesStore)
 
 const searchKeyword = ref('')
 const filterFormat = ref('')
@@ -527,9 +546,7 @@ const filterCategoryId = ref('')
 const filterTagId = ref('')
 const sortBy = ref('createdAt')
 const currentPage = ref(1)
-const pageSizeOptions = [12, 18, 24, 36, 60]
-const storedPageSize = Number(localStorage.getItem('aibook-library-page-size'))
-const pageSize = ref(pageSizeOptions.includes(storedPageSize) ? storedPageSize : 18)
+const pageSizeOptions = LIBRARY_PAGE_SIZE_OPTIONS
 const showUploadDialog = ref(false)
 const showRecycleBin = ref(false)
 const showScraperDialog = ref(false)
@@ -943,7 +960,7 @@ const goToPage = (page: number) => {
 }
 
 const handlePageSizeChange = () => {
-  localStorage.setItem('aibook-library-page-size', String(pageSize.value))
+  preferencesStore.setLibraryPageSize(pageSize.value as LibraryPageSize)
   currentPage.value = 1
   selectedBooks.value.clear()
   loadBooks()
@@ -956,16 +973,18 @@ watch(
       searchKeyword.value = newSearch as string
       handleSearch()
     }
-  },
-  { immediate: true }
+  }
 )
 
-onMounted(() => {
-  void preferencesStore.hydrate()
+onMounted(async () => {
+  await preferencesStore.hydrate()
   categoryStore.refresh()
   tagStore.fetchTags()
   bookStore.fetchTrashCount()
-  if (!route.query.search) {
+  if (route.query.search) {
+    searchKeyword.value = route.query.search as string
+    handleSearch()
+  } else {
     loadBooks()
   }
 })
@@ -1314,6 +1333,46 @@ onMounted(() => {
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: var(--spacing-lg);
   margin-bottom: var(--spacing-xl);
+}
+
+.books-grid-compact {
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.books-grid-compact .book-cover {
+  height: 150px;
+}
+
+.books-grid-compact .book-info {
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.books-grid-compact .book-title {
+  font-size: var(--font-size-sm);
+}
+
+.books-grid-compact .book-tag-list {
+  gap: 2px;
+  min-height: 17px;
+}
+
+.books-grid-compact .book-tag-chip {
+  max-width: 62px;
+  padding: 1px 4px;
+  font-size: 9px;
+}
+
+.books-grid-compact .book-cover-actions {
+  gap: 4px;
+  padding: 6px;
+}
+
+.books-grid-compact .action-btn {
+  flex-basis: 28px;
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
 }
 
 .book-card {

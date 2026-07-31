@@ -33,10 +33,14 @@ class UserServiceTest {
 
         UserPreferencesDTO result = service.updatePreferences(
                 "reader",
-                UserPreferencesDTO.builder().libraryViewMode("list").build());
+                UserPreferencesDTO.builder()
+                        .libraryViewMode("compact-card")
+                        .libraryPageSize(36)
+                        .build());
 
         assertEquals("warm", result.getTheme());
-        assertEquals("list", result.getLibraryViewMode());
+        assertEquals("compact-card", result.getLibraryViewMode());
+        assertEquals(36, result.getLibraryPageSize());
         assertEquals(2, result.getScanThreadCount());
     }
 
@@ -79,6 +83,24 @@ class UserServiceTest {
                 () -> service.updatePreferences(
                         "reader",
                         UserPreferencesDTO.builder().scanThreadCount(17).build()));
+    }
+
+    @Test
+    void rejectsUnsupportedLibraryPageSize() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        UserService service = new UserService(repository);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updatePreferences(
+                        "reader",
+                        UserPreferencesDTO.builder().libraryPageSize(25).build()));
     }
 
     @Test

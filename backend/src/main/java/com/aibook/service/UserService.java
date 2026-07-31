@@ -21,7 +21,10 @@ import java.util.Set;
 public class UserService implements UserDetailsService {
 
     private static final Set<String> WEB_THEMES = Set.of("modern", "warm", "natural");
-    private static final Set<String> LIBRARY_VIEW_MODES = Set.of("card", "list");
+    private static final Set<String> LIBRARY_VIEW_MODES =
+            Set.of("card", "compact-card", "list");
+    private static final Set<Integer> LIBRARY_PAGE_SIZES =
+            Set.of(12, 18, 24, 36, 60);
 
     private final UserRepository userRepository;
     private final FontAssetRepository fontAssetRepository;
@@ -77,6 +80,13 @@ public class UserService implements UserDetailsService {
                     LIBRARY_VIEW_MODES);
             user.setLibraryViewMode(request.getLibraryViewMode());
         }
+        if (request.getLibraryPageSize() != null) {
+            requireAllowed(
+                    "书库分页大小",
+                    request.getLibraryPageSize(),
+                    LIBRARY_PAGE_SIZES);
+            user.setLibraryPageSize(request.getLibraryPageSize());
+        }
         if (request.getScanThreadCount() != null) {
             if (!ScanSettings.isValidThreadCount(request.getScanThreadCount())) {
                 throw new IllegalArgumentException(
@@ -104,6 +114,7 @@ public class UserService implements UserDetailsService {
         return UserPreferencesDTO.builder()
                 .theme(user.getWebTheme())
                 .libraryViewMode(user.getLibraryViewMode())
+                .libraryPageSize(user.getLibraryPageSize())
                 .scanThreadCount(
                         ScanSettings.normalizeThreadCount(user.getScanThreadCount()))
                 .uiFontId(activeFontId(user.getUiFontId()))
@@ -130,7 +141,7 @@ public class UserService implements UserDetailsService {
                 : null;
     }
 
-    private void requireAllowed(String label, String value, Set<String> allowedValues) {
+    private <T> void requireAllowed(String label, T value, Set<T> allowedValues) {
         if (!allowedValues.contains(value)) {
             throw new IllegalArgumentException(label + "不支持该值: " + value);
         }

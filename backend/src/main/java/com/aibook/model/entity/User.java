@@ -64,9 +64,14 @@ public class User implements UserDetails {
     private String webTheme;
 
     /**
-     * Web 端书库显示方式（card、list）
+     * Web 端书库显示方式（card、compact-card、list）
      */
     private String libraryViewMode;
+
+    /**
+     * Web 端书库每页显示数量
+     */
+    private Integer libraryPageSize;
 
     /**
      * 后端目录扫描工作线程数
