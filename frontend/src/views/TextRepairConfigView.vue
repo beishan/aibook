@@ -1,14 +1,8 @@
 <template>
   <div class="repair-config-view">
     <div class="page-header">
-      <button class="back-btn" @click="$router.back()">
-        <span>‹</span>
-        <span>返回</span>
-      </button>
-      <div>
-        <h1 class="page-title">修复配置</h1>
-        <p class="page-subtitle">管理广告规则和修复模板</p>
-      </div>
+      <h1 class="page-title">🔧 内容修复配置</h1>
+      <p class="page-subtitle">管理广告规则和修复模板</p>
     </div>
 
     <!-- 标签页 -->
@@ -20,7 +14,7 @@
         :class="{ active: activeTab === tab.key }"
         @click="activeTab = tab.key"
       >
-        <span>{{ tab.icon }}</span>
+        <span class="tab-icon-lg">{{ tab.icon }}</span>
         <span>{{ tab.label }}</span>
       </button>
     </div>
@@ -124,6 +118,75 @@
               🗑️ 删除
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 通用设置 -->
+    <div v-show="activeTab === 'general'" class="tab-content">
+      <div class="section-header">
+        <h3>通用修复设置</h3>
+      </div>
+      <div class="general-settings glass">
+        <div class="setting-item">
+          <label class="setting-label">默认修复模式</label>
+          <select v-model="generalSettings.defaultMode" class="setting-select">
+            <option value="SAFE">安全修复 - 仅处理低风险问题</option>
+            <option value="STANDARD">标准修复 - 安全修复 + 常见广告清理、章节统一</option>
+            <option value="DEEP">深度修复 - 标准修复 + 模糊广告识别、章节粘连检测</option>
+          </select>
+        </div>
+        <div class="setting-item">
+          <label class="setting-label">默认章节输出格式</label>
+          <input v-model="generalSettings.chapterFormat" type="text" class="setting-input" />
+          <small class="setting-hint">占位符: {number} 编号, {number:3} 三位补零, {chineseNumber} 中文编号, {title} 标题</small>
+        </div>
+        <div class="setting-item">
+          <label class="setting-label">段首缩进方式</label>
+          <select v-model="generalSettings.indentStyle" class="setting-select">
+            <option value="FULL_WIDTH_SPACE">两个全角空格（　　）</option>
+            <option value="HALF_SPACE">两个普通空格</option>
+            <option value="FOUR_SPACE">四个普通空格</option>
+            <option value="NONE">不缩进</option>
+            <option value="KEEP">保持原样</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div class="setting-item">
+            <label class="setting-label">段落间空行数量</label>
+            <select v-model="generalSettings.blankLineCount" class="setting-select">
+              <option :value="0">不保留空行</option>
+              <option :value="1">保留 1 个空行</option>
+              <option :value="2">保留 2 个空行</option>
+              <option :value="-1">保持原样</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">自动接受置信度阈值</label>
+            <input v-model.number="generalSettings.autoApplyThreshold" type="number" step="0.1" min="0" max="1" class="setting-input" />
+            <small class="setting-hint">高于此置信度的问题可自动接受（0.0~1.0）</small>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-item">
+            <label class="setting-label">超短章节字数阈值</label>
+            <input v-model.number="generalSettings.minChapterWords" type="number" class="setting-input" />
+            <small class="setting-hint">字数低于此值的章节将被标记为异常</small>
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">超长章节字数阈值</label>
+            <input v-model.number="generalSettings.maxChapterWords" type="number" class="setting-input" />
+            <small class="setting-hint">字数高于此值的章节可能存在粘连</small>
+          </div>
+        </div>
+        <div class="setting-item">
+          <label class="setting-checkbox-label">
+            <input v-model="generalSettings.punctuationNormalize" type="checkbox" />
+            标点统一（英文标点自动转中文标点）
+          </label>
+        </div>
+        <div class="setting-actions">
+          <button class="btn btn-primary" @click="handleSaveGeneralSettings">保存设置</button>
         </div>
       </div>
     </div>
@@ -297,9 +360,21 @@ const showTemplateDialog = ref(false)
 const editingRule = ref<RepairRule | null>(null)
 const editingTemplate = ref<RepairTemplate | null>(null)
 
+const generalSettings = reactive({
+  defaultMode: 'STANDARD',
+  chapterFormat: '第{number}章 {title}',
+  indentStyle: 'FULL_WIDTH_SPACE',
+  blankLineCount: 1,
+  autoApplyThreshold: 0.8,
+  minChapterWords: 100,
+  maxChapterWords: 30000,
+  punctuationNormalize: false,
+})
+
 const tabs = [
   { key: 'rules', label: '广告规则', icon: '📋' },
   { key: 'templates', label: '修复模板', icon: '⚙️' },
+  { key: 'general', label: '通用设置', icon: '🎨' },
 ]
 
 const ruleForm = reactive({
@@ -329,6 +404,15 @@ const templateForm = reactive({
 })
 
 onMounted(async () => {
+  // 加载保存的通用设置
+  const saved = localStorage.getItem('textRepairSettings')
+  if (saved) {
+    try {
+      Object.assign(generalSettings, JSON.parse(saved))
+    } catch {
+      // 忽略解析错误
+    }
+  }
   await Promise.all([repairStore.loadRules(), repairStore.loadTemplates()])
 })
 
@@ -465,6 +549,12 @@ function getIndentText(style: string) {
     FOUR_SPACE: '四空格', NONE: '不缩进', KEEP: '保持原样',
   }[style] || style
 }
+
+function handleSaveGeneralSettings() {
+  // 保存到 localStorage 作为全局默认设置
+  localStorage.setItem('textRepairSettings', JSON.stringify(generalSettings))
+  message.success('设置已保存')
+}
 </script>
 
 <style scoped>
@@ -479,19 +569,6 @@ function getIndentText(style: string) {
   align-items: center;
   gap: 16px;
   margin-bottom: 20px;
-}
-
-.back-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 16px;
-  background: var(--glass-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--text-primary);
 }
 
 .page-title {
@@ -510,27 +587,39 @@ function getIndentText(style: string) {
 .tabs {
   display: flex;
   gap: 4px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--border-color);
 }
 
 .tab-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: var(--glass-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 8px 8px 0 0;
+  gap: 8px;
+  padding: 10px 20px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  color: var(--text-primary);
+  background: var(--glass-bg);
 }
 
 .tab-btn.active {
-  color: var(--accent-color);
-  border-bottom-color: var(--accent-color);
-  background: var(--glass-hover);
+  color: var(--accent-color, var(--primary, #409eff));
+  border-bottom-color: var(--accent-color, var(--primary, #409eff));
+  font-weight: 600;
 }
+
+.tab-icon-lg {
+  font-size: 18px;
 
 .section-header {
   display: flex;
@@ -701,5 +790,66 @@ function getIndentText(style: string) {
 
 .form-row .form-group {
   flex: 1;
+}
+
+/* 通用设置 */
+.general-settings {
+  padding: 24px;
+  border-radius: 10px;
+}
+
+.setting-item {
+  margin-bottom: 16px;
+}
+
+.setting-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.setting-select,
+.setting-input {
+  width: 100%;
+  max-width: 400px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--input-bg, var(--glass-bg));
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.setting-hint {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.setting-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.setting-row {
+  display: flex;
+  gap: 16px;
+}
+
+.setting-row .setting-item {
+  flex: 1;
+}
+
+.setting-actions {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
 }
 </style>

@@ -41,7 +41,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/TextRepairView.vue'),
       },
       {
-        path: 'settings/text-repair',
+        path: 'text-repair',
         name: 'TextRepairConfig',
         component: () => import('@/views/TextRepairConfigView.vue'),
       },
