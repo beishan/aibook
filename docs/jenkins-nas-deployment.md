@@ -124,8 +124,9 @@ FONTS_GID=1001
 ```
 
 字体目录不需要配置时，将两个参数同时留空即可，部署和网页上传字体功能不受
-影响。部署脚本只在配置主字体目录后合并
-`docker/docker-compose.fonts.yml`，因此基础 Compose 配置不依赖任何字体变量。
+影响。部署脚本只在配置主字体目录后动态生成挂载和附加组配置，并会对主书库、
+附加书库和字体目录的 GID 统一去重，因此基础 Compose 配置不依赖任何字体变量。
+`docker/docker-compose.fonts.yml` 仍可用于不经过部署脚本的手动 Compose 启动。
 字体文件只需读取权限，建议在 NAS 上配置组 ACL：
 
 ```bash

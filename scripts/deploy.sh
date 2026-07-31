@@ -5,7 +5,6 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${PROJECT_DIR}/docker/docker-compose.yml"
-FONTS_COMPOSE_FILE="${PROJECT_DIR}/docker/docker-compose.fonts.yml"
 ACTION="${1:-deploy}"
 ENV_FILE="${2:-${PROJECT_DIR}/docker/.env.production}"
 STATE_FILE="${3:-${PROJECT_DIR}/.aibook-previous-images}"
@@ -17,7 +16,6 @@ HEALTH_RETRIES="${HEALTH_RETRIES:-36}"
 HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-5}"
 IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
 COMPOSE_OVERRIDE_FILE=""
-USE_FONTS_COMPOSE=false
 
 cleanup_temp_files() {
     if [[ -n "${COMPOSE_OVERRIDE_FILE}" && -f "${COMPOSE_OVERRIDE_FILE}" ]]; then
@@ -225,6 +223,7 @@ collect_gids_config() {
 }
 
 prepare_mounts_override() {
+    local books_gid
     local books_mounts
     local books_gids
     local fonts_path
@@ -232,6 +231,12 @@ prepare_mounts_override() {
     local font_mounts
     local font_gids
     local index
+
+    books_gid="$(trim_whitespace "${BOOKS_GID:-$(env_file_value BOOKS_GID)}")"
+    books_gid="${books_gid:-1001}"
+    validate_gid "BOOKS_GID" "${books_gid}"
+    # 基础 Compose 已包含主书库 GID；后续动态 GID 必须与它一起去重。
+    SEEN_OVERRIDE_GIDS+="${books_gid}"$'\n'
 
     books_mounts="${BOOKS_MOUNTS:-$(env_file_value BOOKS_MOUNTS)}"
     books_gids="${BOOKS_GIDS:-$(env_file_value BOOKS_GIDS)}"
@@ -251,11 +256,12 @@ prepare_mounts_override() {
         fi
         validate_mount_path "主字体目录宿主机路径" "${fonts_path}"
         validate_gid "FONTS_GID" "${fonts_gid}"
-        export FONTS_PATH="${fonts_path}"
-        export FONTS_GID="${fonts_gid}"
-        USE_FONTS_COMPOSE=true
-        echo "  主字体目录：${fonts_path} -> /fontfolder (ro)"
-        echo "  主字体目录 GID ${fonts_gid}"
+        add_override_mount \
+            "${fonts_path}" \
+            "/fontfolder" \
+            "true" \
+            "主字体目录：${fonts_path} -> /fontfolder (ro)"
+        add_override_gid "${fonts_gid}" "主字体目录 GID ${fonts_gid}"
     fi
 
     collect_mounts_config \
@@ -308,9 +314,6 @@ compose() {
         --env-file "${ENV_FILE}"
         --file "${COMPOSE_FILE}"
     )
-    if [[ "${USE_FONTS_COMPOSE}" == "true" ]]; then
-        compose_args+=(--file "${FONTS_COMPOSE_FILE}")
-    fi
     if [[ -n "${COMPOSE_OVERRIDE_FILE}" ]]; then
         compose_args+=(--file "${COMPOSE_OVERRIDE_FILE}")
     fi
