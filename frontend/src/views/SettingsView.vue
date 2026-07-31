@@ -339,6 +339,7 @@ const tabs = [
   { key: 'directories', label: '扫描目录', icon: '📂' },
   { key: 'connections', label: 'OPDS 连接', icon: '🔗' },
   { key: 'scheduler', label: '定时任务', icon: '⏰' },
+  { key: 'text-repair', label: '修复配置', icon: '🔧' },
   { key: 'info', label: '系统信息', icon: 'ℹ️' },
 ]
 
@@ -364,6 +365,10 @@ const activeTab = ref(
 )
 
 const selectTab = (tab: string) => {
+  if (tab === 'text-repair') {
+    void router.push('/settings/text-repair')
+    return
+  }
   activeTab.value = tab
   void router.replace({
     query: {

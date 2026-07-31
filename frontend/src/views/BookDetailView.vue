@@ -38,6 +38,9 @@
                 >
                   🔄 {{ reparsing ? '解析中...' : '重新解析书籍' }}
                 </el-dropdown-item>
+                <el-dropdown-item command="repair">
+                  🔧 内容修复
+                </el-dropdown-item>
                 <el-dropdown-item divided command="delete">
                   <span class="danger-menu-item">🗑️ 移入回收站</span>
                 </el-dropdown-item>
@@ -665,6 +668,9 @@ const handleBookActionCommand = (command: string) => {
       break
     case 'reparse-book':
       void handleReparseBook()
+      break
+    case 'repair':
+      router.push(`/books/${book.value?.id}/repair`)
       break
     case 'delete':
       void handleDelete()

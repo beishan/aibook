@@ -36,6 +36,16 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/BookDetailView.vue'),
       },
       {
+        path: 'books/:id/repair',
+        name: 'TextRepair',
+        component: () => import('@/views/TextRepairView.vue'),
+      },
+      {
+        path: 'settings/text-repair',
+        name: 'TextRepairConfig',
+        component: () => import('@/views/TextRepairConfigView.vue'),
+      },
+      {
         path: 'reader/:id',
         name: 'Reader',
         component: () => import('@/views/ReaderView.vue'),
