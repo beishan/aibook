@@ -15,5 +15,8 @@ public interface TextRepairTaskRepository extends JpaRepository<TextRepairTask, 
 
     Page<TextRepairTask> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 
+    Page<TextRepairTask> findByUserIdAndStatusInOrderByCreatedAtDesc(
+            Long userId, List<String> statuses, Pageable pageable);
+
     List<TextRepairTask> findByUserIdAndStatus(Long userId, String status);
 }

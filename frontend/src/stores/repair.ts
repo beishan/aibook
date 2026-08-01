@@ -11,6 +11,8 @@ import type {
 import {
   createRepairTask,
   getRepairTask,
+  getRepairRecords,
+  rescanRepairTask,
   getBookRepairTasks,
   getRepairIssues,
   updateRepairIssue,
@@ -34,6 +36,8 @@ import {
 export const useRepairStore = defineStore('repair', () => {
   const currentTask = ref<RepairTask | null>(null)
   const tasks = ref<RepairTask[]>([])
+  const records = ref<RepairTask[]>([])
+  const recordsTotal = ref(0)
   const issues = ref<RepairIssue[]>([])
   const issuesTotal = ref(0)
   const loading = ref(false)
@@ -82,6 +86,30 @@ export const useRepairStore = defineStore('repair', () => {
     const response = await getBookRepairTasks(bookId)
     tasks.value = response.data
     return response.data
+  }
+
+  async function loadRecords(page = 0, size = 10) {
+    loading.value = true
+    try {
+      const response = await getRepairRecords(page, size)
+      records.value = response.data.content
+      recordsTotal.value = response.data.totalElements
+      return response.data
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function rescanTask(taskId: number) {
+    loading.value = true
+    try {
+      const response = await rescanRepairTask(taskId)
+      currentTask.value = response.data
+      await loadIssues(response.data.id)
+      return response.data
+    } finally {
+      loading.value = false
+    }
   }
 
   // 问题管理
@@ -220,6 +248,8 @@ export const useRepairStore = defineStore('repair', () => {
   return {
     currentTask,
     tasks,
+    records,
+    recordsTotal,
     issues,
     issuesTotal,
     loading,
@@ -233,6 +263,8 @@ export const useRepairStore = defineStore('repair', () => {
     createTask,
     loadTask,
     loadBookTasks,
+    loadRecords,
+    rescanTask,
     loadIssues,
     updateIssue,
     acceptHighConfidenceIssues,

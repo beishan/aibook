@@ -2,7 +2,7 @@
   <div class="repair-config-view">
     <div class="page-header">
       <h1 class="page-title">🔧 内容修复配置</h1>
-      <p class="page-subtitle">管理广告规则和修复模板</p>
+      <p class="page-subtitle">管理检测记录、广告规则、修复模板和默认检测功能</p>
     </div>
 
     <!-- 标签页 -->
@@ -12,7 +12,7 @@
         :key="tab.key"
         class="tab-btn"
         :class="{ active: activeTab === tab.key }"
-        @click="activeTab = tab.key"
+        @click="selectTab(tab.key)"
       >
         <span class="tab-icon-lg">{{ tab.icon }}</span>
         <span>{{ tab.label }}</span>
@@ -120,6 +120,60 @@
             </button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- 检测结果记录 -->
+    <div v-show="activeTab === 'records'" class="tab-content">
+      <div class="section-header records-header">
+        <div>
+          <h3>检测结果记录</h3>
+          <p class="section-note">扫描结果和处理状态会持续保存，可直接继续处理或按原配置重新检测。</p>
+        </div>
+        <button class="btn" :disabled="repairStore.loading" @click="loadRecords">刷新</button>
+      </div>
+      <div v-if="repairStore.loading && !repairStore.records.length" class="records-empty">正在加载检测记录...</div>
+      <div v-else-if="!repairStore.records.length" class="records-empty">
+        <strong>还没有已完成的检测记录</strong>
+        <span>从书籍详情进入“内容修复”并完成一次扫描后，会显示在这里。</span>
+      </div>
+      <div v-else class="record-list">
+        <article v-for="record in repairStore.records" :key="record.id" class="record-card glass">
+          <div class="record-main">
+            <div class="record-title-row">
+              <h4>{{ record.bookTitle }}</h4>
+              <span class="record-status" :class="record.status.toLowerCase()">{{ getTaskStatusText(record.status) }}</span>
+              <span class="record-mode">{{ getModeText(record.repairMode) }}</span>
+            </div>
+            <div class="record-meta">检测于 {{ formatDate(record.createdAt) }} · 识别 {{ record.detectedChapterCount || 0 }} 章</div>
+            <div class="record-progress">
+              <div class="progress-track">
+                <span :style="{ width: `${getProcessedPercent(record)}%` }"></span>
+              </div>
+              <div class="progress-labels">
+                <span>已处理 {{ getProcessedCount(record) }}</span>
+                <span>待处理 {{ record.pendingIssueCount }} · 共 {{ record.totalIssueCount }}</span>
+              </div>
+            </div>
+            <div class="record-counts">
+              <span>已接受 {{ record.acceptedIssueCount }}</span>
+              <span>已拒绝 {{ record.rejectedIssueCount }}</span>
+              <span>已忽略 {{ record.ignoredIssueCount }}</span>
+              <span>已应用 {{ record.appliedIssueCount }}</span>
+            </div>
+          </div>
+          <div class="record-actions">
+            <button class="btn btn-primary" @click="continueRecord(record)">继续处理</button>
+            <button class="btn" :disabled="rescanningId === record.id" @click="rescanRecord(record)">
+              {{ rescanningId === record.id ? '检测中...' : '重新检测' }}
+            </button>
+          </div>
+        </article>
+      </div>
+      <div v-if="repairStore.recordsTotal > recordsPageSize" class="records-pagination">
+        <button class="btn btn-sm" :disabled="recordsPage === 0" @click="changeRecordsPage(-1)">上一页</button>
+        <span>第 {{ recordsPage + 1 }} / {{ Math.ceil(repairStore.recordsTotal / recordsPageSize) }} 页</span>
+        <button class="btn btn-sm" :disabled="(recordsPage + 1) * recordsPageSize >= repairStore.recordsTotal" @click="changeRecordsPage(1)">下一页</button>
       </div>
     </div>
 
@@ -432,16 +486,21 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useRepairStore } from '@/stores/repair'
-import type { RepairRule, RepairTemplate } from '@/utils/repair'
+import type { RepairRule, RepairTask, RepairTemplate } from '@/utils/repair'
 
 const repairStore = useRepairStore()
+const router = useRouter()
 const activeTab = ref('rules')
 const showRuleDialog = ref(false)
 const showTemplateDialog = ref(false)
 const editingRule = ref<RepairRule | null>(null)
 const editingTemplate = ref<RepairTemplate | null>(null)
+const recordsPage = ref(0)
+const recordsPageSize = 10
+const rescanningId = ref<number | null>(null)
 
 const generalSettings = reactive<Record<string, any>>({
   defaultMode: 'STANDARD',
@@ -474,6 +533,7 @@ const tabs = [
   { key: 'rules', label: '广告规则', icon: '📋' },
   { key: 'templates', label: '修复模板', icon: '⚙️' },
   { key: 'general', label: '修复功能', icon: '🧰' },
+  { key: 'records', label: '检测结果记录', icon: '🗂️' },
 ]
 
 const featureGroups = [
@@ -571,6 +631,60 @@ onMounted(async () => {
   }
   await Promise.all([repairStore.loadRules(), repairStore.loadTemplates()])
 })
+
+async function selectTab(tab: string) {
+  activeTab.value = tab
+  if (tab === 'records' && !repairStore.records.length) await loadRecords()
+}
+
+async function loadRecords() {
+  try {
+    await repairStore.loadRecords(recordsPage.value, recordsPageSize)
+  } catch {
+    message.error('加载检测记录失败')
+  }
+}
+
+async function changeRecordsPage(offset: number) {
+  recordsPage.value += offset
+  await loadRecords()
+}
+
+function continueRecord(record: RepairTask) {
+  router.push({ name: 'TextRepair', params: { id: record.bookId }, query: { taskId: record.id } })
+}
+
+async function rescanRecord(record: RepairTask) {
+  const confirmed = await confirm('将按该记录的书籍版本和修复配置重新检测，原记录会继续保留。确认继续？')
+  if (!confirmed) return
+  try {
+    rescanningId.value = record.id
+    const newRecord = await repairStore.rescanTask(record.id)
+    message.success(`重新检测完成，发现 ${newRecord.totalIssueCount} 个问题`)
+    router.push({ name: 'TextRepair', params: { id: newRecord.bookId }, query: { taskId: newRecord.id } })
+  } catch {
+    message.error('重新检测失败')
+  } finally {
+    rescanningId.value = null
+  }
+}
+
+function getProcessedCount(record: RepairTask) {
+  return Math.max(0, record.totalIssueCount - record.pendingIssueCount)
+}
+
+function getProcessedPercent(record: RepairTask) {
+  if (!record.totalIssueCount) return 100
+  return Math.round(getProcessedCount(record) / record.totalIssueCount * 100)
+}
+
+function getTaskStatusText(status: string) {
+  return status === 'COMPLETED' ? '已完成修复' : '待处理'
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleString()
+}
 
 function editRule(rule: RepairRule) {
   editingRule.value = rule
@@ -1415,6 +1529,45 @@ function handleSaveGeneralSettings() {
   border-top: 1px solid var(--border-color);
 }
 
+.records-header { align-items: flex-start; }
+
+.record-list { display: grid; gap: 12px; }
+
+.record-card {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 18px 20px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.record-main { flex: 1; min-width: 0; }
+
+.record-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.record-title-row h4 { margin: 0; font-size: 17px; color: var(--text-primary); }
+.record-status,
+.record-mode {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--accent-bg);
+  color: var(--accent-color);
+}
+.record-status.completed { background: rgba(34, 197, 94, .12); color: #16a34a; }
+.record-mode { background: rgba(100, 116, 139, .1); color: var(--text-secondary); }
+.record-meta { margin-top: 6px; color: var(--text-secondary); font-size: 12px; }
+.record-progress { max-width: 620px; margin-top: 14px; }
+.progress-track { height: 7px; overflow: hidden; border-radius: 99px; background: var(--border-color); }
+.progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--accent-color); }
+.progress-labels,
+.record-counts { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 12px; color: var(--text-secondary); }
+.record-counts { justify-content: flex-start; flex-wrap: wrap; }
+.record-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.records-empty { display: grid; place-items: center; gap: 6px; min-height: 220px; padding: 32px; color: var(--text-secondary); border: 1px dashed var(--border-color); border-radius: 10px; }
+.records-empty strong { color: var(--text-primary); }
+.records-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; color: var(--text-secondary); font-size: 13px; }
+
 @media (max-width: 760px) {
   .feature-config-grid,
   .template-feature-groups,
@@ -1446,6 +1599,9 @@ function handleSaveGeneralSettings() {
   .template-editor .modal-body { padding: 10px; }
 
   .template-section { padding: 12px; }
+
+  .record-card { align-items: stretch; flex-direction: column; gap: 14px; }
+  .record-actions .btn { flex: 1; }
 }
 
 @media (min-width: 761px) and (max-width: 920px) {

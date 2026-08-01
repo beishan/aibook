@@ -26,8 +26,14 @@
             <label class="form-label">OPDS 地址</label>
             <div class="url-row">
               <input :value="opdsUrl" readonly class="input url-input" />
-              <button class="btn" @click="copyUrl(opdsUrl)">
-                <span>📋</span>
+              <button
+                class="btn copy-btn"
+                :class="{ copied: copiedUrl === opdsUrl }"
+                :aria-label="copiedUrl === opdsUrl ? 'OPDS 地址已复制' : '复制 OPDS 地址'"
+                :title="copiedUrl === opdsUrl ? '已复制' : '复制地址'"
+                @click="copyUrl(opdsUrl)"
+              >
+                <span>{{ copiedUrl === opdsUrl ? '✓' : '📋' }}</span>
               </button>
               <button class="btn btn-primary" @click="testConnection('opds')">测试</button>
             </div>
@@ -48,8 +54,14 @@
             <label class="form-label">OPDS 2.0 (JSON) 地址</label>
             <div class="url-row">
               <input :value="opds2Url" readonly class="input url-input" />
-              <button class="btn" @click="copyUrl(opds2Url)">
-                <span>📋</span>
+              <button
+                class="btn copy-btn"
+                :class="{ copied: copiedUrl === opds2Url }"
+                :aria-label="copiedUrl === opds2Url ? 'OPDS 2.0 地址已复制' : '复制 OPDS 2.0 地址'"
+                :title="copiedUrl === opds2Url ? '已复制' : '复制地址'"
+                @click="copyUrl(opds2Url)"
+              >
+                <span>{{ copiedUrl === opds2Url ? '✓' : '📋' }}</span>
               </button>
             </div>
           </div>
@@ -72,8 +84,14 @@
             <label class="form-label">WebDAV 地址</label>
             <div class="url-row">
               <input :value="webdavUrl" readonly class="input url-input" />
-              <button class="btn" @click="copyUrl(webdavUrl)">
-                <span>📋</span>
+              <button
+                class="btn copy-btn"
+                :class="{ copied: copiedUrl === webdavUrl }"
+                :aria-label="copiedUrl === webdavUrl ? 'WebDAV 地址已复制' : '复制 WebDAV 地址'"
+                :title="copiedUrl === webdavUrl ? '已复制' : '复制地址'"
+                @click="copyUrl(webdavUrl)"
+              >
+                <span>{{ copiedUrl === webdavUrl ? '✓' : '📋' }}</span>
               </button>
               <button class="btn btn-primary" @click="testConnection('webdav')">测试</button>
             </div>
@@ -139,6 +157,7 @@
 import { ref, computed } from 'vue'
 import { message } from '@/utils/message'
 import api from '@/utils/api'
+import { copyText } from '@/utils/clipboard'
 
 withDefaults(defineProps<{ embedded?: boolean }>(), {
   embedded: false,
@@ -146,6 +165,8 @@ withDefaults(defineProps<{ embedded?: boolean }>(), {
 
 const showTestResult = ref(false)
 const testResult = ref<{ success: boolean; message: string } | null>(null)
+const copiedUrl = ref('')
+let copiedResetTimer: ReturnType<typeof setTimeout> | undefined
 
 const serverUrl = computed(() => window.location.origin)
 
@@ -163,10 +184,15 @@ const steps = computed(() => [
 
 const copyUrl = async (url: string) => {
   try {
-    await navigator.clipboard.writeText(url)
+    await copyText(url)
+    copiedUrl.value = url
+    if (copiedResetTimer) clearTimeout(copiedResetTimer)
+    copiedResetTimer = setTimeout(() => {
+      copiedUrl.value = ''
+    }, 1800)
     message.success('已复制到剪贴板')
   } catch {
-    message.error('复制失败')
+    message.error('浏览器不允许自动复制，请选中地址后手动复制')
   }
 }
 
@@ -304,6 +330,19 @@ const testConnection = async (type: 'opds' | 'webdav') => {
   font-family: 'SF Mono', monospace;
   font-size: var(--font-size-sm);
   background: var(--bg-secondary);
+}
+
+.copy-btn {
+  width: 44px;
+  min-width: 44px;
+  padding-inline: 0;
+  transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+
+.copy-btn.copied {
+  color: var(--success-color);
+  border-color: var(--success-color);
+  background: color-mix(in srgb, var(--success-color) 10%, transparent);
 }
 
 .supported-clients {

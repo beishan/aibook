@@ -1,6 +1,7 @@
 package com.aibook.android.feature.opds
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
@@ -213,9 +214,11 @@ class OpdsViewModel(
         viewModelScope.launch {
             connectionRepository.markSyncing(connection.id)
             try {
-                val collection = OpdsSyncCollector { href ->
-                    connectionRepository.browse(catalogService, connection, href)
-                }.collect()
+                val collection = withContext(Dispatchers.IO) {
+                    OpdsSyncCollector { href ->
+                        connectionRepository.browse(catalogService, connection, href)
+                    }.collect()
+                }
                 val feed = OpdsFeed(
                     title = connection.name,
                     entries = collection.acquisitionEntries
@@ -238,6 +241,7 @@ class OpdsViewModel(
                 _state.value = _state.value.copy(statusMessage = "同步完成：$syncSummary，共 $bookCount 本，$categoryCount 个目录")
             } catch (e: Exception) {
                 val message = e.message ?: "未知错误"
+                Log.e(TAG, "Failed to sync OPDS connection ${connection.id}", e)
                 connectionRepository.markSyncFailed(connection.id, message)
                 _state.value = _state.value.copy(errorMessage = "同步失败：$message")
             }
@@ -252,13 +256,16 @@ class OpdsViewModel(
                 activeConnection = connection
             )
             try {
-                val feed = connectionRepository.browse(catalogService, connection, href)
+                val feed = withContext(Dispatchers.IO) {
+                    connectionRepository.browse(catalogService, connection, href)
+                }
                 _state.value = _state.value.copy(
                     currentFeed = feed,
                     isLoading = false,
                     navigationStack = if (href != null) _state.value.navigationStack + href else emptyList()
                 )
             } catch (e: Exception) {
+                Log.e(TAG, "Failed to browse OPDS connection ${connection.id}", e)
                 connectionRepository.markSyncFailed(connection.id, e.message ?: "未知错误")
                 _state.value = _state.value.copy(
                     isLoading = false,
@@ -282,7 +289,9 @@ class OpdsViewModel(
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoadingNextPage = true)
             try {
-                val page = connectionRepository.browse(catalogService, connection, next.href)
+                val page = withContext(Dispatchers.IO) {
+                    connectionRepository.browse(catalogService, connection, next.href)
+                }
                 val known = current.entries.mapNotNull { it.acquisitionLink?.href ?: it.alternateLink?.href }.toSet()
                 _state.value = _state.value.copy(
                     currentFeed = current.copy(
@@ -294,6 +303,7 @@ class OpdsViewModel(
                     isLoadingNextPage = false
                 )
             } catch (e: Exception) {
+                Log.e(TAG, "Failed to load the next OPDS page for ${connection.id}", e)
                 _state.value = _state.value.copy(
                     isLoadingNextPage = false,
                     errorMessage = "加载下一页失败：${e.message ?: "未知错误"}"
@@ -331,9 +341,12 @@ class OpdsViewModel(
             )
             try {
                 val href = newStack.lastOrNull()
-                val feed = connectionRepository.browse(catalogService, connection, href)
+                val feed = withContext(Dispatchers.IO) {
+                    connectionRepository.browse(catalogService, connection, href)
+                }
                 _state.value = _state.value.copy(currentFeed = feed, isLoading = false)
             } catch (e: Exception) {
+                Log.e(TAG, "Failed to navigate back in OPDS connection ${connection.id}", e)
                 _state.value = _state.value.copy(
                     isLoading = false,
                     errorMessage = "导航失败：${e.message}"
@@ -373,6 +386,8 @@ class OpdsViewModel(
     }
 
     companion object {
+        private const val TAG = "OpdsViewModel"
+
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as Application

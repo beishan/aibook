@@ -23,18 +23,36 @@
     <template v-else>
       <!-- 未创建任务：模式选择 -->
       <div v-if="!repairStore.currentTask" class="repair-mode-section glass">
-        <div v-if="repairStore.tasks.length" class="task-history">
-          <h2>历史修复任务</h2>
+        <div v-if="bookRepairRecords.length && !showScanSetup" class="resume-panel">
+          <div class="resume-heading">
+            <div>
+              <span class="eyebrow">已找到检测结果</span>
+              <h2>继续上次处理，还是重新检测？</h2>
+              <p>处理状态已保存，可从待处理问题继续，不需要重复扫描。</p>
+            </div>
+            <div class="resume-actions">
+              <button class="btn btn-primary" @click="handleOpenTask(bookRepairRecords[0].id)">继续最近记录</button>
+              <button class="btn" @click="handleRescanTask(bookRepairRecords[0].id)">重新检测</button>
+              <button class="btn btn-text" @click="showScanSetup = true">使用其他配置</button>
+            </div>
+          </div>
+          <div class="task-history">
+            <h3>本书检测记录</h3>
           <button
-            v-for="item in repairStore.tasks"
+            v-for="item in bookRepairRecords"
             :key="item.id"
             class="history-task"
             @click="handleOpenTask(item.id)"
           >
-            <span>{{ getStatusText(item.status) }} · {{ getModeText(item.repairMode) }}</span>
-            <span>{{ new Date(item.createdAt).toLocaleString() }}</span>
+              <span class="history-main">
+                <b>{{ getStatusText(item.status) }} · {{ getModeText(item.repairMode) }}</b>
+                <small>{{ new Date(item.createdAt).toLocaleString() }}</small>
+              </span>
+              <span class="history-progress">待处理 {{ item.pendingIssueCount }} / 共 {{ item.totalIssueCount }}</span>
           </button>
+          </div>
         </div>
+        <div v-if="showScanSetup || !bookRepairRecords.length" class="scan-setup">
         <h2>选择修复模式</h2>
         <div class="mode-cards">
           <div
@@ -107,6 +125,8 @@
           <button class="btn btn-primary" @click="handleCreateTask">
             🚀 开始扫描
           </button>
+          <button v-if="bookRepairRecords.length" class="btn" @click="showScanSetup = false">返回已有记录</button>
+        </div>
         </div>
       </div>
 
@@ -130,6 +150,9 @@
             <span class="count-item applied">已应用: {{ repairStore.currentTask.appliedIssueCount }}</span>
           </div>
           <div class="task-actions">
+            <button class="btn btn-sm" @click="handleRescanTask(repairStore.currentTask.id)">
+              🔄 重新检测
+            </button>
             <button class="btn btn-sm" @click="handleAcceptHighConfidence" :disabled="repairStore.currentTask.pendingIssueCount === 0">
               ✅ 接受高置信度
             </button>
@@ -418,9 +441,14 @@ const encodingPreview = ref('')
 const selectedIssueId = ref<number | null>(null)
 const filterType = ref('')
 const filterStatus = ref('')
+const showScanSetup = ref(false)
 
 const selectedIssue = computed(() =>
   repairStore.issues.find((i) => i.id === selectedIssueId.value) || null,
+)
+
+const bookRepairRecords = computed(() =>
+  repairStore.tasks.filter((task) => task.status === 'SCANNED' || task.status === 'COMPLETED'),
 )
 
 const repairReport = computed<RepairReport | null>(() => {
@@ -570,11 +598,37 @@ onMounted(async () => {
     repairStore.loadTemplates(),
     repairStore.loadBookTasks(bookId),
   ])
+  const requestedTaskId = Number(route.query.taskId)
+  if (Number.isFinite(requestedTaskId) && requestedTaskId > 0) {
+    try {
+      await handleOpenTask(requestedTaskId)
+    } catch {
+      message.error('检测记录不存在或已被删除')
+    }
+  } else {
+    showScanSetup.value = bookRepairRecords.value.length === 0
+  }
 })
 
 async function handleOpenTask(taskId: number) {
   await repairStore.loadTask(taskId)
   await repairStore.loadIssues(taskId)
+}
+
+async function handleRescanTask(taskId: number) {
+  try {
+    const confirmed = await confirm('重新检测会创建一条新记录，原检测结果仍会保留。确认继续？')
+    if (!confirmed) return
+    loading.value = true
+    loadingText.value = '正在重新检测内容...'
+    const task = await repairStore.rescanTask(taskId)
+    await repairStore.loadBookTasks(bookId)
+    message.success(`重新检测完成，发现 ${task.totalIssueCount} 个问题`)
+  } catch {
+    message.error('重新检测失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 function handleTemplateChange() {
@@ -906,6 +960,21 @@ function truncate(text: string | undefined, max: number) {
   padding: 24px;
   border-radius: 12px;
 }
+
+.resume-panel { display: grid; gap: 22px; }
+.resume-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 20px; border-radius: 10px; background: var(--accent-bg); }
+.resume-heading h2 { margin: 5px 0 6px; }
+.resume-heading p { margin: 0; color: var(--text-secondary); }
+.eyebrow { color: var(--accent-color); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+.resume-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.btn-text { border-color: transparent; background: transparent; }
+.task-history h3 { margin: 0 0 10px; }
+.history-task { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 14px; margin-top: 8px; border: 1px solid var(--border-color); border-radius: 8px; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; }
+.history-task:hover { border-color: var(--accent-color); background: var(--accent-bg); }
+.history-main { display: grid; gap: 3px; }
+.history-main small,
+.history-progress { color: var(--text-secondary); font-size: 12px; }
+.scan-setup { margin-top: 4px; }
 
 .mode-cards {
   display: grid;

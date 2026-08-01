@@ -24,6 +24,7 @@ public class RepairTaskDTO {
     private Long bookId;
     private String bookTitle;
     private Long versionId;
+    private Long templateId;
     private RepairMode repairMode;
     private String status;
     private String originalContentVersion;

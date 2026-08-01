@@ -64,6 +64,20 @@ public class TextRepairController {
     }
 
     /**
+     * 获取已完成扫描、可继续处理的检测结果记录。
+     */
+    @GetMapping("/records")
+    public ResponseEntity<Page<RepairTaskDTO>> getDetectionRecords(
+            Authentication authentication,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        User user = userService.findByUsername(authentication.getName());
+        PageRequest pageRequest = PageRequest.of(page, size,
+                Sort.by("createdAt").descending());
+        return ResponseEntity.ok(repairService.getDetectionRecords(user.getId(), pageRequest));
+    }
+
+    /**
      * 获取修复任务详情
      */
     @GetMapping("/tasks/{taskId}")
@@ -72,6 +86,17 @@ public class TextRepairController {
             @PathVariable Long taskId) {
         User user = userService.findByUsername(authentication.getName());
         return ResponseEntity.ok(repairService.getTask(taskId, user.getId()));
+    }
+
+    /**
+     * 按原记录配置重新检测，并保留原记录。
+     */
+    @PostMapping("/tasks/{taskId}/rescan")
+    public ResponseEntity<RepairTaskDTO> rescanTask(
+            Authentication authentication,
+            @PathVariable Long taskId) {
+        User user = userService.findByUsername(authentication.getName());
+        return ResponseEntity.ok(repairService.rescanTask(taskId, user.getId()));
     }
 
     /**

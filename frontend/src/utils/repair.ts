@@ -7,6 +7,7 @@ export interface RepairTask {
   bookId: number
   bookTitle: string
   versionId?: number
+  templateId?: number
   repairMode: 'SAFE' | 'STANDARD' | 'DEEP'
   status: string
   originalContentVersion?: string
@@ -148,8 +149,18 @@ export function getRepairTasks(page = 0, size = 10) {
   })
 }
 
+export function getRepairRecords(page = 0, size = 10) {
+  return api.get<{ content: RepairTask[]; totalElements: number }>('/api/text-repair/records', {
+    params: { page, size },
+  })
+}
+
 export function getRepairTask(taskId: number) {
   return api.get<RepairTask>(`/api/text-repair/tasks/${taskId}`)
+}
+
+export function rescanRepairTask(taskId: number) {
+  return api.post<RepairTask>(`/api/text-repair/tasks/${taskId}/rescan`)
 }
 
 export function deleteRepairTask(taskId: number) {

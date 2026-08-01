@@ -149,6 +149,36 @@ public class TextRepairService {
     }
 
     /**
+     * 获取已经完成扫描、可继续处理的检测记录。
+     */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<RepairTaskDTO> getDetectionRecords(
+            Long userId, org.springframework.data.domain.Pageable pageable) {
+        User user = User.builder().id(userId).build();
+        return taskRepository.findByUserIdAndStatusInOrderByCreatedAtDesc(
+                        userId, List.of("SCANNED", "COMPLETED"), pageable)
+                .map(task -> {
+                    Book book = bookService.getBookEntity(task.getBookId(), user);
+                    return toTaskDTO(task, book);
+                });
+    }
+
+    /**
+     * 使用原检测记录的书籍、版本和配置重新扫描。旧记录会保留，便于追溯。
+     */
+    @Transactional
+    public RepairTaskDTO rescanTask(Long taskId, Long userId) {
+        TextRepairTask sourceTask = getOwnedTask(taskId, userId);
+        CreateRepairTaskRequest request = new CreateRepairTaskRequest();
+        request.setBookId(sourceTask.getBookId());
+        request.setVersionId(sourceTask.getVersionId());
+        request.setRepairMode(sourceTask.getRepairMode());
+        request.setTemplateId(sourceTask.getTemplateId());
+        request.setOptionsJson(sourceTask.getOptionsJson());
+        return createTask(request, userId);
+    }
+
+    /**
      * 获取书籍的修复任务列表
      */
     @Transactional
@@ -1079,6 +1109,7 @@ public class TextRepairService {
                 .bookId(task.getBookId())
                 .bookTitle(book.getTitle())
                 .versionId(task.getVersionId())
+                .templateId(task.getTemplateId())
                 .repairMode(task.getRepairMode())
                 .status(task.getStatus())
                 .originalContentVersion(task.getOriginalContentVersion())
