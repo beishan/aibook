@@ -716,7 +716,15 @@ public class TextRepairService {
                         extractStringOption(task.getOptionsJson(), "indentStyle", "FULL_WIDTH_SPACE"));
             }
         }
-        // Encoding anomalies and chapter warnings without concrete replacements are
+        if (issue.getType() == RepairIssueType.ENCODING
+                && issue.getSuggestedText() != null) {
+            Map<String, Object> metadata = parseIssueMetadata(issue.getMetadataJson());
+            Object garbledPattern = metadata == null ? null : metadata.get("garbledPattern");
+            if (garbledPattern instanceof String pattern && !pattern.isEmpty()) {
+                return text.replace(pattern, issue.getSuggestedText());
+            }
+        }
+        // Remaining anomaly and chapter warnings without concrete replacements are
         // advisory only and must never mutate the source text.
         return text;
     }

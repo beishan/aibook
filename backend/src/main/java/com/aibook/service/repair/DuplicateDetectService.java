@@ -6,6 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 重复内容检测服务
@@ -67,7 +69,8 @@ public class DuplicateDetectService {
                     int currIdx = indices.get(idx);
                     DetectedChapterDTO prevChapter = chapters.get(prevIdx);
                     DetectedChapterDTO currChapter = chapters.get(currIdx);
-                    String duplicateText = extractChapterText(text, currChapter);
+                    String duplicateText = extractRange(text,
+                            currChapter.getStartOffset(), currChapter.getEndOffset());
 
                     issues.add(TextRepairIssue.builder()
                             .taskId(taskId)
@@ -161,18 +164,17 @@ public class DuplicateDetectService {
         List<TextRepairIssue> issues = new ArrayList<>();
 
         // 按段落分割全文
-        String[] paragraphs = text.split("\\n{2,}");
         Map<String, List<int[]>> paragraphPositions = new HashMap<>();
-
-        int offset = 0;
-        for (String para : paragraphs) {
+        Matcher paragraphMatcher = Pattern.compile("(?s)(.*?)(?:\\n{2,}|\\z)")
+                .matcher(text);
+        while (paragraphMatcher.find()) {
+            String para = paragraphMatcher.group(1);
             String normalized = normalizeForComparison(para);
             if (normalized.length() >= 50) { // 只关注较长的段落
                 paragraphPositions
                         .computeIfAbsent(normalized, k -> new ArrayList<>())
-                        .add(new int[]{offset, offset + para.length()});
+                        .add(new int[]{paragraphMatcher.start(1), paragraphMatcher.end(1)});
             }
-            offset += para.length() + 2; // +2 for \n\n
         }
 
         for (Map.Entry<String, List<int[]>> entry : paragraphPositions.entrySet()) {
@@ -211,6 +213,13 @@ public class DuplicateDetectService {
         String chapterText = text.substring(start, end);
         int titleEnd = chapterText.indexOf('\n');
         return titleEnd >= 0 ? chapterText.substring(titleEnd + 1) : "";
+    }
+
+    private String extractRange(String text, Integer startOffset, Integer endOffset) {
+        if (startOffset == null || endOffset == null) return "";
+        int start = Math.max(0, Math.min(startOffset, text.length()));
+        int end = Math.max(start, Math.min(endOffset, text.length()));
+        return text.substring(start, end);
     }
 
     private String normalizeForComparison(String text) {

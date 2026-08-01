@@ -37,6 +37,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import java.util.regex.Pattern;
 
 /**
  * 从书籍原始文件重新提取本地元数据。
@@ -48,6 +49,8 @@ public class BookParsingService {
 
     private static final int MAX_DESCRIPTION_CHAPTER_BYTES = 2 * 1024 * 1024;
     private static final int MAX_DESCRIPTION_LENGTH = 3000;
+    private static final Pattern GENERATED_STORAGE_NAME = Pattern.compile(
+            "(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$");
 
     private final BookRepository bookRepository;
     private final TxtParserService txtParserService;
@@ -727,11 +730,22 @@ public class BookParsingService {
         String parsedTitle = extensionIndex > 0
                 ? fileName.substring(0, extensionIndex)
                 : fileName;
+        // Uploaded files use UUIDs on disk. That storage implementation detail must
+        // never replace a meaningful title obtained from the upload name or metadata.
+        if (isGeneratedStorageTitle(parsedTitle)
+                && book.getTitle() != null
+                && !book.getTitle().isBlank()) {
+            return;
+        }
         if (parsedTitle.equals(book.getTitle())) {
             return;
         }
         book.setTitle(parsedTitle);
         updatedFields.add("title");
+    }
+
+    static boolean isGeneratedStorageTitle(String value) {
+        return value != null && GENERATED_STORAGE_NAME.matcher(value.trim()).matches();
     }
 
     private void updateIfPresent(

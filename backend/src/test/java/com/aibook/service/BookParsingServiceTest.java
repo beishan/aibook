@@ -46,6 +46,22 @@ class BookParsingServiceTest {
     }
 
     @Test
+    void shouldNotReplaceUploadedTitleWithUuidStorageFilename() throws Exception {
+        Path file = tempDir.resolve("cfe3012c-dff6-4b6e-b3bc-4af90d3fcae3.txt");
+        Files.writeString(file, "第一章 开始\n正文", StandardCharsets.UTF_8);
+        Book book = Book.builder()
+                .title("盗墓笔记")
+                .format("txt")
+                .filePath(file.toString())
+                .build();
+
+        BookParsingService.ParseResult result = service().reparse(book);
+
+        assertEquals("盗墓笔记", result.getBook().getTitle());
+        assertTrue(!result.getUpdatedFields().contains("title"));
+    }
+
+    @Test
     void shouldReparseEpubMetadataAndSpineCount() throws Exception {
         Path file = tempDir.resolve("sample.epub");
         try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(file))) {

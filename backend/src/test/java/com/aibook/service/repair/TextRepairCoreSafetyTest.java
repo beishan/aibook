@@ -20,6 +20,8 @@ class TextRepairCoreSafetyTest {
     private final ChapterNormalizeService chapterNormalizeService = new ChapterNormalizeService();
     private final ParagraphFixService paragraphFixService = new ParagraphFixService();
     private final DuplicateDetectService duplicateDetectService = new DuplicateDetectService();
+    private final PunctuationFixService punctuationFixService = new PunctuationFixService();
+    private final EncodingDetectService encodingDetectService = new EncodingDetectService();
 
     @Test
     void chapterNormalizationOnlyReplacesTheTitleLine() {
@@ -52,6 +54,70 @@ class TextRepairCoreSafetyTest {
                 .contains("\"blankLineCount\":3")
                 .contains("\"contextBefore\":\"第一行\"")
                 .contains("\"contextAfter\":\"第二行\"");
+    }
+
+    @Test
+    void brokenLineReplacementDoesNotConsumeTheFollowingLineBreak() {
+        String text = "一句话被拆成\n两行。\n下一段。";
+
+        TextRepairIssue issue = paragraphFixService
+                .scanForIssues(text, text.split("\n", -1), 1L).stream()
+                .filter(item -> item.getReason().contains("拆成多行"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(text.substring(issue.getStartOffset(), issue.getEndOffset()))
+                .isEqualTo(issue.getOriginalText());
+        String repaired = text.substring(0, issue.getStartOffset())
+                + issue.getSuggestedText() + text.substring(issue.getEndOffset());
+        assertThat(repaired).isEqualTo("一句话被拆成两行。\n下一段。");
+    }
+
+    @Test
+    void duplicateParagraphOffsetsRemainExactWithThreeBlankLines() {
+        String paragraph = "这是一个用于验证重复段落偏移的长段落，内容必须超过五十个字符，"
+                + "并且第二次出现时仍然可以准确定位原文范围而不会发生偏移。";
+        String text = paragraph + "\n\n\n短过渡。\n\n\n" + paragraph;
+
+        TextRepairIssue issue = duplicateDetectService
+                .scanForIssues(text, List.of(), 1L).stream()
+                .filter(item -> item.getReason().startsWith("重复段落"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(text.substring(issue.getStartOffset(), issue.getEndOffset()))
+                .isEqualTo(issue.getOriginalText())
+                .isEqualTo(paragraph);
+        assertThat(issue.getSuggestedText()).isEmpty();
+    }
+
+    @Test
+    void wholeDocumentCleanupIssuesExposeARealSamplePreview() {
+        String text = "这一行末尾有空格   \n下一行";
+
+        TextRepairIssue issue = punctuationFixService
+                .scanForIssues(text, text.split("\n", -1), 1L).stream()
+                .filter(item -> item.getReason().contains("行尾多余空格"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(issue.getMetadataJson())
+                .contains("previewOriginal")
+                .contains("行尾空白")
+                .contains("previewSuggested");
+    }
+
+    @Test
+    void recoverableEncodingPatternCarriesAnActionableReplacementKey() {
+        TextRepairIssue issue = encodingDetectService.scanForIssues("开头浣犲ソ结尾", 1L).stream()
+                .filter(item -> item.getOriginalText().contains("浣犲ソ"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(issue.getMetadataJson())
+                .contains("\"garbledPattern\":\"浣犲ソ\"")
+                .contains("\"candidates\"")
+                .contains("\"previewOriginal\"");
     }
 
     @Test

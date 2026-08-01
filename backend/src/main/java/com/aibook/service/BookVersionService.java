@@ -72,10 +72,21 @@ public class BookVersionService {
 
     @Transactional
     public BookVersion ensurePrimaryVersion(Book book) {
+        return ensurePrimaryVersion(book, null);
+    }
+
+    @Transactional
+    public BookVersion ensurePrimaryVersion(Book book, String uploadedFilename) {
         BookVersion version = bookVersionRepository.findByBookAndPrimaryVersionTrue(book)
-                .map(existing -> syncPrimaryVersion(book, existing))
+                .map(existing -> {
+                    if (isGeneratedStorageFilename(existing.getDisplayName())
+                            && uploadedFilename != null && !uploadedFilename.isBlank()) {
+                        existing.setDisplayName(safeFilename(uploadedFilename));
+                    }
+                    return syncPrimaryVersion(book, existing);
+                })
                 .orElseGet(() -> {
-                    String displayName = Paths.get(book.getFilePath()).getFileName().toString();
+                    String displayName = resolvePrimaryDisplayName(book, uploadedFilename);
                     BookVersion createdVersion = bookVersionRepository.save(BookVersion.builder()
                             .book(book)
                             .displayName(displayName)
@@ -216,6 +227,34 @@ public class BookVersionService {
         version.setChapterInfo(book.getChapterInfo());
         version.setChapterCount(book.getChapterCount());
         return bookVersionRepository.save(version);
+    }
+
+    private String resolvePrimaryDisplayName(Book book, String uploadedFilename) {
+        if (uploadedFilename != null && !uploadedFilename.isBlank()) {
+            return safeFilename(uploadedFilename);
+        }
+        String storedFilename = Paths.get(book.getFilePath()).getFileName().toString();
+        if (!isGeneratedStorageFilename(storedFilename)) {
+            return storedFilename;
+        }
+        String title = book.getTitle() == null || book.getTitle().isBlank()
+                ? "未命名书籍"
+                : book.getTitle().trim();
+        return title + "." + book.getFormat().toLowerCase(Locale.ROOT);
+    }
+
+    private String safeFilename(String filename) {
+        String normalized = filename.replace('\\', '/');
+        int slash = normalized.lastIndexOf('/');
+        return slash >= 0 ? normalized.substring(slash + 1) : normalized;
+    }
+
+    private boolean isGeneratedStorageFilename(String filename) {
+        if (filename == null || filename.isBlank()) return false;
+        String safeName = safeFilename(filename);
+        int dot = safeName.lastIndexOf('.');
+        String baseName = dot > 0 ? safeName.substring(0, dot) : safeName;
+        return BookParsingService.isGeneratedStorageTitle(baseName);
     }
 
     private String extension(String filename) {

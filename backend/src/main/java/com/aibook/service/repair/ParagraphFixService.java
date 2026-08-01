@@ -126,7 +126,7 @@ public class ParagraphFixService {
                             .status(RepairIssueStatus.PENDING)
                             .source(RepairSource.AUTO)
                             .riskLevel(RiskLevel.LOW)
-                            .metadataJson(buildBlankLineContextMetadata(
+                            .metadataJson(RepairMetadataUtil.blankLineContext(
                                     blankRun, contextBefore, contextAfter))
                             .build());
                 }
@@ -136,38 +136,6 @@ public class ParagraphFixService {
         }
 
         return issues;
-    }
-
-    private String buildBlankLineContextMetadata(
-            int blankLineCount, String contextBefore, String contextAfter) {
-        return "{\"blankLineCount\":" + blankLineCount
-                + ",\"contextBefore\":\"" + escapeJson(contextBefore) + "\""
-                + ",\"contextAfter\":\"" + escapeJson(contextAfter) + "\"}";
-    }
-
-    private String escapeJson(String value) {
-        if (value == null) return "";
-        StringBuilder escaped = new StringBuilder(value.length());
-        for (int i = 0; i < value.length(); i++) {
-            char ch = value.charAt(i);
-            switch (ch) {
-                case '\\' -> escaped.append("\\\\");
-                case '"' -> escaped.append("\\\"");
-                case '\b' -> escaped.append("\\b");
-                case '\f' -> escaped.append("\\f");
-                case '\n' -> escaped.append("\\n");
-                case '\r' -> escaped.append("\\r");
-                case '\t' -> escaped.append("\\t");
-                default -> {
-                    if (ch < 0x20) {
-                        escaped.append(String.format("\\u%04x", (int) ch));
-                    } else {
-                        escaped.append(ch);
-                    }
-                }
-            }
-        }
-        return escaped.toString();
     }
 
     // ==================== 错误换行检测 ====================
@@ -196,7 +164,7 @@ public class ParagraphFixService {
                         .chapterIndex(-1)
                         .type(RepairIssueType.PARAGRAPH)
                         .startOffset(charOffset)
-                        .endOffset(charOffset + current.length() + next.length() + 2)
+                        .endOffset(charOffset + current.length() + next.length() + 1)
                         .originalText(trimmedCurrent + "\n" + trimmedNext)
                         .suggestedText(merged)
                         .reason("一句话被拆成多行，建议合并")

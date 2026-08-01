@@ -5,6 +5,8 @@ import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookVersionRepository;
 import com.aibook.service.UserService;
+import com.aibook.service.BookParsingService;
+import com.aibook.service.BookVersionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,6 +37,8 @@ public class FileUploadController {
     private final BookRepository bookRepository;
     private final BookVersionRepository bookVersionRepository;
     private final UserService userService;
+    private final BookParsingService bookParsingService;
+    private final BookVersionService bookVersionService;
 
     @Value("${upload.path:./uploads}")
     private String uploadPath;
@@ -61,10 +65,16 @@ public class FileUploadController {
         for (MultipartFile file : files) {
             try {
                 // 生成唯一文件名
-                String originalFilename = file.getOriginalFilename();
+                String originalFilename = safeOriginalFilename(file.getOriginalFilename());
+                if (originalFilename.isBlank()) {
+                    throw new IllegalArgumentException("文件名不能为空");
+                }
                 String extension = "";
-                if (originalFilename != null && originalFilename.contains(".")) {
+                if (originalFilename.contains(".")) {
                     extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+                }
+                if (extension.isBlank()) {
+                    throw new IllegalArgumentException("文件缺少扩展名");
                 }
                 String uniqueFilename = UUID.randomUUID().toString() + extension;
 
@@ -104,21 +114,29 @@ public class FileUploadController {
                         .user(user)
                         .build();
 
-                bookRepository.save(book);
+                book = bookRepository.save(book);
+                try {
+                    // EPUB 等格式优先采用文件内部元数据；TXT 等格式保留上传文件名。
+                    book = bookParsingService.reparse(book).getBook();
+                } catch (Exception parseException) {
+                    log.warn("上传后解析失败，保留文件名作为书名: {}", originalFilename, parseException);
+                }
+                bookVersionService.ensurePrimaryVersion(book, originalFilename);
                 successCount++;
 
                 results.add(Map.of(
                     "filename", originalFilename,
                     "success", true,
                     "message", "上传成功",
-                    "bookId", book.getId()
+                    "bookId", book.getId(),
+                    "title", book.getTitle()
                 ));
 
                 log.info("文件上传成功: {}", originalFilename);
             } catch (Exception e) {
                 log.error("文件上传失败: {}", file.getOriginalFilename(), e);
                 results.add(Map.of(
-                    "filename", file.getOriginalFilename(),
+                    "filename", safeOriginalFilename(file.getOriginalFilename()),
                     "success", false,
                     "message", "上传失败: " + e.getMessage()
                 ));
@@ -135,6 +153,13 @@ public class FileUploadController {
         response.put("failCount", failCount);
 
         return ResponseEntity.ok(response);
+    }
+
+    private String safeOriginalFilename(String originalFilename) {
+        if (originalFilename == null) return "";
+        String normalized = originalFilename.replace('\\', '/');
+        int slash = normalized.lastIndexOf('/');
+        return (slash >= 0 ? normalized.substring(slash + 1) : normalized).trim();
     }
 
     /**

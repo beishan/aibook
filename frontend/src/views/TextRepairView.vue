@@ -241,6 +241,13 @@
                   <p>{{ blankLineContext(selectedIssue, 'contextAfter') }}</p>
                 </div>
               </div>
+              <div v-else-if="selectedIssue && hasSamplePreview(selectedIssue)" class="sample-preview-card">
+                <span class="sample-caption">检测样例</span>
+                <pre>{{ issueMetadataText(selectedIssue, 'previewOriginal') }}</pre>
+                <p v-if="issueMetadataText(selectedIssue, 'previewNote')" class="sample-note">
+                  {{ issueMetadataText(selectedIssue, 'previewNote') }}
+                </p>
+              </div>
               <pre v-else-if="selectedIssue">{{ selectedIssue.originalText || '（无内容）' }}</pre>
               <div v-else class="content-placeholder">
                 <p>选择左侧问题查看原始内容</p>
@@ -255,7 +262,8 @@
               <div v-if="selectedIssue" class="issue-actions">
                 <button
                   class="btn btn-sm btn-success"
-                  :disabled="selectedIssue.suggestedText == null"
+                  :disabled="!isIssueActionable(selectedIssue)"
+                  :title="isIssueActionable(selectedIssue) ? '接受这项修复' : '该问题仅用于检测提示'"
                   @click="handleAcceptIssue(selectedIssue)"
                 >
                   ✅ 接受
@@ -266,10 +274,18 @@
                 <button class="btn btn-sm" @click="handleIgnoreIssue(selectedIssue)">
                   🚫 忽略
                 </button>
-                <button class="btn btn-sm" @click="handleManualEdit(selectedIssue)">
+                <button
+                  v-if="canManualEdit(selectedIssue)"
+                  class="btn btn-sm"
+                  @click="handleManualEdit(selectedIssue)"
+                >
                   ✏️ 手动编辑
                 </button>
-                <button class="btn btn-sm" @click="handleApplyToAll(selectedIssue)">
+                <button
+                  v-if="isIssueActionable(selectedIssue)"
+                  class="btn btn-sm"
+                  @click="handleApplyToAll(selectedIssue)"
+                >
                   📚 应用同类
                 </button>
                 <button
@@ -302,7 +318,28 @@
                   <p>{{ blankLineContext(selectedIssue, 'contextAfter') }}</p>
                 </div>
               </div>
-              <pre v-else-if="selectedIssue">{{ selectedIssue.suggestedText || '（无建议）' }}</pre>
+              <div v-else-if="selectedIssue && !isIssueActionable(selectedIssue)" class="repair-state-card advisory">
+                <span class="repair-state-icon">i</span>
+                <div>
+                  <strong>仅检测提示，不会自动修改</strong>
+                  <p>该问题需要人工判断，可选择忽略、拒绝或手动编辑。</p>
+                </div>
+              </div>
+              <div v-else-if="selectedIssue && hasSamplePreview(selectedIssue)" class="sample-preview-card repaired">
+                <span class="sample-caption">处理后样例</span>
+                <pre>{{ issueMetadataText(selectedIssue, 'previewSuggested') || '（该样例内容将被删除）' }}</pre>
+                <p v-if="issueMetadataText(selectedIssue, 'previewNote')" class="sample-note">
+                  {{ issueMetadataText(selectedIssue, 'previewNote') }}
+                </p>
+              </div>
+              <div v-else-if="selectedIssue && isDeletionSuggestion(selectedIssue)" class="repair-state-card deletion">
+                <span class="repair-state-icon">−</span>
+                <div>
+                  <strong>删除这段内容</strong>
+                  <p>接受后将删除左侧展示的完整内容。</p>
+                </div>
+              </div>
+              <pre v-else-if="selectedIssue">{{ selectedIssue.suggestedText }}</pre>
               <div v-else class="content-placeholder">
                 <p>选择左侧问题查看修复建议</p>
               </div>
@@ -449,6 +486,41 @@ function isBlankLineIssue(issue: RepairIssue): boolean {
     && typeof issue.metadata?.blankLineCount === 'number'
 }
 
+function issueMetadataText(issue: RepairIssue, key: string): string {
+  const value = issue.metadata?.[key]
+  return typeof value === 'string' ? value : ''
+}
+
+function hasSamplePreview(issue: RepairIssue): boolean {
+  return issueMetadataText(issue, 'previewOriginal').length > 0
+}
+
+function isIssueActionable(issue: RepairIssue): boolean {
+  if (issue.suggestedText == null) return false
+  if (issue.startOffset != null && issue.endOffset != null) return true
+  if (issue.type === 'PUNCTUATION' || issue.type === 'INVISIBLE_CHAR') return true
+  if (issue.type === 'PARAGRAPH') {
+    return Boolean(issue.reason?.includes('换行符') || issue.reason?.includes('段首缩进'))
+  }
+  if (issue.type === 'ENCODING') {
+    return issueMetadataText(issue, 'garbledPattern').length > 0
+  }
+  return false
+}
+
+function isDeletionSuggestion(issue: RepairIssue): boolean {
+  return issue.suggestedText === ''
+    || ((issue.type === 'AD' || issue.type === 'DUPLICATE')
+      && issue.suggestedText === '[已删除]')
+}
+
+function canManualEdit(issue: RepairIssue): boolean {
+  const hasConcreteRange = issue.startOffset != null && issue.endOffset != null
+  const isPatternReplacement = issue.type === 'ENCODING'
+    && issueMetadataText(issue, 'garbledPattern').length > 0
+  return isIssueActionable(issue) && (hasConcreteRange || isPatternReplacement)
+}
+
 function blankLineContext(issue: RepairIssue, key: 'contextBefore' | 'contextAfter'): string {
   const value = issue.metadata?.[key]
   return typeof value === 'string' && value.length > 0 ? value : '（文件边界）'
@@ -579,6 +651,7 @@ function selectIssue(issue: RepairIssue) {
 }
 
 async function handleAcceptIssue(issue: RepairIssue) {
+  if (!isIssueActionable(issue)) return
   try {
     await repairStore.updateIssue(issue.id, { status: 'ACCEPTED' })
     message.success('已接受修复')
@@ -606,7 +679,11 @@ async function handleIgnoreIssue(issue: RepairIssue) {
 }
 
 async function handleManualEdit(issue: RepairIssue) {
-  const value = window.prompt('请输入修复后的文本', issue.suggestedText || issue.originalText || '')
+  if (!canManualEdit(issue)) return
+  const value = window.prompt(
+    '请输入修复后的文本',
+    issue.suggestedText ?? issue.originalText ?? '',
+  )
   if (value === null) return
   await repairStore.updateIssue(issue.id, {
     status: 'ACCEPTED',
@@ -616,6 +693,7 @@ async function handleManualEdit(issue: RepairIssue) {
 }
 
 async function handleApplyToAll(issue: RepairIssue) {
+  if (!isIssueActionable(issue)) return
   await repairStore.updateIssue(issue.id, {
     status: 'ACCEPTED',
     applyToAll: true,
@@ -1206,6 +1284,94 @@ function truncate(text: string | undefined, max: number) {
 
 .blank-run-indicator.fixed span {
   color: var(--success);
+}
+
+.sample-preview-card {
+  position: relative;
+  overflow: hidden;
+  padding: 38px 14px 14px;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border-color));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning) 7%, var(--surface-card));
+}
+
+.sample-preview-card.repaired {
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border-color));
+  background: color-mix(in srgb, var(--success) 7%, var(--surface-card));
+}
+
+.sample-caption {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 6px 10px;
+  border-bottom-right-radius: 7px;
+  background: color-mix(in srgb, var(--warning) 16%, var(--surface-card));
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sample-preview-card.repaired .sample-caption {
+  background: color-mix(in srgb, var(--success) 16%, var(--surface-card));
+  color: var(--success);
+}
+
+.sample-preview-card pre {
+  overflow-wrap: anywhere;
+}
+
+.sample-note {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.repair-state-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface-card);
+}
+
+.repair-state-card.deletion {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border-color));
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface-card));
+}
+
+.repair-state-card.advisory {
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--border-color));
+  background: color-mix(in srgb, var(--warning) 7%, var(--surface-card));
+}
+
+.repair-state-icon {
+  display: inline-flex;
+  flex: 0 0 26px;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.repair-state-card strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.repair-state-card p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .content-placeholder {

@@ -38,7 +38,7 @@ public class PunctuationFixService {
         List<TextRepairIssue> issues = new ArrayList<>();
 
         // 1. 不可见字符
-        issues.addAll(detectInvisibleChars(text, lines, taskId));
+        issues.addAll(detectInvisibleChars(text, taskId));
 
         // 2. 行尾空格
         issues.addAll(detectTrailingSpaces(lines, taskId));
@@ -57,23 +57,13 @@ public class PunctuationFixService {
 
     // ==================== 不可见字符 ====================
 
-    private List<TextRepairIssue> detectInvisibleChars(
-            String text, String[] lines, Long taskId) {
+    private List<TextRepairIssue> detectInvisibleChars(String text, Long taskId) {
         List<TextRepairIssue> issues = new ArrayList<>();
 
         int zeroWidthCount = countInvisibleChars(text);
         if (zeroWidthCount > 0) {
             // 找到第一处不可见字符的位置
             int firstPos = findFirstInvisible(text);
-            int charOffset = 0;
-            int lineIndex = 0;
-            for (int i = 0; i < lines.length && charOffset <= firstPos; i++) {
-                if (charOffset + lines[i].length() >= firstPos) {
-                    lineIndex = i;
-                    break;
-                }
-                charOffset += lines[i].length() + 1;
-            }
 
             issues.add(TextRepairIssue.builder()
                     .taskId(taskId)
@@ -86,6 +76,7 @@ public class PunctuationFixService {
                     .status(RepairIssueStatus.PENDING)
                     .source(RepairSource.AUTO)
                     .riskLevel(RiskLevel.LOW)
+                    .metadataJson(invisibleCharPreview(text, firstPos))
                     .build());
         }
 
@@ -129,8 +120,8 @@ public class PunctuationFixService {
             String[] lines, Long taskId) {
         List<TextRepairIssue> issues = new ArrayList<>();
         int count = 0;
-        int charOffset = 0;
-        List<int[]> positions = new ArrayList<>();
+        String sampleOriginal = null;
+        String sampleSuggested = null;
 
         for (String line : lines) {
             int end = line.length();
@@ -142,9 +133,12 @@ public class PunctuationFixService {
             int trailing = line.length() - end;
             if (trailing > 0) {
                 count++;
-                positions.add(new int[]{charOffset + end, charOffset + line.length()});
+                if (sampleOriginal == null) {
+                    sampleOriginal = line.substring(0, end)
+                            + "⟦行尾空白 × " + trailing + "⟧";
+                    sampleSuggested = line.substring(0, end);
+                }
             }
-            charOffset += line.length() + 1;
         }
 
         if (count > 0) {
@@ -159,6 +153,8 @@ public class PunctuationFixService {
                     .status(RepairIssueStatus.PENDING)
                     .source(RepairSource.AUTO)
                     .riskLevel(RiskLevel.LOW)
+                    .metadataJson(RepairMetadataUtil.samplePreview(
+                            sampleOriginal, sampleSuggested, "空白字符已转换为可见标记"))
                     .build());
         }
 
@@ -171,14 +167,18 @@ public class PunctuationFixService {
             String[] lines, Long taskId) {
         List<TextRepairIssue> issues = new ArrayList<>();
         int count = 0;
-        int charOffset = 0;
+        String sampleOriginal = null;
+        String sampleSuggested = null;
 
         for (String line : lines) {
             // 检测 " ，" " 。" " ：" 等模式
             String trimmed = line.trim();
             int lineCount = countSpaceBeforePunct(trimmed);
             count += lineCount;
-            charOffset += line.length() + 1;
+            if (lineCount > 0 && sampleOriginal == null) {
+                sampleOriginal = trimmed;
+                sampleSuggested = removeSpaceBeforePunct(trimmed);
+            }
         }
 
         if (count > 0) {
@@ -193,6 +193,8 @@ public class PunctuationFixService {
                     .status(RepairIssueStatus.PENDING)
                     .source(RepairSource.AUTO)
                     .riskLevel(RiskLevel.LOW)
+                    .metadataJson(RepairMetadataUtil.samplePreview(
+                            sampleOriginal, sampleSuggested, "展示第一处匹配样例"))
                     .build());
         }
 
@@ -224,6 +226,8 @@ public class PunctuationFixService {
             String[] lines, Long taskId) {
         List<TextRepairIssue> issues = new ArrayList<>();
         int count = 0;
+        String sampleOriginal = null;
+        String sampleSuggested = null;
 
         for (String line : lines) {
             String trimmed = line.trim();
@@ -233,6 +237,11 @@ public class PunctuationFixService {
                 if (hasChinese(trimmed)) {
                     count += countChar(trimmed, entry.getKey());
                 }
+            }
+            if (sampleOriginal == null && hasChinese(trimmed)
+                    && containsMappedPunctuation(trimmed)) {
+                sampleOriginal = trimmed;
+                sampleSuggested = normalizePunctuation(trimmed);
             }
         }
 
@@ -248,6 +257,8 @@ public class PunctuationFixService {
                     .status(RepairIssueStatus.PENDING)
                     .source(RepairSource.AUTO)
                     .riskLevel(RiskLevel.LOW)
+                    .metadataJson(RepairMetadataUtil.samplePreview(
+                            sampleOriginal, sampleSuggested, "展示第一处匹配样例"))
                     .build());
         }
 
@@ -260,7 +271,8 @@ public class PunctuationFixService {
             String[] lines, Long taskId) {
         List<TextRepairIssue> issues = new ArrayList<>();
         int count = 0;
-        int charOffset = 0;
+        String sampleOriginal = null;
+        String sampleSuggested = null;
 
         for (String line : lines) {
             String trimmed = line.trim();
@@ -274,11 +286,14 @@ public class PunctuationFixService {
                     }
                     if (run >= 3) {
                         count++;
+                        if (sampleOriginal == null) {
+                            sampleOriginal = trimmed;
+                            sampleSuggested = cleanRepeatedPunctuation(trimmed);
+                        }
                         i += run - 1;
                     }
                 }
             }
-            charOffset += line.length() + 1;
         }
 
         if (count > 0) {
@@ -293,6 +308,8 @@ public class PunctuationFixService {
                     .status(RepairIssueStatus.PENDING)
                     .source(RepairSource.AUTO)
                     .riskLevel(RiskLevel.LOW)
+                    .metadataJson(RepairMetadataUtil.samplePreview(
+                            sampleOriginal, sampleSuggested, "展示第一处匹配样例"))
                     .build());
         }
 
@@ -369,6 +386,38 @@ public class PunctuationFixService {
             if (text.charAt(i) == c) count++;
         }
         return count;
+    }
+
+    private boolean containsMappedPunctuation(String text) {
+        for (Character punctuation : PUNCTUATION_MAP.keySet()) {
+            if (text.indexOf(punctuation) >= 0) return true;
+        }
+        return false;
+    }
+
+    private String invisibleCharPreview(String text, int position) {
+        if (position < 0 || position >= text.length()) return null;
+        int lineStart = text.lastIndexOf('\n', position);
+        lineStart = lineStart < 0 ? 0 : lineStart + 1;
+        int lineEnd = text.indexOf('\n', position);
+        lineEnd = lineEnd < 0 ? text.length() : lineEnd;
+        String line = text.substring(lineStart, lineEnd);
+        return RepairMetadataUtil.samplePreview(
+                renderInvisibleChars(line), cleanInvisibleChars(line),
+                "不可见字符已转换为 Unicode 可见标记");
+    }
+
+    private String renderInvisibleChars(String text) {
+        StringBuilder visible = new StringBuilder();
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (isInvisibleChar(ch)) {
+                visible.append(String.format("⟦U+%04X⟧", (int) ch));
+            } else {
+                visible.append(ch);
+            }
+        }
+        return visible.toString();
     }
 
     private String stripTrailing(String s) {

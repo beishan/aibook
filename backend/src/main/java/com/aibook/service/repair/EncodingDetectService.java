@@ -152,7 +152,7 @@ public class EncodingDetectService {
             issues.add(TextRepairIssue.builder()
                     .taskId(taskId)
                     .type(RepairIssueType.ENCODING)
-                    .originalText("发现 " + replaceCharCount + " 处 Unicode 替换字符（）")
+                    .originalText("发现 " + replaceCharCount + " 处 Unicode 替换字符（�）")
                     .suggestedText(null)
                     .reason("原始字符可能已经在之前的解码过程中丢失，无法保证自动恢复。")
                     .confidence(0.9)
@@ -179,7 +179,8 @@ public class EncodingDetectService {
                             .status(RepairIssueStatus.PENDING)
                             .source(RepairSource.AUTO)
                             .riskLevel(RiskLevel.MEDIUM)
-                            .metadataJson(candidates.isEmpty() ? null : toJsonArray(candidates))
+                            .metadataJson(RepairMetadataUtil.encodingCandidates(
+                                    pattern, candidates))
                             .build());
                 }
             }
@@ -432,14 +433,4 @@ public class EncodingDetectService {
         return count;
     }
 
-    private String toJsonArray(List<String> list) {
-        if (list == null || list.isEmpty()) return null;
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < list.size(); i++) {
-            if (i > 0) sb.append(",");
-            sb.append("\"").append(list.get(i).replace("\"", "\\\"")).append("\"");
-        }
-        sb.append("]");
-        return sb.toString();
-    }
 }
