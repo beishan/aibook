@@ -23,7 +23,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * TXT 内容修复任务编排服务
@@ -81,6 +80,7 @@ public class TextRepairService {
         TextRepairTask task = TextRepairTask.builder()
                 .bookId(book.getId())
                 .versionId(version.getId())
+                .templateId(request.getTemplateId())
                 .repairMode(request.getRepairMode())
                 .status("SCANNING")
                 .originalContentVersion(version.getFileHash())
@@ -90,10 +90,12 @@ public class TextRepairService {
         // 应用模板配置
         if (request.getTemplateId() != null) {
             TextRepairTemplate template = templateRepository.findById(request.getTemplateId())
-                    .orElse(null);
-            if (template != null) {
-                task.setOptionsJson(buildOptionsFromTemplate(template));
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND, "修复模板不存在"));
+            if (template.getUserId() != null && !template.getUserId().equals(userId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无权使用此修复模板");
             }
+            task.setOptionsJson(buildOptionsFromTemplate(template));
         } else if (request.getOptionsJson() != null) {
             task.setOptionsJson(request.getOptionsJson());
         } else {
@@ -183,8 +185,9 @@ public class TextRepairService {
      */
     @Transactional
     public org.springframework.data.domain.Page<RepairIssueDTO> getIssues(
-            Long taskId, RepairIssueType type, RepairIssueStatus status,
+            Long taskId, Long userId, RepairIssueType type, RepairIssueStatus status,
             org.springframework.data.domain.Pageable pageable) {
+        getOwnedTask(taskId, userId);
         if (type != null && status != null) {
             // 同时过滤类型和状态
             List<TextRepairIssue> allIssues = issueRepository
@@ -223,20 +226,30 @@ public class TextRepairService {
         if (request.getSource() != null) {
             issue.setSource(request.getSource());
         }
-        if (request.getManualText() != null && !request.getManualText().isEmpty()) {
+        if (request.getManualText() != null) {
             issue.setSuggestedText(request.getManualText());
+            issue.setSource(RepairSource.MANUAL);
         }
 
         issue = issueRepository.save(issue);
 
         // 批量应用
         if (Boolean.TRUE.equals(request.getApplyToAll())) {
+            String targetRuleId = issue.getRuleId();
+            String targetOriginalText = issue.getOriginalText();
             List<TextRepairIssue> similarIssues = issueRepository
                     .findByTaskIdAndType(task.getId(), issue.getType()).stream()
                     .filter(i -> i.getStatus() == RepairIssueStatus.PENDING)
+                    .filter(i -> targetRuleId != null
+                            ? targetRuleId.equals(i.getRuleId())
+                            : Objects.equals(targetOriginalText, i.getOriginalText()))
                     .toList();
             for (TextRepairIssue similar : similarIssues) {
                 similar.setStatus(request.getStatus());
+                if (request.getManualText() != null) {
+                    similar.setSuggestedText(request.getManualText());
+                    similar.setSource(RepairSource.MANUAL);
+                }
                 if (request.getSource() != null) {
                     similar.setSource(request.getSource());
                 }
@@ -252,30 +265,39 @@ public class TextRepairService {
      * 批量更新问题状态
      */
     @Transactional
-    public void batchUpdateIssues(BatchUpdateIssuesRequest request, Long userId) {
+    public void batchUpdateIssues(Long taskId, BatchUpdateIssuesRequest request, Long userId) {
+        getOwnedTask(taskId, userId);
         List<TextRepairIssue> issues = issueRepository.findAllById(request.getIssueIds());
+        if (issues.size() != request.getIssueIds().size()
+                || issues.stream().anyMatch(issue -> !issue.getTaskId().equals(taskId))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "批量操作包含不属于当前任务的问题");
+        }
         for (TextRepairIssue issue : issues) {
-            TextRepairTask task = taskRepository.findById(issue.getTaskId()).orElse(null);
-            if (task == null || !task.getUserId().equals(userId)) continue;
             issue.setStatus(request.getStatus());
             issue.setSource(RepairSource.BATCH);
         }
         issueRepository.saveAll(issues);
-        // 更新各任务计数
-        Set<Long> taskIds = issues.stream().map(TextRepairIssue::getTaskId).collect(Collectors.toSet());
-        taskIds.forEach(this::updateTaskCounts);
+        updateTaskCounts(taskId);
     }
 
     /**
      * 批量接受高置信度问题
      */
     @Transactional
-    public int acceptHighConfidenceIssues(Long taskId, double threshold) {
+    public int acceptHighConfidenceIssues(Long taskId, double threshold, Long userId) {
+        getOwnedTask(taskId, userId);
+        if (threshold < 0.0 || threshold > 1.0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "置信度阈值必须在 0 到 1 之间");
+        }
         List<TextRepairIssue> issues = issueRepository
                 .findByTaskIdAndStatus(taskId, RepairIssueStatus.PENDING);
         int count = 0;
         for (TextRepairIssue issue : issues) {
-            if (issue.getConfidence() != null && issue.getConfidence() >= threshold) {
+            if (issue.getConfidence() != null && issue.getConfidence() >= threshold
+                    && issue.getRiskLevel() != RiskLevel.HIGH
+                    && issue.getSuggestedText() != null) {
                 issue.setStatus(RepairIssueStatus.ACCEPTED);
                 issue.setSource(RepairSource.BATCH);
                 count++;
@@ -304,6 +326,49 @@ public class TextRepairService {
             }
         }
         issueRepository.saveAll(issues);
+        updateTaskCounts(taskId);
+    }
+
+    /**
+     * Restore a completed repair task by removing only the version created by it.
+     * The primary/original version is never modified by the repair pipeline.
+     */
+    @Transactional
+    public void restoreOriginalVersion(Long taskId, Long userId) {
+        TextRepairTask task = getOwnedTask(taskId, userId);
+        if (!"COMPLETED".equals(task.getStatus()) || task.getRepairedContentVersion() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前任务没有可恢复的修复版本");
+        }
+        Book book = getOwnedBook(task.getBookId(), userId);
+        BookVersion repairedVersion = bookVersionRepository
+                .findByFileHash(task.getRepairedContentVersion())
+                .filter(version -> version.getBook().getId().equals(book.getId()))
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "修复版本不存在或已经恢复"));
+        if (Boolean.TRUE.equals(repairedVersion.getPrimaryVersion())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "修复版本已被设为主版本，不能自动删除");
+        }
+
+        Path repairedPath = Paths.get(repairedVersion.getFilePath());
+        bookVersionService.deleteVersion(book, repairedVersion.getId());
+        try {
+            Files.deleteIfExists(repairedPath);
+        } catch (IOException e) {
+            log.warn("修复版本记录已删除，但文件清理失败: {}", repairedPath, e);
+        }
+
+        List<TextRepairIssue> issues = issueRepository
+                .findByTaskIdOrderByChapterIndexAscStartOffsetAsc(taskId);
+        for (TextRepairIssue issue : issues) {
+            if (issue.getStatus() == RepairIssueStatus.APPLIED) {
+                issue.setStatus(RepairIssueStatus.REVERTED);
+            }
+        }
+        issueRepository.saveAll(issues);
+        task.setStatus("REVERTED");
+        task.setRepairedContentVersion(null);
+        task.setReportJson(null);
+        taskRepository.save(task);
         updateTaskCounts(taskId);
     }
 
@@ -404,14 +469,10 @@ public class TextRepairService {
 
             // 获取要应用的问题
             List<TextRepairIssue> issuesToApply;
-            if (Boolean.TRUE.equals(request.getAcceptedOnly())) {
-                issuesToApply = issueRepository
-                        .findByTaskIdAndStatus(task.getId(), RepairIssueStatus.ACCEPTED);
-            } else {
-                issuesToApply = issueRepository
-                        .findByTaskIdAndStatusIn(task.getId(),
-                                List.of(RepairIssueStatus.ACCEPTED, RepairIssueStatus.PENDING));
-            }
+            // Pending issues, especially low-confidence and high-risk suggestions, are
+            // never applied implicitly.
+            issuesToApply = issueRepository
+                    .findByTaskIdAndStatus(task.getId(), RepairIssueStatus.ACCEPTED);
 
             // 生成修复后文本
             String repairedText = applyIssues(originalText, issuesToApply, task);
@@ -440,13 +501,14 @@ public class TextRepairService {
             }
             issueRepository.saveAll(issuesToApply);
 
-            // 生成修复报告
+            // Persist result and refresh counters before generating the report.
             task.setRepairedContentVersion(hash);
             task.setStatus("COMPLETED");
+            taskRepository.save(task);
+            updateTaskCounts(task.getId());
+            task = taskRepository.findById(task.getId()).orElseThrow();
             task.setReportJson(generateReport(task, issuesToApply));
             taskRepository.save(task);
-
-            updateTaskCounts(task.getId());
 
             return bookVersionService.toDTO(newVersion);
         } catch (Exception e) {
@@ -470,20 +532,38 @@ public class TextRepairService {
                 .scanForIssues(text, task.getId());
         allIssues.addAll(encodingIssues);
 
-        // 2. 不可见字符
+        // 2. 不可见字符及可选标点清理
         List<TextRepairIssue> punctIssues = punctuationFixService
                 .scanForIssues(text, lines, task.getId());
-        allIssues.addAll(punctIssues);
+        boolean punctuationEnabled = extractBooleanOption(
+                task.getOptionsJson(), "punctuationNormalize", false);
+        allIssues.addAll(punctIssues.stream()
+                .filter(i -> i.getType() == RepairIssueType.INVISIBLE_CHAR
+                        || (task.getRepairMode() != RepairMode.SAFE && punctuationEnabled))
+                .toList());
 
         // 3. 段落格式
         List<TextRepairIssue> paragraphIssues = paragraphFixService
                 .scanForIssues(text, lines, task.getId());
-        allIssues.addAll(paragraphIssues);
+        if (task.getRepairMode() == RepairMode.SAFE) {
+            allIssues.addAll(paragraphIssues.stream()
+                    .filter(i -> i.getReason() != null
+                            && (i.getReason().contains("换行符")
+                                || i.getReason().contains("多余空行")))
+                    .toList());
+        } else {
+            allIssues.addAll(paragraphIssues);
+        }
 
         // 4. 章节识别
         List<DetectedChapterDTO> chapters = chapterDetectService.detectChapters(text);
-        List<TextRepairIssue> chapterIssues = chapterDetectService
-                .scanForIssues(chapters, task.getId());
+        task.setDetectedChapterCount(chapters.size());
+        int minChapterWords = extractIntOption(task.getOptionsJson(), "minChapterWords", 100);
+        int maxChapterWords = extractIntOption(task.getOptionsJson(), "maxChapterWords", 30000);
+        List<TextRepairIssue> chapterIssues = chapterDetectService.scanForIssues(
+                chapters, task.getId(), minChapterWords, maxChapterWords,
+                task.getRepairMode() != RepairMode.SAFE,
+                task.getRepairMode() == RepairMode.DEEP);
         allIssues.addAll(chapterIssues);
 
         // 5. 章节标题规范化（标准及以上模式）
@@ -495,16 +575,34 @@ public class TextRepairService {
         }
 
         // 6. 广告检测
-        List<TextRepairRule> adRules = ruleRepository
-                .findByUserIdOrUserIdIsNullAndEnabledTrue(task.getUserId());
+        List<TextRepairRule> adRules = ruleRepository.findEnabledRules(task.getUserId())
+                .stream()
+                .filter(rule -> ruleAppliesToTask(rule, task))
+                .toList();
         List<TextRepairIssue> adIssues = adDetectService.scanForIssues(
                 text, lines, convertChapters(chapters), task.getId(), adRules);
-        allIssues.addAll(adIssues);
+        if (task.getRepairMode() == RepairMode.SAFE) {
+            allIssues.addAll(adIssues.stream()
+                    .filter(i -> i.getRiskLevel() == RiskLevel.LOW
+                            && i.getConfidence() != null && i.getConfidence() >= 0.7)
+                    .toList());
+        } else {
+            allIssues.addAll(adIssues);
+        }
 
         // 7. 重复内容检测
-        List<TextRepairIssue> dupIssues = duplicateDetectService
-                .scanForIssues(text, chapters, task.getId());
-        allIssues.addAll(dupIssues);
+        if (task.getRepairMode() != RepairMode.SAFE) {
+            List<TextRepairIssue> dupIssues = duplicateDetectService
+                    .scanForIssues(text, chapters, task.getId());
+            if (task.getRepairMode() == RepairMode.STANDARD) {
+                allIssues.addAll(dupIssues.stream()
+                        .filter(i -> i.getReason() != null
+                                && i.getReason().startsWith("完全重复章节"))
+                        .toList());
+            } else {
+                allIssues.addAll(dupIssues);
+            }
+        }
 
         // 保存所有问题
         issueRepository.saveAll(allIssues);
@@ -521,17 +619,60 @@ public class TextRepairService {
                                 TextRepairTask task) {
         String result = text;
 
-        // 按偏移量排序（从后往前应用，避免偏移量变化）
+        // Apply concrete replacements from the end of the original text. Larger ranges
+        // win when two accepted suggestions overlap (for example deleting a duplicate
+        // chapter and normalizing its title).
         List<TextRepairIssue> sortedIssues = issues.stream()
+                .filter(i -> i.getStartOffset() != null && i.getEndOffset() != null)
                 .sorted(Comparator.comparingInt(
-                        (TextRepairIssue i) -> i.getStartOffset() != null ? -i.getStartOffset() : 0))
+                                (TextRepairIssue i) -> -i.getStartOffset())
+                        .thenComparingInt(i -> -(i.getEndOffset() - i.getStartOffset())))
                 .toList();
 
+        int nextAppliedStart = text.length() + 1;
         for (TextRepairIssue issue : sortedIssues) {
+            if (issue.getEndOffset() > nextAppliedStart) {
+                log.warn("跳过重叠修复项: issueId={}, range=[{}, {})",
+                        issue.getId(), issue.getStartOffset(), issue.getEndOffset());
+                continue;
+            }
             result = applySingleIssue(result, issue);
+            nextAppliedStart = issue.getStartOffset();
+        }
+
+        // Whole-document cleanup issues intentionally have no offsets. Run them after
+        // positional edits so they cannot invalidate the original offsets.
+        for (TextRepairIssue issue : issues) {
+            if (issue.getStartOffset() == null || issue.getEndOffset() == null) {
+                result = applyWholeDocumentIssue(result, issue, task);
+            }
         }
 
         return result;
+    }
+
+    private String applyWholeDocumentIssue(String text, TextRepairIssue issue,
+                                           TextRepairTask task) {
+        String reason = issue.getReason() == null ? "" : issue.getReason();
+        if (issue.getType() == RepairIssueType.INVISIBLE_CHAR) {
+            return punctuationFixService.cleanInvisibleChars(text);
+        }
+        if (issue.getType() == RepairIssueType.PUNCTUATION) {
+            if (reason.contains("行尾")) return punctuationFixService.trimTrailingSpaces(text);
+            if (reason.contains("标点前")) return punctuationFixService.removeSpaceBeforePunct(text);
+            if (reason.contains("英文标点")) return punctuationFixService.normalizePunctuation(text);
+            if (reason.contains("重复标点")) return punctuationFixService.cleanRepeatedPunctuation(text);
+        }
+        if (issue.getType() == RepairIssueType.PARAGRAPH) {
+            if (reason.contains("换行符")) return paragraphFixService.normalizeLineEndings(text);
+            if (reason.contains("段首缩进")) {
+                return paragraphFixService.normalizeIndent(text,
+                        extractStringOption(task.getOptionsJson(), "indentStyle", "FULL_WIDTH_SPACE"));
+            }
+        }
+        // Encoding anomalies and chapter warnings without concrete replacements are
+        // advisory only and must never mutate the source text.
+        return text;
     }
 
     private String applySingleIssue(String text, TextRepairIssue issue) {
@@ -540,7 +681,7 @@ public class TextRepairService {
         }
         int start = Math.min(issue.getStartOffset(), text.length());
         int end = Math.min(issue.getEndOffset(), text.length());
-        if (start >= end) return text;
+        if (start > end) return text;
 
         String suggested = issue.getSuggestedText();
         if (suggested == null) return text;
@@ -647,6 +788,52 @@ public class TextRepairService {
         }
     }
 
+    private TextRepairTask getOwnedTask(Long taskId, Long userId) {
+        TextRepairTask task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "修复任务不存在"));
+        if (!task.getUserId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无权访问此修复任务");
+        }
+        return task;
+    }
+
+    private String extractStringOption(String optionsJson, String key, String defaultValue) {
+        if (optionsJson == null || optionsJson.isEmpty()) return defaultValue;
+        try {
+            Map<String, Object> options = objectMapper.readValue(optionsJson,
+                    new TypeReference<Map<String, Object>>() {});
+            Object value = options.get(key);
+            return value != null ? value.toString() : defaultValue;
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
+    private int extractIntOption(String optionsJson, String key, int defaultValue) {
+        if (optionsJson == null || optionsJson.isEmpty()) return defaultValue;
+        try {
+            Map<String, Object> options = objectMapper.readValue(optionsJson,
+                    new TypeReference<Map<String, Object>>() {});
+            Object value = options.get(key);
+            return value instanceof Number number ? number.intValue() : defaultValue;
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
+    private boolean extractBooleanOption(String optionsJson, String key, boolean defaultValue) {
+        if (optionsJson == null || optionsJson.isEmpty()) return defaultValue;
+        try {
+            Map<String, Object> options = objectMapper.readValue(optionsJson,
+                    new TypeReference<Map<String, Object>>() {});
+            Object value = options.get(key);
+            return value instanceof Boolean bool ? bool : defaultValue;
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
     private List<AdDetectService.ChapterInfo> convertChapters(List<DetectedChapterDTO> chapters) {
         return chapters.stream()
                 .map(c -> new AdDetectService.ChapterInfo(
@@ -685,7 +872,7 @@ public class TextRepairService {
 
     private String generateReport(TextRepairTask task, List<TextRepairIssue> appliedIssues) {
         RepairReportDTO report = RepairReportDTO.builder()
-                .detectedChapters(0)
+                .detectedChapters(task.getDetectedChapterCount())
                 .fixedEncoding((int) appliedIssues.stream()
                         .filter(i -> i.getType() == RepairIssueType.ENCODING).count())
                 .removedAds((int) appliedIssues.stream()
@@ -701,7 +888,9 @@ public class TextRepairService {
                 .normalizedPunctuation((int) appliedIssues.stream()
                         .filter(i -> i.getType() == RepairIssueType.PUNCTUATION).count())
                 .unconfirmedCount(task.getPendingIssueCount())
-                .anomalies(appliedIssues.stream()
+                .anomalies(issueRepository
+                        .findByTaskIdAndType(task.getId(), RepairIssueType.CHAPTER_ANOMALY)
+                        .stream()
                         .filter(i -> i.getType() == RepairIssueType.CHAPTER_ANOMALY)
                         .map(i -> RepairReportDTO.AnomalyItem.builder()
                                 .type("CHAPTER_ANOMALY")
@@ -789,6 +978,7 @@ public class TextRepairService {
                 .optionsJson(task.getOptionsJson())
                 .reportJson(task.getReportJson())
                 .totalIssueCount(task.getTotalIssueCount())
+                .detectedChapterCount(task.getDetectedChapterCount())
                 .pendingIssueCount(task.getPendingIssueCount())
                 .acceptedIssueCount(task.getAcceptedIssueCount())
                 .rejectedIssueCount(task.getRejectedIssueCount())
@@ -803,6 +993,18 @@ public class TextRepairService {
     }
 
     private RepairIssueDTO toIssueDTO(TextRepairIssue issue) {
+        Map<String, Object> metadata = parseIssueMetadata(issue.getMetadataJson());
+        List<String> candidates = null;
+        if (metadata != null && metadata.get("candidates") instanceof List<?> values) {
+            candidates = values.stream().map(String::valueOf).toList();
+        } else if (issue.getMetadataJson() != null && issue.getMetadataJson().startsWith("[")) {
+            try {
+                candidates = objectMapper.readValue(issue.getMetadataJson(),
+                        new TypeReference<List<String>>() {});
+            } catch (Exception ignored) {
+                // Keep malformed detector metadata from breaking the issue list.
+            }
+        }
         return RepairIssueDTO.builder()
                 .id(issue.getId())
                 .taskId(issue.getTaskId())
@@ -818,9 +1020,34 @@ public class TextRepairService {
                 .status(issue.getStatus())
                 .source(issue.getSource())
                 .riskLevel(issue.getRiskLevel())
+                .metadata(metadata)
+                .candidates(candidates)
                 .createdAt(issue.getCreatedAt())
                 .updatedAt(issue.getUpdatedAt())
                 .build();
+    }
+
+    private boolean ruleAppliesToTask(TextRepairRule rule, TextRepairTask task) {
+        String scope = rule.getScope() == null ? "ALL_BOOKS" : rule.getScope();
+        return switch (scope) {
+            case "CURRENT_BOOK" -> rule.getBookId() != null
+                    && rule.getBookId().equals(task.getBookId());
+            case "TEMPLATE" -> rule.getTemplateId() != null
+                    && rule.getTemplateId().equals(task.getTemplateId());
+            default -> true;
+        };
+    }
+
+    private Map<String, Object> parseIssueMetadata(String metadataJson) {
+        if (metadataJson == null || metadataJson.isBlank() || metadataJson.startsWith("[")) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(metadataJson,
+                    new TypeReference<Map<String, Object>>() {});
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private org.springframework.data.domain.Page<RepairIssueDTO> toIssueDTOPage(

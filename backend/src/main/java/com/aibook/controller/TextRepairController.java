@@ -110,9 +110,10 @@ public class TextRepairController {
             @RequestParam(required = false) RepairIssueStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        userService.findByUsername(authentication.getName());
+        User user = userService.findByUsername(authentication.getName());
         PageRequest pageRequest = PageRequest.of(page, size);
-        return ResponseEntity.ok(repairService.getIssues(taskId, type, status, pageRequest));
+        return ResponseEntity.ok(repairService.getIssues(
+                taskId, user.getId(), type, status, pageRequest));
     }
 
     /**
@@ -136,7 +137,7 @@ public class TextRepairController {
             @PathVariable Long taskId,
             @Valid @RequestBody BatchUpdateIssuesRequest request) {
         User user = userService.findByUsername(authentication.getName());
-        repairService.batchUpdateIssues(request, user.getId());
+        repairService.batchUpdateIssues(taskId, request, user.getId());
         return ResponseEntity.noContent().build();
     }
 
@@ -149,7 +150,7 @@ public class TextRepairController {
             @PathVariable Long taskId,
             @RequestParam(defaultValue = "0.8") double threshold) {
         User user = userService.findByUsername(authentication.getName());
-        int count = repairService.acceptHighConfidenceIssues(taskId, threshold);
+        int count = repairService.acceptHighConfidenceIssues(taskId, threshold, user.getId());
         return ResponseEntity.ok(Map.of("acceptedCount", count));
     }
 
@@ -162,6 +163,18 @@ public class TextRepairController {
             @PathVariable Long taskId) {
         User user = userService.findByUsername(authentication.getName());
         repairService.revertAllIssues(taskId, user.getId());
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 删除本任务生成的修复版本并恢复到修复前状态
+     */
+    @PostMapping("/tasks/{taskId}/restore-original")
+    public ResponseEntity<Void> restoreOriginal(
+            Authentication authentication,
+            @PathVariable Long taskId) {
+        User user = userService.findByUsername(authentication.getName());
+        repairService.restoreOriginalVersion(taskId, user.getId());
         return ResponseEntity.noContent().build();
     }
 

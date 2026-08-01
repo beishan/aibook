@@ -33,7 +33,11 @@ public class CreateRuleRequest {
 
     private Boolean enabled = true;
 
+    private Boolean whitelist = false;
+
     private String scope = "ALL_BOOKS";
 
     private Long templateId;
+
+    private Long bookId;
 }

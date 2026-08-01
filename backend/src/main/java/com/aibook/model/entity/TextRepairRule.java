@@ -64,12 +64,19 @@ public class TextRepairRule {
     @Builder.Default
     private Boolean systemRule = false;
 
+    /** 是否为广告白名单规则 */
+    @Builder.Default
+    private Boolean whitelist = false;
+
     /** 规则作用范围：CURRENT_BOOK / ALL_BOOKS / TEMPLATE */
     @Builder.Default
     private String scope = "ALL_BOOKS";
 
     /** 关联模板 ID（scope 为 TEMPLATE 时使用） */
     private Long templateId;
+
+    /** 关联书籍 ID（scope 为 CURRENT_BOOK 时使用） */
+    private Long bookId;
 
     /** 所属用户 ID（可空，为空表示全局规则） */
     private Long userId;

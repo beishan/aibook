@@ -25,7 +25,7 @@ public class TextRepairRuleService {
 
     @Transactional
     public List<RepairRuleDTO> getRules(Long userId) {
-        return ruleRepository.findByUserIdOrUserIdIsNullAndEnabledTrue(userId)
+        return ruleRepository.findVisibleRules(userId)
                 .stream().map(this::toDTO).toList();
     }
 
@@ -41,8 +41,10 @@ public class TextRepairRuleService {
                 .riskLevel(request.getRiskLevel())
                 .enabled(request.getEnabled())
                 .systemRule(false)
+                .whitelist(Boolean.TRUE.equals(request.getWhitelist()))
                 .scope(request.getScope())
                 .templateId(request.getTemplateId())
+                .bookId(request.getBookId())
                 .userId(userId)
                 .build();
         rule = ruleRepository.save(rule);
@@ -67,8 +69,10 @@ public class TextRepairRuleService {
         rule.setReplacement(request.getReplacement());
         rule.setRiskLevel(request.getRiskLevel());
         rule.setEnabled(request.getEnabled());
+        rule.setWhitelist(Boolean.TRUE.equals(request.getWhitelist()));
         rule.setScope(request.getScope());
         rule.setTemplateId(request.getTemplateId());
+        rule.setBookId(request.getBookId());
         rule = ruleRepository.save(rule);
         return toDTO(rule);
     }
@@ -162,8 +166,10 @@ public class TextRepairRuleService {
                 .riskLevel(rule.getRiskLevel())
                 .enabled(rule.getEnabled())
                 .systemRule(rule.getSystemRule())
+                .whitelist(rule.getWhitelist())
                 .scope(rule.getScope())
                 .templateId(rule.getTemplateId())
+                .bookId(rule.getBookId())
                 .userId(rule.getUserId())
                 .build();
     }

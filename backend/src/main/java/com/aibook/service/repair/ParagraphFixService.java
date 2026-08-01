@@ -114,7 +114,9 @@ public class ParagraphFixService {
                             .startOffset(blankStart)
                             .endOffset(charOffset)
                             .originalText("连续 " + blankRun + " 个空行")
-                            .suggestedText("压缩为 1 个空行")
+                            // The range starts after the previous line's newline. Keeping
+                            // one newline in this range produces exactly one blank line.
+                            .suggestedText("\n")
                             .reason("多余空行，建议压缩为 1 个空行")
                             .confidence(0.9)
                             .status(RepairIssueStatus.PENDING)

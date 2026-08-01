@@ -67,6 +67,7 @@ public class DuplicateDetectService {
                     int currIdx = indices.get(idx);
                     DetectedChapterDTO prevChapter = chapters.get(prevIdx);
                     DetectedChapterDTO currChapter = chapters.get(currIdx);
+                    String duplicateText = extractChapterText(text, currChapter);
 
                     issues.add(TextRepairIssue.builder()
                             .taskId(taskId)
@@ -74,9 +75,10 @@ public class DuplicateDetectService {
                             .type(RepairIssueType.DUPLICATE)
                             .startOffset(currChapter.getStartOffset())
                             .endOffset(currChapter.getEndOffset())
-                            .originalText("第" + (prevIdx + 1) + "章与第" + (currIdx + 1) + "章内容完全一致")
-                            .suggestedText("[删除此章节]")
-                            .reason("完全重复章节：内容哈希一致")
+                            .originalText(duplicateText)
+                            .suggestedText("")
+                            .reason("完全重复章节：第" + (prevIdx + 1) + "章与第"
+                                    + (currIdx + 1) + "章内容哈希一致")
                             .confidence(0.95)
                             .status(RepairIssueStatus.PENDING)
                             .source(RepairSource.AUTO)
@@ -119,7 +121,9 @@ public class DuplicateDetectService {
                             .endOffset(chapter.getEndOffset())
                             .originalText("第" + (i + 1) + "章与第" + (j + 1) + "章相似度 " +
                                     String.format("%.1f%%", similarity * 100))
-                            .suggestedText("[确认是否删除]")
+                            // Similar content is only a warning. It must not become a
+                            // destructive replacement until the user chooses an action.
+                            .suggestedText(null)
                             .reason("高度疑似重复章节")
                             .confidence(similarity)
                             .status(RepairIssueStatus.PENDING)
@@ -136,7 +140,7 @@ public class DuplicateDetectService {
                             .endOffset(chapter.getEndOffset())
                             .originalText("第" + (i + 1) + "章与第" + (j + 1) + "章相似度 " +
                                     String.format("%.1f%%", similarity * 100))
-                            .suggestedText("[确认是否删除]")
+                            .suggestedText(null)
                             .reason("可能重复章节")
                             .confidence(similarity)
                             .status(RepairIssueStatus.PENDING)
@@ -182,9 +186,10 @@ public class DuplicateDetectService {
                         .type(RepairIssueType.DUPLICATE)
                         .startOffset(lastPos[0])
                         .endOffset(lastPos[1])
-                        .originalText("重复段落：" + preview)
-                        .suggestedText("[删除后一处]")
-                        .reason("该段落重复出现 " + entry.getValue().size() + " 次")
+                        .originalText(text.substring(lastPos[0], lastPos[1]))
+                        .suggestedText("")
+                        .reason("重复段落（" + preview + "）：该段落重复出现 "
+                                + entry.getValue().size() + " 次，建议删除后一处")
                         .confidence(0.85)
                         .status(RepairIssueStatus.PENDING)
                         .source(RepairSource.AUTO)
@@ -203,7 +208,9 @@ public class DuplicateDetectService {
         int start = Math.min(chapter.getStartOffset(), text.length());
         int end = Math.min(chapter.getEndOffset(), text.length());
         if (start >= end) return "";
-        return text.substring(start, end);
+        String chapterText = text.substring(start, end);
+        int titleEnd = chapterText.indexOf('\n');
+        return titleEnd >= 0 ? chapterText.substring(titleEnd + 1) : "";
     }
 
     private String normalizeForComparison(String text) {

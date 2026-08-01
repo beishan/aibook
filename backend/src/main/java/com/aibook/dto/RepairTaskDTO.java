@@ -31,6 +31,7 @@ public class RepairTaskDTO {
     private String optionsJson;
     private String reportJson;
     private Integer totalIssueCount;
+    private Integer detectedChapterCount;
     private Integer pendingIssueCount;
     private Integer acceptedIssueCount;
     private Integer rejectedIssueCount;

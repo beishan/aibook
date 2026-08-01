@@ -70,15 +70,17 @@ public class AdDetectService {
             Long taskId, List<TextRepairRule> rules) {
 
         List<TextRepairIssue> issues = new ArrayList<>();
+        List<Pattern> whitelistPatterns = compileWhitelistPatterns(rules);
 
         // 1. 明确规则匹配
-        issues.addAll(detectByRules(lines, chapters, taskId, rules));
+        issues.addAll(detectByRules(
+                text, lines, chapters, taskId, rules, whitelistPatterns));
 
         // 2. 关键词+URL 评分检测
-        issues.addAll(detectByScoring(lines, chapters, taskId));
+        issues.addAll(detectByScoring(lines, chapters, taskId, whitelistPatterns));
 
         // 3. 跨章节重复短句检测
-        issues.addAll(detectRepeatedAds(lines, chapters, taskId));
+        issues.addAll(detectRepeatedAds(lines, chapters, taskId, whitelistPatterns));
 
         return issues;
     }
@@ -86,8 +88,9 @@ public class AdDetectService {
     // ==================== 明确规则匹配 ====================
 
     private List<TextRepairIssue> detectByRules(
-            String[] lines, List<ChapterInfo> chapters,
-            Long taskId, List<TextRepairRule> rules) {
+            String text, String[] lines, List<ChapterInfo> chapters,
+            Long taskId, List<TextRepairRule> rules,
+            List<Pattern> whitelistPatterns) {
 
         List<TextRepairIssue> issues = new ArrayList<>();
         int charOffset = 0;
@@ -97,26 +100,55 @@ public class AdDetectService {
             String trimmed = line.trim();
             int chapterIndex = getChapterIndex(chapters, charOffset);
 
+            if (isWhitelisted(line, whitelistPatterns)) {
+                charOffset += line.length() + 1;
+                continue;
+            }
+
             for (TextRepairRule rule : rules) {
                 if (!Boolean.TRUE.equals(rule.getEnabled())) continue;
+                if (Boolean.TRUE.equals(rule.getWhitelist())) continue;
                 if (rule.getType() != RepairIssueType.AD) continue;
 
-                boolean matched = false;
+                java.util.regex.Matcher matcher;
                 try {
-                    matched = Pattern.compile(rule.getPattern()).matcher(trimmed).find();
+                    matcher = Pattern.compile(rule.getPattern()).matcher(line);
                 } catch (Exception e) {
                     log.warn("广告规则正则编译失败: {}", rule.getPattern());
+                    continue;
                 }
 
-                if (matched) {
+                if (matcher.find() && matchesConfiguredScope(
+                        rule.getMatchScope(), chapters, charOffset)) {
+                    int startOffset = charOffset;
+                    int endOffset = Math.min(text.length(), charOffset + line.length());
+                    String originalText = line;
+                    String suggestedText;
+                    switch (rule.getAction()) {
+                        case DELETE_MATCH -> suggestedText = matcher.replaceAll("");
+                        case REPLACE -> suggestedText = matcher.replaceAll(
+                                rule.getReplacement() == null ? "" : rule.getReplacement());
+                        case MARK_ONLY -> suggestedText = null;
+                        case DELETE_PARAGRAPH -> {
+                            startOffset = paragraphStart(text, charOffset);
+                            endOffset = paragraphEnd(text, charOffset + line.length());
+                            originalText = text.substring(startOffset, endOffset);
+                            suggestedText = "";
+                        }
+                        case DELETE_LINE -> {
+                            endOffset = Math.min(text.length(), charOffset + line.length() + 1);
+                            suggestedText = "";
+                        }
+                        default -> suggestedText = null;
+                    }
                     issues.add(TextRepairIssue.builder()
                             .taskId(taskId)
                             .chapterIndex(chapterIndex)
                             .type(RepairIssueType.AD)
-                            .startOffset(charOffset)
-                            .endOffset(charOffset + line.length() + 1)
-                            .originalText(trimmed)
-                            .suggestedText("[已删除]")
+                            .startOffset(startOffset)
+                            .endOffset(endOffset)
+                            .originalText(originalText)
+                            .suggestedText(suggestedText)
                             .reason("匹配规则: " + rule.getName())
                             .ruleId(String.valueOf(rule.getId()))
                             .confidence(0.9)
@@ -131,10 +163,38 @@ public class AdDetectService {
         return issues;
     }
 
+    private boolean matchesConfiguredScope(MatchScope scope,
+                                           List<ChapterInfo> chapters,
+                                           int charOffset) {
+        if (scope == null || scope == MatchScope.LINE
+                || scope == MatchScope.CONTENT || scope == MatchScope.PARAGRAPH) {
+            return true;
+        }
+        if (chapters == null || chapters.isEmpty()) return false;
+        for (ChapterInfo chapter : chapters) {
+            if (scope == MatchScope.CHAPTER_START
+                    && Math.abs(charOffset - chapter.startOffset) < 200) return true;
+            if (scope == MatchScope.CHAPTER_END && chapter.endOffset > 0
+                    && Math.abs(charOffset - chapter.endOffset) < 200) return true;
+        }
+        return false;
+    }
+
+    private int paragraphStart(String text, int offset) {
+        int boundary = text.lastIndexOf("\n\n", Math.max(0, offset - 1));
+        return boundary < 0 ? 0 : boundary + 2;
+    }
+
+    private int paragraphEnd(String text, int offset) {
+        int boundary = text.indexOf("\n\n", Math.min(offset, text.length()));
+        return boundary < 0 ? text.length() : boundary + 2;
+    }
+
     // ==================== 评分检测 ====================
 
     private List<TextRepairIssue> detectByScoring(
-            String[] lines, List<ChapterInfo> chapters, Long taskId) {
+            String[] lines, List<ChapterInfo> chapters, Long taskId,
+            List<Pattern> whitelistPatterns) {
 
         List<TextRepairIssue> issues = new ArrayList<>();
         int charOffset = 0;
@@ -143,7 +203,7 @@ public class AdDetectService {
             String line = lines[lineIndex];
             String trimmed = line.trim();
 
-            if (!trimmed.isEmpty()) {
+            if (!trimmed.isEmpty() && !isWhitelisted(line, whitelistPatterns)) {
                 int score = calculateAdScore(trimmed, lineIndex, lines, chapters, charOffset);
                 int chapterIndex = getChapterIndex(chapters, charOffset);
 
@@ -239,7 +299,8 @@ public class AdDetectService {
     // ==================== 跨章节重复检测 ====================
 
     private List<TextRepairIssue> detectRepeatedAds(
-            String[] lines, List<ChapterInfo> chapters, Long taskId) {
+            String[] lines, List<ChapterInfo> chapters, Long taskId,
+            List<Pattern> whitelistPatterns) {
 
         List<TextRepairIssue> issues = new ArrayList<>();
 
@@ -251,7 +312,8 @@ public class AdDetectService {
         for (int i = 0; i < lines.length; i++) {
             String trimmed = lines[i].trim();
             // 只关注 8~150 字的短句
-            if (trimmed.length() >= 8 && trimmed.length() <= 150) {
+            if (!isWhitelisted(lines[i], whitelistPatterns)
+                    && trimmed.length() >= 8 && trimmed.length() <= 150) {
                 final int offset = charOffset;
                 final int lineEnd = charOffset + lines[i].length() + 1;
                 lineChapters.computeIfAbsent(trimmed, k -> new HashSet<>())
@@ -306,6 +368,24 @@ public class AdDetectService {
             }
         }
         return chapters.size() - 1;
+    }
+
+    private List<Pattern> compileWhitelistPatterns(List<TextRepairRule> rules) {
+        List<Pattern> patterns = new ArrayList<>();
+        for (TextRepairRule rule : rules) {
+            if (!Boolean.TRUE.equals(rule.getEnabled())
+                    || !Boolean.TRUE.equals(rule.getWhitelist())) continue;
+            try {
+                patterns.add(Pattern.compile(rule.getPattern()));
+            } catch (Exception e) {
+                log.warn("广告白名单正则编译失败: {}", rule.getPattern());
+            }
+        }
+        return patterns;
+    }
+
+    private boolean isWhitelisted(String text, List<Pattern> patterns) {
+        return patterns.stream().anyMatch(pattern -> pattern.matcher(text).find());
     }
 
     /**

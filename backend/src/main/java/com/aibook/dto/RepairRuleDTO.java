@@ -28,7 +28,9 @@ public class RepairRuleDTO {
     private RiskLevel riskLevel;
     private Boolean enabled;
     private Boolean systemRule;
+    private Boolean whitelist;
     private String scope;
     private Long templateId;
+    private Long bookId;
     private Long userId;
 }

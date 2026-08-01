@@ -280,6 +280,7 @@
                   <el-dropdown-menu>
                     <el-dropdown-item command="scrape">✨ 刮削元数据</el-dropdown-item>
                     <el-dropdown-item command="reparse">🔄 重新解析</el-dropdown-item>
+                    <el-dropdown-item command="repair">🔧 内容修复</el-dropdown-item>
                     <el-dropdown-item command="edit">✏️ 编辑书籍</el-dropdown-item>
                     <el-dropdown-item command="add-to-list">📚 加入书单</el-dropdown-item>
                     <el-dropdown-item divided command="delete">🗑️ 移入回收站</el-dropdown-item>
@@ -394,6 +395,7 @@
               <el-dropdown-menu>
                 <el-dropdown-item command="scrape">✨ 刮削元数据</el-dropdown-item>
                 <el-dropdown-item command="reparse">🔄 重新解析</el-dropdown-item>
+                <el-dropdown-item command="repair">🔧 内容修复</el-dropdown-item>
                 <el-dropdown-item command="edit">✏️ 编辑书籍</el-dropdown-item>
                 <el-dropdown-item command="add-to-list">📚 加入书单</el-dropdown-item>
                 <el-dropdown-item divided command="delete">🗑️ 移入回收站</el-dropdown-item>
@@ -841,6 +843,9 @@ const handleMoreCommand = async (command: string, book: Book) => {
       break
     case 'reparse':
       await handleReparseBook(book)
+      break
+    case 'repair':
+      router.push(`/books/${book.id}/repair`)
       break
     case 'edit':
       editingBook.value = book

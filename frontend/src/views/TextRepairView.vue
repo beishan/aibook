@@ -23,6 +23,18 @@
     <template v-else>
       <!-- 未创建任务：模式选择 -->
       <div v-if="!repairStore.currentTask" class="repair-mode-section glass">
+        <div v-if="repairStore.tasks.length" class="task-history">
+          <h2>历史修复任务</h2>
+          <button
+            v-for="item in repairStore.tasks"
+            :key="item.id"
+            class="history-task"
+            @click="handleOpenTask(item.id)"
+          >
+            <span>{{ getStatusText(item.status) }} · {{ getModeText(item.repairMode) }}</span>
+            <span>{{ new Date(item.createdAt).toLocaleString() }}</span>
+          </button>
+        </div>
         <h2>选择修复模式</h2>
         <div class="mode-cards">
           <div
@@ -39,6 +51,16 @@
               <li v-for="feature in mode.features" :key="feature">{{ feature }}</li>
             </ul>
           </div>
+        </div>
+
+        <div class="template-selector">
+          <label for="repair-template">修复模板</label>
+          <select id="repair-template" v-model="selectedTemplateId" @change="handleTemplateChange">
+            <option :value="undefined">使用通用设置</option>
+            <option v-for="item in repairStore.templates" :key="item.id" :value="item.id">
+              {{ item.name }}{{ item.systemTemplate ? '（系统）' : '' }}
+            </option>
+          </select>
         </div>
 
         <!-- 编码检测 -->
@@ -117,10 +139,38 @@
             <button class="btn btn-sm btn-primary" @click="handleApply" :disabled="repairStore.currentTask.acceptedIssueCount === 0">
               💾 执行修复
             </button>
-            <button class="btn btn-sm" @click="handleRevertAll">
+            <button
+              v-if="repairStore.currentTask.status === 'SCANNED'"
+              class="btn btn-sm"
+              @click="handleRevertAll"
+            >
               ↩️ 撤销全部
             </button>
+            <button
+              v-if="repairStore.currentTask.status === 'COMPLETED'"
+              class="btn btn-sm btn-danger"
+              @click="handleRestoreOriginal"
+            >
+              🛟 恢复修复前版本
+            </button>
           </div>
+        </div>
+
+        <div v-if="repairReport" class="repair-report glass">
+          <h3>修复结果报告</h3>
+          <div class="report-counts">
+            <span>检测章节：{{ repairReport.detectedChapters }}</span>
+            <span>删除广告：{{ repairReport.removedAds }}</span>
+            <span>统一章节：{{ repairReport.normalizedChapters }}</span>
+            <span>段落修复：{{ repairReport.fixedLineBreaks }}</span>
+            <span>删除重复：{{ repairReport.removedDuplicates }}</span>
+            <span>未确认：{{ repairReport.unconfirmedCount }}</span>
+          </div>
+          <ul v-if="repairReport.anomalies?.length">
+            <li v-for="(item, index) in repairReport.anomalies" :key="index">
+              {{ item.description }}
+            </li>
+          </ul>
         </div>
 
         <!-- 三栏布局 -->
@@ -190,7 +240,11 @@
             <div class="panel-header">
               <h3>修复后内容</h3>
               <div v-if="selectedIssue" class="issue-actions">
-                <button class="btn btn-sm btn-success" @click="handleAcceptIssue(selectedIssue)">
+                <button
+                  class="btn btn-sm btn-success"
+                  :disabled="selectedIssue.suggestedText == null"
+                  @click="handleAcceptIssue(selectedIssue)"
+                >
                   ✅ 接受
                 </button>
                 <button class="btn btn-sm btn-danger" @click="handleRejectIssue(selectedIssue)">
@@ -198,6 +252,26 @@
                 </button>
                 <button class="btn btn-sm" @click="handleIgnoreIssue(selectedIssue)">
                   🚫 忽略
+                </button>
+                <button class="btn btn-sm" @click="handleManualEdit(selectedIssue)">
+                  ✏️ 手动编辑
+                </button>
+                <button class="btn btn-sm" @click="handleApplyToAll(selectedIssue)">
+                  📚 应用同类
+                </button>
+                <button
+                  v-if="selectedIssue.type === 'AD'"
+                  class="btn btn-sm"
+                  @click="handleAddAdRule(selectedIssue, false)"
+                >
+                  ➕ 加入广告规则
+                </button>
+                <button
+                  v-if="selectedIssue.type === 'AD'"
+                  class="btn btn-sm"
+                  @click="handleAddAdRule(selectedIssue, true)"
+                >
+                  🛡️ 加入白名单
                 </button>
               </div>
             </div>
@@ -264,7 +338,7 @@ import { useRoute } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useRepairStore } from '@/stores/repair'
 import { useBookStore } from '@/stores/book'
-import type { RepairIssue } from '@/utils/repair'
+import type { RepairIssue, RepairReport } from '@/utils/repair'
 
 const route = useRoute()
 const repairStore = useRepairStore()
@@ -275,6 +349,7 @@ const loading = ref(false)
 const loadingText = ref('')
 const bookInfo = ref<any>(null)
 const selectedMode = ref('STANDARD')
+const selectedTemplateId = ref<number | undefined>(undefined)
 const selectedEncoding = ref('AUTO')
 const encodingPreview = ref('')
 const selectedIssueId = ref<number | null>(null)
@@ -284,6 +359,16 @@ const filterStatus = ref('')
 const selectedIssue = computed(() =>
   repairStore.issues.find((i) => i.id === selectedIssueId.value) || null,
 )
+
+const repairReport = computed<RepairReport | null>(() => {
+  const json = repairStore.currentTask?.reportJson
+  if (!json) return null
+  try {
+    return JSON.parse(json) as RepairReport
+  } catch {
+    return null
+  }
+})
 
 const repairModes = [
   {
@@ -333,8 +418,23 @@ const issueStatuses: Record<string, string> = {
 }
 
 onMounted(async () => {
-  await loadBookInfo()
+  repairStore.reset()
+  await Promise.all([
+    loadBookInfo(),
+    repairStore.loadTemplates(),
+    repairStore.loadBookTasks(bookId),
+  ])
 })
+
+async function handleOpenTask(taskId: number) {
+  await repairStore.loadTask(taskId)
+  await repairStore.loadIssues(taskId)
+}
+
+function handleTemplateChange() {
+  const template = repairStore.templates.find((item) => item.id === selectedTemplateId.value)
+  if (template) selectedMode.value = template.repairMode
+}
 
 async function loadBookInfo() {
   try {
@@ -374,7 +474,16 @@ async function handleCreateTask() {
   try {
     loading.value = true
     loadingText.value = '扫描内容中...'
-    await repairStore.createTask(bookId, selectedMode.value)
+    const optionsJson = selectedTemplateId.value
+      ? undefined
+      : localStorage.getItem('textRepairSettings') || undefined
+    await repairStore.createTask(
+      bookId,
+      selectedMode.value,
+      undefined,
+      selectedTemplateId.value,
+      optionsJson,
+    )
     message.success('扫描完成，发现 ' + repairStore.currentTask?.totalIssueCount + ' 个问题')
   } catch (error: any) {
     message.error(error.response?.data?.message || '创建修复任务失败')
@@ -420,6 +529,44 @@ async function handleIgnoreIssue(issue: RepairIssue) {
   } catch {
     message.error('操作失败')
   }
+}
+
+async function handleManualEdit(issue: RepairIssue) {
+  const value = window.prompt('请输入修复后的文本', issue.suggestedText || issue.originalText || '')
+  if (value === null) return
+  await repairStore.updateIssue(issue.id, {
+    status: 'ACCEPTED',
+    manualText: value,
+  })
+  message.success('已保存手动修改')
+}
+
+async function handleApplyToAll(issue: RepairIssue) {
+  await repairStore.updateIssue(issue.id, {
+    status: 'ACCEPTED',
+    applyToAll: true,
+  })
+  await repairStore.loadTask(issue.taskId)
+  message.success('已应用到全部同类问题')
+}
+
+async function handleAddAdRule(issue: RepairIssue, whitelist: boolean) {
+  const content = issue.originalText?.trim()
+  if (!content) return
+  const pattern = content.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  await repairStore.addRule({
+    name: whitelist ? `白名单：${content.slice(0, 20)}` : `广告：${content.slice(0, 20)}`,
+    type: 'AD',
+    pattern,
+    matchScope: 'LINE',
+    action: whitelist ? 'MARK_ONLY' : 'DELETE_LINE',
+    riskLevel: whitelist ? 'LOW' : 'MEDIUM',
+    enabled: true,
+    whitelist,
+    scope: 'CURRENT_BOOK',
+    bookId,
+  })
+  message.success(whitelist ? '已加入白名单' : '已加入广告规则')
 }
 
 function handleSelectCandidate(issue: RepairIssue, candidate: string) {
@@ -480,12 +627,26 @@ async function handleRevertAll() {
   }
 }
 
+async function handleRestoreOriginal() {
+  if (!repairStore.currentTask) return
+  try {
+    await confirm('确认删除本次生成的修复版本并恢复到修复前状态？')
+    await repairStore.restoreOriginal(repairStore.currentTask.id)
+    message.success('已恢复到修复前版本')
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      message.error(error.response?.data?.message || '恢复失败')
+    }
+  }
+}
+
 function getStatusClass(status: string) {
   switch (status) {
     case 'SCANNING': return 'tag-warning'
     case 'SCANNED': return 'tag-info'
     case 'REPAIRING': return 'tag-primary'
     case 'COMPLETED': return 'tag-success'
+    case 'REVERTED': return 'tag-info'
     case 'FAILED': return 'tag-danger'
     default: return 'tag-info'
   }
@@ -497,6 +658,7 @@ function getStatusText(status: string) {
     case 'SCANNED': return '已扫描'
     case 'REPAIRING': return '修复中'
     case 'COMPLETED': return '已完成'
+    case 'REVERTED': return '已恢复原始版本'
     case 'FAILED': return '失败'
     default: return status
   }

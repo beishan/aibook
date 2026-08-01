@@ -32,6 +32,9 @@ public class TextRepairTask {
     /** 关联书籍版本 ID（可空，为空时使用主版本） */
     private Long versionId;
 
+    /** 创建任务时使用的修复模板 ID */
+    private Long templateId;
+
     /** 修复模式 */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -59,6 +62,10 @@ public class TextRepairTask {
     /** 问题总数 */
     @Builder.Default
     private Integer totalIssueCount = 0;
+
+    /** 扫描识别出的章节数量 */
+    @Builder.Default
+    private Integer detectedChapterCount = 0;
 
     /** 待处理问题数 */
     @Builder.Default

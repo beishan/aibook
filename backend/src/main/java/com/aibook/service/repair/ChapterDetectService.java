@@ -74,7 +74,8 @@ public class ChapterDetectService {
             String trimmed = line.trim();
 
             if (!trimmed.isEmpty()) {
-                ChapterCandidate candidate = tryMatch(trimmed, charOffset, i, lines);
+                ChapterCandidate candidate = tryMatch(
+                        trimmed, charOffset + line.indexOf(trimmed), i, lines);
                 if (candidate != null) {
                     candidates.add(candidate);
                 }
@@ -96,6 +97,13 @@ public class ChapterDetectService {
      */
     public List<TextRepairIssue> scanForIssues(
             List<DetectedChapterDTO> chapters, Long taskId) {
+        return scanForIssues(chapters, taskId, 100, 30000, true, true);
+    }
+
+    public List<TextRepairIssue> scanForIssues(
+            List<DetectedChapterDTO> chapters, Long taskId,
+            int minWords, int maxWords,
+            boolean includeNumberAnomalies, boolean includeAdhesion) {
         List<TextRepairIssue> issues = new ArrayList<>();
 
         for (int i = 0; i < chapters.size(); i++) {
@@ -120,7 +128,8 @@ public class ChapterDetectService {
             }
 
             // 检测章节标题粘连
-            if (chapter.getOriginalTitle() != null && chapter.getOriginalTitle().length() > 50) {
+            if (includeAdhesion && chapter.getOriginalTitle() != null
+                    && chapter.getOriginalTitle().length() > 50) {
                 // 可能是正文和章节标题粘连
                 issues.add(TextRepairIssue.builder()
                         .taskId(taskId)
@@ -140,10 +149,15 @@ public class ChapterDetectService {
         }
 
         // 检测章节编号异常
-        issues.addAll(detectChapterNumberAnomalies(chapters, taskId));
+        if (includeNumberAnomalies) {
+            issues.addAll(detectChapterNumberAnomalies(chapters, taskId));
+        }
 
         // 检测章节字数异常
-        issues.addAll(detectChapterWordCountAnomalies(chapters, taskId));
+        if (includeNumberAnomalies) {
+            issues.addAll(detectChapterWordCountAnomalies(
+                    chapters, taskId, minWords, maxWords));
+        }
 
         return issues;
     }
@@ -165,7 +179,7 @@ public class ChapterDetectService {
             String title = cleanText.substring(diMatcher.end()).trim();
             int number = ChapterNumberConverter.chineseToNumber(numberStr);
             double confidence = calculateConfidence(cleanText, lineIndex, lines, numberStr);
-            return new ChapterCandidate(number, numberStr, cleanText,
+            return new ChapterCandidate(number, numberStr, text,
                     title, keyword, charOffset, confidence);
         }
 
@@ -176,7 +190,7 @@ public class ChapterDetectService {
             String title = cleanText.substring(volMatcher.end()).trim();
             int number = ChapterNumberConverter.chineseToNumber(numberStr);
             double confidence = calculateConfidence(cleanText, lineIndex, lines, numberStr);
-            return new ChapterCandidate(number, numberStr, cleanText,
+            return new ChapterCandidate(number, numberStr, text,
                     title, "卷", charOffset, confidence);
         }
 
@@ -185,7 +199,7 @@ public class ChapterDetectService {
         if (enMatcher.find()) {
             int number = Integer.parseInt(enMatcher.group(1));
             String title = cleanText.substring(enMatcher.end()).trim();
-            return new ChapterCandidate(number, String.valueOf(number), cleanText,
+            return new ChapterCandidate(number, String.valueOf(number), text,
                     title, "Chapter", charOffset, 0.7);
         }
 
@@ -194,7 +208,7 @@ public class ChapterDetectService {
         if (specialMatcher.find()) {
             String keyword = specialMatcher.group(1);
             String title = specialMatcher.group(2).trim();
-            return new ChapterCandidate(0, keyword, cleanText,
+            return new ChapterCandidate(0, keyword, text,
                     title, keyword, charOffset, 0.8);
         }
 
@@ -203,7 +217,7 @@ public class ChapterDetectService {
         if (numMatcher.find()) {
             int number = Integer.parseInt(numMatcher.group(1));
             String title = numMatcher.group(2);
-            return new ChapterCandidate(number, numMatcher.group(1), cleanText,
+            return new ChapterCandidate(number, numMatcher.group(1), text,
                     title, "数字编号", charOffset, 0.6);
         }
 
@@ -212,7 +226,7 @@ public class ChapterDetectService {
         if (chMatcher.find()) {
             int number = ChapterNumberConverter.chineseToNumber(chMatcher.group(1));
             String title = chMatcher.group(2);
-            return new ChapterCandidate(number, chMatcher.group(1), cleanText,
+            return new ChapterCandidate(number, chMatcher.group(1), text,
                     title, "中文编号", charOffset, 0.6);
         }
 
@@ -220,7 +234,7 @@ public class ChapterDetectService {
         Matcher mdMatcher = MARKDOWN_PATTERN.matcher(cleanText);
         if (mdMatcher.find()) {
             String title = mdMatcher.group(1);
-            return new ChapterCandidate(0, "", cleanText,
+            return new ChapterCandidate(0, "", text,
                     title, "Markdown", charOffset, 0.5);
         }
 
@@ -371,10 +385,9 @@ public class ChapterDetectService {
     // ==================== 章节字数异常检测 ====================
 
     private List<TextRepairIssue> detectChapterWordCountAnomalies(
-            List<DetectedChapterDTO> chapters, Long taskId) {
+            List<DetectedChapterDTO> chapters, Long taskId,
+            int minWords, int maxWords) {
         List<TextRepairIssue> issues = new ArrayList<>();
-        int minWords = 100;
-        int maxWords = 30000;
 
         for (int i = 0; i < chapters.size(); i++) {
             DetectedChapterDTO chapter = chapters.get(i);

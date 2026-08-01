@@ -14,6 +14,7 @@ export interface RepairTask {
   optionsJson?: string
   reportJson?: string
   totalIssueCount: number
+  detectedChapterCount: number
   pendingIssueCount: number
   acceptedIssueCount: number
   rejectedIssueCount: number
@@ -84,8 +85,10 @@ export interface RepairRule {
   riskLevel: string
   enabled: boolean
   systemRule: boolean
+  whitelist: boolean
   scope: string
   templateId?: number
+  bookId?: number
   userId?: number
 }
 
@@ -123,12 +126,19 @@ export interface RepairReport {
 // ==================== API 调用 ====================
 
 // 修复任务
-export function createRepairTask(bookId: number, repairMode: string, versionId?: number, templateId?: number) {
+export function createRepairTask(
+  bookId: number,
+  repairMode: string,
+  versionId?: number,
+  templateId?: number,
+  optionsJson?: string,
+) {
   return api.post<RepairTask>('/api/text-repair/tasks', {
     bookId,
     repairMode,
     versionId,
     templateId,
+    optionsJson,
   })
 }
 
@@ -180,6 +190,10 @@ export function acceptHighConfidence(taskId: number, threshold = 0.8) {
 
 export function revertAllRepairs(taskId: number) {
   return api.post(`/api/text-repair/tasks/${taskId}/revert`)
+}
+
+export function restoreOriginalRepairVersion(taskId: number) {
+  return api.post(`/api/text-repair/tasks/${taskId}/restore-original`)
 }
 
 // 编码检测

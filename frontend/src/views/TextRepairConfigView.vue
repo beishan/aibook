@@ -35,6 +35,7 @@
             <div class="rule-name">
               {{ rule.name }}
               <span v-if="rule.systemRule" class="tag tag-info">系统</span>
+              <span v-if="rule.whitelist" class="tag tag-success">白名单</span>
               <span class="risk-tag" :class="rule.riskLevel.toLowerCase()">
                 {{ rule.riskLevel === 'LOW' ? '低风险' : rule.riskLevel === 'MEDIUM' ? '中风险' : '高风险' }}
               </span>
@@ -216,6 +217,12 @@
             <label>匹配表达式（正则）</label>
             <textarea v-model="ruleForm.pattern" rows="3" placeholder="如：https?://[^\s]+" />
           </div>
+          <div class="form-group">
+            <label class="setting-checkbox-label">
+              <input v-model="ruleForm.whitelist" type="checkbox" />
+              作为广告白名单（匹配内容不参与广告检测）
+            </label>
+          </div>
           <div class="form-row">
             <div class="form-group">
               <label>匹配范围</label>
@@ -255,7 +262,7 @@
               <label>作用范围</label>
               <select v-model="ruleForm.scope">
                 <option value="ALL_BOOKS">所有书籍</option>
-                <option value="CURRENT_BOOK">仅当前书籍</option>
+                <option v-if="ruleForm.bookId" value="CURRENT_BOOK">仅当前书籍</option>
               </select>
             </div>
           </div>
@@ -386,7 +393,10 @@ const ruleForm = reactive({
   replacement: '',
   riskLevel: 'LOW',
   enabled: true,
+  whitelist: false,
   scope: 'ALL_BOOKS',
+  bookId: undefined as number | undefined,
+  templateId: undefined as number | undefined,
 })
 
 const templateForm = reactive({
@@ -427,7 +437,10 @@ function editRule(rule: RepairRule) {
     replacement: rule.replacement || '',
     riskLevel: rule.riskLevel,
     enabled: rule.enabled,
+    whitelist: rule.whitelist,
     scope: rule.scope,
+    bookId: rule.bookId,
+    templateId: rule.templateId,
   })
   showRuleDialog.value = true
 }
@@ -620,6 +633,7 @@ function handleSaveGeneralSettings() {
 
 .tab-icon-lg {
   font-size: 18px;
+}
 
 .section-header {
   display: flex;

@@ -61,7 +61,9 @@ public class ChapterNormalizeService {
                         .chapterIndex(i)
                         .type(RepairIssueType.CHAPTER)
                         .startOffset(chapter.getStartOffset())
-                        .endOffset(chapter.getEndOffset())
+                        // DetectedChapterDTO.endOffset is the end of the whole chapter.
+                        // A title normalization must only replace the title line.
+                        .endOffset(chapter.getStartOffset() + originalTitle.length())
                         .originalText(originalTitle)
                         .suggestedText(normalizedTitle)
                         .reason("章节标题规范化")

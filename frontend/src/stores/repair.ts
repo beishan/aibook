@@ -11,10 +11,12 @@ import type {
 import {
   createRepairTask,
   getRepairTask,
+  getBookRepairTasks,
   getRepairIssues,
   updateRepairIssue,
   acceptHighConfidence,
   revertAllRepairs,
+  restoreOriginalRepairVersion,
   detectEncoding,
   previewEncoding,
   previewRepair,
@@ -31,6 +33,7 @@ import {
 
 export const useRepairStore = defineStore('repair', () => {
   const currentTask = ref<RepairTask | null>(null)
+  const tasks = ref<RepairTask[]>([])
   const issues = ref<RepairIssue[]>([])
   const issuesTotal = ref(0)
   const loading = ref(false)
@@ -44,10 +47,18 @@ export const useRepairStore = defineStore('repair', () => {
   const rejectedCount = computed(() => issues.value.filter((i) => i.status === 'REJECTED').length)
 
   // 任务管理
-  async function createTask(bookId: number, repairMode: string, versionId?: number, templateId?: number) {
+  async function createTask(
+    bookId: number,
+    repairMode: string,
+    versionId?: number,
+    templateId?: number,
+    optionsJson?: string,
+  ) {
     loading.value = true
     try {
-      const response = await createRepairTask(bookId, repairMode, versionId, templateId)
+      const response = await createRepairTask(
+        bookId, repairMode, versionId, templateId, optionsJson,
+      )
       currentTask.value = response.data
       await loadIssues(response.data.id)
       return response.data
@@ -65,6 +76,12 @@ export const useRepairStore = defineStore('repair', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  async function loadBookTasks(bookId: number) {
+    const response = await getBookRepairTasks(bookId)
+    tasks.value = response.data
+    return response.data
   }
 
   // 问题管理
@@ -105,6 +122,12 @@ export const useRepairStore = defineStore('repair', () => {
     await revertAllRepairs(taskId)
     await loadIssues(taskId)
     await loadTask(taskId)
+  }
+
+  async function restoreOriginal(taskId: number) {
+    await restoreOriginalRepairVersion(taskId)
+    await loadTask(taskId)
+    await loadIssues(taskId)
   }
 
   // 编码检测
@@ -187,6 +210,7 @@ export const useRepairStore = defineStore('repair', () => {
 
   function reset() {
     currentTask.value = null
+    tasks.value = []
     issues.value = []
     issuesTotal.value = 0
     encodingResult.value = null
@@ -195,6 +219,7 @@ export const useRepairStore = defineStore('repair', () => {
 
   return {
     currentTask,
+    tasks,
     issues,
     issuesTotal,
     loading,
@@ -207,10 +232,12 @@ export const useRepairStore = defineStore('repair', () => {
     rejectedCount,
     createTask,
     loadTask,
+    loadBookTasks,
     loadIssues,
     updateIssue,
     acceptHighConfidenceIssues,
     revertAll,
+    restoreOriginal,
     loadEncoding,
     switchEncodingPreview,
     loadPreview,
