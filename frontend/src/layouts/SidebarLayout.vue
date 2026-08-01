@@ -166,7 +166,7 @@ const menuItems = [
   { path: '/shelf', icon: Reading, title: '书架' },
   { path: '/categories', icon: FolderOpened, title: '分类' },
   { path: '/tags', icon: PriceTag, title: '标签' },
-  { path: '/settings/text-repair', icon: Tools, title: '内容修复' },
+  { path: '/text-repair', icon: Tools, title: '内容修复' },
   { path: '/settings', icon: Setting, title: '设置' },
 ]
 

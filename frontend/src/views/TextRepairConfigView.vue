@@ -36,8 +36,8 @@
               {{ rule.name }}
               <span v-if="rule.systemRule" class="tag tag-info">系统</span>
               <span v-if="rule.whitelist" class="tag tag-success">白名单</span>
-              <span class="risk-tag" :class="rule.riskLevel.toLowerCase()">
-                {{ rule.riskLevel === 'LOW' ? '低风险' : rule.riskLevel === 'MEDIUM' ? '中风险' : '高风险' }}
+              <span class="risk-tag" :class="(rule.riskLevel || 'LOW').toLowerCase()">
+                {{ getRiskLevelText(rule.riskLevel) }}
               </span>
             </div>
             <div class="rule-pattern">{{ rule.pattern }}</div>
@@ -546,6 +546,10 @@ function getActionText(action: string) {
     DELETE_PARAGRAPH: '删除段落', MARK_ONLY: '仅标记', REPLACE: '替换',
   }
   return map[action] || action
+}
+
+function getRiskLevelText(level?: string) {
+  return { LOW: '低风险', MEDIUM: '中风险', HIGH: '高风险' }[level || 'LOW'] || '低风险'
 }
 
 function getModeText(mode: string) {
