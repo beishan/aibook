@@ -204,6 +204,16 @@ public class FontService {
         return toDto(fontAssetRepository.save(asset));
     }
 
+    /** 浏览器确认无法解析字体后持久化不可用状态，避免后续重复加载。 */
+    @Transactional
+    public void markUnavailable(Long id) {
+        FontAsset asset = getAsset(id);
+        if (!Boolean.FALSE.equals(asset.getAvailable())) {
+            asset.setAvailable(false);
+            fontAssetRepository.save(asset);
+        }
+    }
+
     @Transactional
     public void delete(Long id) {
         FontAsset asset = getAsset(id);

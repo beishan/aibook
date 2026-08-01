@@ -41,6 +41,11 @@ api.interceptors.response.use(
     const message = error.response?.data?.message || '请求失败'
     const status = error.response?.status
     const authRequest = isAuthEndpoint(error.config?.url)
+    const suppressErrorToast = String(
+      error.config?.headers?.get?.('X-Suppress-Error-Toast')
+        ?? error.config?.headers?.['X-Suppress-Error-Toast']
+        ?? ''
+    ) === 'true'
 
     if (status === 401 && !authRequest) {
       clearStoredAuthSession()
@@ -55,9 +60,9 @@ api.interceptors.response.use(
         })
         ElMessage.error('登录已过期，请重新登录')
       }
-    } else if (status === 403) {
+    } else if (status === 403 && !suppressErrorToast) {
       ElMessage.error('没有权限执行此操作')
-    } else if (!(status === 401 && authRequest)) {
+    } else if (!(status === 401 && authRequest) && !suppressErrorToast) {
       ElMessage.error(message)
     }
 

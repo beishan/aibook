@@ -85,6 +85,26 @@ export const useFontStore = defineStore('fonts', () => {
 
   const cssFamily = (id: number) => `"${managedFamily(id)}"`
 
+  const markFontUnavailable = async (font: FontAsset) => {
+    font.available = false
+    const loaded = loadedFonts.get(font.id)
+    if (loaded) {
+      document.fonts.forEach(face => {
+        if (face.family === loaded.family) document.fonts.delete(face)
+      })
+      URL.revokeObjectURL(loaded.objectUrl)
+      loadedFonts.delete(font.id)
+    }
+    try {
+      await api.post(`/api/fonts/${font.id}/unavailable`, null, {
+        headers: { 'X-Suppress-Error-Toast': 'true' },
+      })
+    } catch (error) {
+      // 本地状态已立即生效；服务端暂时不可达时也不要干扰当前页面。
+      console.warn('Failed to persist unavailable font state:', error)
+    }
+  }
+
   const loadFont = async (fontOrId: FontAsset | number): Promise<LoadedFont> => {
     const id = typeof fontOrId === 'number' ? fontOrId : fontOrId.id
     const cached = loadedFonts.get(id)
@@ -107,6 +127,7 @@ export const useFontStore = defineStore('fonts', () => {
         responseType: 'arraybuffer',
       })
       if (!(response.data instanceof ArrayBuffer) || response.data.byteLength === 0) {
+        await markFontUnavailable(font)
         throw new Error('字体文件内容为空或响应格式不正确')
       }
       const contentType = String(response.headers['content-type'] || 'font/ttf')
@@ -133,6 +154,7 @@ export const useFontStore = defineStore('fonts', () => {
         document.fonts.add(face)
       } catch (error) {
         URL.revokeObjectURL(objectUrl)
+        await markFontUnavailable(font)
         const detail = error instanceof Error && error.message
           ? `：${error.message}`
           : ''

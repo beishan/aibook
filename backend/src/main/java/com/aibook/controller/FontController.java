@@ -90,6 +90,12 @@ public class FontController {
         return ResponseEntity.ok(fontService.update(id, request));
     }
 
+    @PostMapping("/{id}/unavailable")
+    public ResponseEntity<Void> markUnavailable(@PathVariable Long id) {
+        fontService.markUnavailable(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         fontService.delete(id);

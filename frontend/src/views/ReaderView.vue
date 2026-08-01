@@ -4,16 +4,22 @@
     <div v-if="book" class="reader-content">
       <!-- 阅读器头部 -->
       <header class="reader-header glass" v-show="!isFullscreen">
-        <button class="back-btn" @click="goBack">
+        <button v-show="!showSidePanel" class="back-btn" @click="goBack">
           <span>‹</span>
           <span>返回</span>
         </button>
         <div class="reader-title">
           <div class="reader-title-main">
-            <span class="reader-book-name">{{ book.title }}</span>
-            <span v-if="selectedVersion" class="reader-version-badge">
-              {{ selectedVersion.format.toUpperCase() }} · {{ selectedVersion.displayName }}
-            </span>
+            <div class="reader-book-identity">
+              <span class="reader-book-name" :title="book.title">{{ book.title }}</span>
+              <span
+                v-if="selectedVersion"
+                class="reader-version-badge"
+                :title="selectedVersion.displayName"
+              >
+                {{ selectedVersion.format.toUpperCase() }}
+              </span>
+            </div>
             <span
               v-if="performancePaginationMode"
               class="performance-mode-badge"
@@ -92,7 +98,15 @@
               >
                 高亮
               </button>
-              <button class="btn btn-icon btn-small close-panel" @click="closeAllPanels">✕</button>
+              <button
+                class="btn btn-icon btn-small close-panel"
+                type="button"
+                title="关闭侧栏"
+                aria-label="关闭侧栏"
+                @click="closeAllPanels"
+              >
+                ✕
+              </button>
             </div>
 
             <!-- 目录内容 -->
@@ -119,7 +133,12 @@
             <div v-if="activeTab === 'bookmarks'" class="panel-content">
               <div class="bookmarks-header">
                 <span>📑 我的书签</span>
-                <button class="btn btn-primary btn-small" @click="handleAddBookmark">
+                <button
+                  class="btn btn-primary bookmark-add-btn"
+                  type="button"
+                  title="添加当前阅读位置为书签"
+                  @click="handleAddBookmark"
+                >
                   + 添加书签
                 </button>
               </div>
@@ -600,9 +619,8 @@ const selectReaderFont = async (font: { value: string; fontId?: number }) => {
       preferencesStore.setReaderFontId(null)
     }
     settings.value.fontFamily = font.value
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : '请检查字体文件是否可用'
-    message.error(`字体加载失败：${detail}`)
+  } catch {
+    // 浏览器不支持的字体会被自动标记不可用，不打断阅读。
   }
 }
 
@@ -687,7 +705,6 @@ const readerStyle = computed(() => {
     color: colors.text,
     // 两屏模式下不限制宽度，让两栏均匀分布
     maxWidth: isDoubleScreen ? '100%' : widthOption.maxWidth,
-    padding: isDoubleScreen ? '40px 60px' : '40px 60px',
   }
 })
 
@@ -1854,6 +1871,9 @@ const initializeReader = async () => {
     }
   } catch (error) {
     console.error('Failed to initialize reader font:', error)
+    if (preferencesStore.readerFontId != null) {
+      preferencesStore.setReaderFontId(null)
+    }
     if (managedFontId(settings.value.fontFamily) != null) {
       settings.value.fontFamily = 'default'
     }
@@ -2034,6 +2054,9 @@ onBeforeUnmount(() => {
 }
 
 .reader-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2041,11 +2064,11 @@ onBeforeUnmount(() => {
   flex: 0 1 auto;
   overflow: hidden;
   padding: 7px var(--spacing-md);
-  margin: 0 var(--spacing-md);
+  margin: 0;
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   pointer-events: auto;
-  width: min(56vw, 760px);
+  width: min(calc(100% - 300px), 820px);
 }
 
 .reader-title-main {
@@ -2054,6 +2077,14 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
+  min-width: 0;
+}
+
+.reader-book-identity {
+  display: flex;
+  flex: 1 1 48%;
+  align-items: center;
+  gap: 7px;
   min-width: 0;
 }
 
@@ -2068,25 +2099,22 @@ onBeforeUnmount(() => {
 }
 
 .reader-version-badge {
-  overflow: hidden;
-  flex: 0 1 auto;
-  max-width: 220px;
+  flex: 0 0 auto;
   padding: 2px 6px;
   border-radius: var(--radius-full);
   background: var(--primary-alpha-10);
   color: var(--primary);
   font-size: 10px;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .reader-title-meta {
   display: flex;
-  flex: 0 1 42%;
+  flex: 0 1 48%;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  max-width: 42%;
+  max-width: 48%;
   margin-left: auto;
   min-width: 0;
   color: var(--text-secondary);
@@ -2175,7 +2203,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  z-index: 50;
+  z-index: 120;
 }
 
 .panel-tabs {
@@ -2209,7 +2237,14 @@ onBeforeUnmount(() => {
 }
 
 .close-panel {
+  flex: 0 0 32px;
   margin-left: auto;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.close-panel:hover {
+  color: var(--text-primary);
 }
 
 .panel-content {
@@ -2227,6 +2262,23 @@ onBeforeUnmount(() => {
   align-items: center;
   margin-bottom: var(--spacing-md);
   font-weight: 600;
+}
+
+.bookmarks-header > span {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.bookmark-add-btn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 92px;
+  min-height: 34px;
+  padding: 7px 12px;
+  white-space: nowrap;
 }
 
 .toc-list {
@@ -2413,11 +2465,15 @@ onBeforeUnmount(() => {
 .reader-body {
   flex: 1;
   overflow-y: auto;
-  padding: 40px 60px;
+  padding: 72px 60px 40px;
   margin: 0 auto;
   width: 100%;
   scroll-behavior: smooth;
   min-height: 0;
+}
+
+.fullscreen-mode .reader-body {
+  padding-top: 40px;
 }
 
 /* 翻页模式也允许滚动 */
@@ -3026,6 +3082,9 @@ onBeforeUnmount(() => {
   }
 
   .reader-title {
+    position: static;
+    left: auto;
+    transform: none;
     grid-column: 1 / -1;
     grid-row: 2;
     justify-self: center;
@@ -3042,7 +3101,7 @@ onBeforeUnmount(() => {
     left: 0;
     top: 0;
     bottom: 0;
-    z-index: 100;
+    z-index: 120;
     width: 85%;
     max-width: 320px;
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.2);
@@ -3053,6 +3112,10 @@ onBeforeUnmount(() => {
   }
 
   .reader-body {
+    padding: 104px var(--spacing-md) var(--spacing-md);
+  }
+
+  .fullscreen-mode .reader-body {
     padding: var(--spacing-md);
   }
 

@@ -320,108 +320,106 @@
 
     <!-- 模板编辑弹窗 -->
     <div v-if="showTemplateDialog" class="modal" @click.self="showTemplateDialog = false">
-      <div class="modal-content glass">
+      <div class="modal-content glass template-editor">
         <div class="modal-header">
-          <h3>{{ editingTemplate ? '编辑模板' : '添加模板' }}</h3>
+          <div>
+            <h3>{{ editingTemplate ? '编辑修复模板' : '添加修复模板' }}</h3>
+            <p>组合检测器、输出格式与风险阈值，创建可重复使用的修复方案。</p>
+          </div>
           <button class="btn" @click="showTemplateDialog = false">✕</button>
         </div>
         <div class="modal-body">
-          <div class="form-group">
-            <label>模板名称</label>
-            <input v-model="templateForm.name" type="text" placeholder="如：网络小说清理" />
-          </div>
-          <div class="form-group">
-            <label>描述</label>
-            <textarea v-model="templateForm.description" rows="2" placeholder="模板描述" />
-          </div>
-          <div class="form-group">
-            <label>修复模式</label>
-            <select v-model="templateForm.repairMode" @change="applyFeaturePreset(templateFeatures, templateForm.repairMode)">
-              <option value="SAFE">安全修复</option>
-              <option value="STANDARD">标准修复</option>
-              <option value="DEEP">深度修复</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>启用的修复功能</label>
-            <div class="template-feature-grid">
-              <label
-                v-for="item in flatFeatureItems"
-                :key="item.key"
-                class="template-feature-option"
-              >
-                <input v-model="templateFeatures[item.key]" type="checkbox" />
-                <span>{{ item.label }}</span>
-              </label>
+          <section class="template-section">
+            <div class="template-section-heading">
+              <span>01</span><div><strong>基本信息</strong><small>名称、用途和默认修复强度</small></div>
             </div>
-            <small>模板被选中后，这些开关会覆盖对应修复模式的默认值。</small>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>源文件解码方式</label>
-              <select v-model="templateAdvanced.preferredEncoding">
-                <option value="AUTO">自动检测</option>
-                <option value="UTF-8">UTF-8</option>
-                <option value="GB18030">GB18030 / GBK</option>
-                <option value="BIG5">Big5</option>
-                <option value="UTF-16LE">UTF-16 LE</option>
-                <option value="UTF-16BE">UTF-16 BE</option>
-              </select>
+            <div class="form-row">
+              <div class="form-group form-grow-2">
+                <label>模板名称</label>
+                <input v-model="templateForm.name" type="text" placeholder="如：网络小说深度清理" />
+              </div>
+              <div class="form-group">
+                <label>修复模式</label>
+                <select v-model="templateForm.repairMode" @change="applyFeaturePreset(templateFeatures, templateForm.repairMode)">
+                  <option value="SAFE">安全修复</option>
+                  <option value="STANDARD">标准修复</option>
+                  <option value="DEEP">深度修复</option>
+                </select>
+              </div>
             </div>
             <div class="form-group">
-              <label>不可恢复乱码</label>
-              <select v-model="templateAdvanced.unrecoverableEncodingAction">
-                <option value="MARK">标记并人工确认</option>
-                <option value="IGNORE">忽略</option>
-              </select>
+              <label>模板说明</label>
+              <textarea v-model="templateForm.description" rows="2" placeholder="说明该模板适合处理什么类型的文本" />
             </div>
-          </div>
-          <div class="form-group">
-            <label>章节输出格式</label>
-            <input v-model="templateForm.chapterFormat" type="text" />
-            <small>占位符: {number} 编号, {number:3} 三位补零, {chineseNumber} 中文编号, {title} 标题</small>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>段首缩进</label>
-              <select v-model="templateForm.indentStyle">
-                <option value="FULL_WIDTH_SPACE">两个全角空格</option>
-                <option value="HALF_SPACE">两个普通空格</option>
-                <option value="FOUR_SPACE">四个普通空格</option>
-                <option value="NONE">不缩进</option>
-                <option value="KEEP">保持原样</option>
-              </select>
+          </section>
+
+          <section class="template-section">
+            <div class="template-section-heading">
+              <span>02</span>
+              <div><strong>启用的修复功能</strong><small>按类别精确控制扫描内容</small></div>
+              <em>{{ enabledTemplateFeatureCount }} 项已启用</em>
             </div>
-            <div class="form-group">
-              <label>空行数量</label>
-              <select v-model="templateForm.blankLineCount">
-                <option :value="0">不保留空行</option>
-                <option :value="1">保留1个空行</option>
-                <option :value="2">保留2个空行</option>
-                <option :value="-1">保持原样</option>
-              </select>
+            <div class="template-feature-groups">
+              <div v-for="group in featureGroups" :key="group.key" class="template-feature-group">
+                <div class="template-feature-group-title">
+                  <span>{{ group.icon }}</span><strong>{{ group.title }}</strong>
+                </div>
+                <label v-for="item in group.items" :key="item.key" class="template-feature-option">
+                  <input v-model="templateFeatures[item.key]" type="checkbox" />
+                  <span class="template-check">✓</span>
+                  <span>{{ item.label }}</span>
+                </label>
+              </div>
             </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>超短章节字数</label>
-              <input v-model.number="templateForm.minChapterWords" type="number" />
+            <p class="template-section-tip">选择修复模式会应用推荐开关，之后仍可逐项调整。</p>
+          </section>
+
+          <section class="template-section">
+            <div class="template-section-heading">
+              <span>03</span><div><strong>格式与判定参数</strong><small>控制编码、章节格式、段落样式和阈值</small></div>
             </div>
-            <div class="form-group">
-              <label>超长章节字数</label>
-              <input v-model.number="templateForm.maxChapterWords" type="number" />
+            <div class="template-parameter-grid">
+              <div class="form-group">
+                <label>源文件解码方式</label>
+                <select v-model="templateAdvanced.preferredEncoding">
+                  <option value="AUTO">自动检测</option><option value="UTF-8">UTF-8</option>
+                  <option value="GB18030">GB18030 / GBK</option><option value="BIG5">Big5</option>
+                  <option value="UTF-16LE">UTF-16 LE</option><option value="UTF-16BE">UTF-16 BE</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>不可恢复乱码</label>
+                <select v-model="templateAdvanced.unrecoverableEncodingAction">
+                  <option value="MARK">标记并人工确认</option><option value="IGNORE">忽略</option>
+                </select>
+              </div>
+              <div class="form-group parameter-wide">
+                <label>章节输出格式</label>
+                <input v-model="templateForm.chapterFormat" type="text" />
+                <small>{number} 编号 · {number:3} 补零 · {chineseNumber} 中文编号 · {title} 标题</small>
+              </div>
+              <div class="form-group">
+                <label>段首缩进</label>
+                <select v-model="templateForm.indentStyle">
+                  <option value="FULL_WIDTH_SPACE">两个全角空格</option><option value="HALF_SPACE">两个普通空格</option>
+                  <option value="FOUR_SPACE">四个普通空格</option><option value="NONE">不缩进</option><option value="KEEP">保持原样</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>段落间空行</label>
+                <select v-model="templateForm.blankLineCount">
+                  <option :value="0">不保留空行</option><option :value="1">保留 1 个空行</option>
+                  <option :value="2">保留 2 个空行</option><option :value="-1">保持原样</option>
+                </select>
+              </div>
+              <div class="form-group"><label>超短章节字数</label><input v-model.number="templateForm.minChapterWords" type="number" /></div>
+              <div class="form-group"><label>超长章节字数</label><input v-model.number="templateForm.maxChapterWords" type="number" /></div>
+              <div class="form-group parameter-wide">
+                <label>自动接受置信度 <b>{{ formatConfidence(templateForm.autoApplyThreshold) }}</b></label>
+                <input v-model.number="templateForm.autoApplyThreshold" class="confidence-range" type="range" step="0.1" min="0" max="1" />
+              </div>
             </div>
-          </div>
-          <div class="form-group">
-            <label>
-              <input v-model="templateForm.punctuationNormalize" type="checkbox" />
-              标点统一（英文标点转中文）
-            </label>
-          </div>
-          <div class="form-group">
-            <label>自动处理置信度阈值</label>
-            <input v-model.number="templateForm.autoApplyThreshold" type="number" step="0.1" min="0" max="1" />
-          </div>
+          </section>
         </div>
         <div class="modal-footer">
           <button class="btn" @click="showTemplateDialog = false">取消</button>
@@ -433,7 +431,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message, confirm } from '@/utils/message'
 import { useRepairStore } from '@/stores/repair'
 import type { RepairRule, RepairTemplate } from '@/utils/repair'
@@ -522,6 +520,9 @@ const featureGroups = [
 
 const flatFeatureItems = featureGroups.flatMap(group => group.items)
 const templateFeatures = reactive<Record<string, boolean>>({})
+const enabledTemplateFeatureCount = computed(() =>
+  flatFeatureItems.filter(item => templateFeatures[item.key]).length
+)
 const templateAdvanced = reactive({
   preferredEncoding: 'AUTO',
   unrecoverableEncodingAction: 'MARK',
@@ -772,6 +773,10 @@ function getIndentText(style: string) {
   }[style] || style
 }
 
+function formatConfidence(value: number | null | undefined) {
+  return Number.isFinite(Number(value)) ? Number(value).toFixed(1) : '0.8'
+}
+
 function handleSaveGeneralSettings() {
   // 保存到 localStorage 作为全局默认设置
   localStorage.setItem('textRepairSettings', JSON.stringify(generalSettings))
@@ -982,6 +987,97 @@ function handleSaveGeneralSettings() {
   border-top: 1px solid var(--border-color);
 }
 
+.template-editor {
+  max-width: 860px;
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  background: var(--surface-card, var(--glass-bg));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+}
+
+.template-editor .modal-header {
+  padding: 18px 22px;
+  background: var(--surface-card, var(--glass-bg));
+}
+
+.template-editor .modal-header h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.template-editor .modal-header p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.template-editor .modal-body {
+  padding: 18px;
+  background: color-mix(in srgb, var(--input-bg, #f5f7fa) 72%, transparent);
+}
+
+.template-editor .modal-footer {
+  padding: 13px 20px;
+  background: var(--surface-card, var(--glass-bg));
+}
+
+.template-section {
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  background: var(--surface-card, var(--glass-bg));
+}
+
+.template-section:last-child { margin-bottom: 0; }
+
+.template-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.template-section-heading > span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent-color, #409eff) 14%, transparent);
+  color: var(--accent-color, #409eff);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.template-section-heading strong,
+.template-section-heading small { display: block; }
+
+.template-section-heading strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.template-section-heading small {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.template-section-heading em {
+  margin-left: auto;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--info-bg, #ecf5ff);
+  color: var(--accent-color, #409eff);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.form-grow-2 { flex: 2 !important; }
+
 .form-group {
   margin-bottom: 12px;
 }
@@ -1171,23 +1267,97 @@ function handleSaveGeneralSettings() {
   font-weight: 600;
 }
 
-.template-feature-grid {
+.template-feature-groups {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-  padding: 10px;
+  gap: 10px;
+}
+
+.template-feature-group {
+  min-width: 0;
+  padding: 11px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 9px;
   background: var(--input-bg, var(--glass-bg));
+}
+
+.template-feature-group-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+  padding-bottom: 7px;
+  border-bottom: 1px dashed var(--border-color);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.template-feature-group-title > span {
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 5px;
+  background: var(--accent-color, #409eff);
+  color: white;
+  font-size: 10px;
 }
 
 .template-feature-option {
   display: flex !important;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
+  padding: 5px 3px;
   margin: 0 !important;
   color: var(--text-primary) !important;
+  font-size: 12px !important;
   cursor: pointer;
+}
+
+.template-feature-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.template-check {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--surface-card, white);
+  color: transparent;
+  font-size: 11px;
+  transition: 0.16s ease;
+}
+
+.template-feature-option input:checked + .template-check {
+  border-color: var(--accent-color, #409eff);
+  background: var(--accent-color, #409eff);
+  color: white;
+}
+
+.template-section-tip {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.template-parameter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+.parameter-wide { grid-column: 1 / -1; }
+
+.confidence-range {
+  height: 28px;
+  padding: 0 !important;
+  accent-color: var(--accent-color, #409eff);
 }
 
 .setting-item {
@@ -1247,9 +1417,12 @@ function handleSaveGeneralSettings() {
 
 @media (max-width: 760px) {
   .feature-config-grid,
-  .template-feature-grid {
+  .template-feature-groups,
+  .template-parameter-grid {
     grid-template-columns: 1fr;
   }
+
+  .parameter-wide { grid-column: auto; }
 
   .setting-row,
   .form-row {
@@ -1259,6 +1432,20 @@ function handleSaveGeneralSettings() {
   .general-settings {
     padding: 16px;
   }
+
+  .modal:has(.template-editor) { padding: 8px; }
+
+  .template-editor {
+    max-height: calc(100vh - 16px);
+    border-radius: 10px;
+  }
+
+  .template-editor .modal-header,
+  .template-editor .modal-footer { padding: 13px 14px; }
+
+  .template-editor .modal-body { padding: 10px; }
+
+  .template-section { padding: 12px; }
 }
 
 @media (min-width: 761px) and (max-width: 920px) {
