@@ -106,22 +106,37 @@ export const useFontStore = defineStore('fonts', () => {
       const response = await api.get<ArrayBuffer>(`/api/fonts/${id}/content`, {
         responseType: 'arraybuffer',
       })
+      if (!(response.data instanceof ArrayBuffer) || response.data.byteLength === 0) {
+        throw new Error('字体文件内容为空或响应格式不正确')
+      }
       const contentType = String(response.headers['content-type'] || 'font/ttf')
       const objectUrl = URL.createObjectURL(
         new Blob([response.data], { type: contentType })
       )
       const family = managedFamily(id)
-      const face = new FontFace(family, `url("${objectUrl}")`, {
+      const descriptors: FontFaceDescriptors = {
         style: font.fontStyle || 'normal',
         weight: String(font.fontWeight || 'normal'),
-      })
+      }
 
       try {
-        await face.load()
+        // 部分经过修改或压缩的中文字体通过 Blob URL 加载会被浏览器拒绝，
+        // 直接传入二进制数据兼容性更好；URL 仍保留给 EPUB iframe 使用。
+        let face: FontFace
+        try {
+          face = new FontFace(family, response.data.slice(0), descriptors)
+          await face.load()
+        } catch {
+          face = new FontFace(family, `url("${objectUrl}")`)
+          await face.load()
+        }
         document.fonts.add(face)
       } catch (error) {
         URL.revokeObjectURL(objectUrl)
-        throw error
+        const detail = error instanceof Error && error.message
+          ? `：${error.message}`
+          : ''
+        throw new Error(`浏览器无法解析该字体文件${detail}`)
       }
 
       const loaded = { family, objectUrl }

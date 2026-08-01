@@ -77,7 +77,7 @@
     <div v-show="activeTab === 'templates'" class="tab-content">
       <div class="section-header">
         <h3>修复模板</h3>
-        <button class="btn btn-primary" @click="showTemplateDialog = true">+ 添加模板</button>
+        <button class="btn btn-primary" @click="handleCreateTemplate">+ 添加模板</button>
       </div>
       <div class="templates-list">
         <div
@@ -126,9 +126,53 @@
     <!-- 通用设置 -->
     <div v-show="activeTab === 'general'" class="tab-content">
       <div class="section-header">
-        <h3>通用修复设置</h3>
+        <div>
+          <h3>修复功能配置</h3>
+          <p class="section-note">控制扫描时实际启用的检测器和修复建议，新建任务时自动使用。</p>
+        </div>
       </div>
       <div class="general-settings glass">
+        <div class="preset-strip">
+          <span>快速预设</span>
+          <button type="button" @click="applyFeaturePreset(generalSettings, 'SAFE')">安全</button>
+          <button type="button" @click="applyFeaturePreset(generalSettings, 'STANDARD')">标准</button>
+          <button type="button" @click="applyFeaturePreset(generalSettings, 'DEEP')">深度</button>
+        </div>
+        <div class="feature-config-grid">
+          <section v-for="group in featureGroups" :key="group.key" class="feature-card">
+            <div class="feature-card-heading">
+              <span class="feature-icon">{{ group.icon }}</span>
+              <div><strong>{{ group.title }}</strong><small>{{ group.description }}</small></div>
+            </div>
+            <label v-for="item in group.items" :key="item.key" class="feature-switch">
+              <input v-model="generalSettings[item.key]" type="checkbox" />
+              <span class="switch-visual"></span>
+              <span><b>{{ item.label }}</b><small>{{ item.hint }}</small></span>
+            </label>
+          </section>
+        </div>
+        <div class="subsection-title">输出格式与判定阈值</div>
+        <div class="setting-row">
+          <div class="setting-item">
+            <label class="setting-label">源文件解码方式</label>
+            <select v-model="generalSettings.preferredEncoding" class="setting-select">
+              <option value="AUTO">自动检测（推荐）</option>
+              <option value="UTF-8">UTF-8</option>
+              <option value="GB18030">GB18030 / GBK</option>
+              <option value="BIG5">Big5</option>
+              <option value="UTF-16LE">UTF-16 LE</option>
+              <option value="UTF-16BE">UTF-16 BE</option>
+            </select>
+            <small class="setting-hint">仅在自动检测结果错误时手动指定。</small>
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">不可恢复乱码</label>
+            <select v-model="generalSettings.unrecoverableEncodingAction" class="setting-select">
+              <option value="MARK">标记并人工确认</option>
+              <option value="IGNORE">忽略不可恢复项</option>
+            </select>
+          </div>
+        </div>
         <div class="setting-item">
           <label class="setting-label">默认修复模式</label>
           <select v-model="generalSettings.defaultMode" class="setting-select">
@@ -292,11 +336,45 @@
           </div>
           <div class="form-group">
             <label>修复模式</label>
-            <select v-model="templateForm.repairMode">
+            <select v-model="templateForm.repairMode" @change="applyFeaturePreset(templateFeatures, templateForm.repairMode)">
               <option value="SAFE">安全修复</option>
               <option value="STANDARD">标准修复</option>
               <option value="DEEP">深度修复</option>
             </select>
+          </div>
+          <div class="form-group">
+            <label>启用的修复功能</label>
+            <div class="template-feature-grid">
+              <label
+                v-for="item in flatFeatureItems"
+                :key="item.key"
+                class="template-feature-option"
+              >
+                <input v-model="templateFeatures[item.key]" type="checkbox" />
+                <span>{{ item.label }}</span>
+              </label>
+            </div>
+            <small>模板被选中后，这些开关会覆盖对应修复模式的默认值。</small>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>源文件解码方式</label>
+              <select v-model="templateAdvanced.preferredEncoding">
+                <option value="AUTO">自动检测</option>
+                <option value="UTF-8">UTF-8</option>
+                <option value="GB18030">GB18030 / GBK</option>
+                <option value="BIG5">Big5</option>
+                <option value="UTF-16LE">UTF-16 LE</option>
+                <option value="UTF-16BE">UTF-16 BE</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>不可恢复乱码</label>
+              <select v-model="templateAdvanced.unrecoverableEncodingAction">
+                <option value="MARK">标记并人工确认</option>
+                <option value="IGNORE">忽略</option>
+              </select>
+            </div>
           </div>
           <div class="form-group">
             <label>章节输出格式</label>
@@ -367,7 +445,7 @@ const showTemplateDialog = ref(false)
 const editingRule = ref<RepairRule | null>(null)
 const editingTemplate = ref<RepairTemplate | null>(null)
 
-const generalSettings = reactive({
+const generalSettings = reactive<Record<string, any>>({
   defaultMode: 'STANDARD',
   chapterFormat: '第{number}章 {title}',
   indentStyle: 'FULL_WIDTH_SPACE',
@@ -376,13 +454,78 @@ const generalSettings = reactive({
   minChapterWords: 100,
   maxChapterWords: 30000,
   punctuationNormalize: false,
+  preferredEncoding: 'AUTO',
+  unrecoverableEncodingAction: 'MARK',
+  encodingRepair: true,
+  invisibleCharCleanup: true,
+  adDetection: true,
+  chapterDetection: true,
+  chapterNormalize: true,
+  chapterNumberCheck: true,
+  chapterAdhesionDetection: false,
+  lineEndingNormalize: true,
+  blankLineCleanup: true,
+  brokenLineMerge: true,
+  indentNormalize: true,
+  duplicateChapterDetection: true,
+  similarChapterDetection: false,
+  duplicateParagraphDetection: false,
 })
 
 const tabs = [
   { key: 'rules', label: '广告规则', icon: '📋' },
   { key: 'templates', label: '修复模板', icon: '⚙️' },
-  { key: 'general', label: '通用设置', icon: '🎨' },
+  { key: 'general', label: '修复功能', icon: '🧰' },
 ]
+
+const featureGroups = [
+  {
+    key: 'encoding', title: '编码与乱码', icon: '译',
+    description: '识别错误编码、乱码特征与隐藏控制字符',
+    items: [
+      { key: 'encodingRepair', label: '乱码检测与候选修复', hint: '识别 UTF-8、GBK 等错误解码特征' },
+      { key: 'invisibleCharCleanup', label: '清理不可见字符', hint: '处理 BOM、零宽字符和异常控制符' },
+    ],
+  },
+  {
+    key: 'chapter', title: '章节标题', icon: '章',
+    description: '识别章节结构并规范标题与编号',
+    items: [
+      { key: 'chapterDetection', label: '章节标题识别', hint: '识别中文数字、阿拉伯数字及特殊章节' },
+      { key: 'chapterNormalize', label: '章节标题规范化', hint: '按下方章节格式生成修改建议' },
+      { key: 'chapterNumberCheck', label: '章节编号与字数检查', hint: '检查缺失、重复、乱序及过短过长章节' },
+      { key: 'chapterAdhesionDetection', label: '章节粘连检测', hint: '检测标题与正文或相邻章节粘连，风险较高' },
+    ],
+  },
+  {
+    key: 'paragraph', title: '段落与标点', icon: '¶',
+    description: '整理换行、空行、缩进和中文标点',
+    items: [
+      { key: 'lineEndingNormalize', label: '统一换行符', hint: '将 CRLF、CR 统一为 LF' },
+      { key: 'blankLineCleanup', label: '清理多余空行', hint: '按下方空行数量压缩连续空行' },
+      { key: 'brokenLineMerge', label: '错误换行合并', hint: '合并被错误拆开的连续句子，需人工确认' },
+      { key: 'indentNormalize', label: '段首缩进统一', hint: '章节标题不缩进，正文使用指定缩进' },
+      { key: 'punctuationNormalize', label: '标点与异常空格整理', hint: '转换常见英文标点并清理重复标点' },
+    ],
+  },
+  {
+    key: 'content', title: '广告与重复内容', icon: '净',
+    description: '结合规则、章节结构和相似度发现冗余内容',
+    items: [
+      { key: 'adDetection', label: '广告与推广信息检测', hint: '使用系统规则、自定义规则和白名单' },
+      { key: 'duplicateChapterDetection', label: '完全重复章节', hint: '比较章节正文，标记完全一致的章节' },
+      { key: 'similarChapterDetection', label: '近似重复章节', hint: '相似度检测，仅提供高风险建议' },
+      { key: 'duplicateParagraphDetection', label: '重复段落检测', hint: '检测全书范围内重复出现的长段落' },
+    ],
+  },
+]
+
+const flatFeatureItems = featureGroups.flatMap(group => group.items)
+const templateFeatures = reactive<Record<string, boolean>>({})
+const templateAdvanced = reactive({
+  preferredEncoding: 'AUTO',
+  unrecoverableEncodingAction: 'MARK',
+})
 
 const ruleForm = reactive({
   name: '',
@@ -412,6 +555,8 @@ const templateForm = reactive({
   maxChapterWords: 30000,
   autoApplyThreshold: 0.8,
 })
+
+applyFeaturePreset(templateFeatures, 'STANDARD')
 
 onMounted(async () => {
   // 加载保存的通用设置
@@ -460,6 +605,35 @@ function editTemplate(template: RepairTemplate) {
     maxChapterWords: template.maxChapterWords,
     autoApplyThreshold: template.autoApplyThreshold,
   })
+  applyFeaturePreset(templateFeatures, template.repairMode)
+  if (template.enabledItemsJson) {
+    try {
+      const options = JSON.parse(template.enabledItemsJson)
+      Object.assign(templateFeatures, options)
+      templateAdvanced.preferredEncoding = options.preferredEncoding || 'AUTO'
+      templateAdvanced.unrecoverableEncodingAction =
+        options.unrecoverableEncodingAction || 'MARK'
+    } catch {
+      // 旧模板配置损坏时使用模式默认值。
+    }
+  }
+  showTemplateDialog.value = true
+}
+
+function handleCreateTemplate() {
+  editingTemplate.value = null
+  Object.assign(templateForm, {
+    name: '', description: '', repairMode: 'STANDARD',
+    chapterFormat: '第{number}章 {title}', indentStyle: 'FULL_WIDTH_SPACE',
+    blankLineCount: 1, punctuationNormalize: false,
+    traditionalSimplified: 'NONE', minChapterWords: 100,
+    maxChapterWords: 30000, autoApplyThreshold: 0.8,
+  })
+  applyFeaturePreset(templateFeatures, 'STANDARD')
+  Object.assign(templateAdvanced, {
+    preferredEncoding: 'AUTO',
+    unrecoverableEncodingAction: 'MARK',
+  })
   showTemplateDialog.value = true
 }
 
@@ -489,11 +663,19 @@ async function handleSaveTemplate() {
     return
   }
   try {
+    const payload = {
+      ...templateForm,
+      punctuationNormalize: Boolean(templateFeatures.punctuationNormalize),
+      enabledItemsJson: JSON.stringify({
+        ...templateFeatures,
+        ...templateAdvanced,
+      }),
+    }
     if (editingTemplate.value) {
-      await repairStore.editTemplate(editingTemplate.value.id, { ...templateForm })
+      await repairStore.editTemplate(editingTemplate.value.id, payload)
       message.success('模板已更新')
     } else {
-      await repairStore.addTemplate({ ...templateForm })
+      await repairStore.addTemplate(payload)
       message.success('模板已添加')
     }
     showTemplateDialog.value = false
@@ -546,6 +728,29 @@ function getActionText(action: string) {
     DELETE_PARAGRAPH: '删除段落', MARK_ONLY: '仅标记', REPLACE: '替换',
   }
   return map[action] || action
+}
+
+function applyFeaturePreset(target: Record<string, any>, mode: string) {
+  const standard = mode !== 'SAFE'
+  const deep = mode === 'DEEP'
+  Object.assign(target, {
+    encodingRepair: true,
+    invisibleCharCleanup: true,
+    adDetection: true,
+    chapterDetection: true,
+    chapterNormalize: standard,
+    chapterNumberCheck: standard,
+    chapterAdhesionDetection: deep,
+    lineEndingNormalize: true,
+    blankLineCleanup: true,
+    brokenLineMerge: standard,
+    indentNormalize: standard,
+    punctuationNormalize: deep,
+    duplicateChapterDetection: standard,
+    similarChapterDetection: deep,
+    duplicateParagraphDetection: deep,
+  })
+  if ('defaultMode' in target) target.defaultMode = mode
 }
 
 function getRiskLevelText(level?: string) {
@@ -650,6 +855,12 @@ function handleSaveGeneralSettings() {
   margin: 0;
   font-size: 16px;
   color: var(--text-primary);
+}
+
+.section-note {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .rule-item,
@@ -816,6 +1027,158 @@ function handleSaveGeneralSettings() {
   border-radius: 10px;
 }
 
+.preset-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--glass-bg) 82%, var(--accent-color, #409eff) 8%);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.preset-strip button {
+  padding: 4px 11px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--input-bg, var(--glass-bg));
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.preset-strip button:hover {
+  border-color: var(--accent-color, #409eff);
+  color: var(--accent-color, #409eff);
+}
+
+.feature-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.feature-card {
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--input-bg, var(--glass-bg)) 92%, transparent);
+}
+
+.feature-card-heading {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 13px;
+  padding-bottom: 11px;
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.feature-card-heading strong,
+.feature-card-heading small,
+.feature-switch b,
+.feature-switch small {
+  display: block;
+}
+
+.feature-card-heading small,
+.feature-switch small {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.feature-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 7px;
+  background: var(--accent-color, #409eff);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.feature-switch {
+  display: grid;
+  grid-template-columns: 0 34px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  padding: 8px 0;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.feature-switch input {
+  position: absolute;
+  opacity: 0;
+}
+
+.switch-visual {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 999px;
+  background: var(--border-color);
+  transition: background 0.18s ease;
+}
+
+.switch-visual::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 0.18s ease;
+}
+
+.feature-switch input:checked + .switch-visual {
+  background: var(--accent-color, #409eff);
+}
+
+.feature-switch input:checked + .switch-visual::after {
+  transform: translateX(14px);
+}
+
+.subsection-title {
+  margin: 4px 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.template-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--input-bg, var(--glass-bg));
+}
+
+.template-feature-option {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  margin: 0 !important;
+  color: var(--text-primary) !important;
+  cursor: pointer;
+}
+
 .setting-item {
   margin-bottom: 16px;
 }
@@ -869,5 +1232,21 @@ function handleSaveGeneralSettings() {
   margin-top: 20px;
   padding-top: 16px;
   border-top: 1px solid var(--border-color);
+}
+
+@media (max-width: 760px) {
+  .feature-config-grid,
+  .template-feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .setting-row,
+  .form-row {
+    display: block;
+  }
+
+  .general-settings {
+    padding: 16px;
+  }
 }
 </style>

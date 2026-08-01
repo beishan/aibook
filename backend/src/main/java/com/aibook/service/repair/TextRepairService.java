@@ -73,9 +73,6 @@ public class TextRepairService {
                     "内容修复仅支持 TXT/MD 格式书籍");
         }
 
-        // 读取原始内容
-        String originalText = readBookContent(version);
-
         // 创建任务
         TextRepairTask task = TextRepairTask.builder()
                 .bookId(book.getId())
@@ -101,6 +98,9 @@ public class TextRepairService {
         } else {
             task.setOptionsJson(buildDefaultOptions(request.getRepairMode()));
         }
+
+        String originalText = readBookContent(version, extractStringOption(
+                task.getOptionsJson(), "preferredEncoding", "AUTO"));
 
         task = taskRepository.save(task);
 
@@ -425,7 +425,8 @@ public class TextRepairService {
 
         Book book = getOwnedBook(task.getBookId(), userId);
         BookVersion version = bookVersionService.resolveVersion(book, task.getVersionId());
-        String originalText = readBookContent(version);
+        String originalText = readBookContent(version, extractStringOption(
+                task.getOptionsJson(), "preferredEncoding", "AUTO"));
 
         // 获取已接受的问题
         List<TextRepairIssue> acceptedIssues = issueRepository
@@ -465,7 +466,8 @@ public class TextRepairService {
         try {
             Book book = getOwnedBook(task.getBookId(), userId);
             BookVersion version = bookVersionService.resolveVersion(book, task.getVersionId());
-            String originalText = readBookContent(version);
+            String originalText = readBookContent(version, extractStringOption(
+                    task.getOptionsJson(), "preferredEncoding", "AUTO"));
 
             // 获取要应用的问题
             List<TextRepairIssue> issuesToApply;
@@ -528,46 +530,81 @@ public class TextRepairService {
         String[] lines = text.split("\n", -1);
 
         // 1. 编码检测
-        List<TextRepairIssue> encodingIssues = encodingDetectService
-                .scanForIssues(text, task.getId());
-        allIssues.addAll(encodingIssues);
+        if (extractBooleanOption(task.getOptionsJson(), "encodingRepair", true)) {
+            List<TextRepairIssue> encodingIssues = encodingDetectService
+                    .scanForIssues(text, task.getId());
+            if ("IGNORE".equals(extractStringOption(task.getOptionsJson(),
+                    "unrecoverableEncodingAction", "MARK"))) {
+                encodingIssues = encodingIssues.stream()
+                        .filter(issue -> issue.getRiskLevel() != RiskLevel.HIGH)
+                        .toList();
+            }
+            allIssues.addAll(encodingIssues);
+        }
 
         // 2. 不可见字符及可选标点清理
         List<TextRepairIssue> punctIssues = punctuationFixService
                 .scanForIssues(text, lines, task.getId());
         boolean punctuationEnabled = extractBooleanOption(
                 task.getOptionsJson(), "punctuationNormalize", false);
+        boolean invisibleCharCleanup = extractBooleanOption(
+                task.getOptionsJson(), "invisibleCharCleanup", true);
         allIssues.addAll(punctIssues.stream()
-                .filter(i -> i.getType() == RepairIssueType.INVISIBLE_CHAR
+                .filter(i -> (i.getType() == RepairIssueType.INVISIBLE_CHAR
+                                && invisibleCharCleanup)
                         || (task.getRepairMode() != RepairMode.SAFE && punctuationEnabled))
                 .toList());
 
         // 3. 段落格式
         List<TextRepairIssue> paragraphIssues = paragraphFixService
                 .scanForIssues(text, lines, task.getId());
-        if (task.getRepairMode() == RepairMode.SAFE) {
-            allIssues.addAll(paragraphIssues.stream()
-                    .filter(i -> i.getReason() != null
-                            && (i.getReason().contains("换行符")
-                                || i.getReason().contains("多余空行")))
-                    .toList());
-        } else {
-            allIssues.addAll(paragraphIssues);
-        }
+        boolean lineEndingNormalize = extractBooleanOption(
+                task.getOptionsJson(), "lineEndingNormalize", true);
+        boolean blankLineCleanup = extractBooleanOption(
+                task.getOptionsJson(), "blankLineCleanup", true);
+        boolean brokenLineMerge = extractBooleanOption(
+                task.getOptionsJson(), "brokenLineMerge",
+                task.getRepairMode() != RepairMode.SAFE);
+        boolean indentNormalize = extractBooleanOption(
+                task.getOptionsJson(), "indentNormalize",
+                task.getRepairMode() != RepairMode.SAFE)
+                && !"KEEP".equals(extractStringOption(
+                        task.getOptionsJson(), "indentStyle", "FULL_WIDTH_SPACE"));
+        int configuredBlankLines = Math.max(0, extractIntOption(
+                task.getOptionsJson(), "blankLineCount", 1));
+        paragraphIssues.stream()
+                .filter(issue -> Objects.toString(issue.getReason(), "")
+                        .contains("多余空行"))
+                .forEach(issue -> issue.setSuggestedText(
+                        "\n".repeat(configuredBlankLines)));
+        allIssues.addAll(paragraphIssues.stream()
+                .filter(i -> paragraphOptionEnabled(i, lineEndingNormalize,
+                        blankLineCleanup, brokenLineMerge, indentNormalize))
+                .toList());
 
         // 4. 章节识别
         List<DetectedChapterDTO> chapters = chapterDetectService.detectChapters(text);
         task.setDetectedChapterCount(chapters.size());
         int minChapterWords = extractIntOption(task.getOptionsJson(), "minChapterWords", 100);
         int maxChapterWords = extractIntOption(task.getOptionsJson(), "maxChapterWords", 30000);
-        List<TextRepairIssue> chapterIssues = chapterDetectService.scanForIssues(
-                chapters, task.getId(), minChapterWords, maxChapterWords,
-                task.getRepairMode() != RepairMode.SAFE,
+        boolean chapterDetection = extractBooleanOption(
+                task.getOptionsJson(), "chapterDetection", true);
+        boolean chapterNumberCheck = extractBooleanOption(
+                task.getOptionsJson(), "chapterNumberCheck",
+                task.getRepairMode() != RepairMode.SAFE);
+        boolean chapterAdhesionDetection = extractBooleanOption(
+                task.getOptionsJson(), "chapterAdhesionDetection",
                 task.getRepairMode() == RepairMode.DEEP);
-        allIssues.addAll(chapterIssues);
+        if (chapterDetection) {
+            allIssues.addAll(chapterDetectService.scanForIssues(
+                    chapters, task.getId(), minChapterWords, maxChapterWords,
+                    chapterNumberCheck, chapterAdhesionDetection));
+        }
 
         // 5. 章节标题规范化（标准及以上模式）
-        if (task.getRepairMode() != RepairMode.SAFE) {
+        if (chapterDetection && extractBooleanOption(
+                task.getOptionsJson(), "chapterNormalize",
+                task.getRepairMode() != RepairMode.SAFE)) {
             String chapterFormat = extractChapterFormat(task.getOptionsJson());
             List<TextRepairIssue> normalizeIssues = chapterNormalizeService
                     .scanForIssues(chapters, chapterFormat, task.getId());
@@ -575,33 +612,42 @@ public class TextRepairService {
         }
 
         // 6. 广告检测
-        List<TextRepairRule> adRules = ruleRepository.findEnabledRules(task.getUserId())
-                .stream()
-                .filter(rule -> ruleAppliesToTask(rule, task))
-                .toList();
-        List<TextRepairIssue> adIssues = adDetectService.scanForIssues(
-                text, lines, convertChapters(chapters), task.getId(), adRules);
-        if (task.getRepairMode() == RepairMode.SAFE) {
-            allIssues.addAll(adIssues.stream()
-                    .filter(i -> i.getRiskLevel() == RiskLevel.LOW
-                            && i.getConfidence() != null && i.getConfidence() >= 0.7)
-                    .toList());
-        } else {
-            allIssues.addAll(adIssues);
+        if (extractBooleanOption(task.getOptionsJson(), "adDetection", true)) {
+            List<TextRepairRule> adRules = ruleRepository.findEnabledRules(task.getUserId())
+                    .stream()
+                    .filter(rule -> ruleAppliesToTask(rule, task))
+                    .toList();
+            List<TextRepairIssue> adIssues = adDetectService.scanForIssues(
+                    text, lines, convertChapters(chapters), task.getId(), adRules);
+            if (task.getRepairMode() == RepairMode.SAFE) {
+                allIssues.addAll(adIssues.stream()
+                        .filter(i -> i.getRiskLevel() == RiskLevel.LOW
+                                && i.getConfidence() != null && i.getConfidence() >= 0.7)
+                        .toList());
+            } else {
+                allIssues.addAll(adIssues);
+            }
         }
 
         // 7. 重复内容检测
-        if (task.getRepairMode() != RepairMode.SAFE) {
+        boolean duplicateChapterDetection = extractBooleanOption(
+                task.getOptionsJson(), "duplicateChapterDetection",
+                task.getRepairMode() != RepairMode.SAFE);
+        boolean similarChapterDetection = extractBooleanOption(
+                task.getOptionsJson(), "similarChapterDetection",
+                task.getRepairMode() == RepairMode.DEEP);
+        boolean duplicateParagraphDetection = extractBooleanOption(
+                task.getOptionsJson(), "duplicateParagraphDetection",
+                task.getRepairMode() == RepairMode.DEEP);
+        if (duplicateChapterDetection || similarChapterDetection
+                || duplicateParagraphDetection) {
             List<TextRepairIssue> dupIssues = duplicateDetectService
                     .scanForIssues(text, chapters, task.getId());
-            if (task.getRepairMode() == RepairMode.STANDARD) {
-                allIssues.addAll(dupIssues.stream()
-                        .filter(i -> i.getReason() != null
-                                && i.getReason().startsWith("完全重复章节"))
-                        .toList());
-            } else {
-                allIssues.addAll(dupIssues);
-            }
+            allIssues.addAll(dupIssues.stream()
+                    .filter(i -> duplicateOptionEnabled(i,
+                            duplicateChapterDetection, similarChapterDetection,
+                            duplicateParagraphDetection))
+                    .toList());
         }
 
         // 保存所有问题
@@ -698,13 +744,17 @@ public class TextRepairService {
     // ==================== 工具方法 ====================
 
     private String readBookContent(BookVersion version) {
+        return readBookContent(version, "AUTO");
+    }
+
+    private String readBookContent(BookVersion version, String encoding) {
         try {
             Path file = Paths.get(version.getFilePath());
             if (!Files.isRegularFile(file)) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "书籍文件不存在");
             }
             byte[] bytes = Files.readAllBytes(file);
-            return encodingDetectService.decodeWithEncoding(bytes, "AUTO");
+            return encodingDetectService.decodeWithEncoding(bytes, encoding);
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                     "读取书籍内容失败: " + e.getMessage(), e);
@@ -749,6 +799,22 @@ public class TextRepairService {
         options.put("minChapterWords", 100);
         options.put("maxChapterWords", 30000);
         options.put("autoApplyThreshold", 0.8);
+        options.put("encodingRepair", true);
+        options.put("preferredEncoding", "AUTO");
+        options.put("unrecoverableEncodingAction", "MARK");
+        options.put("invisibleCharCleanup", true);
+        options.put("adDetection", true);
+        options.put("chapterDetection", true);
+        options.put("chapterNormalize", mode != RepairMode.SAFE);
+        options.put("chapterNumberCheck", mode != RepairMode.SAFE);
+        options.put("chapterAdhesionDetection", mode == RepairMode.DEEP);
+        options.put("lineEndingNormalize", true);
+        options.put("blankLineCleanup", true);
+        options.put("brokenLineMerge", mode != RepairMode.SAFE);
+        options.put("indentNormalize", mode != RepairMode.SAFE);
+        options.put("duplicateChapterDetection", mode != RepairMode.SAFE);
+        options.put("similarChapterDetection", mode == RepairMode.DEEP);
+        options.put("duplicateParagraphDetection", mode == RepairMode.DEEP);
         try {
             return objectMapper.writeValueAsString(options);
         } catch (Exception e) {
@@ -767,6 +833,7 @@ public class TextRepairService {
         options.put("minChapterWords", template.getMinChapterWords());
         options.put("maxChapterWords", template.getMaxChapterWords());
         options.put("autoApplyThreshold", template.getAutoApplyThreshold());
+        mergeJsonOptions(options, template.getEnabledItemsJson());
         try {
             return objectMapper.writeValueAsString(options);
         } catch (Exception e) {
@@ -832,6 +899,39 @@ public class TextRepairService {
         } catch (Exception e) {
             return defaultValue;
         }
+    }
+
+    private void mergeJsonOptions(Map<String, Object> target, String json) {
+        if (json == null || json.isBlank()) return;
+        try {
+            target.putAll(objectMapper.readValue(json,
+                    new TypeReference<Map<String, Object>>() {}));
+        } catch (Exception e) {
+            log.warn("忽略无效的修复模板功能配置", e);
+        }
+    }
+
+    private boolean paragraphOptionEnabled(TextRepairIssue issue,
+            boolean lineEnding, boolean blankLines, boolean brokenLines,
+            boolean indent) {
+        String reason = Objects.toString(issue.getReason(), "");
+        if (reason.contains("换行符")) return lineEnding;
+        if (reason.contains("多余空行")) return blankLines;
+        if (reason.contains("拆成多行")) return brokenLines;
+        if (reason.contains("缩进")) return indent;
+        return false;
+    }
+
+    private boolean duplicateOptionEnabled(TextRepairIssue issue,
+            boolean exactChapter, boolean similarChapter,
+            boolean duplicateParagraph) {
+        String reason = Objects.toString(issue.getReason(), "");
+        if (reason.startsWith("完全重复章节")) return exactChapter;
+        if (reason.contains("疑似重复章节") || reason.contains("可能重复章节")) {
+            return similarChapter;
+        }
+        if (reason.startsWith("重复段落")) return duplicateParagraph;
+        return false;
     }
 
     private List<AdDetectService.ChapterInfo> convertChapters(List<DetectedChapterDTO> chapters) {

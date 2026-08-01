@@ -419,6 +419,17 @@ const issueStatuses: Record<string, string> = {
 
 onMounted(async () => {
   repairStore.reset()
+  const savedSettings = localStorage.getItem('textRepairSettings')
+  if (savedSettings) {
+    try {
+      const settings = JSON.parse(savedSettings)
+      if (['SAFE', 'STANDARD', 'DEEP'].includes(settings.defaultMode)) {
+        selectedMode.value = settings.defaultMode
+      }
+    } catch {
+      // 无效的本地设置不影响页面打开。
+    }
+  }
   await Promise.all([
     loadBookInfo(),
     repairStore.loadTemplates(),

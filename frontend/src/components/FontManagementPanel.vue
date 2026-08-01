@@ -316,26 +316,49 @@ const readSelectedId = (value: number | string) => {
   return value ? Number(value) : null
 }
 
-const handleUiFontChange = (value: number | string) => {
+const handleUiFontChange = async (value: number | string) => {
   const id = readSelectedId(value)
-  preferencesStore.setUiFontId(id)
-  void loadSelectedPreview(fontStore.getFont(id))
-  message.success(id == null ? '已恢复系统默认字体' : '系统字体已更新')
+  if (id == null) {
+    preferencesStore.setUiFontId(null)
+    message.success('已恢复系统默认字体')
+    return
+  }
+  const font = fontStore.getFont(id)
+  try {
+    await fontStore.loadFont(id)
+    preferencesStore.setUiFontId(id)
+    message.success('系统字体已更新')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : '字体文件不可用'
+    message.error(`字体“${font?.displayName || id}”加载失败：${detail}`)
+  }
 }
 
-const handleReaderFontChange = (value: number | string) => {
+const handleReaderFontChange = async (value: number | string) => {
   const id = readSelectedId(value)
-  preferencesStore.setReaderFontId(id)
-  void loadSelectedPreview(fontStore.getFont(id))
-  message.success(id == null ? '已恢复阅读器默认字体' : '默认阅读字体已更新')
+  if (id == null) {
+    preferencesStore.setReaderFontId(null)
+    message.success('已恢复阅读器默认字体')
+    return
+  }
+  const font = fontStore.getFont(id)
+  try {
+    await fontStore.loadFont(id)
+    preferencesStore.setReaderFontId(id)
+    message.success('默认阅读字体已更新')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : '字体文件不可用'
+    message.error(`字体“${font?.displayName || id}”加载失败：${detail}`)
+  }
 }
 
 const loadSelectedPreview = async (font: FontAsset | undefined) => {
   if (!font?.enabled || !font.available) return
   try {
     await fontStore.loadFont(font)
-  } catch {
-    message.error(`字体“${font.displayName}”预览加载失败`)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : '字体文件不可用'
+    message.error(`字体“${font.displayName}”预览加载失败：${detail}`)
   }
 }
 

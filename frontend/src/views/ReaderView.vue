@@ -600,8 +600,9 @@ const selectReaderFont = async (font: { value: string; fontId?: number }) => {
       preferencesStore.setReaderFontId(null)
     }
     settings.value.fontFamily = font.value
-  } catch {
-    message.error('字体加载失败，请检查字体文件是否可用')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : '请检查字体文件是否可用'
+    message.error(`字体加载失败：${detail}`)
   }
 }
 
