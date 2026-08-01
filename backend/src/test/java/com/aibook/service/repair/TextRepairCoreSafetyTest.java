@@ -48,6 +48,10 @@ class TextRepairCoreSafetyTest {
                 .orElseThrow();
 
         assertThat(issue.getSuggestedText()).isEqualTo("\n");
+        assertThat(issue.getMetadataJson())
+                .contains("\"blankLineCount\":3")
+                .contains("\"contextBefore\":\"第一行\"")
+                .contains("\"contextAfter\":\"第二行\"");
     }
 
     @Test

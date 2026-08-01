@@ -228,7 +228,20 @@
               <h3>原始内容</h3>
             </div>
             <div class="content-view">
-              <pre v-if="selectedIssue">{{ selectedIssue.originalText || '（无内容）' }}</pre>
+              <div v-if="selectedIssue && isBlankLineIssue(selectedIssue)" class="blank-line-preview">
+                <div class="context-line">
+                  <span class="context-label">上文</span>
+                  <p>{{ blankLineContext(selectedIssue, 'contextBefore') }}</p>
+                </div>
+                <div class="blank-run-indicator" :style="blankRunStyle(selectedIssue)">
+                  <span>连续 {{ blankLineCount(selectedIssue) }} 个空行</span>
+                </div>
+                <div class="context-line">
+                  <span class="context-label">下文</span>
+                  <p>{{ blankLineContext(selectedIssue, 'contextAfter') }}</p>
+                </div>
+              </div>
+              <pre v-else-if="selectedIssue">{{ selectedIssue.originalText || '（无内容）' }}</pre>
               <div v-else class="content-placeholder">
                 <p>选择左侧问题查看原始内容</p>
               </div>
@@ -276,7 +289,20 @@
               </div>
             </div>
             <div class="content-view">
-              <pre v-if="selectedIssue">{{ selectedIssue.suggestedText || '（无建议）' }}</pre>
+              <div v-if="selectedIssue && isBlankLineIssue(selectedIssue)" class="blank-line-preview repaired">
+                <div class="context-line">
+                  <span class="context-label">上文</span>
+                  <p>{{ blankLineContext(selectedIssue, 'contextBefore') }}</p>
+                </div>
+                <div class="blank-run-indicator fixed" :style="repairedBlankRunStyle(selectedIssue)">
+                  <span>{{ repairedBlankLineText(selectedIssue) }}</span>
+                </div>
+                <div class="context-line">
+                  <span class="context-label">下文</span>
+                  <p>{{ blankLineContext(selectedIssue, 'contextAfter') }}</p>
+                </div>
+              </div>
+              <pre v-else-if="selectedIssue">{{ selectedIssue.suggestedText || '（无建议）' }}</pre>
               <div v-else class="content-placeholder">
                 <p>选择左侧问题查看修复建议</p>
               </div>
@@ -415,6 +441,43 @@ const issueStatuses: Record<string, string> = {
   IGNORED: '已忽略',
   APPLIED: '已应用',
   REVERTED: '已撤销',
+}
+
+function isBlankLineIssue(issue: RepairIssue): boolean {
+  return issue.type === 'PARAGRAPH'
+    && Boolean(issue.reason?.includes('多余空行'))
+    && typeof issue.metadata?.blankLineCount === 'number'
+}
+
+function blankLineContext(issue: RepairIssue, key: 'contextBefore' | 'contextAfter'): string {
+  const value = issue.metadata?.[key]
+  return typeof value === 'string' && value.length > 0 ? value : '（文件边界）'
+}
+
+function blankLineCount(issue: RepairIssue): number {
+  const count = issue.metadata?.blankLineCount
+  return typeof count === 'number' ? count : 0
+}
+
+function repairedBlankLineCount(issue: RepairIssue): number {
+  return issue.suggestedText == null
+    ? 0
+    : [...issue.suggestedText].filter((char) => char === '\n').length
+}
+
+function repairedBlankLineText(issue: RepairIssue): string {
+  const count = repairedBlankLineCount(issue)
+  return count === 0 ? '移除全部空行' : `保留 ${count} 个空行`
+}
+
+function blankRunStyle(issue: RepairIssue): Record<string, string> {
+  const height = Math.min(128, 38 + blankLineCount(issue) * 12)
+  return { minHeight: `${height}px` }
+}
+
+function repairedBlankRunStyle(issue: RepairIssue): Record<string, string> {
+  const height = Math.min(80, 32 + repairedBlankLineCount(issue) * 10)
+  return { minHeight: `${height}px` }
 }
 
 onMounted(async () => {
@@ -1080,6 +1143,69 @@ function truncate(text: string | undefined, max: number) {
   white-space: pre-wrap;
   color: var(--text-primary);
   margin: 0;
+}
+
+.blank-line-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--glass-bg);
+}
+
+.context-line {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-card);
+}
+
+.context-line p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.context-label {
+  padding-top: 2px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.blank-run-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border-top: 1px dashed var(--danger);
+  border-bottom: 1px dashed var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.blank-run-indicator span {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-card);
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.blank-run-indicator.fixed {
+  border-color: var(--success);
+  background: var(--success-alpha-15);
+}
+
+.blank-run-indicator.fixed span {
+  color: var(--success);
 }
 
 .content-placeholder {

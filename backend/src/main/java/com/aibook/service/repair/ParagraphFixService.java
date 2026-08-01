@@ -107,6 +107,10 @@ public class ParagraphFixService {
                 blankRun++;
             } else {
                 if (blankRun >= 3) {
+                    String contextBefore = i - blankRun - 1 >= 0
+                            ? lines[i - blankRun - 1]
+                            : "";
+                    String contextAfter = lines[i];
                     issues.add(TextRepairIssue.builder()
                             .taskId(taskId)
                             .chapterIndex(-1)
@@ -122,6 +126,8 @@ public class ParagraphFixService {
                             .status(RepairIssueStatus.PENDING)
                             .source(RepairSource.AUTO)
                             .riskLevel(RiskLevel.LOW)
+                            .metadataJson(buildBlankLineContextMetadata(
+                                    blankRun, contextBefore, contextAfter))
                             .build());
                 }
                 blankRun = 0;
@@ -130,6 +136,38 @@ public class ParagraphFixService {
         }
 
         return issues;
+    }
+
+    private String buildBlankLineContextMetadata(
+            int blankLineCount, String contextBefore, String contextAfter) {
+        return "{\"blankLineCount\":" + blankLineCount
+                + ",\"contextBefore\":\"" + escapeJson(contextBefore) + "\""
+                + ",\"contextAfter\":\"" + escapeJson(contextAfter) + "\"}";
+    }
+
+    private String escapeJson(String value) {
+        if (value == null) return "";
+        StringBuilder escaped = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            switch (ch) {
+                case '\\' -> escaped.append("\\\\");
+                case '"' -> escaped.append("\\\"");
+                case '\b' -> escaped.append("\\b");
+                case '\f' -> escaped.append("\\f");
+                case '\n' -> escaped.append("\\n");
+                case '\r' -> escaped.append("\\r");
+                case '\t' -> escaped.append("\\t");
+                default -> {
+                    if (ch < 0x20) {
+                        escaped.append(String.format("\\u%04x", (int) ch));
+                    } else {
+                        escaped.append(ch);
+                    }
+                }
+            }
+        }
+        return escaped.toString();
     }
 
     // ==================== 错误换行检测 ====================
