@@ -781,7 +781,7 @@ function handleSaveGeneralSettings() {
 
 <style scoped>
 .repair-config-view {
-  max-width: 900px;
+  max-width: 1120px;
   margin: 0 auto;
   padding: 16px;
 }
@@ -1058,10 +1058,12 @@ function handleSaveGeneralSettings() {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  align-items: start;
   margin-bottom: 24px;
 }
 
 .feature-card {
+  min-width: 0;
   padding: 16px;
   border: 1px solid var(--border-color);
   border-radius: 10px;
@@ -1107,13 +1109,22 @@ function handleSaveGeneralSettings() {
 
 .feature-switch {
   display: grid;
-  grid-template-columns: 0 34px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr);
   gap: 9px;
   align-items: start;
   padding: 8px 0;
   cursor: pointer;
   color: var(--text-primary);
   font-size: 13px;
+}
+
+.feature-switch > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.feature-switch b {
+  line-height: 1.35;
 }
 
 .feature-switch input {
@@ -1247,6 +1258,12 @@ function handleSaveGeneralSettings() {
 
   .general-settings {
     padding: 16px;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 920px) {
+  .feature-config-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
