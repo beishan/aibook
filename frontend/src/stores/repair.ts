@@ -13,6 +13,7 @@ import {
   getRepairTask,
   getRepairRecords,
   rescanRepairTask,
+  deleteRepairTask,
   getBookRepairTasks,
   getRepairIssues,
   updateRepairIssue,
@@ -110,6 +111,14 @@ export const useRepairStore = defineStore('repair', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  async function removeTask(taskId: number) {
+    await deleteRepairTask(taskId)
+    records.value = records.value.filter((task) => task.id !== taskId)
+    recordsTotal.value = Math.max(0, recordsTotal.value - 1)
+    tasks.value = tasks.value.filter((task) => task.id !== taskId)
+    if (currentTask.value?.id === taskId) currentTask.value = null
   }
 
   // 问题管理
@@ -265,6 +274,7 @@ export const useRepairStore = defineStore('repair', () => {
     loadBookTasks,
     loadRecords,
     rescanTask,
+    removeTask,
     loadIssues,
     updateIssue,
     acceptHighConfidenceIssues,

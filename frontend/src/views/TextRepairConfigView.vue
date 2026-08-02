@@ -163,9 +163,17 @@
             </div>
           </div>
           <div class="record-actions">
-            <button class="btn btn-primary" @click="continueRecord(record)">继续处理</button>
-            <button class="btn" :disabled="rescanningId === record.id" @click="rescanRecord(record)">
+            <button class="btn btn-primary" :disabled="deletingId === record.id" @click="continueRecord(record)">继续处理</button>
+            <button class="btn" :disabled="rescanningId === record.id || deletingId === record.id" @click="rescanRecord(record)">
               {{ rescanningId === record.id ? '检测中...' : '重新检测' }}
+            </button>
+            <button
+              class="btn btn-danger record-delete"
+              :disabled="deletingId === record.id || rescanningId === record.id"
+              :aria-label="`删除《${record.bookTitle}》的检测记录`"
+              @click="deleteRecord(record)"
+            >
+              {{ deletingId === record.id ? '删除中...' : '删除' }}
             </button>
           </div>
         </article>
@@ -501,6 +509,7 @@ const editingTemplate = ref<RepairTemplate | null>(null)
 const recordsPage = ref(0)
 const recordsPageSize = 10
 const rescanningId = ref<number | null>(null)
+const deletingId = ref<number | null>(null)
 
 const generalSettings = reactive<Record<string, any>>({
   defaultMode: 'STANDARD',
@@ -666,6 +675,26 @@ async function rescanRecord(record: RepairTask) {
     message.error('重新检测失败')
   } finally {
     rescanningId.value = null
+  }
+}
+
+async function deleteRecord(record: RepairTask) {
+  const confirmed = await confirm(
+    `确认删除《${record.bookTitle}》在 ${formatDate(record.createdAt)} 生成的检测记录？\n\n该记录的检测问题和处理状态将一并删除，书籍文件不会受到影响。`,
+    '删除检测记录',
+  )
+  if (!confirmed) return
+  try {
+    deletingId.value = record.id
+    const isLastRecordOnPage = repairStore.records.length === 1
+    await repairStore.removeTask(record.id)
+    if (isLastRecordOnPage && recordsPage.value > 0) recordsPage.value -= 1
+    await loadRecords()
+    message.success('检测记录已删除')
+  } catch {
+    message.error('删除检测记录失败')
+  } finally {
+    deletingId.value = null
   }
 }
 
@@ -1564,6 +1593,7 @@ function handleSaveGeneralSettings() {
 .record-counts { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 12px; color: var(--text-secondary); }
 .record-counts { justify-content: flex-start; flex-wrap: wrap; }
 .record-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.record-delete { margin-left: 2px; }
 .records-empty { display: grid; place-items: center; gap: 6px; min-height: 220px; padding: 32px; color: var(--text-secondary); border: 1px dashed var(--border-color); border-radius: 10px; }
 .records-empty strong { color: var(--text-primary); }
 .records-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; color: var(--text-secondary); font-size: 13px; }
