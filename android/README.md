@@ -24,8 +24,10 @@
 
 ## 常用命令
 
+Windows、macOS 的完整构建、测试、APK/AAB 打包、安装、日志与 Release 签名命令见 [BUILDING.md](BUILDING.md)。
+
 ```bash
-cd /Users/beibei/aiprojects/ai-book/android
+cd /path/to/aibook/android
 
 # 运行单元测试
 ./gradlew test
