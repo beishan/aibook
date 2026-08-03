@@ -62,7 +62,7 @@ minio:
 
 # Upload configuration
 upload:
-  path: ${UPLOAD_PATH:/app/uploads}
+  path: ${UPLOAD_PATH:./uploads}
 
 # Book scanning configuration
 scanning:

@@ -20,7 +20,7 @@
         </div>
         <div class="avatar-actions">
           <strong>个人头像</strong>
-          <p>支持 JPG、PNG、WebP、GIF，文件不能超过 5MB。</p>
+          <p>支持 JPG、PNG、WebP、GIF，最大 5MB；可拖动和缩放裁剪，裁剪后以 JPG 保存。</p>
           <div class="button-row">
             <input
               ref="avatarInput"
@@ -122,12 +122,21 @@
         </div>
       </section>
     </div>
+
+    <AvatarCropperDialog
+      :visible="cropDialogVisible"
+      :image-url="cropImageUrl"
+      :original-name="cropOriginalName"
+      @close="closeCropper"
+      @confirm="uploadCroppedAvatar"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import api from '@/utils/api'
+import AvatarCropperDialog from '@/components/AvatarCropperDialog.vue'
 import { confirm, message } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
 
@@ -136,6 +145,9 @@ const loading = ref(true)
 const saving = ref(false)
 const uploading = ref(false)
 const avatarInput = ref<HTMLInputElement | null>(null)
+const cropDialogVisible = ref(false)
+const cropImageUrl = ref('')
+const cropOriginalName = ref('')
 const profileForm = reactive({
   nickname: '',
   mood: '',
@@ -196,7 +208,14 @@ const saveProfile = async () => {
   }
 }
 
-const handleAvatarSelected = async (event: Event) => {
+const closeCropper = () => {
+  cropDialogVisible.value = false
+  if (cropImageUrl.value.startsWith('blob:')) URL.revokeObjectURL(cropImageUrl.value)
+  cropImageUrl.value = ''
+  cropOriginalName.value = ''
+}
+
+const handleAvatarSelected = (event: Event) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
@@ -205,21 +224,34 @@ const handleAvatarSelected = async (event: Event) => {
     input.value = ''
     return
   }
+  const supportedType = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)
+  const supportedExtension = /\.(jpe?g|png|webp|gif)$/i.test(file.name)
+  if (!supportedType && !supportedExtension) {
+    message.warning('仅支持 JPG、PNG、WebP 或 GIF 图片')
+    input.value = ''
+    return
+  }
 
+  closeCropper()
+  cropImageUrl.value = URL.createObjectURL(file)
+  cropOriginalName.value = file.name
+  cropDialogVisible.value = true
+  input.value = ''
+}
+
+const uploadCroppedAvatar = async (file: File) => {
+  closeCropper()
   uploading.value = true
   try {
     const formData = new FormData()
     formData.append('file', file)
-    await api.post('/api/user/profile/avatar', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    await api.post('/api/user/profile/avatar', formData)
     await userStore.hydrate(true)
     message.success('头像已更新')
   } catch (error: any) {
     message.error(error.response?.data?.message || '头像上传失败')
   } finally {
     uploading.value = false
-    input.value = ''
   }
 }
 
@@ -239,6 +271,7 @@ const removeAvatar = async () => {
 }
 
 onMounted(() => void loadProfile())
+onBeforeUnmount(closeCropper)
 </script>
 
 <style scoped>
