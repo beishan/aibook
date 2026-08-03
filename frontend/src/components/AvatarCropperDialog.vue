@@ -21,6 +21,7 @@
         @pointercancel="stopDragging"
       >
         <img
+          v-if="imageUrl"
           ref="imageRef"
           :src="imageUrl"
           :style="imageStyle"
@@ -147,6 +148,10 @@ const handleImageLoaded = () => {
 }
 
 const handleImageError = () => {
+  // Closing the cropper clears and revokes its blob URL. The image element may
+  // emit a final error before Element Plus finishes destroying the dialog.
+  // That lifecycle event is not a failed user image load and should stay silent.
+  if (!props.visible || !props.imageUrl) return
   message.error('无法读取该图片，请选择其他图片')
   handleClose()
 }

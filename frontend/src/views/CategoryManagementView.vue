@@ -32,8 +32,16 @@
       <div class="category-card-header">
         <div>
           <h2>分类树</h2>
-          <p>删除分类只会解除书籍分类，不会删除书籍文件。</p>
+          <p>点击大类可展开或折叠；删除分类只会解除书籍分类，不会删除书籍文件。</p>
         </div>
+        <button
+          v-if="collapsibleRoots.length"
+          class="btn btn-text collapse-all-button"
+          type="button"
+          @click="toggleAllRoots"
+        >
+          {{ allRootsCollapsed ? '全部展开' : '全部折叠' }}
+        </button>
       </div>
 
       <div v-if="categoryStore.loading" class="loading">
@@ -49,19 +57,47 @@
 
       <div v-else class="category-list">
         <div
-          v-for="category in categoryStore.flatTree"
+          v-for="category in visibleCategories"
           :key="category.id"
           class="category-row"
-          :class="{ disabled: !category.enabled }"
+          :class="{
+            disabled: !category.enabled,
+            'root-category': category.depth === 0,
+            collapsed: isRootCollapsed(category),
+          }"
         >
-          <div class="category-main" :style="{ paddingLeft: `${category.depth * 28 + 8}px` }">
+          <div
+            class="category-main"
+            :class="{ 'category-main-collapsible': isCollapsibleRoot(category) }"
+            :style="{ paddingLeft: `${category.depth * 28 + 8}px` }"
+            :role="isCollapsibleRoot(category) ? 'button' : undefined"
+            :tabindex="isCollapsibleRoot(category) ? 0 : undefined"
+            :aria-expanded="isCollapsibleRoot(category) ? !isRootCollapsed(category) : undefined"
+            @click="toggleRoot(category)"
+            @keydown.enter.prevent="toggleRoot(category)"
+            @keydown.space.prevent="toggleRoot(category)"
+          >
             <span v-if="category.depth > 0" class="tree-branch">└</span>
+            <span
+              v-else-if="isCollapsibleRoot(category)"
+              class="collapse-chevron"
+              aria-hidden="true"
+            >
+              ›
+            </span>
+            <span v-else class="collapse-chevron-placeholder" aria-hidden="true"></span>
             <span class="category-icon">{{ category.depth === 0 ? '📚' : '📖' }}</span>
-            <div>
+            <div class="category-copy">
               <div class="category-name">
                 {{ category.name }}
                 <span v-if="category.builtIn" class="tag tag-info">预置</span>
                 <span v-if="!category.enabled" class="tag">已停用</span>
+                <span
+                  v-if="isCollapsibleRoot(category)"
+                  class="child-count"
+                >
+                  {{ descendantCount(category) }} 个子类
+                </span>
               </div>
               <div class="category-description">
                 {{ category.description || category.path }}
@@ -155,9 +191,11 @@ import {
 } from '@/stores/category'
 
 const categoryStore = useCategoryStore()
+const COLLAPSED_ROOTS_KEY = 'aibook.category.collapsed-roots'
 const dialogVisible = ref(false)
 const editingId = ref<number>()
 const saving = ref(false)
+const collapsedRootIds = ref<Set<number>>(new Set())
 const form = reactive<CategoryPayload>({
   name: '',
   description: '',
@@ -173,6 +211,86 @@ const categorizedBookCount = computed(() =>
 const availableParents = computed(() =>
   categoryStore.flatTree.filter((category) => category.id !== editingId.value && category.depth < 2),
 )
+const collapsibleRoots = computed(() =>
+  categoryStore.categoryTree.filter((category) => category.children?.length),
+)
+const allRootsCollapsed = computed(() =>
+  collapsibleRoots.value.length > 0
+  && collapsibleRoots.value.every((category) => collapsedRootIds.value.has(category.id)),
+)
+const visibleCategories = computed(() => {
+  const result: Array<Category & { depth: number; path: string }> = []
+  const visit = (nodes: Category[], depth: number, parentPath: string) => {
+    nodes.forEach((node) => {
+      const path = parentPath ? `${parentPath} / ${node.name}` : node.name
+      result.push({ ...node, depth, path })
+      if (depth !== 0 || !collapsedRootIds.value.has(node.id)) {
+        visit(node.children || [], depth + 1, path)
+      }
+    })
+  }
+  visit(categoryStore.categoryTree, 0, '')
+  return result
+})
+
+const saveCollapsedRoots = () => {
+  localStorage.setItem(COLLAPSED_ROOTS_KEY, JSON.stringify([...collapsedRootIds.value]))
+}
+
+const setCollapsedRoots = (ids: Iterable<number>) => {
+  collapsedRootIds.value = new Set(ids)
+  saveCollapsedRoots()
+}
+
+const loadCollapsedRoots = () => {
+  try {
+    const stored = JSON.parse(localStorage.getItem(COLLAPSED_ROOTS_KEY) || '[]')
+    if (Array.isArray(stored)) {
+      collapsedRootIds.value = new Set(stored.filter((id): id is number => Number.isInteger(id)))
+    }
+  } catch {
+    collapsedRootIds.value = new Set()
+  }
+}
+
+const isCollapsibleRoot = (category: Category & { depth?: number }) =>
+  category.depth === 0 && Boolean(category.children?.length)
+
+const isRootCollapsed = (category: Category & { depth?: number }) =>
+  isCollapsibleRoot(category) && collapsedRootIds.value.has(category.id)
+
+const toggleRoot = (category: Category & { depth?: number }) => {
+  if (!isCollapsibleRoot(category)) return
+  const next = new Set(collapsedRootIds.value)
+  if (next.has(category.id)) next.delete(category.id)
+  else next.add(category.id)
+  setCollapsedRoots(next)
+}
+
+const toggleAllRoots = () => {
+  setCollapsedRoots(allRootsCollapsed.value ? [] : collapsibleRoots.value.map(({ id }) => id))
+}
+
+const descendantCount = (category: Category): number =>
+  (category.children || []).reduce(
+    (count, child) => count + 1 + descendantCount(child),
+    0,
+  )
+
+const rootIdFor = (categoryId: number) => {
+  const contains = (category: Category): boolean =>
+    category.id === categoryId || (category.children || []).some(contains)
+  return categoryStore.categoryTree.find(contains)?.id
+}
+
+const expandCategoryRoot = (categoryId?: number) => {
+  if (!categoryId) return
+  const rootId = rootIdFor(categoryId)
+  if (!rootId || !collapsedRootIds.value.has(rootId)) return
+  const next = new Set(collapsedRootIds.value)
+  next.delete(rootId)
+  setCollapsedRoots(next)
+}
 
 const resetForm = () => {
   editingId.value = undefined
@@ -210,6 +328,7 @@ const closeDialog = () => {
 
 const saveCategory = async () => {
   if (!form.name.trim()) return
+  const parentId = form.parentId
   saving.value = true
   try {
     if (editingId.value) {
@@ -217,6 +336,7 @@ const saveCategory = async () => {
     } else {
       await categoryStore.createCategory({ ...form })
     }
+    expandCategoryRoot(parentId)
     message.success('分类已保存')
     closeDialog()
   } catch {
@@ -265,7 +385,10 @@ const restorePresets = async () => {
   }
 }
 
-onMounted(() => categoryStore.refresh())
+onMounted(() => {
+  loadCollapsedRoots()
+  void categoryStore.refresh()
+})
 </script>
 
 <style scoped>
@@ -313,7 +436,9 @@ onMounted(() => categoryStore.refresh())
 
 .category-card-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 16px;
   margin-bottom: 14px;
 }
 
@@ -336,6 +461,19 @@ onMounted(() => categoryStore.refresh())
   align-items: center;
   min-height: 68px;
   border-bottom: 1px solid var(--border-color);
+  transition: background-color 160ms ease, opacity 160ms ease;
+}
+
+.category-row.root-category {
+  background: color-mix(in srgb, var(--surface-card) 55%, transparent);
+}
+
+.category-row.root-category:hover {
+  background: var(--surface-hover);
+}
+
+.category-row.root-category.collapsed {
+  border-bottom-color: color-mix(in srgb, var(--primary) 25%, var(--border-color));
 }
 
 .category-row.disabled {
@@ -346,6 +484,22 @@ onMounted(() => categoryStore.refresh())
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  min-height: 68px;
+  border-radius: var(--radius-sm);
+}
+
+.category-main-collapsible {
+  cursor: pointer;
+}
+
+.category-main-collapsible:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -3px;
+}
+
+.category-copy {
+  min-width: 0;
 }
 
 .category-name {
@@ -357,6 +511,37 @@ onMounted(() => categoryStore.refresh())
 
 .tree-branch {
   color: var(--text-secondary);
+}
+
+.collapse-chevron,
+.collapse-chevron-placeholder {
+  width: 16px;
+  flex: 0 0 16px;
+}
+
+.collapse-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  font-size: 24px;
+  font-weight: 700;
+  transform: rotate(90deg);
+  transition: transform 180ms ease;
+}
+
+.category-row.collapsed .collapse-chevron {
+  transform: rotate(0deg);
+}
+
+.child-count {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.collapse-all-button {
+  flex: 0 0 auto;
 }
 
 .category-count {
@@ -400,6 +585,10 @@ onMounted(() => categoryStore.refresh())
     padding: 12px 0;
   }
 
+  .category-card-header {
+    align-items: flex-start;
+  }
+
   .category-count {
     grid-column: 2;
     grid-row: 1;
@@ -409,6 +598,11 @@ onMounted(() => categoryStore.refresh())
     grid-column: 1 / -1;
     flex-wrap: wrap;
     padding-left: 8px;
+  }
+
+
+  .child-count {
+    display: none;
   }
 }
 </style>
