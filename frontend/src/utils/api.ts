@@ -10,9 +10,6 @@ const isAuthEndpoint = (url?: string) => url?.startsWith('/api/auth/') === true
 const api = axios.create({
   baseURL: '',
   timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 })
 
 // 请求拦截器
