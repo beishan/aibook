@@ -49,6 +49,7 @@ export const useFontStore = defineStore('fonts', () => {
   const scanning = ref(false)
   const loadedFonts = new Map<number, LoadedFont>()
   const loadingFonts = new Map<number, Promise<LoadedFont>>()
+  let systemFontApplyVersion = 0
 
   const availableFonts = computed(() =>
     fonts.value.filter(font => font.enabled && font.available)
@@ -173,6 +174,7 @@ export const useFontStore = defineStore('fonts', () => {
   }
 
   const applySystemFont = async (id: number | null) => {
+    const applyVersion = ++systemFontApplyVersion
     if (id == null) {
       document.documentElement.style.setProperty('--font-family', DEFAULT_FONT_STACK)
       document.documentElement.style.setProperty('--el-font-family', DEFAULT_FONT_STACK)
@@ -181,10 +183,12 @@ export const useFontStore = defineStore('fonts', () => {
 
     try {
       await loadFont(id)
+      if (applyVersion !== systemFontApplyVersion) return
       const stack = `${cssFamily(id)}, ${DEFAULT_FONT_STACK}`
       document.documentElement.style.setProperty('--font-family', stack)
       document.documentElement.style.setProperty('--el-font-family', stack)
     } catch (error) {
+      if (applyVersion !== systemFontApplyVersion) return
       document.documentElement.style.setProperty('--font-family', DEFAULT_FONT_STACK)
       document.documentElement.style.setProperty('--el-font-family', DEFAULT_FONT_STACK)
       console.error('Failed to apply system font:', error)

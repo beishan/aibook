@@ -149,20 +149,20 @@
               </div>
             </div>
             <div class="directory-actions">
-              <select
-                class="select-input directory-category-select"
-                :value="row.defaultCategoryId || ''"
-                @change="handleDefaultCategoryChange(row, $event)"
+              <el-select
+                class="directory-category-select"
+                :model-value="row.defaultCategoryId || ''"
+                placeholder="新书不分类"
+                @change="value => handleDefaultCategoryChange(row, value)"
               >
-                <option value="">新书不分类</option>
-                <option
+                <el-option label="新书不分类" value="" />
+                <el-option
                   v-for="category in categoryStore.flatTree"
                   :key="category.id"
+                  :label="category.path"
                   :value="category.id"
-                >
-                  {{ category.path }}
-                </option>
-              </select>
+                />
+              </el-select>
               <button class="btn btn-text" @click="handleScan(row)" :disabled="row._scanning">
                 {{ row._scanning ? `${row._scanProgress?.progress || 0}%` : '立即扫描' }}
               </button>
@@ -297,16 +297,19 @@
               <DirectoryBrowser @select="handleDirectorySelect" />
               <div class="form-group default-category-field">
                 <label class="form-label">新书默认分类</label>
-                <select v-model="selectedDefaultCategoryId" class="select-input">
-                  <option value="">暂不分类</option>
-                  <option
+                <el-select
+                  v-model="selectedDefaultCategoryId"
+                  class="default-category-select"
+                  placeholder="暂不分类"
+                >
+                  <el-option label="暂不分类" value="" />
+                  <el-option
                     v-for="category in categoryStore.flatTree"
                     :key="category.id"
+                    :label="category.path"
                     :value="String(category.id)"
-                  >
-                    {{ category.path }}
-                  </option>
-                </select>
+                  />
+                </el-select>
                 <p class="field-hint">只影响之后新扫描入库的书，不覆盖已有书籍分类。</p>
               </div>
             </div>
@@ -607,8 +610,7 @@ const handleAddDirectory = async () => {
   }
 }
 
-const handleDefaultCategoryChange = async (row: any, event: Event) => {
-  const value = (event.target as HTMLSelectElement).value
+const handleDefaultCategoryChange = async (row: any, value: number | string) => {
   try {
     await api.put(`/api/scan-directories/${row.id}/default-category`, {
       categoryId: value ? Number(value) : null,
@@ -997,6 +999,7 @@ onUnmounted(() => {
 }
 
 .directory-category-select {
+  width: 180px;
   max-width: 180px;
 }
 
@@ -1004,7 +1007,7 @@ onUnmounted(() => {
   margin-top: var(--spacing-lg);
 }
 
-.default-category-field .select-input {
+.default-category-select {
   width: 100%;
 }
 

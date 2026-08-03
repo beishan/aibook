@@ -323,13 +323,13 @@ const handleUiFontChange = async (value: number | string) => {
     message.success('已恢复系统默认字体')
     return
   }
-  const font = fontStore.getFont(id)
+  // 先更新选中状态，避免字体加载期间 el-select 被旧值锁住。
+  preferencesStore.setUiFontId(id)
   try {
     await fontStore.loadFont(id)
-    preferencesStore.setUiFontId(id)
-    message.success('系统字体已更新')
+    if (preferencesStore.uiFontId === id) message.success('系统字体已更新')
   } catch {
-    // 不支持的字体会由字体仓库标记为不可用并从选项中移除。
+    if (preferencesStore.uiFontId === id) preferencesStore.setUiFontId(null)
   }
 }
 
@@ -340,7 +340,6 @@ const handleReaderFontChange = async (value: number | string) => {
     message.success('已恢复阅读器默认字体')
     return
   }
-  const font = fontStore.getFont(id)
   try {
     await fontStore.loadFont(id)
     preferencesStore.setReaderFontId(id)

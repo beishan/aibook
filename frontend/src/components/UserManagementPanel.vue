@@ -102,6 +102,9 @@
       v-model="showUserDialog"
       :title="editingUser ? '修改用户' : '新增用户'"
       width="min(520px, 92vw)"
+      class="user-editor-dialog"
+      top="5vh"
+      append-to-body
       destroy-on-close
     >
       <div class="dialog-form">
@@ -133,10 +136,14 @@
         </template>
 
         <label class="form-label">角色</label>
-        <select v-model="userForm.role" class="select-input" :disabled="editingCurrentUser">
-          <option value="USER">普通用户</option>
-          <option value="ADMIN">管理员</option>
-        </select>
+        <el-select
+          v-model="userForm.role"
+          class="role-select"
+          :disabled="editingCurrentUser"
+        >
+          <el-option label="普通用户" value="USER" />
+          <el-option label="管理员" value="ADMIN" />
+        </el-select>
 
         <label class="enabled-row">
           <span>
@@ -158,6 +165,7 @@
       v-model="showPasswordDialog"
       title="重置密码"
       width="min(440px, 92vw)"
+      append-to-body
       destroy-on-close
     >
       <p class="password-hint">为用户“{{ passwordTarget?.username }}”设置新的登录密码。</p>
@@ -387,6 +395,9 @@ onMounted(() => void loadUsers())
 
 <style scoped>
 .user-management-card {
+  display: flex;
+  min-height: 620px;
+  flex-direction: column;
   overflow: hidden;
 }
 
@@ -431,6 +442,7 @@ onMounted(() => void loadUsers())
 }
 
 .user-state {
+  flex: 1;
   min-height: 240px;
   display: flex;
   flex-direction: column;
@@ -440,6 +452,7 @@ onMounted(() => void loadUsers())
 }
 
 .user-table-wrap {
+  flex: 1;
   overflow-x: auto;
 }
 
@@ -536,8 +549,23 @@ onMounted(() => void loadUsers())
   gap: 10px;
 }
 
+:global(.user-editor-dialog) {
+  display: flex;
+  max-height: 90vh;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+:global(.user-editor-dialog .el-dialog__body) {
+  overflow-y: auto;
+}
+
 .dialog-form .form-label:not(:first-child) {
   margin-top: 6px;
+}
+
+.role-select {
+  width: 100%;
 }
 
 .enabled-row {

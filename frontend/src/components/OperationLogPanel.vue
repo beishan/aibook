@@ -1,11 +1,11 @@
 <template>
   <div class="card glass operation-log-card">
-    <div class="card-header log-header">
+    <div class="log-header">
       <div>
-        <div>📋 操作日志</div>
+        <div class="panel-title">📋 操作日志</div>
         <p class="header-hint">关键操作按时间倒序展示</p>
       </div>
-      <button class="btn" :disabled="loading" @click="loadLogs(currentPage - 1)">
+      <button class="btn btn-primary" :disabled="loading" @click="loadLogs(currentPage - 1)">
         {{ loading ? '刷新中...' : '刷新' }}
       </button>
     </div>
@@ -133,12 +133,14 @@ onMounted(() => void loadLogs())
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
-.log-header > div:first-child {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.panel-title {
+  color: var(--text-primary);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
 }
 
 .log-header .btn {
@@ -147,10 +149,9 @@ onMounted(() => void loadLogs())
 }
 
 .header-hint {
-  margin: 0;
+  margin: 4px 0 0;
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
-  font-weight: 400;
 }
 
 .log-state {
