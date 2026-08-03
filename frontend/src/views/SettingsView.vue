@@ -231,6 +231,11 @@
       </div>
     </div>
 
+    <!-- 操作日志 -->
+    <div v-show="activeTab === 'logs'" class="tab-content">
+      <OperationLogPanel />
+    </div>
+
     <!-- 系统信息 -->
     <div v-show="activeTab === 'info'" class="tab-content">
       <div class="card glass">
@@ -321,6 +326,7 @@ import DirectoryBrowser from '@/components/DirectoryBrowser.vue'
 import ScanHistoryDialog from '@/components/ScanHistoryDialog.vue'
 import ConnectionsView from '@/views/ConnectionsView.vue'
 import FontManagementPanel from '@/components/FontManagementPanel.vue'
+import OperationLogPanel from '@/components/OperationLogPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
@@ -339,6 +345,7 @@ const tabs = [
   { key: 'directories', label: '扫描目录', icon: '📂' },
   { key: 'connections', label: 'OPDS 连接', icon: '🔗' },
   { key: 'scheduler', label: '定时任务', icon: '⏰' },
+  { key: 'logs', label: '操作日志', icon: '📋' },
   { key: 'info', label: '系统信息', icon: 'ℹ️' },
 ]
 

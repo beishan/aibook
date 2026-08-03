@@ -35,7 +35,8 @@ class ScannedBookPersistenceServiceTest {
         ScannedBookPersistenceService service = new ScannedBookPersistenceService(
                 bookRepository,
                 userRepository,
-                categoryRepository);
+                categoryRepository,
+                mock(OperationLogService.class));
 
         Book saved = service.save(book, 1L, 2L);
 
@@ -62,7 +63,8 @@ class ScannedBookPersistenceServiceTest {
         ScannedBookPersistenceService service = new ScannedBookPersistenceService(
                 bookRepository,
                 userRepository,
-                categoryRepository);
+                categoryRepository,
+                mock(OperationLogService.class));
 
         Book saved = service.save(book, 1L, null);
 

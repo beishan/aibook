@@ -2,6 +2,7 @@ package com.aibook.service;
 
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.Category;
+import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.CategoryRepository;
@@ -21,6 +22,7 @@ public class ScannedBookPersistenceService {
     private final BookRepository bookRepository;
     private final UserRepository userRepository;
     private final CategoryRepository categoryRepository;
+    private final OperationLogService operationLogService;
 
     /**
      * 使用当前事务创建的实体引用，避免跨线程共享 Hibernate 代理。
@@ -34,6 +36,10 @@ public class ScannedBookPersistenceService {
 
         book.setUser(user);
         book.setCategory(category);
-        return bookRepository.save(book);
+        Book savedBook = bookRepository.save(book);
+        operationLogService.record(
+                user, OperationLog.Action.IMPORT_BOOK, savedBook,
+                "导入书籍《" + savedBook.getTitle() + "》", "来源：目录扫描");
+        return savedBook;
     }
 }

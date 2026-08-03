@@ -1,12 +1,14 @@
 package com.aibook.controller;
 
 import com.aibook.model.entity.Book;
+import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookVersionRepository;
-import com.aibook.service.UserService;
 import com.aibook.service.BookParsingService;
 import com.aibook.service.BookVersionService;
+import com.aibook.service.OperationLogService;
+import com.aibook.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,6 +41,7 @@ public class FileUploadController {
     private final UserService userService;
     private final BookParsingService bookParsingService;
     private final BookVersionService bookVersionService;
+    private final OperationLogService operationLogService;
 
     @Value("${upload.path:./uploads}")
     private String uploadPath;
@@ -122,6 +125,9 @@ public class FileUploadController {
                     log.warn("上传后解析失败，保留文件名作为书名: {}", originalFilename, parseException);
                 }
                 bookVersionService.ensurePrimaryVersion(book, originalFilename);
+                operationLogService.record(
+                        user, OperationLog.Action.IMPORT_BOOK, book,
+                        "导入书籍《" + book.getTitle() + "》", "来源：网页上传；文件：" + originalFilename);
                 successCount++;
 
                 results.add(Map.of(

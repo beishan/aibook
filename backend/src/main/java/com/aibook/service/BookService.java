@@ -4,6 +4,7 @@ import com.aibook.dto.BookDTO;
 import com.aibook.dto.TagDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.Category;
+import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.Tag;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookHighlightRepository;
@@ -39,6 +40,7 @@ public class BookService {
     private final BookListRepository bookListRepository;
     private final CategoryService categoryService;
     private final TagService tagService;
+    private final OperationLogService operationLogService;
 
     /**
      * 获取用户书籍列表
@@ -173,6 +175,9 @@ public class BookService {
         Book book = getBookEntity(id, user);
         book.setDeletedAt(LocalDateTime.now());
         bookRepository.save(book);
+        operationLogService.record(
+                user, OperationLog.Action.DELETE_BOOK, book,
+                "删除书籍《" + book.getTitle() + "》", "已移入回收站");
     }
 
     @Transactional
@@ -186,6 +191,9 @@ public class BookService {
         LocalDateTime deletedAt = LocalDateTime.now();
         books.forEach(book -> book.setDeletedAt(deletedAt));
         bookRepository.saveAll(books);
+        books.forEach(book -> operationLogService.record(
+                user, OperationLog.Action.DELETE_BOOK, book,
+                "删除书籍《" + book.getTitle() + "》", "批量操作，已移入回收站"));
     }
 
     @Transactional(readOnly = true)
@@ -205,7 +213,11 @@ public class BookService {
     public List<BookDTO> restoreBooks(List<Long> bookIds, User user) {
         List<Book> books = getOwnedTrashBooks(bookIds, user);
         books.forEach(book -> book.setDeletedAt(null));
-        return bookRepository.saveAll(books).stream()
+        List<Book> restoredBooks = bookRepository.saveAll(books);
+        restoredBooks.forEach(book -> operationLogService.record(
+                user, OperationLog.Action.RESTORE_BOOK, book,
+                "恢复书籍《" + book.getTitle() + "》", "已从回收站恢复"));
+        return restoredBooks.stream()
                 .map(this::convertToDTO)
                 .toList();
     }
@@ -217,7 +229,12 @@ public class BookService {
     @Transactional
     public void permanentlyDeleteBooks(List<Long> bookIds, User user) {
         List<Book> books = getOwnedTrashBooks(bookIds, user);
-        books.forEach(this::purgeDatabaseRecordOnly);
+        books.forEach(book -> {
+            operationLogService.record(
+                    user, OperationLog.Action.PERMANENTLY_DELETE_BOOK, book,
+                    "永久删除书籍《" + book.getTitle() + "》", "原始文件保留");
+            purgeDatabaseRecordOnly(book);
+        });
     }
 
     /**
@@ -227,7 +244,12 @@ public class BookService {
     @Transactional
     public void emptyTrash(User user) {
         bookRepository.findByUserAndDeletedAtIsNotNullAndPurgedAtIsNull(user)
-                .forEach(this::purgeDatabaseRecordOnly);
+                .forEach(book -> {
+                    operationLogService.record(
+                            user, OperationLog.Action.PERMANENTLY_DELETE_BOOK, book,
+                            "永久删除书籍《" + book.getTitle() + "》", "清空回收站，原始文件保留");
+                    purgeDatabaseRecordOnly(book);
+                });
     }
 
     private List<Book> getOwnedTrashBooks(List<Long> bookIds, User user) {

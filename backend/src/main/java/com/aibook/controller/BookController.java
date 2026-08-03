@@ -10,6 +10,7 @@ import com.aibook.dto.BookVersionRebuildTaskDTO;
 import com.aibook.dto.ScrapeTaskDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.BookVersion;
+import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
 import com.aibook.service.BookCoverService;
@@ -17,6 +18,7 @@ import com.aibook.service.BookParsingService;
 import com.aibook.service.BookService;
 import com.aibook.service.BookVersionRebuildTaskService;
 import com.aibook.service.BookVersionService;
+import com.aibook.service.OperationLogService;
 import com.aibook.service.TxtParserService;
 import com.aibook.service.UserService;
 import com.aibook.service.scraper.BatchScrapeTaskService;
@@ -47,8 +49,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -72,6 +75,7 @@ public class BookController {
     private final BookCoverService bookCoverService;
     private final BookVersionService bookVersionService;
     private final BookVersionRebuildTaskService bookVersionRebuildTaskService;
+    private final OperationLogService operationLogService;
 
     /**
      * 获取书籍列表
@@ -257,6 +261,27 @@ public class BookController {
         User user = userService.findByUsername(authentication.getName());
         BookDTO book = bookService.getBookById(id, user);
         return ResponseEntity.ok(book);
+    }
+
+    /**
+     * 记录用户进入在线阅读器。由阅读页在书籍成功加载后调用一次。
+     */
+    @PostMapping("/{id}/open")
+    public ResponseEntity<Void> recordBookOpen(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestParam(required = false) Long versionId) {
+        User user = userService.findByUsername(authentication.getName());
+        Book book = bookService.getBookEntity(id, user);
+        BookVersion version = bookVersionService.resolveVersion(book, versionId);
+        String format = version.getFormat() == null
+                ? "未知"
+                : version.getFormat().toUpperCase(Locale.ROOT);
+        operationLogService.record(
+                user, OperationLog.Action.OPEN_BOOK, book,
+                "打开书籍《" + book.getTitle() + "》",
+                "阅读版本：" + format);
+        return ResponseEntity.noContent().build();
     }
 
     /**

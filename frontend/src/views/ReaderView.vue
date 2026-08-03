@@ -986,6 +986,9 @@ const loadBook = async () => {
 
     // 记录开始阅读时间
     readingStartTime = Date.now()
+    void api.post(withVersion(`/api/books/${id}/open`)).catch(error => {
+      console.error('Failed to record book open:', error)
+    })
   } catch (error) {
     console.error('Failed to load book:', error)
   } finally {
