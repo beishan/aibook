@@ -1,5 +1,6 @@
 package com.aibook.security;
 
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
@@ -49,6 +50,11 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/api/site/favicon",
+                    "/api/site/favicon/status"
+                ).permitAll()
                 .requestMatchers("/api/books/*/content/**").permitAll()
                 .requestMatchers("/api/files/**").permitAll()
                 .requestMatchers("/api/covers/**").permitAll()

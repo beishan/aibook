@@ -253,6 +253,11 @@
       <UserManagementPanel />
     </div>
 
+    <!-- 网站图标（仅管理员） -->
+    <div v-if="isAdmin && activeTab === 'favicon'" class="tab-content">
+      <SiteFaviconSettingsPanel />
+    </div>
+
     <!-- 系统信息 -->
     <div v-show="activeTab === 'info'" class="tab-content">
       <div class="card glass">
@@ -275,6 +280,16 @@
             <span class="info-label">数据库状态</span>
             <span class="info-value">
               <span class="tag tag-success">已连接</span>
+            </span>
+          </div>
+          <div class="info-item list-item">
+            <span class="info-label">当前运行总时长</span>
+            <span class="info-value">{{ formattedUptime }}</span>
+          </div>
+          <div class="info-item list-item">
+            <span class="info-label">最近启动时间</span>
+            <span class="info-value">
+              {{ systemRuntime?.startedAt ? formatChinaDateTime(systemRuntime.startedAt) : '加载中...' }}
             </span>
           </div>
         </div>
@@ -351,6 +366,7 @@ import FontManagementPanel from '@/components/FontManagementPanel.vue'
 import OperationLogPanel from '@/components/OperationLogPanel.vue'
 import UserManagementPanel from '@/components/UserManagementPanel.vue'
 import CurrentUserSettingsPanel from '@/components/CurrentUserSettingsPanel.vue'
+import SiteFaviconSettingsPanel from '@/components/SiteFaviconSettingsPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
@@ -364,6 +380,46 @@ const preferencesStore = usePreferencesStore()
 const categoryStore = useCategoryStore()
 const userStore = useUserStore()
 const themes = THEMES
+
+interface SystemRuntime {
+  startedAt: string
+  uptimeMillis: number
+}
+
+const systemRuntime = ref<SystemRuntime | null>(null)
+const runtimeLoadedAt = ref(0)
+const runtimeClock = ref(Date.now())
+let runtimeClockTimer: ReturnType<typeof setInterval> | null = null
+
+const formatDuration = (milliseconds: number) => {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000))
+  const totalDays = Math.floor(totalSeconds / 86400)
+  const years = Math.floor(totalDays / 365)
+  const remainingAfterYears = totalDays % 365
+  const months = Math.floor(remainingAfterYears / 30)
+  const days = remainingAfterYears % 30
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return `${years}年 ${months}月 ${days}日 ${hours}时 ${minutes}分 ${seconds}秒`
+}
+
+const formattedUptime = computed(() => {
+  if (!systemRuntime.value) return '加载中...'
+  const elapsedAfterLoad = runtimeClock.value - runtimeLoadedAt.value
+  return formatDuration(systemRuntime.value.uptimeMillis + elapsedAfterLoad)
+})
+
+const loadSystemRuntime = async () => {
+  try {
+    const { data } = await api.get<SystemRuntime>('/api/system/runtime')
+    systemRuntime.value = data
+    runtimeLoadedAt.value = Date.now()
+    runtimeClock.value = runtimeLoadedAt.value
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '系统运行信息加载失败')
+  }
+}
 
 const isAdmin = computed(() => userStore.userInfo?.role === 'ADMIN')
 const tabGroups = computed(() => [
@@ -398,7 +454,10 @@ const tabGroups = computed(() => [
   },
   {
     label: '系统',
-    items: [{ key: 'info', label: '系统信息', icon: 'ℹ️' }],
+    items: [
+      ...(isAdmin.value ? [{ key: 'favicon', label: '网站图标', icon: '🌐' }] : []),
+      { key: 'info', label: '系统信息', icon: 'ℹ️' },
+    ],
   },
 ])
 const tabs = computed(() => tabGroups.value.flatMap(group => group.items))
@@ -703,11 +762,16 @@ onMounted(async () => {
   await loadDirectories()
   await restoreScanProgress()
   await categoryStore.refresh()
+  await loadSystemRuntime()
+  runtimeClockTimer = setInterval(() => {
+    runtimeClock.value = Date.now()
+  }, 1000)
 })
 
 onUnmounted(() => {
   scanPollTimers.forEach(timer => clearTimeout(timer))
   scanPollTimers.clear()
+  if (runtimeClockTimer) clearInterval(runtimeClockTimer)
 })
 </script>
 

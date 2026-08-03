@@ -8,6 +8,7 @@ import App from './App.vue'
 import router from './router'
 import { useThemeStore } from './stores/theme'
 import { usePreferencesStore } from './stores/preferences'
+import { loadSiteFavicon } from './utils/siteFavicon'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -21,5 +22,6 @@ const themeStore = useThemeStore(pinia)
 themeStore.initTheme()
 const preferencesStore = usePreferencesStore(pinia)
 void preferencesStore.hydrate()
+void loadSiteFavicon()
 
 app.mount('#app')

@@ -73,6 +73,7 @@ public class OperationLog {
         DELETE_USER,
         RESET_PASSWORD,
         UPDATE_PROFILE,
-        UPDATE_AVATAR
+        UPDATE_AVATAR,
+        UPDATE_SITE_FAVICON
     }
 }

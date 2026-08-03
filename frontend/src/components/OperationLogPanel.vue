@@ -92,6 +92,7 @@ const actionLabels: Record<string, { label: string; className: string }> = {
   RESET_PASSWORD: { label: '重置密码', className: 'tag-warning' },
   UPDATE_PROFILE: { label: '个人资料', className: 'tag-primary' },
   UPDATE_AVATAR: { label: '个人头像', className: 'tag-primary' },
+  UPDATE_SITE_FAVICON: { label: '网站图标', className: 'tag-primary' },
 }
 
 const actionMeta = (action: string) =>
