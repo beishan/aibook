@@ -86,6 +86,10 @@ const actionLabels: Record<string, { label: string; className: string }> = {
   DELETE_BOOK: { label: '删除书籍', className: 'tag-warning' },
   PERMANENTLY_DELETE_BOOK: { label: '永久删除', className: 'tag-danger' },
   RESTORE_BOOK: { label: '恢复书籍', className: 'tag-info' },
+  CREATE_USER: { label: '新增用户', className: 'tag-success' },
+  UPDATE_USER: { label: '修改用户', className: 'tag-primary' },
+  DELETE_USER: { label: '删除用户', className: 'tag-danger' },
+  RESET_PASSWORD: { label: '重置密码', className: 'tag-warning' },
 }
 
 const actionMeta = (action: string) =>
@@ -122,10 +126,22 @@ onMounted(() => void loadLogs())
   overflow: hidden;
 }
 
+.log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
 .log-header > div:first-child {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.log-header .btn {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .header-hint {

@@ -67,6 +67,10 @@ public class OperationLog {
         OPEN_BOOK,
         DELETE_BOOK,
         PERMANENTLY_DELETE_BOOK,
-        RESTORE_BOOK
+        RESTORE_BOOK,
+        CREATE_USER,
+        UPDATE_USER,
+        DELETE_USER,
+        RESET_PASSWORD
     }
 }

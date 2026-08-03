@@ -1,10 +1,13 @@
 package com.aibook.repository;
 
 import com.aibook.model.entity.User;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
-
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 /**
  * 用户 Repository
@@ -31,4 +34,23 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * 检查邮箱是否存在
      */
     boolean existsByEmail(String email);
+
+    boolean existsByUsernameAndIdNot(String username, Long id);
+
+    boolean existsByEmailAndIdNot(String email, Long id);
+
+    long countByRole(User.Role role);
+
+    long countByRoleAndEnabledTrue(User.Role role);
+
+    Optional<User> findFirstByOrderByCreatedAtAscIdAsc();
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE :keyword = ''
+               OR LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(COALESCE(u.nickname, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            """)
+    Page<User> search(@Param("keyword") String keyword, Pageable pageable);
 }

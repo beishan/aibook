@@ -236,6 +236,11 @@
       <OperationLogPanel />
     </div>
 
+    <!-- 用户管理（仅管理员） -->
+    <div v-if="isAdmin && activeTab === 'users'" class="tab-content">
+      <UserManagementPanel />
+    </div>
+
     <!-- 系统信息 -->
     <div v-show="activeTab === 'info'" class="tab-content">
       <div class="card glass">
@@ -327,9 +332,11 @@ import ScanHistoryDialog from '@/components/ScanHistoryDialog.vue'
 import ConnectionsView from '@/views/ConnectionsView.vue'
 import FontManagementPanel from '@/components/FontManagementPanel.vue'
 import OperationLogPanel from '@/components/OperationLogPanel.vue'
+import UserManagementPanel from '@/components/UserManagementPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
+import { useUserStore } from '@/stores/user'
 import { THEMES, type ThemeId } from '@/types/theme'
 
 const themeStore = useThemeStore()
@@ -337,9 +344,10 @@ const route = useRoute()
 const router = useRouter()
 const preferencesStore = usePreferencesStore()
 const categoryStore = useCategoryStore()
+const userStore = useUserStore()
 const themes = THEMES
 
-const tabs = [
+const baseTabs = [
   { key: 'theme', label: '主题风格', icon: '🎨' },
   { key: 'fonts', label: '字体管理', icon: '🔤' },
   { key: 'directories', label: '扫描目录', icon: '📂' },
@@ -348,6 +356,15 @@ const tabs = [
   { key: 'logs', label: '操作日志', icon: '📋' },
   { key: 'info', label: '系统信息', icon: 'ℹ️' },
 ]
+const isAdmin = computed(() => userStore.userInfo?.role === 'ADMIN')
+const tabs = computed(() => isAdmin.value
+  ? [
+      ...baseTabs.slice(0, -1),
+      { key: 'users', label: '用户管理', icon: '👥' },
+      baseTabs[baseTabs.length - 1],
+    ]
+  : baseTabs
+)
 
 const getLayoutName = (layout: string) => {
   const names: Record<string, string> = {
@@ -363,14 +380,16 @@ const handleThemeChange = (id: ThemeId) => {
   message.success(`已切换到「${themes.find(t => t.id === id)?.name}」主题`)
 }
 
-const tabKeys = new Set(tabs.map(tab => tab.key))
-const activeTab = ref(
-  typeof route.query.tab === 'string' && tabKeys.has(route.query.tab)
-    ? route.query.tab
-    : 'theme'
-)
+const tabKeys = computed(() => new Set(tabs.value.map(tab => tab.key)))
+const activeTab = ref('theme')
+
+const syncActiveTab = (tab: unknown) => {
+  activeTab.value =
+    typeof tab === 'string' && tabKeys.value.has(tab) ? tab : 'theme'
+}
 
 const selectTab = (tab: string) => {
+  if (!tabKeys.value.has(tab)) return
   activeTab.value = tab
   void router.replace({
     query: {
@@ -381,11 +400,8 @@ const selectTab = (tab: string) => {
 }
 
 watch(
-  () => route.query.tab,
-  tab => {
-    activeTab.value =
-      typeof tab === 'string' && tabKeys.has(tab) ? tab : 'theme'
-  }
+  [() => route.query.tab, isAdmin],
+  ([tab]) => syncActiveTab(tab)
 )
 const loading = ref(false)
 const adding = ref(false)
@@ -644,6 +660,8 @@ const getScanProgressStatus = (
 }
 
 onMounted(async () => {
+  await userStore.hydrate()
+  syncActiveTab(route.query.tab)
   await preferencesStore.hydrate()
   scanThreadCountDraft.value = preferencesStore.scanThreadCount
   await loadDirectories()

@@ -43,7 +43,7 @@ public class AuthService {
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .nickname(request.getNickname() != null ? request.getNickname() : request.getUsername())
-                .role(User.Role.USER)
+                .role(userRepository.count() == 0 ? User.Role.ADMIN : User.Role.USER)
                 .enabled(true)
                 .build();
 

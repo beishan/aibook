@@ -1,16 +1,17 @@
 package com.aibook.controller;
 
 import com.aibook.exception.ResourceNotFoundException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-
-import java.util.Map;
-import java.util.LinkedHashMap;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 全局异常处理器
@@ -18,6 +19,17 @@ import java.util.LinkedHashMap;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(
+            AccessDeniedException ex) {
+        log.debug("Access denied: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of(
+                    "error", "Forbidden",
+                    "message", "没有权限执行此操作"
+                ));
+    }
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<Map<String, Object>> handleAuthentication(
@@ -47,6 +59,20 @@ public class GlobalExceptionHandler {
                 .body(Map.of(
                     "error", "Bad request",
                     "message", ex.getMessage() != null ? ex.getMessage() : "Invalid request"
+                ));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleValidation(
+            MethodArgumentNotValidException ex) {
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(error -> error.getDefaultMessage())
+                .orElse("请求参数不正确");
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                    "error", "Bad request",
+                    "message", message
                 ));
     }
 

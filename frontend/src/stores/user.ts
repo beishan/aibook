@@ -16,6 +16,23 @@ interface UserInfo {
 export const useUserStore = defineStore('user', () => {
   const token = ref<string>(localStorage.getItem('token') || '')
   const userInfo = ref<UserInfo | null>(null)
+  let hydrationPromise: Promise<UserInfo | null> | null = null
+
+  async function hydrate(force = false) {
+    if (!token.value) return null
+    if (userInfo.value && !force) return userInfo.value
+    if (hydrationPromise && !force) return hydrationPromise
+
+    hydrationPromise = api.get<UserInfo>('/api/user/profile', {
+      headers: { 'X-Suppress-Error-Toast': 'true' },
+    }).then(response => {
+      userInfo.value = response.data
+      return response.data
+    }).finally(() => {
+      hydrationPromise = null
+    })
+    return hydrationPromise
+  }
 
   // 登录
   async function login(username: string, password: string) {
@@ -23,13 +40,16 @@ export const useUserStore = defineStore('user', () => {
     const data = response.data
     token.value = data.token
     localStorage.setItem('token', data.token)
-    await usePreferencesStore().hydrate(true)
     userInfo.value = {
       id: 0,
       username: data.username,
       email: data.email,
       role: data.role,
     }
+    await Promise.all([
+      usePreferencesStore().hydrate(true),
+      hydrate(true),
+    ])
     return data
   }
 
@@ -44,13 +64,16 @@ export const useUserStore = defineStore('user', () => {
     const data = response.data
     token.value = data.token
     localStorage.setItem('token', data.token)
-    await usePreferencesStore().hydrate(true)
     userInfo.value = {
       id: 0,
       username: data.username,
       email: data.email,
       role: data.role,
     }
+    await Promise.all([
+      usePreferencesStore().hydrate(true),
+      hydrate(true),
+    ])
     return data
   }
 
@@ -72,6 +95,7 @@ export const useUserStore = defineStore('user', () => {
   return {
     token,
     userInfo,
+    hydrate,
     login,
     register,
     logout,
