@@ -12,6 +12,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 
@@ -57,6 +58,29 @@ public class User implements UserDetails {
      * 头像URL
      */
     private String avatarUrl;
+
+    /**
+     * 当前心情或个性签名。
+     */
+    @Column(length = 100)
+    private String mood;
+
+    /**
+     * 个人备注。
+     */
+    @Column(columnDefinition = "TEXT")
+    private String profileNotes;
+
+    /**
+     * 出生日期。
+     */
+    private LocalDate birthDate;
+
+    /**
+     * 偏好的书籍类型、作者或阅读主题。
+     */
+    @Column(columnDefinition = "TEXT")
+    private String bookPreferences;
 
     /**
      * Web 端主题偏好（modern、warm、natural）

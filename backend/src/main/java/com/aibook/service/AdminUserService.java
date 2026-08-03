@@ -25,6 +25,7 @@ public class AdminUserService {
     private final PasswordEncoder passwordEncoder;
     private final OperationLogService operationLogService;
     private final JdbcTemplate jdbcTemplate;
+    private final UserProfileService userProfileService;
 
     @Transactional(readOnly = true)
     public Page<AdminUserDTO> getUsers(String keyword, Pageable pageable) {
@@ -130,6 +131,7 @@ public class AdminUserService {
         deleteOwnedData(id);
         userRepository.delete(target);
         userRepository.flush();
+        userProfileService.deleteStoredAvatar(target);
     }
 
     private User requireUser(Long id) {

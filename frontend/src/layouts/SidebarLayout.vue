@@ -65,7 +65,11 @@
 
           <el-dropdown trigger="click" @command="handleUserCommand">
             <el-button text circle class="user-button" aria-label="用户菜单">
-              <el-avatar :size="34" class="user-avatar">
+              <el-avatar
+                :size="34"
+                :src="userStore.avatarObjectUrl || undefined"
+                class="user-avatar"
+              >
                 {{ userInitial }}
               </el-avatar>
             </el-button>

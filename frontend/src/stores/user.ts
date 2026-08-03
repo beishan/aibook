@@ -10,13 +10,45 @@ interface UserInfo {
   email: string
   nickname?: string
   avatarUrl?: string
+  hasAvatar?: boolean
+  mood?: string
+  notes?: string
+  birthDate?: string
+  bookPreferences?: string
   role: string
 }
 
 export const useUserStore = defineStore('user', () => {
   const token = ref<string>(localStorage.getItem('token') || '')
   const userInfo = ref<UserInfo | null>(null)
+  const avatarObjectUrl = ref('')
   let hydrationPromise: Promise<UserInfo | null> | null = null
+
+  const replaceAvatarObjectUrl = (url = '') => {
+    if (avatarObjectUrl.value.startsWith('blob:')) {
+      URL.revokeObjectURL(avatarObjectUrl.value)
+    }
+    avatarObjectUrl.value = url
+  }
+
+  async function loadAvatar() {
+    if (!userInfo.value?.hasAvatar) {
+      replaceAvatarObjectUrl()
+      return ''
+    }
+    try {
+      const response = await api.get('/api/user/profile/avatar', {
+        responseType: 'blob',
+        headers: { 'X-Suppress-Error-Toast': 'true' },
+      })
+      const url = URL.createObjectURL(response.data)
+      replaceAvatarObjectUrl(url)
+      return url
+    } catch {
+      replaceAvatarObjectUrl()
+      return ''
+    }
+  }
 
   async function hydrate(force = false) {
     if (!token.value) return null
@@ -25,8 +57,9 @@ export const useUserStore = defineStore('user', () => {
 
     hydrationPromise = api.get<UserInfo>('/api/user/profile', {
       headers: { 'X-Suppress-Error-Toast': 'true' },
-    }).then(response => {
+    }).then(async response => {
       userInfo.value = response.data
+      await loadAvatar()
       return response.data
     }).finally(() => {
       hydrationPromise = null
@@ -81,6 +114,7 @@ export const useUserStore = defineStore('user', () => {
   function logout() {
     token.value = ''
     userInfo.value = null
+    replaceAvatarObjectUrl()
     localStorage.removeItem('token')
     usePreferencesStore().resetHydration()
   }
@@ -95,7 +129,9 @@ export const useUserStore = defineStore('user', () => {
   return {
     token,
     userInfo,
+    avatarObjectUrl,
     hydrate,
+    loadAvatar,
     login,
     register,
     logout,

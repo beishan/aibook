@@ -1,5 +1,6 @@
 package com.aibook.dto;
 
+import java.time.LocalDate;
 import lombok.Builder;
 import lombok.Data;
 
@@ -11,5 +12,10 @@ public class UserProfileDTO {
     private String email;
     private String nickname;
     private String avatarUrl;
+    private Boolean hasAvatar;
+    private String mood;
+    private String notes;
+    private LocalDate birthDate;
+    private String bookPreferences;
     private String role;
 }

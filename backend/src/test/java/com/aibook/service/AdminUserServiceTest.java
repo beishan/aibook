@@ -31,7 +31,8 @@ class AdminUserServiceTest {
                 userRepository,
                 passwordEncoder,
                 operationLogService,
-                mock(JdbcTemplate.class));
+                mock(JdbcTemplate.class),
+                mock(UserProfileService.class));
         User administrator = User.builder().id(1L).username("admin").build();
         AdminUserCreateRequest request = new AdminUserCreateRequest();
         request.setUsername("reader");
@@ -107,7 +108,8 @@ class AdminUserServiceTest {
                 userRepository,
                 passwordEncoder,
                 mock(OperationLogService.class),
-                mock(JdbcTemplate.class));
+                mock(JdbcTemplate.class),
+                mock(UserProfileService.class));
 
         service.resetPassword(2L, "new-secret", administrator);
 
@@ -116,7 +118,7 @@ class AdminUserServiceTest {
     }
 
     @Test
-    void deletesOwnedDatabaseDataButDoesNotPerformFilesystemOperations() {
+    void deletesOwnedDatabaseDataAndStoredAvatar() {
         UserRepository userRepository = mock(UserRepository.class);
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         User administrator = User.builder()
@@ -132,17 +134,20 @@ class AdminUserServiceTest {
                 .enabled(true)
                 .build();
         when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+        UserProfileService userProfileService = mock(UserProfileService.class);
         AdminUserService service = new AdminUserService(
                 userRepository,
                 mock(PasswordEncoder.class),
                 mock(OperationLogService.class),
-                jdbcTemplate);
+                jdbcTemplate,
+                userProfileService);
 
         service.deleteUser(2L, administrator);
 
         verify(jdbcTemplate, atLeastOnce()).update(anyString(), any(Object[].class));
         verify(userRepository).delete(target);
         verify(userRepository).flush();
+        verify(userProfileService).deleteStoredAvatar(target);
     }
 
     private AdminUserService service(UserRepository userRepository) {
@@ -150,7 +155,8 @@ class AdminUserServiceTest {
                 userRepository,
                 mock(PasswordEncoder.class),
                 mock(OperationLogService.class),
-                mock(JdbcTemplate.class));
+                mock(JdbcTemplate.class),
+                mock(UserProfileService.class));
     }
 
     private AdminUserUpdateRequest updateRequest(

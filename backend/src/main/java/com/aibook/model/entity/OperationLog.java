@@ -71,6 +71,8 @@ public class OperationLog {
         CREATE_USER,
         UPDATE_USER,
         DELETE_USER,
-        RESET_PASSWORD
+        RESET_PASSWORD,
+        UPDATE_PROFILE,
+        UPDATE_AVATAR
     }
 }

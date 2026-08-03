@@ -90,6 +90,8 @@ const actionLabels: Record<string, { label: string; className: string }> = {
   UPDATE_USER: { label: '修改用户', className: 'tag-primary' },
   DELETE_USER: { label: '删除用户', className: 'tag-danger' },
   RESET_PASSWORD: { label: '重置密码', className: 'tag-warning' },
+  UPDATE_PROFILE: { label: '个人资料', className: 'tag-primary' },
+  UPDATE_AVATAR: { label: '个人头像', className: 'tag-primary' },
 }
 
 const actionMeta = (action: string) =>

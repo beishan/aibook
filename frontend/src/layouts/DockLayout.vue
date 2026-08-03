@@ -23,9 +23,14 @@
 
         <div class="user-menu" @click="showDropdown = !showDropdown">
           <div class="user-avatar">
-            {{ userStore.userInfo?.username?.charAt(0)?.toUpperCase() || 'U' }}
+            <img v-if="userStore.avatarObjectUrl" :src="userStore.avatarObjectUrl" alt="用户头像" />
+            <template v-else>
+              {{ userStore.userInfo?.username?.charAt(0)?.toUpperCase() || 'U' }}
+            </template>
           </div>
-          <span class="username">{{ userStore.userInfo?.username || '用户' }}</span>
+          <span class="username">
+            {{ userStore.userInfo?.nickname || userStore.userInfo?.username || '用户' }}
+          </span>
 
           <Transition name="fade">
             <div v-if="showDropdown" class="dropdown-menu glass">
@@ -238,6 +243,13 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   color: white;
   font-weight: 600;
   font-size: var(--font-size-base);
+  overflow: hidden;
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .username {

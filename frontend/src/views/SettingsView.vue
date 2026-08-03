@@ -8,18 +8,30 @@
       </div>
     </div>
 
-    <!-- 选项卡 -->
-    <div class="tabs">
-      <div
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="tab-item"
-        :class="{ active: activeTab === tab.key }"
-        @click="selectTab(tab.key)"
-      >
-        <span class="tab-icon">{{ tab.icon }}</span>
-        <span>{{ tab.label }}</span>
-      </div>
+    <div class="settings-layout">
+      <nav class="settings-nav" aria-label="设置导航">
+        <div v-for="group in tabGroups" :key="group.label" class="settings-nav-group">
+          <div class="settings-nav-title">{{ group.label }}</div>
+          <button
+            v-for="tab in group.items"
+            :key="tab.key"
+            type="button"
+            class="settings-nav-item"
+            :class="{ active: activeTab === tab.key }"
+            :aria-current="activeTab === tab.key ? 'page' : undefined"
+            @click="selectTab(tab.key)"
+          >
+            <span class="settings-nav-icon">{{ tab.icon }}</span>
+            <span>{{ tab.label }}</span>
+          </button>
+        </div>
+      </nav>
+
+      <main class="settings-content">
+
+    <!-- 当前用户设置 -->
+    <div v-if="activeTab === 'profile'" class="tab-content">
+      <CurrentUserSettingsPanel />
     </div>
 
     <!-- 主题设置 -->
@@ -268,6 +280,8 @@
         </div>
       </div>
     </div>
+      </main>
+    </div>
 
     <!-- 添加目录对话框 -->
     <Teleport to="body">
@@ -333,6 +347,7 @@ import ConnectionsView from '@/views/ConnectionsView.vue'
 import FontManagementPanel from '@/components/FontManagementPanel.vue'
 import OperationLogPanel from '@/components/OperationLogPanel.vue'
 import UserManagementPanel from '@/components/UserManagementPanel.vue'
+import CurrentUserSettingsPanel from '@/components/CurrentUserSettingsPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
@@ -347,24 +362,43 @@ const categoryStore = useCategoryStore()
 const userStore = useUserStore()
 const themes = THEMES
 
-const baseTabs = [
-  { key: 'theme', label: '主题风格', icon: '🎨' },
-  { key: 'fonts', label: '字体管理', icon: '🔤' },
-  { key: 'directories', label: '扫描目录', icon: '📂' },
-  { key: 'connections', label: 'OPDS 连接', icon: '🔗' },
-  { key: 'scheduler', label: '定时任务', icon: '⏰' },
-  { key: 'logs', label: '操作日志', icon: '📋' },
-  { key: 'info', label: '系统信息', icon: 'ℹ️' },
-]
 const isAdmin = computed(() => userStore.userInfo?.role === 'ADMIN')
-const tabs = computed(() => isAdmin.value
-  ? [
-      ...baseTabs.slice(0, -1),
-      { key: 'users', label: '用户管理', icon: '👥' },
-      baseTabs[baseTabs.length - 1],
-    ]
-  : baseTabs
-)
+const tabGroups = computed(() => [
+  {
+    label: '个人',
+    items: [{ key: 'profile', label: '个人设置', icon: '👤' }],
+  },
+  {
+    label: '外观',
+    items: [
+      { key: 'theme', label: '主题风格', icon: '🎨' },
+      { key: 'fonts', label: '字体管理', icon: '🔤' },
+    ],
+  },
+  {
+    label: '书库',
+    items: [
+      { key: 'directories', label: '扫描目录', icon: '📂' },
+      { key: 'scheduler', label: '定时任务', icon: '⏰' },
+    ],
+  },
+  {
+    label: '连接',
+    items: [{ key: 'connections', label: 'OPDS 连接', icon: '🔗' }],
+  },
+  {
+    label: '管理',
+    items: [
+      ...(isAdmin.value ? [{ key: 'users', label: '用户管理', icon: '👥' }] : []),
+      { key: 'logs', label: '操作日志', icon: '📋' },
+    ],
+  },
+  {
+    label: '系统',
+    items: [{ key: 'info', label: '系统信息', icon: 'ℹ️' }],
+  },
+])
+const tabs = computed(() => tabGroups.value.flatMap(group => group.items))
 
 const getLayoutName = (layout: string) => {
   const names: Record<string, string> = {
@@ -677,9 +711,79 @@ onUnmounted(() => {
 
 <style scoped>
 .settings-view {
-  max-width: 1000px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: var(--spacing-lg) 0;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--spacing-xl);
+}
+
+.settings-nav {
+  position: sticky;
+  top: var(--spacing-lg);
+  padding: var(--spacing-sm);
+  background: var(--surface-card);
+  border: var(--glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.settings-nav-group + .settings-nav-group {
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-color-light);
+}
+
+.settings-nav-title {
+  padding: var(--spacing-xs) var(--spacing-md);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.settings-nav-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 10px var(--spacing-md);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.settings-nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.settings-nav-item.active {
+  background: var(--primary-gradient);
+  box-shadow: var(--shadow-md);
+  color: white;
+}
+
+.settings-nav-icon {
+  width: 20px;
+  flex: 0 0 20px;
+  text-align: center;
+}
+
+.settings-content {
+  min-width: 0;
 }
 
 /* 页面头部 */
@@ -1138,6 +1242,35 @@ onUnmounted(() => {
 }
 
 /* 响应式 */
+@media (max-width: 900px) {
+  .settings-layout {
+    display: block;
+  }
+
+  .settings-nav {
+    position: static;
+    display: flex;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-xl);
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .settings-nav-group {
+    display: contents;
+  }
+
+  .settings-nav-title {
+    display: none;
+  }
+
+  .settings-nav-item {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 10px 14px;
+  }
+}
+
 @media (max-width: 768px) {
   .theme-grid {
     grid-template-columns: 1fr;
