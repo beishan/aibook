@@ -35,6 +35,12 @@ public interface BookRepository extends JpaRepository<Book, Long> {
 
     Optional<Book> findByIdAndUserAndDeletedAtIsNotNullAndPurgedAtIsNull(Long id, User user);
 
+    /** 按主键游标分页读取来源回填需要的最小字段。 */
+    @Query("SELECT b.id AS id, b.user.id AS userId, b.filePath AS filePath "
+            + "FROM Book b WHERE b.id > :afterId ORDER BY b.id")
+    List<BookScanSourceBackfillProjection> findBackfillCandidatesAfterId(
+            @Param("afterId") Long afterId, Pageable pageable);
+
     /**
      * 根据用户分页查询书籍
      */

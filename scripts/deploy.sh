@@ -515,7 +515,8 @@ deploy_release() {
 
     echo "正在更新 aibook 服务。"
     if ! compose up -d --remove-orphans; then
-        echo "Compose 更新失败，尝试恢复上一版本。" >&2
+        echo "Compose 更新失败，输出新版本后端日志并尝试恢复上一版本。" >&2
+        compose logs --no-color --tail=300 backend || true
         rollback_from_state || true
         return 1
     fi
