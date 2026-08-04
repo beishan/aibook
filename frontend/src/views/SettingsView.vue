@@ -163,11 +163,20 @@
                   :value="category.id"
                 />
               </el-select>
-              <button class="btn btn-text" @click="handleScan(row)" :disabled="row._scanning">
+              <button
+                class="btn btn-text"
+                :disabled="row._scanning || !row.enabled"
+                :title="row.enabled ? '立即扫描' : '请先启用该目录'"
+                @click="handleScan(row)"
+              >
                 {{ row._scanning ? `${row._scanProgress?.progress || 0}%` : '立即扫描' }}
               </button>
-              <button class="btn btn-text" @click="handleToggle(row)">
-                {{ row.enabled ? '禁用' : '启用' }}
+              <button
+                class="btn btn-text"
+                :disabled="row._toggling"
+                @click="handleToggle(row)"
+              >
+                {{ row._toggling ? '处理中...' : row.enabled ? '禁用' : '启用' }}
               </button>
               <button class="btn btn-text btn-danger" @click="handleRemove(row)">删除</button>
             </div>
@@ -703,12 +712,15 @@ const handleScan = async (row: any) => {
 }
 
 const handleToggle = async (row: any) => {
+  row._toggling = true
   try {
-    await api.put(`/api/scan-directories/${row.id}/toggle`)
-    message.success(row.enabled ? '已禁用' : '已启用')
-    await loadDirectories()
-  } catch (error) {
-    message.error('操作失败')
+    const { data } = await api.put(`/api/scan-directories/${row.id}/toggle`)
+    Object.assign(row, data)
+    message.success(data.enabled ? '已启用' : '已禁用')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '操作失败')
+  } finally {
+    row._toggling = false
   }
 }
 

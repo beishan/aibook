@@ -66,6 +66,9 @@ public class ScanDirectoryTaskService {
 
         ScanDirectory directory = scanDirectoryRepository.findByIdAndUser(directoryId, user)
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", directoryId));
+        if (!Boolean.TRUE.equals(directory.getEnabled())) {
+            throw new IllegalArgumentException("扫描目录已禁用，请先启用后再扫描");
+        }
         Path path = Path.of(directory.getPath());
         if (!Files.exists(path) || !Files.isDirectory(path)) {
             throw new IllegalArgumentException("目录不存在: " + directory.getPath());

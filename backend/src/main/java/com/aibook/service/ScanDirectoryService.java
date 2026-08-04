@@ -108,6 +108,10 @@ public class ScanDirectoryService {
         ScanDirectory dir = scanDirectoryRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
 
+        if (!Boolean.TRUE.equals(dir.getEnabled())) {
+            throw new IllegalArgumentException("扫描目录已禁用，请先启用后再扫描");
+        }
+
         Path dirPath = Paths.get(dir.getPath());
         if (!Files.exists(dirPath) || !Files.isDirectory(dirPath)) {
             return Map.of(
@@ -149,7 +153,7 @@ public class ScanDirectoryService {
         ScanDirectory dir = scanDirectoryRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
 
-        dir.setEnabled(!dir.getEnabled());
+        dir.setEnabled(!Boolean.TRUE.equals(dir.getEnabled()));
         return scanDirectoryRepository.save(dir);
     }
 

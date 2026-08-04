@@ -1,6 +1,7 @@
 package com.aibook.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -93,6 +94,31 @@ class ScanDirectoryTaskServiceTest {
             assertThat(finalRecord.getSkippedBooks()).isEqualTo(1);
             assertThat(finalRecord.getFailedBooks()).isEqualTo(1);
             assertThat(finalRecord.getDurationMs()).isNotNull();
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void rejectsStartingScanForDisabledDirectory() {
+        User user = User.builder().id(1L).username("reader").build();
+        ScanDirectory directory = ScanDirectory.builder()
+                .id(2L)
+                .path(tempDir.toString())
+                .enabled(false)
+                .user(user)
+                .build();
+        ScanDirectoryRepository repository = mock(ScanDirectoryRepository.class);
+        when(repository.findByIdAndUser(2L, user)).thenReturn(Optional.of(directory));
+        ScanDirectoryTaskService service = new ScanDirectoryTaskService(
+                repository,
+                mock(FileScannerService.class),
+                mock(ScanRecordRepository.class));
+
+        try {
+            assertThatThrownBy(() -> service.startScan(2L, user))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("扫描目录已禁用，请先启用后再扫描");
         } finally {
             service.shutdown();
         }
