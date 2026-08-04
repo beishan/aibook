@@ -84,7 +84,7 @@
     <div v-show="activeTab === 'directories'" class="tab-content">
       <div class="card glass">
         <div class="card-header">
-          <span>📁 监控目录配置</span>
+          <span>📁 书籍扫描目录配置</span>
           <div class="directory-header-actions">
             <button class="btn" @click="showScanHistory = true">
               <span>📋</span>
