@@ -17,10 +17,19 @@ import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.beans.factory.annotation.Autowired;
 
 class SystemResourceServiceTest {
 
     @TempDir Path temporaryDirectory;
+
+    @Test
+    void marksProductionConstructorForSpringInjection() throws Exception {
+        assertThat(SystemResourceService.class
+                        .getConstructor(ScanDirectoryRepository.class)
+                        .getAnnotation(Autowired.class))
+                .isNotNull();
+    }
 
     @Test
     void prefersCgroupV2LimitsAndCachesCollection() throws Exception {
