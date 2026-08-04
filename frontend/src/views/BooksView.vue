@@ -262,6 +262,15 @@
             </button>
             <button
               class="action-btn"
+              :class="{ 'active-shelf': book.onShelf }"
+              :aria-label="book.onShelf ? '移出书架' : '加入书架'"
+              :title="book.onShelf ? '移出书架' : '加入书架'"
+              @click.stop="handleToggleShelf(book)"
+            >
+              <span class="action-icon">{{ book.onShelf ? '📚' : '➕' }}</span>
+            </button>
+            <button
+              class="action-btn"
               :class="{ 'is-processing': processingBookId === book.id }"
               aria-label="更多操作"
               title="更多操作"
@@ -379,6 +388,15 @@
           >
             <span>{{ row.isWanted ? '🔖' : '📑' }}</span>
             <span class="list-action-label">{{ row.isWanted ? '已想读' : '想读' }}</span>
+          </button>
+          <button
+            class="btn btn-text list-state-button"
+            :class="{ 'is-on-shelf': row.onShelf }"
+            :title="row.onShelf ? '移出书架' : '加入书架'"
+            @click.stop="handleToggleShelf(row)"
+          >
+            <span>{{ row.onShelf ? '📚' : '➕' }}</span>
+            <span class="list-action-label">{{ row.onShelf ? '已在书架' : '加入书架' }}</span>
           </button>
           <button class="btn btn-text" @click.stop="$router.push(`/reader/${row.id}`)">阅读</button>
           <el-dropdown
@@ -711,6 +729,20 @@ const handleToggleWanted = async (id: number) => {
     message.success('操作成功')
   } catch (error) {
     message.error('操作失败')
+  }
+}
+
+const handleToggleShelf = async (book: Book) => {
+  try {
+    if (book.onShelf) {
+      await bookStore.removeFromShelf(book.id)
+      message.success('已移出书架')
+    } else {
+      await bookStore.addToShelf(book.id)
+      message.success('已加入书架')
+    }
+  } catch (error) {
+    message.error(book.onShelf ? '移出书架失败' : '加入书架失败')
   }
 }
 
@@ -1575,6 +1607,12 @@ onMounted(async () => {
   color: #be185d;
 }
 
+.action-btn.active-shelf {
+  color: #166534;
+  background: rgba(220, 252, 231, 0.9);
+  border-color: rgba(134, 239, 172, 0.95);
+}
+
 .more-trigger {
   display: grid;
   width: 30px;
@@ -1703,6 +1741,11 @@ onMounted(async () => {
 .list-state-button.is-wanted {
   background: rgba(252, 231, 243, 0.7);
   color: #be185d;
+}
+
+.list-state-button.is-on-shelf {
+  color: #166534;
+  background: rgba(220, 252, 231, 0.72);
 }
 
 .btn-danger {

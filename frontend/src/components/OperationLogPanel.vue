@@ -94,6 +94,8 @@ const actionLabels: Record<string, { label: string; className: string }> = {
   UPDATE_AVATAR: { label: '个人头像', className: 'tag-primary' },
   UPDATE_SITE_FAVICON: { label: '网站图标', className: 'tag-primary' },
   UPDATE_SCAN_DIRECTORY_VISIBILITY: { label: '书库显示设置', className: 'tag-primary' },
+  ADD_TO_SHELF: { label: '加入书架', className: 'tag-success' },
+  REMOVE_FROM_SHELF: { label: '移出书架', className: 'tag-info' },
 }
 
 const actionMeta = (action: string) =>

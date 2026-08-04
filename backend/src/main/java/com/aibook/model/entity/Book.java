@@ -143,6 +143,21 @@ public class Book {
     @Builder.Default
     private Boolean isWanted = false;
 
+    /** 是否已加入用户的“书架”页。 */
+    @Builder.Default
+    private Boolean onShelf = false;
+
+    /** 加入书架时间，用于默认倒序展示。 */
+    private LocalDateTime shelfAddedAt;
+
+    /** 书籍在所属书架分组内的手动顺序，数值越小越靠前。 */
+    private Integer shelfSortOrder;
+
+    /** 书架分组；为空表示未分组。 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "shelf_group_id")
+    private ShelfGroup shelfGroup;
+
     /**
      * 笔记
      */

@@ -38,6 +38,10 @@ public class BookDTO {
     private List<String> tagNames;
     private Boolean isFavorite;
     private Boolean isWanted;
+    private Boolean onShelf;
+    private Long shelfGroupId;
+    private LocalDateTime shelfAddedAt;
+    private Integer shelfSortOrder;
     private String notes;
     private String chapterInfo;
     private Integer chapterCount;

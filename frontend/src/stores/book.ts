@@ -25,6 +25,10 @@ export interface Book {
   tagNames: string[]
   isFavorite: boolean
   isWanted: boolean
+  onShelf: boolean
+  shelfGroupId?: number
+  shelfAddedAt?: string
+  shelfSortOrder?: number
   notes?: string
   chapterInfo?: string
   chapterCount?: number
@@ -162,6 +166,20 @@ export const useBookStore = defineStore('book', () => {
     if (currentBook.value?.id === id) {
       currentBook.value = updatedBook
     }
+    return updatedBook
+  }
+
+  async function addToShelf(id: number, groupId?: number) {
+    const response = await api.post(`/api/shelf/books/${id}`, { groupId: groupId || null })
+    const updatedBook: Book = response.data
+    updateLocalBook(updatedBook)
+    return updatedBook
+  }
+
+  async function removeFromShelf(id: number) {
+    const response = await api.delete(`/api/shelf/books/${id}`)
+    const updatedBook: Book = response.data
+    updateLocalBook(updatedBook)
     return updatedBook
   }
 
@@ -325,6 +343,8 @@ export const useBookStore = defineStore('book', () => {
     toggleFavorite,
     toggleWanted,
     updateReadingStatus,
+    addToShelf,
+    removeFromShelf,
     deleteBook,
     fetchTrash,
     fetchTrashCount,

@@ -1,6 +1,7 @@
 package com.aibook.service;
 
 import com.aibook.model.entity.Book;
+import com.aibook.model.entity.ShelfGroup;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookHighlightRepository;
 import com.aibook.repository.BookListRepository;
@@ -30,6 +31,7 @@ class BookServiceRecycleBinTest {
     void moveRestoreAndPurgeNeverDeleteOriginalFile() throws Exception {
         Path original = Files.writeString(tempDir.resolve("original.epub"), "book");
         User user = User.builder().id(1L).username("admin").build();
+        ShelfGroup shelfGroup = ShelfGroup.builder().id(4L).user(user).name("收藏夹").build();
         Book book = Book.builder()
                 .id(9L)
                 .title("测试书籍")
@@ -37,6 +39,10 @@ class BookServiceRecycleBinTest {
                 .filePath(original.toString())
                 .fileHash("hash-9")
                 .user(user)
+                .onShelf(true)
+                .shelfGroup(shelfGroup)
+                .shelfAddedAt(java.time.LocalDateTime.now())
+                .shelfSortOrder(0)
                 .build();
         BookRepository bookRepository = mock(BookRepository.class);
         ReadingProgressRepository progressRepository = mock(ReadingProgressRepository.class);
@@ -70,6 +76,8 @@ class BookServiceRecycleBinTest {
         service.permanentlyDeleteBooks(List.of(9L), user);
 
         assertThat(book.getPurgedAt()).isNotNull();
+        assertThat(book.getOnShelf()).isFalse();
+        assertThat(book.getShelfGroup()).isNull();
         assertThat(Files.exists(original)).isTrue();
         verify(progressRepository).deleteByBook(book);
         verify(bookmarkRepository).deleteByBook(book);

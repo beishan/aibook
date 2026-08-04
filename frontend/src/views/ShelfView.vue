@@ -60,6 +60,166 @@
       </div>
     </div>
 
+    <!-- 书架 -->
+    <div v-show="activeTab === 'shelf'" class="tab-content shelf-tab-content">
+      <div class="shelf-tab-toolbar">
+        <div>
+          <h2>我的书架</h2>
+          <p>共 {{ shelfOverview.totalBooks }} 本书，可按文件夹整理和手动排序</p>
+        </div>
+        <button class="btn btn-primary" @click="openCreateShelfGroup">
+          <span>📁</span>
+          <span>新建分组</span>
+        </button>
+      </div>
+
+      <div v-if="shelfLoading" class="loading glass">
+        <div class="loading-spinner"></div>
+        <p>正在加载书架...</p>
+      </div>
+      <div v-else-if="shelfOverview.totalBooks === 0 && shelfOverview.groups.length === 0" class="empty glass">
+        <div class="empty-icon">📚</div>
+        <p>书架还是空的，可在书库或书籍详情页点击“加入书架”</p>
+        <button class="btn btn-primary" @click="$router.push('/books')">去书库添加</button>
+      </div>
+      <template v-else>
+        <div class="shelf-folder-grid">
+          <button
+            class="shelf-folder-card shelf-folder-all"
+            :class="{ active: selectedShelfGroup === 'all' }"
+            @click="selectedShelfGroup = 'all'"
+          >
+            <span class="shelf-folder-icon">📚</span>
+            <strong>全部书籍</strong>
+            <small>{{ shelfOverview.totalBooks }} 本</small>
+          </button>
+          <button
+            class="shelf-folder-card shelf-folder-ungrouped"
+            :class="{ active: selectedShelfGroup === 'ungrouped' }"
+            @click="selectedShelfGroup = 'ungrouped'"
+          >
+            <span class="shelf-folder-icon">📖</span>
+            <strong>未分组</strong>
+            <small>{{ shelfOverview.ungroupedBooks.length }} 本</small>
+          </button>
+          <article
+            v-for="(group, groupIndex) in shelfOverview.groups"
+            :key="group.id"
+            class="shelf-folder-card custom-folder-card"
+            :class="{ active: selectedShelfGroup === group.id }"
+            :style="{ '--folder-color': group.color }"
+            role="button"
+            tabindex="0"
+            @click="selectedShelfGroup = group.id"
+            @keyup.enter="selectedShelfGroup = group.id"
+          >
+            <div class="folder-card-main">
+              <span class="shelf-folder-icon">{{ group.icon }}</span>
+              <div class="folder-card-copy">
+                <strong>{{ group.name }}</strong>
+                <small>{{ group.books.length }} 本</small>
+              </div>
+            </div>
+            <p>{{ group.description || '暂无分组描述' }}</p>
+            <div class="folder-card-actions" @click.stop>
+              <button :disabled="groupIndex === 0" title="分组前移" @click="moveShelfGroup(groupIndex, -1)">←</button>
+              <button :disabled="groupIndex === shelfOverview.groups.length - 1" title="分组后移" @click="moveShelfGroup(groupIndex, 1)">→</button>
+              <button title="编辑分组" @click="openEditShelfGroup(group)">✎</button>
+              <button class="danger" title="删除分组" @click="deleteShelfGroup(group)">✕</button>
+            </div>
+          </article>
+        </div>
+
+        <div class="shelf-section-heading">
+          <div>
+            <h3>{{ selectedShelfTitle }}</h3>
+            <p>{{ selectedShelfDescription }}</p>
+          </div>
+          <span>{{ displayedShelfBooks.length }} 本</span>
+        </div>
+
+        <div v-if="displayedShelfBooks.length === 0" class="empty glass compact-empty">
+          <div class="empty-icon">📂</div>
+          <p>这个分组中还没有书籍</p>
+        </div>
+        <div v-else :class="[viewMode === 'grid' ? 'books-grid' : 'books-list', `card-${cardSize}`]">
+          <div
+            v-for="(book, bookIndex) in displayedShelfBooks"
+            :key="book.id"
+            :class="viewMode === 'grid' ? 'book-card glass' : 'book-list-item glass'"
+            @click="$router.push(`/books/${book.id}`)"
+          >
+            <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
+              <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+              <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+              <div v-if="viewMode === 'grid'" class="book-cover-actions shelf-book-actions" @click.stop>
+                <button
+                  v-if="selectedShelfGroup !== 'all'"
+                  class="action-btn"
+                  :disabled="bookIndex === 0 || shelfActionBookId === book.id"
+                  title="向前移动"
+                  @click="moveShelfBookOrder(bookIndex, -1)"
+                ><span class="action-icon">↑</span></button>
+                <button
+                  v-if="selectedShelfGroup !== 'all'"
+                  class="action-btn"
+                  :disabled="bookIndex === displayedShelfBooks.length - 1 || shelfActionBookId === book.id"
+                  title="向后移动"
+                  @click="moveShelfBookOrder(bookIndex, 1)"
+                ><span class="action-icon">↓</span></button>
+                <el-dropdown trigger="click" @command="command => moveBookToShelfGroup(book, command)">
+                  <button class="action-btn" title="移动到分组" @click.stop>
+                    <span class="action-icon">📁</span>
+                  </button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="ungrouped" :disabled="!book.shelfGroupId">未分组</el-dropdown-item>
+                      <el-dropdown-item
+                        v-for="group in shelfOverview.groups"
+                        :key="group.id"
+                        :command="String(group.id)"
+                        :disabled="book.shelfGroupId === group.id"
+                      >{{ group.icon }} {{ group.name }}</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+                <button
+                  class="action-btn remove-reading-action"
+                  :disabled="shelfActionBookId === book.id"
+                  title="移出书架"
+                  @click="removeShelfBook(book)"
+                ><span class="action-icon">✕</span></button>
+              </div>
+            </div>
+            <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
+              <div class="book-title">{{ book.title }}</div>
+              <div class="book-author">{{ book.author || '未知作者' }}</div>
+              <div v-if="viewMode === 'list'" class="book-meta">
+                <span class="book-format">{{ book.format?.toUpperCase() }}</span>
+                <span>加入于 {{ formatShelfDate(book.shelfAddedAt) }}</span>
+              </div>
+            </div>
+            <div v-if="viewMode === 'list'" class="shelf-list-actions" @click.stop>
+              <button v-if="selectedShelfGroup !== 'all'" class="btn btn-text" :disabled="bookIndex === 0" @click="moveShelfBookOrder(bookIndex, -1)">上移</button>
+              <button v-if="selectedShelfGroup !== 'all'" class="btn btn-text" :disabled="bookIndex === displayedShelfBooks.length - 1" @click="moveShelfBookOrder(bookIndex, 1)">下移</button>
+              <el-dropdown trigger="click" @command="command => moveBookToShelfGroup(book, command)">
+                <button class="btn btn-text" @click.stop>移动分组</button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="ungrouped" :disabled="!book.shelfGroupId">未分组</el-dropdown-item>
+                    <el-dropdown-item v-for="group in shelfOverview.groups" :key="group.id" :command="String(group.id)" :disabled="book.shelfGroupId === group.id">
+                      {{ group.icon }} {{ group.name }}
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+              <button class="btn btn-text remove-reading-list-action" @click="removeShelfBook(book)">移出书架</button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
     <!-- 收藏 -->
     <div v-show="activeTab === 'favorite'" class="tab-content">
       <div v-if="favoriteBooks.length === 0" class="empty glass">
@@ -262,13 +422,45 @@
         </div>
       </Transition>
     </Teleport>
+
+    <el-dialog
+      v-model="showShelfGroupDialog"
+      append-to-body
+      :title="editingShelfGroup ? '编辑书架分组' : '新建书架分组'"
+      width="min(520px, 92vw)"
+    >
+      <el-form label-position="top">
+        <el-form-item label="分组名称" required>
+          <el-input v-model="shelfGroupForm.name" maxlength="80" show-word-limit placeholder="例如：近期必读" />
+        </el-form-item>
+        <el-form-item label="分组描述">
+          <el-input v-model="shelfGroupForm.description" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="介绍这个分组收录的内容" />
+        </el-form-item>
+        <div class="group-appearance-fields">
+          <el-form-item label="分组图标">
+            <el-select v-model="shelfGroupForm.icon">
+              <el-option v-for="icon in shelfGroupIcons" :key="icon" :label="icon" :value="icon" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="主题颜色">
+            <el-color-picker v-model="shelfGroupForm.color" />
+          </el-form-item>
+        </div>
+      </el-form>
+      <template #footer>
+        <button class="btn" @click="showShelfGroupDialog = false">取消</button>
+        <button class="btn btn-primary" :disabled="savingShelfGroup" @click="saveShelfGroup">
+          {{ savingShelfGroup ? '保存中...' : '保存' }}
+        </button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { message } from '@/utils/message'
+import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
@@ -280,6 +472,7 @@ const bookStore = useBookStore()
 const STORAGE_KEY = 'shelf-settings'
 
 const tabs = [
+  { key: 'shelf', label: '书架', icon: '📚' },
   { key: 'favorite', label: '收藏', icon: '⭐' },
   { key: 'reading', label: '正在阅读', icon: '📖' },
   { key: 'finished', label: '已读完', icon: '✅' },
@@ -293,12 +486,37 @@ const cardSizes = [
   { value: 'large', label: '大', icon: '◻' },
 ]
 
-const activeTab = ref('favorite')
+interface ShelfGroup {
+  id: number
+  name: string
+  description?: string
+  icon: string
+  color: string
+  sortOrder: number
+  books: Book[]
+}
+
+interface ShelfOverview {
+  ungroupedBooks: Book[]
+  groups: ShelfGroup[]
+  totalBooks: number
+}
+
+const activeTab = ref('shelf')
 const showCreateListDialog = ref(false)
 const bookLists = ref<any[]>([])
 const readingBooks = ref<Book[]>([])
 const readingLoading = ref(false)
 const removingReadingIds = ref(new Set<number>())
+const shelfOverview = ref<ShelfOverview>({ ungroupedBooks: [], groups: [], totalBooks: 0 })
+const shelfLoading = ref(false)
+const selectedShelfGroup = ref<'all' | 'ungrouped' | number>('all')
+const shelfActionBookId = ref<number | null>(null)
+const showShelfGroupDialog = ref(false)
+const savingShelfGroup = ref(false)
+const editingShelfGroup = ref<ShelfGroup | null>(null)
+const shelfGroupIcons = ['📁', '📚', '⭐', '❤️', '🎯', '💡', '🌙', '☕', '🧠', '🚀']
+const shelfGroupForm = ref({ name: '', description: '', icon: '📁', color: '#4f8cff' })
 const viewMode = ref<'grid' | 'list'>('grid')
 const cardSize = ref<'small' | 'medium' | 'large'>('medium')
 
@@ -310,6 +528,25 @@ const newListForm = ref({
 const favoriteBooks = computed(() => bookStore.books.filter((b) => b.isFavorite))
 const finishedBooks = computed(() => bookStore.books.filter((b) => b.readingStatus === 'FINISHED'))
 const wantedBooks = computed(() => bookStore.books.filter((b) => b.isWanted))
+const displayedShelfBooks = computed(() => {
+  if (selectedShelfGroup.value === 'ungrouped') return shelfOverview.value.ungroupedBooks
+  if (typeof selectedShelfGroup.value === 'number') {
+    return shelfOverview.value.groups.find(group => group.id === selectedShelfGroup.value)?.books || []
+  }
+  return [...shelfOverview.value.ungroupedBooks, ...shelfOverview.value.groups.flatMap(group => group.books)]
+    .sort((left, right) => new Date(right.shelfAddedAt || 0).getTime() - new Date(left.shelfAddedAt || 0).getTime())
+})
+const selectedShelfTitle = computed(() => {
+  if (selectedShelfGroup.value === 'all') return '全部书籍'
+  if (selectedShelfGroup.value === 'ungrouped') return '未分组'
+  return shelfOverview.value.groups.find(group => group.id === selectedShelfGroup.value)?.name || '书架分组'
+})
+const selectedShelfDescription = computed(() => {
+  if (selectedShelfGroup.value === 'all') return '默认按照加入书架的时间倒序展示'
+  if (selectedShelfGroup.value === 'ungrouped') return '尚未放入自定义分组的书籍，可使用上移、下移手动调整顺序'
+  return shelfOverview.value.groups.find(group => group.id === selectedShelfGroup.value)?.description
+    || '可使用上移、下移手动调整组内顺序'
+})
 
 // 加载设置
 const loadSettings = () => {
@@ -338,6 +575,164 @@ watch([viewMode, cardSize], saveSettings)
 
 const loadBooks = async () => {
   await bookStore.fetchBooks(0, 100, 'createdAt', 'desc')
+}
+
+const loadShelf = async () => {
+  if (shelfLoading.value) return
+  shelfLoading.value = true
+  try {
+    const response = await api.get<ShelfOverview>('/api/shelf')
+    shelfOverview.value = response.data
+    if (typeof selectedShelfGroup.value === 'number'
+      && !response.data.groups.some(group => group.id === selectedShelfGroup.value)) {
+      selectedShelfGroup.value = 'all'
+    }
+  } catch (error) {
+    console.error('Failed to load shelf:', error)
+    message.error('书架加载失败')
+  } finally {
+    shelfLoading.value = false
+  }
+}
+
+const formatShelfDate = (value?: string) => {
+  if (!value) return '--'
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return '--'
+  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(date)
+}
+
+const openCreateShelfGroup = () => {
+  editingShelfGroup.value = null
+  shelfGroupForm.value = { name: '', description: '', icon: '📁', color: '#4f8cff' }
+  showShelfGroupDialog.value = true
+}
+
+const openEditShelfGroup = (group: ShelfGroup) => {
+  editingShelfGroup.value = group
+  shelfGroupForm.value = {
+    name: group.name,
+    description: group.description || '',
+    icon: group.icon,
+    color: group.color,
+  }
+  showShelfGroupDialog.value = true
+}
+
+const saveShelfGroup = async () => {
+  if (!shelfGroupForm.value.name.trim()) {
+    message.warning('请输入分组名称')
+    return
+  }
+  savingShelfGroup.value = true
+  try {
+    if (editingShelfGroup.value) {
+      await api.put(`/api/shelf/groups/${editingShelfGroup.value.id}`, shelfGroupForm.value)
+      message.success('分组已更新')
+    } else {
+      await api.post('/api/shelf/groups', shelfGroupForm.value)
+      message.success('分组已创建')
+    }
+    showShelfGroupDialog.value = false
+    await loadShelf()
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '分组保存失败')
+  } finally {
+    savingShelfGroup.value = false
+  }
+}
+
+const deleteShelfGroup = async (group: ShelfGroup) => {
+  const approved = await confirm(
+    `确定删除分组“${group.name}”吗？\n\n分组中的书籍会回到“未分组”，不会被移出书架。`,
+    '删除书架分组',
+  )
+  if (!approved) return
+  try {
+    await api.delete(`/api/shelf/groups/${group.id}`)
+    if (selectedShelfGroup.value === group.id) selectedShelfGroup.value = 'ungrouped'
+    await loadShelf()
+    message.success('分组已删除，书籍已移到未分组')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '分组删除失败')
+  }
+}
+
+const moveShelfGroup = async (index: number, offset: number) => {
+  const target = index + offset
+  if (target < 0 || target >= shelfOverview.value.groups.length) return
+  const previous = [...shelfOverview.value.groups]
+  const reordered = [...previous]
+  ;[reordered[index], reordered[target]] = [reordered[target], reordered[index]]
+  shelfOverview.value.groups = reordered
+  try {
+    await api.put('/api/shelf/groups/order', { groupIds: reordered.map(group => group.id) })
+  } catch (error) {
+    shelfOverview.value.groups = previous
+    message.error('分组排序失败')
+  }
+}
+
+const replaceSelectedShelfBooks = (books: Book[]) => {
+  if (selectedShelfGroup.value === 'ungrouped') {
+    shelfOverview.value.ungroupedBooks = books
+    return
+  }
+  if (typeof selectedShelfGroup.value === 'number') {
+    const group = shelfOverview.value.groups.find(item => item.id === selectedShelfGroup.value)
+    if (group) group.books = books
+  }
+}
+
+const moveShelfBookOrder = async (index: number, offset: number) => {
+  if (selectedShelfGroup.value === 'all') return
+  const target = index + offset
+  const current = [...displayedShelfBooks.value]
+  if (target < 0 || target >= current.length) return
+  const previous = [...current]
+  ;[current[index], current[target]] = [current[target], current[index]]
+  replaceSelectedShelfBooks(current)
+  shelfActionBookId.value = current[target].id
+  try {
+    await api.put('/api/shelf/books/order', {
+      groupId: selectedShelfGroup.value === 'ungrouped' ? null : selectedShelfGroup.value,
+      bookIds: current.map(book => book.id),
+    })
+  } catch (error) {
+    replaceSelectedShelfBooks(previous)
+    message.error('书籍排序失败')
+  } finally {
+    shelfActionBookId.value = null
+  }
+}
+
+const moveBookToShelfGroup = async (book: Book, command: string | number | object) => {
+  const value = String(command)
+  const groupId = value === 'ungrouped' ? null : Number(value)
+  shelfActionBookId.value = book.id
+  try {
+    await api.put(`/api/shelf/books/${book.id}/group`, { groupId })
+    await loadShelf()
+    message.success('书籍分组已更新')
+  } catch (error) {
+    message.error('移动书籍失败')
+  } finally {
+    shelfActionBookId.value = null
+  }
+}
+
+const removeShelfBook = async (book: Book) => {
+  shelfActionBookId.value = book.id
+  try {
+    await bookStore.removeFromShelf(book.id)
+    await loadShelf()
+    message.success(`已将《${book.title}》移出书架`)
+  } catch (error) {
+    message.error('移出书架失败')
+  } finally {
+    shelfActionBookId.value = null
+  }
 }
 
 const loadReadingBooks = async () => {
@@ -390,7 +785,9 @@ const loadBookLists = async () => {
 
 const handleTabChange = (tab: string) => {
   activeTab.value = tab
-  if (tab === 'lists') {
+  if (tab === 'shelf') {
+    loadShelf()
+  } else if (tab === 'lists') {
     loadBookLists()
   } else if (tab === 'reading') {
     loadReadingBooks()
@@ -421,6 +818,7 @@ const handleViewList = (list: any) => {
 onMounted(() => {
   loadSettings()
   loadBooks()
+  loadShelf()
   loadReadingBooks()
 })
 </script>
@@ -523,6 +921,196 @@ onMounted(() => {
   color: white;
 }
 
+.shelf-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.shelf-tab-toolbar,
+.shelf-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.shelf-tab-toolbar h2,
+.shelf-section-heading h3 {
+  margin: 0 0 4px;
+  color: var(--text-on-page-bg);
+}
+
+.shelf-tab-toolbar p,
+.shelf-section-heading p {
+  margin: 0;
+  color: var(--text-on-page-bg-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.shelf-section-heading > span {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  color: var(--text-on-page-bg-secondary);
+  background: var(--surface-card);
+  border-radius: 999px;
+  font-size: var(--font-size-sm);
+}
+
+.shelf-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.shelf-folder-card {
+  position: relative;
+  min-height: 132px;
+  padding: var(--spacing-md);
+  overflow: hidden;
+  color: var(--text-primary);
+  text-align: left;
+  background: var(--surface-card);
+  border: 2px solid transparent;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+button.shelf-folder-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  font: inherit;
+}
+
+.shelf-folder-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-3px);
+}
+
+.shelf-folder-card.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-alpha-20);
+}
+
+.shelf-folder-all {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 18%, var(--surface-card)), var(--surface-card));
+}
+
+.shelf-folder-ungrouped {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--warning) 16%, var(--surface-card)), var(--surface-card));
+}
+
+.custom-folder-card {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--folder-color) 24%, var(--surface-card)), var(--surface-card));
+}
+
+.shelf-folder-icon {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.shelf-folder-card strong {
+  margin-top: 10px;
+  overflow: hidden;
+  font-size: var(--font-size-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shelf-folder-card small {
+  margin-top: 3px;
+  color: var(--text-secondary);
+}
+
+.folder-card-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.folder-card-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.folder-card-copy strong {
+  margin-top: 0;
+}
+
+.custom-folder-card > p {
+  display: -webkit-box;
+  min-height: 34px;
+  margin: 12px 0 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.folder-card-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.custom-folder-card:hover .folder-card-actions,
+.custom-folder-card:focus-within .folder-card-actions {
+  opacity: 1;
+}
+
+.folder-card-actions button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--text-primary);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  cursor: pointer;
+  place-items: center;
+}
+
+.folder-card-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.folder-card-actions button.danger {
+  color: var(--danger);
+}
+
+.compact-empty {
+  padding-block: var(--spacing-lg);
+}
+
+.compact-empty .empty-icon {
+  font-size: 42px;
+}
+
+.shelf-list-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.group-appearance-fields {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(120px, 1fr);
+  gap: var(--spacing-lg);
+}
+
 /* 空状态 */
 .empty {
   text-align: center;
@@ -566,6 +1154,18 @@ onMounted(() => {
 
 .books-grid.card-small .book-title {
   font-size: var(--font-size-xs);
+}
+
+.books-grid.card-small .shelf-book-actions {
+  gap: 3px;
+  padding: 6px;
+}
+
+.books-grid.card-small .shelf-book-actions .action-btn {
+  flex-basis: 27px;
+  width: 27px;
+  height: 27px;
+  font-size: 12px;
 }
 
 .books-grid.card-small .book-author {
@@ -1053,6 +1653,30 @@ onMounted(() => {
   .tab-item {
     padding: 8px 12px;
     font-size: var(--font-size-xs);
+  }
+
+  .shelf-tab-toolbar,
+  .shelf-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .shelf-folder-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .folder-card-actions {
+    opacity: 1;
+  }
+
+  .shelf-list-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .group-appearance-fields {
+    grid-template-columns: 1fr;
+    gap: 0;
   }
 }
 

@@ -216,6 +216,7 @@ public class AdminUserService {
         update("DELETE FROM scan_records WHERE user_id = ?", userId);
         update("DELETE FROM scan_directories WHERE user_id = ?", userId);
         update("DELETE FROM books WHERE user_id = ?", userId);
+        update("DELETE FROM shelf_groups WHERE user_id = ?", userId);
         update("UPDATE categories SET parent_id = NULL WHERE user_id = ?", userId);
         update("DELETE FROM categories WHERE user_id = ?", userId);
         update("DELETE FROM tags WHERE user_id = ?", userId);

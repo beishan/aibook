@@ -18,6 +18,10 @@
             <span>📚</span>
             <span>加入书单</span>
           </button>
+          <button class="btn" :class="{ active: book.onShelf }" @click="handleToggleShelf">
+            <span>{{ book.onShelf ? '📚' : '➕' }}</span>
+            <span>{{ book.onShelf ? '已在书架' : '加入书架' }}</span>
+          </button>
           <el-dropdown trigger="click" @command="handleBookActionCommand">
             <button class="btn more-actions-button">
               <span>更多操作</span>
@@ -787,6 +791,17 @@ const handleToggleWanted = async () => {
     message.success('操作成功')
   } catch (error) {
     message.error('操作失败')
+  }
+}
+
+const handleToggleShelf = async () => {
+  try {
+    book.value = book.value.onShelf
+      ? await bookStore.removeFromShelf(book.value.id)
+      : await bookStore.addToShelf(book.value.id)
+    message.success(book.value.onShelf ? '已加入书架' : '已移出书架')
+  } catch (error) {
+    message.error('书架操作失败')
   }
 }
 

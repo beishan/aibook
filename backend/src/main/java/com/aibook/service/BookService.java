@@ -279,6 +279,10 @@ public class BookService {
         book.setCategory(null);
         book.setIsFavorite(false);
         book.setIsWanted(false);
+        book.setOnShelf(false);
+        book.setShelfGroup(null);
+        book.setShelfAddedAt(null);
+        book.setShelfSortOrder(null);
         book.setNotes(null);
         book.setChapterInfo(null);
         book.setPurgedAt(LocalDateTime.now());
@@ -439,6 +443,10 @@ public class BookService {
                         .collect(Collectors.toList()))
                 .isFavorite(book.getIsFavorite())
                 .isWanted(book.getIsWanted())
+                .onShelf(Boolean.TRUE.equals(book.getOnShelf()))
+                .shelfGroupId(book.getShelfGroup() == null ? null : book.getShelfGroup().getId())
+                .shelfAddedAt(book.getShelfAddedAt())
+                .shelfSortOrder(book.getShelfSortOrder())
                 .notes(book.getNotes())
                 .chapterInfo(book.getChapterInfo())
                 .chapterCount(book.getChapterCount())

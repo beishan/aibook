@@ -79,6 +79,18 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     Page<Book> findByUserAndIsWantedAndDeletedAtIsNull(
             @Param("user") User user, @Param("isWanted") Boolean isWanted, Pageable pageable);
 
+    /** 获取用户书架中的全部可见书籍，服务层再按分组组织。 */
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.onShelf = true "
+            + "AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE
+            + " ORDER BY b.shelfSortOrder ASC, b.shelfAddedAt DESC")
+    List<Book> findShelfBooks(@Param("user") User user);
+
+    /** 分组删除时必须包含回收站及书库隐藏书籍，避免遗留外键引用。 */
+    List<Book> findByUserAndShelfGroup(User user, com.aibook.model.entity.ShelfGroup shelfGroup);
+
+    /** 分组删除时计算未分组顺序，包含当前用户全部书架关联。 */
+    List<Book> findByUserAndOnShelfTrue(User user);
+
     /**
      * 全文搜索书籍
      */
