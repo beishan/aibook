@@ -39,6 +39,7 @@ class SystemResourceServiceTest {
         Files.writeString(cgroup.resolve("cpu.max"), "200000 100000\n");
         Files.writeString(cgroup.resolve("memory.current"), "512\n");
         Files.writeString(cgroup.resolve("memory.max"), "1024\n");
+        Files.writeString(cgroup.resolve("memory.stat"), "anon 300\ninactive_file 128\n");
 
         ScanDirectoryRepository repository = mock(ScanDirectoryRepository.class);
         ScanDirectory first = ScanDirectory.builder()
@@ -57,9 +58,9 @@ class SystemResourceServiceTest {
         assertThat(firstResult.scope()).isEqualTo(ResourceScope.CONTAINER);
         assertThat(firstResult.cpu().status()).isEqualTo(ResourceAvailability.AVAILABLE);
         assertThat(firstResult.cpu().usagePercent()).isNull();
-        assertThat(firstResult.memory().usedBytes()).isEqualTo(512L);
+        assertThat(firstResult.memory().usedBytes()).isEqualTo(384L);
         assertThat(firstResult.memory().totalBytes()).isEqualTo(1024L);
-        assertThat(firstResult.memory().usagePercent()).isEqualTo(50d);
+        assertThat(firstResult.memory().usagePercent()).isEqualTo(37.5d);
         assertThat(firstResult.disk().status()).isEqualTo(ResourceAvailability.AVAILABLE);
         assertThat(firstResult.disks()).hasSize(1);
         assertThat(firstResult.disks().getFirst().label()).isEqualTo("书籍存储");
@@ -94,6 +95,7 @@ class SystemResourceServiceTest {
         Files.writeString(cpuacct.resolve("cpuacct.usage"), "1000000\n");
         Files.writeString(memory.resolve("memory.usage_in_bytes"), "256\n");
         Files.writeString(memory.resolve("memory.limit_in_bytes"), "1024\n");
+        Files.writeString(memory.resolve("memory.stat"), "cache 80\ntotal_inactive_file 64\n");
         Path proc = temporaryDirectory.resolve("proc-v1");
         Files.writeString(proc, "2:cpu,cpuacct:/slice/test\n3:memory:/slice/test\n");
 
@@ -105,8 +107,31 @@ class SystemResourceServiceTest {
 
         assertThat(result.scope()).isEqualTo(ResourceScope.CONTAINER);
         assertThat(result.cpu().usagePercent()).isNull();
-        assertThat(result.memory().usedBytes()).isEqualTo(256L);
+        assertThat(result.memory().usedBytes()).isEqualTo(192L);
         assertThat(result.memory().totalBytes()).isEqualTo(1024L);
+    }
+
+    @Test
+    void usesLinuxAvailableMemoryInsteadOfCountingReclaimableCacheAsUsed() throws Exception {
+        ScanDirectoryRepository repository = mock(ScanDirectoryRepository.class);
+        when(repository.findAll()).thenReturn(List.of());
+        Path absent = temporaryDirectory.resolve("absent");
+        Path meminfo = temporaryDirectory.resolve("meminfo");
+        Files.writeString(meminfo, "MemTotal: 33554432 kB\nMemFree: 2097152 kB\nMemAvailable: 23068672 kB\n");
+        SystemResourceService service = new SystemResourceService(
+                repository,
+                absent,
+                absent,
+                meminfo,
+                absent,
+                temporaryDirectory,
+                () -> mock(OperatingSystemMXBean.class));
+
+        SystemResourcesDTO result = service.getResources();
+
+        assertThat(result.memory().totalBytes()).isEqualTo(32L * 1024 * 1024 * 1024);
+        assertThat(result.memory().usedBytes()).isEqualTo(10L * 1024 * 1024 * 1024);
+        assertThat(result.memory().usagePercent()).isEqualTo(31.25d);
     }
 
     @Test
@@ -116,6 +141,7 @@ class SystemResourceServiceTest {
         Path absent = temporaryDirectory.resolve("absent");
         SystemResourceService service = new SystemResourceService(
                 repository,
+                absent,
                 absent,
                 absent,
                 absent,
@@ -137,6 +163,7 @@ class SystemResourceServiceTest {
                 repository,
                 cgroup,
                 procCgroup,
+                temporaryDirectory.resolve("no-meminfo"),
                 temporaryDirectory.resolve("no-docker-marker"),
                 temporaryDirectory,
                 () -> mock(OperatingSystemMXBean.class));

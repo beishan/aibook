@@ -37,6 +37,7 @@ public class SystemResourceService {
     private final ScanDirectoryRepository scanDirectoryRepository;
     private final Path cgroupRoot;
     private final Path procSelfCgroup;
+    private final Path procMeminfo;
     private final Path dockerEnvironment;
     private final Path workingDirectory;
     private final Supplier<OperatingSystemMXBean> operatingSystemBeanSupplier;
@@ -50,6 +51,7 @@ public class SystemResourceService {
                 scanDirectoryRepository,
                 Path.of("/sys/fs/cgroup"),
                 Path.of("/proc/self/cgroup"),
+                Path.of("/proc/meminfo"),
                 Path.of("/.dockerenv"),
                 Path.of(System.getProperty("user.dir", ".")),
                 ManagementFactory::getOperatingSystemMXBean);
@@ -59,12 +61,14 @@ public class SystemResourceService {
             ScanDirectoryRepository scanDirectoryRepository,
             Path cgroupRoot,
             Path procSelfCgroup,
+            Path procMeminfo,
             Path dockerEnvironment,
             Path workingDirectory,
             Supplier<OperatingSystemMXBean> operatingSystemBeanSupplier) {
         this.scanDirectoryRepository = scanDirectoryRepository;
         this.cgroupRoot = cgroupRoot;
         this.procSelfCgroup = procSelfCgroup;
+        this.procMeminfo = procMeminfo;
         this.dockerEnvironment = dockerEnvironment;
         this.workingDirectory = workingDirectory;
         this.operatingSystemBeanSupplier = operatingSystemBeanSupplier;
@@ -201,8 +205,28 @@ public class SystemResourceService {
         if (total <= 0 || total >= UNLIMITED_CGROUP_MEMORY) {
             return unavailableMetric();
         }
-        long used = Math.max(0, Math.min(total, readLong(usagePath)));
+        long current = readLong(usagePath);
+        long reclaimableCache = readReclaimableCgroupCache(version);
+        long used = Math.max(0, Math.min(total, current - reclaimableCache));
         return metric(used, total, ResourceAvailability.AVAILABLE);
+    }
+
+    private long readReclaimableCgroupCache(CgroupVersion version) {
+        Path statPath;
+        try {
+            statPath = version == CgroupVersion.V2
+                    ? cgroupRoot.resolve("memory.stat")
+                    : cgroupFile("memory", "memory.stat");
+            if (!Files.isReadable(statPath)) {
+                return 0;
+            }
+            Map<String, Long> stats = readKeyValueBytes(statPath);
+            return Math.max(0, version == CgroupVersion.V2
+                    ? stats.getOrDefault("inactive_file", 0L)
+                    : stats.getOrDefault("total_inactive_file", stats.getOrDefault("inactive_file", 0L)));
+        } catch (IOException | NumberFormatException ignored) {
+            return 0;
+        }
     }
 
     private ResourceMetricDTO collectOperatingSystemCpu() {
@@ -223,6 +247,17 @@ public class SystemResourceService {
 
     private ResourceMetricDTO collectOperatingSystemMemory() {
         try {
+            Map<String, Long> memoryInfo = readMeminfoBytes(procMeminfo);
+            Long total = memoryInfo.get("MemTotal");
+            Long available = memoryInfo.get("MemAvailable");
+            if (total != null && total > 0 && available != null && available >= 0) {
+                return metric(Math.max(0, total - Math.min(total, available)), total,
+                        ResourceAvailability.AVAILABLE);
+            }
+        } catch (IOException | NumberFormatException ignored) {
+            // Fall through to the JVM-visible metric on non-Linux systems.
+        }
+        try {
             OperatingSystemMXBean bean = operatingSystemBeanSupplier.get();
             if (bean instanceof com.sun.management.OperatingSystemMXBean extended) {
                 long total = extended.getTotalMemorySize();
@@ -235,6 +270,32 @@ public class SystemResourceService {
             // Return a partial response below.
         }
         return unavailableMetric();
+    }
+
+    private static Map<String, Long> readMeminfoBytes(Path path) throws IOException {
+        Map<String, Long> values = new LinkedHashMap<>();
+        for (String line : Files.readAllLines(path)) {
+            String[] parts = line.trim().split("\\s+");
+            if (parts.length >= 2 && parts[0].endsWith(":")) {
+                String name = parts[0].substring(0, parts[0].length() - 1);
+                long value = Long.parseLong(parts[1]);
+                values.put(name, parts.length >= 3 && "kB".equalsIgnoreCase(parts[2])
+                        ? Math.multiplyExact(value, 1024L)
+                        : value);
+            }
+        }
+        return values;
+    }
+
+    private static Map<String, Long> readKeyValueBytes(Path path) throws IOException {
+        Map<String, Long> values = new LinkedHashMap<>();
+        for (String line : Files.readAllLines(path)) {
+            String[] parts = line.trim().split("\\s+", 2);
+            if (parts.length == 2) {
+                values.put(parts[0], Long.parseLong(parts[1]));
+            }
+        }
+        return values;
     }
 
     private DiskCollection collectDisks() {

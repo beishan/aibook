@@ -590,8 +590,8 @@ const resourceMetricDescription = (metric: ResourceMetric | undefined, emptyText
 
 const resourceScopeDescription = computed(() => {
   switch (systemResources.value?.scope) {
-    case 'CONTAINER': return '容器范围：CPU 与内存优先按本容器 cgroup 限额统计。'
-    case 'HOST': return '宿主机范围：显示应用可见的系统资源。'
+    case 'CONTAINER': return '容器范围：CPU 与内存优先按本容器 cgroup 限额统计，已用内存不含可回收文件缓存。'
+    case 'HOST': return '宿主机范围：显示应用可见的系统资源，已用内存按系统可用量计算。'
     default: return '可见范围未知：显示应用当前可读取的资源信息。'
   }
 })
