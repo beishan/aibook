@@ -92,7 +92,11 @@
 
     <!-- 正在阅读 -->
     <div v-show="activeTab === 'reading'" class="tab-content">
-      <div v-if="readingBooks.length === 0" class="empty glass">
+      <div v-if="readingLoading" class="loading glass">
+        <div class="loading-spinner"></div>
+        <p>正在加载...</p>
+      </div>
+      <div v-else-if="readingBooks.length === 0" class="empty glass">
         <div class="empty-icon">📖</div>
         <p>暂无正在阅读的书籍</p>
         <button class="btn btn-primary" @click="$router.push('/books')">去书库看看</button>
@@ -107,6 +111,17 @@
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
             <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+            <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
+              <button
+                class="action-btn remove-reading-action"
+                :disabled="removingReadingIds.has(book.id)"
+                aria-label="移除正在阅读"
+                title="移除正在阅读"
+                @click.stop="removeFromReading(book)"
+              >
+                <span class="action-icon">{{ removingReadingIds.has(book.id) ? '…' : '✕' }}</span>
+              </button>
+            </div>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ book.title }}</div>
@@ -116,6 +131,14 @@
               <span v-if="book.publisher">{{ book.publisher }}</span>
             </div>
           </div>
+          <button
+            v-if="viewMode === 'list'"
+            class="btn btn-text remove-reading-list-action"
+            :disabled="removingReadingIds.has(book.id)"
+            @click.stop="removeFromReading(book)"
+          >
+            {{ removingReadingIds.has(book.id) ? '处理中...' : '移除正在阅读' }}
+          </button>
         </div>
       </div>
     </div>
@@ -249,6 +272,7 @@ import { message } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
+import type { Book } from '@/stores/book'
 
 const router = useRouter()
 const bookStore = useBookStore()
@@ -272,6 +296,9 @@ const cardSizes = [
 const activeTab = ref('favorite')
 const showCreateListDialog = ref(false)
 const bookLists = ref<any[]>([])
+const readingBooks = ref<Book[]>([])
+const readingLoading = ref(false)
+const removingReadingIds = ref(new Set<number>())
 const viewMode = ref<'grid' | 'list'>('grid')
 const cardSize = ref<'small' | 'medium' | 'large'>('medium')
 
@@ -281,7 +308,6 @@ const newListForm = ref({
 })
 
 const favoriteBooks = computed(() => bookStore.books.filter((b) => b.isFavorite))
-const readingBooks = computed(() => bookStore.books.filter((b) => b.readingStatus === 'READING'))
 const finishedBooks = computed(() => bookStore.books.filter((b) => b.readingStatus === 'FINISHED'))
 const wantedBooks = computed(() => bookStore.books.filter((b) => b.isWanted))
 
@@ -314,6 +340,45 @@ const loadBooks = async () => {
   await bookStore.fetchBooks(0, 100, 'createdAt', 'desc')
 }
 
+const loadReadingBooks = async () => {
+  if (readingLoading.value) return
+  readingLoading.value = true
+  try {
+    const books: Book[] = []
+    let page = 0
+    let totalPages = 1
+    do {
+      const response = await api.get('/api/books', {
+        params: { page, size: 100, sortBy: 'updatedAt', sortDir: 'desc', status: 'READING' },
+      })
+      books.push(...response.data.content)
+      totalPages = response.data.totalPages
+      page += 1
+    } while (page < totalPages)
+    readingBooks.value = books
+  } catch (error) {
+    console.error('Failed to load reading books:', error)
+    message.error('正在阅读书籍加载失败')
+  } finally {
+    readingLoading.value = false
+  }
+}
+
+const removeFromReading = async (book: Book) => {
+  if (removingReadingIds.value.has(book.id)) return
+  removingReadingIds.value.add(book.id)
+  try {
+    await bookStore.updateReadingStatus(book.id, 'UNREADING')
+    readingBooks.value = readingBooks.value.filter(item => item.id !== book.id)
+    message.success(`已将《${book.title}》移出正在阅读`)
+  } catch (error) {
+    console.error('Failed to remove reading book:', error)
+    message.error('移除正在阅读失败')
+  } finally {
+    removingReadingIds.value.delete(book.id)
+  }
+}
+
 const loadBookLists = async () => {
   try {
     const response = await api.get('/api/booklists')
@@ -327,6 +392,8 @@ const handleTabChange = (tab: string) => {
   activeTab.value = tab
   if (tab === 'lists') {
     loadBookLists()
+  } else if (tab === 'reading') {
+    loadReadingBooks()
   }
 }
 
@@ -354,6 +421,7 @@ const handleViewList = (list: any) => {
 onMounted(() => {
   loadSettings()
   loadBooks()
+  loadReadingBooks()
 })
 </script>
 
@@ -543,6 +611,7 @@ onMounted(() => {
 }
 
 .book-card {
+  position: relative;
   background: var(--surface-card);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -560,12 +629,101 @@ onMounted(() => {
 
 .book-cover {
   height: 200px;
+  position: relative;
+  overflow: hidden;
 }
 
 .book-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.book-cover-actions {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 9px 10px;
+  background: rgba(15, 23, 42, 0.72);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+  opacity: 0;
+  transform: translateY(-105%);
+  transition: transform 0.24s ease, opacity 0.2s ease;
+}
+
+.book-card:hover .book-cover-actions,
+.book-card:focus-within .book-cover-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.action-btn {
+  position: relative;
+  display: flex;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.82);
+  border-color: rgba(254, 202, 202, 0.9);
+  transform: translateY(-1px);
+}
+
+.action-btn:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.action-icon {
+  position: relative;
+  z-index: 1;
+}
+
+.remove-reading-list-action {
+  flex: 0 0 auto;
+  color: var(--danger);
+  white-space: nowrap;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  gap: var(--spacing-sm);
+  color: var(--text-secondary);
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: shelf-spin 0.8s linear infinite;
+}
+
+@keyframes shelf-spin {
+  to { transform: rotate(360deg); }
 }
 
 .no-cover {
@@ -895,6 +1053,19 @@ onMounted(() => {
   .tab-item {
     padding: 8px 12px;
     font-size: var(--font-size-xs);
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .book-cover-actions {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .book-cover-actions {
+    transition: none;
   }
 }
 </style>

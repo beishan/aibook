@@ -152,6 +152,19 @@ export const useBookStore = defineStore('book', () => {
     return updatedBook
   }
 
+  async function updateReadingStatus(id: number, status: 'UNREADING' | 'READING' | 'FINISHED') {
+    const response = await api.put(`/api/books/${id}/status`, { status })
+    const updatedBook: Book = response.data
+    const index = books.value.findIndex((book) => book.id === id)
+    if (index !== -1) {
+      books.value[index] = updatedBook
+    }
+    if (currentBook.value?.id === id) {
+      currentBook.value = updatedBook
+    }
+    return updatedBook
+  }
+
   // 移入系统回收站（NAS 原始文件不作改动）
   async function deleteBook(id: number) {
     await api.delete(`/api/books/${id}`)
@@ -311,6 +324,7 @@ export const useBookStore = defineStore('book', () => {
     fetchBookById,
     toggleFavorite,
     toggleWanted,
+    updateReadingStatus,
     deleteBook,
     fetchTrash,
     fetchTrashCount,

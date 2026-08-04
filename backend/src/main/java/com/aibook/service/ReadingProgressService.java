@@ -78,14 +78,13 @@ public class ReadingProgressService {
         progress.setTotalProgress(totalProgress);
         progress.setLastReadAt(LocalDateTime.now());
 
-        // 如果进度为100%，自动标记为已读完
+        // 保存进度即表示用户已经开始阅读；即使首屏进度仍为 0，也应进入“正在阅读”。
         if (totalProgress != null && totalProgress >= 100) {
             book.setReadingStatus(Book.ReadingStatus.FINISHED);
-            bookRepository.save(book);
-        } else if (totalProgress != null && totalProgress > 0) {
+        } else {
             book.setReadingStatus(Book.ReadingStatus.READING);
-            bookRepository.save(book);
         }
+        bookRepository.save(book);
 
         VersionReadingProgress saved = versionProgressRepository.save(progress);
         syncAggregateProgress(book, user, saved);
@@ -113,6 +112,12 @@ public class ReadingProgressService {
                 ? 0L : progress.getReadingTimeSeconds();
         progress.setReadingTimeSeconds(currentSeconds + additionalSeconds);
         progress.setLastReadAt(LocalDateTime.now());
+
+        // 某些阅读器会先上报阅读时长再上报页面进度，同样应出现在“正在阅读”中。
+        if (book.getReadingStatus() != Book.ReadingStatus.FINISHED) {
+            book.setReadingStatus(Book.ReadingStatus.READING);
+            bookRepository.save(book);
+        }
 
         VersionReadingProgress saved = versionProgressRepository.save(progress);
         syncAggregateProgress(book, user, saved);
