@@ -284,6 +284,15 @@
       <div class="card glass">
         <div class="card-header">
           <span>ℹ️ 系统信息</span>
+          <button
+            v-if="isAdmin"
+            class="btn system-resource-refresh"
+            :disabled="resourceLoading"
+            @click="loadSystemResources(true)"
+          >
+            <span :class="{ 'refresh-spinning': resourceLoading }">↻</span>
+            <span>{{ resourceLoading ? '采集中...' : '刷新' }}</span>
+          </button>
         </div>
 
         <div class="info-list grouped-list">
@@ -314,6 +323,59 @@
             </span>
           </div>
         </div>
+
+        <section v-if="isAdmin" class="system-resources" aria-label="系统资源占用">
+          <div class="system-resources-heading">
+            <div>
+              <div class="system-resources-title">
+                <h2>系统资源</h2>
+                <span v-if="systemResources" class="tag" :class="resourceStatusClass">
+                  {{ resourceStatusText }}
+                </span>
+              </div>
+              <p>{{ resourceScopeDescription }}</p>
+            </div>
+            <span class="resource-collected-at">
+              最近采集：{{ systemResources?.collectedAt ? formatChinaDateTime(systemResources.collectedAt) : '--' }}
+            </span>
+          </div>
+
+          <div class="resource-grid">
+            <article class="resource-card">
+              <div class="resource-card-title"><span>CPU</span><span>{{ formatPercent(systemResources?.cpu.usagePercent) }}</span></div>
+              <el-progress
+                :percentage="progressPercent(systemResources?.cpu.usagePercent)"
+                :show-text="false"
+                :color="progressColor(systemResources?.cpu.usagePercent)"
+              />
+              <p>{{ resourceMetricDescription(systemResources?.cpu, 'CPU 首次采样将在下一次刷新后显示') }}</p>
+            </article>
+            <article class="resource-card">
+              <div class="resource-card-title"><span>内存</span><span>{{ formatPercent(systemResources?.memory.usagePercent) }}</span></div>
+              <el-progress
+                :percentage="progressPercent(systemResources?.memory.usagePercent)"
+                :show-text="false"
+                :color="progressColor(systemResources?.memory.usagePercent)"
+              />
+              <p>{{ formatUsage(systemResources?.memory) }}</p>
+            </article>
+            <article class="resource-card">
+              <div class="resource-card-title"><span>磁盘</span><span>{{ formatPercent(systemResources?.disk.usagePercent) }}</span></div>
+              <el-progress
+                :percentage="progressPercent(systemResources?.disk.usagePercent)"
+                :show-text="false"
+                :color="progressColor(systemResources?.disk.usagePercent)"
+              />
+              <p>{{ formatUsage(systemResources?.disk) }}</p>
+            </article>
+          </div>
+
+          <div v-if="systemResources?.disks?.length" class="disk-volumes">
+            <span v-for="volume in systemResources.disks" :key="volume.label">
+              {{ volume.label }}：{{ formatBytes(volume.usedBytes) }} / {{ formatBytes(volume.totalBytes) }}
+            </span>
+          </div>
+        </section>
       </div>
     </div>
       </main>
@@ -407,10 +469,40 @@ interface SystemRuntime {
   uptimeMillis: number
 }
 
+type ResourceStatus = 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE'
+type ResourceScope = 'CONTAINER' | 'HOST' | 'UNKNOWN'
+
+interface ResourceMetric {
+  usagePercent: number | null
+  usedBytes: number | null
+  totalBytes: number | null
+  status: ResourceStatus
+}
+
+interface SystemResources {
+  scope: ResourceScope
+  status: ResourceStatus
+  collectedAt: string
+  cpu: ResourceMetric
+  memory: ResourceMetric
+  disk: ResourceMetric
+  disks: Array<{
+    label: string
+    usedBytes: number | null
+    totalBytes: number | null
+    status: ResourceStatus
+  }>
+}
+
 const systemRuntime = ref<SystemRuntime | null>(null)
 const runtimeLoadedAt = ref(0)
 const runtimeClock = ref(Date.now())
 let runtimeClockTimer: ReturnType<typeof setInterval> | null = null
+const systemResources = ref<SystemResources | null>(null)
+const resourceLoading = ref(false)
+let resourceRefreshTimer: ReturnType<typeof setInterval> | null = null
+let resourceRequest: Promise<void> | null = null
+let resourceErrorShown = false
 
 const formatDuration = (milliseconds: number) => {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000))
@@ -439,6 +531,97 @@ const loadSystemRuntime = async () => {
     runtimeClock.value = runtimeLoadedAt.value
   } catch (error: any) {
     message.error(error.response?.data?.message || '系统运行信息加载失败')
+  }
+}
+
+const loadSystemResources = async (manual = false) => {
+  if (!isAdmin.value || resourceRequest) return resourceRequest
+  resourceLoading.value = true
+  resourceRequest = api.get<SystemResources>('/api/system/resources')
+    .then(({ data }) => {
+      systemResources.value = data
+      resourceErrorShown = false
+    })
+    .catch((error: any) => {
+      if (manual || !resourceErrorShown) {
+        message.error(error.response?.data?.message || '系统资源信息加载失败')
+        resourceErrorShown = true
+      }
+    })
+    .finally(() => {
+      resourceLoading.value = false
+      resourceRequest = null
+    })
+  return resourceRequest
+}
+
+const formatBytes = (value: number | null | undefined) => {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '--'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let amount = Math.max(0, value)
+  let unit = 0
+  while (amount >= 1024 && unit < units.length - 1) {
+    amount /= 1024
+    unit += 1
+  }
+  return `${amount >= 10 || unit === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[unit]}`
+}
+
+const formatPercent = (value: number | null | undefined) =>
+  value === null || value === undefined || !Number.isFinite(value) ? '--' : `${value.toFixed(1)}%`
+
+const progressPercent = (value: number | null | undefined) =>
+  value === null || value === undefined || !Number.isFinite(value) ? 0 : Math.min(100, Math.max(0, value))
+
+const progressColor = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return 'var(--border-color)'
+  if (value >= 90) return 'var(--danger)'
+  if (value >= 75) return 'var(--warning)'
+  return 'var(--success)'
+}
+
+const formatUsage = (metric: ResourceMetric | undefined) =>
+  metric?.usedBytes === null || metric?.usedBytes === undefined || metric?.totalBytes === null || metric?.totalBytes === undefined
+    ? '--'
+    : `${formatBytes(metric.usedBytes)} / ${formatBytes(metric.totalBytes)}`
+
+const resourceMetricDescription = (metric: ResourceMetric | undefined, emptyText: string) =>
+  metric?.usagePercent === null || metric?.usagePercent === undefined ? emptyText : '当前 CPU 使用率'
+
+const resourceScopeDescription = computed(() => {
+  switch (systemResources.value?.scope) {
+    case 'CONTAINER': return '容器范围：CPU 与内存优先按本容器 cgroup 限额统计。'
+    case 'HOST': return '宿主机范围：显示应用可见的系统资源。'
+    default: return '可见范围未知：显示应用当前可读取的资源信息。'
+  }
+})
+
+const resourceStatusText = computed(() => {
+  switch (systemResources.value?.status) {
+    case 'AVAILABLE': return '指标正常'
+    case 'PARTIAL': return '部分指标不可用'
+    case 'UNAVAILABLE': return '指标不可用'
+    default: return '等待采集'
+  }
+})
+
+const resourceStatusClass = computed(() =>
+  systemResources.value?.status === 'AVAILABLE' ? 'tag-success' : 'tag-info'
+)
+
+const refreshResourcesWhenVisible = () => {
+  if (activeTab.value === 'info' && document.visibilityState === 'visible') {
+    void loadSystemResources()
+  }
+}
+
+const updateResourceRefreshTimer = () => {
+  if (resourceRefreshTimer) {
+    clearInterval(resourceRefreshTimer)
+    resourceRefreshTimer = null
+  }
+  if (isAdmin.value && activeTab.value === 'info') {
+    resourceRefreshTimer = setInterval(refreshResourcesWhenVisible, 10_000)
   }
 }
 
@@ -520,6 +703,10 @@ watch(
   [() => route.query.tab, isAdmin],
   ([tab]) => syncActiveTab(tab)
 )
+watch([activeTab, isAdmin], ([tab, admin]) => {
+  updateResourceRefreshTimer()
+  if (tab === 'info' && admin) void loadSystemResources()
+})
 const loading = ref(false)
 const adding = ref(false)
 const showAddDialog = ref(false)
@@ -806,12 +993,17 @@ onMounted(async () => {
   runtimeClockTimer = setInterval(() => {
     runtimeClock.value = Date.now()
   }, 1000)
+  document.addEventListener('visibilitychange', refreshResourcesWhenVisible)
+  updateResourceRefreshTimer()
+  if (activeTab.value === 'info' && isAdmin.value) await loadSystemResources()
 })
 
 onUnmounted(() => {
   scanPollTimers.forEach(timer => clearTimeout(timer))
   scanPollTimers.clear()
   if (runtimeClockTimer) clearInterval(runtimeClockTimer)
+  if (resourceRefreshTimer) clearInterval(resourceRefreshTimer)
+  document.removeEventListener('visibilitychange', refreshResourcesWhenVisible)
 })
 </script>
 
@@ -1178,6 +1370,96 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
+.system-resource-refresh {
+  margin-left: auto;
+}
+
+.refresh-spinning {
+  display: inline-block;
+  animation: spin 0.8s linear infinite;
+}
+
+.system-resources {
+  padding: var(--spacing-lg);
+  border-top: 1px solid var(--border-color-light);
+}
+
+.system-resources-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+}
+
+.system-resources-heading h2 {
+  margin: 0 0 var(--spacing-xs);
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+}
+
+.system-resources-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.system-resources-title h2 {
+  margin-bottom: 0;
+}
+
+.system-resources-heading p,
+.resource-collected-at,
+.resource-card p,
+.disk-volumes {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.resource-collected-at {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-md);
+}
+
+.resource-card {
+  min-width: 0;
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+}
+
+.resource-card-title {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.resource-card p {
+  min-height: 20px;
+  margin-top: var(--spacing-sm);
+}
+
+.disk-volumes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs) var(--spacing-md);
+  margin-top: var(--spacing-md);
+}
+
 /* 主题选择 */
 .theme-grid {
   display: grid;
@@ -1382,6 +1664,10 @@ onUnmounted(() => {
   .theme-grid {
     grid-template-columns: 1fr;
   }
+
+  .resource-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1420,6 +1706,15 @@ onUnmounted(() => {
   .directory-header-actions {
     align-items: stretch;
     flex-direction: column-reverse;
+  }
+
+  .system-resources-heading {
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+
+  .resource-collected-at {
+    text-align: left;
   }
 }
 </style>
