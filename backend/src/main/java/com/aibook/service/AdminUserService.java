@@ -210,6 +210,8 @@ public class AdminUserService {
                 + ownedBooks + ")", userId, userId);
         update("DELETE FROM book_tags WHERE book_id IN (" + ownedBooks + ")", userId);
         update("DELETE FROM book_versions WHERE book_id IN (" + ownedBooks + ")", userId);
+        update("DELETE FROM book_scan_sources WHERE user_id = ? OR book_id IN ("
+                + ownedBooks + ")", userId, userId);
         update("DELETE FROM book_lists WHERE user_id = ?", userId);
         update("DELETE FROM scan_records WHERE user_id = ?", userId);
         update("DELETE FROM scan_directories WHERE user_id = ?", userId);

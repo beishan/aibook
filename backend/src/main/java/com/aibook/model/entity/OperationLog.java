@@ -74,6 +74,7 @@ public class OperationLog {
         RESET_PASSWORD,
         UPDATE_PROFILE,
         UPDATE_AVATAR,
-        UPDATE_SITE_FAVICON
+        UPDATE_SITE_FAVICON,
+        UPDATE_SCAN_DIRECTORY_VISIBILITY
     }
 }

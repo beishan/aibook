@@ -174,6 +174,7 @@ public class ScanDirectoryTaskService {
                     task.userId,
                     task.threadCount,
                     task.defaultCategoryId,
+                    task.directoryId,
                     task.result);
 
             if (task.result.getErrors().isEmpty()) {

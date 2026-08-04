@@ -97,7 +97,7 @@ public class FileScannerService {
             Path dir = Paths.get(dirPath);
             if (Files.exists(dir) && Files.isDirectory(dir)) {
                 try {
-                    scanDirectory(dir, userId, null, threadCount, result);
+                    scanDirectory(dir, userId, null, null, threadCount, result);
                 } catch (IOException e) {
                     log.error("扫描目录失败: {}", dirPath, e);
                     result.addError(dirPath, e.getMessage());
@@ -123,11 +123,18 @@ public class FileScannerService {
      * 扫描指定目录，并为新导入书籍设置默认分类。
      */
     public ScanResult scanDirectory(String dirPath, User user, Long defaultCategoryId) {
+        return scanDirectory(dirPath, user, defaultCategoryId, null);
+    }
+
+    /** 扫描受管目录，并把每本发现的书关联到该目录来源。 */
+    public ScanResult scanDirectory(
+            String dirPath, User user, Long defaultCategoryId, Long directoryId) {
         return scanDirectory(
                 dirPath,
                 Objects.requireNonNull(user.getId(), "扫描用户 ID 不能为空"),
                 ScanSettings.normalizeThreadCount(user.getScanThreadCount()),
                 defaultCategoryId,
+                directoryId,
                 new ScanResult());
     }
 
@@ -140,6 +147,16 @@ public class FileScannerService {
             int threadCount,
             Long defaultCategoryId,
             ScanResult result) {
+        return scanDirectory(dirPath, userId, threadCount, defaultCategoryId, null, result);
+    }
+
+    public ScanResult scanDirectory(
+            String dirPath,
+            Long userId,
+            int threadCount,
+            Long defaultCategoryId,
+            Long directoryId,
+            ScanResult result) {
         result.setStartTime(System.currentTimeMillis());
         threadCount = ScanSettings.normalizeThreadCount(threadCount);
 
@@ -150,6 +167,7 @@ public class FileScannerService {
                         dir,
                         userId,
                         defaultCategoryId,
+                        directoryId,
                         threadCount,
                         result);
             } catch (IOException e) {
@@ -186,6 +204,7 @@ public class FileScannerService {
             Path dir,
             Long userId,
             Long defaultCategoryId,
+            Long directoryId,
             int threadCount,
             ScanResult result) throws IOException {
         result.setThreadCount(threadCount);
@@ -219,6 +238,7 @@ public class FileScannerService {
                                     file,
                                     userId,
                                     defaultCategoryId,
+                                    directoryId,
                                     claimedHashes,
                                     result));
                 }
@@ -248,6 +268,7 @@ public class FileScannerService {
             Path file,
             Long userId,
             Long defaultCategoryId,
+            Long directoryId,
             Set<String> claimedHashes,
             ScanResult result) {
         String claimedHash = null;
@@ -256,6 +277,10 @@ public class FileScannerService {
             String format = getFileFormat(file);
 
             if (!claimedHashes.add(fileHash)) {
+                if (directoryId != null) {
+                    scannedBookPersistenceService.recordExistingSource(
+                            fileHash, userId, directoryId);
+                }
                 result.addSkipped(file.toString());
                 return;
             }
@@ -263,9 +288,16 @@ public class FileScannerService {
 
             // 检查是否已存在
             Optional<Book> existingBook = bookRepository.findByFileHash(fileHash);
-            if (existingBook.isPresent()
-                    || (bookVersionRepository != null
-                    && bookVersionRepository.findByFileHash(fileHash).isPresent())) {
+            Optional<com.aibook.model.entity.BookVersion> existingVersion = bookVersionRepository == null
+                    ? Optional.empty()
+                    : bookVersionRepository.findByFileHash(fileHash);
+            if (existingBook.isPresent() || existingVersion.isPresent()) {
+                if (directoryId != null) {
+                    existingBook.ifPresent(book -> scannedBookPersistenceService.recordExistingSource(
+                            book, userId, directoryId));
+                    existingVersion.ifPresent(version -> scannedBookPersistenceService.recordExistingSource(
+                            version.getBook(), userId, directoryId));
+                }
                 result.addSkipped(file.toString());
                 return;
             }
@@ -282,7 +314,11 @@ public class FileScannerService {
             // 尝试提取元数据
             extractMetadata(file, book);
 
-            scannedBookPersistenceService.save(book, userId, defaultCategoryId);
+            if (directoryId == null) {
+                scannedBookPersistenceService.save(book, userId, defaultCategoryId);
+            } else {
+                scannedBookPersistenceService.save(book, userId, defaultCategoryId, directoryId);
+            }
             result.addNew(file.toString());
             log.info("成功导入书籍: {}", book.getTitle());
 

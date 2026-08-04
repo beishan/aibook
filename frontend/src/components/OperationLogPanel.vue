@@ -93,6 +93,7 @@ const actionLabels: Record<string, { label: string; className: string }> = {
   UPDATE_PROFILE: { label: '个人资料', className: 'tag-primary' },
   UPDATE_AVATAR: { label: '个人头像', className: 'tag-primary' },
   UPDATE_SITE_FAVICON: { label: '网站图标', className: 'tag-primary' },
+  UPDATE_SCAN_DIRECTORY_VISIBILITY: { label: '书库显示设置', className: 'tag-primary' },
 }
 
 const actionMeta = (action: string) =>

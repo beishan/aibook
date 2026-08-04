@@ -4,6 +4,8 @@ import com.aibook.model.entity.Book;
 import com.aibook.model.entity.Category;
 import com.aibook.model.entity.Tag;
 import com.aibook.model.entity.User;
+import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,14 +13,16 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
-import java.util.Optional;
-
 /**
  * 书籍 Repository
  */
 @Repository
 public interface BookRepository extends JpaRepository<Book, Long> {
+
+    String LIBRARY_VISIBLE = " (NOT EXISTS (SELECT source FROM BookScanSource source "
+            + "WHERE source.book = b) OR EXISTS (SELECT source FROM BookScanSource source "
+            + "WHERE source.book = b AND (source.scanDirectory.libraryVisible = true "
+            + "OR source.scanDirectory.libraryVisible IS NULL))) ";
 
     /**
      * 根据文件哈希查找书籍
@@ -34,31 +38,40 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     /**
      * 根据用户分页查询书籍
      */
-    Page<Book> findByUserAndDeletedAtIsNull(User user, Pageable pageable);
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE)
+    Page<Book> findByUserAndDeletedAtIsNull(@Param("user") User user, Pageable pageable);
 
     /**
      * 根据用户和格式查询书籍
      */
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.format = :format "
+            + "AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE)
     Page<Book> findByUserAndFormatAndDeletedAtIsNull(
-            User user, String format, Pageable pageable);
+            @Param("user") User user, @Param("format") String format, Pageable pageable);
 
     /**
      * 根据用户和阅读状态查询书籍
      */
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.readingStatus = :status "
+            + "AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE)
     Page<Book> findByUserAndReadingStatusAndDeletedAtIsNull(
-            User user, Book.ReadingStatus status, Pageable pageable);
+            @Param("user") User user, @Param("status") Book.ReadingStatus status, Pageable pageable);
 
     /**
      * 根据用户和收藏状态查询书籍
      */
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.isFavorite = :isFavorite "
+            + "AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE)
     Page<Book> findByUserAndIsFavoriteAndDeletedAtIsNull(
-            User user, Boolean isFavorite, Pageable pageable);
+            @Param("user") User user, @Param("isFavorite") Boolean isFavorite, Pageable pageable);
 
     /**
      * 根据用户和想读状态查询书籍
      */
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.isWanted = :isWanted "
+            + "AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE)
     Page<Book> findByUserAndIsWantedAndDeletedAtIsNull(
-            User user, Boolean isWanted, Pageable pageable);
+            @Param("user") User user, @Param("isWanted") Boolean isWanted, Pageable pageable);
 
     /**
      * 全文搜索书籍
@@ -67,52 +80,67 @@ public interface BookRepository extends JpaRepository<Book, Long> {
            "LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(b.author) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(b.isbn) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(b.description) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+           "LOWER(b.description) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND" + LIBRARY_VISIBLE)
     Page<Book> searchByKeyword(@Param("user") User user, @Param("keyword") String keyword, Pageable pageable);
 
     /**
      * 根据用户和分类查询书籍
      */
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.category.id = :categoryId "
+            + "AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE)
     Page<Book> findByUserAndCategoryIdAndDeletedAtIsNull(
-            User user, Long categoryId, Pageable pageable);
+            @Param("user") User user, @Param("categoryId") Long categoryId, Pageable pageable);
 
     /**
      * 根据多个分类查询书籍（包含子分类筛选）。
      */
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.category.id IN :categoryIds "
+            + "AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE)
     Page<Book> findByUserAndCategoryIdInAndDeletedAtIsNull(
-            User user, List<Long> categoryIds, Pageable pageable);
+            @Param("user") User user, @Param("categoryIds") List<Long> categoryIds, Pageable pageable);
 
     /**
      * 获取某分类下的书籍，用于分类删除和合并。
      */
-    List<Book> findByUserAndCategoryAndDeletedAtIsNull(User user, Category category);
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.category = :category "
+            + "AND b.deletedAt IS NULL")
+    List<Book> findByUserAndCategoryAndDeletedAtIsNull(
+            @Param("user") User user, @Param("category") Category category);
 
     /**
      * 统计某分类下的书籍。
      */
-    long countByUserAndCategoryAndDeletedAtIsNull(User user, Category category);
+    @Query("SELECT COUNT(b) FROM Book b WHERE b.user = :user AND b.category = :category "
+            + "AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE)
+    long countByUserAndCategoryAndDeletedAtIsNull(
+            @Param("user") User user, @Param("category") Category category);
 
     /**
      * 统计使用指定标签的书籍。
      */
-    long countByUserAndTagsContainingAndDeletedAtIsNull(User user, Tag tag);
+    @Query("SELECT COUNT(DISTINCT b) FROM Book b JOIN b.tags t WHERE b.user = :user AND t = :tag "
+            + "AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE)
+    long countByUserAndTagsContainingAndDeletedAtIsNull(
+            @Param("user") User user, @Param("tag") Tag tag);
 
     /**
      * 根据用户和标签查询书籍
      */
     @Query("SELECT DISTINCT b FROM Book b JOIN b.tags t " +
-            "WHERE b.user = :user AND b.deletedAt IS NULL AND t.id = :tagId")
+            "WHERE b.user = :user AND b.deletedAt IS NULL AND t.id = :tagId AND" + LIBRARY_VISIBLE)
     Page<Book> findByUserAndTagId(@Param("user") User user, @Param("tagId") Long tagId, Pageable pageable);
 
     /**
      * 统计用户书籍数量
      */
-    long countByUserAndDeletedAtIsNull(User user);
+    @Query("SELECT COUNT(b) FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE)
+    long countByUserAndDeletedAtIsNull(@Param("user") User user);
 
     /**
      * 根据用户查询所有书籍
      */
-    List<Book> findByUserAndDeletedAtIsNull(User user);
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE)
+    List<Book> findByUserAndDeletedAtIsNull(@Param("user") User user);
 
     @Query("""
             SELECT b.id AS id,
@@ -128,11 +156,19 @@ public interface BookRepository extends JpaRepository<Book, Long> {
             @Param("userId") Long userId);
 
     /**
-     * 根据用户和文件名查找书籍（title.format）
+     * 根据用户和文件名查找书籍（title.format），用于同步等已知书籍操作。
      */
     @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL " +
             "AND (b.title || '.' || b.format) = :filename")
     Optional<Book> findByUserAndFilename(@Param("user") User user, @Param("filename") String filename);
+
+    /**
+     * 根据用户和文件名查找书库中可见的书籍，用于 WebDAV 等发现入口。
+     */
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL " +
+            "AND (b.title || '.' || b.format) = :filename AND" + LIBRARY_VISIBLE)
+    Optional<Book> findVisibleByUserAndFilename(
+            @Param("user") User user, @Param("filename") String filename);
 
     /**
      * 查找作者或描述为空的书籍（用于刮削）

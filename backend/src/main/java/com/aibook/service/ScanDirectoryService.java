@@ -1,20 +1,21 @@
 package com.aibook.service;
 
 import com.aibook.exception.ResourceNotFoundException;
+import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.ScanDirectory;
 import com.aibook.model.entity.User;
+import com.aibook.repository.BookScanSourceRepository;
 import com.aibook.repository.ScanDirectoryRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 扫描目录管理服务
@@ -27,6 +28,8 @@ public class ScanDirectoryService {
     private final ScanDirectoryRepository scanDirectoryRepository;
     private final FileScannerService fileScannerService;
     private final CategoryService categoryService;
+    private final BookScanSourceRepository bookScanSourceRepository;
+    private final OperationLogService operationLogService;
 
     /**
      * 获取所有扫描目录
@@ -96,6 +99,7 @@ public class ScanDirectoryService {
     public void deleteDirectory(Long id, User user) {
         ScanDirectory dir = scanDirectoryRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
+        bookScanSourceRepository.deleteByScanDirectory(dir);
         scanDirectoryRepository.delete(dir);
         log.info("删除扫描目录: {}", dir.getPath());
     }
@@ -123,7 +127,7 @@ public class ScanDirectoryService {
         // 调用 FileScannerService 实际导入书籍
         log.info("开始扫描目录并导入书籍: {}", dir.getPath());
         FileScannerService.ScanResult scanResult = fileScannerService.scanDirectory(
-                dir.getPath(), user, dir.defaultCategoryId());
+                dir.getPath(), user, dir.defaultCategoryId(), dir.getId());
 
         // 更新扫描目录记录
         dir.setLastScanTime(LocalDateTime.now());
@@ -155,6 +159,25 @@ public class ScanDirectoryService {
 
         dir.setEnabled(!Boolean.TRUE.equals(dir.getEnabled()));
         return scanDirectoryRepository.save(dir);
+    }
+
+    /** 更新目录在书库中的展示状态；重复提交同一状态不产生额外副作用。 */
+    @Transactional
+    public ScanDirectory updateLibraryVisibility(Long id, boolean visible, User user) {
+        ScanDirectory dir = scanDirectoryRepository.findByIdAndUser(id, user)
+                .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
+        if (Boolean.valueOf(visible).equals(dir.getLibraryVisible())) {
+            return dir;
+        }
+        dir.setLibraryVisible(visible);
+        ScanDirectory saved = scanDirectoryRepository.save(dir);
+        operationLogService.record(
+                user,
+                OperationLog.Action.UPDATE_SCAN_DIRECTORY_VISIBILITY,
+                null,
+                (visible ? "书库显示" : "书库隐藏") + "扫描目录",
+                dir.getPath());
+        return saved;
     }
 
     /**

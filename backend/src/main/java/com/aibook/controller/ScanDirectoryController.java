@@ -122,6 +122,20 @@ public class ScanDirectoryController {
         return ResponseEntity.ok(dir);
     }
 
+    /** 单独控制目录来源书籍是否出现在书库发现列表中。 */
+    @PutMapping("/{id}/library-visibility")
+    public ResponseEntity<ScanDirectory> updateLibraryVisibility(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+        Object value = body.get("visible");
+        if (!(value instanceof Boolean visible)) {
+            throw new IllegalArgumentException("visible 必须为布尔值");
+        }
+        return ResponseEntity.ok(scanDirectoryService.updateLibraryVisibility(
+                id, visible, getUserFromAuth(authentication)));
+    }
+
     @PutMapping("/{id}/default-category")
     public ResponseEntity<ScanDirectory> updateDefaultCategory(
             Authentication authentication,

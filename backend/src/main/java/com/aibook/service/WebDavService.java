@@ -152,7 +152,7 @@ public class WebDavService {
         String filename = Paths.get(path).getFileName().toString();
 
         // 尝试通过文件名查找书籍
-        Optional<Book> bookOpt = bookRepository.findByUserAndFilename(user, filename);
+        Optional<Book> bookOpt = bookRepository.findVisibleByUserAndFilename(user, filename);
         if (bookOpt.isPresent()) {
             return bookToResource(bookOpt.get());
         }
@@ -172,7 +172,7 @@ public class WebDavService {
     public Path getBookFilePath(User user, String path) {
         String filename = Paths.get(path).getFileName().toString();
 
-        Optional<Book> bookOpt = bookRepository.findByUserAndFilename(user, filename);
+        Optional<Book> bookOpt = bookRepository.findVisibleByUserAndFilename(user, filename);
         if (bookOpt.isPresent()) {
             return Paths.get(bookOpt.get().getFilePath());
         }
@@ -221,7 +221,7 @@ public class WebDavService {
      */
     public boolean deleteResource(User user, String path) {
         String filename = Paths.get(path).getFileName().toString();
-        Optional<Book> bookOpt = bookRepository.findByUserAndFilename(user, filename);
+        Optional<Book> bookOpt = bookRepository.findVisibleByUserAndFilename(user, filename);
         if (bookOpt.isPresent()) {
             Book book = bookOpt.get();
             book.setDeletedAt(LocalDateTime.now());

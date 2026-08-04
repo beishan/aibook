@@ -3,6 +3,7 @@ package com.aibook.service;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.BookHighlight;
 import com.aibook.model.entity.BookList;
+import com.aibook.model.entity.BookScanSource;
 import com.aibook.model.entity.BookVersion;
 import com.aibook.model.entity.ReadingProgress;
 import com.aibook.model.entity.User;
@@ -12,6 +13,7 @@ import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookVersionRepository;
 import com.aibook.repository.BookVersionIdentityProjection;
 import com.aibook.repository.BookmarkRepository;
+import com.aibook.repository.BookScanSourceRepository;
 import com.aibook.repository.ReadingProgressRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -45,6 +47,7 @@ public class BookVersionAggregationService {
     private final BookmarkRepository bookmarkRepository;
     private final BookHighlightRepository bookHighlightRepository;
     private final BookListRepository bookListRepository;
+    private final BookScanSourceRepository bookScanSourceRepository;
 
     public RebuildPlan buildPlan(Long userId) {
         List<BookVersionIdentityProjection> identities =
@@ -103,6 +106,7 @@ public class BookVersionAggregationService {
         moveBookmarks(primary, duplicate);
         moveHighlights(primary, duplicate, user);
         replaceInBookLists(primary, duplicate, user);
+        mergeScanSources(primary, duplicate);
         hideAggregatedBook(duplicate);
         bookRepository.save(primary);
         return duplicateVersions.size();
@@ -476,6 +480,19 @@ public class BookVersionAggregationService {
                 bookList.getBooks().add(primary);
             }
             bookListRepository.save(bookList);
+        }
+    }
+
+    /** 合并重复书籍时保留所有扫描目录来源，避免唯一约束冲突。 */
+    private void mergeScanSources(Book primary, Book duplicate) {
+        for (BookScanSource source : bookScanSourceRepository.findByBook(duplicate)) {
+            if (bookScanSourceRepository.existsByBookAndScanDirectory(
+                    primary, source.getScanDirectory())) {
+                bookScanSourceRepository.delete(source);
+            } else {
+                source.setBook(primary);
+                bookScanSourceRepository.save(source);
+            }
         }
     }
 

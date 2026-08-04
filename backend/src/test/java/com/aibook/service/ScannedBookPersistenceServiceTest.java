@@ -9,7 +9,9 @@ import com.aibook.model.entity.Book;
 import com.aibook.model.entity.Category;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
+import com.aibook.repository.BookScanSourceRepository;
 import com.aibook.repository.CategoryRepository;
+import com.aibook.repository.ScanDirectoryRepository;
 import com.aibook.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 
@@ -36,7 +38,9 @@ class ScannedBookPersistenceServiceTest {
                 bookRepository,
                 userRepository,
                 categoryRepository,
-                mock(OperationLogService.class));
+                mock(OperationLogService.class),
+                mock(BookScanSourceRepository.class),
+                mock(ScanDirectoryRepository.class));
 
         Book saved = service.save(book, 1L, 2L);
 
@@ -64,7 +68,9 @@ class ScannedBookPersistenceServiceTest {
                 bookRepository,
                 userRepository,
                 categoryRepository,
-                mock(OperationLogService.class));
+                mock(OperationLogService.class),
+                mock(BookScanSourceRepository.class),
+                mock(ScanDirectoryRepository.class));
 
         Book saved = service.save(book, 1L, null);
 

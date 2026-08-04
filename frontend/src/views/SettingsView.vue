@@ -141,6 +141,9 @@
                 <span class="tag" :class="row.enabled ? 'tag-success' : 'tag-info'">
                   {{ row.enabled ? '启用' : '禁用' }}
                 </span>
+                <span class="tag" :class="row.libraryVisible !== false ? 'tag-success' : 'tag-info'">
+                  {{ row.libraryVisible !== false ? '书库显示' : '书库隐藏' }}
+                </span>
                 <span class="meta-text">{{ row.bookCount }} 本书</span>
                 <span class="meta-text">
                   默认分类：{{ row.defaultCategoryName || '未分类' }}
@@ -177,6 +180,15 @@
                 @click="handleToggle(row)"
               >
                 {{ row._toggling ? '处理中...' : row.enabled ? '禁用' : '启用' }}
+              </button>
+              <button
+                class="btn btn-text"
+                :disabled="row._visibilityUpdating"
+                @click="handleLibraryVisibility(row)"
+              >
+                {{ row._visibilityUpdating
+                  ? '处理中...'
+                  : row.libraryVisible !== false ? '书库隐藏' : '书库显示' }}
               </button>
               <button class="btn btn-text btn-danger" @click="handleRemove(row)">删除</button>
             </div>
@@ -721,6 +733,22 @@ const handleToggle = async (row: any) => {
     message.error(error.response?.data?.message || '操作失败')
   } finally {
     row._toggling = false
+  }
+}
+
+const handleLibraryVisibility = async (row: any) => {
+  row._visibilityUpdating = true
+  const visible = row.libraryVisible === false
+  try {
+    const { data } = await api.put(`/api/scan-directories/${row.id}/library-visibility`, {
+      visible,
+    })
+    Object.assign(row, data)
+    message.success(visible ? '该目录书籍已在书库显示' : '该目录书籍已从书库隐藏')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '书库显示状态更新失败')
+  } finally {
+    row._visibilityUpdating = false
   }
 }
 

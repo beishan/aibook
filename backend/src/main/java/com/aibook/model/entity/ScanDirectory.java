@@ -41,6 +41,14 @@ public class ScanDirectory {
     private Boolean enabled = true;
 
     /**
+     * 是否在书库及协议发现列表中展示本目录来源的书籍。
+     * 该开关只影响展示，不影响目录扫描是否启用。
+     */
+    @Builder.Default
+    @Column(name = "library_visible", nullable = false, columnDefinition = "boolean default true")
+    private Boolean libraryVisible = true;
+
+    /**
      * 上次扫描时间
      */
     @Column(name = "last_scan_time")

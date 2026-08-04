@@ -9,6 +9,7 @@ import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookVersionRepository;
 import com.aibook.repository.BookVersionIdentityProjection;
 import com.aibook.repository.BookmarkRepository;
+import com.aibook.repository.BookScanSourceRepository;
 import com.aibook.repository.ReadingProgressRepository;
 import org.junit.jupiter.api.Test;
 
@@ -67,7 +68,8 @@ class BookVersionAggregationServiceTest {
                 progressRepository,
                 bookmarkRepository,
                 highlightRepository,
-                bookListRepository);
+                bookListRepository,
+                mock(BookScanSourceRepository.class));
 
         int aggregatedVersions = service.aggregatePair(1L, 2L, user);
 
@@ -118,7 +120,8 @@ class BookVersionAggregationServiceTest {
                 progressRepository,
                 bookmarkRepository,
                 highlightRepository,
-                bookListRepository)
+                bookListRepository,
+                mock(BookScanSourceRepository.class))
                 .buildPlan(8L);
 
         assertEquals(5, plan.totalBooks());

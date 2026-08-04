@@ -51,9 +51,10 @@ class ScanDirectoryTaskServiceTest {
                 eq(1L),
                 eq(3),
                 isNull(),
+                eq(2L),
                 any(FileScannerService.ScanResult.class)))
                 .thenAnswer(invocation -> {
-                    FileScannerService.ScanResult result = invocation.getArgument(4);
+                    FileScannerService.ScanResult result = invocation.getArgument(5);
                     result.setTotalCount(3);
                     result.addNew("/books/one.epub");
                     result.addSkipped("/books/two.epub");
