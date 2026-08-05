@@ -23,8 +23,9 @@ Jenkins Pipeline 会完成以下工作：
 | `aibook-frontend` | Web 前端与 API 反向代理 | `8291` |
 | `aibook-backend` | Spring Boot API | `8292` |
 | `aibook-postgres` | PostgreSQL 16 | 不对外暴露 |
-| `aibook-redis` | Redis 7 | 不对外暴露 |
-| `aibook-minio` | MinIO API / 控制台 | `9000` / `9001` |
+
+书籍元数据刮削结果缓存在后端进程内，使用 Caffeine 保存 7 天且最多保留
+10,000 条。后端重启会清空缓存，但不会影响 PostgreSQL 中的书籍数据。
 
 ## 二、Jenkins 前置条件
 
@@ -151,13 +152,11 @@ sudo setfacl -m d:g:FONTS_GID:rX,d:m::rX /vol1/docker/aibook/fonts
 `FONT_GIDS=1001,1002`。部署后在“设置 → 字体管理”中配置 `/fontfolder` 或
 `/fontfolder/chinese` 等容器内扫描路径。
 
-应用的 PostgreSQL、Redis、MinIO、上传文件、数据库备份和部署状态使用以下
+应用的 PostgreSQL、上传文件、数据库备份和部署状态使用以下
 Docker Volume：
 
 ```text
 aibook-postgres-data
-aibook-redis-data
-aibook-minio-data
 aibook-uploads-data
 aibook-backups
 aibook-deploy-state
@@ -247,7 +246,6 @@ Secret file 中的单行分号格式，便于固定配置；临时发版也可�
 ```text
 http://192.168.31.155:8291/
 http://192.168.31.155:8292/actuator/health
-http://192.168.31.155:9001/
 ```
 
 Actuator 只公开健康检查端点，不公开环境变量或其他管理信息。
@@ -305,7 +303,7 @@ Jenkins 部署成功后只清理 `aibook-backend` 和 `aibook-frontend` 仓库�
 ./scripts/rollback.sh /path/to/aibook-production.env
 ```
 
-回滚只替换前后端应用镜像，不会删除数据库、Redis、MinIO 或上传文件。
+回滚只替换前后端应用镜像，不会删除数据库或上传文件。
 
 查看当前镜像：
 
@@ -390,7 +388,7 @@ docker inspect aibook-backend
 docker logs --tail=200 aibook-backend
 ```
 
-重点检查数据库密码、Redis 密码、MinIO 凭据和 NAS 目录权限。
+重点检查数据库密码和 NAS 目录权限。
 
 ### 前端正常但 API 不通
 
@@ -399,5 +397,4 @@ Nginx 通过容器服务名 `backend:8080` 访问后端，不使用 NAS 的映�
 
 ### 端口冲突
 
-在 Jenkins 构建参数中修改 `FRONTEND_PORT` 或 `BACKEND_PORT`。MinIO 端口
-则在 Secret file 中修改 `MINIO_API_PORT` 与 `MINIO_CONSOLE_PORT`。
+在 Jenkins 构建参数中修改 `FRONTEND_PORT` 或 `BACKEND_PORT`。

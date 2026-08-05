@@ -34,15 +34,6 @@ spring:
   jackson:
     time-zone: ${APP_TIME_ZONE:Asia/Shanghai}
 
-  cache:
-    type: redis
-
-  data:
-    redis:
-      host: ${REDIS_HOST:redis}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:memoryvault}
-
   servlet:
     multipart:
       max-file-size: 500MB
@@ -52,13 +43,6 @@ spring:
 jwt:
   secret: ${JWT_SECRET:your-secret-key-change-in-production}
   expiration: 86400000  # 24 hours
-
-# MinIO Configuration
-minio:
-  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
-  access-key: ${MINIO_ACCESS_KEY:${MINIO_USER:minioadmin}}
-  secret-key: ${MINIO_SECRET_KEY:${MINIO_PASSWORD:memoryvault}}
-  bucket-name: aibook
 
 # Upload configuration
 upload:

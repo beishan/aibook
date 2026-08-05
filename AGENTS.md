@@ -16,9 +16,10 @@
 | 后端 | Java 21 + Spring Boot 3 + Spring Security |
 | 数据库 | PostgreSQL 16 |
 | 搜索索引 | PostgreSQL 全文检索 |
+| 缓存 | Caffeine（进程内） |
 | 任务调度 | Spring Scheduler |
 | 容器化 | Docker + Docker Compose |
-| 对象存储 | MinIO |
+| 文件存储 | Docker Volume（本地文件系统） |
 | 代码托管 | GitHub |
 
 ## 项目结构
@@ -143,8 +144,6 @@ npm run build  # 包含 vue-tsc
 ```bash
 # 数据库密码
 DB_PASSWORD=memoryvault
-REDIS_PASSWORD=memoryvault
-MINIO_PASSWORD=memoryvault
 
 # JWT 密钥（生产环境必须修改）
 JWT_SECRET=your-secret-key

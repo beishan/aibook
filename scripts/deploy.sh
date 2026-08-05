@@ -389,8 +389,6 @@ wait_for_containers() {
     local status
     local containers=(
         aibook-postgres
-        aibook-redis
-        aibook-minio
         aibook-backend
         aibook-frontend
     )
