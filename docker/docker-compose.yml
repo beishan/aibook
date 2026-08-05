@@ -76,6 +76,8 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
+      labels:
+        com.aibook.image-scope: backend
     group_add:
       - "${BOOKS_GID:-1001}"
     container_name: aibook-backend
@@ -126,6 +128,8 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile
+      labels:
+        com.aibook.image-scope: frontend
     container_name: aibook-frontend
     restart: unless-stopped
     environment:
