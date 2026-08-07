@@ -22,10 +22,22 @@
             <span>{{ book.onShelf ? '📚' : '➕' }}</span>
             <span>{{ book.onShelf ? '已在书架' : '加入书架' }}</span>
           </button>
-          <el-dropdown trigger="click" @command="handleBookActionCommand">
-            <button class="btn more-actions-button">
+          <el-dropdown
+            trigger="click"
+            @command="handleBookActionCommand"
+            @visible-change="moreActionsOpen = $event"
+          >
+            <button
+              class="btn more-actions-button"
+              type="button"
+              :aria-expanded="moreActionsOpen"
+            >
               <span>更多操作</span>
-              <span>⌄</span>
+              <ArrowDown
+                class="more-actions-arrow"
+                :class="{ 'is-open': moreActionsOpen }"
+                aria-hidden="true"
+              />
             </button>
             <template #dropdown>
               <el-dropdown-menu>
@@ -488,6 +500,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ArrowDown } from '@element-plus/icons-vue'
 import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import { useCategoryStore } from '@/stores/category'
@@ -513,6 +526,7 @@ const scraping = ref(false)
 const reparsing = ref(false)
 const downloadingCover = ref(false)
 const showScraperDialog = ref(false)
+const moreActionsOpen = ref(false)
 const tocLoading = ref(false)
 const tocError = ref('')
 
@@ -1245,8 +1259,26 @@ onMounted(() => {
 }
 
 .more-actions-button {
-  min-width: 110px;
-  justify-content: space-between;
+  min-width: 116px;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.more-actions-arrow {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  color: var(--text-secondary);
+  transition: transform var(--transition-fast), color var(--transition-fast);
+}
+
+.more-actions-button:hover .more-actions-arrow,
+.more-actions-arrow.is-open {
+  color: currentColor;
+}
+
+.more-actions-arrow.is-open {
+  transform: rotate(180deg);
 }
 
 .danger-menu-item {
