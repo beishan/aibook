@@ -222,7 +222,11 @@
 
     <!-- 收藏 -->
     <div v-show="activeTab === 'favorite'" class="tab-content">
-      <div v-if="favoriteBooks.length === 0" class="empty glass">
+      <div v-if="favoriteLoading" class="loading glass">
+        <div class="loading-spinner"></div>
+        <p>正在加载...</p>
+      </div>
+      <div v-else-if="favoriteBooks.length === 0" class="empty glass">
         <div class="empty-icon">⭐</div>
         <p>暂无收藏的书籍</p>
         <button class="btn btn-primary" @click="$router.push('/books')">去书库看看</button>
@@ -334,7 +338,11 @@
 
     <!-- 想读 -->
     <div v-show="activeTab === 'wanted'" class="tab-content">
-      <div v-if="wantedBooks.length === 0" class="empty glass">
+      <div v-if="wantedLoading" class="loading glass">
+        <div class="loading-spinner"></div>
+        <p>正在加载...</p>
+      </div>
+      <div v-else-if="wantedBooks.length === 0" class="empty glass">
         <div class="empty-icon">📝</div>
         <p>暂无想读的书籍</p>
         <button class="btn btn-primary" @click="$router.push('/books')">去书库看看</button>
@@ -505,6 +513,10 @@ interface ShelfOverview {
 const activeTab = ref('shelf')
 const showCreateListDialog = ref(false)
 const bookLists = ref<any[]>([])
+const favoriteBooks = ref<Book[]>([])
+const favoriteLoading = ref(false)
+const wantedBooks = ref<Book[]>([])
+const wantedLoading = ref(false)
 const readingBooks = ref<Book[]>([])
 const readingLoading = ref(false)
 const removingReadingIds = ref(new Set<number>())
@@ -525,9 +537,7 @@ const newListForm = ref({
   description: '',
 })
 
-const favoriteBooks = computed(() => bookStore.books.filter((b) => b.isFavorite))
 const finishedBooks = computed(() => bookStore.books.filter((b) => b.readingStatus === 'FINISHED'))
-const wantedBooks = computed(() => bookStore.books.filter((b) => b.isWanted))
 const displayedShelfBooks = computed(() => {
   if (selectedShelfGroup.value === 'ungrouped') return shelfOverview.value.ungroupedBooks
   if (typeof selectedShelfGroup.value === 'number') {
@@ -575,6 +585,47 @@ watch([viewMode, cardSize], saveSettings)
 
 const loadBooks = async () => {
   await bookStore.fetchBooks(0, 100, 'createdAt', 'desc')
+}
+
+const loadMarkedBooks = async (endpoint: 'favorites' | 'wanted') => {
+  const books: Book[] = []
+  let page = 0
+  let totalPages = 1
+  do {
+    const response = await api.get(`/api/books/${endpoint}`, {
+      params: { page, size: 100 },
+    })
+    books.push(...response.data.content)
+    totalPages = response.data.totalPages
+    page += 1
+  } while (page < totalPages)
+  return books
+}
+
+const loadFavoriteBooks = async () => {
+  if (favoriteLoading.value) return
+  favoriteLoading.value = true
+  try {
+    favoriteBooks.value = await loadMarkedBooks('favorites')
+  } catch (error) {
+    console.error('Failed to load favorite books:', error)
+    message.error('收藏书籍加载失败')
+  } finally {
+    favoriteLoading.value = false
+  }
+}
+
+const loadWantedBooks = async () => {
+  if (wantedLoading.value) return
+  wantedLoading.value = true
+  try {
+    wantedBooks.value = await loadMarkedBooks('wanted')
+  } catch (error) {
+    console.error('Failed to load wanted books:', error)
+    message.error('想读书籍加载失败')
+  } finally {
+    wantedLoading.value = false
+  }
 }
 
 const loadShelf = async () => {
@@ -787,6 +838,10 @@ const handleTabChange = (tab: string) => {
   activeTab.value = tab
   if (tab === 'shelf') {
     loadShelf()
+  } else if (tab === 'favorite') {
+    loadFavoriteBooks()
+  } else if (tab === 'wanted') {
+    loadWantedBooks()
   } else if (tab === 'lists') {
     loadBookLists()
   } else if (tab === 'reading') {
@@ -819,6 +874,8 @@ onMounted(() => {
   loadSettings()
   loadBooks()
   loadShelf()
+  loadFavoriteBooks()
+  loadWantedBooks()
   loadReadingBooks()
 })
 </script>

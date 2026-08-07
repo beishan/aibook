@@ -88,8 +88,6 @@ const menuItems = [
   { path: '/', icon: '🏠', title: '首页' },
   { path: '/books', icon: '📚', title: '书库' },
   { path: '/shelf', icon: '📖', title: '书架' },
-  { path: '/categories', icon: '🗂️', title: '分类' },
-  { path: '/tags', icon: '🏷️', title: '标签' },
   { path: '/text-repair', icon: '🔧', title: '内容修复' },
   { path: '/settings', icon: '⚙️', title: '设置' },
 ]

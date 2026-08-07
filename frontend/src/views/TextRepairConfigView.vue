@@ -217,31 +217,31 @@
         <div class="setting-row">
           <div class="setting-item">
             <label class="setting-label">源文件解码方式</label>
-            <select v-model="generalSettings.preferredEncoding" class="setting-select">
-              <option value="AUTO">自动检测（推荐）</option>
-              <option value="UTF-8">UTF-8</option>
-              <option value="GB18030">GB18030 / GBK</option>
-              <option value="BIG5">Big5</option>
-              <option value="UTF-16LE">UTF-16 LE</option>
-              <option value="UTF-16BE">UTF-16 BE</option>
-            </select>
+            <el-select v-model="generalSettings.preferredEncoding" class="setting-select">
+              <el-option label="自动检测（推荐）" value="AUTO" />
+              <el-option label="UTF-8" value="UTF-8" />
+              <el-option label="GB18030 / GBK" value="GB18030" />
+              <el-option label="Big5" value="BIG5" />
+              <el-option label="UTF-16 LE" value="UTF-16LE" />
+              <el-option label="UTF-16 BE" value="UTF-16BE" />
+            </el-select>
             <small class="setting-hint">仅在自动检测结果错误时手动指定。</small>
           </div>
           <div class="setting-item">
             <label class="setting-label">不可恢复乱码</label>
-            <select v-model="generalSettings.unrecoverableEncodingAction" class="setting-select">
-              <option value="MARK">标记并人工确认</option>
-              <option value="IGNORE">忽略不可恢复项</option>
-            </select>
+            <el-select v-model="generalSettings.unrecoverableEncodingAction" class="setting-select">
+              <el-option label="标记并人工确认" value="MARK" />
+              <el-option label="忽略不可恢复项" value="IGNORE" />
+            </el-select>
           </div>
         </div>
         <div class="setting-item">
           <label class="setting-label">默认修复模式</label>
-          <select v-model="generalSettings.defaultMode" class="setting-select">
-            <option value="SAFE">安全修复 - 仅处理低风险问题</option>
-            <option value="STANDARD">标准修复 - 安全修复 + 常见广告清理、章节统一</option>
-            <option value="DEEP">深度修复 - 标准修复 + 模糊广告识别、章节粘连检测</option>
-          </select>
+          <el-select v-model="generalSettings.defaultMode" class="setting-select">
+            <el-option label="安全修复 - 仅处理低风险问题" value="SAFE" />
+            <el-option label="标准修复 - 安全修复 + 常见广告清理、章节统一" value="STANDARD" />
+            <el-option label="深度修复 - 标准修复 + 模糊广告识别、章节粘连检测" value="DEEP" />
+          </el-select>
         </div>
         <div class="setting-item">
           <label class="setting-label">默认章节输出格式</label>
@@ -250,23 +250,23 @@
         </div>
         <div class="setting-item">
           <label class="setting-label">段首缩进方式</label>
-          <select v-model="generalSettings.indentStyle" class="setting-select">
-            <option value="FULL_WIDTH_SPACE">两个全角空格（　　）</option>
-            <option value="HALF_SPACE">两个普通空格</option>
-            <option value="FOUR_SPACE">四个普通空格</option>
-            <option value="NONE">不缩进</option>
-            <option value="KEEP">保持原样</option>
-          </select>
+          <el-select v-model="generalSettings.indentStyle" class="setting-select">
+            <el-option label="两个全角空格（　　）" value="FULL_WIDTH_SPACE" />
+            <el-option label="两个普通空格" value="HALF_SPACE" />
+            <el-option label="四个普通空格" value="FOUR_SPACE" />
+            <el-option label="不缩进" value="NONE" />
+            <el-option label="保持原样" value="KEEP" />
+          </el-select>
         </div>
         <div class="setting-row">
           <div class="setting-item">
             <label class="setting-label">段落间空行数量</label>
-            <select v-model="generalSettings.blankLineCount" class="setting-select">
-              <option :value="0">不保留空行</option>
-              <option :value="1">保留 1 个空行</option>
-              <option :value="2">保留 2 个空行</option>
-              <option :value="-1">保持原样</option>
-            </select>
+            <el-select v-model="generalSettings.blankLineCount" class="setting-select">
+              <el-option label="不保留空行" :value="0" />
+              <el-option label="保留 1 个空行" :value="1" />
+              <el-option label="保留 2 个空行" :value="2" />
+              <el-option label="保持原样" :value="-1" />
+            </el-select>
           </div>
           <div class="setting-item">
             <label class="setting-label">自动接受置信度阈值</label>
@@ -312,12 +312,12 @@
           </div>
           <div class="form-group">
             <label>问题类型</label>
-            <select v-model="ruleForm.type">
-              <option value="AD">广告</option>
-              <option value="ENCODING">乱码</option>
-              <option value="PARAGRAPH">段落</option>
-              <option value="PUNCTUATION">标点</option>
-            </select>
+            <el-select v-model="ruleForm.type">
+              <el-option label="广告" value="AD" />
+              <el-option label="乱码" value="ENCODING" />
+              <el-option label="段落" value="PARAGRAPH" />
+              <el-option label="标点" value="PUNCTUATION" />
+            </el-select>
           </div>
           <div class="form-group">
             <label>匹配表达式（正则）</label>
@@ -332,23 +332,23 @@
           <div class="form-row">
             <div class="form-group">
               <label>匹配范围</label>
-              <select v-model="ruleForm.matchScope">
-                <option value="LINE">当前行</option>
-                <option value="PARAGRAPH">当前段落</option>
-                <option value="CONTENT">当前内容</option>
-                <option value="CHAPTER_START">章节开头</option>
-                <option value="CHAPTER_END">章节结尾</option>
-              </select>
+              <el-select v-model="ruleForm.matchScope">
+                <el-option label="当前行" value="LINE" />
+                <el-option label="当前段落" value="PARAGRAPH" />
+                <el-option label="当前内容" value="CONTENT" />
+                <el-option label="章节开头" value="CHAPTER_START" />
+                <el-option label="章节结尾" value="CHAPTER_END" />
+              </el-select>
             </div>
             <div class="form-group">
               <label>处理方式</label>
-              <select v-model="ruleForm.action">
-                <option value="DELETE_LINE">删除整行</option>
-                <option value="DELETE_MATCH">删除匹配内容</option>
-                <option value="DELETE_PARAGRAPH">删除整个段落</option>
-                <option value="MARK_ONLY">仅标记</option>
-                <option value="REPLACE">替换为指定内容</option>
-              </select>
+              <el-select v-model="ruleForm.action">
+                <el-option label="删除整行" value="DELETE_LINE" />
+                <el-option label="删除匹配内容" value="DELETE_MATCH" />
+                <el-option label="删除整个段落" value="DELETE_PARAGRAPH" />
+                <el-option label="仅标记" value="MARK_ONLY" />
+                <el-option label="替换为指定内容" value="REPLACE" />
+              </el-select>
             </div>
           </div>
           <div v-if="ruleForm.action === 'REPLACE'" class="form-group">
@@ -358,18 +358,18 @@
           <div class="form-row">
             <div class="form-group">
               <label>风险等级</label>
-              <select v-model="ruleForm.riskLevel">
-                <option value="LOW">低风险</option>
-                <option value="MEDIUM">中风险</option>
-                <option value="HIGH">高风险</option>
-              </select>
+              <el-select v-model="ruleForm.riskLevel">
+                <el-option label="低风险" value="LOW" />
+                <el-option label="中风险" value="MEDIUM" />
+                <el-option label="高风险" value="HIGH" />
+              </el-select>
             </div>
             <div class="form-group">
               <label>作用范围</label>
-              <select v-model="ruleForm.scope">
-                <option value="ALL_BOOKS">所有书籍</option>
-                <option v-if="ruleForm.bookId" value="CURRENT_BOOK">仅当前书籍</option>
-              </select>
+              <el-select v-model="ruleForm.scope">
+                <el-option label="所有书籍" value="ALL_BOOKS" />
+                <el-option v-if="ruleForm.bookId" label="仅当前书籍" value="CURRENT_BOOK" />
+              </el-select>
             </div>
           </div>
         </div>
@@ -402,11 +402,11 @@
               </div>
               <div class="form-group">
                 <label>修复模式</label>
-                <select v-model="templateForm.repairMode" @change="applyFeaturePreset(templateFeatures, templateForm.repairMode)">
-                  <option value="SAFE">安全修复</option>
-                  <option value="STANDARD">标准修复</option>
-                  <option value="DEEP">深度修复</option>
-                </select>
+                <el-select v-model="templateForm.repairMode" @change="applyFeaturePreset(templateFeatures, templateForm.repairMode)">
+                  <el-option label="安全修复" value="SAFE" />
+                  <el-option label="标准修复" value="STANDARD" />
+                  <el-option label="深度修复" value="DEEP" />
+                </el-select>
               </div>
             </div>
             <div class="form-group">
@@ -443,17 +443,21 @@
             <div class="template-parameter-grid">
               <div class="form-group">
                 <label>源文件解码方式</label>
-                <select v-model="templateAdvanced.preferredEncoding">
-                  <option value="AUTO">自动检测</option><option value="UTF-8">UTF-8</option>
-                  <option value="GB18030">GB18030 / GBK</option><option value="BIG5">Big5</option>
-                  <option value="UTF-16LE">UTF-16 LE</option><option value="UTF-16BE">UTF-16 BE</option>
-                </select>
+                <el-select v-model="templateAdvanced.preferredEncoding">
+                  <el-option label="自动检测" value="AUTO" />
+                  <el-option label="UTF-8" value="UTF-8" />
+                  <el-option label="GB18030 / GBK" value="GB18030" />
+                  <el-option label="Big5" value="BIG5" />
+                  <el-option label="UTF-16 LE" value="UTF-16LE" />
+                  <el-option label="UTF-16 BE" value="UTF-16BE" />
+                </el-select>
               </div>
               <div class="form-group">
                 <label>不可恢复乱码</label>
-                <select v-model="templateAdvanced.unrecoverableEncodingAction">
-                  <option value="MARK">标记并人工确认</option><option value="IGNORE">忽略</option>
-                </select>
+                <el-select v-model="templateAdvanced.unrecoverableEncodingAction">
+                  <el-option label="标记并人工确认" value="MARK" />
+                  <el-option label="忽略" value="IGNORE" />
+                </el-select>
               </div>
               <div class="form-group parameter-wide">
                 <label>章节输出格式</label>
@@ -462,17 +466,22 @@
               </div>
               <div class="form-group">
                 <label>段首缩进</label>
-                <select v-model="templateForm.indentStyle">
-                  <option value="FULL_WIDTH_SPACE">两个全角空格</option><option value="HALF_SPACE">两个普通空格</option>
-                  <option value="FOUR_SPACE">四个普通空格</option><option value="NONE">不缩进</option><option value="KEEP">保持原样</option>
-                </select>
+                <el-select v-model="templateForm.indentStyle">
+                  <el-option label="两个全角空格" value="FULL_WIDTH_SPACE" />
+                  <el-option label="两个普通空格" value="HALF_SPACE" />
+                  <el-option label="四个普通空格" value="FOUR_SPACE" />
+                  <el-option label="不缩进" value="NONE" />
+                  <el-option label="保持原样" value="KEEP" />
+                </el-select>
               </div>
               <div class="form-group">
                 <label>段落间空行</label>
-                <select v-model="templateForm.blankLineCount">
-                  <option :value="0">不保留空行</option><option :value="1">保留 1 个空行</option>
-                  <option :value="2">保留 2 个空行</option><option :value="-1">保持原样</option>
-                </select>
+                <el-select v-model="templateForm.blankLineCount">
+                  <el-option label="不保留空行" :value="0" />
+                  <el-option label="保留 1 个空行" :value="1" />
+                  <el-option label="保留 2 个空行" :value="2" />
+                  <el-option label="保持原样" :value="-1" />
+                </el-select>
               </div>
               <div class="form-group"><label>超短章节字数</label><input v-model.number="templateForm.minChapterWords" type="number" /></div>
               <div class="form-group"><label>超长章节字数</label><input v-model.number="templateForm.maxChapterWords" type="number" /></div>
@@ -831,7 +840,7 @@ async function handleSaveTemplate() {
 
 async function handleDeleteRule(rule: RepairRule) {
   try {
-    await confirm(`确认删除规则"${rule.name}"？`)
+    if (!await confirm(`确认删除规则"${rule.name}"？`)) return
     await repairStore.removeRule(rule.id)
     message.success('规则已删除')
   } catch (error) {
@@ -841,7 +850,7 @@ async function handleDeleteRule(rule: RepairRule) {
 
 async function handleDeleteTemplate(template: RepairTemplate) {
   try {
-    await confirm(`确认删除模板"${template.name}"？`)
+    if (!await confirm(`确认删除模板"${template.name}"？`)) return
     await repairStore.removeTemplate(template.id)
     message.success('模板已删除')
   } catch (error) {
@@ -1233,7 +1242,6 @@ function handleSaveGeneralSettings() {
 }
 
 .form-group input,
-.form-group select,
 .form-group textarea {
   width: 100%;
   padding: 8px 12px;
@@ -1264,6 +1272,10 @@ function handleSaveGeneralSettings() {
 .general-settings {
   padding: 24px;
   border-radius: 10px;
+}
+
+.form-group .el-select {
+  width: 100%;
 }
 
 .preset-strip {
@@ -1519,6 +1531,9 @@ function handleSaveGeneralSettings() {
 .setting-input {
   width: 100%;
   max-width: 400px;
+}
+
+.setting-input {
   padding: 8px 12px;
   border: 1px solid var(--border-color);
   border-radius: 6px;

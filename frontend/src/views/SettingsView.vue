@@ -228,6 +228,16 @@
       </div>
     </div>
 
+    <!-- 分类管理 -->
+    <div v-if="activeTab === 'categories'" class="tab-content">
+      <CategoryManagementView />
+    </div>
+
+    <!-- 标签管理 -->
+    <div v-if="activeTab === 'tags'" class="tab-content">
+      <TagManagementView />
+    </div>
+
     <!-- OPDS 与第三方客户端连接 -->
     <div v-show="activeTab === 'connections'" class="tab-content">
       <ConnectionsView embedded />
@@ -437,7 +447,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'
@@ -455,6 +465,13 @@ import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
 import { useUserStore } from '@/stores/user'
 import { THEMES, type ThemeId } from '@/types/theme'
+
+const CategoryManagementView = defineAsyncComponent(
+  () => import('@/views/CategoryManagementView.vue'),
+)
+const TagManagementView = defineAsyncComponent(
+  () => import('@/views/TagManagementView.vue'),
+)
 
 const themeStore = useThemeStore()
 const route = useRoute()
@@ -642,6 +659,8 @@ const tabGroups = computed(() => [
     label: '书库',
     items: [
       { key: 'directories', label: '扫描目录', icon: '📂' },
+      { key: 'categories', label: '分类管理', icon: '🗂️' },
+      { key: 'tags', label: '标签管理', icon: '🏷️' },
       { key: 'scheduler', label: '定时任务', icon: '⏰' },
     ],
   },
@@ -681,11 +700,11 @@ const handleThemeChange = (id: ThemeId) => {
 }
 
 const tabKeys = computed(() => new Set(tabs.value.map(tab => tab.key)))
-const activeTab = ref('theme')
+const activeTab = ref('profile')
 
 const syncActiveTab = (tab: unknown) => {
   activeTab.value =
-    typeof tab === 'string' && tabKeys.value.has(tab) ? tab : 'theme'
+    typeof tab === 'string' && tabKeys.value.has(tab) ? tab : 'profile'
 }
 
 const selectTab = (tab: string) => {
@@ -694,7 +713,7 @@ const selectTab = (tab: string) => {
   void router.replace({
     query: {
       ...route.query,
-      tab: tab === 'theme' ? undefined : tab,
+      tab: tab === 'profile' ? undefined : tab,
     },
   })
 }

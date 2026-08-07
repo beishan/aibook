@@ -68,12 +68,12 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'categories',
         name: 'Categories',
-        component: () => import('@/views/CategoryManagementView.vue'),
+        redirect: { path: '/settings', query: { tab: 'categories' } },
       },
       {
         path: 'tags',
         name: 'Tags',
-        component: () => import('@/views/TagManagementView.vue'),
+        redirect: { path: '/settings', query: { tab: 'tags' } },
       },
       {
         path: 'settings',

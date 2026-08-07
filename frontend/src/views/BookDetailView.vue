@@ -184,20 +184,20 @@
           <div class="organization-panel">
             <div class="organization-row">
               <span class="organization-label">分类</span>
-              <select
+              <el-select
                 class="category-select"
-                :value="book.categoryId || ''"
+                :model-value="book.categoryId || ''"
+                filterable
                 @change="handleCategoryChange"
               >
-                <option value="">未分类</option>
-                <option
+                <el-option label="未分类" value="" />
+                <el-option
                   v-for="category in categoryStore.flatTree"
                   :key="category.id"
                   :value="category.id"
-                >
-                  {{ `${'　'.repeat(category.depth)}${category.name}` }}
-                </option>
-              </select>
+                  :label="`${'　'.repeat(category.depth)}${category.name}`"
+                />
+              </el-select>
             </div>
             <div class="organization-row">
               <span class="organization-label">标签</span>
@@ -222,7 +222,10 @@
                   <span>{{ tag.name }}</span>
                 </el-option>
               </el-select>
-              <button class="btn btn-text tag-manage-link" @click="$router.push('/tags')">
+              <button
+                class="btn btn-text tag-manage-link"
+                @click="$router.push({ path: '/settings', query: { tab: 'tags' } })"
+              >
                 管理
               </button>
             </div>
@@ -819,8 +822,7 @@ const handleToggleShelf = async () => {
   }
 }
 
-const handleCategoryChange = async (event: Event) => {
-  const value = (event.target as HTMLSelectElement).value
+const handleCategoryChange = async (value: number | string) => {
   try {
     book.value = await bookStore.updateBookCategory(
       book.value.id,
@@ -1023,11 +1025,6 @@ onMounted(() => {
 
 .category-select {
   min-width: 180px;
-  padding: 8px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--surface-card);
-  color: var(--text-primary);
 }
 
 .tab-count {

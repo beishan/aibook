@@ -137,16 +137,20 @@
               </div>
               <div class="form-group">
                 <label class="form-label">父分类</label>
-                <select v-model="form.parentId" class="select-input full-width">
-                  <option :value="undefined">作为一级分类</option>
-                  <option
+                <el-select
+                  :model-value="form.parentId ?? ''"
+                  class="full-width"
+                  filterable
+                  @change="form.parentId = $event === '' ? undefined : Number($event)"
+                >
+                  <el-option label="作为一级分类" value="" />
+                  <el-option
                     v-for="category in availableParents"
                     :key="category.id"
                     :value="category.id"
-                  >
-                    {{ `${'　'.repeat(category.depth)}${category.name}` }}
-                  </option>
-                </select>
+                    :label="`${'　'.repeat(category.depth)}${category.name}`"
+                  />
+                </el-select>
               </div>
               <div class="form-group">
                 <label class="form-label">分类说明</label>

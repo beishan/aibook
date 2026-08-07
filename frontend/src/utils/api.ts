@@ -1,7 +1,7 @@
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
 import router from '@/router'
 import { clearStoredAuthSession } from '@/utils/authSession'
+import { message as notification } from '@/utils/message'
 
 let authExpiryHandled = false
 
@@ -55,12 +55,12 @@ api.interceptors.response.use(
           path: '/login',
           query: redirect ? { redirect } : undefined,
         })
-        ElMessage.error('登录已过期，请重新登录')
+        notification.error('登录已过期，请重新登录')
       }
     } else if (status === 403 && !suppressErrorToast) {
-      ElMessage.error('没有权限执行此操作')
+      notification.error('没有权限执行此操作')
     } else if (!(status === 401 && authRequest) && !suppressErrorToast) {
-      ElMessage.error(message)
+      notification.error(message)
     }
 
     return Promise.reject(error)

@@ -133,8 +133,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
 import { InfoFilled, Loading, Check, Close } from '@element-plus/icons-vue'
+import { message, confirm } from '@/utils/message'
 import {
   batchScrape,
   scrapeAllIncomplete,
@@ -304,13 +304,13 @@ async function cancelTask() {
 
   try {
     await cancelScrapeTask(taskId.value)
-    ElMessage.success('任务已取消')
+    message.success('任务已取消')
     cleanup()
     phase.value = 'done'
     emit('complete')
   } catch (error: any) {
     console.error('取消任务失败:', error)
-    ElMessage.error('取消任务失败')
+    message.error('取消任务失败')
   }
 }
 
@@ -320,10 +320,10 @@ function retry() {
 }
 
 // 关闭对话框
-function handleClose() {
+async function handleClose() {
   // 如果任务还在运行，提示用户
   if (phase.value === 'running') {
-    if (confirm('任务正在运行中，确定要关闭吗？任务将在后台继续运行。')) {
+    if (await confirm('任务正在运行中，确定要关闭吗？任务将在后台继续运行。')) {
       cleanup()
       emit('close')
     }

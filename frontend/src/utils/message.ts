@@ -1,50 +1,61 @@
-// 消息提示工具 - 替代 ElMessage
+import { h } from 'vue'
+import { ElMessageBox, ElNotification } from 'element-plus'
+
+type MessageType = 'success' | 'warning' | 'error' | 'info'
 
 interface MessageOptions {
-  type?: 'success' | 'warning' | 'error' | 'info'
+  type?: MessageType
   duration?: number
+  title?: string
 }
 
-let messageContainer: HTMLDivElement | null = null
-
-const getContainer = () => {
-  if (!messageContainer) {
-    messageContainer = document.createElement('div')
-    messageContainer.className = 'message-container'
-    document.body.appendChild(messageContainer)
-  }
-  return messageContainer
+const notificationTitles: Record<MessageType, string> = {
+  success: '操作成功',
+  warning: '请注意',
+  error: '操作失败',
+  info: '系统提示',
 }
 
 export const showMessage = (text: string, options: MessageOptions = {}) => {
-  const { type = 'info', duration = 3000 } = options
+  const { type = 'info', duration = 3000, title = notificationTitles[type] } = options
 
-  const container = getContainer()
-
-  const message = document.createElement('div')
-  message.className = `message message-${type}`
-  message.textContent = text
-
-  container.appendChild(message)
-
-  setTimeout(() => {
-    message.remove()
-  }, duration)
+  return ElNotification({
+    title,
+    message: text,
+    type,
+    duration,
+    position: 'top-right',
+    showClose: true,
+    offset: 18,
+  })
 }
 
 export const message = {
   success: (text: string) => showMessage(text, { type: 'success' }),
   warning: (text: string) => showMessage(text, { type: 'warning' }),
-  error: (text: string) => showMessage(text, { type: 'error' }),
+  error: (text: string) => showMessage(text, { type: 'error', duration: 4500 }),
   info: (text: string) => showMessage(text, { type: 'info' }),
 }
 
-// 确认对话框 - 替代 ElMessageBox.confirm
-export const confirm = (text: string, title = '提示'): Promise<boolean> => {
-  return new Promise((resolve) => {
-    const result = window.confirm(`${title}\n\n${text}`)
-    resolve(result)
-  })
+export const confirm = async (text: string, title = '请确认'): Promise<boolean> => {
+  try {
+    await ElMessageBox.confirm(
+      h('div', { style: { whiteSpace: 'pre-line', lineHeight: '1.6' } }, text),
+      title,
+      {
+        type: 'warning',
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        closeOnClickModal: false,
+        closeOnPressEscape: true,
+        distinguishCancelAndClose: true,
+        draggable: true,
+      },
+    )
+    return true
+  } catch {
+    return false
+  }
 }
 
 export default message

@@ -73,12 +73,20 @@
 
         <div class="template-selector">
           <label for="repair-template">修复模板</label>
-          <select id="repair-template" v-model="selectedTemplateId" @change="handleTemplateChange">
-            <option :value="undefined">使用通用设置</option>
-            <option v-for="item in repairStore.templates" :key="item.id" :value="item.id">
-              {{ item.name }}{{ item.systemTemplate ? '（系统）' : '' }}
-            </option>
-          </select>
+          <el-select
+            :model-value="selectedTemplateId ?? ''"
+            input-id="repair-template"
+            filterable
+            @change="handleTemplateChange"
+          >
+            <el-option label="使用通用设置" value="" />
+            <el-option
+              v-for="item in repairStore.templates"
+              :key="item.id"
+              :label="`${item.name}${item.systemTemplate ? '（系统）' : ''}`"
+              :value="item.id"
+            />
+          </el-select>
         </div>
 
         <!-- 编码检测 -->
@@ -105,15 +113,15 @@
             <!-- 手动切换编码 -->
             <div class="encoding-switch">
               <span>手动切换编码预览:</span>
-              <select v-model="selectedEncoding" @change="handleSwitchEncoding">
-                <option value="AUTO">自动检测</option>
-                <option value="UTF-8">UTF-8</option>
-                <option value="GBK">GBK</option>
-                <option value="GB18030">GB18030</option>
-                <option value="Big5">Big5</option>
-                <option value="UTF-16LE">UTF-16 LE</option>
-                <option value="UTF-16BE">UTF-16 BE</option>
-              </select>
+              <el-select v-model="selectedEncoding" class="encoding-select" @change="handleSwitchEncoding">
+                <el-option label="自动检测" value="AUTO" />
+                <el-option label="UTF-8" value="UTF-8" />
+                <el-option label="GBK" value="GBK" />
+                <el-option label="GB18030" value="GB18030" />
+                <el-option label="Big5" value="Big5" />
+                <el-option label="UTF-16 LE" value="UTF-16LE" />
+                <el-option label="UTF-16 BE" value="UTF-16BE" />
+              </el-select>
             </div>
             <div v-if="encodingPreview" class="encoding-preview-text">
               <pre>{{ encodingPreview }}</pre>
@@ -202,18 +210,24 @@
           <div class="left-panel glass">
             <div class="panel-header">
               <h3>问题列表</h3>
-              <select v-model="filterType" @change="loadFilteredIssues" class="filter-select">
-                <option value="">全部类型</option>
-                <option v-for="(label, value) in issueTypes" :key="value" :value="value">
-                  {{ label }}
-                </option>
-              </select>
-              <select v-model="filterStatus" @change="loadFilteredIssues" class="filter-select">
-                <option value="">全部状态</option>
-                <option v-for="(label, value) in issueStatuses" :key="value" :value="value">
-                  {{ label }}
-                </option>
-              </select>
+              <el-select v-model="filterType" class="filter-select" @change="loadFilteredIssues">
+                <el-option label="全部类型" value="" />
+                <el-option
+                  v-for="(label, value) in issueTypes"
+                  :key="value"
+                  :label="label"
+                  :value="value"
+                />
+              </el-select>
+              <el-select v-model="filterStatus" class="filter-select" @change="loadFilteredIssues">
+                <el-option label="全部状态" value="" />
+                <el-option
+                  v-for="(label, value) in issueStatuses"
+                  :key="value"
+                  :label="label"
+                  :value="value"
+                />
+              </el-select>
             </div>
             <div class="issue-list">
               <div
@@ -631,7 +645,10 @@ async function handleRescanTask(taskId: number) {
   }
 }
 
-function handleTemplateChange() {
+function handleTemplateChange(value?: number | string) {
+  if (value !== undefined) {
+    selectedTemplateId.value = value === '' ? undefined : Number(value)
+  }
   const template = repairStore.templates.find((item) => item.id === selectedTemplateId.value)
   if (template) selectedMode.value = template.repairMode
 }
@@ -805,7 +822,7 @@ async function handlePreview() {
 async function handleApply() {
   if (!repairStore.currentTask) return
   try {
-    await confirm('确认执行修复？将保存为新的书籍版本，原始内容不会被修改。')
+    if (!await confirm('确认执行修复？将保存为新的书籍版本，原始内容不会被修改。')) return
     loading.value = true
     loadingText.value = '执行修复中...'
     await repairStore.executeRepair(repairStore.currentTask.id)
@@ -823,7 +840,7 @@ async function handleApply() {
 async function handleRevertAll() {
   if (!repairStore.currentTask) return
   try {
-    await confirm('确认撤销全部修改？')
+    if (!await confirm('确认撤销全部修改？')) return
     await repairStore.revertAll(repairStore.currentTask.id)
     message.success('已撤销全部修改')
   } catch (error: any) {
@@ -836,7 +853,7 @@ async function handleRevertAll() {
 async function handleRestoreOriginal() {
   if (!repairStore.currentTask) return
   try {
-    await confirm('确认删除本次生成的修复版本并恢复到修复前状态？')
+    if (!await confirm('确认删除本次生成的修复版本并恢复到修复前状态？')) return
     await repairStore.restoreOriginal(repairStore.currentTask.id)
     message.success('已恢复到修复前版本')
   } catch (error: any) {
@@ -1067,12 +1084,12 @@ function truncate(text: string | undefined, max: number) {
   margin: 8px 0;
 }
 
-.encoding-switch select {
-  padding: 4px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: var(--input-bg);
-  color: var(--text-primary);
+.encoding-select {
+  width: 150px;
+}
+
+.encoding-select :deep(.el-select__wrapper) {
+  min-height: 30px;
 }
 
 .encoding-preview-text pre {
@@ -1178,12 +1195,13 @@ function truncate(text: string | undefined, max: number) {
 }
 
 .filter-select {
-  padding: 2px 6px;
+  width: 104px;
+}
+
+.filter-select :deep(.el-select__wrapper) {
+  min-height: 28px;
+  padding: 2px 8px;
   font-size: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: var(--input-bg);
-  color: var(--text-primary);
 }
 
 .issue-list {

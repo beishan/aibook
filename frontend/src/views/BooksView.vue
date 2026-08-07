@@ -42,48 +42,46 @@
             @keyup.enter="handleSearch"
           />
         </div>
-        <select v-model="filterFormat" class="select-input" @change="handleFilterChange('format')">
-          <option value="">全部格式</option>
-          <option value="epub">EPUB</option>
-          <option value="pdf">PDF</option>
-          <option value="txt">TXT</option>
-          <option value="mobi">MOBI</option>
-          <option value="docx">DOCX</option>
-          <option value="html">HTML</option>
-          <option value="md">Markdown</option>
-        </select>
-        <select v-model="filterStatus" class="select-input" @change="handleFilterChange('status')">
-          <option value="">全部状态</option>
-          <option value="UNREADING">未读</option>
-          <option value="READING">正在阅读</option>
-          <option value="FINISHED">已读完</option>
-        </select>
-        <select v-model="filterCategoryId" class="select-input" @change="handleFilterChange('category')">
-          <option value="">全部分类</option>
-          <option
+        <el-select v-model="filterFormat" class="select-input" @change="handleFilterChange('format')">
+          <el-option label="全部格式" value="" />
+          <el-option label="EPUB" value="epub" />
+          <el-option label="PDF" value="pdf" />
+          <el-option label="TXT" value="txt" />
+          <el-option label="MOBI" value="mobi" />
+          <el-option label="DOCX" value="docx" />
+          <el-option label="HTML" value="html" />
+          <el-option label="Markdown" value="md" />
+        </el-select>
+        <el-select v-model="filterStatus" class="select-input" @change="handleFilterChange('status')">
+          <el-option label="全部状态" value="" />
+          <el-option label="未读" value="UNREADING" />
+          <el-option label="正在阅读" value="READING" />
+          <el-option label="已读完" value="FINISHED" />
+        </el-select>
+        <el-select v-model="filterCategoryId" class="select-input" filterable @change="handleFilterChange('category')">
+          <el-option label="全部分类" value="" />
+          <el-option
             v-for="category in categoryStore.flatTree"
             :key="category.id"
             :value="String(category.id)"
-          >
-            {{ `${'　'.repeat(category.depth)}${category.name}` }}
-          </option>
-        </select>
-        <select v-model="filterTagId" class="select-input" @change="handleFilterChange('tag')">
-          <option value="">全部标签</option>
-          <option
+            :label="`${'　'.repeat(category.depth)}${category.name}`"
+          />
+        </el-select>
+        <el-select v-model="filterTagId" class="select-input" filterable @change="handleFilterChange('tag')">
+          <el-option label="全部标签" value="" />
+          <el-option
             v-for="tag in tagStore.tags"
             :key="tag.id"
             :value="String(tag.id)"
-          >
-            {{ tag.name }}
-          </option>
-        </select>
-        <select v-model="sortBy" class="select-input" @change="loadBooks">
-          <option value="createdAt">添加时间</option>
-          <option value="title">书名</option>
-          <option value="author">作者</option>
-          <option value="updatedAt">最近阅读</option>
-        </select>
+            :label="tag.name"
+          />
+        </el-select>
+        <el-select v-model="sortBy" class="select-input" @change="loadBooks">
+          <el-option label="添加时间" value="createdAt" />
+          <el-option label="书名" value="title" />
+          <el-option label="作者" value="author" />
+          <el-option label="最近阅读" value="updatedAt" />
+        </el-select>
         <div class="filter-actions">
           <button class="btn" @click="handleSearch">搜索</button>
           <button class="btn btn-text" @click="resetFilters">重置</button>
@@ -145,16 +143,15 @@
       <div class="batch-actions">
         <button class="btn btn-text" @click="selectAllCurrentPage">全选当前页</button>
         <button class="btn btn-text" @click="clearSelection">取消全选</button>
-        <select v-model="batchCategoryId" class="select-input batch-category-select">
-          <option value="">设为未分类</option>
-          <option
+        <el-select v-model="batchCategoryId" class="select-input batch-category-select" filterable>
+          <el-option label="设为未分类" value="" />
+          <el-option
             v-for="category in categoryStore.flatTree"
             :key="category.id"
             :value="String(category.id)"
-          >
-            {{ category.path }}
-          </option>
-        </select>
+            :label="category.path"
+          />
+        </el-select>
         <button class="btn" @click="applyBatchCategory">
           <span>🗂️</span>
           <span>设置分类</span>
@@ -174,11 +171,11 @@
             :value="tag.id"
           />
         </el-select>
-        <select v-model="batchTagMode" class="select-input batch-tag-mode">
-          <option value="ADD">添加标签</option>
-          <option value="REMOVE">移除标签</option>
-          <option value="REPLACE">替换标签</option>
-        </select>
+        <el-select v-model="batchTagMode" class="select-input batch-tag-mode">
+          <el-option label="添加标签" value="ADD" />
+          <el-option label="移除标签" value="REMOVE" />
+          <el-option label="替换标签" value="REPLACE" />
+        </el-select>
         <button class="btn" :disabled="batchTagIds.length === 0" @click="applyBatchTags">
           <span>🏷️</span>
           <span>应用标签</span>
@@ -428,11 +425,14 @@
     <div class="pagination" v-if="bookStore.totalElements > 0">
       <label class="page-size-control">
         <span>每页</span>
-        <select v-model.number="pageSize" class="page-size-select" @change="handlePageSizeChange">
-          <option v-for="size in pageSizeOptions" :key="size" :value="size">
-            {{ size }} 条
-          </option>
-        </select>
+        <el-select v-model="pageSize" class="page-size-select" @change="handlePageSizeChange">
+          <el-option
+            v-for="size in pageSizeOptions"
+            :key="size"
+            :label="`${size} 条`"
+            :value="size"
+          />
+        </el-select>
       </label>
       <button class="btn" :disabled="currentPage <= 1" @click="prevPage">
         <span>‹</span>
@@ -1120,16 +1120,16 @@ onMounted(async () => {
 }
 
 .select-input {
-  padding: 12px 16px;
-  border: none;
+  min-width: 140px;
+}
+
+.select-input :deep(.el-select__wrapper) {
+  min-height: 44px;
   border-radius: var(--radius-md);
-  font-size: var(--font-size-base);
   background: var(--bg-primary);
+  box-shadow: none;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  min-width: 140px;
-  cursor: pointer;
-  outline: none;
 }
 
 .filter-actions {
@@ -1262,7 +1262,6 @@ onMounted(async () => {
 
 .batch-category-select {
   min-width: 180px;
-  padding: 8px 12px;
 }
 
 .batch-tag-select {
@@ -1271,7 +1270,11 @@ onMounted(async () => {
 
 .batch-tag-mode {
   min-width: 112px;
-  padding: 8px 12px;
+}
+
+.batch-category-select :deep(.el-select__wrapper),
+.batch-tag-mode :deep(.el-select__wrapper) {
+  min-height: 36px;
 }
 
 .batch-trash-button {
@@ -1774,14 +1777,13 @@ onMounted(async () => {
 }
 
 .page-size-select {
-  min-width: 78px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-color);
+  width: 94px;
+}
+
+.page-size-select :deep(.el-select__wrapper) {
+  min-height: 36px;
   border-radius: var(--radius-md);
-  outline: none;
   background: var(--surface-card);
-  color: var(--text-primary);
-  cursor: pointer;
 }
 
 .page-info {
