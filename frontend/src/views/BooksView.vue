@@ -42,7 +42,13 @@
             @keyup.enter="handleSearch"
           />
         </div>
-        <el-select v-model="filterFormat" class="select-input" @change="handleFilterChange('format')">
+        <el-select
+          v-model="filterFormat"
+          class="select-input"
+          aria-label="格式筛选"
+          @change="handleFilterChange('format')"
+        >
+          <template #prefix><span class="filter-select-label">格式</span></template>
           <el-option label="全部格式" value="" />
           <el-option label="EPUB" value="epub" />
           <el-option label="PDF" value="pdf" />
@@ -52,13 +58,26 @@
           <el-option label="HTML" value="html" />
           <el-option label="Markdown" value="md" />
         </el-select>
-        <el-select v-model="filterStatus" class="select-input" @change="handleFilterChange('status')">
+        <el-select
+          v-model="filterStatus"
+          class="select-input"
+          aria-label="阅读状态筛选"
+          @change="handleFilterChange('status')"
+        >
+          <template #prefix><span class="filter-select-label">状态</span></template>
           <el-option label="全部状态" value="" />
           <el-option label="未读" value="UNREADING" />
           <el-option label="正在阅读" value="READING" />
           <el-option label="已读完" value="FINISHED" />
         </el-select>
-        <el-select v-model="filterCategoryId" class="select-input" filterable @change="handleFilterChange('category')">
+        <el-select
+          v-model="filterCategoryId"
+          class="select-input"
+          filterable
+          aria-label="分类筛选"
+          @change="handleFilterChange('category')"
+        >
+          <template #prefix><span class="filter-select-label">分类</span></template>
           <el-option label="全部分类" value="" />
           <el-option
             v-for="category in categoryStore.flatTree"
@@ -67,7 +86,14 @@
             :label="`${'　'.repeat(category.depth)}${category.name}`"
           />
         </el-select>
-        <el-select v-model="filterTagId" class="select-input" filterable @change="handleFilterChange('tag')">
+        <el-select
+          v-model="filterTagId"
+          class="select-input"
+          filterable
+          aria-label="标签筛选"
+          @change="handleFilterChange('tag')"
+        >
+          <template #prefix><span class="filter-select-label">标签</span></template>
           <el-option label="全部标签" value="" />
           <el-option
             v-for="tag in tagStore.tags"
@@ -76,7 +102,8 @@
             :label="tag.name"
           />
         </el-select>
-        <el-select v-model="sortBy" class="select-input" @change="loadBooks">
+        <el-select v-model="sortBy" class="select-input" aria-label="排序方式" @change="loadBooks">
+          <template #prefix><span class="filter-select-label">排序</span></template>
           <el-option label="添加时间" value="createdAt" />
           <el-option label="书名" value="title" />
           <el-option label="作者" value="author" />
@@ -1095,16 +1122,22 @@ onMounted(async () => {
 }
 
 .filter-row {
-  display: flex;
-  gap: var(--spacing-md);
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 1.8fr)
+    minmax(0, 0.78fr)
+    minmax(0, 0.82fr)
+    minmax(0, 0.92fr)
+    minmax(0, 0.86fr)
+    minmax(0, 0.9fr)
+    auto;
+  gap: 10px;
   align-items: center;
 }
 
 .search-box {
   position: relative;
-  flex: 1;
-  min-width: 250px;
+  min-width: 0;
 }
 
 .search-icon {
@@ -1123,6 +1156,25 @@ onMounted(async () => {
   min-width: 140px;
 }
 
+.filter-row > .select-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.filter-select-label {
+  flex: none;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.filter-select-label::after {
+  content: '·';
+  margin-left: 6px;
+  color: var(--border-color);
+}
+
 .select-input :deep(.el-select__wrapper) {
   min-height: 44px;
   border-radius: var(--radius-md);
@@ -1135,6 +1187,7 @@ onMounted(async () => {
 .filter-actions {
   display: flex;
   gap: var(--spacing-sm);
+  white-space: nowrap;
 }
 
 /* 视图切换 */
@@ -1832,11 +1885,16 @@ onMounted(async () => {
 /* 响应式 */
 @media (max-width: 768px) {
   .filter-row {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .search-box {
-    min-width: 100%;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .filter-actions {
+    width: 100%;
   }
 
   .book-list-meta {

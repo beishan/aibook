@@ -247,14 +247,18 @@ const setCollapsedRoots = (ids: Iterable<number>) => {
 }
 
 const loadCollapsedRoots = () => {
+  const savedValue = localStorage.getItem(COLLAPSED_ROOTS_KEY)
+  if (savedValue === null) return false
   try {
-    const stored = JSON.parse(localStorage.getItem(COLLAPSED_ROOTS_KEY) || '[]')
+    const stored = JSON.parse(savedValue)
     if (Array.isArray(stored)) {
       collapsedRootIds.value = new Set(stored.filter((id): id is number => Number.isInteger(id)))
+      return true
     }
   } catch {
     collapsedRootIds.value = new Set()
   }
+  return false
 }
 
 const isCollapsibleRoot = (category: Category & { depth?: number }) =>
@@ -389,15 +393,32 @@ const restorePresets = async () => {
   }
 }
 
-onMounted(() => {
-  loadCollapsedRoots()
-  void categoryStore.refresh()
+onMounted(async () => {
+  const hasSavedCollapseState = loadCollapsedRoots()
+  await categoryStore.refresh()
+  if (!hasSavedCollapseState) {
+    setCollapsedRoots(collapsibleRoots.value.map(({ id }) => id))
+  }
 })
 </script>
 
 <style scoped>
 .category-view {
   width: 100%;
+}
+
+.page-header {
+  margin-bottom: 28px;
+}
+
+.page-title {
+  margin: 0 0 8px;
+  line-height: 1.2;
+}
+
+.page-subtitle {
+  margin: 0 0 20px;
+  line-height: 1.6;
 }
 
 .header-actions,
@@ -408,11 +429,16 @@ onMounted(() => {
   gap: 10px;
 }
 
+.header-actions {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 18px;
+  margin-bottom: 24px;
 }
 
 .summary-card {
@@ -579,6 +605,14 @@ onMounted(() => {
 }
 
 @media (max-width: 800px) {
+  .page-header {
+    margin-bottom: 22px;
+  }
+
+  .page-subtitle {
+    margin-bottom: 16px;
+  }
+
   .summary-grid {
     grid-template-columns: 1fr;
   }
