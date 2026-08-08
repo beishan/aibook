@@ -13,6 +13,10 @@ public class UserPreferencesDTO {
     private String libraryViewMode;
     private Integer libraryPageSize;
     private Integer scanThreadCount;
+    private Integer dockSize;
+    private Integer dockOpacity;
+    private Integer dockMagnification;
+    private Integer dockBlur;
     private Long uiFontId;
     private Long readerFontId;
 
@@ -58,6 +62,38 @@ public class UserPreferencesDTO {
 
     public void setScanThreadCount(Integer scanThreadCount) {
         this.scanThreadCount = scanThreadCount;
+    }
+
+    public Integer getDockSize() {
+        return dockSize;
+    }
+
+    public void setDockSize(Integer dockSize) {
+        this.dockSize = dockSize;
+    }
+
+    public Integer getDockOpacity() {
+        return dockOpacity;
+    }
+
+    public void setDockOpacity(Integer dockOpacity) {
+        this.dockOpacity = dockOpacity;
+    }
+
+    public Integer getDockMagnification() {
+        return dockMagnification;
+    }
+
+    public void setDockMagnification(Integer dockMagnification) {
+        this.dockMagnification = dockMagnification;
+    }
+
+    public Integer getDockBlur() {
+        return dockBlur;
+    }
+
+    public void setDockBlur(Integer dockBlur) {
+        this.dockBlur = dockBlur;
     }
 
     public Long getUiFontId() {
@@ -110,6 +146,26 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder scanThreadCount(Integer scanThreadCount) {
             value.setScanThreadCount(scanThreadCount);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder dockSize(Integer dockSize) {
+            value.setDockSize(dockSize);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder dockOpacity(Integer dockOpacity) {
+            value.setDockOpacity(dockOpacity);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder dockMagnification(Integer dockMagnification) {
+            value.setDockMagnification(dockMagnification);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder dockBlur(Integer dockBlur) {
+            value.setDockBlur(dockBlur);
             return this;
         }
 

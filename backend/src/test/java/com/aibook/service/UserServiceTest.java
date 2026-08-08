@@ -42,6 +42,66 @@ class UserServiceTest {
         assertEquals("compact-card", result.getLibraryViewMode());
         assertEquals(36, result.getLibraryPageSize());
         assertEquals(2, result.getScanThreadCount());
+        assertEquals(58, result.getDockSize());
+        assertEquals(72, result.getDockOpacity());
+        assertEquals(128, result.getDockMagnification());
+        assertEquals(24, result.getDockBlur());
+    }
+
+    @Test
+    void updatesDockAppearancePreferences() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        when(repository.save(user)).thenReturn(user);
+        UserService service = new UserService(repository);
+
+        UserPreferencesDTO result = service.updatePreferences(
+                "reader",
+                UserPreferencesDTO.builder()
+                        .dockSize(64)
+                        .dockOpacity(66)
+                        .dockMagnification(136)
+                        .dockBlur(30)
+                        .build());
+
+        assertEquals(64, result.getDockSize());
+        assertEquals(66, result.getDockOpacity());
+        assertEquals(136, result.getDockMagnification());
+        assertEquals(30, result.getDockBlur());
+    }
+
+    @Test
+    void rejectsDockAppearanceOutsideAllowedRange() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        UserService service = new UserService(repository);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updatePreferences(
+                        "reader", UserPreferencesDTO.builder().dockSize(80).build()));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updatePreferences(
+                        "reader", UserPreferencesDTO.builder().dockOpacity(20).build()));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updatePreferences(
+                        "reader", UserPreferencesDTO.builder().dockMagnification(170).build()));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updatePreferences(
+                        "reader", UserPreferencesDTO.builder().dockBlur(4).build()));
     }
 
     @Test

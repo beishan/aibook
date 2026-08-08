@@ -103,6 +103,26 @@ public class User implements UserDetails {
     private Integer scanThreadCount;
 
     /**
+     * 自然清新主题 Dock 图标尺寸（像素）
+     */
+    private Integer dockSize;
+
+    /**
+     * 自然清新主题 Dock 玻璃底色透明度（百分比）
+     */
+    private Integer dockOpacity;
+
+    /**
+     * 自然清新主题 Dock 悬浮放大比例（百分比）
+     */
+    private Integer dockMagnification;
+
+    /**
+     * 自然清新主题 Dock 背景模糊半径（像素）
+     */
+    private Integer dockBlur;
+
+    /**
      * 系统界面字体资源 ID。
      */
     private Long uiFontId;

@@ -25,6 +25,10 @@ public class UserService implements UserDetailsService {
             Set.of("card", "compact-card", "list");
     private static final Set<Integer> LIBRARY_PAGE_SIZES =
             Set.of(12, 18, 24, 36, 60);
+    private static final int DEFAULT_DOCK_SIZE = 58;
+    private static final int DEFAULT_DOCK_OPACITY = 72;
+    private static final int DEFAULT_DOCK_MAGNIFICATION = 128;
+    private static final int DEFAULT_DOCK_BLUR = 24;
 
     private final UserRepository userRepository;
     private final FontAssetRepository fontAssetRepository;
@@ -98,6 +102,22 @@ public class UserService implements UserDetailsService {
             }
             user.setScanThreadCount(request.getScanThreadCount());
         }
+        if (request.getDockSize() != null) {
+            requireRange("Dock 大小", request.getDockSize(), 44, 76);
+            user.setDockSize(request.getDockSize());
+        }
+        if (request.getDockOpacity() != null) {
+            requireRange("Dock 透明度", request.getDockOpacity(), 40, 96);
+            user.setDockOpacity(request.getDockOpacity());
+        }
+        if (request.getDockMagnification() != null) {
+            requireRange("Dock 悬浮放大", request.getDockMagnification(), 100, 150);
+            user.setDockMagnification(request.getDockMagnification());
+        }
+        if (request.getDockBlur() != null) {
+            requireRange("Dock 玻璃模糊", request.getDockBlur(), 8, 40);
+            user.setDockBlur(request.getDockBlur());
+        }
         if (request.hasUiFontId()) {
             validateFont(request.getUiFontId());
             user.setUiFontId(request.getUiFontId());
@@ -117,6 +137,11 @@ public class UserService implements UserDetailsService {
                 .libraryPageSize(user.getLibraryPageSize())
                 .scanThreadCount(
                         ScanSettings.normalizeThreadCount(user.getScanThreadCount()))
+                .dockSize(defaultIfNull(user.getDockSize(), DEFAULT_DOCK_SIZE))
+                .dockOpacity(defaultIfNull(user.getDockOpacity(), DEFAULT_DOCK_OPACITY))
+                .dockMagnification(defaultIfNull(
+                        user.getDockMagnification(), DEFAULT_DOCK_MAGNIFICATION))
+                .dockBlur(defaultIfNull(user.getDockBlur(), DEFAULT_DOCK_BLUR))
                 .uiFontId(activeFontId(user.getUiFontId()))
                 .readerFontId(activeFontId(user.getReaderFontId()))
                 .build();
@@ -145,5 +170,16 @@ public class UserService implements UserDetailsService {
         if (!allowedValues.contains(value)) {
             throw new IllegalArgumentException(label + "不支持该值: " + value);
         }
+    }
+
+    private void requireRange(String label, int value, int min, int max) {
+        if (value < min || value > max) {
+            throw new IllegalArgumentException(
+                    label + "必须在 " + min + " 到 " + max + " 之间");
+        }
+    }
+
+    private int defaultIfNull(Integer value, int fallback) {
+        return value == null ? fallback : value;
     }
 }
