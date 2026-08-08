@@ -5,6 +5,9 @@ import com.aibook.dto.UserPreferencesDTO;
 import com.aibook.model.entity.User;
 import com.aibook.repository.FontAssetRepository;
 import com.aibook.repository.UserRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -12,7 +15,9 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -35,6 +40,7 @@ public class UserService implements UserDetailsService {
     private static final String DEFAULT_WARM_THEME_COLOR = "#A0522D";
     private static final String DEFAULT_NATURAL_THEME_COLOR = "#2E7D5A";
     private static final Pattern HEX_COLOR_PATTERN = Pattern.compile("^#[0-9A-Fa-f]{6}$");
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final UserRepository userRepository;
     private final FontAssetRepository fontAssetRepository;
@@ -117,6 +123,10 @@ public class UserService implements UserDetailsService {
         if (request.getNaturalThemeColor() != null) {
             user.setNaturalThemeColor(normalizeThemeColor(request.getNaturalThemeColor()));
         }
+        if (request.getThemeBackgrounds() != null) {
+            user.setThemeBackgroundSettings(serializeThemeBackgrounds(
+                    normalizeThemeBackgrounds(request.getThemeBackgrounds())));
+        }
         if (request.getDockSize() != null) {
             requireRange("Dock 大小", request.getDockSize(), 44, 76);
             user.setDockSize(request.getDockSize());
@@ -154,6 +164,7 @@ public class UserService implements UserDetailsService {
                         user.getWarmThemeColor(), DEFAULT_WARM_THEME_COLOR))
                 .naturalThemeColor(defaultIfBlank(
                         user.getNaturalThemeColor(), DEFAULT_NATURAL_THEME_COLOR))
+                .themeBackgrounds(readThemeBackgrounds(user.getThemeBackgroundSettings()))
                 .libraryViewMode(user.getLibraryViewMode())
                 .libraryPageSize(user.getLibraryPageSize())
                 .scanThreadCount(
@@ -205,6 +216,9 @@ public class UserService implements UserDetailsService {
     }
 
     private String normalizeThemeColor(String value) {
+        if (value == null) {
+            throw new IllegalArgumentException("主题颜色不能为空");
+        }
         String normalized = value.trim().toUpperCase(Locale.ROOT);
         if (!HEX_COLOR_PATTERN.matcher(normalized).matches()) {
             throw new IllegalArgumentException("主题色必须使用 #RRGGBB 格式");
@@ -214,5 +228,67 @@ public class UserService implements UserDetailsService {
 
     private String defaultIfBlank(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private Map<String, UserPreferencesDTO.ThemeBackgroundDTO> normalizeThemeBackgrounds(
+            Map<String, UserPreferencesDTO.ThemeBackgroundDTO> backgrounds) {
+        if (!backgrounds.keySet().equals(WEB_THEMES)) {
+            throw new IllegalArgumentException("背景设置必须完整包含 modern、warm、natural 三个主题");
+        }
+        Map<String, UserPreferencesDTO.ThemeBackgroundDTO> normalized = new LinkedHashMap<>();
+        for (String theme : new String[] {"modern", "warm", "natural"}) {
+            UserPreferencesDTO.ThemeBackgroundDTO value = backgrounds.get(theme);
+            if (value == null || (!"solid".equals(value.getMode())
+                    && !"gradient".equals(value.getMode()))) {
+                throw new IllegalArgumentException("背景模式必须为 solid 或 gradient");
+            }
+            if (value.getNavOpacity() == null || value.getSurfaceOpacity() == null) {
+                throw new IllegalArgumentException("背景透明度不能为空");
+            }
+            requireRange("导航透明度", value.getNavOpacity(), 20, 100);
+            requireRange("卡片透明度", value.getSurfaceOpacity(), 35, 100);
+            normalized.put(theme, new UserPreferencesDTO.ThemeBackgroundDTO(
+                    value.getMode(),
+                    normalizeThemeColor(value.getPageColor()),
+                    normalizeThemeColor(value.getSecondaryColor()),
+                    normalizeThemeColor(value.getNavColor()),
+                    value.getNavOpacity(),
+                    normalizeThemeColor(value.getSurfaceColor()),
+                    value.getSurfaceOpacity()));
+        }
+        return normalized;
+    }
+
+    private String serializeThemeBackgrounds(
+            Map<String, UserPreferencesDTO.ThemeBackgroundDTO> backgrounds) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(backgrounds);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("无法保存主题背景设置", exception);
+        }
+    }
+
+    private Map<String, UserPreferencesDTO.ThemeBackgroundDTO> readThemeBackgrounds(String value) {
+        if (value == null || value.isBlank()) {
+            return defaultThemeBackgrounds();
+        }
+        try {
+            Map<String, UserPreferencesDTO.ThemeBackgroundDTO> backgrounds =
+                    OBJECT_MAPPER.readValue(value, new TypeReference<>() {});
+            return normalizeThemeBackgrounds(backgrounds);
+        } catch (JsonProcessingException | IllegalArgumentException exception) {
+            return defaultThemeBackgrounds();
+        }
+    }
+
+    private Map<String, UserPreferencesDTO.ThemeBackgroundDTO> defaultThemeBackgrounds() {
+        Map<String, UserPreferencesDTO.ThemeBackgroundDTO> defaults = new LinkedHashMap<>();
+        defaults.put("modern", new UserPreferencesDTO.ThemeBackgroundDTO(
+                "solid", "#F5F5F5", "#EEF2F7", "#FFFFFF", 100, "#FFFFFF", 100));
+        defaults.put("warm", new UserPreferencesDTO.ThemeBackgroundDTO(
+                "solid", "#FAF6F1", "#F3E9DC", "#FFFBF5", 100, "#FFFBF5", 100));
+        defaults.put("natural", new UserPreferencesDTO.ThemeBackgroundDTO(
+                "gradient", "#E8F5E9", "#E0F2F1", "#FFFFFF", 75, "#FFFFFF", 72));
+        return defaults;
     }
 }

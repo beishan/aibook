@@ -1,10 +1,21 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { DEFAULT_THEME_ACCENT_COLORS, THEMES, type ThemeAccentColors, type ThemeId, type ThemeDefinition } from '@/types/theme'
+import {
+  DEFAULT_THEME_ACCENT_COLORS,
+  DEFAULT_THEME_BACKGROUND_SETTINGS,
+  THEMES,
+  type ThemeAccentColors,
+  type ThemeBackgroundConfig,
+  type ThemeBackgroundSettings,
+  type ThemeId,
+  type ThemeDefinition,
+} from '@/types/theme'
 import { applyThemeColorTokens, normalizeHexColor } from '@/utils/themeColor'
+import { applyThemeBackgroundTokens, normalizeThemeBackgroundConfig } from '@/utils/themeBackground'
 
 const STORAGE_KEY = 'ai-book-theme'
 const ACCENT_STORAGE_KEY = 'ai-book-theme-accent-colors'
+const BACKGROUND_STORAGE_KEY = 'ai-book-theme-background-settings'
 
 const readAccentColors = (): ThemeAccentColors => {
   try {
@@ -19,9 +30,29 @@ const readAccentColors = (): ThemeAccentColors => {
   }
 }
 
+const cloneDefaultBackgroundSettings = (): ThemeBackgroundSettings => ({
+  modern: { ...DEFAULT_THEME_BACKGROUND_SETTINGS.modern },
+  warm: { ...DEFAULT_THEME_BACKGROUND_SETTINGS.warm },
+  natural: { ...DEFAULT_THEME_BACKGROUND_SETTINGS.natural },
+})
+
+const readBackgroundSettings = (): ThemeBackgroundSettings => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(BACKGROUND_STORAGE_KEY) || '{}')
+    return {
+      modern: normalizeThemeBackgroundConfig(saved.modern || {}, DEFAULT_THEME_BACKGROUND_SETTINGS.modern),
+      warm: normalizeThemeBackgroundConfig(saved.warm || {}, DEFAULT_THEME_BACKGROUND_SETTINGS.warm),
+      natural: normalizeThemeBackgroundConfig(saved.natural || {}, DEFAULT_THEME_BACKGROUND_SETTINGS.natural),
+    }
+  } catch {
+    return cloneDefaultBackgroundSettings()
+  }
+}
+
 export const useThemeStore = defineStore('theme', () => {
   const currentTheme = ref<ThemeId>('natural')
   const accentColors = ref<ThemeAccentColors>(readAccentColors())
+  const backgroundSettings = ref<ThemeBackgroundSettings>(readBackgroundSettings())
 
   const currentThemeDef = computed<ThemeDefinition>(() => {
     return THEMES.find(t => t.id === currentTheme.value) || THEMES[2]
@@ -29,12 +60,31 @@ export const useThemeStore = defineStore('theme', () => {
 
   const currentLayout = computed(() => currentThemeDef.value.layout)
   const currentAccentColor = computed(() => accentColors.value[currentTheme.value])
+  const currentBackgroundSettings = computed(() => backgroundSettings.value[currentTheme.value])
 
   function setTheme(id: ThemeId) {
     currentTheme.value = id
     document.documentElement.dataset.theme = id
     localStorage.setItem(STORAGE_KEY, id)
     applyThemeColorTokens(accentColors.value[id])
+    applyThemeBackgroundTokens(backgroundSettings.value[id])
+  }
+
+  function setBackgroundSettings(theme: ThemeId, config: ThemeBackgroundConfig) {
+    const normalized = normalizeThemeBackgroundConfig(config, DEFAULT_THEME_BACKGROUND_SETTINGS[theme])
+    backgroundSettings.value = { ...backgroundSettings.value, [theme]: normalized }
+    localStorage.setItem(BACKGROUND_STORAGE_KEY, JSON.stringify(backgroundSettings.value))
+    if (theme === currentTheme.value) applyThemeBackgroundTokens(normalized)
+  }
+
+  function resetBackgroundSettings(theme: ThemeId) {
+    setBackgroundSettings(theme, { ...DEFAULT_THEME_BACKGROUND_SETTINGS[theme] })
+  }
+
+  function resetAllBackgroundSettings() {
+    backgroundSettings.value = cloneDefaultBackgroundSettings()
+    localStorage.setItem(BACKGROUND_STORAGE_KEY, JSON.stringify(backgroundSettings.value))
+    applyThemeBackgroundTokens(backgroundSettings.value[currentTheme.value])
   }
 
   function setAccentColor(theme: ThemeId, color: string) {
@@ -71,10 +121,15 @@ export const useThemeStore = defineStore('theme', () => {
     currentLayout,
     accentColors,
     currentAccentColor,
+    backgroundSettings,
+    currentBackgroundSettings,
     setTheme,
     setAccentColor,
     resetAccentColor,
     resetAllAccentColors,
+    setBackgroundSettings,
+    resetBackgroundSettings,
+    resetAllBackgroundSettings,
     initTheme,
   }
 })

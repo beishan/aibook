@@ -3,7 +3,14 @@ import { ref } from 'vue'
 import api from '@/utils/api'
 import { useThemeStore } from '@/stores/theme'
 import { useFontStore } from '@/stores/font'
-import { THEMES, type ThemeId } from '@/types/theme'
+import {
+  DEFAULT_THEME_BACKGROUND_SETTINGS,
+  THEMES,
+  type ThemeBackgroundConfig,
+  type ThemeBackgroundSettings,
+  type ThemeId,
+} from '@/types/theme'
+import { normalizeThemeBackgroundConfig } from '@/utils/themeBackground'
 
 export type LibraryViewMode = 'card' | 'compact-card' | 'list'
 export const LIBRARY_PAGE_SIZE_OPTIONS = [12, 18, 24, 36, 60] as const
@@ -17,6 +24,7 @@ interface UserPreferences {
   modernThemeColor: string | null
   warmThemeColor: string | null
   naturalThemeColor: string | null
+  themeBackgrounds: ThemeBackgroundSettings | null
   dockSize: number | null
   dockOpacity: number | null
   dockMagnification: number | null
@@ -71,6 +79,26 @@ const isScanThreadCount = (value: unknown): value is number =>
 
 const isThemeColor = (value: unknown): value is string =>
   typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
+
+const isBackgroundConfig = (value: unknown): value is ThemeBackgroundConfig => {
+  if (!value || typeof value !== 'object') return false
+  const config = value as Partial<ThemeBackgroundConfig>
+  return (config.mode === 'solid' || config.mode === 'gradient')
+    && isThemeColor(config.pageColor)
+    && isThemeColor(config.secondaryColor)
+    && isThemeColor(config.navColor)
+    && isNumberInRange(config.navOpacity, 20, 100)
+    && isThemeColor(config.surfaceColor)
+    && isNumberInRange(config.surfaceOpacity, 35, 100)
+}
+
+const isBackgroundSettings = (value: unknown): value is ThemeBackgroundSettings => {
+  if (!value || typeof value !== 'object') return false
+  const settings = value as Partial<ThemeBackgroundSettings>
+  return isBackgroundConfig(settings.modern)
+    && isBackgroundConfig(settings.warm)
+    && isBackgroundConfig(settings.natural)
+}
 
 export const usePreferencesStore = defineStore('preferences', () => {
   const themeStore = useThemeStore()
@@ -144,6 +172,29 @@ export const usePreferencesStore = defineStore('preferences', () => {
       warmThemeColor: themeStore.accentColors.warm,
       naturalThemeColor: themeStore.accentColors.natural,
     })
+  }
+
+  const setThemeBackground = (
+    theme: ThemeId,
+    config: ThemeBackgroundConfig,
+    syncRemote = true,
+  ) => {
+    const normalized = normalizeThemeBackgroundConfig(
+      config,
+      DEFAULT_THEME_BACKGROUND_SETTINGS[theme],
+    )
+    themeStore.setBackgroundSettings(theme, normalized)
+    if (syncRemote) persistRemote({ themeBackgrounds: themeStore.backgroundSettings })
+  }
+
+  const resetThemeBackground = (theme: ThemeId) => {
+    themeStore.resetBackgroundSettings(theme)
+    persistRemote({ themeBackgrounds: themeStore.backgroundSettings })
+  }
+
+  const resetAllThemeBackgrounds = () => {
+    themeStore.resetAllBackgroundSettings()
+    persistRemote({ themeBackgrounds: themeStore.backgroundSettings })
   }
 
   const setDockSize = (value: number, syncRemote = true) => {
@@ -240,6 +291,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
         else missingPreferences[themeColorPreferenceKey[theme]] = themeStore.accentColors[theme]
       })
 
+      if (isBackgroundSettings(data.themeBackgrounds)) {
+        THEMES.forEach(({ id }) => setThemeBackground(id, data.themeBackgrounds![id], false))
+      } else {
+        missingPreferences.themeBackgrounds = themeStore.backgroundSettings
+      }
+
       if (isNumberInRange(data.dockSize, 44, 76)) setDockSize(data.dockSize, false)
       else missingPreferences.dockSize = dockSize.value
 
@@ -293,6 +350,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setThemeAccentColor,
     resetThemeAccentColor,
     resetAllThemeAccentColors,
+    setThemeBackground,
+    resetThemeBackground,
+    resetAllThemeBackgrounds,
     setDockSize,
     setDockOpacity,
     setDockMagnification,

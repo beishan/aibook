@@ -103,6 +103,12 @@ public class User implements UserDetails {
     private String naturalThemeColor;
 
     /**
+     * Web 端各主题的页面、导航与卡片背景配置（JSON）。
+     */
+    @Column(columnDefinition = "TEXT")
+    private String themeBackgroundSettings;
+
+    /**
      * Web 端书库显示方式（card、compact-card、list）
      */
     private String libraryViewMode;

@@ -187,11 +187,12 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   justify-content: space-between;
   padding: 0 var(--spacing-lg);
   height: 60px;
-  background: var(--glass-bg);
+  background: var(--nav-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border-bottom: var(--glass-border);
   box-shadow: var(--glass-shadow);
+  color: var(--nav-text-primary, var(--text-primary));
 }
 
 .header-left {
@@ -299,7 +300,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 
 .username {
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--nav-text-primary, var(--text-primary));
   font-size: var(--font-size-sm);
 }
 

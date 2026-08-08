@@ -138,6 +138,8 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   background: var(--nav-bg);
   border-bottom: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
+  color: var(--nav-text-primary, var(--text-primary));
+  backdrop-filter: var(--glass-blur);
 }
 
 .header-content {
@@ -170,7 +172,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 .logo-text {
   font-size: var(--font-size-xl);
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--nav-text-primary, var(--text-primary));
 }
 
 /* 水平导航 */
@@ -187,7 +189,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   padding: 8px 16px;
   border-radius: var(--radius-xl);
   text-decoration: none;
-  color: var(--text-secondary);
+  color: var(--nav-text-secondary, var(--text-secondary));
   font-size: var(--font-size-sm);
   font-weight: 500;
   transition: all var(--transition-fast);
@@ -195,7 +197,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 
 .nav-item:hover {
   background: var(--surface-hover);
-  color: var(--text-primary);
+  color: var(--nav-text-primary, var(--text-primary));
 }
 
 .nav-item.active {
@@ -288,7 +290,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 
 .username {
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--nav-text-primary, var(--text-primary));
   font-size: var(--font-size-sm);
 }
 

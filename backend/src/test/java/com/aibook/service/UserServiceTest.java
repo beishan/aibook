@@ -9,6 +9,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -49,6 +51,7 @@ class UserServiceTest {
         assertEquals("#2563EB", result.getModernThemeColor());
         assertEquals("#A0522D", result.getWarmThemeColor());
         assertEquals("#2E7D5A", result.getNaturalThemeColor());
+        assertEquals("gradient", result.getThemeBackgrounds().get("natural").getMode());
     }
 
     @Test
@@ -97,6 +100,66 @@ class UserServiceTest {
                 () -> service.updatePreferences(
                         "reader",
                         UserPreferencesDTO.builder().warmThemeColor("#FFF").build()));
+    }
+
+    @Test
+    void updatesThemeBackgroundSettings() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        when(repository.save(user)).thenReturn(user);
+        UserService service = new UserService(repository);
+        Map<String, UserPreferencesDTO.ThemeBackgroundDTO> backgrounds = validBackgrounds();
+        backgrounds.get("modern").setPageColor("#eaf0f7");
+
+        UserPreferencesDTO result = service.updatePreferences(
+                "reader",
+                UserPreferencesDTO.builder().themeBackgrounds(backgrounds).build());
+
+        assertEquals("#EAF0F7", result.getThemeBackgrounds().get("modern").getPageColor());
+        assertEquals(72, result.getThemeBackgrounds().get("natural").getSurfaceOpacity());
+    }
+
+    @Test
+    void rejectsInvalidThemeBackgroundSettings() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        UserService service = new UserService(repository);
+        Map<String, UserPreferencesDTO.ThemeBackgroundDTO> incomplete = validBackgrounds();
+        incomplete.remove("warm");
+        Map<String, UserPreferencesDTO.ThemeBackgroundDTO> invalidOpacity = validBackgrounds();
+        invalidOpacity.get("natural").setSurfaceOpacity(10);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updatePreferences(
+                        "reader",
+                        UserPreferencesDTO.builder().themeBackgrounds(incomplete).build()));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updatePreferences(
+                        "reader",
+                        UserPreferencesDTO.builder().themeBackgrounds(invalidOpacity).build()));
+    }
+
+    private Map<String, UserPreferencesDTO.ThemeBackgroundDTO> validBackgrounds() {
+        Map<String, UserPreferencesDTO.ThemeBackgroundDTO> values = new LinkedHashMap<>();
+        values.put("modern", new UserPreferencesDTO.ThemeBackgroundDTO(
+                "solid", "#F5F5F5", "#EEF2F7", "#FFFFFF", 100, "#FFFFFF", 100));
+        values.put("warm", new UserPreferencesDTO.ThemeBackgroundDTO(
+                "solid", "#FAF6F1", "#F3E9DC", "#FFFBF5", 100, "#FFFBF5", 100));
+        values.put("natural", new UserPreferencesDTO.ThemeBackgroundDTO(
+                "gradient", "#E8F5E9", "#E0F2F1", "#FFFFFF", 75, "#FFFFFF", 72));
+        return values;
     }
 
     @Test

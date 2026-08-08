@@ -3,6 +3,8 @@ package com.aibook.dto;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSetter;
 
+import java.util.Map;
+
 /**
  * 用户界面偏好。字体字段记录是否出现在请求 JSON 中，以支持 partial PUT
  * 和显式传 null 清空之间的区别。
@@ -13,6 +15,7 @@ public class UserPreferencesDTO {
     private String modernThemeColor;
     private String warmThemeColor;
     private String naturalThemeColor;
+    private Map<String, ThemeBackgroundDTO> themeBackgrounds;
     private String libraryViewMode;
     private Integer libraryPageSize;
     private Integer scanThreadCount;
@@ -65,6 +68,14 @@ public class UserPreferencesDTO {
 
     public void setNaturalThemeColor(String naturalThemeColor) {
         this.naturalThemeColor = naturalThemeColor;
+    }
+
+    public Map<String, ThemeBackgroundDTO> getThemeBackgrounds() {
+        return themeBackgrounds;
+    }
+
+    public void setThemeBackgrounds(Map<String, ThemeBackgroundDTO> themeBackgrounds) {
+        this.themeBackgrounds = themeBackgrounds;
     }
 
     public String getLibraryViewMode() {
@@ -191,6 +202,12 @@ public class UserPreferencesDTO {
             return this;
         }
 
+        public UserPreferencesDTOBuilder themeBackgrounds(
+                Map<String, ThemeBackgroundDTO> themeBackgrounds) {
+            value.setThemeBackgrounds(themeBackgrounds);
+            return this;
+        }
+
         public UserPreferencesDTOBuilder dockSize(Integer dockSize) {
             value.setDockSize(dockSize);
             return this;
@@ -224,5 +241,50 @@ public class UserPreferencesDTO {
         public UserPreferencesDTO build() {
             return value;
         }
+    }
+
+    public static class ThemeBackgroundDTO {
+        private String mode;
+        private String pageColor;
+        private String secondaryColor;
+        private String navColor;
+        private Integer navOpacity;
+        private String surfaceColor;
+        private Integer surfaceOpacity;
+
+        public ThemeBackgroundDTO() {
+        }
+
+        public ThemeBackgroundDTO(
+                String mode,
+                String pageColor,
+                String secondaryColor,
+                String navColor,
+                Integer navOpacity,
+                String surfaceColor,
+                Integer surfaceOpacity) {
+            this.mode = mode;
+            this.pageColor = pageColor;
+            this.secondaryColor = secondaryColor;
+            this.navColor = navColor;
+            this.navOpacity = navOpacity;
+            this.surfaceColor = surfaceColor;
+            this.surfaceOpacity = surfaceOpacity;
+        }
+
+        public String getMode() { return mode; }
+        public void setMode(String mode) { this.mode = mode; }
+        public String getPageColor() { return pageColor; }
+        public void setPageColor(String pageColor) { this.pageColor = pageColor; }
+        public String getSecondaryColor() { return secondaryColor; }
+        public void setSecondaryColor(String secondaryColor) { this.secondaryColor = secondaryColor; }
+        public String getNavColor() { return navColor; }
+        public void setNavColor(String navColor) { this.navColor = navColor; }
+        public Integer getNavOpacity() { return navOpacity; }
+        public void setNavOpacity(Integer navOpacity) { this.navOpacity = navOpacity; }
+        public String getSurfaceColor() { return surfaceColor; }
+        public void setSurfaceColor(String surfaceColor) { this.surfaceColor = surfaceColor; }
+        public Integer getSurfaceOpacity() { return surfaceOpacity; }
+        public void setSurfaceOpacity(Integer surfaceOpacity) { this.surfaceOpacity = surfaceOpacity; }
     }
 }

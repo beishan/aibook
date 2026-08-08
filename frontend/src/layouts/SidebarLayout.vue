@@ -215,7 +215,7 @@ const handleLogout = async () => {
 <style scoped>
 .modern-layout {
   min-height: 100vh;
-  background: var(--bg-page);
+  background: var(--bg-page-gradient);
 }
 
 .modern-sidebar {
@@ -237,7 +237,7 @@ const handleLogout = async () => {
   margin: 0 8px;
   padding: 0 12px;
   overflow: hidden;
-  color: var(--text-primary);
+  color: var(--nav-text-primary, var(--text-primary));
   border-radius: var(--radius-md);
 }
 
@@ -269,13 +269,13 @@ const handleLogout = async () => {
 .mobile-menu :deep(.el-menu-item) {
   height: 44px;
   margin: 3px 8px;
-  color: var(--text-secondary);
+  color: var(--nav-text-secondary, var(--text-secondary));
   border-radius: var(--radius-md);
 }
 
 .desktop-menu :deep(.el-menu-item:hover),
 .mobile-menu :deep(.el-menu-item:hover) {
-  color: var(--text-primary);
+  color: var(--nav-text-primary, var(--text-primary));
   background: var(--surface-hover);
 }
 
@@ -298,7 +298,7 @@ const handleLogout = async () => {
 .collapse-button {
   justify-content: flex-start;
   width: 100%;
-  color: var(--text-tertiary);
+  color: var(--nav-text-secondary, var(--text-tertiary));
 }
 
 .collapse-button span {
@@ -325,7 +325,9 @@ const handleLogout = async () => {
   justify-content: space-between;
   height: 60px;
   padding: 0 var(--spacing-lg);
-  background: var(--surface-card);
+  background: var(--nav-bg);
+  color: var(--nav-text-primary, var(--text-primary));
+  backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--border-color);
 }
 
