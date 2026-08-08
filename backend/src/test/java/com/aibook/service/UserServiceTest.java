@@ -46,6 +46,57 @@ class UserServiceTest {
         assertEquals(72, result.getDockOpacity());
         assertEquals(128, result.getDockMagnification());
         assertEquals(24, result.getDockBlur());
+        assertEquals("#2563EB", result.getModernThemeColor());
+        assertEquals("#A0522D", result.getWarmThemeColor());
+        assertEquals("#2E7D5A", result.getNaturalThemeColor());
+    }
+
+    @Test
+    void updatesAndNormalizesThemeColors() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        when(repository.save(user)).thenReturn(user);
+        UserService service = new UserService(repository);
+
+        UserPreferencesDTO result = service.updatePreferences(
+                "reader",
+                UserPreferencesDTO.builder()
+                        .modernThemeColor("#0891b2")
+                        .warmThemeColor("#b7791f")
+                        .naturalThemeColor("#3c8d78")
+                        .build());
+
+        assertEquals("#0891B2", result.getModernThemeColor());
+        assertEquals("#B7791F", result.getWarmThemeColor());
+        assertEquals("#3C8D78", result.getNaturalThemeColor());
+    }
+
+    @Test
+    void rejectsInvalidThemeColors() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        UserService service = new UserService(repository);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updatePreferences(
+                        "reader",
+                        UserPreferencesDTO.builder().modernThemeColor("blue").build()));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updatePreferences(
+                        "reader",
+                        UserPreferencesDTO.builder().warmThemeColor("#FFF").build()));
     }
 
     @Test

@@ -12,7 +12,9 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 用户服务
@@ -29,6 +31,10 @@ public class UserService implements UserDetailsService {
     private static final int DEFAULT_DOCK_OPACITY = 72;
     private static final int DEFAULT_DOCK_MAGNIFICATION = 128;
     private static final int DEFAULT_DOCK_BLUR = 24;
+    private static final String DEFAULT_MODERN_THEME_COLOR = "#2563EB";
+    private static final String DEFAULT_WARM_THEME_COLOR = "#A0522D";
+    private static final String DEFAULT_NATURAL_THEME_COLOR = "#2E7D5A";
+    private static final Pattern HEX_COLOR_PATTERN = Pattern.compile("^#[0-9A-Fa-f]{6}$");
 
     private final UserRepository userRepository;
     private final FontAssetRepository fontAssetRepository;
@@ -102,6 +108,15 @@ public class UserService implements UserDetailsService {
             }
             user.setScanThreadCount(request.getScanThreadCount());
         }
+        if (request.getModernThemeColor() != null) {
+            user.setModernThemeColor(normalizeThemeColor(request.getModernThemeColor()));
+        }
+        if (request.getWarmThemeColor() != null) {
+            user.setWarmThemeColor(normalizeThemeColor(request.getWarmThemeColor()));
+        }
+        if (request.getNaturalThemeColor() != null) {
+            user.setNaturalThemeColor(normalizeThemeColor(request.getNaturalThemeColor()));
+        }
         if (request.getDockSize() != null) {
             requireRange("Dock 大小", request.getDockSize(), 44, 76);
             user.setDockSize(request.getDockSize());
@@ -133,6 +148,12 @@ public class UserService implements UserDetailsService {
     private UserPreferencesDTO toPreferences(User user) {
         return UserPreferencesDTO.builder()
                 .theme(user.getWebTheme())
+                .modernThemeColor(defaultIfBlank(
+                        user.getModernThemeColor(), DEFAULT_MODERN_THEME_COLOR))
+                .warmThemeColor(defaultIfBlank(
+                        user.getWarmThemeColor(), DEFAULT_WARM_THEME_COLOR))
+                .naturalThemeColor(defaultIfBlank(
+                        user.getNaturalThemeColor(), DEFAULT_NATURAL_THEME_COLOR))
                 .libraryViewMode(user.getLibraryViewMode())
                 .libraryPageSize(user.getLibraryPageSize())
                 .scanThreadCount(
@@ -181,5 +202,17 @@ public class UserService implements UserDetailsService {
 
     private int defaultIfNull(Integer value, int fallback) {
         return value == null ? fallback : value;
+    }
+
+    private String normalizeThemeColor(String value) {
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        if (!HEX_COLOR_PATTERN.matcher(normalized).matches()) {
+            throw new IllegalArgumentException("主题色必须使用 #RRGGBB 格式");
+        }
+        return normalized;
+    }
+
+    private String defaultIfBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 }

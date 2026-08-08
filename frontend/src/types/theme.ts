@@ -2,6 +2,14 @@ export type ThemeId = 'modern' | 'warm' | 'natural'
 
 export type LayoutType = 'sidebar' | 'topbar' | 'dock'
 
+export type ThemeAccentColors = Record<ThemeId, string>
+
+export const DEFAULT_THEME_ACCENT_COLORS: ThemeAccentColors = {
+  modern: '#2563EB',
+  warm: '#A0522D',
+  natural: '#2E7D5A',
+}
+
 export interface ThemeDefinition {
   id: ThemeId
   name: string

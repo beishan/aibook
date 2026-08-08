@@ -88,6 +88,21 @@ public class User implements UserDetails {
     private String webTheme;
 
     /**
+     * 现代简约主题强调色（#RRGGBB）
+     */
+    private String modernThemeColor;
+
+    /**
+     * 暖色文艺主题强调色（#RRGGBB）
+     */
+    private String warmThemeColor;
+
+    /**
+     * 自然清新主题强调色（#RRGGBB）
+     */
+    private String naturalThemeColor;
+
+    /**
      * Web 端书库显示方式（card、compact-card、list）
      */
     private String libraryViewMode;

@@ -10,6 +10,9 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 public class UserPreferencesDTO {
 
     private String theme;
+    private String modernThemeColor;
+    private String warmThemeColor;
+    private String naturalThemeColor;
     private String libraryViewMode;
     private Integer libraryPageSize;
     private Integer scanThreadCount;
@@ -38,6 +41,30 @@ public class UserPreferencesDTO {
 
     public void setTheme(String theme) {
         this.theme = theme;
+    }
+
+    public String getModernThemeColor() {
+        return modernThemeColor;
+    }
+
+    public void setModernThemeColor(String modernThemeColor) {
+        this.modernThemeColor = modernThemeColor;
+    }
+
+    public String getWarmThemeColor() {
+        return warmThemeColor;
+    }
+
+    public void setWarmThemeColor(String warmThemeColor) {
+        this.warmThemeColor = warmThemeColor;
+    }
+
+    public String getNaturalThemeColor() {
+        return naturalThemeColor;
+    }
+
+    public void setNaturalThemeColor(String naturalThemeColor) {
+        this.naturalThemeColor = naturalThemeColor;
     }
 
     public String getLibraryViewMode() {
@@ -146,6 +173,21 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder scanThreadCount(Integer scanThreadCount) {
             value.setScanThreadCount(scanThreadCount);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder modernThemeColor(String modernThemeColor) {
+            value.setModernThemeColor(modernThemeColor);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder warmThemeColor(String warmThemeColor) {
+            value.setWarmThemeColor(warmThemeColor);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder naturalThemeColor(String naturalThemeColor) {
+            value.setNaturalThemeColor(naturalThemeColor);
             return this;
         }
 

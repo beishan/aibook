@@ -73,6 +73,7 @@
           </div>
         </div>
       </div>
+      <ThemeColorSettingsPanel />
       <Transition name="dock-settings-reveal">
         <DockSettingsPanel v-if="themeStore.currentTheme === 'natural'" />
       </Transition>
@@ -464,6 +465,7 @@ import UserManagementPanel from '@/components/UserManagementPanel.vue'
 import CurrentUserSettingsPanel from '@/components/CurrentUserSettingsPanel.vue'
 import SiteFaviconSettingsPanel from '@/components/SiteFaviconSettingsPanel.vue'
 import DockSettingsPanel from '@/components/DockSettingsPanel.vue'
+import ThemeColorSettingsPanel from '@/components/ThemeColorSettingsPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'

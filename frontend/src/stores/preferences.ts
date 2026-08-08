@@ -14,6 +14,9 @@ interface UserPreferences {
   libraryViewMode: LibraryViewMode | null
   libraryPageSize: number | null
   scanThreadCount: number | null
+  modernThemeColor: string | null
+  warmThemeColor: string | null
+  naturalThemeColor: string | null
   dockSize: number | null
   dockOpacity: number | null
   dockMagnification: number | null
@@ -66,6 +69,9 @@ const isLibraryViewMode = (value: unknown): value is LibraryViewMode =>
 const isScanThreadCount = (value: unknown): value is number =>
   Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 16
 
+const isThemeColor = (value: unknown): value is string =>
+  typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
+
 export const usePreferencesStore = defineStore('preferences', () => {
   const themeStore = useThemeStore()
   const libraryViewMode = ref<LibraryViewMode>(readLocalLibraryViewMode())
@@ -113,6 +119,31 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (!isScanThreadCount(value)) return
     scanThreadCount.value = value
     if (syncRemote) persistRemote({ scanThreadCount: value })
+  }
+
+  const themeColorPreferenceKey: Record<ThemeId, keyof UserPreferences> = {
+    modern: 'modernThemeColor',
+    warm: 'warmThemeColor',
+    natural: 'naturalThemeColor',
+  }
+
+  const setThemeAccentColor = (theme: ThemeId, color: string, syncRemote = true) => {
+    if (!isThemeColor(color) || !themeStore.setAccentColor(theme, color)) return
+    if (syncRemote) persistRemote({ [themeColorPreferenceKey[theme]]: color.toUpperCase() })
+  }
+
+  const resetThemeAccentColor = (theme: ThemeId) => {
+    themeStore.resetAccentColor(theme)
+    persistRemote({ [themeColorPreferenceKey[theme]]: themeStore.accentColors[theme] })
+  }
+
+  const resetAllThemeAccentColors = () => {
+    themeStore.resetAllAccentColors()
+    persistRemote({
+      modernThemeColor: themeStore.accentColors.modern,
+      warmThemeColor: themeStore.accentColors.warm,
+      naturalThemeColor: themeStore.accentColors.natural,
+    })
   }
 
   const setDockSize = (value: number, syncRemote = true) => {
@@ -199,6 +230,16 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.scanThreadCount = scanThreadCount.value
       }
 
+      const remoteThemeColors: Array<[ThemeId, string | null]> = [
+        ['modern', data.modernThemeColor],
+        ['warm', data.warmThemeColor],
+        ['natural', data.naturalThemeColor],
+      ]
+      remoteThemeColors.forEach(([theme, color]) => {
+        if (isThemeColor(color)) setThemeAccentColor(theme, color, false)
+        else missingPreferences[themeColorPreferenceKey[theme]] = themeStore.accentColors[theme]
+      })
+
       if (isNumberInRange(data.dockSize, 44, 76)) setDockSize(data.dockSize, false)
       else missingPreferences.dockSize = dockSize.value
 
@@ -249,6 +290,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setLibraryViewMode,
     setLibraryPageSize,
     setScanThreadCount,
+    setThemeAccentColor,
+    resetThemeAccentColor,
+    resetAllThemeAccentColors,
     setDockSize,
     setDockOpacity,
     setDockMagnification,
