@@ -36,48 +36,62 @@
 
     <!-- 主题设置 -->
     <div v-show="activeTab === 'theme'" class="tab-content">
-      <div class="card glass">
-        <div class="card-header">
-          <span>🎨 主题风格</span>
-        </div>
-
-        <div class="theme-grid">
-          <div
-            v-for="theme in themes"
-            :key="theme.id"
-            class="theme-card"
-            :class="{ active: themeStore.currentTheme === theme.id }"
-            @click="handleThemeChange(theme.id)"
-          >
-            <div class="theme-preview" :class="`theme-preview-${theme.id}`">
-              <div class="preview-sidebar" :class="`sidebar-${theme.id}`"></div>
-              <div class="preview-content">
-                <div class="preview-header" :class="`header-${theme.id}`"></div>
-                <div class="preview-cards">
-                  <div class="preview-card" :class="`card-${theme.id}`"></div>
-                  <div class="preview-card" :class="`card-${theme.id}`"></div>
+      <div class="theme-settings-tabs card glass">
+        <el-tabs v-model="themeSettingsTab" stretch>
+          <el-tab-pane name="style">
+            <template #label><span class="theme-tab-label"><i>◫</i>主题样式</span></template>
+            <div class="theme-tab-panel style-tab-panel">
+              <div class="theme-panel-heading">
+                <div><strong>选择网站主题</strong><p>主题决定整体布局、圆角和视觉气质。</p></div>
+                <span class="current-theme-pill">当前 · {{ themeStore.currentThemeDef.name }}</span>
+              </div>
+              <div class="theme-grid">
+                <div
+                  v-for="theme in themes"
+                  :key="theme.id"
+                  class="theme-card"
+                  :class="{ active: themeStore.currentTheme === theme.id }"
+                  @click="handleThemeChange(theme.id)"
+                >
+                  <div class="theme-preview" :class="`theme-preview-${theme.id}`">
+                    <div class="preview-sidebar" :class="`sidebar-${theme.id}`"></div>
+                    <div class="preview-content">
+                      <div class="preview-header" :class="`header-${theme.id}`"></div>
+                      <div class="preview-cards">
+                        <div class="preview-card" :class="`card-${theme.id}`"></div>
+                        <div class="preview-card" :class="`card-${theme.id}`"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="theme-info">
+                    <div class="theme-name">
+                      <span class="theme-icon">{{ theme.icon }}</span>
+                      <span>{{ theme.name }}</span>
+                    </div>
+                    <div class="theme-desc">{{ theme.description }}</div>
+                    <div class="theme-layout">
+                      <span class="layout-badge">{{ getLayoutName(theme.layout) }}</span>
+                    </div>
+                  </div>
+                  <div v-if="themeStore.currentTheme === theme.id" class="theme-check">✓</div>
                 </div>
               </div>
             </div>
-            <div class="theme-info">
-              <div class="theme-name">
-                <span class="theme-icon">{{ theme.icon }}</span>
-                <span>{{ theme.name }}</span>
-              </div>
-              <div class="theme-desc">{{ theme.description }}</div>
-              <div class="theme-layout">
-                <span class="layout-badge">{{ getLayoutName(theme.layout) }}</span>
-              </div>
-            </div>
-            <div v-if="themeStore.currentTheme === theme.id" class="theme-check">✓</div>
-          </div>
-        </div>
+          </el-tab-pane>
+          <el-tab-pane name="accent">
+            <template #label><span class="theme-tab-label"><i>●</i>主题色</span></template>
+            <div class="theme-tab-panel"><ThemeColorSettingsPanel /></div>
+          </el-tab-pane>
+          <el-tab-pane name="background">
+            <template #label><span class="theme-tab-label"><i>◩</i>背景与表面</span></template>
+            <div class="theme-tab-panel"><ThemeBackgroundSettingsPanel /></div>
+          </el-tab-pane>
+          <el-tab-pane v-if="themeStore.currentTheme === 'natural'" name="dock">
+            <template #label><span class="theme-tab-label"><i>⌒</i>Dock 设置</span></template>
+            <div class="theme-tab-panel"><DockSettingsPanel /></div>
+          </el-tab-pane>
+        </el-tabs>
       </div>
-      <ThemeColorSettingsPanel />
-      <ThemeBackgroundSettingsPanel />
-      <Transition name="dock-settings-reveal">
-        <DockSettingsPanel v-if="themeStore.currentTheme === 'natural'" />
-      </Transition>
     </div>
 
     <!-- 字体管理 -->
@@ -701,6 +715,15 @@ const getLayoutName = (layout: string) => {
   }
   return names[layout] || layout
 }
+
+type ThemeSettingsTab = 'style' | 'accent' | 'background' | 'dock'
+const themeSettingsTab = ref<ThemeSettingsTab>('style')
+
+watch(() => themeStore.currentTheme, theme => {
+  if (theme !== 'natural' && themeSettingsTab.value === 'dock') {
+    themeSettingsTab.value = 'style'
+  }
+})
 
 const handleThemeChange = (id: ThemeId) => {
   preferencesStore.setTheme(id)
@@ -1488,11 +1511,124 @@ onUnmounted(() => {
 }
 
 /* 主题选择 */
+.theme-settings-tabs {
+  overflow: hidden;
+}
+
+.theme-settings-tabs :deep(.el-tabs__header) {
+  margin: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color-light);
+  background: color-mix(in srgb, var(--surface-hover) 55%, transparent);
+}
+
+.theme-settings-tabs :deep(.el-tabs__nav-wrap::after),
+.theme-settings-tabs :deep(.el-tabs__active-bar) {
+  display: none;
+}
+
+.theme-settings-tabs :deep(.el-tabs__nav) {
+  gap: 7px;
+}
+
+.theme-settings-tabs :deep(.el-tabs__item) {
+  height: 42px;
+  padding: 0 18px !important;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--text-secondary);
+  transition: color .18s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.theme-settings-tabs :deep(.el-tabs__item:hover) {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.theme-settings-tabs :deep(.el-tabs__item.is-active) {
+  border-color: var(--primary-alpha-20);
+  background: var(--surface-elevated);
+  color: var(--primary);
+  box-shadow: 0 5px 18px var(--shadow-color);
+}
+
+.theme-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+}
+
+.theme-tab-label i {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--primary-alpha-10);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.theme-tab-panel {
+  min-height: 500px;
+  animation: theme-pane-in .22s ease-out both;
+}
+
+.style-tab-panel {
+  padding: var(--spacing-xl);
+}
+
+.theme-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.theme-panel-heading strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-lg);
+}
+
+.theme-panel-heading p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.current-theme-pill {
+  flex: none;
+  padding: 6px 11px;
+  border: 1px solid var(--primary-alpha-20);
+  border-radius: 999px;
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.theme-settings-tabs :deep(.theme-color-settings),
+.theme-settings-tabs :deep(.background-settings),
+.theme-settings-tabs :deep(.dock-settings) {
+  margin-top: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+@keyframes theme-pane-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .theme-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--spacing-lg);
-  padding: var(--spacing-lg);
+  padding: 0;
 }
 
 .theme-card {
@@ -1718,6 +1854,41 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
+  .theme-settings-tabs :deep(.el-tabs__header) {
+    padding: 10px;
+    overflow: hidden;
+  }
+
+  .theme-settings-tabs :deep(.el-tabs__nav-scroll) {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .theme-settings-tabs :deep(.el-tabs__nav-scroll::-webkit-scrollbar) {
+    display: none;
+  }
+
+  .theme-settings-tabs :deep(.el-tabs__nav) {
+    min-width: 520px;
+  }
+
+  .theme-settings-tabs :deep(.el-tabs__item) {
+    padding: 0 12px !important;
+  }
+
+  .style-tab-panel {
+    padding: var(--spacing-lg);
+  }
+
+  .theme-panel-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .current-theme-pill {
+    align-self: flex-start;
+  }
+
   .theme-grid {
     grid-template-columns: 1fr;
   }
