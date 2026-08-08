@@ -39,7 +39,9 @@
       <div class="theme-settings-tabs card glass">
         <el-tabs v-model="themeSettingsTab" stretch>
           <el-tab-pane name="style">
-            <template #label><span class="theme-tab-label"><i>◫</i>主题样式</span></template>
+            <template #label>
+              <span class="theme-tab-label"><el-icon class="theme-tab-icon"><Monitor /></el-icon>主题样式</span>
+            </template>
             <div class="theme-tab-panel style-tab-panel">
               <div class="theme-panel-heading">
                 <div><strong>选择网站主题</strong><p>主题决定整体布局、圆角和视觉气质。</p></div>
@@ -79,15 +81,21 @@
             </div>
           </el-tab-pane>
           <el-tab-pane name="accent">
-            <template #label><span class="theme-tab-label"><i>●</i>主题色</span></template>
+            <template #label>
+              <span class="theme-tab-label"><el-icon class="theme-tab-icon"><Brush /></el-icon>主题色</span>
+            </template>
             <div class="theme-tab-panel"><ThemeColorSettingsPanel /></div>
           </el-tab-pane>
           <el-tab-pane name="background">
-            <template #label><span class="theme-tab-label"><i>◩</i>背景与表面</span></template>
+            <template #label>
+              <span class="theme-tab-label"><el-icon class="theme-tab-icon"><Picture /></el-icon>背景与表面</span>
+            </template>
             <div class="theme-tab-panel"><ThemeBackgroundSettingsPanel /></div>
           </el-tab-pane>
           <el-tab-pane v-if="themeStore.currentTheme === 'natural'" name="dock">
-            <template #label><span class="theme-tab-label"><i>⌒</i>Dock 设置</span></template>
+            <template #label>
+              <span class="theme-tab-label"><el-icon class="theme-tab-icon"><Operation /></el-icon>Dock 设置</span>
+            </template>
             <div class="theme-tab-panel"><DockSettingsPanel /></div>
           </el-tab-pane>
         </el-tabs>
@@ -468,6 +476,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed, watch, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Brush, Monitor, Operation, Picture } from '@element-plus/icons-vue'
 import { message, confirm } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import api from '@/utils/api'
@@ -1559,15 +1568,22 @@ onUnmounted(() => {
   font-weight: 650;
 }
 
-.theme-tab-label i {
+.theme-tab-icon {
   display: grid;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   place-items: center;
-  border-radius: 6px;
+  border-radius: 7px;
   background: var(--primary-alpha-10);
-  font-size: 11px;
-  font-style: normal;
+  color: var(--text-secondary);
+  font-size: 15px;
+  transition: color .18s ease, background .18s ease, transform .18s ease;
+}
+
+.theme-settings-tabs :deep(.el-tabs__item.is-active) .theme-tab-icon {
+  background: var(--primary-alpha-15);
+  color: var(--primary);
+  transform: scale(1.04);
 }
 
 .theme-tab-panel {
