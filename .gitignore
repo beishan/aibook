@@ -40,7 +40,9 @@ local.properties
 # OS
 .DS_Store
 Thumbs.db
-
+./pnpm-store*
+./pnpm-store/*
+./pnpm-store/
 # Xcode user state
 **/xcuserdata/
 *.xcuserstate
@@ -56,3 +58,9 @@ android/.gradle/8.13/executionHistory/executionHistory.bin
 android/.gradle/8.13/fileHashes/fileHashes.lock
 android/.gradle/buildOutputCleanup/buildOutputCleanup.lock
 android/.gradle/
+.pnpm-store/v11/projects/.ignored_59c2178bb985e1605d7eca33a4dd5e96/tsconfig.json
+.pnpm-store/v11
+.pnpm-store/v11/**
+.pnpm-store/v11/projects/*
+.pnpm-store/v11/projects/59c2178bb985e1605d7eca33a4dd5e96/src/stores/repair.ts
+.pnpm-store/v11/projects/59c2178bb985e1605d7eca33a4dd5e96/src/utils/api.ts

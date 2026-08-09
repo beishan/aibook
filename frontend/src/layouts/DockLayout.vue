@@ -70,7 +70,9 @@
           :style="dockItemStyle(index)"
           :aria-label="item.title"
         >
-          <span class="dock-icon-tile"><span class="dock-icon">{{ item.icon }}</span></span>
+          <span class="dock-icon-tile">
+            <el-icon class="dock-icon" aria-hidden="true"><component :is="item.icon" /></el-icon>
+          </span>
           <span class="dock-active-dot" aria-hidden="true"></span>
           <span class="dock-tooltip">{{ item.title }}</span>
         </router-link>
@@ -82,6 +84,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Collection, HomeFilled, Reading, Setting, Tools } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
 import { usePreferencesStore } from '@/stores/preferences'
@@ -97,11 +100,11 @@ const dockContainerRef = ref<HTMLElement | null>(null)
 const dockScales = ref<number[]>([])
 
 const menuItems = [
-  { path: '/', icon: '🏠', title: '首页' },
-  { path: '/books', icon: '📚', title: '书库' },
-  { path: '/shelf', icon: '📖', title: '书架' },
-  { path: '/text-repair', icon: '🔧', title: '内容修复' },
-  { path: '/settings', icon: '⚙️', title: '设置' },
+  { path: '/', icon: HomeFilled, title: '首页' },
+  { path: '/books', icon: Collection, title: '书库' },
+  { path: '/shelf', icon: Reading, title: '书架' },
+  { path: '/text-repair', icon: Tools, title: '内容修复' },
+  { path: '/settings', icon: Setting, title: '设置' },
 ]
 
 const dockStyle = computed(() => ({
@@ -444,9 +447,17 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
     linear-gradient(145deg, rgba(229, 249, 239, 0.94), rgba(137, 205, 171, 0.78));
 }
 
+.dock-item:nth-child(1) .dock-icon {
+  color: #176b4b;
+}
+
 .dock-item:nth-child(2) .dock-icon-tile {
   background: radial-gradient(circle at 24% 14%, #ffffff, transparent 38%),
     linear-gradient(145deg, rgba(244, 250, 221, 0.95), rgba(178, 218, 151, 0.8));
+}
+
+.dock-item:nth-child(2) .dock-icon {
+  color: #52712e;
 }
 
 .dock-item:nth-child(3) .dock-icon-tile {
@@ -454,14 +465,26 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
     linear-gradient(145deg, rgba(224, 248, 244, 0.95), rgba(120, 197, 185, 0.78));
 }
 
+.dock-item:nth-child(3) .dock-icon {
+  color: #176d68;
+}
+
 .dock-item:nth-child(4) .dock-icon-tile {
   background: radial-gradient(circle at 24% 14%, #ffffff, transparent 38%),
     linear-gradient(145deg, rgba(246, 242, 226, 0.95), rgba(211, 187, 143, 0.76));
 }
 
+.dock-item:nth-child(4) .dock-icon {
+  color: #765629;
+}
+
 .dock-item:nth-child(5) .dock-icon-tile {
   background: radial-gradient(circle at 24% 14%, #ffffff, transparent 38%),
     linear-gradient(145deg, rgba(235, 241, 247, 0.95), rgba(165, 187, 199, 0.78));
+}
+
+.dock-item:nth-child(5) .dock-icon {
+  color: #405c69;
 }
 
 .dock-item:hover .dock-icon-tile,
@@ -476,10 +499,22 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 .dock-icon {
   position: relative;
   z-index: 1;
-  font-size: calc(var(--dock-size) * 0.5);
+  width: calc(var(--dock-size) * 0.46);
+  height: calc(var(--dock-size) * 0.46);
+  font-size: calc(var(--dock-size) * 0.46);
   line-height: 1;
-  filter: drop-shadow(0 2px 2px rgba(17, 61, 43, 0.13));
-  transition: transform 180ms ease;
+  filter: drop-shadow(0 1px 1px rgba(17, 61, 43, 0.12));
+  transition: color 180ms ease, transform 180ms ease;
+}
+
+.dock-icon :deep(svg) {
+  width: 100%;
+  height: 100%;
+  shape-rendering: geometricPrecision;
+}
+
+.dock-item.active .dock-icon {
+  color: var(--primary-dark);
 }
 
 .dock-item:hover .dock-icon {

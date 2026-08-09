@@ -2,6 +2,58 @@ export type ThemeId = 'modern' | 'warm' | 'natural'
 
 export type LayoutType = 'sidebar' | 'topbar' | 'dock'
 
+export type ThemeAccentColors = Record<ThemeId, string>
+
+export type ThemeBackgroundMode = 'solid' | 'gradient'
+
+export interface ThemeBackgroundConfig {
+  mode: ThemeBackgroundMode
+  pageColor: string
+  secondaryColor: string
+  navColor: string
+  navOpacity: number
+  surfaceColor: string
+  surfaceOpacity: number
+}
+
+export type ThemeBackgroundSettings = Record<ThemeId, ThemeBackgroundConfig>
+
+export const DEFAULT_THEME_ACCENT_COLORS: ThemeAccentColors = {
+  modern: '#2563EB',
+  warm: '#A0522D',
+  natural: '#2E7D5A',
+}
+
+export const DEFAULT_THEME_BACKGROUND_SETTINGS: ThemeBackgroundSettings = {
+  modern: {
+    mode: 'solid',
+    pageColor: '#F5F5F5',
+    secondaryColor: '#EEF2F7',
+    navColor: '#FFFFFF',
+    navOpacity: 100,
+    surfaceColor: '#FFFFFF',
+    surfaceOpacity: 100,
+  },
+  warm: {
+    mode: 'solid',
+    pageColor: '#FAF6F1',
+    secondaryColor: '#F3E9DC',
+    navColor: '#FFFBF5',
+    navOpacity: 100,
+    surfaceColor: '#FFFBF5',
+    surfaceOpacity: 100,
+  },
+  natural: {
+    mode: 'gradient',
+    pageColor: '#E8F5E9',
+    secondaryColor: '#E0F2F1',
+    navColor: '#FFFFFF',
+    navOpacity: 75,
+    surfaceColor: '#FFFFFF',
+    surfaceOpacity: 72,
+  },
+}
+
 export interface ThemeDefinition {
   id: ThemeId
   name: string

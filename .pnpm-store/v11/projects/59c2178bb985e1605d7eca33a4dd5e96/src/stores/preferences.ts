@@ -3,7 +3,14 @@ import { ref } from 'vue'
 import api from '@/utils/api'
 import { useThemeStore } from '@/stores/theme'
 import { useFontStore } from '@/stores/font'
-import { THEMES, type ThemeId } from '@/types/theme'
+import {
+  DEFAULT_THEME_BACKGROUND_SETTINGS,
+  THEMES,
+  type ThemeBackgroundConfig,
+  type ThemeBackgroundSettings,
+  type ThemeId,
+} from '@/types/theme'
+import { normalizeThemeBackgroundConfig } from '@/utils/themeBackground'
 
 export type LibraryViewMode = 'card' | 'compact-card' | 'list'
 export const LIBRARY_PAGE_SIZE_OPTIONS = [12, 18, 24, 36, 60] as const
@@ -14,6 +21,10 @@ interface UserPreferences {
   libraryViewMode: LibraryViewMode | null
   libraryPageSize: number | null
   scanThreadCount: number | null
+  modernThemeColor: string | null
+  warmThemeColor: string | null
+  naturalThemeColor: string | null
+  themeBackgrounds: ThemeBackgroundSettings | null
   dockSize: number | null
   dockOpacity: number | null
   dockMagnification: number | null
@@ -66,6 +77,29 @@ const isLibraryViewMode = (value: unknown): value is LibraryViewMode =>
 const isScanThreadCount = (value: unknown): value is number =>
   Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 16
 
+const isThemeColor = (value: unknown): value is string =>
+  typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
+
+const isBackgroundConfig = (value: unknown): value is ThemeBackgroundConfig => {
+  if (!value || typeof value !== 'object') return false
+  const config = value as Partial<ThemeBackgroundConfig>
+  return (config.mode === 'solid' || config.mode === 'gradient')
+    && isThemeColor(config.pageColor)
+    && isThemeColor(config.secondaryColor)
+    && isThemeColor(config.navColor)
+    && isNumberInRange(config.navOpacity, 20, 100)
+    && isThemeColor(config.surfaceColor)
+    && isNumberInRange(config.surfaceOpacity, 35, 100)
+}
+
+const isBackgroundSettings = (value: unknown): value is ThemeBackgroundSettings => {
+  if (!value || typeof value !== 'object') return false
+  const settings = value as Partial<ThemeBackgroundSettings>
+  return isBackgroundConfig(settings.modern)
+    && isBackgroundConfig(settings.warm)
+    && isBackgroundConfig(settings.natural)
+}
+
 export const usePreferencesStore = defineStore('preferences', () => {
   const themeStore = useThemeStore()
   const libraryViewMode = ref<LibraryViewMode>(readLocalLibraryViewMode())
@@ -113,6 +147,54 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (!isScanThreadCount(value)) return
     scanThreadCount.value = value
     if (syncRemote) persistRemote({ scanThreadCount: value })
+  }
+
+  const themeColorPreferenceKey: Record<ThemeId, keyof UserPreferences> = {
+    modern: 'modernThemeColor',
+    warm: 'warmThemeColor',
+    natural: 'naturalThemeColor',
+  }
+
+  const setThemeAccentColor = (theme: ThemeId, color: string, syncRemote = true) => {
+    if (!isThemeColor(color) || !themeStore.setAccentColor(theme, color)) return
+    if (syncRemote) persistRemote({ [themeColorPreferenceKey[theme]]: color.toUpperCase() })
+  }
+
+  const resetThemeAccentColor = (theme: ThemeId) => {
+    themeStore.resetAccentColor(theme)
+    persistRemote({ [themeColorPreferenceKey[theme]]: themeStore.accentColors[theme] })
+  }
+
+  const resetAllThemeAccentColors = () => {
+    themeStore.resetAllAccentColors()
+    persistRemote({
+      modernThemeColor: themeStore.accentColors.modern,
+      warmThemeColor: themeStore.accentColors.warm,
+      naturalThemeColor: themeStore.accentColors.natural,
+    })
+  }
+
+  const setThemeBackground = (
+    theme: ThemeId,
+    config: ThemeBackgroundConfig,
+    syncRemote = true,
+  ) => {
+    const normalized = normalizeThemeBackgroundConfig(
+      config,
+      DEFAULT_THEME_BACKGROUND_SETTINGS[theme],
+    )
+    themeStore.setBackgroundSettings(theme, normalized)
+    if (syncRemote) persistRemote({ themeBackgrounds: themeStore.backgroundSettings })
+  }
+
+  const resetThemeBackground = (theme: ThemeId) => {
+    themeStore.resetBackgroundSettings(theme)
+    persistRemote({ themeBackgrounds: themeStore.backgroundSettings })
+  }
+
+  const resetAllThemeBackgrounds = () => {
+    themeStore.resetAllBackgroundSettings()
+    persistRemote({ themeBackgrounds: themeStore.backgroundSettings })
   }
 
   const setDockSize = (value: number, syncRemote = true) => {
@@ -199,6 +281,22 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.scanThreadCount = scanThreadCount.value
       }
 
+      const remoteThemeColors: Array<[ThemeId, string | null]> = [
+        ['modern', data.modernThemeColor],
+        ['warm', data.warmThemeColor],
+        ['natural', data.naturalThemeColor],
+      ]
+      remoteThemeColors.forEach(([theme, color]) => {
+        if (isThemeColor(color)) setThemeAccentColor(theme, color, false)
+        else missingPreferences[themeColorPreferenceKey[theme]] = themeStore.accentColors[theme]
+      })
+
+      if (isBackgroundSettings(data.themeBackgrounds)) {
+        THEMES.forEach(({ id }) => setThemeBackground(id, data.themeBackgrounds![id], false))
+      } else {
+        missingPreferences.themeBackgrounds = themeStore.backgroundSettings
+      }
+
       if (isNumberInRange(data.dockSize, 44, 76)) setDockSize(data.dockSize, false)
       else missingPreferences.dockSize = dockSize.value
 
@@ -249,6 +347,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setLibraryViewMode,
     setLibraryPageSize,
     setScanThreadCount,
+    setThemeAccentColor,
+    resetThemeAccentColor,
+    resetAllThemeAccentColors,
+    setThemeBackground,
+    resetThemeBackground,
+    resetAllThemeBackgrounds,
     setDockSize,
     setDockOpacity,
     setDockMagnification,

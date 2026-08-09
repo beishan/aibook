@@ -25,7 +25,7 @@
             class="dock-preview-item"
             :class="{ active: index === 1, magnified: index === 2 }"
           >
-            <span class="dock-preview-icon">{{ item.icon }}</span>
+            <el-icon class="dock-preview-icon" aria-hidden="true"><component :is="item.icon" /></el-icon>
             <span class="dock-preview-dot"></span>
           </div>
         </div>
@@ -59,6 +59,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Collection, HomeFilled, Reading, Setting, Tools } from '@element-plus/icons-vue'
 import { usePreferencesStore } from '@/stores/preferences'
 import { message } from '@/utils/message'
 
@@ -66,11 +67,11 @@ type DockControlKey = 'size' | 'opacity' | 'magnification' | 'blur'
 
 const preferencesStore = usePreferencesStore()
 const previewItems = [
-  { icon: '🏠', label: '首页' },
-  { icon: '📚', label: '书库' },
-  { icon: '📖', label: '书架' },
-  { icon: '🔧', label: '修复' },
-  { icon: '⚙️', label: '设置' },
+  { icon: HomeFilled, label: '首页' },
+  { icon: Collection, label: '书库' },
+  { icon: Reading, label: '书架' },
+  { icon: Tools, label: '修复' },
+  { icon: Setting, label: '设置' },
 ]
 
 const controls = computed(() => [
@@ -296,8 +297,17 @@ const handleReset = () => {
 }
 
 .dock-preview-icon {
-  font-size: calc(var(--preview-size) * 0.5);
-  filter: drop-shadow(0 2px 2px rgba(14, 67, 45, 0.12));
+  width: calc(var(--preview-size) * 0.46);
+  height: calc(var(--preview-size) * 0.46);
+  color: #236f4d;
+  font-size: calc(var(--preview-size) * 0.46);
+  filter: drop-shadow(0 1px 1px rgba(14, 67, 45, 0.1));
+}
+
+.dock-preview-icon :deep(svg) {
+  width: 100%;
+  height: 100%;
+  shape-rendering: geometricPrecision;
 }
 
 .dock-preview-dot {
