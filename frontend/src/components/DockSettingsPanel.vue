@@ -128,6 +128,12 @@ const iconStyleOptions: Array<{
     description: '纸张、木纹与金属质感',
     previewIcons: ['home', 'library', 'settings'],
   },
+  {
+    value: 'macos26',
+    label: 'macOS 26',
+    description: '液态玻璃与彩色渐变',
+    previewIcons: ['home', 'library', 'settings'],
+  },
 ]
 
 const controls = computed(() => [
@@ -372,6 +378,12 @@ const handleReset = () => {
   filter: none;
 }
 
+.dock-preview-icon.dock-glyph--macos26 {
+  width: calc(var(--preview-size) * 0.66);
+  height: calc(var(--preview-size) * 0.66);
+  filter: none;
+}
+
 .dock-preview-dot {
   position: absolute;
   bottom: -5px;
@@ -422,7 +434,7 @@ const handleReset = () => {
 
 .dock-icon-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 10px;
 }
 

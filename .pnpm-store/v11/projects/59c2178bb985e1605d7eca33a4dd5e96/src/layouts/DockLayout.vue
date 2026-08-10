@@ -524,6 +524,12 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   filter: none;
 }
 
+.dock-icon.dock-glyph--macos26 {
+  width: calc(var(--dock-size) * 0.66);
+  height: calc(var(--dock-size) * 0.66);
+  filter: none;
+}
+
 .dock-item.active .dock-icon {
   color: var(--primary-dark);
 }

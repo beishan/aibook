@@ -182,14 +182,14 @@ class UserServiceTest {
                         .dockOpacity(66)
                         .dockMagnification(136)
                         .dockBlur(30)
-                        .dockIconStyle("skeuomorphic")
+                        .dockIconStyle("macos26")
                         .build());
 
         assertEquals(64, result.getDockSize());
         assertEquals(66, result.getDockOpacity());
         assertEquals(136, result.getDockMagnification());
         assertEquals(30, result.getDockBlur());
-        assertEquals("skeuomorphic", result.getDockIconStyle());
+        assertEquals("macos26", result.getDockIconStyle());
     }
 
     @Test

@@ -144,7 +144,7 @@ public class User implements UserDetails {
     private Integer dockBlur;
 
     /**
-     * 自然清新主题 Dock 图标风格（minimal、skeuomorphic）
+     * 自然清新主题 Dock 图标风格（minimal、skeuomorphic、macos26）
      */
     private String dockIconStyle;
 

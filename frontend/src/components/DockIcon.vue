@@ -4,7 +4,7 @@
       <component :is="minimalIcon" />
     </el-icon>
 
-    <svg v-else class="dock-glyph-skeuo" viewBox="0 0 64 64" aria-hidden="true">
+    <svg v-else-if="variant === 'skeuomorphic'" class="dock-glyph-skeuo" viewBox="0 0 64 64" aria-hidden="true">
       <defs>
         <linearGradient :id="`${gradientPrefix}-green`" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stop-color="#8fd7ae" />
@@ -85,6 +85,13 @@
         <path d="M21 21a16 16 0 0 1 20-1" fill="none" stroke="#fff5cc" stroke-width="2" stroke-linecap="round" opacity=".58" />
       </g>
     </svg>
+
+    <span v-else class="dock-glyph-macos" :class="`dock-glyph-macos--${name}`" aria-hidden="true">
+      <span class="dock-glyph-macos-glass"></span>
+      <el-icon class="dock-glyph-macos-symbol">
+        <component :is="minimalIcon" />
+      </el-icon>
+    </span>
   </span>
 </template>
 
@@ -94,7 +101,7 @@ import { Collection, HomeFilled, Reading, Setting, Tools } from '@element-plus/i
 import type { Component } from 'vue'
 
 export type DockIconName = 'home' | 'library' | 'shelf' | 'repair' | 'settings'
-export type DockIconStyle = 'minimal' | 'skeuomorphic'
+export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26'
 
 const props = defineProps<{
   name: DockIconName
@@ -137,5 +144,69 @@ const gradientPrefix = computed(() => `dock-${instanceId}-${props.name}`)
 
 .dock-glyph-skeuo {
   overflow: visible;
+}
+
+.dock-glyph-macos {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 27%;
+  background: linear-gradient(145deg, #75d7ff, #1689e8 58%, #0755ae);
+  box-shadow:
+    0 2px 5px rgba(15, 47, 83, 0.28),
+    inset 0 1px 1px rgba(255, 255, 255, 0.74),
+    inset 0 -1px 2px rgba(0, 35, 91, 0.34);
+  isolation: isolate;
+}
+
+.dock-glyph-macos--library {
+  background: linear-gradient(145deg, #ff9a75, #ef4f48 56%, #ac1d43);
+}
+
+.dock-glyph-macos--shelf {
+  background: linear-gradient(145deg, #68dfbd, #19a881 56%, #08715d);
+}
+
+.dock-glyph-macos--repair {
+  background: linear-gradient(145deg, #ffc968, #ed902b 58%, #a84b19);
+}
+
+.dock-glyph-macos--settings {
+  background: linear-gradient(145deg, #c8d0da, #748294 56%, #3c4959);
+}
+
+.dock-glyph-macos-glass {
+  position: absolute;
+  inset: 1px 2px 48%;
+  border-radius: 42% 42% 52% 52%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.06));
+  mix-blend-mode: screen;
+}
+
+.dock-glyph-macos::after {
+  content: '';
+  position: absolute;
+  inset: auto 12% 5%;
+  height: 22%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  filter: blur(4px);
+}
+
+.dock-glyph-macos-symbol {
+  z-index: 1;
+  width: 58%;
+  height: 58%;
+  color: rgba(255, 255, 255, 0.96);
+  filter: drop-shadow(0 1.5px 1px rgba(14, 42, 68, 0.35));
+}
+
+.dock-glyph-macos-symbol :deep(svg) {
+  width: 100%;
+  height: 100%;
 }
 </style>

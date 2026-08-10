@@ -33,7 +33,7 @@ public class UserService implements UserDetailsService {
     private static final Set<Integer> LIBRARY_PAGE_SIZES =
             Set.of(12, 18, 24, 36, 60);
     private static final Set<String> DOCK_ICON_STYLES =
-            Set.of("minimal", "skeuomorphic");
+            Set.of("minimal", "skeuomorphic", "macos26");
     private static final int DEFAULT_DOCK_SIZE = 58;
     private static final int DEFAULT_DOCK_OPACITY = 72;
     private static final int DEFAULT_DOCK_MAGNIFICATION = 128;

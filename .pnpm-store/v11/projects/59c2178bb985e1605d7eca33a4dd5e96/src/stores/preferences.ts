@@ -13,7 +13,7 @@ import {
 import { normalizeThemeBackgroundConfig } from '@/utils/themeBackground'
 
 export type LibraryViewMode = 'card' | 'compact-card' | 'list'
-export type DockIconStyle = 'minimal' | 'skeuomorphic'
+export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26'
 export const LIBRARY_PAGE_SIZE_OPTIONS = [12, 18, 24, 36, 60] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
 
@@ -70,7 +70,7 @@ const readLocalNumber = (key: string, fallback: number, min: number, max: number
 }
 
 const isDockIconStyle = (value: unknown): value is DockIconStyle =>
-  value === 'minimal' || value === 'skeuomorphic'
+  value === 'minimal' || value === 'skeuomorphic' || value === 'macos26'
 
 const readLocalDockIconStyle = (): DockIconStyle => {
   const saved = localStorage.getItem(DOCK_ICON_STYLE_KEY)
