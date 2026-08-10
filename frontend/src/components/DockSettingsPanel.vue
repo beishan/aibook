@@ -25,7 +25,12 @@
             class="dock-preview-item"
             :class="{ active: index === 1, magnified: index === 2 }"
           >
-            <el-icon class="dock-preview-icon" aria-hidden="true"><component :is="item.icon" /></el-icon>
+            <DockIcon
+              class="dock-preview-icon"
+              :name="item.icon"
+              :variant="preferencesStore.dockIconStyle"
+              aria-hidden="true"
+            />
             <span class="dock-preview-dot"></span>
           </div>
         </div>
@@ -33,6 +38,38 @@
       </div>
 
       <div class="dock-controls">
+        <section class="dock-icon-config" aria-labelledby="dock-icon-style-title">
+          <div class="dock-icon-config-copy">
+            <div id="dock-icon-style-title" class="dock-control-label">图标风格</div>
+            <p>选择清晰克制的现代图标，或带真实材质和光影的经典拟物图标。</p>
+          </div>
+          <div class="dock-icon-options">
+            <button
+              v-for="option in iconStyleOptions"
+              :key="option.value"
+              type="button"
+              class="dock-icon-option"
+              :class="{ active: preferencesStore.dockIconStyle === option.value }"
+              :aria-pressed="preferencesStore.dockIconStyle === option.value"
+              @click="preferencesStore.setDockIconStyle(option.value)"
+            >
+              <span class="dock-icon-option-preview" aria-hidden="true">
+                <DockIcon
+                  v-for="icon in option.previewIcons"
+                  :key="icon"
+                  :name="icon"
+                  :variant="option.value"
+                />
+              </span>
+              <span class="dock-icon-option-text">
+                <strong>{{ option.label }}</strong>
+                <small>{{ option.description }}</small>
+              </span>
+              <span class="dock-icon-option-check" aria-hidden="true">✓</span>
+            </button>
+          </div>
+        </section>
+
         <div v-for="control in controls" :key="control.key" class="dock-control">
           <div class="dock-control-copy">
             <div class="dock-control-label">
@@ -59,19 +96,38 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Collection, HomeFilled, Reading, Setting, Tools } from '@element-plus/icons-vue'
+import DockIcon, { type DockIconName, type DockIconStyle } from '@/components/DockIcon.vue'
 import { usePreferencesStore } from '@/stores/preferences'
 import { message } from '@/utils/message'
 
 type DockControlKey = 'size' | 'opacity' | 'magnification' | 'blur'
 
 const preferencesStore = usePreferencesStore()
-const previewItems = [
-  { icon: HomeFilled, label: '首页' },
-  { icon: Collection, label: '书库' },
-  { icon: Reading, label: '书架' },
-  { icon: Tools, label: '修复' },
-  { icon: Setting, label: '设置' },
+const previewItems: Array<{ icon: DockIconName; label: string }> = [
+  { icon: 'home', label: '首页' },
+  { icon: 'library', label: '书库' },
+  { icon: 'shelf', label: '书架' },
+  { icon: 'repair', label: '修复' },
+  { icon: 'settings', label: '设置' },
+]
+const iconStyleOptions: Array<{
+  value: DockIconStyle
+  label: string
+  description: string
+  previewIcons: DockIconName[]
+}> = [
+  {
+    value: 'minimal',
+    label: '现代简洁',
+    description: '高对比矢量图形',
+    previewIcons: ['home', 'library', 'settings'],
+  },
+  {
+    value: 'skeuomorphic',
+    label: '经典拟物',
+    description: '纸张、木纹与金属质感',
+    previewIcons: ['home', 'library', 'settings'],
+  },
 ]
 
 const controls = computed(() => [
@@ -310,6 +366,12 @@ const handleReset = () => {
   shape-rendering: geometricPrecision;
 }
 
+.dock-preview-icon.dock-glyph--skeuomorphic {
+  width: calc(var(--preview-size) * 0.66);
+  height: calc(var(--preview-size) * 0.66);
+  filter: none;
+}
+
 .dock-preview-dot {
   position: absolute;
   bottom: -5px;
@@ -342,6 +404,115 @@ const handleReset = () => {
   display: grid;
   align-content: center;
   gap: 6px;
+}
+
+.dock-icon-config {
+  display: grid;
+  gap: 13px;
+  padding: 4px 4px 16px;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.dock-icon-config-copy p {
+  margin-top: 5px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dock-icon-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dock-icon-option {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--surface-card) 82%, transparent);
+  color: var(--text-primary);
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+  cursor: pointer;
+}
+
+.dock-icon-option:hover {
+  border-color: var(--primary-alpha-30);
+  background: var(--primary-alpha-10);
+  transform: translateY(-1px);
+}
+
+.dock-icon-option.active {
+  border-color: var(--primary);
+  background: linear-gradient(145deg, var(--primary-alpha-10), rgba(255, 255, 255, 0.56));
+  box-shadow: inset 0 0 0 1px var(--primary-alpha-10);
+}
+
+.dock-icon-option-preview {
+  display: flex;
+  height: 36px;
+  align-items: center;
+  gap: 7px;
+  color: var(--primary-dark);
+}
+
+.dock-icon-option-preview :deep(.dock-glyph) {
+  width: 30px;
+  height: 30px;
+}
+
+.dock-icon-option-preview :deep(.dock-glyph--minimal) {
+  width: 21px;
+  height: 21px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--primary-alpha-10);
+}
+
+.dock-icon-option-text {
+  display: grid;
+  gap: 2px;
+}
+
+.dock-icon-option-text strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dock-icon-option-text small {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-icon-option-check {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.dock-icon-option.active .dock-icon-option-check {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .dock-control {
@@ -420,6 +591,10 @@ const handleReset = () => {
   .dock-control {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  .dock-icon-options {
+    grid-template-columns: 1fr;
   }
 
   .dock-preview-stage {

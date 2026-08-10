@@ -23,6 +23,7 @@ public class UserPreferencesDTO {
     private Integer dockOpacity;
     private Integer dockMagnification;
     private Integer dockBlur;
+    private String dockIconStyle;
     private Long uiFontId;
     private Long readerFontId;
 
@@ -134,6 +135,14 @@ public class UserPreferencesDTO {
         this.dockBlur = dockBlur;
     }
 
+    public String getDockIconStyle() {
+        return dockIconStyle;
+    }
+
+    public void setDockIconStyle(String dockIconStyle) {
+        this.dockIconStyle = dockIconStyle;
+    }
+
     public Long getUiFontId() {
         return uiFontId;
     }
@@ -225,6 +234,11 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder dockBlur(Integer dockBlur) {
             value.setDockBlur(dockBlur);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder dockIconStyle(String dockIconStyle) {
+            value.setDockIconStyle(dockIconStyle);
             return this;
         }
 

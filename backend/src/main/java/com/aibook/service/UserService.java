@@ -32,10 +32,13 @@ public class UserService implements UserDetailsService {
             Set.of("card", "compact-card", "list");
     private static final Set<Integer> LIBRARY_PAGE_SIZES =
             Set.of(12, 18, 24, 36, 60);
+    private static final Set<String> DOCK_ICON_STYLES =
+            Set.of("minimal", "skeuomorphic");
     private static final int DEFAULT_DOCK_SIZE = 58;
     private static final int DEFAULT_DOCK_OPACITY = 72;
     private static final int DEFAULT_DOCK_MAGNIFICATION = 128;
     private static final int DEFAULT_DOCK_BLUR = 24;
+    private static final String DEFAULT_DOCK_ICON_STYLE = "minimal";
     private static final String DEFAULT_MODERN_THEME_COLOR = "#2563EB";
     private static final String DEFAULT_WARM_THEME_COLOR = "#A0522D";
     private static final String DEFAULT_NATURAL_THEME_COLOR = "#2E7D5A";
@@ -143,6 +146,10 @@ public class UserService implements UserDetailsService {
             requireRange("Dock 玻璃模糊", request.getDockBlur(), 8, 40);
             user.setDockBlur(request.getDockBlur());
         }
+        if (request.getDockIconStyle() != null) {
+            requireAllowed("Dock 图标风格", request.getDockIconStyle(), DOCK_ICON_STYLES);
+            user.setDockIconStyle(request.getDockIconStyle());
+        }
         if (request.hasUiFontId()) {
             validateFont(request.getUiFontId());
             user.setUiFontId(request.getUiFontId());
@@ -174,6 +181,8 @@ public class UserService implements UserDetailsService {
                 .dockMagnification(defaultIfNull(
                         user.getDockMagnification(), DEFAULT_DOCK_MAGNIFICATION))
                 .dockBlur(defaultIfNull(user.getDockBlur(), DEFAULT_DOCK_BLUR))
+                .dockIconStyle(defaultIfBlank(
+                        user.getDockIconStyle(), DEFAULT_DOCK_ICON_STYLE))
                 .uiFontId(activeFontId(user.getUiFontId()))
                 .readerFontId(activeFontId(user.getReaderFontId()))
                 .build();

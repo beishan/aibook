@@ -13,6 +13,7 @@ import {
 import { normalizeThemeBackgroundConfig } from '@/utils/themeBackground'
 
 export type LibraryViewMode = 'card' | 'compact-card' | 'list'
+export type DockIconStyle = 'minimal' | 'skeuomorphic'
 export const LIBRARY_PAGE_SIZE_OPTIONS = [12, 18, 24, 36, 60] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
 
@@ -29,6 +30,7 @@ interface UserPreferences {
   dockOpacity: number | null
   dockMagnification: number | null
   dockBlur: number | null
+  dockIconStyle: DockIconStyle | null
   uiFontId: number | null
   readerFontId: number | null
 }
@@ -39,12 +41,14 @@ const DOCK_SIZE_KEY = 'aibook-dock-size'
 const DOCK_OPACITY_KEY = 'aibook-dock-opacity'
 const DOCK_MAGNIFICATION_KEY = 'aibook-dock-magnification'
 const DOCK_BLUR_KEY = 'aibook-dock-blur'
+const DOCK_ICON_STYLE_KEY = 'aibook-dock-icon-style'
 const DEFAULT_LIBRARY_PAGE_SIZE: LibraryPageSize = 18
 const DEFAULT_SCAN_THREAD_COUNT = 2
 export const DEFAULT_DOCK_SIZE = 58
 export const DEFAULT_DOCK_OPACITY = 72
 export const DEFAULT_DOCK_MAGNIFICATION = 128
 export const DEFAULT_DOCK_BLUR = 24
+export const DEFAULT_DOCK_ICON_STYLE: DockIconStyle = 'minimal'
 
 const readLocalLibraryViewMode = (): LibraryViewMode => {
   const saved = localStorage.getItem(LIBRARY_VIEW_MODE_KEY)
@@ -63,6 +67,14 @@ const readLocalLibraryPageSize = (): LibraryPageSize => {
 const readLocalNumber = (key: string, fallback: number, min: number, max: number) => {
   const saved = Number(localStorage.getItem(key))
   return Number.isFinite(saved) && saved >= min && saved <= max ? saved : fallback
+}
+
+const isDockIconStyle = (value: unknown): value is DockIconStyle =>
+  value === 'minimal' || value === 'skeuomorphic'
+
+const readLocalDockIconStyle = (): DockIconStyle => {
+  const saved = localStorage.getItem(DOCK_ICON_STYLE_KEY)
+  return isDockIconStyle(saved) ? saved : DEFAULT_DOCK_ICON_STYLE
 }
 
 const isNumberInRange = (value: unknown, min: number, max: number): value is number =>
@@ -109,6 +121,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const dockOpacity = ref(readLocalNumber(DOCK_OPACITY_KEY, DEFAULT_DOCK_OPACITY, 40, 96))
   const dockMagnification = ref(readLocalNumber(DOCK_MAGNIFICATION_KEY, DEFAULT_DOCK_MAGNIFICATION, 100, 150))
   const dockBlur = ref(readLocalNumber(DOCK_BLUR_KEY, DEFAULT_DOCK_BLUR, 8, 40))
+  const dockIconStyle = ref<DockIconStyle>(readLocalDockIconStyle())
   const uiFontId = ref<number | null>(null)
   const readerFontId = ref<number | null>(null)
   const hydrated = ref(false)
@@ -225,16 +238,25 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (syncRemote) persistRemote({ dockBlur: value })
   }
 
+  const setDockIconStyle = (value: DockIconStyle, syncRemote = true) => {
+    if (!isDockIconStyle(value)) return
+    dockIconStyle.value = value
+    localStorage.setItem(DOCK_ICON_STYLE_KEY, value)
+    if (syncRemote) persistRemote({ dockIconStyle: value })
+  }
+
   const resetDockAppearance = () => {
     setDockSize(DEFAULT_DOCK_SIZE, false)
     setDockOpacity(DEFAULT_DOCK_OPACITY, false)
     setDockMagnification(DEFAULT_DOCK_MAGNIFICATION, false)
     setDockBlur(DEFAULT_DOCK_BLUR, false)
+    setDockIconStyle(DEFAULT_DOCK_ICON_STYLE, false)
     persistRemote({
       dockSize: DEFAULT_DOCK_SIZE,
       dockOpacity: DEFAULT_DOCK_OPACITY,
       dockMagnification: DEFAULT_DOCK_MAGNIFICATION,
       dockBlur: DEFAULT_DOCK_BLUR,
+      dockIconStyle: DEFAULT_DOCK_ICON_STYLE,
     })
   }
 
@@ -309,6 +331,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
       if (isNumberInRange(data.dockBlur, 8, 40)) setDockBlur(data.dockBlur, false)
       else missingPreferences.dockBlur = dockBlur.value
 
+      if (isDockIconStyle(data.dockIconStyle)) setDockIconStyle(data.dockIconStyle, false)
+      else missingPreferences.dockIconStyle = dockIconStyle.value
+
       setUiFontId(Number.isInteger(data.uiFontId) ? data.uiFontId : null, false)
       setReaderFontId(
         Number.isInteger(data.readerFontId) ? data.readerFontId : null,
@@ -340,6 +365,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     dockOpacity,
     dockMagnification,
     dockBlur,
+    dockIconStyle,
     uiFontId,
     readerFontId,
     hydrated,
@@ -357,6 +383,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setDockOpacity,
     setDockMagnification,
     setDockBlur,
+    setDockIconStyle,
     resetDockAppearance,
     setUiFontId,
     setReaderFontId,

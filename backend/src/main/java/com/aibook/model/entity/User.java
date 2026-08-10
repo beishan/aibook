@@ -144,6 +144,11 @@ public class User implements UserDetails {
     private Integer dockBlur;
 
     /**
+     * 自然清新主题 Dock 图标风格（minimal、skeuomorphic）
+     */
+    private String dockIconStyle;
+
+    /**
      * 系统界面字体资源 ID。
      */
     private Long uiFontId;

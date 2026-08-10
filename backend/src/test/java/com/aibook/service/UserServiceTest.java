@@ -48,6 +48,7 @@ class UserServiceTest {
         assertEquals(72, result.getDockOpacity());
         assertEquals(128, result.getDockMagnification());
         assertEquals(24, result.getDockBlur());
+        assertEquals("minimal", result.getDockIconStyle());
         assertEquals("#2563EB", result.getModernThemeColor());
         assertEquals("#A0522D", result.getWarmThemeColor());
         assertEquals("#2E7D5A", result.getNaturalThemeColor());
@@ -181,12 +182,14 @@ class UserServiceTest {
                         .dockOpacity(66)
                         .dockMagnification(136)
                         .dockBlur(30)
+                        .dockIconStyle("skeuomorphic")
                         .build());
 
         assertEquals(64, result.getDockSize());
         assertEquals(66, result.getDockOpacity());
         assertEquals(136, result.getDockMagnification());
         assertEquals(30, result.getDockBlur());
+        assertEquals("skeuomorphic", result.getDockIconStyle());
     }
 
     @Test
@@ -216,6 +219,11 @@ class UserServiceTest {
                 IllegalArgumentException.class,
                 () -> service.updatePreferences(
                         "reader", UserPreferencesDTO.builder().dockBlur(4).build()));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updatePreferences(
+                        "reader",
+                        UserPreferencesDTO.builder().dockIconStyle("pixel").build()));
     }
 
     @Test

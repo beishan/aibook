@@ -71,7 +71,12 @@
           :aria-label="item.title"
         >
           <span class="dock-icon-tile">
-            <el-icon class="dock-icon" aria-hidden="true"><component :is="item.icon" /></el-icon>
+            <DockIcon
+              class="dock-icon"
+              :name="item.icon"
+              :variant="preferencesStore.dockIconStyle"
+              aria-hidden="true"
+            />
           </span>
           <span class="dock-active-dot" aria-hidden="true"></span>
           <span class="dock-tooltip">{{ item.title }}</span>
@@ -84,7 +89,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Collection, HomeFilled, Reading, Setting, Tools } from '@element-plus/icons-vue'
+import DockIcon, { type DockIconName } from '@/components/DockIcon.vue'
 import { confirm } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
 import { usePreferencesStore } from '@/stores/preferences'
@@ -99,12 +104,12 @@ const showDropdown = ref(false)
 const dockContainerRef = ref<HTMLElement | null>(null)
 const dockScales = ref<number[]>([])
 
-const menuItems = [
-  { path: '/', icon: HomeFilled, title: '首页' },
-  { path: '/books', icon: Collection, title: '书库' },
-  { path: '/shelf', icon: Reading, title: '书架' },
-  { path: '/text-repair', icon: Tools, title: '内容修复' },
-  { path: '/settings', icon: Setting, title: '设置' },
+const menuItems: Array<{ path: string; icon: DockIconName; title: string }> = [
+  { path: '/', icon: 'home', title: '首页' },
+  { path: '/books', icon: 'library', title: '书库' },
+  { path: '/shelf', icon: 'shelf', title: '书架' },
+  { path: '/text-repair', icon: 'repair', title: '内容修复' },
+  { path: '/settings', icon: 'settings', title: '设置' },
 ]
 
 const dockStyle = computed(() => ({
@@ -511,6 +516,12 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   width: 100%;
   height: 100%;
   shape-rendering: geometricPrecision;
+}
+
+.dock-icon.dock-glyph--skeuomorphic {
+  width: calc(var(--dock-size) * 0.66);
+  height: calc(var(--dock-size) * 0.66);
+  filter: none;
 }
 
 .dock-item.active .dock-icon {
