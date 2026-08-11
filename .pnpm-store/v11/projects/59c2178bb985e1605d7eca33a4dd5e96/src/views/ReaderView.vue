@@ -3,12 +3,16 @@
     <!-- 阅读器内容 -->
     <div v-if="book" class="reader-content">
       <!-- 阅读器头部 -->
-      <header class="reader-header glass" v-show="!isFullscreen">
-        <button v-show="!showSidePanel" class="back-btn" @click="goBack">
+      <header
+        v-show="!isFullscreen"
+        class="reader-header"
+        :style="readerHeaderStyle"
+      >
+        <button v-show="!showSidePanel" type="button" class="back-btn glass" @click="goBack">
           <span>‹</span>
           <span>返回</span>
         </button>
-        <div class="reader-title">
+        <div class="reader-title glass">
           <div class="reader-title-main">
             <div class="reader-book-identity">
               <span class="reader-book-name" :title="book.title">{{ book.title }}</span>
@@ -36,7 +40,7 @@
             </div>
           </div>
         </div>
-        <div class="reader-actions">
+        <div class="reader-actions glass" aria-label="阅读工具">
           <button
             v-if="book.format === 'epub' || tocItems.length > 0"
             class="btn btn-icon"
@@ -704,6 +708,10 @@ const readerStyle = computed(() => {
 })
 
 const pageTurnZoneStyle = computed(() => ({
+  '--reader-content-width': readerStyle.value.maxWidth,
+}))
+
+const readerHeaderStyle = computed(() => ({
   '--reader-content-width': readerStyle.value.maxWidth,
 }))
 
@@ -2068,18 +2076,17 @@ onBeforeUnmount(() => {
 /* 阅读器头部 */
 .reader-header {
   position: absolute;
-  top: var(--spacing-md);
+  top: 0;
   left: var(--spacing-md);
   right: var(--spacing-md);
-  display: flex;
+  display: grid;
+  grid-template-columns:
+    minmax(112px, 1fr)
+    min(var(--reader-content-width, 800px), calc(100vw - 360px))
+    minmax(216px, 1fr);
   align-items: center;
-  justify-content: space-between;
+  column-gap: var(--spacing-md);
   padding: 0;
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border: none;
-  box-shadow: none;
   z-index: 100;
   pointer-events: none;
   min-height: 40px;
@@ -2090,9 +2097,11 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: var(--spacing-xs);
   padding: 8px 16px;
-  border: none;
+  justify-self: start;
+  border: 1px solid var(--border-color-light);
   border-radius: var(--radius-full);
-  background: var(--bg-secondary);
+  background: var(--surface-card);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   color: var(--text-primary);
   font-size: var(--font-size-base);
   cursor: pointer;
@@ -2105,21 +2114,21 @@ onBeforeUnmount(() => {
 }
 
 .reader-title {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
+  justify-self: stretch;
   color: var(--text-primary);
-  flex: 0 1 auto;
   overflow: hidden;
   padding: 7px var(--spacing-md);
   margin: 0;
   border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
+  border: 1px solid var(--border-color-light);
+  background: var(--surface-card);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   pointer-events: auto;
-  width: min(calc(100% - 300px), 820px);
+  width: 100%;
+  min-width: 0;
 }
 
 .reader-title-main {
@@ -2204,7 +2213,13 @@ onBeforeUnmount(() => {
 
 .reader-actions {
   display: flex;
-  gap: var(--spacing-xs);
+  justify-self: end;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-full);
+  background: var(--surface-card);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   pointer-events: auto;
 }
 
@@ -2213,7 +2228,8 @@ onBeforeUnmount(() => {
   height: 40px;
   padding: 0;
   border-radius: var(--radius-full);
-  background: var(--bg-secondary);
+  border: 0;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3090,7 +3106,7 @@ onBeforeUnmount(() => {
 /* 响应式设计 */
 @media (max-width: 768px) {
   .reader-header {
-    top: 8px;
+    top: 0;
     left: 8px;
     right: 8px;
     display: grid;
@@ -3099,9 +3115,6 @@ onBeforeUnmount(() => {
   }
 
   .reader-title {
-    position: static;
-    left: auto;
-    transform: none;
     grid-column: 1 / -1;
     grid-row: 2;
     justify-self: center;
