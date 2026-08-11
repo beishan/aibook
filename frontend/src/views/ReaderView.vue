@@ -2094,6 +2094,7 @@ onBeforeUnmount(() => {
 
 .back-btn {
   display: inline-flex;
+  grid-column: 1;
   align-items: center;
   gap: var(--spacing-xs);
   padding: 8px 16px;
@@ -2115,6 +2116,7 @@ onBeforeUnmount(() => {
 
 .reader-title {
   display: flex;
+  grid-column: 2;
   align-items: center;
   justify-content: center;
   justify-self: stretch;
@@ -2213,6 +2215,7 @@ onBeforeUnmount(() => {
 
 .reader-actions {
   display: flex;
+  grid-column: 3;
   justify-self: end;
   gap: 2px;
   padding: 2px;
@@ -3123,6 +3126,8 @@ onBeforeUnmount(() => {
   }
 
   .reader-actions {
+    grid-column: 2;
+    grid-row: 1;
     justify-self: end;
   }
 
