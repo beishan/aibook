@@ -58,9 +58,9 @@
             >
               <DockIcon
                 class="dock-icon"
-                name="trash"
+                :name="trashIconName"
                 :variant="preferencesStore.dockIconStyle"
-                :custom-src="dockIconStore.iconUrls.trash"
+                :custom-src="trashCustomIconUrl"
                 aria-hidden="true"
               />
             </span>
@@ -192,6 +192,14 @@ const userInitial = computed(
 
 const displayName = computed(
   () => userStore.userInfo?.nickname || userStore.userInfo?.username || '用户'
+)
+
+const trashIconName = computed<DockIconName>(() =>
+  bookStore.trashCount > 0 ? 'trashFull' : 'trashEmpty'
+)
+
+const trashCustomIconUrl = computed(() =>
+  dockIconStore.iconUrls[trashIconName.value] || dockIconStore.iconUrls.trash
 )
 
 const dockItemStyle = (index: number) => {

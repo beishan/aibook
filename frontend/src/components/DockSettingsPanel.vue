@@ -33,7 +33,7 @@
               class="dock-preview-icon"
               :name="item.icon"
               :variant="preferencesStore.dockIconStyle"
-              :custom-src="dockIconStore.iconUrls[item.icon]"
+              :custom-src="customIconUrl(item.icon)"
               aria-hidden="true"
             />
             <span class="dock-preview-dot"></span>
@@ -81,11 +81,11 @@
               <small>支持 JPG、PNG、WebP，单张不超过 5MB；建议使用透明背景的正方形图片。</small>
             </div>
             <div class="custom-icon-grid">
-              <article v-for="item in previewItems" :key="item.icon" class="custom-icon-card">
-                <div class="custom-icon-image" :class="{ empty: !dockIconStore.iconUrls[item.icon] }">
+              <article v-for="item in customIconItems" :key="item.icon" class="custom-icon-card">
+                <div class="custom-icon-image" :class="{ empty: !customIconUrl(item.icon) }">
                   <img
-                    v-if="dockIconStore.iconUrls[item.icon]"
-                    :src="dockIconStore.iconUrls[item.icon]"
+                    v-if="customIconUrl(item.icon)"
+                    :src="customIconUrl(item.icon)"
                     :alt="`${item.label}自定义图标`"
                   />
                   <DockIcon v-else :name="item.icon" variant="minimal" aria-hidden="true" />
@@ -148,20 +148,41 @@ import { computed, onMounted } from 'vue'
 import DockIcon, { type DockIconName, type DockIconStyle } from '@/components/DockIcon.vue'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useDockIconStore } from '@/stores/dockIcons'
+import { useBookStore } from '@/stores/book'
 import { message } from '@/utils/message'
 
 type DockControlKey = 'size' | 'opacity' | 'magnification' | 'blur'
 
 const preferencesStore = usePreferencesStore()
 const dockIconStore = useDockIconStore()
-const previewItems: Array<{ icon: DockIconName; label: string }> = [
+const bookStore = useBookStore()
+const navigationIconItems: Array<{ icon: DockIconName; label: string }> = [
   { icon: 'home', label: '首页' },
   { icon: 'library', label: '书库' },
   { icon: 'shelf', label: '书架' },
   { icon: 'repair', label: '修复' },
   { icon: 'settings', label: '设置' },
-  { icon: 'trash', label: '回收站' },
 ]
+const customIconItems: Array<{ icon: DockIconName; label: string }> = [
+  ...navigationIconItems,
+  { icon: 'trashEmpty', label: '回收站（空）' },
+  { icon: 'trashFull', label: '回收站（非空）' },
+]
+const previewItems = computed<Array<{ icon: DockIconName; label: string }>>(() => [
+  ...navigationIconItems,
+  {
+    icon: bookStore.trashCount > 0 ? 'trashFull' : 'trashEmpty',
+    label: '回收站',
+  },
+])
+
+const customIconUrl = (name: DockIconName) => {
+  const current = dockIconStore.iconUrls[name]
+  if (current) return current
+  return name === 'trashEmpty' || name === 'trashFull'
+    ? dockIconStore.iconUrls.trash
+    : ''
+}
 const iconStyleOptions: Array<{
   value: DockIconStyle
   label: string
@@ -291,6 +312,7 @@ const handleIconRemove = async (item: { icon: DockIconName; label: string }) => 
 
 onMounted(() => {
   void dockIconStore.hydrate()
+  void bookStore.fetchTrashCount().catch(() => undefined)
 })
 </script>
 

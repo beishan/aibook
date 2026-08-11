@@ -75,10 +75,11 @@
         <path d="M12 23h40" stroke="#fff0ce" stroke-width="1.4" opacity=".36" />
       </g>
 
-      <g v-else-if="name === 'trash'" :filter="`url(#${gradientPrefix}-shadow)`">
+      <g v-else-if="name === 'trashEmpty' || name === 'trashFull'" :filter="`url(#${gradientPrefix}-shadow)`">
         <path d="M18 20h28l-2.8 34H20.8Z" fill="#c9d2d8" stroke="#4d5d67" stroke-width="1.8" stroke-linejoin="round" />
         <path d="M15 18h34M25 18v-5h14v5" fill="none" stroke="#4d5d67" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
         <path d="M27 27v18M37 27v18" stroke="#71838d" stroke-width="2.3" stroke-linecap="round" />
+        <path v-if="name === 'trashFull'" d="m23 30 6-5 5 4 6-5 3 6v14H23Z" fill="#f6f1dc" stroke="#9e8d62" stroke-width="1.2" stroke-linejoin="round" />
         <path d="M21 22h22" stroke="#fff" stroke-width="1.4" opacity=".62" />
       </g>
 
@@ -111,10 +112,10 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance } from 'vue'
-import { Collection, DeleteFilled, HomeFilled, Reading, Setting, Tools } from '@element-plus/icons-vue'
+import { Collection, Delete, DeleteFilled, HomeFilled, Reading, Setting, Tools } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
 
-export type DockIconName = 'home' | 'library' | 'shelf' | 'repair' | 'settings' | 'trash'
+export type DockIconName = 'home' | 'library' | 'shelf' | 'repair' | 'settings' | 'trashEmpty' | 'trashFull'
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 
 const props = defineProps<{
@@ -129,7 +130,8 @@ const minimalIcons: Record<DockIconName, Component> = {
   shelf: Reading,
   repair: Tools,
   settings: Setting,
-  trash: DeleteFilled,
+  trashEmpty: Delete,
+  trashFull: DeleteFilled,
 }
 
 const instanceId = getCurrentInstance()?.uid ?? 0
@@ -202,8 +204,13 @@ const gradientPrefix = computed(() => `dock-${instanceId}-${props.name}`)
   background: linear-gradient(145deg, #c8d0da, #748294 56%, #3c4959);
 }
 
-.dock-glyph-macos--trash {
+.dock-glyph-macos--trashEmpty,
+.dock-glyph-macos--trashFull {
   background: linear-gradient(145deg, #edf1f4, #9aa8b4 56%, #53626f);
+}
+
+.dock-glyph-macos--trashFull {
+  background: linear-gradient(145deg, #ffe39b, #e2aa45 56%, #94601f);
 }
 
 .dock-glyph-macos-glass {

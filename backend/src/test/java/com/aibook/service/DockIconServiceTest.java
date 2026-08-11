@@ -65,6 +65,28 @@ class DockIconServiceTest {
     }
 
     @Test
+    void storesEmptyAndFullTrashIconsIndependently() {
+        byte[] emptyPng = new byte[] {
+            (byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1
+        };
+        byte[] fullPng = new byte[] {
+            (byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 2
+        };
+
+        service.upload(user, "trashEmpty", new MockMultipartFile(
+                "file", "empty.png", "image/png", emptyPng));
+        service.upload(user, "trashFull", new MockMultipartFile(
+                "file", "full.png", "image/png", fullPng));
+
+        assertThat(service.getStatus(user).icons())
+                .contains("trashEmpty", "trashFull");
+        assertThat(service.getIcon(user, "trashEmpty").path())
+                .hasBinaryContent(emptyPng);
+        assertThat(service.getIcon(user, "trashFull").path())
+                .hasBinaryContent(fullPng);
+    }
+
+    @Test
     void rejectsInvalidNameAndFakeImage() {
         MockMultipartFile fake = new MockMultipartFile(
                 "file", "fake.png", "image/png", "not-an-image".getBytes());
