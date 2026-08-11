@@ -32,8 +32,9 @@ public class UserService implements UserDetailsService {
             Set.of("card", "compact-card", "list");
     private static final Set<Integer> LIBRARY_PAGE_SIZES =
             Set.of(12, 18, 24, 36, 60);
+    private static final int DEFAULT_LIBRARY_PAGE_SIZE = 18;
     private static final Set<String> DOCK_ICON_STYLES =
-            Set.of("minimal", "skeuomorphic", "macos26");
+            Set.of("minimal", "skeuomorphic", "macos26", "custom");
     private static final int DEFAULT_DOCK_SIZE = 58;
     private static final int DEFAULT_DOCK_OPACITY = 72;
     private static final int DEFAULT_DOCK_MAGNIFICATION = 128;
@@ -106,6 +107,20 @@ public class UserService implements UserDetailsService {
                     LIBRARY_PAGE_SIZES);
             user.setLibraryPageSize(request.getLibraryPageSize());
         }
+        if (request.getLibraryCardPageSize() != null) {
+            requireAllowed(
+                    "书库卡片分页大小",
+                    request.getLibraryCardPageSize(),
+                    LIBRARY_PAGE_SIZES);
+            user.setLibraryPageSize(request.getLibraryCardPageSize());
+        }
+        if (request.getLibraryListPageSize() != null) {
+            requireAllowed(
+                    "书库列表分页大小",
+                    request.getLibraryListPageSize(),
+                    LIBRARY_PAGE_SIZES);
+            user.setLibraryListPageSize(request.getLibraryListPageSize());
+        }
         if (request.getScanThreadCount() != null) {
             if (!ScanSettings.isValidThreadCount(request.getScanThreadCount())) {
                 throw new IllegalArgumentException(
@@ -163,6 +178,9 @@ public class UserService implements UserDetailsService {
     }
 
     private UserPreferencesDTO toPreferences(User user) {
+        int cardPageSize = defaultIfNull(
+                user.getLibraryPageSize(), DEFAULT_LIBRARY_PAGE_SIZE);
+        int listPageSize = defaultIfNull(user.getLibraryListPageSize(), cardPageSize);
         return UserPreferencesDTO.builder()
                 .theme(user.getWebTheme())
                 .modernThemeColor(defaultIfBlank(
@@ -173,7 +191,9 @@ public class UserService implements UserDetailsService {
                         user.getNaturalThemeColor(), DEFAULT_NATURAL_THEME_COLOR))
                 .themeBackgrounds(readThemeBackgrounds(user.getThemeBackgroundSettings()))
                 .libraryViewMode(user.getLibraryViewMode())
-                .libraryPageSize(user.getLibraryPageSize())
+                .libraryPageSize(cardPageSize)
+                .libraryCardPageSize(cardPageSize)
+                .libraryListPageSize(listPageSize)
                 .scanThreadCount(
                         ScanSettings.normalizeThreadCount(user.getScanThreadCount()))
                 .dockSize(defaultIfNull(user.getDockSize(), DEFAULT_DOCK_SIZE))

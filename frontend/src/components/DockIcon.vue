@@ -1,6 +1,13 @@
 <template>
   <span class="dock-glyph" :class="`dock-glyph--${variant}`">
-    <el-icon v-if="variant === 'minimal'" class="dock-glyph-simple" aria-hidden="true">
+    <img
+      v-if="variant === 'custom' && customSrc"
+      class="dock-glyph-custom-image"
+      :src="customSrc"
+      alt=""
+    />
+
+    <el-icon v-else-if="variant === 'minimal' || variant === 'custom'" class="dock-glyph-simple" aria-hidden="true">
       <component :is="minimalIcon" />
     </el-icon>
 
@@ -101,11 +108,12 @@ import { Collection, HomeFilled, Reading, Setting, Tools } from '@element-plus/i
 import type { Component } from 'vue'
 
 export type DockIconName = 'home' | 'library' | 'shelf' | 'repair' | 'settings'
-export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26'
+export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 
 const props = defineProps<{
   name: DockIconName
   variant: DockIconStyle
+  customSrc?: string
 }>()
 
 const minimalIcons: Record<DockIconName, Component> = {
@@ -132,9 +140,16 @@ const gradientPrefix = computed(() => `dock-${instanceId}-${props.name}`)
 
 .dock-glyph-simple,
 .dock-glyph-simple :deep(svg),
-.dock-glyph-skeuo {
+.dock-glyph-skeuo,
+.dock-glyph-custom-image {
   width: 100%;
   height: 100%;
+}
+
+.dock-glyph-custom-image {
+  display: block;
+  border: 0;
+  object-fit: contain;
 }
 
 .dock-glyph-simple :deep(svg),

@@ -18,6 +18,8 @@ public class UserPreferencesDTO {
     private Map<String, ThemeBackgroundDTO> themeBackgrounds;
     private String libraryViewMode;
     private Integer libraryPageSize;
+    private Integer libraryCardPageSize;
+    private Integer libraryListPageSize;
     private Integer scanThreadCount;
     private Integer dockSize;
     private Integer dockOpacity;
@@ -93,6 +95,22 @@ public class UserPreferencesDTO {
 
     public void setLibraryPageSize(Integer libraryPageSize) {
         this.libraryPageSize = libraryPageSize;
+    }
+
+    public Integer getLibraryCardPageSize() {
+        return libraryCardPageSize;
+    }
+
+    public void setLibraryCardPageSize(Integer libraryCardPageSize) {
+        this.libraryCardPageSize = libraryCardPageSize;
+    }
+
+    public Integer getLibraryListPageSize() {
+        return libraryListPageSize;
+    }
+
+    public void setLibraryListPageSize(Integer libraryListPageSize) {
+        this.libraryListPageSize = libraryListPageSize;
     }
 
     public Integer getScanThreadCount() {
@@ -188,6 +206,16 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder libraryPageSize(Integer libraryPageSize) {
             value.setLibraryPageSize(libraryPageSize);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder libraryCardPageSize(Integer libraryCardPageSize) {
+            value.setLibraryCardPageSize(libraryCardPageSize);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder libraryListPageSize(Integer libraryListPageSize) {
+            value.setLibraryListPageSize(libraryListPageSize);
             return this;
         }
 

@@ -26,11 +26,15 @@
           :style="dockItemStyle(index)"
           :aria-label="item.title"
         >
-          <span class="dock-icon-tile">
+          <span
+            class="dock-icon-tile"
+            :class="{ 'dock-icon-tile--custom': preferencesStore.dockIconStyle === 'custom' }"
+          >
             <DockIcon
               class="dock-icon"
               :name="item.icon"
               :variant="preferencesStore.dockIconStyle"
+              :custom-src="dockIconStore.iconUrls[item.icon]"
               aria-hidden="true"
             />
           </span>
@@ -100,11 +104,13 @@ import DockIcon, { type DockIconName } from '@/components/DockIcon.vue'
 import { confirm } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
 import { usePreferencesStore } from '@/stores/preferences'
+import { useDockIconStore } from '@/stores/dockIcons'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const preferencesStore = usePreferencesStore()
+const dockIconStore = useDockIconStore()
 
 const showUserMenu = ref(false)
 const dockContainerRef = ref<HTMLElement | null>(null)
@@ -190,6 +196,7 @@ const handleEscape = (event: KeyboardEvent) => {
 
 onMounted(() => {
   resetDockMagnification()
+  void dockIconStore.hydrate()
   document.addEventListener('click', handleClickOutside)
   document.addEventListener('keydown', handleEscape)
 })
@@ -467,6 +474,23 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
+.dock-icon-tile--custom {
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.dock-icon-tile--custom::after {
+  display: none;
+}
+
+.dock-icon.dock-glyph--custom {
+  width: 100%;
+  height: 100%;
+  filter: none;
+}
+
 .dock-item:nth-child(1) .dock-icon-tile {
   background: radial-gradient(circle at 24% 14%, #ffffff, transparent 38%),
     linear-gradient(145deg, rgba(229, 249, 239, 0.94), rgba(137, 205, 171, 0.78));
@@ -519,6 +543,13 @@ onUnmounted(() => {
     0 9px 22px rgba(18, 76, 50, 0.23),
     inset 0 1px 0 white,
     inset 0 -1px 2px rgba(59, 123, 92, 0.1);
+}
+
+.dock-item:hover .dock-icon-tile--custom,
+.dock-item.active .dock-icon-tile--custom {
+  background: transparent !important;
+  box-shadow: none;
+  filter: none;
 }
 
 .dock-icon {

@@ -119,6 +119,11 @@ public class User implements UserDetails {
     private Integer libraryPageSize;
 
     /**
+     * Web 端书库列表视图每页显示数量；卡片视图继续使用 libraryPageSize。
+     */
+    private Integer libraryListPageSize;
+
+    /**
      * 后端目录扫描工作线程数
      */
     private Integer scanThreadCount;
@@ -156,7 +161,7 @@ public class User implements UserDetails {
     private Integer dockBlur;
 
     /**
-     * 自然清新主题 Dock 图标风格（minimal、skeuomorphic、macos26）
+     * MACOS 主题 Dock 图标风格（minimal、skeuomorphic、macos26、custom）
      */
     private String dockIconStyle;
 

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/utils/api'
 import { usePreferencesStore } from '@/stores/preferences'
+import { useDockIconStore } from '@/stores/dockIcons'
 import { AUTH_EXPIRED_EVENT } from '@/utils/authSession'
 
 interface UserInfo {
@@ -117,6 +118,7 @@ export const useUserStore = defineStore('user', () => {
     replaceAvatarObjectUrl()
     localStorage.removeItem('token')
     usePreferencesStore().resetHydration()
+    useDockIconStore().reset()
   }
 
   window.addEventListener(AUTH_EXPIRED_EVENT, logout)

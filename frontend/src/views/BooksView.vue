@@ -126,7 +126,7 @@
         <button
           class="btn"
           :class="{ active: viewMode === 'card' }"
-          @click="preferencesStore.setLibraryViewMode('card')"
+          @click="handleViewModeChange('card')"
         >
           <span>▦</span>
           <span>卡片</span>
@@ -134,7 +134,7 @@
         <button
           class="btn"
           :class="{ active: viewMode === 'compact-card' }"
-          @click="preferencesStore.setLibraryViewMode('compact-card')"
+          @click="handleViewModeChange('compact-card')"
         >
           <span>▪︎</span>
           <span>小卡片</span>
@@ -142,7 +142,7 @@
         <button
           class="btn"
           :class="{ active: viewMode === 'list' }"
-          @click="preferencesStore.setLibraryViewMode('list')"
+          @click="handleViewModeChange('list')"
         >
           <span>☰</span>
           <span>列表</span>
@@ -587,8 +587,22 @@ const tagStore = useTagStore()
 const preferencesStore = usePreferencesStore()
 const {
   libraryViewMode: viewMode,
-  libraryPageSize: pageSize,
+  libraryCardPageSize,
+  libraryListPageSize,
 } = storeToRefs(preferencesStore)
+
+const pageSize = computed<LibraryPageSize>({
+  get: () => viewMode.value === 'list'
+    ? libraryListPageSize.value
+    : libraryCardPageSize.value,
+  set: value => {
+    if (viewMode.value === 'list') {
+      preferencesStore.setLibraryListPageSize(value)
+    } else {
+      preferencesStore.setLibraryCardPageSize(value)
+    }
+  },
+})
 
 const searchKeyword = ref('')
 const filterFormat = ref('')
@@ -1028,7 +1042,14 @@ const goToPage = (page: number) => {
 }
 
 const handlePageSizeChange = () => {
-  preferencesStore.setLibraryPageSize(pageSize.value as LibraryPageSize)
+  currentPage.value = 1
+  selectedBooks.value.clear()
+  loadBooks()
+}
+
+const handleViewModeChange = (mode: 'card' | 'compact-card' | 'list') => {
+  if (viewMode.value === mode) return
+  preferencesStore.setLibraryViewMode(mode)
   currentPage.value = 1
   selectedBooks.value.clear()
   loadBooks()

@@ -23,12 +23,17 @@
             v-for="(item, index) in previewItems"
             :key="item.label"
             class="dock-preview-item"
-            :class="{ active: index === 1, magnified: index === 2 }"
+            :class="{
+              active: index === 1,
+              magnified: index === 2,
+              custom: preferencesStore.dockIconStyle === 'custom',
+            }"
           >
             <DockIcon
               class="dock-preview-icon"
               :name="item.icon"
               :variant="preferencesStore.dockIconStyle"
+              :custom-src="dockIconStore.iconUrls[item.icon]"
               aria-hidden="true"
             />
             <span class="dock-preview-dot"></span>
@@ -59,6 +64,7 @@
                   :key="icon"
                   :name="icon"
                   :variant="option.value"
+                  :custom-src="option.value === 'custom' ? dockIconStore.iconUrls[icon] : undefined"
                 />
               </span>
               <span class="dock-icon-option-text">
@@ -67,6 +73,49 @@
               </span>
               <span class="dock-icon-option-check" aria-hidden="true">✓</span>
             </button>
+          </div>
+
+          <div v-if="preferencesStore.dockIconStyle === 'custom'" class="custom-icon-settings">
+            <div class="custom-icon-heading">
+              <strong>自定义图标</strong>
+              <small>支持 JPG、PNG、WebP，单张不超过 5MB；建议使用透明背景的正方形图片。</small>
+            </div>
+            <div class="custom-icon-grid">
+              <article v-for="item in previewItems" :key="item.icon" class="custom-icon-card">
+                <div class="custom-icon-image" :class="{ empty: !dockIconStore.iconUrls[item.icon] }">
+                  <img
+                    v-if="dockIconStore.iconUrls[item.icon]"
+                    :src="dockIconStore.iconUrls[item.icon]"
+                    :alt="`${item.label}自定义图标`"
+                  />
+                  <DockIcon v-else :name="item.icon" variant="minimal" aria-hidden="true" />
+                </div>
+                <span class="custom-icon-name">{{ item.label }}</span>
+                <div class="custom-icon-actions">
+                  <label
+                    class="btn btn-secondary custom-icon-upload"
+                    :class="{ disabled: dockIconStore.uploading[item.icon] }"
+                  >
+                    <span>{{ dockIconStore.uploading[item.icon] ? '处理中…' : '上传' }}</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      :disabled="dockIconStore.uploading[item.icon]"
+                      @change="event => handleIconUpload(item, event)"
+                    />
+                  </label>
+                  <button
+                    v-if="dockIconStore.iconUrls[item.icon]"
+                    type="button"
+                    class="btn btn-text custom-icon-remove"
+                    :disabled="dockIconStore.uploading[item.icon]"
+                    @click="handleIconRemove(item)"
+                  >
+                    移除
+                  </button>
+                </div>
+              </article>
+            </div>
           </div>
         </section>
 
@@ -95,14 +144,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import DockIcon, { type DockIconName, type DockIconStyle } from '@/components/DockIcon.vue'
 import { usePreferencesStore } from '@/stores/preferences'
+import { useDockIconStore } from '@/stores/dockIcons'
 import { message } from '@/utils/message'
 
 type DockControlKey = 'size' | 'opacity' | 'magnification' | 'blur'
 
 const preferencesStore = usePreferencesStore()
+const dockIconStore = useDockIconStore()
 const previewItems: Array<{ icon: DockIconName; label: string }> = [
   { icon: 'home', label: '首页' },
   { icon: 'library', label: '书库' },
@@ -132,6 +183,12 @@ const iconStyleOptions: Array<{
     value: 'macos26',
     label: 'macOS 26',
     description: '液态玻璃与彩色渐变',
+    previewIcons: ['home', 'library', 'settings'],
+  },
+  {
+    value: 'custom',
+    label: '自定义',
+    description: '完整显示自己上传的图片',
     previewIcons: ['home', 'library', 'settings'],
   },
 ]
@@ -200,6 +257,40 @@ const handleReset = () => {
   preferencesStore.resetDockAppearance()
   message.success('Dock 外观已恢复默认设置')
 }
+
+const errorMessage = (error: unknown) => {
+  if (error instanceof Error && error.message) return error.message
+  return '图标操作失败，请稍后重试'
+}
+
+const handleIconUpload = async (
+  item: { icon: DockIconName; label: string },
+  event: Event,
+) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  try {
+    await dockIconStore.upload(item.icon, file)
+    message.success(`${item.label}图标已更新`)
+  } catch (error) {
+    message.error(errorMessage(error))
+  }
+}
+
+const handleIconRemove = async (item: { icon: DockIconName; label: string }) => {
+  try {
+    await dockIconStore.remove(item.icon)
+    message.success(`${item.label}图标已移除`)
+  } catch (error) {
+    message.error(errorMessage(error))
+  }
+}
+
+onMounted(() => {
+  void dockIconStore.hydrate()
+})
 </script>
 
 <style scoped>
@@ -358,6 +449,13 @@ const handleReset = () => {
   transform: translateY(-6px) scale(var(--preview-scale));
 }
 
+.dock-preview-item.custom {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .dock-preview-icon {
   width: calc(var(--preview-size) * 0.46);
   height: calc(var(--preview-size) * 0.46);
@@ -381,6 +479,12 @@ const handleReset = () => {
 .dock-preview-icon.dock-glyph--macos26 {
   width: calc(var(--preview-size) * 0.66);
   height: calc(var(--preview-size) * 0.66);
+  filter: none;
+}
+
+.dock-preview-icon.dock-glyph--custom {
+  width: 100%;
+  height: 100%;
   filter: none;
 }
 
@@ -527,6 +631,109 @@ const handleReset = () => {
   transform: scale(1);
 }
 
+.custom-icon-settings {
+  display: grid;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.custom-icon-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.custom-icon-heading strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.custom-icon-heading small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.custom-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(82px, 1fr));
+  gap: 9px;
+}
+
+.custom-icon-card {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 7px;
+  padding: 10px 7px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--surface-card) 76%, transparent);
+}
+
+.custom-icon-image {
+  width: 54px;
+  height: 54px;
+}
+
+.custom-icon-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: contain;
+}
+
+.custom-icon-image.empty {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  padding: 9px;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+}
+
+.custom-icon-name {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.custom-icon-actions {
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.custom-icon-upload {
+  position: relative;
+  padding: 5px 8px;
+  overflow: hidden;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.custom-icon-upload.disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.custom-icon-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.custom-icon-remove {
+  padding: 5px;
+  color: var(--danger);
+  font-size: 10px;
+}
+
 .dock-control {
   display: grid;
   grid-template-columns: minmax(180px, 0.92fr) minmax(150px, 1.08fr);
@@ -607,6 +814,10 @@ const handleReset = () => {
 
   .dock-icon-options {
     grid-template-columns: 1fr;
+  }
+
+  .custom-icon-grid {
+    grid-template-columns: repeat(2, minmax(110px, 1fr));
   }
 
   .dock-preview-stage {
