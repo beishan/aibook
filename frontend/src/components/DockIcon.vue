@@ -75,6 +75,13 @@
         <path d="M12 23h40" stroke="#fff0ce" stroke-width="1.4" opacity=".36" />
       </g>
 
+      <g v-else-if="name === 'trash'" :filter="`url(#${gradientPrefix}-shadow)`">
+        <path d="M18 20h28l-2.8 34H20.8Z" fill="#c9d2d8" stroke="#4d5d67" stroke-width="1.8" stroke-linejoin="round" />
+        <path d="M15 18h34M25 18v-5h14v5" fill="none" stroke="#4d5d67" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M27 27v18M37 27v18" stroke="#71838d" stroke-width="2.3" stroke-linecap="round" />
+        <path d="M21 22h22" stroke="#fff" stroke-width="1.4" opacity=".62" />
+      </g>
+
       <g v-else :filter="`url(#${gradientPrefix}-shadow)`">
         <g :fill="`url(#${gradientPrefix}-metal)`" stroke="#684e25" stroke-width="1.1">
           <rect x="28" y="7" width="8" height="15" rx="3" />
@@ -104,10 +111,10 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance } from 'vue'
-import { Collection, HomeFilled, Reading, Setting, Tools } from '@element-plus/icons-vue'
+import { Collection, DeleteFilled, HomeFilled, Reading, Setting, Tools } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
 
-export type DockIconName = 'home' | 'library' | 'shelf' | 'repair' | 'settings'
+export type DockIconName = 'home' | 'library' | 'shelf' | 'repair' | 'settings' | 'trash'
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 
 const props = defineProps<{
@@ -122,6 +129,7 @@ const minimalIcons: Record<DockIconName, Component> = {
   shelf: Reading,
   repair: Tools,
   settings: Setting,
+  trash: DeleteFilled,
 }
 
 const instanceId = getCurrentInstance()?.uid ?? 0
@@ -192,6 +200,10 @@ const gradientPrefix = computed(() => `dock-${instanceId}-${props.name}`)
 
 .dock-glyph-macos--settings {
   background: linear-gradient(145deg, #c8d0da, #748294 56%, #3c4959);
+}
+
+.dock-glyph-macos--trash {
+  background: linear-gradient(145deg, #edf1f4, #9aa8b4 56%, #53626f);
 }
 
 .dock-glyph-macos-glass {

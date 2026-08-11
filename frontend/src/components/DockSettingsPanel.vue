@@ -160,6 +160,7 @@ const previewItems: Array<{ icon: DockIconName; label: string }> = [
   { icon: 'shelf', label: '书架' },
   { icon: 'repair', label: '修复' },
   { icon: 'settings', label: '设置' },
+  { icon: 'trash', label: '回收站' },
 ]
 const iconStyleOptions: Array<{
   value: DockIconStyle
@@ -655,7 +656,7 @@ onMounted(() => {
 
 .custom-icon-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(82px, 1fr));
+  grid-template-columns: repeat(3, minmax(110px, 1fr));
   gap: 9px;
 }
 

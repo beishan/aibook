@@ -252,6 +252,20 @@ public class BookService {
                 });
     }
 
+    /** 自动清理超过保留期限的回收站记录，原始文件始终保留。 */
+    @Transactional
+    public int purgeExpiredTrash(User user, LocalDateTime deletedBefore) {
+        List<Book> books = bookRepository
+                .findByUserAndDeletedAtBeforeAndPurgedAtIsNull(user, deletedBefore);
+        books.forEach(book -> {
+            operationLogService.record(
+                    user, OperationLog.Action.PERMANENTLY_DELETE_BOOK, book,
+                    "永久删除书籍《" + book.getTitle() + "》", "回收站到期自动清理，原始文件保留");
+            purgeDatabaseRecordOnly(book);
+        });
+        return books.size();
+    }
+
     private List<Book> getOwnedTrashBooks(List<Long> bookIds, User user) {
         List<Long> distinctIds = validateBookIds(bookIds);
         List<Book> books = bookRepository.findTrashByIds(distinctIds, user);

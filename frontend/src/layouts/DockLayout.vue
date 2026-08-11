@@ -42,15 +42,67 @@
           <span class="dock-tooltip">{{ item.title }}</span>
         </router-link>
 
+        <div class="dock-trash-entry" :class="{ open: showTrashMenu }">
+          <button
+            type="button"
+            class="dock-item dock-trash-item"
+            :style="dockItemStyle(menuItems.length)"
+            aria-haspopup="dialog"
+            :aria-expanded="showTrashMenu"
+            aria-label="回收站"
+            @click.stop="toggleTrashMenu"
+          >
+            <span
+              class="dock-icon-tile"
+              :class="{ 'dock-icon-tile--custom': preferencesStore.dockIconStyle === 'custom' }"
+            >
+              <DockIcon
+                class="dock-icon"
+                name="trash"
+                :variant="preferencesStore.dockIconStyle"
+                :custom-src="dockIconStore.iconUrls.trash"
+                aria-hidden="true"
+              />
+            </span>
+            <span v-if="bookStore.trashCount > 0" class="dock-trash-badge">
+              {{ bookStore.trashCount > 99 ? '99+' : bookStore.trashCount }}
+            </span>
+            <span class="dock-tooltip">回收站</span>
+          </button>
+
+          <Transition name="dock-menu">
+            <section
+              v-if="showTrashMenu"
+              class="dock-trash-window"
+              role="dialog"
+              aria-modal="false"
+              aria-labelledby="dock-trash-title"
+              @click.stop
+              @pointermove.stop
+            >
+              <header class="dock-trash-header">
+                <div>
+                  <strong id="dock-trash-title">系统回收站</strong>
+                  <small>恢复书籍，或从系统中永久清理记录</small>
+                </div>
+                <button type="button" class="dock-trash-close" aria-label="关闭回收站" @click="showTrashMenu = false">✕</button>
+              </header>
+              <div class="dock-trash-body">
+                <RecycleBinPanel compact @changed="refreshTrashCount" />
+              </div>
+            </section>
+          </Transition>
+        </div>
+
         <div class="dock-user-entry" :class="{ open: showUserMenu }">
           <button
             type="button"
             class="dock-item dock-user-item"
-            :style="dockItemStyle(menuItems.length)"
+            :style="dockItemStyle(menuItems.length + 1)"
             aria-haspopup="menu"
             :aria-expanded="showUserMenu"
             aria-label="用户菜单"
-            @click.stop="showUserMenu = !showUserMenu"
+            @click.stop="toggleUserMenu"
           >
             <span class="dock-user-avatar">
               <img v-if="userStore.avatarObjectUrl" :src="userStore.avatarObjectUrl" alt="" />
@@ -105,14 +157,18 @@ import { confirm } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useDockIconStore } from '@/stores/dockIcons'
+import { useBookStore } from '@/stores/book'
+import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const preferencesStore = usePreferencesStore()
 const dockIconStore = useDockIconStore()
+const bookStore = useBookStore()
 
 const showUserMenu = ref(false)
+const showTrashMenu = ref(false)
 const dockContainerRef = ref<HTMLElement | null>(null)
 const dockScales = ref<number[]>([])
 
@@ -148,7 +204,7 @@ const dockItemStyle = (index: number) => {
 }
 
 const resetDockMagnification = () => {
-  dockScales.value = Array.from({ length: menuItems.length + 1 }, () => 1)
+  dockScales.value = Array.from({ length: menuItems.length + 2 }, () => 1)
 }
 
 const handleDockPointerMove = (event: PointerEvent) => {
@@ -174,6 +230,21 @@ const openProfile = () => {
   void router.push({ path: '/settings', query: { tab: 'profile' } })
 }
 
+const refreshTrashCount = () => {
+  void bookStore.fetchTrashCount().catch(() => undefined)
+}
+
+const toggleTrashMenu = () => {
+  showTrashMenu.value = !showTrashMenu.value
+  showUserMenu.value = false
+  if (showTrashMenu.value) refreshTrashCount()
+}
+
+const toggleUserMenu = () => {
+  showUserMenu.value = !showUserMenu.value
+  showTrashMenu.value = false
+}
+
 const handleLogout = async () => {
   const result = await confirm('确定要退出登录吗？')
   if (result) {
@@ -188,15 +259,22 @@ const handleClickOutside = (e: MouseEvent) => {
   if (!target.closest('.dock-user-entry')) {
     showUserMenu.value = false
   }
+  if (!target.closest('.dock-trash-entry')) {
+    showTrashMenu.value = false
+  }
 }
 
 const handleEscape = (event: KeyboardEvent) => {
-  if (event.key === 'Escape') showUserMenu.value = false
+  if (event.key === 'Escape') {
+    showUserMenu.value = false
+    showTrashMenu.value = false
+  }
 }
 
 onMounted(() => {
   resetDockMagnification()
   void dockIconStore.hydrate()
+  refreshTrashCount()
   document.addEventListener('click', handleClickOutside)
   document.addEventListener('keydown', handleEscape)
 })
@@ -297,6 +375,113 @@ onUnmounted(() => {
   justify-content: center;
   margin-left: 13px;
   flex: 0 0 var(--dock-size);
+}
+
+.dock-trash-entry {
+  position: relative;
+  display: flex;
+  width: var(--dock-size);
+  height: var(--dock-size);
+  align-items: flex-end;
+  justify-content: center;
+  flex: 0 0 var(--dock-size);
+}
+
+.dock-trash-item {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+}
+
+.dock-trash-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  z-index: 3;
+  display: grid;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  place-items: center;
+  border: 2px solid rgba(245, 252, 248, 0.94);
+  border-radius: 999px;
+  background: var(--danger);
+  color: white;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.dock-trash-window {
+  position: absolute;
+  right: -76px;
+  bottom: calc(100% + 22px);
+  z-index: 30;
+  width: min(900px, calc(100vw - 32px));
+  max-height: min(680px, calc(100vh - 130px));
+  overflow: visible;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface-elevated) 92%, transparent);
+  box-shadow: 0 24px 62px rgba(17, 61, 43, 0.28);
+  color: var(--text-primary);
+  backdrop-filter: blur(26px) saturate(170%);
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+}
+
+.dock-trash-window::after {
+  position: absolute;
+  right: calc(var(--dock-size) / 2 + 69px);
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  border-right: 1px solid rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.72);
+  background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.dock-trash-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 17px 20px 14px;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.dock-trash-header div {
+  display: grid;
+  gap: 3px;
+}
+
+.dock-trash-header strong {
+  font-size: 16px;
+}
+
+.dock-trash-header small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.dock-trash-close {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.dock-trash-body {
+  max-height: min(606px, calc(100vh - 204px));
+  padding: 16px;
+  overflow: auto;
 }
 
 .dock-user-entry::before {
@@ -646,6 +831,11 @@ onUnmounted(() => {
   visibility: hidden;
 }
 
+.dock-trash-entry.open .dock-tooltip {
+  opacity: 0;
+  visibility: hidden;
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -692,6 +882,12 @@ onUnmounted(() => {
     flex-basis: min(var(--dock-size), 52px);
   }
 
+  .dock-trash-entry {
+    width: min(var(--dock-size), 52px);
+    height: min(var(--dock-size), 52px);
+    flex-basis: min(var(--dock-size), 52px);
+  }
+
   .dock-user-avatar {
     width: calc(min(var(--dock-size), 52px) - 6px);
     height: calc(min(var(--dock-size), 52px) - 6px);
@@ -723,6 +919,25 @@ onUnmounted(() => {
     height: min(var(--dock-size), 42px);
     margin-left: 8px;
     flex-basis: min(var(--dock-size), 42px);
+  }
+
+  .dock-trash-entry {
+    width: min(var(--dock-size), 42px);
+    height: min(var(--dock-size), 42px);
+    flex-basis: min(var(--dock-size), 42px);
+  }
+
+  .dock-trash-window {
+    position: fixed;
+    right: 14px;
+    bottom: 72px;
+    left: 14px;
+    width: auto;
+    max-height: calc(100vh - 92px);
+  }
+
+  .dock-trash-window::after {
+    display: none;
   }
 
   .dock-user-entry::before {

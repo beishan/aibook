@@ -141,6 +141,12 @@ public class User implements UserDetails {
     private String scheduledScanTime;
 
     /**
+     * 回收站记录保留天数；0 表示不自动清理。
+     */
+    @Column(name = "trash_retention_days")
+    private Integer trashRetentionDays;
+
+    /**
      * 自然清新主题 Dock 图标尺寸（像素）
      */
     private Integer dockSize;

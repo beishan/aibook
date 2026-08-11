@@ -3,7 +3,7 @@ import { reactive, ref } from 'vue'
 import api from '@/utils/api'
 import type { DockIconName } from '@/components/DockIcon.vue'
 
-const DOCK_ICON_NAMES: DockIconName[] = ['home', 'library', 'shelf', 'repair', 'settings']
+const DOCK_ICON_NAMES: DockIconName[] = ['home', 'library', 'shelf', 'repair', 'settings', 'trash']
 const SUPPORTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const MAX_ICON_SIZE = 5 * 1024 * 1024
 
@@ -17,6 +17,7 @@ const emptyIconUrls = (): Record<DockIconName, string> => ({
   shelf: '',
   repair: '',
   settings: '',
+  trash: '',
 })
 
 export const useDockIconStore = defineStore('dockIcons', () => {
@@ -27,6 +28,7 @@ export const useDockIconStore = defineStore('dockIcons', () => {
     shelf: false,
     repair: false,
     settings: false,
+    trash: false,
   })
   const loading = ref(false)
   let hydrated = false

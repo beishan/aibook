@@ -6,6 +6,7 @@ import com.aibook.model.entity.Tag;
 import com.aibook.model.entity.User;
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDateTime;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -227,6 +228,9 @@ public interface BookRepository extends JpaRepository<Book, Long> {
             Pageable pageable);
 
     List<Book> findByUserAndDeletedAtIsNotNullAndPurgedAtIsNull(User user);
+
+    List<Book> findByUserAndDeletedAtBeforeAndPurgedAtIsNull(
+            User user, LocalDateTime deletedBefore);
 
     @Query("SELECT b FROM Book b WHERE b.id IN :ids AND b.user = :user " +
             "AND b.deletedAt IS NOT NULL AND b.purgedAt IS NULL")

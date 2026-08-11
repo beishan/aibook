@@ -15,13 +15,6 @@
           <span>🧩</span>
           <span>重建多版本</span>
         </button>
-        <button class="btn recycle-bin-button" @click="showRecycleBin = true">
-          <span>🗑️</span>
-          <span>回收站</span>
-          <span v-if="bookStore.trashCount > 0" class="trash-count">
-            {{ bookStore.trashCount > 99 ? '99+' : bookStore.trashCount }}
-          </span>
-        </button>
         <button class="btn btn-primary" @click="showUploadDialog = true">
           <span>📤</span>
           <span>上传书籍</span>
@@ -534,12 +527,6 @@
       @saved="handleBookSaved"
     />
 
-    <RecycleBinDialog
-      :visible="showRecycleBin"
-      @close="showRecycleBin = false"
-      @changed="handleTrashChanged"
-    />
-
     <AddToBookListDialog
       :visible="showAddToListDialog"
       :book="bookToAddToList"
@@ -573,7 +560,6 @@ import FileUpload from '@/components/FileUpload.vue'
 import BatchScraperDialog from '@/components/BatchScraperDialog.vue'
 import BookEditDialog from '@/components/BookEditDialog.vue'
 import ScraperDialog from '@/components/ScraperDialog.vue'
-import RecycleBinDialog from '@/components/RecycleBinDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import BookVersionRebuildDialog from '@/components/BookVersionRebuildDialog.vue'
 import { getCoverUrl } from '@/utils/cover'
@@ -613,7 +599,6 @@ const sortBy = ref('createdAt')
 const currentPage = ref(1)
 const pageSizeOptions = LIBRARY_PAGE_SIZE_OPTIONS
 const showUploadDialog = ref(false)
-const showRecycleBin = ref(false)
 const showScraperDialog = ref(false)
 const showEditDialog = ref(false)
 const editingBook = ref<Book | null>(null)
@@ -981,11 +966,6 @@ const handleBookSaved = (book: Book) => {
   void tagStore.fetchTags()
 }
 
-const handleTrashChanged = () => {
-  void bookStore.fetchTrashCount()
-  void loadBooks()
-}
-
 const getStatusClass = (status: string) => {
   switch (status) {
     case 'READING':
@@ -1069,7 +1049,6 @@ onMounted(async () => {
   await preferencesStore.hydrate()
   categoryStore.refresh()
   tagStore.fetchTags()
-  bookStore.fetchTrashCount()
   if (route.query.search) {
     searchKeyword.value = route.query.search as string
     handleSearch()
@@ -1099,27 +1078,6 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-}
-
-.recycle-bin-button {
-  position: relative;
-  background: var(--surface-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-}
-
-.trash-count {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  background: var(--danger, #ef4444);
-  color: #fff;
-  font-size: 11px;
-  line-height: 1;
 }
 
 .page-title {

@@ -2,6 +2,7 @@ package com.aibook.repository;
 
 import com.aibook.model.entity.User;
 import java.util.Optional;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -44,6 +45,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByRoleAndEnabledTrue(User.Role role);
 
     Optional<User> findFirstByOrderByCreatedAtAscIdAsc();
+
+    List<User> findByTrashRetentionDaysGreaterThan(Integer retentionDays);
 
     @Query("""
             SELECT u FROM User u

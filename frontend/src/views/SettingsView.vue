@@ -265,6 +265,16 @@
       <TagManagementView />
     </div>
 
+    <!-- 系统回收站 -->
+    <div v-if="activeTab === 'trash'" class="tab-content">
+      <div class="card glass recycle-settings-card">
+        <div class="card-header">
+          <span>🗑️ 系统回收站</span>
+        </div>
+        <RecycleBinPanel show-cleanup-settings />
+      </div>
+    </div>
+
     <!-- OPDS 与第三方客户端连接 -->
     <div v-show="activeTab === 'connections'" class="tab-content">
       <ConnectionsView embedded />
@@ -501,6 +511,7 @@ import SiteFaviconSettingsPanel from '@/components/SiteFaviconSettingsPanel.vue'
 import DockSettingsPanel from '@/components/DockSettingsPanel.vue'
 import ThemeColorSettingsPanel from '@/components/ThemeColorSettingsPanel.vue'
 import ThemeBackgroundSettingsPanel from '@/components/ThemeBackgroundSettingsPanel.vue'
+import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
@@ -702,6 +713,7 @@ const tabGroups = computed(() => [
       { key: 'directories', label: '扫描目录', icon: '📂' },
       { key: 'categories', label: '分类管理', icon: '🗂️' },
       { key: 'tags', label: '标签管理', icon: '🏷️' },
+      { key: 'trash', label: '回收站', icon: '🗑️' },
       { key: 'scheduler', label: '定时任务', icon: '⏰' },
     ],
   },
@@ -1107,6 +1119,10 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.recycle-settings-card :deep(.recycle-bin-panel) {
+  padding: var(--spacing-lg);
+}
+
 .settings-view {
   max-width: 1200px;
   margin: 0 auto;
