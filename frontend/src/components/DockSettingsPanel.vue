@@ -5,7 +5,7 @@
         <div id="dock-settings-title" class="dock-settings-title">
           <span class="dock-settings-symbol" aria-hidden="true"></span>
           <span>Dock 设置</span>
-          <span class="dock-settings-badge">自然清新</span>
+          <span class="dock-settings-badge">MACOS</span>
         </div>
         <p>调整液态玻璃 Dock 的尺寸、通透感与悬浮反馈，效果会实时应用。</p>
       </div>

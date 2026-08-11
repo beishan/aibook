@@ -1,49 +1,5 @@
 <template>
   <div class="layout-container" :style="dockStyle">
-    <!-- 顶部工具栏 -->
-    <header class="layout-header glass">
-      <div class="header-left">
-        <div class="logo" @click="router.push('/')">
-          <span class="logo-icon">📚</span>
-          <span class="logo-text">汗牛充栋</span>
-        </div>
-      </div>
-
-      <div class="header-right">
-        <div class="search-box">
-          <span class="search-icon">🔍</span>
-          <input
-            v-model="searchKeyword"
-            type="text"
-            class="search-input"
-            placeholder="搜索书籍..."
-            @keyup.enter="handleSearch"
-          />
-        </div>
-
-        <div class="user-menu" @click="showDropdown = !showDropdown">
-          <div class="user-avatar">
-            <img v-if="userStore.avatarObjectUrl" :src="userStore.avatarObjectUrl" alt="用户头像" />
-            <template v-else>
-              {{ userStore.userInfo?.username?.charAt(0)?.toUpperCase() || 'U' }}
-            </template>
-          </div>
-          <span class="username">
-            {{ userStore.userInfo?.nickname || userStore.userInfo?.username || '用户' }}
-          </span>
-
-          <Transition name="fade">
-            <div v-if="showDropdown" class="dropdown-menu glass">
-              <div class="dropdown-item" @click="handleLogout">
-                <span class="dropdown-icon">🚪</span>
-                <span>退出登录</span>
-              </div>
-            </div>
-          </Transition>
-        </div>
-      </div>
-    </header>
-
     <!-- 内容区 -->
     <main class="layout-main">
       <router-view v-slot="{ Component }">
@@ -66,7 +22,7 @@
           :key="item.path"
           :to="item.path"
           class="dock-item"
-          :class="{ active: isActiveRoute(item.path), separator: item.path === '/settings' }"
+          :class="{ active: isActiveRoute(item.path) }"
           :style="dockItemStyle(index)"
           :aria-label="item.title"
         >
@@ -81,6 +37,57 @@
           <span class="dock-active-dot" aria-hidden="true"></span>
           <span class="dock-tooltip">{{ item.title }}</span>
         </router-link>
+
+        <div class="dock-user-entry" :class="{ open: showUserMenu }">
+          <button
+            type="button"
+            class="dock-item dock-user-item"
+            :style="dockItemStyle(menuItems.length)"
+            aria-haspopup="menu"
+            :aria-expanded="showUserMenu"
+            aria-label="用户菜单"
+            @click.stop="showUserMenu = !showUserMenu"
+          >
+            <span class="dock-user-avatar">
+              <img v-if="userStore.avatarObjectUrl" :src="userStore.avatarObjectUrl" alt="" />
+              <span v-else>{{ userInitial }}</span>
+            </span>
+            <span class="dock-tooltip">{{ displayName }}</span>
+          </button>
+
+          <Transition name="dock-menu">
+            <div
+              v-if="showUserMenu"
+              class="dock-user-menu"
+              role="menu"
+              @pointermove.stop
+            >
+              <div class="dock-user-summary">
+                <span class="dock-menu-avatar">
+                  <img v-if="userStore.avatarObjectUrl" :src="userStore.avatarObjectUrl" alt="" />
+                  <span v-else>{{ userInitial }}</span>
+                </span>
+                <span class="dock-user-copy">
+                  <strong>{{ displayName }}</strong>
+                  <small>{{ userStore.userInfo?.email || '个人账号' }}</small>
+                </span>
+              </div>
+              <button type="button" class="dock-menu-item" role="menuitem" @click="openProfile">
+                <span>👤</span>
+                <span>个人设置</span>
+              </button>
+              <button
+                type="button"
+                class="dock-menu-item danger"
+                role="menuitem"
+                @click="handleLogout"
+              >
+                <span>🚪</span>
+                <span>退出登录</span>
+              </button>
+            </div>
+          </Transition>
+        </div>
       </div>
     </nav>
   </div>
@@ -99,8 +106,7 @@ const router = useRouter()
 const userStore = useUserStore()
 const preferencesStore = usePreferencesStore()
 
-const searchKeyword = ref('')
-const showDropdown = ref(false)
+const showUserMenu = ref(false)
 const dockContainerRef = ref<HTMLElement | null>(null)
 const dockScales = ref<number[]>([])
 
@@ -118,6 +124,14 @@ const dockStyle = computed(() => ({
   '--dock-blur': `${preferencesStore.dockBlur}px`,
 }))
 
+const userInitial = computed(
+  () => userStore.userInfo?.username?.charAt(0)?.toUpperCase() || 'U'
+)
+
+const displayName = computed(
+  () => userStore.userInfo?.nickname || userStore.userInfo?.username || '用户'
+)
+
 const dockItemStyle = (index: number) => {
   const scale = dockScales.value[index] || 1
   const lift = (scale - 1) * preferencesStore.dockSize * 0.72
@@ -128,7 +142,7 @@ const dockItemStyle = (index: number) => {
 }
 
 const resetDockMagnification = () => {
-  dockScales.value = menuItems.map(() => 1)
+  dockScales.value = Array.from({ length: menuItems.length + 1 }, () => 1)
 }
 
 const handleDockPointerMove = (event: PointerEvent) => {
@@ -149,10 +163,9 @@ const isActiveRoute = (path: string) => {
   return route.path.startsWith(path)
 }
 
-const handleSearch = () => {
-  if (searchKeyword.value.trim()) {
-    router.push({ path: '/books', query: { search: searchKeyword.value } })
-  }
+const openProfile = () => {
+  showUserMenu.value = false
+  void router.push({ path: '/settings', query: { tab: 'profile' } })
 }
 
 const handleLogout = async () => {
@@ -161,21 +174,29 @@ const handleLogout = async () => {
     userStore.logout()
     router.push('/login')
   }
-  showDropdown.value = false
+  showUserMenu.value = false
 }
 
 const handleClickOutside = (e: MouseEvent) => {
   const target = e.target as HTMLElement
-  if (!target.closest('.user-menu')) {
-    showDropdown.value = false
+  if (!target.closest('.dock-user-entry')) {
+    showUserMenu.value = false
   }
+}
+
+const handleEscape = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') showUserMenu.value = false
 }
 
 onMounted(() => {
   resetDockMagnification()
   document.addEventListener('click', handleClickOutside)
+  document.addEventListener('keydown', handleEscape)
 })
-onUnmounted(() => document.removeEventListener('click', handleClickOutside))
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('keydown', handleEscape)
+})
 </script>
 
 <style scoped>
@@ -184,165 +205,6 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   flex-direction: column;
   min-height: 100vh;
   background: var(--bg-page-gradient);
-}
-
-.layout-header {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--spacing-lg);
-  height: 60px;
-  background: var(--nav-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border-bottom: var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  color: var(--nav-text-primary, var(--text-primary));
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  cursor: pointer;
-}
-
-.logo-icon {
-  font-size: 28px;
-}
-
-.logo-text {
-  font-size: var(--font-size-xl);
-  font-weight: 700;
-  background: var(--primary-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-}
-
-.search-box {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.search-icon {
-  position: absolute;
-  left: 14px;
-  font-size: 14px;
-  pointer-events: none;
-}
-
-.search-input {
-  width: 240px;
-  padding: 10px 16px 10px 40px;
-  border: none;
-  border-radius: var(--radius-full);
-  font-size: var(--font-size-sm);
-  background: var(--surface-card);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  transition: all var(--transition-normal);
-  outline: none;
-  color: var(--text-primary);
-}
-
-.search-input:focus {
-  width: 320px;
-  background: var(--surface-elevated);
-  box-shadow: 0 0 0 3px var(--primary-alpha-20);
-}
-
-.search-input::placeholder {
-  color: var(--text-tertiary);
-}
-
-.user-menu {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: 6px 12px 6px 6px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.user-menu:hover {
-  background: var(--surface-hover);
-}
-
-.user-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  background: var(--primary-gradient);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 600;
-  font-size: var(--font-size-base);
-  overflow: hidden;
-}
-
-.user-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.username {
-  font-weight: 500;
-  color: var(--nav-text-primary, var(--text-primary));
-  font-size: var(--font-size-sm);
-}
-
-.dropdown-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: var(--spacing-sm);
-  min-width: 160px;
-  background: var(--surface-elevated);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: var(--glass-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
-
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: 12px 16px;
-  color: var(--danger);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.dropdown-item:hover {
-  background: var(--surface-hover);
-}
-
-.dropdown-icon {
-  font-size: 16px;
 }
 
 .layout-main {
@@ -417,6 +279,164 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   transition: transform 90ms cubic-bezier(0.2, 0.8, 0.2, 1);
   cursor: pointer;
   will-change: transform;
+}
+
+.dock-user-entry {
+  position: relative;
+  display: flex;
+  width: var(--dock-size);
+  height: var(--dock-size);
+  align-items: flex-end;
+  justify-content: center;
+  margin-left: 13px;
+  flex: 0 0 var(--dock-size);
+}
+
+.dock-user-entry::before {
+  position: absolute;
+  top: 9%;
+  right: calc(100% + 9px);
+  width: 1px;
+  height: 72%;
+  background: rgba(64, 110, 89, 0.22);
+  box-shadow: 1px 0 rgba(255, 255, 255, 0.54);
+  content: '';
+}
+
+.dock-user-item {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+}
+
+.dock-user-avatar,
+.dock-menu-avatar {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  background: var(--primary-gradient);
+  color: #fff;
+  font-weight: 700;
+  box-shadow:
+    0 7px 16px rgba(22, 83, 56, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.dock-user-avatar {
+  width: calc(var(--dock-size) - 6px);
+  height: calc(var(--dock-size) - 6px);
+  font-size: calc(var(--dock-size) * 0.34);
+}
+
+.dock-user-avatar img,
+.dock-menu-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dock-user-item:hover .dock-user-avatar,
+.dock-user-entry.open .dock-user-avatar {
+  box-shadow:
+    0 9px 22px rgba(18, 76, 50, 0.28),
+    0 0 0 3px var(--primary-alpha-20);
+}
+
+.dock-user-menu {
+  position: absolute;
+  right: -8px;
+  bottom: calc(100% + 22px);
+  z-index: 20;
+  width: 230px;
+  padding: 8px;
+  overflow: visible;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
+  box-shadow: 0 20px 46px rgba(17, 61, 43, 0.24);
+  color: var(--text-primary);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+}
+
+.dock-user-menu::after {
+  position: absolute;
+  right: calc(var(--dock-size) / 2 - 1px);
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  border-right: 1px solid rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.72);
+  background: color-mix(in srgb, var(--surface-elevated) 92%, transparent);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.dock-user-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 12px;
+  border-bottom: 1px solid var(--border-color-light);
+  margin-bottom: 6px;
+}
+
+.dock-menu-avatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  font-size: 15px;
+}
+
+.dock-user-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  text-align: left;
+}
+
+.dock-user-copy strong,
+.dock-user-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-user-copy strong {
+  font-size: 14px;
+}
+
+.dock-user-copy small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.dock-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.dock-menu-item:hover {
+  background: var(--surface-hover);
+}
+
+.dock-menu-item.danger {
+  color: var(--danger);
 }
 
 .dock-icon-tile {
@@ -553,21 +573,6 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   box-shadow: 0 0 5px var(--primary-alpha-30);
 }
 
-.dock-item.separator {
-  margin-left: 13px;
-}
-
-.dock-item.separator::before {
-  content: '';
-  position: absolute;
-  top: 9%;
-  right: calc(100% + 9px);
-  width: 1px;
-  height: 72%;
-  background: rgba(64, 110, 89, 0.22);
-  box-shadow: 1px 0 rgba(255, 255, 255, 0.54);
-}
-
 .dock-tooltip {
   position: absolute;
   bottom: calc(100% + 12px);
@@ -605,6 +610,11 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   transform: translateX(-50%) translateY(-4px);
 }
 
+.dock-user-entry.open .dock-tooltip {
+  opacity: 0;
+  visibility: hidden;
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -620,23 +630,19 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   transform: translateY(-10px);
 }
 
+.dock-menu-enter-active,
+.dock-menu-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+  transform-origin: bottom right;
+}
+
+.dock-menu-enter-from,
+.dock-menu-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.97);
+}
+
 @media (max-width: 768px) {
-  .layout-header {
-    padding: 0 var(--spacing-md);
-  }
-
-  .search-input {
-    width: 160px;
-  }
-
-  .search-input:focus {
-    width: 200px;
-  }
-
-  .username {
-    display: none;
-  }
-
   .dock-nav {
     bottom: 12px;
     padding: 6px 8px 8px;
@@ -647,6 +653,17 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
     height: min(var(--dock-size), 52px);
     margin-top: 0;
     transform: none;
+  }
+
+  .dock-user-entry {
+    width: min(var(--dock-size), 52px);
+    height: min(var(--dock-size), 52px);
+    flex-basis: min(var(--dock-size), 52px);
+  }
+
+  .dock-user-avatar {
+    width: calc(min(var(--dock-size), 52px) - 6px);
+    height: calc(min(var(--dock-size), 52px) - 6px);
   }
 
   .dock-icon-tile {
@@ -661,28 +678,43 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 
 @media (max-width: 480px) {
   .dock-item {
-    width: min(var(--dock-size), 46px);
-    height: min(var(--dock-size), 46px);
+    width: min(var(--dock-size), 42px);
+    height: min(var(--dock-size), 42px);
   }
 
   .dock-icon-tile {
-    width: calc(min(var(--dock-size), 46px) - 4px);
-    height: calc(min(var(--dock-size), 46px) - 4px);
+    width: calc(min(var(--dock-size), 42px) - 4px);
+    height: calc(min(var(--dock-size), 42px) - 4px);
   }
 
-  .dock-item.separator {
+  .dock-user-entry {
+    width: min(var(--dock-size), 42px);
+    height: min(var(--dock-size), 42px);
     margin-left: 8px;
+    flex-basis: min(var(--dock-size), 42px);
   }
 
-  .dock-item.separator::before {
+  .dock-user-entry::before {
     right: calc(100% + 6px);
   }
+
+  .dock-user-avatar {
+    width: calc(min(var(--dock-size), 42px) - 6px);
+    height: calc(min(var(--dock-size), 42px) - 6px);
+  }
+
+  .dock-user-menu {
+    right: -6px;
+    width: min(230px, calc(100vw - 28px));
+  }
+
 }
 
 @media (prefers-reduced-motion: reduce) {
   .dock-item,
   .dock-icon,
-  .dock-tooltip {
+  .dock-tooltip,
+  .dock-menu-item {
     transition: none;
   }
 }

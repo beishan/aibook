@@ -290,12 +290,22 @@
 
           <div class="form-group">
             <label class="form-label">扫描时间</label>
-            <input type="time" v-model="schedulerTime" class="input" />
+            <input
+              type="time"
+              v-model="schedulerTime"
+              class="input"
+              :disabled="!schedulerConfig.enabled || loadingSchedulerConfig"
+            />
+            <p class="field-hint">到点后会扫描当前账号下所有已启用的扫描目录。</p>
           </div>
 
-          <button class="btn btn-primary" @click="handleSaveScheduler">
+          <button
+            class="btn btn-primary"
+            :disabled="savingSchedulerConfig || loadingSchedulerConfig"
+            @click="handleSaveScheduler"
+          >
             <span>💾</span>
-            <span>保存配置</span>
+            <span>{{ savingSchedulerConfig ? '保存中…' : '保存配置' }}</span>
           </button>
         </div>
       </div>
@@ -783,6 +793,8 @@ const schedulerConfig = reactive({
   enabled: true,
   time: '02:00',
 })
+const loadingSchedulerConfig = ref(false)
+const savingSchedulerConfig = ref(false)
 
 const schedulerTime = computed({
   get: () => schedulerConfig.time,
@@ -1012,8 +1024,35 @@ const handleRemove = async (row: any) => {
   }
 }
 
-const handleSaveScheduler = () => {
-  message.success('配置已保存')
+const loadSchedulerConfig = async () => {
+  loadingSchedulerConfig.value = true
+  try {
+    const { data } = await api.get('/api/scheduled-scan-settings')
+    schedulerConfig.enabled = data.enabled !== false
+    schedulerConfig.time = data.time || '02:00'
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '定时扫描配置加载失败')
+  } finally {
+    loadingSchedulerConfig.value = false
+  }
+}
+
+const handleSaveScheduler = async () => {
+  if (!/^\d{2}:\d{2}$/.test(schedulerConfig.time)) {
+    message.warning('请选择有效的扫描时间')
+    return
+  }
+  savingSchedulerConfig.value = true
+  try {
+    const { data } = await api.put('/api/scheduled-scan-settings', schedulerConfig)
+    schedulerConfig.enabled = data.enabled
+    schedulerConfig.time = data.time
+    message.success('定时扫描配置已保存')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '定时扫描配置保存失败')
+  } finally {
+    savingSchedulerConfig.value = false
+  }
 }
 
 const formatTime = (timeStr: string) => {
@@ -1045,6 +1084,7 @@ onMounted(async () => {
   syncActiveTab(route.query.tab)
   await preferencesStore.hydrate()
   scanThreadCountDraft.value = preferencesStore.scanThreadCount
+  await loadSchedulerConfig()
   await loadDirectories()
   await restoreScanProgress()
   await categoryStore.refresh()

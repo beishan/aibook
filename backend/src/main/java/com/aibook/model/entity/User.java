@@ -124,6 +124,18 @@ public class User implements UserDetails {
     private Integer scanThreadCount;
 
     /**
+     * 是否按用户设置的时间自动扫描已启用目录。
+     */
+    @Column(name = "scheduled_scan_enabled")
+    private Boolean scheduledScanEnabled;
+
+    /**
+     * 每日自动扫描时间，格式为 HH:mm。
+     */
+    @Column(name = "scheduled_scan_time", length = 5)
+    private String scheduledScanTime;
+
+    /**
      * 自然清新主题 Dock 图标尺寸（像素）
      */
     private Integer dockSize;

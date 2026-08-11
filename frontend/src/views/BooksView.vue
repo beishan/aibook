@@ -45,6 +45,7 @@
         <el-select
           v-model="filterFormat"
           class="select-input"
+          placeholder="全部格式"
           aria-label="格式筛选"
           @change="handleFilterChange('format')"
         >
@@ -61,6 +62,7 @@
         <el-select
           v-model="filterStatus"
           class="select-input"
+          placeholder="全部状态"
           aria-label="阅读状态筛选"
           @change="handleFilterChange('status')"
         >
@@ -74,6 +76,7 @@
           v-model="filterCategoryId"
           class="select-input"
           filterable
+          placeholder="全部分类"
           aria-label="分类筛选"
           @change="handleFilterChange('category')"
         >
@@ -90,6 +93,7 @@
           v-model="filterTagId"
           class="select-input"
           filterable
+          placeholder="全部标签"
           aria-label="标签筛选"
           @change="handleFilterChange('tag')"
         >
@@ -1462,9 +1466,9 @@ onMounted(async () => {
 }
 
 .books-grid-compact .action-btn {
-  flex-basis: 28px;
+  --card-action-size: 28px;
+  min-width: 20px;
   width: 28px;
-  height: 28px;
   font-size: 12px;
 }
 
@@ -1602,9 +1606,12 @@ onMounted(async () => {
 }
 
 .action-btn {
-  flex: 0 0 34px;
+  --card-action-size: 34px;
+  flex: 0 1 var(--card-action-size);
+  min-width: 26px;
   width: 34px;
-  height: 34px;
+  height: auto;
+  aspect-ratio: 1;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.34);
   border-radius: 50%;
@@ -1671,8 +1678,8 @@ onMounted(async () => {
 
 .more-trigger {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 100%;
+  height: 100%;
   place-items: center;
   color: inherit;
   outline: none;

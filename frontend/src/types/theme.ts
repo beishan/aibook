@@ -79,7 +79,7 @@ export const THEMES: ThemeDefinition[] = [
   },
   {
     id: 'natural',
-    name: '自然清新',
+    name: 'MACOS',
     icon: '🟢',
     description: '柔和绿色渐变，轻松舒适',
     layout: 'dock'

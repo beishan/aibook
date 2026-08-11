@@ -8,7 +8,6 @@ import com.aibook.repository.BookVersionRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -73,9 +72,6 @@ public class FileScannerService {
 
     @Value("#{'${scanning.directories:/books/fiction,/books/tech}'.split(',')}")
     private List<String> scanDirectories;
-
-    @Value("${scanning.enabled:true}")
-    private boolean scanningEnabled;
 
     // 支持的文件格式
     private static final Set<String> SUPPORTED_FORMATS = Set.of(
@@ -181,20 +177,6 @@ public class FileScannerService {
 
         result.setEndTime(System.currentTimeMillis());
         return result;
-    }
-
-    /**
-     * 定时扫描（每天凌晨2点）
-     */
-    @Scheduled(
-            cron = "${scanning.cron:0 0 2 * * ?}",
-            zone = "${scanning.time-zone:Asia/Shanghai}")
-    public void scheduledScan() {
-        if (!scanningEnabled) {
-            return;
-        }
-        log.info("开始定时扫描...");
-        // TODO: 需要获取默认用户或遍历所有用户
     }
 
     /**

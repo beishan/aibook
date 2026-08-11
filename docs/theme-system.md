@@ -8,7 +8,7 @@
 |------|------|------|------|
 | 现代简约 | Notion/Linear 风格 | 左侧可折叠侧边栏 | 蓝灰色系 |
 | 暖色文艺 | 豆瓣/微信读书风格 | 顶部水平导航栏 | 暖棕/奶油色系 |
-| 自然清新 | 柔和渐变风格 | 底部浮动 Dock | 绿色/大地色系 |
+| MACOS | 柔和渐变风格 | 底部浮动 Dock | 绿色/大地色系 |
 
 ## 架构设计
 
@@ -19,7 +19,7 @@
 ```html
 <html data-theme="modern"> <!-- 现代简约 -->
 <html data-theme="warm">   <!-- 暖色文艺 -->
-<html data-theme="natural"> <!-- 自然清新 -->
+<html data-theme="natural"> <!-- MACOS -->
 ```
 
 所有颜色通过 CSS 自定义属性控制，每个主题在 `[data-theme="..."]` 选择器下覆盖变量值。
@@ -51,7 +51,7 @@ frontend/src/
 │   ├── ThemeLayoutWrapper.vue # 动态布局包装器
 │   ├── SidebarLayout.vue     # 侧边栏布局（现代简约）
 │   ├── TopbarLayout.vue      # 顶部栏布局（暖色文艺）
-│   └── DockLayout.vue        # 底部 Dock 布局（自然清新）
+│   └── DockLayout.vue        # 底部 Dock 布局（MACOS）
 └── views/
     └── SettingsView.vue      # 包含主题选择器 UI
 ```

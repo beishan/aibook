@@ -51,7 +51,7 @@ upload:
 # Book scanning configuration
 scanning:
   enabled: true
-  cron: "0 0 2 * * ?"  # 每天凌晨2点
+  scheduler-poll-cron: "0 * * * * ?"  # 每分钟检查用户配置的扫描时间
   time-zone: ${APP_TIME_ZONE:Asia/Shanghai}
   directories: /books/fiction,/books/tech
 
