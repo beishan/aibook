@@ -454,8 +454,15 @@ html[data-theme="macos26"] .settings-nav-item:hover {
 
 html[data-theme="macos26"] .settings-nav-item.active {
   border-color: rgba(255, 255, 255, 0.72);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.78), rgba(220, 238, 255, 0.48));
-  box-shadow: 0 8px 20px rgba(48, 66, 100, 0.12), inset 0 1px 0 #fff;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.84), rgba(188, 221, 255, 0.62));
+  box-shadow: 0 8px 20px rgba(48, 66, 100, 0.14), inset 0 1px 0 #fff;
+  color: #084f9d;
+  font-weight: 700;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+html[data-theme="macos26"] .settings-nav-item.active .settings-nav-icon {
+  filter: saturate(125%) contrast(110%);
 }
 
 html[data-theme="macos26"] .book-card,
@@ -542,11 +549,21 @@ html[data-theme="macos26"] .dock-nav {
 }
 
 html[data-theme="macos26"] .dock-icon-tile {
-  border-color: rgba(255, 255, 255, 0.88);
-  background:
-    radial-gradient(circle at 25% 14%, rgba(255, 255, 255, 0.98), transparent 38%),
-    linear-gradient(145deg, rgba(247, 251, 255, 0.9), rgba(185, 211, 244, 0.7));
-  box-shadow: 0 8px 18px rgba(45, 61, 94, 0.18), inset 0 1px 0 #fff;
+  overflow: visible;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+html[data-theme="macos26"] .dock-icon-tile::after {
+  display: none;
+}
+
+html[data-theme="macos26"] .dock-item:hover .dock-icon-tile,
+html[data-theme="macos26"] .dock-item.active .dock-icon-tile {
+  background: transparent;
+  box-shadow: none;
+  filter: none;
 }
 
 html[data-theme="macos26"] .dock-user-menu,
