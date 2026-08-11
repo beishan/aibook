@@ -70,7 +70,7 @@
             <span class="dock-tooltip">回收站</span>
           </button>
 
-          <Transition name="dock-menu">
+          <Transition name="dock-trash-window">
             <section
               v-if="showTrashMenu"
               class="dock-trash-window"
@@ -422,9 +422,9 @@ onUnmounted(() => {
 }
 
 .dock-trash-window {
-  position: absolute;
-  right: -76px;
-  bottom: calc(100% + 22px);
+  position: fixed;
+  top: 50%;
+  left: 50%;
   z-index: 30;
   width: min(900px, calc(100vw - 32px));
   max-height: min(680px, calc(100vh - 130px));
@@ -434,21 +434,13 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--surface-elevated) 92%, transparent);
   box-shadow: 0 24px 62px rgba(17, 61, 43, 0.28);
   color: var(--text-primary);
+  transform: translate(-50%, -50%);
   backdrop-filter: blur(26px) saturate(170%);
   -webkit-backdrop-filter: blur(26px) saturate(170%);
 }
 
 .dock-trash-window::after {
-  position: absolute;
-  right: calc(var(--dock-size) / 2 + 69px);
-  bottom: -7px;
-  width: 14px;
-  height: 14px;
-  border-right: 1px solid rgba(255, 255, 255, 0.72);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.72);
-  background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
-  content: '';
-  transform: rotate(45deg);
+  display: none;
 }
 
 .dock-trash-header {
@@ -871,6 +863,18 @@ onUnmounted(() => {
   transform: translateY(8px) scale(0.97);
 }
 
+.dock-trash-window-enter-active,
+.dock-trash-window-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
+  transform-origin: center;
+}
+
+.dock-trash-window-enter-from,
+.dock-trash-window-leave-to {
+  opacity: 0;
+  transform: translate(-50%, calc(-50% + 12px)) scale(0.97);
+}
+
 @media (max-width: 768px) {
   .dock-nav {
     bottom: 12px;
@@ -936,12 +940,13 @@ onUnmounted(() => {
   }
 
   .dock-trash-window {
-    position: fixed;
-    right: 14px;
-    bottom: 72px;
-    left: 14px;
-    width: auto;
+    top: 50%;
+    right: auto;
+    bottom: auto;
+    left: 50%;
+    width: calc(100vw - 28px);
     max-height: calc(100vh - 92px);
+    transform: translate(-50%, -50%);
   }
 
   .dock-trash-window::after {
