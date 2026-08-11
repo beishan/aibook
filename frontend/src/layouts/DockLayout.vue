@@ -1,7 +1,7 @@
 <template>
   <div class="layout-container" :style="dockStyle">
     <!-- 内容区 -->
-    <main class="layout-main">
+    <main class="layout-main" :class="{ 'layout-main--reader': isReaderRoute }">
       <router-view v-slot="{ Component }">
         <Transition name="fade" mode="out-in">
           <component :is="Component" />
@@ -10,7 +10,7 @@
     </main>
 
     <!-- 底部 Dock 导航栏 -->
-    <nav class="dock-nav" aria-label="主导航">
+    <nav v-if="!isReaderRoute" class="dock-nav" aria-label="主导航">
       <div
         ref="dockContainerRef"
         class="dock-container"
@@ -167,6 +167,8 @@ const preferencesStore = usePreferencesStore()
 const dockIconStore = useDockIconStore()
 const bookStore = useBookStore()
 
+const isReaderRoute = computed(() => route.name === 'Reader')
+
 const showUserMenu = ref(false)
 const showTrashMenu = ref(false)
 const dockContainerRef = ref<HTMLElement | null>(null)
@@ -305,6 +307,11 @@ onUnmounted(() => {
   padding: var(--spacing-lg);
   padding-bottom: calc(var(--dock-size, 58px) + 58px);
   overflow-y: auto;
+}
+
+.layout-main.layout-main--reader {
+  padding: 0;
+  overflow: hidden;
 }
 
 /* Dock 导航 */
