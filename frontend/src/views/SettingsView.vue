@@ -92,7 +92,7 @@
             </template>
             <div class="theme-tab-panel"><ThemeBackgroundSettingsPanel /></div>
           </el-tab-pane>
-          <el-tab-pane v-if="themeStore.currentTheme === 'natural'" name="dock">
+          <el-tab-pane v-if="themeStore.currentTheme === 'natural' || themeStore.currentTheme === 'macos26'" name="dock">
             <template #label>
               <span class="theme-tab-label"><el-icon class="theme-tab-icon"><Operation /></el-icon>Dock 设置</span>
             </template>
@@ -751,7 +751,7 @@ type ThemeSettingsTab = 'style' | 'accent' | 'background' | 'dock'
 const themeSettingsTab = ref<ThemeSettingsTab>('style')
 
 watch(() => themeStore.currentTheme, theme => {
-  if (theme !== 'natural' && themeSettingsTab.value === 'dock') {
+  if (theme !== 'natural' && theme !== 'macos26' && themeSettingsTab.value === 'dock') {
     themeSettingsTab.value = 'style'
   }
 })
@@ -1698,7 +1698,7 @@ onUnmounted(() => {
 
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--spacing-lg);
   padding: 0;
 }
@@ -1812,6 +1812,65 @@ onUnmounted(() => {
   backdrop-filter: blur(10px);
   border: 1px solid rgba(200, 230, 210, 0.3);
   border-radius: 8px;
+}
+
+/* MACOS26 Liquid Glass 预览 */
+.theme-preview-macos26 {
+  position: relative;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(82, 205, 255, 0.7), transparent 38%),
+    radial-gradient(circle at 86% 22%, rgba(196, 125, 255, 0.55), transparent 42%),
+    linear-gradient(145deg, #d8ebfb, #eee2fa 52%, #d9f0ef);
+}
+
+.theme-preview-macos26::before {
+  position: absolute;
+  top: 9px;
+  right: 12px;
+  left: 12px;
+  height: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.42);
+  box-shadow: inset 0 1px 0 white, 0 5px 14px rgba(45, 61, 94, 0.13);
+  content: '';
+  backdrop-filter: blur(10px) saturate(190%);
+}
+
+.theme-preview-macos26::after {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  width: 82px;
+  height: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 8px;
+  background: rgba(250, 253, 255, 0.48);
+  box-shadow: 0 7px 16px rgba(45, 61, 94, 0.2), inset 0 1px 0 white;
+  content: '●  ●  ●  ●';
+  color: rgba(31, 61, 102, 0.72);
+  font-size: 6px;
+  line-height: 15px;
+  text-align: center;
+  transform: translateX(-50%);
+  backdrop-filter: blur(10px) saturate(200%);
+}
+
+.sidebar-macos26 {
+  width: 0;
+}
+
+.header-macos26 {
+  height: 30px;
+  background: transparent;
+}
+
+.card-macos26 {
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 9px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.3));
+  box-shadow: 0 7px 16px rgba(45, 61, 94, 0.13), inset 0 1px 0 white;
+  backdrop-filter: blur(10px) saturate(185%);
 }
 
 .preview-content {

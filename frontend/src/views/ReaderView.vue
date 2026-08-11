@@ -640,6 +640,7 @@ const autoThemeColors = computed(() => {
   switch (themeStore.currentTheme) {
     case 'modern': return { bg: '#ffffff', text: '#1a1a1a' }
     case 'warm': return { bg: '#faf6f1', text: '#3d2b1f' }
+    case 'macos26': return { bg: '#eef5fb', text: '#172235' }
     case 'natural':
     default: return { bg: '#f0f7f4', text: '#1a3a2a' }
   }

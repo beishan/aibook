@@ -1,4 +1,4 @@
-export type ThemeId = 'modern' | 'warm' | 'natural'
+export type ThemeId = 'modern' | 'warm' | 'natural' | 'macos26'
 
 export type LayoutType = 'sidebar' | 'topbar' | 'dock'
 
@@ -22,6 +22,7 @@ export const DEFAULT_THEME_ACCENT_COLORS: ThemeAccentColors = {
   modern: '#2563EB',
   warm: '#A0522D',
   natural: '#2E7D5A',
+  macos26: '#007AFF',
 }
 
 export const DEFAULT_THEME_BACKGROUND_SETTINGS: ThemeBackgroundSettings = {
@@ -51,6 +52,15 @@ export const DEFAULT_THEME_BACKGROUND_SETTINGS: ThemeBackgroundSettings = {
     navOpacity: 75,
     surfaceColor: '#FFFFFF',
     surfaceOpacity: 72,
+  },
+  macos26: {
+    mode: 'gradient',
+    pageColor: '#DCEBFA',
+    secondaryColor: '#F1E4F8',
+    navColor: '#F8FBFF',
+    navOpacity: 62,
+    surfaceColor: '#FFFFFF',
+    surfaceOpacity: 58,
   },
 }
 
@@ -82,6 +92,13 @@ export const THEMES: ThemeDefinition[] = [
     name: 'MACOS',
     icon: '🟢',
     description: '柔和绿色渐变，轻松舒适',
+    layout: 'dock'
+  },
+  {
+    id: 'macos26',
+    name: 'MACOS26',
+    icon: '◉',
+    description: 'Liquid Glass 液态玻璃系统界面',
     layout: 'dock'
   }
 ]

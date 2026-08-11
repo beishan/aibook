@@ -77,7 +77,7 @@
         </section>
       </div>
     </div>
-    <p v-if="themeStore.currentTheme === 'natural'" class="dock-note">Dock 的玻璃透明度仍由下方 Dock 设置单独控制。</p>
+    <p v-if="themeStore.currentTheme === 'natural' || themeStore.currentTheme === 'macos26'" class="dock-note">Dock 的玻璃透明度仍由下方 Dock 设置单独控制。</p>
   </section>
 </template>
 
@@ -142,6 +142,12 @@ const presetGroups: Record<ThemeId, BackgroundPreset[]> = {
     { name: '湖水青', description: '通透、轻快', config: { mode: 'gradient', pageColor: '#DFF4F0', secondaryColor: '#D9EEF4', navColor: '#F7FFFE', navOpacity: 72, surfaceColor: '#FFFFFF', surfaceOpacity: 68 } },
     { name: '竹纸白', description: '自然、素雅', config: { mode: 'solid', pageColor: '#F3F5E9', secondaryColor: '#E8EDDA', navColor: '#FBFCF4', navOpacity: 90, surfaceColor: '#FFFFFA', surfaceOpacity: 84 } },
     { name: '浅天蓝', description: '明净、开阔', config: { mode: 'gradient', pageColor: '#E7F2F8', secondaryColor: '#E2F3EE', navColor: '#F8FCFF', navOpacity: 76, surfaceColor: '#FFFFFF', surfaceOpacity: 72 } },
+  ],
+  macos26: [
+    { name: '虹彩天幕', description: 'Liquid Glass 默认', config: { mode: 'gradient', pageColor: '#DCEBFA', secondaryColor: '#F1E4F8', navColor: '#F8FBFF', navOpacity: 62, surfaceColor: '#FFFFFF', surfaceOpacity: 58 } },
+    { name: '海湾晨光', description: '清透、明亮', config: { mode: 'gradient', pageColor: '#CDEDF4', secondaryColor: '#E9E0FA', navColor: '#F5FCFF', navOpacity: 58, surfaceColor: '#FFFFFF', surfaceOpacity: 54 } },
+    { name: '银色空间', description: '克制、精密', config: { mode: 'gradient', pageColor: '#DDE3EA', secondaryColor: '#F1F3F7', navColor: '#FFFFFF', navOpacity: 66, surfaceColor: '#F9FBFD', surfaceOpacity: 62 } },
+    { name: '落日玻璃', description: '柔紫、暖光', config: { mode: 'gradient', pageColor: '#F3DDE8', secondaryColor: '#DDE8FA', navColor: '#FFF8FC', navOpacity: 60, surfaceColor: '#FFFFFF', surfaceOpacity: 56 } },
   ],
 }
 

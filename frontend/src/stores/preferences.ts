@@ -27,6 +27,7 @@ interface UserPreferences {
   modernThemeColor: string | null
   warmThemeColor: string | null
   naturalThemeColor: string | null
+  macos26ThemeColor: string | null
   themeBackgrounds: ThemeBackgroundSettings | null
   dockSize: number | null
   dockOpacity: number | null
@@ -114,6 +115,7 @@ const isBackgroundSettings = (value: unknown): value is ThemeBackgroundSettings 
   return isBackgroundConfig(settings.modern)
     && isBackgroundConfig(settings.warm)
     && isBackgroundConfig(settings.natural)
+    && isBackgroundConfig(settings.macos26)
 }
 
 export const usePreferencesStore = defineStore('preferences', () => {
@@ -182,6 +184,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     modern: 'modernThemeColor',
     warm: 'warmThemeColor',
     natural: 'naturalThemeColor',
+    macos26: 'macos26ThemeColor',
   }
 
   const setThemeAccentColor = (theme: ThemeId, color: string, syncRemote = true) => {
@@ -200,6 +203,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
       modernThemeColor: themeStore.accentColors.modern,
       warmThemeColor: themeStore.accentColors.warm,
       naturalThemeColor: themeStore.accentColors.natural,
+      macos26ThemeColor: themeStore.accentColors.macos26,
     })
   }
 
@@ -338,6 +342,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
         ['modern', data.modernThemeColor],
         ['warm', data.warmThemeColor],
         ['natural', data.naturalThemeColor],
+        ['macos26', data.macos26ThemeColor],
       ]
       remoteThemeColors.forEach(([theme, color]) => {
         if (isThemeColor(color)) setThemeAccentColor(theme, color, false)

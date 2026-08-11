@@ -54,6 +54,8 @@ class UserServiceTest {
         assertEquals("#2563EB", result.getModernThemeColor());
         assertEquals("#A0522D", result.getWarmThemeColor());
         assertEquals("#2E7D5A", result.getNaturalThemeColor());
+        assertEquals("#007AFF", result.getMacos26ThemeColor());
+        assertEquals("gradient", result.getThemeBackgrounds().get("macos26").getMode());
         assertEquals("gradient", result.getThemeBackgrounds().get("natural").getMode());
     }
 
@@ -72,14 +74,18 @@ class UserServiceTest {
         UserPreferencesDTO result = service.updatePreferences(
                 "reader",
                 UserPreferencesDTO.builder()
+                        .theme("macos26")
                         .modernThemeColor("#0891b2")
                         .warmThemeColor("#b7791f")
                         .naturalThemeColor("#3c8d78")
+                        .macos26ThemeColor("#5856d6")
                         .build());
 
+        assertEquals("macos26", result.getTheme());
         assertEquals("#0891B2", result.getModernThemeColor());
         assertEquals("#B7791F", result.getWarmThemeColor());
         assertEquals("#3C8D78", result.getNaturalThemeColor());
+        assertEquals("#5856D6", result.getMacos26ThemeColor());
     }
 
     @Test
@@ -162,6 +168,8 @@ class UserServiceTest {
                 "solid", "#FAF6F1", "#F3E9DC", "#FFFBF5", 100, "#FFFBF5", 100));
         values.put("natural", new UserPreferencesDTO.ThemeBackgroundDTO(
                 "gradient", "#E8F5E9", "#E0F2F1", "#FFFFFF", 75, "#FFFFFF", 72));
+        values.put("macos26", new UserPreferencesDTO.ThemeBackgroundDTO(
+                "gradient", "#DCEBFA", "#F1E4F8", "#F8FBFF", 62, "#FFFFFF", 58));
         return values;
     }
 

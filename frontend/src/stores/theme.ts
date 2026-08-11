@@ -24,6 +24,7 @@ const readAccentColors = (): ThemeAccentColors => {
       modern: normalizeHexColor(saved.modern) || DEFAULT_THEME_ACCENT_COLORS.modern,
       warm: normalizeHexColor(saved.warm) || DEFAULT_THEME_ACCENT_COLORS.warm,
       natural: normalizeHexColor(saved.natural) || DEFAULT_THEME_ACCENT_COLORS.natural,
+      macos26: normalizeHexColor(saved.macos26) || DEFAULT_THEME_ACCENT_COLORS.macos26,
     }
   } catch {
     return { ...DEFAULT_THEME_ACCENT_COLORS }
@@ -34,6 +35,7 @@ const cloneDefaultBackgroundSettings = (): ThemeBackgroundSettings => ({
   modern: { ...DEFAULT_THEME_BACKGROUND_SETTINGS.modern },
   warm: { ...DEFAULT_THEME_BACKGROUND_SETTINGS.warm },
   natural: { ...DEFAULT_THEME_BACKGROUND_SETTINGS.natural },
+  macos26: { ...DEFAULT_THEME_BACKGROUND_SETTINGS.macos26 },
 })
 
 const readBackgroundSettings = (): ThemeBackgroundSettings => {
@@ -43,6 +45,7 @@ const readBackgroundSettings = (): ThemeBackgroundSettings => {
       modern: normalizeThemeBackgroundConfig(saved.modern || {}, DEFAULT_THEME_BACKGROUND_SETTINGS.modern),
       warm: normalizeThemeBackgroundConfig(saved.warm || {}, DEFAULT_THEME_BACKGROUND_SETTINGS.warm),
       natural: normalizeThemeBackgroundConfig(saved.natural || {}, DEFAULT_THEME_BACKGROUND_SETTINGS.natural),
+      macos26: normalizeThemeBackgroundConfig(saved.macos26 || {}, DEFAULT_THEME_BACKGROUND_SETTINGS.macos26),
     }
   } catch {
     return cloneDefaultBackgroundSettings()

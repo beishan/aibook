@@ -118,6 +118,11 @@ const presetGroups: Record<ThemeId, Array<{ name: string; color: string }>> = {
     { name: '湖水', color: '#2F7F83' }, { name: '松针', color: '#316B52' },
     { name: '鼠尾草', color: '#718C62' }, { name: '银杏', color: '#A77A3D' },
   ],
+  macos26: [
+    { name: '系统蓝', color: '#007AFF' }, { name: '天际蓝', color: '#32ADE6' },
+    { name: '薄荷绿', color: '#00C7BE' }, { name: '虹彩紫', color: '#AF52DE' },
+    { name: '活力橙', color: '#FF9500' }, { name: '珊瑚红', color: '#FF3B30' },
+  ],
 }
 
 const themeStore = useThemeStore()

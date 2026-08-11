@@ -103,6 +103,11 @@ public class User implements UserDetails {
     private String naturalThemeColor;
 
     /**
+     * MACOS26 Liquid Glass 主题强调色（#RRGGBB）
+     */
+    private String macos26ThemeColor;
+
+    /**
      * Web 端各主题的页面、导航与卡片背景配置（JSON）。
      */
     @Column(columnDefinition = "TEXT")

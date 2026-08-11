@@ -223,3 +223,360 @@
   --nav-bg: #fffbf5;
   --nav-border: #e8ddd0;
 }
+
+/* MACOS26 - Liquid Glass 系统主题 */
+[data-theme="macos26"] {
+  color-scheme: light;
+
+  --el-color-primary: #007aff;
+  --el-color-primary-light-3: #4da3ff;
+  --el-color-primary-light-5: #80bdff;
+  --el-color-primary-light-7: #b3d7ff;
+  --el-color-primary-light-8: #cce5ff;
+  --el-color-primary-light-9: #eaf4ff;
+  --el-color-primary-dark-2: #0062cc;
+  --el-color-success: #30d158;
+  --el-color-warning: #ff9f0a;
+  --el-color-danger: #ff453a;
+  --el-color-info: #64748b;
+  --el-bg-color: rgba(255, 255, 255, 0.68);
+  --el-bg-color-page: #dceafa;
+  --el-fill-color-blank: rgba(255, 255, 255, 0.64);
+  --el-fill-color-light: rgba(255, 255, 255, 0.4);
+  --el-fill-color-lighter: rgba(255, 255, 255, 0.28);
+  --el-fill-color-dark: rgba(198, 216, 237, 0.52);
+  --el-text-color-primary: #172235;
+  --el-text-color-regular: rgba(23, 34, 53, 0.74);
+  --el-text-color-secondary: rgba(23, 34, 53, 0.55);
+  --el-text-color-placeholder: rgba(23, 34, 53, 0.38);
+  --el-border-color: rgba(255, 255, 255, 0.72);
+  --el-border-color-light: rgba(255, 255, 255, 0.52);
+  --el-border-color-lighter: rgba(255, 255, 255, 0.36);
+  --el-border-radius-base: 12px;
+  --el-border-radius-small: 9px;
+  --el-box-shadow-light: 0 16px 38px rgba(55, 74, 105, 0.16);
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  --bg-page: #dceafa;
+  --bg-page-gradient:
+    radial-gradient(circle at 12% 8%, rgba(104, 207, 255, 0.62), transparent 32%),
+    radial-gradient(circle at 88% 12%, rgba(206, 151, 255, 0.52), transparent 35%),
+    radial-gradient(circle at 55% 88%, rgba(113, 238, 210, 0.42), transparent 40%),
+    linear-gradient(145deg, #d6eafa 0%, #eee4fa 46%, #d9eff0 100%);
+
+  --bg-surface: rgba(255, 255, 255, 0.7);
+  --surface-card: rgba(255, 255, 255, 0.52);
+  --surface-elevated: rgba(255, 255, 255, 0.76);
+  --surface-hover: rgba(255, 255, 255, 0.44);
+
+  --text-primary: #172235;
+  --text-secondary: rgba(23, 34, 53, 0.7);
+  --text-tertiary: rgba(23, 34, 53, 0.46);
+  --text-on-page-bg: #172235;
+  --text-on-page-bg-secondary: rgba(23, 34, 53, 0.68);
+  --text-on-page-bg-shadow: 0 1px 12px rgba(255, 255, 255, 0.58);
+
+  --primary: #007aff;
+  --primary-light: #5ac8fa;
+  --primary-dark: #005ecb;
+  --primary-gradient: linear-gradient(145deg, #37a8ff 0%, #007aff 52%, #5e5ce6 100%);
+  --primary-alpha-10: rgba(0, 122, 255, 0.1);
+  --primary-alpha-15: rgba(0, 122, 255, 0.15);
+  --primary-alpha-20: rgba(0, 122, 255, 0.2);
+  --primary-alpha-30: rgba(0, 122, 255, 0.3);
+
+  --success: #248a3d;
+  --success-alpha-15: rgba(48, 209, 88, 0.16);
+  --warning: #c76d00;
+  --danger: #d92d28;
+  --info: #64748b;
+
+  --border-color: rgba(255, 255, 255, 0.72);
+  --border-color-light: rgba(255, 255, 255, 0.46);
+  --shadow-color: rgba(48, 66, 100, 0.13);
+  --shadow-sm: 0 3px 10px rgba(48, 66, 100, 0.1);
+  --shadow-md: 0 10px 28px rgba(48, 66, 100, 0.14);
+  --shadow-lg: 0 20px 48px rgba(48, 66, 100, 0.17);
+  --shadow-xl: 0 32px 76px rgba(48, 66, 100, 0.22);
+
+  --glass-bg:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.36));
+  --glass-blur: blur(28px) saturate(185%) contrast(104%);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.74);
+  --glass-shadow:
+    0 22px 48px rgba(48, 66, 100, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(92, 118, 157, 0.13);
+
+  --nav-bg: rgba(249, 252, 255, 0.56);
+  --nav-border: rgba(255, 255, 255, 0.78);
+}
+
+html[data-theme="macos26"] body {
+  background: var(--bg-page-gradient);
+  background-attachment: fixed;
+}
+
+html[data-theme="macos26"] body::before,
+html[data-theme="macos26"] body::after {
+  position: fixed;
+  z-index: -1;
+  border-radius: 50%;
+  content: '';
+  filter: blur(18px);
+  pointer-events: none;
+}
+
+html[data-theme="macos26"] body::before {
+  top: 8vh;
+  left: 8vw;
+  width: 34vw;
+  height: 34vw;
+  background: radial-gradient(circle, rgba(92, 200, 250, 0.42), transparent 68%);
+}
+
+html[data-theme="macos26"] body::after {
+  right: 3vw;
+  bottom: 8vh;
+  width: 42vw;
+  height: 42vw;
+  background: radial-gradient(circle, rgba(191, 117, 255, 0.3), transparent 70%);
+}
+
+html[data-theme="macos26"] .layout-container {
+  background:
+    radial-gradient(circle at 8% 14%, rgba(94, 203, 255, 0.42), transparent 30%),
+    radial-gradient(circle at 91% 10%, rgba(206, 147, 255, 0.34), transparent 34%),
+    radial-gradient(circle at 62% 92%, rgba(86, 226, 201, 0.28), transparent 36%),
+    var(--bg-page-gradient);
+  background-attachment: fixed;
+}
+
+html[data-theme="macos26"] .card,
+html[data-theme="macos26"] .glass,
+html[data-theme="macos26"] .filter-card,
+html[data-theme="macos26"] .dialog,
+html[data-theme="macos26"] .tabs {
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.34));
+  box-shadow:
+    0 22px 48px rgba(48, 66, 100, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -1px 0 rgba(88, 112, 148, 0.12);
+  backdrop-filter: blur(28px) saturate(185%) contrast(104%);
+  -webkit-backdrop-filter: blur(28px) saturate(185%) contrast(104%);
+}
+
+html[data-theme="macos26"] .card,
+html[data-theme="macos26"] .filter-card {
+  border-radius: 22px;
+}
+
+html[data-theme="macos26"] .card-header,
+html[data-theme="macos26"] .dialog-header,
+html[data-theme="macos26"] .dialog-footer {
+  border-color: rgba(255, 255, 255, 0.48);
+}
+
+html[data-theme="macos26"] .btn {
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(237, 246, 255, 0.4));
+  box-shadow:
+    0 7px 18px rgba(48, 66, 100, 0.11),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(16px) saturate(175%);
+  -webkit-backdrop-filter: blur(16px) saturate(175%);
+}
+
+html[data-theme="macos26"] .btn:hover {
+  border-color: rgba(255, 255, 255, 0.92);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.88), rgba(231, 243, 255, 0.54));
+  box-shadow: 0 10px 24px rgba(48, 66, 100, 0.16), inset 0 1px 0 #fff;
+}
+
+html[data-theme="macos26"] .btn-primary {
+  border-color: rgba(255, 255, 255, 0.48);
+  background: var(--primary-gradient);
+  box-shadow:
+    0 10px 24px var(--primary-alpha-30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  color: white;
+}
+
+html[data-theme="macos26"] .btn-text {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+html[data-theme="macos26"] .input,
+html[data-theme="macos26"] input:not([type="checkbox"]):not([type="radio"]):not(.el-input__inner),
+html[data-theme="macos26"] textarea,
+html[data-theme="macos26"] select {
+  border-color: rgba(255, 255, 255, 0.74);
+  background: rgba(255, 255, 255, 0.46);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 5px 16px rgba(48, 66, 100, 0.08);
+  backdrop-filter: blur(18px) saturate(170%);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+}
+
+html[data-theme="macos26"] .input:focus,
+html[data-theme="macos26"] input:not(.el-input__inner):focus,
+html[data-theme="macos26"] textarea:focus,
+html[data-theme="macos26"] select:focus {
+  border-color: rgba(0, 122, 255, 0.62);
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.13), inset 0 1px 0 #fff;
+}
+
+html[data-theme="macos26"] .settings-nav {
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.3));
+  box-shadow: 0 18px 42px rgba(48, 66, 100, 0.13), inset 0 1px 0 #fff;
+  backdrop-filter: blur(26px) saturate(185%);
+  -webkit-backdrop-filter: blur(26px) saturate(185%);
+}
+
+html[data-theme="macos26"] .settings-nav-item {
+  border: 1px solid transparent;
+  border-radius: 12px;
+}
+
+html[data-theme="macos26"] .settings-nav-item:hover {
+  border-color: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.34);
+}
+
+html[data-theme="macos26"] .settings-nav-item.active {
+  border-color: rgba(255, 255, 255, 0.72);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.78), rgba(220, 238, 255, 0.48));
+  box-shadow: 0 8px 20px rgba(48, 66, 100, 0.12), inset 0 1px 0 #fff;
+}
+
+html[data-theme="macos26"] .book-card,
+html[data-theme="macos26"] .compact-book-card,
+html[data-theme="macos26"] .directory-item,
+html[data-theme="macos26"] .list-item {
+  border-color: rgba(255, 255, 255, 0.62);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.3));
+  box-shadow: 0 14px 34px rgba(48, 66, 100, 0.11), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(22px) saturate(175%);
+  -webkit-backdrop-filter: blur(22px) saturate(175%);
+}
+
+html[data-theme="macos26"] .book-card:hover,
+html[data-theme="macos26"] .compact-book-card:hover,
+html[data-theme="macos26"] .directory-item:hover,
+html[data-theme="macos26"] .list-item:hover {
+  border-color: rgba(255, 255, 255, 0.9);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.76), rgba(235, 246, 255, 0.42));
+  box-shadow: 0 20px 44px rgba(48, 66, 100, 0.16), inset 0 1px 0 #fff;
+}
+
+html[data-theme="macos26"] .el-dialog,
+html[data-theme="macos26"] .el-message-box,
+html[data-theme="macos26"] .el-popper,
+html[data-theme="macos26"] .el-dropdown__popper,
+html[data-theme="macos26"] .el-select__popper {
+  border: 1px solid rgba(255, 255, 255, 0.76) !important;
+  border-radius: 20px !important;
+  background: rgba(244, 249, 255, 0.74) !important;
+  box-shadow: 0 26px 64px rgba(48, 66, 100, 0.22), inset 0 1px 0 #fff !important;
+  backdrop-filter: blur(30px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(190%) !important;
+}
+
+html[data-theme="macos26"] .el-input__wrapper,
+html[data-theme="macos26"] .el-select__wrapper,
+html[data-theme="macos26"] .el-textarea__inner,
+html[data-theme="macos26"] .el-input-group__append {
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  background: rgba(255, 255, 255, 0.44);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 5px 14px rgba(48, 66, 100, 0.07);
+  backdrop-filter: blur(16px) saturate(170%);
+  -webkit-backdrop-filter: blur(16px) saturate(170%);
+}
+
+html[data-theme="macos26"] .el-button:not(.el-button--primary):not(.el-button--danger) {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.48);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+html[data-theme="macos26"] .el-table,
+html[data-theme="macos26"] .el-table tr,
+html[data-theme="macos26"] .el-table th.el-table__cell,
+html[data-theme="macos26"] .el-table td.el-table__cell {
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  --el-table-header-bg-color: rgba(255, 255, 255, 0.28);
+  --el-table-row-hover-bg-color: rgba(255, 255, 255, 0.36);
+  border-color: rgba(255, 255, 255, 0.42);
+  background: transparent;
+}
+
+html[data-theme="macos26"] .el-table {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.56);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+html[data-theme="macos26"] .dock-nav {
+  border-color: rgba(255, 255, 255, 0.82);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55), transparent 46%),
+    rgba(242, 248, 255, var(--dock-opacity));
+  box-shadow:
+    0 24px 58px rgba(45, 61, 94, 0.24),
+    0 6px 16px rgba(45, 61, 94, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -1px 0 rgba(91, 111, 148, 0.14);
+  backdrop-filter: blur(var(--dock-blur)) saturate(210%) contrast(106%);
+  -webkit-backdrop-filter: blur(var(--dock-blur)) saturate(210%) contrast(106%);
+}
+
+html[data-theme="macos26"] .dock-icon-tile {
+  border-color: rgba(255, 255, 255, 0.88);
+  background:
+    radial-gradient(circle at 25% 14%, rgba(255, 255, 255, 0.98), transparent 38%),
+    linear-gradient(145deg, rgba(247, 251, 255, 0.9), rgba(185, 211, 244, 0.7));
+  box-shadow: 0 8px 18px rgba(45, 61, 94, 0.18), inset 0 1px 0 #fff;
+}
+
+html[data-theme="macos26"] .dock-user-menu,
+html[data-theme="macos26"] .dock-trash-window {
+  border-color: rgba(255, 255, 255, 0.8);
+  background: rgba(244, 249, 255, 0.72);
+  box-shadow: 0 28px 68px rgba(45, 61, 94, 0.25), inset 0 1px 0 #fff;
+  backdrop-filter: blur(32px) saturate(195%);
+  -webkit-backdrop-filter: blur(32px) saturate(195%);
+}
+
+html[data-theme="macos26"] ::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+html[data-theme="macos26"] ::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(70, 91, 124, 0.28);
+  background-clip: padding-box;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme="macos26"] .glass,
+  html[data-theme="macos26"] .card,
+  html[data-theme="macos26"] .el-dialog,
+  html[data-theme="macos26"] .el-popper {
+    background: rgba(247, 250, 255, 0.94) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}

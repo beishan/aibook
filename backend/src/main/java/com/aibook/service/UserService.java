@@ -27,7 +27,9 @@ import java.util.regex.Pattern;
 @Service
 public class UserService implements UserDetailsService {
 
-    private static final Set<String> WEB_THEMES = Set.of("modern", "warm", "natural");
+    private static final Set<String> WEB_THEMES =
+            Set.of("modern", "warm", "natural", "macos26");
+    private static final Set<String> LEGACY_WEB_THEMES = Set.of("modern", "warm", "natural");
     private static final Set<String> LIBRARY_VIEW_MODES =
             Set.of("card", "compact-card", "list");
     private static final Set<Integer> LIBRARY_PAGE_SIZES =
@@ -43,6 +45,7 @@ public class UserService implements UserDetailsService {
     private static final String DEFAULT_MODERN_THEME_COLOR = "#2563EB";
     private static final String DEFAULT_WARM_THEME_COLOR = "#A0522D";
     private static final String DEFAULT_NATURAL_THEME_COLOR = "#2E7D5A";
+    private static final String DEFAULT_MACOS26_THEME_COLOR = "#007AFF";
     private static final Pattern HEX_COLOR_PATTERN = Pattern.compile("^#[0-9A-Fa-f]{6}$");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -141,6 +144,9 @@ public class UserService implements UserDetailsService {
         if (request.getNaturalThemeColor() != null) {
             user.setNaturalThemeColor(normalizeThemeColor(request.getNaturalThemeColor()));
         }
+        if (request.getMacos26ThemeColor() != null) {
+            user.setMacos26ThemeColor(normalizeThemeColor(request.getMacos26ThemeColor()));
+        }
         if (request.getThemeBackgrounds() != null) {
             user.setThemeBackgroundSettings(serializeThemeBackgrounds(
                     normalizeThemeBackgrounds(request.getThemeBackgrounds())));
@@ -189,6 +195,8 @@ public class UserService implements UserDetailsService {
                         user.getWarmThemeColor(), DEFAULT_WARM_THEME_COLOR))
                 .naturalThemeColor(defaultIfBlank(
                         user.getNaturalThemeColor(), DEFAULT_NATURAL_THEME_COLOR))
+                .macos26ThemeColor(defaultIfBlank(
+                        user.getMacos26ThemeColor(), DEFAULT_MACOS26_THEME_COLOR))
                 .themeBackgrounds(readThemeBackgrounds(user.getThemeBackgroundSettings()))
                 .libraryViewMode(user.getLibraryViewMode())
                 .libraryPageSize(cardPageSize)
@@ -261,12 +269,17 @@ public class UserService implements UserDetailsService {
 
     private Map<String, UserPreferencesDTO.ThemeBackgroundDTO> normalizeThemeBackgrounds(
             Map<String, UserPreferencesDTO.ThemeBackgroundDTO> backgrounds) {
-        if (!backgrounds.keySet().equals(WEB_THEMES)) {
-            throw new IllegalArgumentException("背景设置必须完整包含 modern、warm、natural 三个主题");
+        if (!backgrounds.keySet().equals(WEB_THEMES)
+                && !backgrounds.keySet().equals(LEGACY_WEB_THEMES)) {
+            throw new IllegalArgumentException(
+                    "背景设置必须完整包含 modern、warm、natural、macos26 四个主题");
         }
         Map<String, UserPreferencesDTO.ThemeBackgroundDTO> normalized = new LinkedHashMap<>();
-        for (String theme : new String[] {"modern", "warm", "natural"}) {
+        for (String theme : new String[] {"modern", "warm", "natural", "macos26"}) {
             UserPreferencesDTO.ThemeBackgroundDTO value = backgrounds.get(theme);
+            if (value == null && "macos26".equals(theme)) {
+                value = defaultThemeBackgrounds().get(theme);
+            }
             if (value == null || (!"solid".equals(value.getMode())
                     && !"gradient".equals(value.getMode()))) {
                 throw new IllegalArgumentException("背景模式必须为 solid 或 gradient");
@@ -318,6 +331,8 @@ public class UserService implements UserDetailsService {
                 "solid", "#FAF6F1", "#F3E9DC", "#FFFBF5", 100, "#FFFBF5", 100));
         defaults.put("natural", new UserPreferencesDTO.ThemeBackgroundDTO(
                 "gradient", "#E8F5E9", "#E0F2F1", "#FFFFFF", 75, "#FFFFFF", 72));
+        defaults.put("macos26", new UserPreferencesDTO.ThemeBackgroundDTO(
+                "gradient", "#DCEBFA", "#F1E4F8", "#F8FBFF", 62, "#FFFFFF", 58));
         return defaults;
     }
 }

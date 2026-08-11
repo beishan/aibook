@@ -15,6 +15,7 @@ public class UserPreferencesDTO {
     private String modernThemeColor;
     private String warmThemeColor;
     private String naturalThemeColor;
+    private String macos26ThemeColor;
     private Map<String, ThemeBackgroundDTO> themeBackgrounds;
     private String libraryViewMode;
     private Integer libraryPageSize;
@@ -71,6 +72,14 @@ public class UserPreferencesDTO {
 
     public void setNaturalThemeColor(String naturalThemeColor) {
         this.naturalThemeColor = naturalThemeColor;
+    }
+
+    public String getMacos26ThemeColor() {
+        return macos26ThemeColor;
+    }
+
+    public void setMacos26ThemeColor(String macos26ThemeColor) {
+        this.macos26ThemeColor = macos26ThemeColor;
     }
 
     public Map<String, ThemeBackgroundDTO> getThemeBackgrounds() {
@@ -236,6 +245,11 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder naturalThemeColor(String naturalThemeColor) {
             value.setNaturalThemeColor(naturalThemeColor);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder macos26ThemeColor(String macos26ThemeColor) {
+            value.setMacos26ThemeColor(macos26ThemeColor);
             return this;
         }
 
