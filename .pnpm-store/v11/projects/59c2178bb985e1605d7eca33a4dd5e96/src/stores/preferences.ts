@@ -13,7 +13,7 @@ import {
 import { normalizeThemeBackgroundConfig } from '@/utils/themeBackground'
 
 export type LibraryViewMode = 'card' | 'compact-card' | 'list'
-export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26'
+export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 export const LIBRARY_PAGE_SIZE_OPTIONS = [12, 18, 24, 36, 60] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
 
@@ -21,10 +21,13 @@ interface UserPreferences {
   theme: ThemeId | null
   libraryViewMode: LibraryViewMode | null
   libraryPageSize: number | null
+  libraryCardPageSize: number | null
+  libraryListPageSize: number | null
   scanThreadCount: number | null
   modernThemeColor: string | null
   warmThemeColor: string | null
   naturalThemeColor: string | null
+  macos26ThemeColor: string | null
   themeBackgrounds: ThemeBackgroundSettings | null
   dockSize: number | null
   dockOpacity: number | null
@@ -37,6 +40,8 @@ interface UserPreferences {
 
 const LIBRARY_VIEW_MODE_KEY = 'ai-book-view-mode'
 const LIBRARY_PAGE_SIZE_KEY = 'aibook-library-page-size'
+const LIBRARY_CARD_PAGE_SIZE_KEY = 'aibook-library-card-page-size'
+const LIBRARY_LIST_PAGE_SIZE_KEY = 'aibook-library-list-page-size'
 const DOCK_SIZE_KEY = 'aibook-dock-size'
 const DOCK_OPACITY_KEY = 'aibook-dock-opacity'
 const DOCK_MAGNIFICATION_KEY = 'aibook-dock-magnification'
@@ -59,8 +64,8 @@ const isLibraryPageSize = (value: unknown): value is LibraryPageSize =>
   typeof value === 'number'
   && LIBRARY_PAGE_SIZE_OPTIONS.some(size => size === value)
 
-const readLocalLibraryPageSize = (): LibraryPageSize => {
-  const saved = Number(localStorage.getItem(LIBRARY_PAGE_SIZE_KEY))
+const readLocalLibraryPageSize = (key: string): LibraryPageSize => {
+  const saved = Number(localStorage.getItem(key) || localStorage.getItem(LIBRARY_PAGE_SIZE_KEY))
   return isLibraryPageSize(saved) ? saved : DEFAULT_LIBRARY_PAGE_SIZE
 }
 
@@ -70,7 +75,7 @@ const readLocalNumber = (key: string, fallback: number, min: number, max: number
 }
 
 const isDockIconStyle = (value: unknown): value is DockIconStyle =>
-  value === 'minimal' || value === 'skeuomorphic' || value === 'macos26'
+  value === 'minimal' || value === 'skeuomorphic' || value === 'macos26' || value === 'custom'
 
 const readLocalDockIconStyle = (): DockIconStyle => {
   const saved = localStorage.getItem(DOCK_ICON_STYLE_KEY)
@@ -110,12 +115,18 @@ const isBackgroundSettings = (value: unknown): value is ThemeBackgroundSettings 
   return isBackgroundConfig(settings.modern)
     && isBackgroundConfig(settings.warm)
     && isBackgroundConfig(settings.natural)
+    && isBackgroundConfig(settings.macos26)
 }
 
 export const usePreferencesStore = defineStore('preferences', () => {
   const themeStore = useThemeStore()
   const libraryViewMode = ref<LibraryViewMode>(readLocalLibraryViewMode())
-  const libraryPageSize = ref<LibraryPageSize>(readLocalLibraryPageSize())
+  const libraryCardPageSize = ref<LibraryPageSize>(
+    readLocalLibraryPageSize(LIBRARY_CARD_PAGE_SIZE_KEY)
+  )
+  const libraryListPageSize = ref<LibraryPageSize>(
+    readLocalLibraryPageSize(LIBRARY_LIST_PAGE_SIZE_KEY)
+  )
   const scanThreadCount = ref(DEFAULT_SCAN_THREAD_COUNT)
   const dockSize = ref(readLocalNumber(DOCK_SIZE_KEY, DEFAULT_DOCK_SIZE, 44, 76))
   const dockOpacity = ref(readLocalNumber(DOCK_OPACITY_KEY, DEFAULT_DOCK_OPACITY, 40, 96))
@@ -149,11 +160,18 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (syncRemote) persistRemote({ libraryViewMode: mode })
   }
 
-  const setLibraryPageSize = (value: LibraryPageSize, syncRemote = true) => {
+  const setLibraryCardPageSize = (value: LibraryPageSize, syncRemote = true) => {
     if (!isLibraryPageSize(value)) return
-    libraryPageSize.value = value
-    localStorage.setItem(LIBRARY_PAGE_SIZE_KEY, String(value))
-    if (syncRemote) persistRemote({ libraryPageSize: value })
+    libraryCardPageSize.value = value
+    localStorage.setItem(LIBRARY_CARD_PAGE_SIZE_KEY, String(value))
+    if (syncRemote) persistRemote({ libraryCardPageSize: value })
+  }
+
+  const setLibraryListPageSize = (value: LibraryPageSize, syncRemote = true) => {
+    if (!isLibraryPageSize(value)) return
+    libraryListPageSize.value = value
+    localStorage.setItem(LIBRARY_LIST_PAGE_SIZE_KEY, String(value))
+    if (syncRemote) persistRemote({ libraryListPageSize: value })
   }
 
   const setScanThreadCount = (value: number, syncRemote = true) => {
@@ -166,6 +184,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     modern: 'modernThemeColor',
     warm: 'warmThemeColor',
     natural: 'naturalThemeColor',
+    macos26: 'macos26ThemeColor',
   }
 
   const setThemeAccentColor = (theme: ThemeId, color: string, syncRemote = true) => {
@@ -184,6 +203,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
       modernThemeColor: themeStore.accentColors.modern,
       warmThemeColor: themeStore.accentColors.warm,
       naturalThemeColor: themeStore.accentColors.natural,
+      macos26ThemeColor: themeStore.accentColors.macos26,
     })
   }
 
@@ -291,10 +311,25 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.libraryViewMode = libraryViewMode.value
       }
 
-      if (isLibraryPageSize(data.libraryPageSize)) {
-        setLibraryPageSize(data.libraryPageSize, false)
+      const legacyPageSize = isLibraryPageSize(data.libraryPageSize)
+        ? data.libraryPageSize
+        : null
+      if (isLibraryPageSize(data.libraryCardPageSize)) {
+        setLibraryCardPageSize(data.libraryCardPageSize, false)
+      } else if (legacyPageSize) {
+        setLibraryCardPageSize(legacyPageSize, false)
+        missingPreferences.libraryCardPageSize = legacyPageSize
       } else {
-        missingPreferences.libraryPageSize = libraryPageSize.value
+        missingPreferences.libraryCardPageSize = libraryCardPageSize.value
+      }
+
+      if (isLibraryPageSize(data.libraryListPageSize)) {
+        setLibraryListPageSize(data.libraryListPageSize, false)
+      } else if (legacyPageSize) {
+        setLibraryListPageSize(legacyPageSize, false)
+        missingPreferences.libraryListPageSize = legacyPageSize
+      } else {
+        missingPreferences.libraryListPageSize = libraryListPageSize.value
       }
 
       if (isScanThreadCount(data.scanThreadCount)) {
@@ -307,6 +342,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
         ['modern', data.modernThemeColor],
         ['warm', data.warmThemeColor],
         ['natural', data.naturalThemeColor],
+        ['macos26', data.macos26ThemeColor],
       ]
       remoteThemeColors.forEach(([theme, color]) => {
         if (isThemeColor(color)) setThemeAccentColor(theme, color, false)
@@ -359,7 +395,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   return {
     libraryViewMode,
-    libraryPageSize,
+    libraryCardPageSize,
+    libraryListPageSize,
     scanThreadCount,
     dockSize,
     dockOpacity,
@@ -371,7 +408,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     hydrated,
     setTheme,
     setLibraryViewMode,
-    setLibraryPageSize,
+    setLibraryCardPageSize,
+    setLibraryListPageSize,
     setScanThreadCount,
     setThemeAccentColor,
     resetThemeAccentColor,

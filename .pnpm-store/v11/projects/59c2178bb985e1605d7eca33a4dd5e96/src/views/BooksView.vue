@@ -15,13 +15,6 @@
           <span>🧩</span>
           <span>重建多版本</span>
         </button>
-        <button class="btn recycle-bin-button" @click="showRecycleBin = true">
-          <span>🗑️</span>
-          <span>回收站</span>
-          <span v-if="bookStore.trashCount > 0" class="trash-count">
-            {{ bookStore.trashCount > 99 ? '99+' : bookStore.trashCount }}
-          </span>
-        </button>
         <button class="btn btn-primary" @click="showUploadDialog = true">
           <span>📤</span>
           <span>上传书籍</span>
@@ -45,6 +38,7 @@
         <el-select
           v-model="filterFormat"
           class="select-input"
+          placeholder="全部格式"
           aria-label="格式筛选"
           @change="handleFilterChange('format')"
         >
@@ -61,6 +55,7 @@
         <el-select
           v-model="filterStatus"
           class="select-input"
+          placeholder="全部状态"
           aria-label="阅读状态筛选"
           @change="handleFilterChange('status')"
         >
@@ -74,6 +69,7 @@
           v-model="filterCategoryId"
           class="select-input"
           filterable
+          placeholder="全部分类"
           aria-label="分类筛选"
           @change="handleFilterChange('category')"
         >
@@ -90,6 +86,7 @@
           v-model="filterTagId"
           class="select-input"
           filterable
+          placeholder="全部标签"
           aria-label="标签筛选"
           @change="handleFilterChange('tag')"
         >
@@ -122,7 +119,7 @@
         <button
           class="btn"
           :class="{ active: viewMode === 'card' }"
-          @click="preferencesStore.setLibraryViewMode('card')"
+          @click="handleViewModeChange('card')"
         >
           <span>▦</span>
           <span>卡片</span>
@@ -130,7 +127,7 @@
         <button
           class="btn"
           :class="{ active: viewMode === 'compact-card' }"
-          @click="preferencesStore.setLibraryViewMode('compact-card')"
+          @click="handleViewModeChange('compact-card')"
         >
           <span>▪︎</span>
           <span>小卡片</span>
@@ -138,7 +135,7 @@
         <button
           class="btn"
           :class="{ active: viewMode === 'list' }"
-          @click="preferencesStore.setLibraryViewMode('list')"
+          @click="handleViewModeChange('list')"
         >
           <span>☰</span>
           <span>列表</span>
@@ -530,12 +527,6 @@
       @saved="handleBookSaved"
     />
 
-    <RecycleBinDialog
-      :visible="showRecycleBin"
-      @close="showRecycleBin = false"
-      @changed="handleTrashChanged"
-    />
-
     <AddToBookListDialog
       :visible="showAddToListDialog"
       :book="bookToAddToList"
@@ -569,7 +560,6 @@ import FileUpload from '@/components/FileUpload.vue'
 import BatchScraperDialog from '@/components/BatchScraperDialog.vue'
 import BookEditDialog from '@/components/BookEditDialog.vue'
 import ScraperDialog from '@/components/ScraperDialog.vue'
-import RecycleBinDialog from '@/components/RecycleBinDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import BookVersionRebuildDialog from '@/components/BookVersionRebuildDialog.vue'
 import { getCoverUrl } from '@/utils/cover'
@@ -583,8 +573,22 @@ const tagStore = useTagStore()
 const preferencesStore = usePreferencesStore()
 const {
   libraryViewMode: viewMode,
-  libraryPageSize: pageSize,
+  libraryCardPageSize,
+  libraryListPageSize,
 } = storeToRefs(preferencesStore)
+
+const pageSize = computed<LibraryPageSize>({
+  get: () => viewMode.value === 'list'
+    ? libraryListPageSize.value
+    : libraryCardPageSize.value,
+  set: value => {
+    if (viewMode.value === 'list') {
+      preferencesStore.setLibraryListPageSize(value)
+    } else {
+      preferencesStore.setLibraryCardPageSize(value)
+    }
+  },
+})
 
 const searchKeyword = ref('')
 const filterFormat = ref('')
@@ -595,7 +599,6 @@ const sortBy = ref('createdAt')
 const currentPage = ref(1)
 const pageSizeOptions = LIBRARY_PAGE_SIZE_OPTIONS
 const showUploadDialog = ref(false)
-const showRecycleBin = ref(false)
 const showScraperDialog = ref(false)
 const showEditDialog = ref(false)
 const editingBook = ref<Book | null>(null)
@@ -963,11 +966,6 @@ const handleBookSaved = (book: Book) => {
   void tagStore.fetchTags()
 }
 
-const handleTrashChanged = () => {
-  void bookStore.fetchTrashCount()
-  void loadBooks()
-}
-
 const getStatusClass = (status: string) => {
   switch (status) {
     case 'READING':
@@ -1024,7 +1022,14 @@ const goToPage = (page: number) => {
 }
 
 const handlePageSizeChange = () => {
-  preferencesStore.setLibraryPageSize(pageSize.value as LibraryPageSize)
+  currentPage.value = 1
+  selectedBooks.value.clear()
+  loadBooks()
+}
+
+const handleViewModeChange = (mode: 'card' | 'compact-card' | 'list') => {
+  if (viewMode.value === mode) return
+  preferencesStore.setLibraryViewMode(mode)
   currentPage.value = 1
   selectedBooks.value.clear()
   loadBooks()
@@ -1044,7 +1049,6 @@ onMounted(async () => {
   await preferencesStore.hydrate()
   categoryStore.refresh()
   tagStore.fetchTags()
-  bookStore.fetchTrashCount()
   if (route.query.search) {
     searchKeyword.value = route.query.search as string
     handleSearch()
@@ -1074,27 +1078,6 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-}
-
-.recycle-bin-button {
-  position: relative;
-  background: var(--surface-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-}
-
-.trash-count {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  background: var(--danger, #ef4444);
-  color: #fff;
-  font-size: 11px;
-  line-height: 1;
 }
 
 .page-title {
@@ -1462,9 +1445,9 @@ onMounted(async () => {
 }
 
 .books-grid-compact .action-btn {
-  flex-basis: 28px;
+  --card-action-size: 28px;
+  min-width: 20px;
   width: 28px;
-  height: 28px;
   font-size: 12px;
 }
 
@@ -1602,9 +1585,12 @@ onMounted(async () => {
 }
 
 .action-btn {
-  flex: 0 0 34px;
+  --card-action-size: 34px;
+  flex: 0 1 var(--card-action-size);
+  min-width: 26px;
   width: 34px;
-  height: 34px;
+  height: auto;
+  aspect-ratio: 1;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.34);
   border-radius: 50%;
@@ -1671,8 +1657,8 @@ onMounted(async () => {
 
 .more-trigger {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 100%;
+  height: 100%;
   place-items: center;
   color: inherit;
   outline: none;

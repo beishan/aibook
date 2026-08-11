@@ -92,7 +92,7 @@
             </template>
             <div class="theme-tab-panel"><ThemeBackgroundSettingsPanel /></div>
           </el-tab-pane>
-          <el-tab-pane v-if="themeStore.currentTheme === 'natural'" name="dock">
+          <el-tab-pane v-if="themeStore.currentTheme === 'natural' || themeStore.currentTheme === 'macos26'" name="dock">
             <template #label>
               <span class="theme-tab-label"><el-icon class="theme-tab-icon"><Operation /></el-icon>Dock 设置</span>
             </template>
@@ -265,6 +265,16 @@
       <TagManagementView />
     </div>
 
+    <!-- 系统回收站 -->
+    <div v-if="activeTab === 'trash'" class="tab-content">
+      <div class="card glass recycle-settings-card">
+        <div class="card-header">
+          <span>🗑️ 系统回收站</span>
+        </div>
+        <RecycleBinPanel show-cleanup-settings />
+      </div>
+    </div>
+
     <!-- OPDS 与第三方客户端连接 -->
     <div v-show="activeTab === 'connections'" class="tab-content">
       <ConnectionsView embedded />
@@ -290,12 +300,22 @@
 
           <div class="form-group">
             <label class="form-label">扫描时间</label>
-            <input type="time" v-model="schedulerTime" class="input" />
+            <input
+              type="time"
+              v-model="schedulerTime"
+              class="input"
+              :disabled="!schedulerConfig.enabled || loadingSchedulerConfig"
+            />
+            <p class="field-hint">到点后会扫描当前账号下所有已启用的扫描目录。</p>
           </div>
 
-          <button class="btn btn-primary" @click="handleSaveScheduler">
+          <button
+            class="btn btn-primary"
+            :disabled="savingSchedulerConfig || loadingSchedulerConfig"
+            @click="handleSaveScheduler"
+          >
             <span>💾</span>
-            <span>保存配置</span>
+            <span>{{ savingSchedulerConfig ? '保存中…' : '保存配置' }}</span>
           </button>
         </div>
       </div>
@@ -491,6 +511,7 @@ import SiteFaviconSettingsPanel from '@/components/SiteFaviconSettingsPanel.vue'
 import DockSettingsPanel from '@/components/DockSettingsPanel.vue'
 import ThemeColorSettingsPanel from '@/components/ThemeColorSettingsPanel.vue'
 import ThemeBackgroundSettingsPanel from '@/components/ThemeBackgroundSettingsPanel.vue'
+import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
@@ -692,6 +713,7 @@ const tabGroups = computed(() => [
       { key: 'directories', label: '扫描目录', icon: '📂' },
       { key: 'categories', label: '分类管理', icon: '🗂️' },
       { key: 'tags', label: '标签管理', icon: '🏷️' },
+      { key: 'trash', label: '回收站', icon: '🗑️' },
       { key: 'scheduler', label: '定时任务', icon: '⏰' },
     ],
   },
@@ -729,7 +751,7 @@ type ThemeSettingsTab = 'style' | 'accent' | 'background' | 'dock'
 const themeSettingsTab = ref<ThemeSettingsTab>('style')
 
 watch(() => themeStore.currentTheme, theme => {
-  if (theme !== 'natural' && themeSettingsTab.value === 'dock') {
+  if (theme !== 'natural' && theme !== 'macos26' && themeSettingsTab.value === 'dock') {
     themeSettingsTab.value = 'style'
   }
 })
@@ -783,6 +805,8 @@ const schedulerConfig = reactive({
   enabled: true,
   time: '02:00',
 })
+const loadingSchedulerConfig = ref(false)
+const savingSchedulerConfig = ref(false)
 
 const schedulerTime = computed({
   get: () => schedulerConfig.time,
@@ -1012,8 +1036,35 @@ const handleRemove = async (row: any) => {
   }
 }
 
-const handleSaveScheduler = () => {
-  message.success('配置已保存')
+const loadSchedulerConfig = async () => {
+  loadingSchedulerConfig.value = true
+  try {
+    const { data } = await api.get('/api/scheduled-scan-settings')
+    schedulerConfig.enabled = data.enabled !== false
+    schedulerConfig.time = data.time || '02:00'
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '定时扫描配置加载失败')
+  } finally {
+    loadingSchedulerConfig.value = false
+  }
+}
+
+const handleSaveScheduler = async () => {
+  if (!/^\d{2}:\d{2}$/.test(schedulerConfig.time)) {
+    message.warning('请选择有效的扫描时间')
+    return
+  }
+  savingSchedulerConfig.value = true
+  try {
+    const { data } = await api.put('/api/scheduled-scan-settings', schedulerConfig)
+    schedulerConfig.enabled = data.enabled
+    schedulerConfig.time = data.time
+    message.success('定时扫描配置已保存')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '定时扫描配置保存失败')
+  } finally {
+    savingSchedulerConfig.value = false
+  }
 }
 
 const formatTime = (timeStr: string) => {
@@ -1045,6 +1096,7 @@ onMounted(async () => {
   syncActiveTab(route.query.tab)
   await preferencesStore.hydrate()
   scanThreadCountDraft.value = preferencesStore.scanThreadCount
+  await loadSchedulerConfig()
   await loadDirectories()
   await restoreScanProgress()
   await categoryStore.refresh()
@@ -1067,6 +1119,10 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.recycle-settings-card :deep(.recycle-bin-panel) {
+  padding: var(--spacing-lg);
+}
+
 .settings-view {
   max-width: 1200px;
   margin: 0 auto;
@@ -1642,7 +1698,7 @@ onUnmounted(() => {
 
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--spacing-lg);
   padding: 0;
 }
@@ -1756,6 +1812,65 @@ onUnmounted(() => {
   backdrop-filter: blur(10px);
   border: 1px solid rgba(200, 230, 210, 0.3);
   border-radius: 8px;
+}
+
+/* MACOS26 Liquid Glass 预览 */
+.theme-preview-macos26 {
+  position: relative;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(82, 205, 255, 0.7), transparent 38%),
+    radial-gradient(circle at 86% 22%, rgba(196, 125, 255, 0.55), transparent 42%),
+    linear-gradient(145deg, #d8ebfb, #eee2fa 52%, #d9f0ef);
+}
+
+.theme-preview-macos26::before {
+  position: absolute;
+  top: 9px;
+  right: 12px;
+  left: 12px;
+  height: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.42);
+  box-shadow: inset 0 1px 0 white, 0 5px 14px rgba(45, 61, 94, 0.13);
+  content: '';
+  backdrop-filter: blur(10px) saturate(190%);
+}
+
+.theme-preview-macos26::after {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  width: 82px;
+  height: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 8px;
+  background: rgba(250, 253, 255, 0.48);
+  box-shadow: 0 7px 16px rgba(45, 61, 94, 0.2), inset 0 1px 0 white;
+  content: '●  ●  ●  ●';
+  color: rgba(31, 61, 102, 0.72);
+  font-size: 6px;
+  line-height: 15px;
+  text-align: center;
+  transform: translateX(-50%);
+  backdrop-filter: blur(10px) saturate(200%);
+}
+
+.sidebar-macos26 {
+  width: 0;
+}
+
+.header-macos26 {
+  height: 30px;
+  background: transparent;
+}
+
+.card-macos26 {
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 9px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.3));
+  box-shadow: 0 7px 16px rgba(45, 61, 94, 0.13), inset 0 1px 0 white;
+  backdrop-filter: blur(10px) saturate(185%);
 }
 
 .preview-content {
