@@ -69,8 +69,20 @@
         <section class="control-block">
           <div><strong>推荐方案</strong><p>一键应用为当前主题调校的整套背景组合。</p></div>
           <div class="preset-grid">
-            <button v-for="preset in currentPresets" :key="preset.name" type="button" class="preset" @click="applyPreset(preset.config)">
-              <span class="preset-swatch" :style="presetStyle(preset.config)"><i></i></span>
+            <button
+              v-for="preset in currentPresets"
+              :key="preset.name"
+              type="button"
+              class="preset"
+              :class="{ active: isPresetActive(preset.config) }"
+              :aria-label="`应用${preset.name}背景方案`"
+              :aria-pressed="isPresetActive(preset.config)"
+              @click="applyPreset(preset.config)"
+            >
+              <span class="preset-swatch" :style="presetStyle(preset.config)">
+                <i></i>
+                <span v-if="isPresetActive(preset.config)" class="preset-check" aria-hidden="true">✓</span>
+              </span>
               <span><b>{{ preset.name }}</b><small>{{ preset.description }}</small></span>
             </button>
           </div>
@@ -158,6 +170,15 @@ const currentThemeName = computed(() => THEMES.find(theme => theme.id === themeS
 const currentPresets = computed(() => presetGroups[themeStore.currentTheme])
 const previewStyle = computed(() => createThemeBackgroundTokens(config.value))
 
+const isPresetActive = (preset: ThemeBackgroundConfig) =>
+  config.value.mode === preset.mode
+  && config.value.pageColor.toUpperCase() === preset.pageColor.toUpperCase()
+  && config.value.secondaryColor.toUpperCase() === preset.secondaryColor.toUpperCase()
+  && config.value.navColor.toUpperCase() === preset.navColor.toUpperCase()
+  && config.value.navOpacity === preset.navOpacity
+  && config.value.surfaceColor.toUpperCase() === preset.surfaceColor.toUpperCase()
+  && config.value.surfaceOpacity === preset.surfaceOpacity
+
 const updateField = <K extends keyof ThemeBackgroundConfig>(key: K, value: ThemeBackgroundConfig[K], persist = false) => {
   preferencesStore.setThemeBackground(themeStore.currentTheme, { ...config.value, [key]: value }, persist)
 }
@@ -196,7 +217,7 @@ const resetAll = async () => {
 .mode-switch { display: flex; padding: 3px; border: 1px solid var(--border-color-light); border-radius: 10px; background: var(--surface-hover); }.mode-switch button { padding: 6px 12px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 12px; }.mode-switch button.active { background: var(--surface-elevated); color: var(--primary); box-shadow: var(--shadow-sm); font-weight: 700; }.color-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--spacing-md); margin-top: var(--spacing-md); }
 :deep(.color-control) { min-width: 0; }:deep(.color-control > strong) { display: block; margin-bottom: 7px; color: var(--text-secondary); font-size: 12px; }:deep(.color-input) { display: grid; grid-template-columns: 40px minmax(0,1fr); gap: 8px; }:deep(.color-input .el-color-picker__trigger) { width: 40px; height: 32px; border-radius: 9px; }:deep(.color-input .el-input__wrapper) { border-radius: 9px; }
 .surface-controls { display: grid; gap: var(--spacing-lg); }.surface-row { display: grid; grid-template-columns: minmax(190px,.8fr) minmax(210px,1.2fr); align-items: end; gap: var(--spacing-lg); }.opacity-control > div { display: flex; justify-content: space-between; margin-bottom: 3px; }.opacity-control span { color: var(--primary); font-size: 12px; font-weight: 700; }.opacity-control :deep(.el-slider) { height: 32px; }
-.preset-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; margin-top: var(--spacing-md); }.preset { min-width: 0; padding: 7px; border: 1px solid var(--border-color-light); border-radius: 11px; background: var(--surface-card); color: var(--text-primary); cursor: pointer; text-align: left; transition: .16s ease; }.preset:hover { border-color: var(--primary-alpha-30); transform: translateY(-2px); box-shadow: var(--shadow-sm); }.preset-swatch { position: relative; display: block; height: 34px; overflow: hidden; border: 1px solid rgba(0,0,0,.07); border-radius: 7px; }.preset-swatch::before { position: absolute; top: 0; bottom: 0; left: 0; width: 26%; background: var(--preset-nav); content: ''; }.preset-swatch i { position: absolute; right: 7px; bottom: 6px; width: 44%; height: 16px; border-radius: 4px; background: var(--preset-card); box-shadow: 0 3px 8px rgba(0,0,0,.12); }.preset > span:last-child { display: grid; margin-top: 6px; }.preset b { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.preset small { margin-top: 2px; color: var(--text-tertiary); font-size: 9px; }
+.preset-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; margin-top: var(--spacing-md); }.preset { min-width: 0; padding: 7px; border: 1px solid var(--border-color-light); border-radius: 11px; background: var(--surface-card); color: var(--text-primary); cursor: pointer; text-align: left; transition: .16s ease; }.preset:hover { border-color: var(--primary-alpha-30); transform: translateY(-2px); box-shadow: var(--shadow-sm); }.preset.active { border-color: var(--primary); background: var(--primary-alpha-10); box-shadow: 0 0 0 2px var(--primary-alpha-10); }.preset:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }.preset-swatch { position: relative; display: block; height: 34px; overflow: hidden; border: 1px solid rgba(0,0,0,.07); border-radius: 7px; }.preset-swatch::before { position: absolute; top: 0; bottom: 0; left: 0; width: 26%; background: var(--preset-nav); content: ''; }.preset-swatch i { position: absolute; right: 7px; bottom: 6px; width: 44%; height: 16px; border-radius: 4px; background: var(--preset-card); box-shadow: 0 3px 8px rgba(0,0,0,.12); }.preset-check { position: absolute; top: 4px; right: 4px; display: grid; width: 17px; height: 17px; place-items: center; border: 1px solid rgba(255,255,255,.8); border-radius: 50%; background: var(--primary); color: #fff; font-size: 11px; font-weight: 800; line-height: 1; box-shadow: 0 2px 7px rgba(0,0,0,.18); }.preset > span:last-child { display: grid; margin-top: 6px; }.preset b { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.preset small { margin-top: 2px; color: var(--text-tertiary); font-size: 9px; }
 .dock-note { margin: 0; padding: 0 var(--spacing-xl) var(--spacing-lg); color: var(--text-tertiary); font-size: 12px; }
 @media (max-width:1100px) { .panel-body { grid-template-columns: 1fr; }.preview-stage { min-height: 330px; } } @media (max-width:700px) { .panel-header { flex-direction: column; padding: var(--spacing-lg); }.header-actions { width: 100%; justify-content: flex-end; }.panel-body { padding: var(--spacing-lg); }.surface-row { grid-template-columns: 1fr; }.preset-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 </style>
