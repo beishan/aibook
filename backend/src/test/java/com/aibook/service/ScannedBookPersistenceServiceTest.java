@@ -33,6 +33,8 @@ class ScannedBookPersistenceServiceTest {
         when(userRepository.getReferenceById(1L)).thenReturn(userReference);
         when(categoryRepository.getReferenceById(2L)).thenReturn(categoryReference);
         when(bookRepository.save(book)).thenReturn(book);
+        RandomBookCoverService randomCoverService = mock(RandomBookCoverService.class);
+        when(randomCoverService.assignIfMissing(book, userReference)).thenReturn(book);
 
         ScannedBookPersistenceService service = new ScannedBookPersistenceService(
                 bookRepository,
@@ -40,13 +42,15 @@ class ScannedBookPersistenceServiceTest {
                 categoryRepository,
                 mock(OperationLogService.class),
                 mock(BookScanSourceRepository.class),
-                mock(ScanDirectoryRepository.class));
+                mock(ScanDirectoryRepository.class),
+                randomCoverService);
 
         Book saved = service.save(book, 1L, 2L);
 
         assertThat(saved.getUser()).isSameAs(userReference);
         assertThat(saved.getCategory()).isSameAs(categoryReference);
         verify(bookRepository).save(book);
+        verify(randomCoverService).assignIfMissing(book, userReference);
     }
 
     @Test
@@ -63,6 +67,8 @@ class ScannedBookPersistenceServiceTest {
 
         when(userRepository.getReferenceById(1L)).thenReturn(userReference);
         when(bookRepository.save(book)).thenReturn(book);
+        RandomBookCoverService randomCoverService = mock(RandomBookCoverService.class);
+        when(randomCoverService.assignIfMissing(book, userReference)).thenReturn(book);
 
         ScannedBookPersistenceService service = new ScannedBookPersistenceService(
                 bookRepository,
@@ -70,12 +76,14 @@ class ScannedBookPersistenceServiceTest {
                 categoryRepository,
                 mock(OperationLogService.class),
                 mock(BookScanSourceRepository.class),
-                mock(ScanDirectoryRepository.class));
+                mock(ScanDirectoryRepository.class),
+                randomCoverService);
 
         Book saved = service.save(book, 1L, null);
 
         assertThat(saved.getUser()).isSameAs(userReference);
         assertThat(saved.getCategory()).isNull();
         verify(bookRepository).save(book);
+        verify(randomCoverService).assignIfMissing(book, userReference);
     }
 }

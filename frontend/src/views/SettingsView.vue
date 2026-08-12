@@ -255,6 +255,11 @@
       </div>
     </div>
 
+    <!-- 随机书籍封面库 -->
+    <div v-if="activeTab === 'covers'" class="tab-content">
+      <RandomCoverLibraryPanel />
+    </div>
+
     <!-- 分类管理 -->
     <div v-if="activeTab === 'categories'" class="tab-content">
       <CategoryManagementView />
@@ -512,6 +517,7 @@ import DockSettingsPanel from '@/components/DockSettingsPanel.vue'
 import ThemeColorSettingsPanel from '@/components/ThemeColorSettingsPanel.vue'
 import ThemeBackgroundSettingsPanel from '@/components/ThemeBackgroundSettingsPanel.vue'
 import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
+import RandomCoverLibraryPanel from '@/components/RandomCoverLibraryPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
@@ -711,6 +717,7 @@ const tabGroups = computed(() => [
     label: '书库',
     items: [
       { key: 'directories', label: '扫描目录', icon: '📂' },
+      { key: 'covers', label: '书籍封面库', icon: '🖼️' },
       { key: 'categories', label: '分类管理', icon: '🗂️' },
       { key: 'tags', label: '标签管理', icon: '🏷️' },
       { key: 'trash', label: '回收站', icon: '🗑️' },

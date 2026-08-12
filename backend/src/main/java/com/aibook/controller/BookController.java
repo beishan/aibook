@@ -19,6 +19,7 @@ import com.aibook.service.BookService;
 import com.aibook.service.BookVersionRebuildTaskService;
 import com.aibook.service.BookVersionService;
 import com.aibook.service.OperationLogService;
+import com.aibook.service.RandomBookCoverService;
 import com.aibook.service.TxtParserService;
 import com.aibook.service.UserService;
 import com.aibook.service.scraper.BatchScrapeTaskService;
@@ -73,6 +74,7 @@ public class BookController {
     private final BookRepository bookRepository;
     private final BookParsingService bookParsingService;
     private final BookCoverService bookCoverService;
+    private final RandomBookCoverService randomBookCoverService;
     private final BookVersionService bookVersionService;
     private final BookVersionRebuildTaskService bookVersionRebuildTaskService;
     private final OperationLogService operationLogService;
@@ -582,6 +584,17 @@ public class BookController {
         Book book = bookService.getBookEntity(id, user);
         return ResponseEntity.ok(
                 bookService.convertToDTO(bookCoverService.upload(book, file)));
+    }
+
+    /** 从当前用户的封面库中随机选择一张并替换书籍封面。 */
+    @PostMapping("/{id}/random-cover")
+    public ResponseEntity<BookDTO> randomCover(
+            Authentication authentication,
+            @PathVariable Long id) {
+        User user = userService.findByUsername(authentication.getName());
+        Book book = bookService.getBookEntity(id, user);
+        return ResponseEntity.ok(
+                bookService.convertToDTO(randomBookCoverService.assign(book, user)));
     }
 
     /**

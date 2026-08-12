@@ -319,6 +319,15 @@ export const useBookStore = defineStore('book', () => {
     return updatedBook
   }
 
+  async function randomizeBookCover(id: number) {
+    const response = await api.post(`/api/books/${id}/random-cover`, undefined, {
+      headers: { 'X-Suppress-Error-Toast': 'true' },
+    })
+    const updatedBook: Book = response.data
+    updateLocalBook(updatedBook)
+    return updatedBook
+  }
+
   function updateLocalBook(updatedBook: Book) {
     const index = books.value.findIndex(book => book.id === updatedBook.id)
     if (index !== -1) {
@@ -361,5 +370,6 @@ export const useBookStore = defineStore('book', () => {
     startBookVersionRebuild,
     getBookVersionRebuildTask,
     uploadBookCover,
+    randomizeBookCover,
   }
 })
