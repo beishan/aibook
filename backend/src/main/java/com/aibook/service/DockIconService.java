@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,10 +36,14 @@ public class DockIconService {
     private String uploadPath;
 
     public DockIconStatusDTO getStatus(User user) {
-        List<String> existing = ICON_NAMES.stream()
-                .filter(name -> findIcon(user.getId(), name) != null)
-                .toList();
-        return new DockIconStatusDTO(existing);
+        Map<String, Long> versions = new LinkedHashMap<>();
+        ICON_NAMES.forEach(name -> {
+            Path icon = findIcon(user.getId(), name);
+            if (icon != null) {
+                versions.put(name, lastModified(icon));
+            }
+        });
+        return new DockIconStatusDTO(user.getId(), List.copyOf(versions.keySet()), versions);
     }
 
     public DockIconStatusDTO upload(User user, String name, MultipartFile file) {
@@ -182,6 +187,15 @@ public class DockIconService {
         if (lower.endsWith(".png")) return "image/png";
         if (lower.endsWith(".webp")) return "image/webp";
         return "image/jpeg";
+    }
+
+    private long lastModified(Path icon) {
+        try {
+            return Files.getLastModifiedTime(icon).toMillis();
+        } catch (Exception exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR, "图标读取失败", exception);
+        }
     }
 
     public record DockIconContent(Path path, String contentType) {}

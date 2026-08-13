@@ -33,32 +33,46 @@
       <strong>封面库还是空的</strong>
       <p>添加一些封面后，新导入且没有封面的书籍会自动获得随机封面。</p>
     </div>
-    <div v-else class="cover-grid">
-      <article v-for="cover in covers" :key="cover.id" class="cover-item">
-        <div class="cover-preview">
-          <img :src="getCoverUrl(cover.coverUrl)" :alt="cover.name" loading="lazy" />
-          <button
-            class="delete-cover"
-            type="button"
-            :disabled="deletingId === cover.id"
-            :aria-label="`删除封面 ${cover.name}`"
-            title="删除封面"
-            @click="removeCover(cover)"
-          >
-            {{ deletingId === cover.id ? '…' : '×' }}
-          </button>
-        </div>
-        <div class="cover-meta">
-          <strong :title="cover.name">{{ cover.name }}</strong>
-          <small>{{ formatFileSize(cover.fileSize) }}</small>
-        </div>
-      </article>
+    <div v-else class="library-content">
+      <div class="cover-grid">
+        <article v-for="cover in paginatedCovers" :key="cover.id" class="cover-item">
+          <div class="cover-preview">
+            <img :src="getCoverUrl(cover.coverUrl)" :alt="cover.name" loading="lazy" />
+            <button
+              class="delete-cover"
+              type="button"
+              :disabled="deletingId === cover.id"
+              :aria-label="`删除封面 ${cover.name}`"
+              title="删除封面"
+              @click="removeCover(cover)"
+            >
+              {{ deletingId === cover.id ? '…' : '×' }}
+            </button>
+          </div>
+          <div class="cover-meta">
+            <strong :title="cover.name">{{ cover.name }}</strong>
+            <small>{{ formatFileSize(cover.fileSize) }}</small>
+          </div>
+        </article>
+      </div>
+      <div class="library-pagination">
+        <span class="pagination-summary">共 {{ covers.length }} 张</span>
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="pageSizeOptions"
+          :total="covers.length"
+          layout="sizes, prev, pager, next"
+          background
+          @size-change="handlePageSizeChange"
+        />
+      </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
 import { confirm, message } from '@/utils/message'
@@ -77,6 +91,14 @@ const loading = ref(true)
 const uploading = ref(false)
 const deletingId = ref<number | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
+const currentPage = ref(1)
+const pageSize = ref(12)
+const pageSizeOptions = [12, 24, 48]
+const pageCount = computed(() => Math.max(1, Math.ceil(covers.value.length / pageSize.value)))
+const paginatedCovers = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return covers.value.slice(start, start + pageSize.value)
+})
 
 const loadCovers = async () => {
   loading.value = true
@@ -85,6 +107,7 @@ const loadCovers = async () => {
       headers: { 'X-Suppress-Error-Toast': 'true' },
     })
     covers.value = data
+    currentPage.value = 1
   } catch (error: any) {
     message.error(error.response?.data?.message || '封面库加载失败')
   } finally {
@@ -114,6 +137,7 @@ const uploadFiles = async (event: Event) => {
       headers: { 'X-Suppress-Error-Toast': 'true' },
     })
     covers.value = [...data, ...covers.value]
+    currentPage.value = 1
     message.success(`已添加 ${data.length} 张随机封面`)
   } catch (error: any) {
     message.error(error.response?.data?.message || '封面上传失败')
@@ -144,6 +168,14 @@ const formatFileSize = (bytes: number) => {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+const handlePageSizeChange = () => {
+  currentPage.value = 1
+}
+
+watch(pageCount, count => {
+  if (currentPage.value > count) currentPage.value = count
+})
+
 onMounted(loadCovers)
 </script>
 
@@ -159,6 +191,7 @@ onMounted(loadCovers)
 .empty-state .empty-icon { font-size: 42px; opacity: .72; }
 .empty-state strong { color: var(--text-primary); font-size: var(--font-size-lg); }
 .empty-state p { max-width: 440px; margin: 0; color: var(--text-secondary); }
+.library-content { min-width: 0; }
 .cover-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(138px, 1fr)); gap: var(--spacing-lg); padding: var(--spacing-xl); }
 .cover-item { min-width: 0; padding: 9px; border: 1px solid var(--border-color-light); border-radius: var(--radius-lg); background: var(--surface-card); }
 .cover-preview { position: relative; aspect-ratio: 3 / 4; overflow: hidden; border-radius: var(--radius-md); background: var(--surface-hover); }
@@ -168,5 +201,8 @@ onMounted(loadCovers)
 .cover-meta { display: grid; min-width: 0; margin-top: 9px; }
 .cover-meta strong { overflow: hidden; color: var(--text-primary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .cover-meta small { margin-top: 3px; color: var(--text-tertiary); }
-@media (max-width: 640px) { .library-header { flex-direction: column; }.library-header .btn { width: 100%; justify-content: center; }.cover-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: var(--spacing-lg); } }
+.library-pagination { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-lg); padding: 0 var(--spacing-xl) var(--spacing-xl); border-top: 1px solid var(--border-color-light); padding-top: var(--spacing-lg); }
+.pagination-summary { flex: none; color: var(--text-secondary); font-size: var(--font-size-sm); }
+.library-pagination :deep(.el-pagination) { min-width: 0; }
+@media (max-width: 640px) { .library-header { flex-direction: column; }.library-header .btn { width: 100%; justify-content: center; }.cover-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: var(--spacing-lg); }.library-pagination { align-items: flex-start; flex-direction: column; padding: var(--spacing-lg); }.library-pagination :deep(.el-pagination) { flex-wrap: wrap; justify-content: flex-start; gap: 6px 0; } }
 </style>

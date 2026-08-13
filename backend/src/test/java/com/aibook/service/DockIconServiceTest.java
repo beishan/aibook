@@ -40,6 +40,9 @@ class DockIconServiceTest {
                 "file", "library.png", "image/png", png));
 
         assertThat(status.icons()).containsExactly("library");
+        assertThat(status.userId()).isEqualTo(7L);
+        assertThat(status.versions()).containsOnlyKeys("library");
+        assertThat(status.versions().get("library")).isPositive();
         DockIconService.DockIconContent content = service.getIcon(user, "library");
         assertThat(content.contentType()).isEqualTo("image/png");
         assertThat(Files.readAllBytes(content.path())).isEqualTo(png);
