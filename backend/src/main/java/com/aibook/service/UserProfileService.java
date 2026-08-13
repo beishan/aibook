@@ -144,12 +144,24 @@ public class UserProfileService {
                 .nickname(user.getNickname())
                 .avatarUrl(hasAvatar ? "/api/user/profile/avatar" : null)
                 .hasAvatar(hasAvatar)
+                .avatarVersion(hasAvatar ? avatarVersion(user) : null)
                 .mood(user.getMood())
                 .notes(user.getProfileNotes())
                 .birthDate(user.getBirthDate())
                 .bookPreferences(user.getBookPreferences())
                 .role(user.getRole().name())
                 .build();
+    }
+
+    private String avatarVersion(User user) {
+        try {
+            Path avatar = Paths.get(uploadPath).resolve(user.getAvatarUrl());
+            if (!Files.isRegularFile(avatar)) return null;
+            return Files.getLastModifiedTime(avatar).toMillis()
+                    + "-" + avatar.getFileName();
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private String normalize(String value) {

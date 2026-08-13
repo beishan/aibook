@@ -13,6 +13,7 @@ public class UserProfileDTO {
     private String nickname;
     private String avatarUrl;
     private Boolean hasAvatar;
+    private String avatarVersion;
     private String mood;
     private String notes;
     private LocalDate birthDate;

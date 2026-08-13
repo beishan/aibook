@@ -111,7 +111,7 @@
           >
             <span class="dock-user-avatar">
               <img v-if="userStore.avatarObjectUrl" :src="userStore.avatarObjectUrl" alt="" />
-              <span v-else>{{ userInitial }}</span>
+              <span v-else-if="!userStore.loading">{{ userInitial }}</span>
             </span>
             <span class="dock-tooltip">{{ displayName }}</span>
           </button>
@@ -126,7 +126,7 @@
               <div class="dock-user-summary">
                 <span class="dock-menu-avatar">
                   <img v-if="userStore.avatarObjectUrl" :src="userStore.avatarObjectUrl" alt="" />
-                  <span v-else>{{ userInitial }}</span>
+                  <span v-else-if="!userStore.loading">{{ userInitial }}</span>
                 </span>
                 <span class="dock-user-copy">
                   <strong>{{ displayName }}</strong>

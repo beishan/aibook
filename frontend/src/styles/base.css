@@ -102,8 +102,16 @@ body {
   color: white;
 }
 
-.btn-primary:hover {
+.btn-primary:hover,
+.btn-primary:focus-visible {
+  background: var(--primary-gradient);
+  color: white;
   box-shadow: 0 4px 12px var(--primary-alpha-30);
+}
+
+.btn-primary:focus-visible {
+  outline: 3px solid var(--primary-alpha-30);
+  outline-offset: 2px;
 }
 
 .btn-secondary {

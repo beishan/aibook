@@ -9,6 +9,7 @@ import router from './router'
 import { useThemeStore } from './stores/theme'
 import { usePreferencesStore } from './stores/preferences'
 import { useDockIconStore } from './stores/dockIcons'
+import { useUserStore } from './stores/user'
 import { loadSiteFavicon } from './utils/siteFavicon'
 
 const app = createApp(App)
@@ -24,12 +25,17 @@ themeStore.initTheme()
 const preferencesStore = usePreferencesStore(pinia)
 void preferencesStore.hydrate()
 const dockIconStore = useDockIconStore(pinia)
+const userStore = useUserStore(pinia)
 void loadSiteFavicon()
 
 const bootstrap = async () => {
   if (localStorage.getItem('token')) {
-    await dockIconStore.restoreCached()
+    await Promise.all([
+      dockIconStore.restoreCached(),
+      userStore.restoreCachedAvatar(),
+    ])
     void dockIconStore.hydrate()
+    void userStore.hydrate()
   }
   app.mount('#app')
 }

@@ -72,6 +72,7 @@ class UserProfileServiceTest {
 
         assertThat(result.getHasAvatar()).isTrue();
         assertThat(result.getAvatarUrl()).isEqualTo("/api/user/profile/avatar");
+        assertThat(result.getAvatarVersion()).isNotBlank();
         Path stored = tempDir.resolve(user.getAvatarUrl());
         assertThat(stored).exists();
         assertThat(Files.readAllBytes(stored)).isEqualTo(png);
@@ -103,6 +104,7 @@ class UserProfileServiceTest {
 
         assertThat(result.getHasAvatar()).isFalse();
         assertThat(result.getAvatarUrl()).isNull();
+        assertThat(result.getAvatarVersion()).isNull();
         assertThat(stored).doesNotExist();
     }
 
