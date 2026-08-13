@@ -14,7 +14,6 @@ DEPLOY_STATE_VOLUME="${DEPLOY_STATE_VOLUME:-aibook-deploy-state}"
 BACKUP_RETENTION_COUNT="${BACKUP_RETENTION_COUNT:-10}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-36}"
 HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-5}"
-IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-3}"
 COMPOSE_OVERRIDE_FILE=""
 
 cleanup_temp_files() {
@@ -43,14 +42,6 @@ trim_whitespace() {
     value="${value#"${value%%[![:space:]]*}"}"
     value="${value%"${value##*[![:space:]]}"}"
     printf '%s' "${value}"
-}
-
-validate_image_retention_count() {
-    if [[ ! "${IMAGE_RETENTION_COUNT}" =~ ^[1-9][0-9]*$ ]] \
-        || ((IMAGE_RETENTION_COUNT > 50)); then
-        echo "错误：IMAGE_RETENTION_COUNT 必须是 1 到 50 的整数。" >&2
-        return 1
-    fi
 }
 
 env_file_value() {
@@ -315,7 +306,6 @@ prepare_mounts_override() {
 }
 
 prepare_mounts_override
-validate_image_retention_count
 
 compose() {
     local compose_args=(
@@ -482,10 +472,13 @@ rollback_from_state() {
 cleanup_repository_images() {
     local repository="$1"
     local current_image="$2"
-    local additional_versions_to_keep=$((IMAGE_RETENTION_COUNT - 1))
-    local additional_versions_kept=0
     local image_ref
     local image_refs=()
+
+    if [[ -z "${current_image}" ]]; then
+        echo "错误：${repository} 当前运行镜像不存在，跳过清理以避免误删。" >&2
+        return 1
+    fi
 
     while IFS= read -r image_ref; do
         image_refs+=("${image_ref}")
@@ -501,13 +494,8 @@ cleanup_repository_images() {
             continue
         fi
 
-        if ((additional_versions_kept < additional_versions_to_keep)); then
-            additional_versions_kept=$((additional_versions_kept + 1))
-            continue
-        fi
-
         echo "清理旧镜像：${image_ref}"
-        docker image rm "${image_ref}" >/dev/null 2>&1 || true
+        docker image rm --force "${image_ref}" >/dev/null
     done
 }
 
@@ -518,7 +506,7 @@ cleanup_dangling_images() {
     while IFS= read -r image_id; do
         [[ -z "${image_id}" ]] && continue
         echo "清理 ${image_scope} 悬空镜像：${image_id}"
-        docker image rm "${image_id}" >/dev/null 2>&1 || true
+        docker image rm --force "${image_id}" >/dev/null
     done < <(
         docker image ls \
             --filter dangling=true \

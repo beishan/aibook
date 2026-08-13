@@ -224,7 +224,6 @@ git@github.com:beishan/aibook.git
 | `FONT_MOUNTS` | 空 | 可选附加字体目录多行挂载配置，始终只读 |
 | `FONT_GIDS` | 空 | 附加字体目录 GID，多个值用逗号分隔 |
 | `SKIP_TESTS` | `false` | 仅在紧急发布时跳过后端测试 |
-| `IMAGE_RETENTION_COUNT` | `3` | 部署成功后前端、后端各保留的镜像版本数（含当前版本，范围 1-50） |
 
 非空 Jenkins 参数会覆盖 Secret file 中同名配置。`BOOKS_MOUNTS` 留空时会读取
 Secret file 中的单行分号格式，便于固定配置；临时发版也可以直接在 Jenkins
@@ -288,16 +287,18 @@ docker logs --tail=200 aibook-frontend
 ```
 
 所有服务都配置了 Docker 日志轮转，默认单文件 10 MB，保留 3 个文件。
-Jenkins 部署成功后只清理 `aibook-backend` 和 `aibook-frontend` 仓库中的旧
-版本镜像，默认各保留最近 3 个版本（包含当前运行版本），不会执行影响其他项目
-的全局镜像清理。可通过构建参数 `IMAGE_RETENTION_COUNT` 调整为 1-50；设为 `1`
-时仅保留当前版本。新构建镜像带有项目专用标签，因此还会清理这两个服务产生的
-悬空镜像（Docker 中显示为 `<none>`），其他项目的悬空镜像不会受影响。若仍需
-使用上一版本手动回滚，请将保留数设置为至少 `2`。
+Jenkins 部署成功并通过内外部健康检查后，只保留 `aibook-backend` 和
+`aibook-frontend` 当前运行的镜像，自动删除这两个仓库中的所有历史版本。不会
+执行影响其他项目的全局镜像清理。新构建镜像带有项目专用标签，因此还会清理这
+两个服务产生的悬空镜像（Docker 中显示为 `<none>`），其他项目的悬空镜像不会
+受影响。部署失败发生在成功清理之前，因此流水线仍可使用部署前镜像自动回滚；
+一次部署已经成功完成清理后，上一版本镜像不再保留，不能再执行跨版本手动回滚。
 
 ## 九、手动回滚
 
-自动部署会把上一版本镜像信息存入 `aibook-deploy-state` Volume。手动回滚：
+自动部署会把上一版本镜像信息存入 `aibook-deploy-state` Volume，供本次部署失败
+时自动回滚。由于成功部署后会删除所有历史应用镜像，以下手动回滚命令只适用于
+旧镜像尚未被成功清理的场景：
 
 ```bash
 ./scripts/rollback.sh /path/to/aibook-production.env

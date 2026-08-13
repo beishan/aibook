@@ -45,11 +45,6 @@ pipeline {
             description: '附加字体目录所需的数字 GID，多个值使用逗号分隔'
         )
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '紧急部署时跳过后端测试')
-        string(
-            name: 'IMAGE_RETENTION_COUNT',
-            defaultValue: '3',
-            description: '部署成功后前端、后端各保留的镜像版本数（1-50，包含当前版本）'
-        )
     }
 
     environment {
