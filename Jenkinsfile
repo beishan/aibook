@@ -63,6 +63,13 @@ pipeline {
                         script: 'git rev-parse --short=12 HEAD',
                         returnStdout: true
                     ).trim()
+                    def appVersion = sh(
+                        script: '''awk -F '"' '/"version"[[:space:]]*:/ { print $4; exit }' frontend/package.json''',
+                        returnStdout: true
+                    ).trim()
+                    if (!(appVersion ==~ /\d+\.\d+\.\d+/)) {
+                        error "frontend/package.json 中的应用版本号无效：${appVersion ?: '空'}"
+                    }
                     def commitSubject = sh(
                         script: 'git log -1 --pretty=%s',
                         returnStdout: true
@@ -74,11 +81,12 @@ pipeline {
                     if (!abbreviatedSubject) {
                         abbreviatedSubject = shortCommit
                     }
-                    env.RELEASE_TAG = "${env.BUILD_NUMBER}-${shortCommit}"
+                    env.APP_VERSION = appVersion
+                    env.RELEASE_TAG = "${appVersion}-${env.BUILD_NUMBER}-${shortCommit}"
                     env.BACKEND_IMAGE = "aibook-backend:${env.RELEASE_TAG}"
                     env.FRONTEND_IMAGE = "aibook-frontend:${env.RELEASE_TAG}"
                     currentBuild.displayName = "#${env.BUILD_NUMBER} ${abbreviatedSubject}"
-                    currentBuild.description = "提交 ${shortCommit}"
+                    currentBuild.description = "版本 ${appVersion} · 提交 ${shortCommit}"
                 }
             }
         }

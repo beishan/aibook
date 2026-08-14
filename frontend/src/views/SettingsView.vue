@@ -360,7 +360,7 @@
         <div class="info-list grouped-list">
           <div class="info-item list-item">
             <span class="info-label">系统版本</span>
-            <span class="info-value">1.0.0</span>
+            <span class="info-value">{{ systemVersion }}</span>
           </div>
           <div class="info-item list-item">
             <span class="info-label">运行状态</span>
@@ -523,6 +523,7 @@ import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
 import { useUserStore } from '@/stores/user'
 import { THEMES, type ThemeId } from '@/types/theme'
+import packageMetadata from '../../package.json'
 
 const CategoryManagementView = defineAsyncComponent(
   () => import('@/views/CategoryManagementView.vue'),
@@ -538,6 +539,7 @@ const preferencesStore = usePreferencesStore()
 const categoryStore = useCategoryStore()
 const userStore = useUserStore()
 const themes = THEMES
+const systemVersion = packageMetadata.version
 
 interface SystemRuntime {
   startedAt: string
