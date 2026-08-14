@@ -11,6 +11,7 @@ import { usePreferencesStore } from './stores/preferences'
 import { useDockIconStore } from './stores/dockIcons'
 import { useUserStore } from './stores/user'
 import { loadSiteFavicon } from './utils/siteFavicon'
+import { loadWebsiteSettings } from './utils/siteSettings'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -29,6 +30,7 @@ const userStore = useUserStore(pinia)
 void loadSiteFavicon()
 
 const bootstrap = async () => {
+  await loadWebsiteSettings()
   if (localStorage.getItem('token')) {
     await Promise.all([
       dockIconStore.restoreCached(),

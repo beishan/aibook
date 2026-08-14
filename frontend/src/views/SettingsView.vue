@@ -336,9 +336,9 @@
       <UserManagementPanel />
     </div>
 
-    <!-- 网站图标（仅管理员） -->
-    <div v-if="isAdmin && activeTab === 'favicon'" class="tab-content">
-      <SiteFaviconSettingsPanel />
+    <!-- 网站设置（仅管理员） -->
+    <div v-if="isAdmin && activeTab === 'website'" class="tab-content">
+      <WebsiteSettingsPanel />
     </div>
 
     <!-- 系统信息 -->
@@ -512,7 +512,7 @@ import FontManagementPanel from '@/components/FontManagementPanel.vue'
 import OperationLogPanel from '@/components/OperationLogPanel.vue'
 import UserManagementPanel from '@/components/UserManagementPanel.vue'
 import CurrentUserSettingsPanel from '@/components/CurrentUserSettingsPanel.vue'
-import SiteFaviconSettingsPanel from '@/components/SiteFaviconSettingsPanel.vue'
+import WebsiteSettingsPanel from '@/components/WebsiteSettingsPanel.vue'
 import DockSettingsPanel from '@/components/DockSettingsPanel.vue'
 import ThemeColorSettingsPanel from '@/components/ThemeColorSettingsPanel.vue'
 import ThemeBackgroundSettingsPanel from '@/components/ThemeBackgroundSettingsPanel.vue'
@@ -740,7 +740,7 @@ const tabGroups = computed(() => [
   {
     label: '系统',
     items: [
-      ...(isAdmin.value ? [{ key: 'favicon', label: '网站图标', icon: '🌐' }] : []),
+      ...(isAdmin.value ? [{ key: 'website', label: '网站设置', icon: '🌐' }] : []),
       { key: 'info', label: '系统信息', icon: 'ℹ️' },
     ],
   },

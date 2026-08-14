@@ -25,11 +25,17 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     private final AuthenticationManager authenticationManager;
+    private final WebsiteSettingsService websiteSettingsService;
 
     /**
      * 用户注册
      */
     public AuthResponse register(RegisterRequest request) {
+        long userCount = userRepository.count();
+        if (userCount > 0 && !websiteSettingsService.isRegistrationEnabled()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "注册功能已关闭");
+        }
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new RuntimeException("用户名已存在");
         }
@@ -43,7 +49,7 @@ public class AuthService {
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .nickname(request.getNickname() != null ? request.getNickname() : request.getUsername())
-                .role(userRepository.count() == 0 ? User.Role.ADMIN : User.Role.USER)
+                .role(userCount == 0 ? User.Role.ADMIN : User.Role.USER)
                 .enabled(true)
                 .build();
 

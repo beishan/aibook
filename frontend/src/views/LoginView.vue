@@ -1,5 +1,5 @@
 <template>
-  <div class="login-container">
+  <div class="login-container" :class="`login-style-${loginStyle}`">
     <!-- 背景装饰 -->
     <div class="bg-decoration">
       <div class="bg-circle bg-circle-1"></div>
@@ -14,71 +14,81 @@
         <span class="window-control window-control-expand"></span>
       </div>
 
-      <div class="login-header">
-        <div class="logo-icon" aria-hidden="true"><span>📚</span></div>
-        <h1>汗牛充栋</h1>
-        <p>您的私人书库管理系统</p>
+      <div class="login-header login-brand-panel">
+        <div class="logo-icon" aria-hidden="true">
+          <img v-if="loginIcon" :src="loginIcon" alt="" />
+          <span v-else>📚</span>
+        </div>
+        <h1>{{ websiteSettings.siteName }}</h1>
+        <p v-if="websiteSettings.loginDescription">{{ websiteSettings.loginDescription }}</p>
         <span class="liquid-glass-badge">Liquid Glass</span>
       </div>
 
-      <form class="login-form" @submit.prevent="handleLogin">
-        <div class="form-group">
-          <label class="form-label" for="login-username">用户名</label>
-          <div class="input-wrapper">
-            <span class="input-icon">👤</span>
-            <input
-              v-model="loginForm.username"
-              id="login-username"
-              type="text"
-              class="input"
-              placeholder="请输入用户名"
-              autocomplete="username"
-            />
+      <div class="login-auth-panel">
+        <form class="login-form" @submit.prevent="handleLogin">
+          <div class="form-group">
+            <label class="form-label" for="login-username">用户名</label>
+            <div class="input-wrapper">
+              <span class="input-icon">👤</span>
+              <input
+                v-model="loginForm.username"
+                id="login-username"
+                type="text"
+                class="input"
+                placeholder="请输入用户名"
+                autocomplete="username"
+              />
+            </div>
+            <span v-if="errors.username" class="error-text">{{ errors.username }}</span>
           </div>
-          <span v-if="errors.username" class="error-text">{{ errors.username }}</span>
-        </div>
 
-        <div class="form-group">
-          <label class="form-label" for="login-password">密码</label>
-          <div class="input-wrapper">
-            <span class="input-icon">🔒</span>
-            <input
-              v-model="loginForm.password"
-              id="login-password"
-              type="password"
-              class="input"
-              placeholder="请输入密码"
-              autocomplete="current-password"
-            />
+          <div class="form-group">
+            <label class="form-label" for="login-password">密码</label>
+            <div class="input-wrapper">
+              <span class="input-icon">🔒</span>
+              <input
+                v-model="loginForm.password"
+                id="login-password"
+                type="password"
+                class="input"
+                placeholder="请输入密码"
+                autocomplete="current-password"
+              />
+            </div>
+            <span v-if="errors.password" class="error-text">{{ errors.password }}</span>
           </div>
-          <span v-if="errors.password" class="error-text">{{ errors.password }}</span>
+
+          <button type="submit" class="btn btn-primary login-button" :disabled="loading">
+            <span v-if="loading" class="loading-spinner"></span>
+            <span>{{ loading ? '登录中...' : '登录' }}</span>
+          </button>
+        </form>
+
+        <div v-if="websiteSettings.registrationEnabled" class="login-footer">
+          <span>还没有账号？</span>
+          <router-link to="/register" class="link">立即注册</router-link>
         </div>
-
-        <button type="submit" class="btn btn-primary login-button" :disabled="loading">
-          <span v-if="loading" class="loading-spinner"></span>
-          <span>{{ loading ? '登录中...' : '登录' }}</span>
-        </button>
-      </form>
-
-      <div class="login-footer">
-        <span>还没有账号？</span>
-        <router-link to="/register" class="link">立即注册</router-link>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { computed, ref, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
+import { useThemeStore } from '@/stores/theme'
+import { loginIconSrc, websiteSettings } from '@/utils/siteSettings'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const themeStore = useThemeStore()
 
 const loading = ref(false)
+const loginStyle = computed(() => websiteSettings.loginStyles[themeStore.currentTheme] || 'glass')
+const loginIcon = computed(loginIconSrc)
 
 const loginForm = reactive({
   username: '',
@@ -552,6 +562,101 @@ const handleLogin = async () => {
   border-top: 1px solid rgba(255, 255, 255, 0.38);
 }
 
+.logo-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+:global(.login-container.login-style-split .login-card) {
+  display: grid;
+  width: min(920px, 100%);
+  max-width: 920px;
+  grid-template-columns: minmax(300px, 0.92fr) minmax(360px, 1.08fr);
+  padding: 0;
+}
+
+:global(.login-container.login-style-split .login-brand-panel) {
+  display: flex;
+  min-height: 520px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 64px 42px;
+  border-right: 1px solid var(--border-color-light);
+  background: linear-gradient(145deg, var(--primary-alpha-20), transparent 68%);
+}
+
+:global(.login-container.login-style-split .login-auth-panel) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 64px 48px 48px;
+}
+
+:global(.login-container.login-style-split .window-chrome) {
+  z-index: 3;
+}
+
+:global(.login-container.login-style-minimal .bg-decoration) {
+  opacity: 0.22;
+}
+
+:global(.login-container.login-style-minimal .login-card) {
+  max-width: 390px;
+  padding: 30px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-card) 94%, transparent);
+  box-shadow: 0 14px 42px rgba(24, 35, 52, 0.1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:global(.login-container.login-style-minimal .window-chrome),
+:global(.login-container.login-style-minimal .liquid-glass-badge) {
+  display: none;
+}
+
+:global(.login-container.login-style-minimal .login-card::before) {
+  display: none;
+}
+
+:global(.login-container.login-style-minimal .login-header) {
+  margin-bottom: 24px;
+}
+
+:global(.login-container.login-style-minimal .logo-icon) {
+  width: 62px;
+  height: 62px;
+  font-size: 34px;
+  animation: none;
+}
+
+:global(.login-container.login-style-minimal .login-header h1) {
+  font-size: 30px;
+}
+
+@media (max-width: 760px) {
+  :global(.login-container.login-style-split .login-card) {
+    display: block;
+    max-width: 440px;
+  }
+
+  :global(.login-container.login-style-split .login-brand-panel) {
+    min-height: 0;
+    padding: 54px 24px 24px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color-light);
+  }
+
+  :global(.login-container.login-style-split .login-auth-panel) {
+    padding: 30px 24px;
+  }
+}
+
 @media (max-width: 520px) {
   :global(html[data-theme="macos26"] .login-container) {
     padding: 16px;
@@ -575,6 +680,12 @@ const handleLogin = async () => {
     background: rgba(247, 250, 255, 0.94);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+}
+
+@media (max-width: 520px) {
+  :global(html[data-theme="macos26"] .login-container.login-style-split .login-card) {
+    padding: 0;
   }
 }
 </style>

@@ -82,15 +82,17 @@
             </div>
             <div class="custom-icon-grid">
               <article v-for="item in customIconItems" :key="item.icon" class="custom-icon-card">
-                <div class="custom-icon-image" :class="{ empty: !customIconUrl(item.icon) }">
-                  <img
-                    v-if="customIconUrl(item.icon)"
-                    :src="customIconUrl(item.icon)"
-                    :alt="`${item.label}自定义图标`"
-                  />
-                  <DockIcon v-else :name="item.icon" variant="minimal" aria-hidden="true" />
+                <div class="custom-icon-identity">
+                  <div class="custom-icon-image" :class="{ empty: !customIconUrl(item.icon) }">
+                    <img
+                      v-if="customIconUrl(item.icon)"
+                      :src="customIconUrl(item.icon)"
+                      :alt="`${item.label}自定义图标`"
+                    />
+                    <DockIcon v-else :name="item.icon" variant="minimal" aria-hidden="true" />
+                  </div>
+                  <span class="custom-icon-name">{{ item.label }}</span>
                 </div>
-                <span class="custom-icon-name">{{ item.label }}</span>
                 <div class="custom-icon-actions">
                   <label
                     class="btn btn-secondary custom-icon-upload"
@@ -105,10 +107,9 @@
                     />
                   </label>
                   <button
-                    v-if="dockIconStore.iconUrls[item.icon]"
                     type="button"
                     class="btn btn-text custom-icon-remove"
-                    :disabled="dockIconStore.uploading[item.icon]"
+                    :disabled="dockIconStore.uploading[item.icon] || !dockIconStore.iconUrls[item.icon]"
                     @click="handleIconRemove(item)"
                   >
                     移除
@@ -679,24 +680,33 @@ onMounted(() => {
 
 .custom-icon-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 9px;
 }
 
 .custom-icon-card {
-  display: grid;
+  display: flex;
   min-width: 0;
-  justify-items: center;
-  gap: 7px;
-  padding: 10px 7px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 9px;
   border: 1px solid var(--border-color-light);
   border-radius: 13px;
   background: color-mix(in srgb, var(--surface-card) 76%, transparent);
 }
 
+.custom-icon-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
 .custom-icon-image {
-  width: 54px;
-  height: 54px;
+  width: 36px;
+  height: 36px;
+  flex: none;
 }
 
 .custom-icon-image img {
@@ -709,26 +719,30 @@ onMounted(() => {
 
 .custom-icon-image.empty {
   display: grid;
-  width: 42px;
-  height: 42px;
-  padding: 9px;
+  width: 36px;
+  height: 36px;
+  padding: 8px;
   place-items: center;
-  border-radius: 11px;
+  border-radius: 10px;
   background: var(--primary-alpha-10);
   color: var(--primary);
 }
 
 .custom-icon-name {
+  overflow: hidden;
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .custom-icon-actions {
   display: flex;
+  flex: none;
   min-height: 26px;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 2px;
 }
 
@@ -837,7 +851,7 @@ onMounted(() => {
   }
 
   .custom-icon-grid {
-    grid-template-columns: repeat(2, minmax(110px, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .dock-preview-stage {

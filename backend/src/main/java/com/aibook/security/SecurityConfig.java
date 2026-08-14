@@ -53,7 +53,9 @@ public class SecurityConfig {
                 .requestMatchers(
                     HttpMethod.GET,
                     "/api/site/favicon",
-                    "/api/site/favicon/status"
+                    "/api/site/favicon/status",
+                    "/api/site/settings",
+                    "/api/site/login-icon"
                 ).permitAll()
                 .requestMatchers("/api/books/*/content/**").permitAll()
                 .requestMatchers("/api/files/**").permitAll()

@@ -75,6 +75,7 @@ public class OperationLog {
         UPDATE_PROFILE,
         UPDATE_AVATAR,
         UPDATE_SITE_FAVICON,
+        UPDATE_SITE_SETTINGS,
         UPDATE_SCAN_DIRECTORY_VISIBILITY,
         ADD_TO_SHELF,
         REMOVE_FROM_SHELF
