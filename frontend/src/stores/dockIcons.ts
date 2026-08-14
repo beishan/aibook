@@ -10,7 +10,7 @@ import {
 
 export type CustomDockIconName = DockIconName | 'trash'
 const DOCK_ICON_NAMES: CustomDockIconName[] = [
-  'home', 'library', 'shelf', 'repair', 'settings', 'trashEmpty', 'trashFull', 'trash',
+  'home', 'library', 'shelf', 'repair', 'conversion', 'settings', 'trashEmpty', 'trashFull', 'trash',
 ]
 const SUPPORTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const MAX_ICON_SIZE = 5 * 1024 * 1024
@@ -28,6 +28,7 @@ const emptyIconUrls = (): Record<CustomDockIconName, string> => ({
   library: '',
   shelf: '',
   repair: '',
+  conversion: '',
   settings: '',
   trashEmpty: '',
   trashFull: '',
@@ -41,6 +42,7 @@ export const useDockIconStore = defineStore('dockIcons', () => {
     library: false,
     shelf: false,
     repair: false,
+    conversion: false,
     settings: false,
     trashEmpty: false,
     trashFull: false,

@@ -175,7 +175,7 @@ pipeline {
                 credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID,
                 variable: 'AIBOOK_ENV_FILE'
             )]) {
-                sh './scripts/deploy.sh cleanup "$AIBOOK_ENV_FILE" || true'
+                sh './scripts/deploy.sh cleanup "$AIBOOK_ENV_FILE"'
             }
             echo "aibook ${env.RELEASE_TAG} 构建和部署成功。"
         }
@@ -192,7 +192,7 @@ pipeline {
             }
             echo 'aibook 构建或部署失败，已执行可用的自动回滚。'
         }
-        always {
+        cleanup {
             cleanWs()
         }
     }

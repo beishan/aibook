@@ -163,6 +163,41 @@ public class BookVersionService {
         }
     }
 
+    /** 将服务端已经生成的文件复制为书籍新版本。源文件始终保留。 */
+    @Transactional
+    public com.aibook.dto.BookVersionDTO addGeneratedVersion(
+            Book book, Path generatedFile, String displayName) {
+        ensurePrimaryVersion(book);
+        Path uploadDirectory = Paths.get(uploadPath);
+        Path target = uploadDirectory.resolve(UUID.randomUUID() + ".epub");
+        try {
+            Files.createDirectories(uploadDirectory);
+            Files.copy(generatedFile, target);
+            String hash = calculateHash(target);
+            if (bookRepository.findByFileHash(hash).isPresent()
+                    || bookVersionRepository.findByFileHash(hash).isPresent()) {
+                Files.deleteIfExists(target);
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "该 EPUB 版本已存在");
+            }
+            BookVersion version = bookVersionRepository.save(BookVersion.builder()
+                    .book(book)
+                    .displayName(safeFilename(displayName))
+                    .format("epub")
+                    .filePath(target.toString())
+                    .fileSize(Files.size(target))
+                    .fileHash(hash)
+                    .primaryVersion(false)
+                    .build());
+            return toDTO(version);
+        } catch (ResponseStatusException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            try { Files.deleteIfExists(target); } catch (Exception ignored) { }
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "转换结果关联失败", exception);
+        }
+    }
+
     @Transactional
     public void deleteVersion(Book book, Long versionId) {
         BookVersion version = resolveVersion(book, versionId);

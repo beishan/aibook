@@ -46,6 +46,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/TextRepairConfigView.vue'),
       },
       {
+        path: 'format-conversion',
+        name: 'FormatConversion',
+        component: () => import('@/views/FormatConversionView.vue'),
+      },
+      {
         path: 'reader/:id',
         name: 'Reader',
         component: () => import('@/views/ReaderView.vue'),

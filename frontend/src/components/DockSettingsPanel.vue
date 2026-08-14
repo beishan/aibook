@@ -161,6 +161,7 @@ const navigationIconItems: Array<{ icon: DockIconName; label: string }> = [
   { icon: 'library', label: '书库' },
   { icon: 'shelf', label: '书架' },
   { icon: 'repair', label: '修复' },
+  { icon: 'conversion', label: '转换' },
   { icon: 'settings', label: '设置' },
 ]
 const customIconItems: Array<{ icon: DockIconName; label: string }> = [

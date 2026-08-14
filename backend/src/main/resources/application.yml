@@ -48,6 +48,11 @@ jwt:
 upload:
   path: ${UPLOAD_PATH:./uploads}
 
+# 独立格式转换任务（结果默认保留 7 天，不自动加入书库）
+conversion:
+  path: ${CONVERSION_PATH:./conversion-tasks}
+  retention-days: ${CONVERSION_RETENTION_DAYS:7}
+
 # Book scanning configuration
 scanning:
   enabled: true

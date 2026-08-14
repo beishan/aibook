@@ -268,16 +268,27 @@
             <h2>选择版本</h2>
             <p>格式或内容不同的版本会分别保存阅读进度。</p>
           </div>
-          <label class="btn version-upload-button" :class="{ disabled: uploadingVersion }">
-            <span>＋</span>
-            <span>{{ uploadingVersion ? '上传中...' : '添加版本' }}</span>
-            <input
-              type="file"
-              accept=".txt,.epub,.pdf,.mobi,.azw3,.docx,.doc,.html,.htm,.md,.cbz,.cbr"
-              :disabled="uploadingVersion"
-              @change="handleVersionUpload"
-            />
-          </label>
+          <div class="version-header-actions">
+            <button
+              class="btn"
+              type="button"
+              :disabled="selectedVersionFormat !== 'txt'"
+              :title="selectedVersionFormat !== 'txt' ? '第一期仅支持 TXT 转 EPUB' : '将当前 TXT 转换为 EPUB'"
+              @click="openFormatConversion"
+            >
+              <span>⇄</span><span>转换格式</span>
+            </button>
+            <label class="btn version-upload-button" :class="{ disabled: uploadingVersion }">
+              <span>＋</span>
+              <span>{{ uploadingVersion ? '上传中...' : '添加版本' }}</span>
+              <input
+                type="file"
+                accept=".txt,.epub,.pdf,.mobi,.azw3,.docx,.doc,.html,.htm,.md,.cbz,.cbr"
+                :disabled="uploadingVersion"
+                @change="handleVersionUpload"
+              />
+            </label>
+          </div>
         </div>
         <div class="version-list">
           <div
@@ -707,6 +718,14 @@ const handleRead = () => {
     query: selectedVersionId.value
       ? { versionId: String(selectedVersionId.value) }
       : undefined,
+  })
+}
+
+const openFormatConversion = () => {
+  if (!book.value || !selectedVersionId.value || selectedVersionFormat.value !== 'txt') return
+  router.push({
+    path: '/format-conversion',
+    query: { bookId: String(book.value.id), versionId: String(selectedVersionId.value) },
   })
 }
 
@@ -1684,6 +1703,12 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
+.version-header-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
 .version-upload-button.disabled {
   opacity: 0.55;
   pointer-events: none;
@@ -2047,6 +2072,10 @@ onMounted(() => {
 
   .version-upload-button {
     justify-content: center;
+  }
+
+  .version-header-actions {
+    flex-direction: column;
   }
 
   .version-list {

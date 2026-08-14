@@ -112,10 +112,10 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance } from 'vue'
-import { Collection, Delete, DeleteFilled, HomeFilled, Reading, Setting, Tools } from '@element-plus/icons-vue'
+import { Collection, Delete, DeleteFilled, HomeFilled, Reading, Setting, Tools, Switch } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
 
-export type DockIconName = 'home' | 'library' | 'shelf' | 'repair' | 'settings' | 'trashEmpty' | 'trashFull'
+export type DockIconName = 'home' | 'library' | 'shelf' | 'repair' | 'conversion' | 'settings' | 'trashEmpty' | 'trashFull'
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 
 const props = defineProps<{
@@ -129,6 +129,7 @@ const minimalIcons: Record<DockIconName, Component> = {
   library: Collection,
   shelf: Reading,
   repair: Tools,
+  conversion: Switch,
   settings: Setting,
   trashEmpty: Delete,
   trashFull: DeleteFilled,
@@ -198,6 +199,10 @@ const gradientPrefix = computed(() => `dock-${instanceId}-${props.name}`)
 
 .dock-glyph-macos--repair {
   background: linear-gradient(145deg, #ffc968, #ed902b 58%, #a84b19);
+}
+
+.dock-glyph-macos--conversion {
+  background: linear-gradient(145deg, #9c8cff, #6557d8 58%, #3f319d);
 }
 
 .dock-glyph-macos--settings {
