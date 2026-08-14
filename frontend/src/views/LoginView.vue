@@ -8,36 +8,47 @@
     </div>
 
     <div class="login-card glass">
+      <div class="window-chrome" aria-hidden="true">
+        <span class="window-control window-control-close"></span>
+        <span class="window-control window-control-minimize"></span>
+        <span class="window-control window-control-expand"></span>
+      </div>
+
       <div class="login-header">
-        <div class="logo-icon">📚</div>
+        <div class="logo-icon" aria-hidden="true"><span>📚</span></div>
         <h1>汗牛充栋</h1>
         <p>您的私人书库管理系统</p>
+        <span class="liquid-glass-badge">Liquid Glass</span>
       </div>
 
       <form class="login-form" @submit.prevent="handleLogin">
         <div class="form-group">
-          <label class="form-label">用户名</label>
+          <label class="form-label" for="login-username">用户名</label>
           <div class="input-wrapper">
             <span class="input-icon">👤</span>
             <input
               v-model="loginForm.username"
+              id="login-username"
               type="text"
               class="input"
               placeholder="请输入用户名"
+              autocomplete="username"
             />
           </div>
           <span v-if="errors.username" class="error-text">{{ errors.username }}</span>
         </div>
 
         <div class="form-group">
-          <label class="form-label">密码</label>
+          <label class="form-label" for="login-password">密码</label>
           <div class="input-wrapper">
             <span class="input-icon">🔒</span>
             <input
               v-model="loginForm.password"
+              id="login-password"
               type="password"
               class="input"
               placeholder="请输入密码"
+              autocomplete="current-password"
             />
           </div>
           <span v-if="errors.password" class="error-text">{{ errors.password }}</span>
@@ -198,6 +209,11 @@ const handleLogin = async () => {
   z-index: 1;
 }
 
+.window-chrome,
+.liquid-glass-badge {
+  display: none;
+}
+
 .login-header {
   text-align: center;
   margin-bottom: var(--spacing-xl);
@@ -207,6 +223,10 @@ const handleLogin = async () => {
   font-size: 64px;
   margin-bottom: var(--spacing-md);
   animation: bounce 2s ease-in-out infinite;
+}
+
+.logo-icon span {
+  display: block;
 }
 
 @keyframes bounce {
@@ -334,5 +354,227 @@ const handleLogin = async () => {
   font-size: var(--font-size-xs);
   margin-top: var(--spacing-xs);
   display: block;
+}
+
+/* MACOS26 登录窗口 */
+:global(html[data-theme="macos26"] .login-container) {
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 14% 12%, rgba(78, 202, 255, 0.72), transparent 30%),
+    radial-gradient(circle at 86% 18%, rgba(206, 141, 255, 0.58), transparent 34%),
+    radial-gradient(circle at 64% 92%, rgba(83, 232, 199, 0.46), transparent 38%),
+    var(--bg-page-gradient);
+}
+
+:global(html[data-theme="macos26"] .login-container::before) {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(112deg, rgba(255, 255, 255, 0.2), transparent 28%, rgba(255, 255, 255, 0.12) 62%, transparent),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 72px);
+  content: '';
+  pointer-events: none;
+}
+
+:global(html[data-theme="macos26"] .bg-circle) {
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.05));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62), 0 30px 80px rgba(58, 76, 113, 0.08);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+:global(html[data-theme="macos26"] .bg-circle-1) {
+  background: radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.6), rgba(116, 197, 255, 0.12) 42%, rgba(255, 255, 255, 0.05));
+}
+
+:global(html[data-theme="macos26"] .bg-circle-2) {
+  background: radial-gradient(circle at 62% 30%, rgba(255, 255, 255, 0.52), rgba(193, 132, 255, 0.12) 46%, rgba(255, 255, 255, 0.04));
+}
+
+:global(html[data-theme="macos26"] .bg-circle-3) {
+  opacity: 0.72;
+  background: radial-gradient(circle at 36% 28%, rgba(255, 255, 255, 0.68), rgba(82, 226, 199, 0.1) 48%, rgba(255, 255, 255, 0.04));
+}
+
+:global(html[data-theme="macos26"] .login-card) {
+  max-width: 440px;
+  padding: 58px 38px 38px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 30px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.66), rgba(244, 249, 255, 0.32)),
+    rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 36px 90px rgba(42, 58, 91, 0.22),
+    0 8px 24px rgba(42, 58, 91, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -1px 0 rgba(83, 105, 141, 0.12);
+  backdrop-filter: blur(34px) saturate(190%) contrast(104%);
+  -webkit-backdrop-filter: blur(34px) saturate(190%) contrast(104%);
+}
+
+:global(html[data-theme="macos26"] .login-card::before) {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 110px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.36), transparent);
+  content: '';
+  pointer-events: none;
+}
+
+:global(html[data-theme="macos26"] .window-chrome) {
+  position: absolute;
+  top: 20px;
+  left: 22px;
+  z-index: 1;
+  display: flex;
+  gap: 8px;
+}
+
+:global(html[data-theme="macos26"] .window-control) {
+  width: 12px;
+  height: 12px;
+  border: 0.5px solid rgba(68, 57, 57, 0.18);
+  border-radius: 50%;
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.58), 0 1px 2px rgba(52, 59, 76, 0.12);
+}
+
+:global(html[data-theme="macos26"] .window-control-close) { background: #ff5f57; }
+:global(html[data-theme="macos26"] .window-control-minimize) { background: #febc2e; }
+:global(html[data-theme="macos26"] .window-control-expand) { background: #28c840; }
+
+:global(html[data-theme="macos26"] .login-header) {
+  position: relative;
+}
+
+:global(html[data-theme="macos26"] .logo-icon) {
+  display: grid;
+  width: 82px;
+  height: 82px;
+  margin: 0 auto var(--spacing-md);
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  border-radius: 23px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(197, 228, 255, 0.3)),
+    var(--primary-gradient);
+  box-shadow:
+    0 16px 34px var(--primary-alpha-20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -10px 22px rgba(0, 99, 204, 0.1);
+  font-size: 43px;
+  animation: macos-logo-float 5s ease-in-out infinite;
+}
+
+:global(html[data-theme="macos26"] .logo-icon span) {
+  filter: drop-shadow(0 4px 8px rgba(22, 54, 91, 0.18));
+}
+
+@keyframes macos-logo-float {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-5px) rotate(1deg); }
+}
+
+:global(html[data-theme="macos26"] .login-header h1) {
+  letter-spacing: -0.04em;
+  text-shadow: 0 1px 18px rgba(255, 255, 255, 0.48);
+}
+
+:global(html[data-theme="macos26"] .liquid-glass-badge) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-top: 12px;
+  padding: 3px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  color: rgba(23, 34, 53, 0.58);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:global(html[data-theme="macos26"] .form-label) {
+  color: rgba(23, 34, 53, 0.72);
+  font-weight: 600;
+}
+
+:global(html[data-theme="macos26"] .input-wrapper::after) {
+  position: absolute;
+  inset: 1px 1px auto;
+  height: 45%;
+  border-radius: 13px 13px 50% 50%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.32), transparent);
+  content: '';
+  pointer-events: none;
+}
+
+:global(html[data-theme="macos26"] .input-icon) {
+  z-index: 1;
+  opacity: 0.66;
+  filter: saturate(0.72);
+}
+
+:global(html[data-theme="macos26"] .input-wrapper .input) {
+  position: relative;
+  z-index: 0;
+  min-height: 48px;
+  border-color: rgba(255, 255, 255, 0.76);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.38);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 6px 18px rgba(48, 66, 100, 0.08);
+}
+
+:global(html[data-theme="macos26"] .input-wrapper .input:hover:not(:focus)) {
+  border-color: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+:global(html[data-theme="macos26"] .login-button) {
+  min-height: 50px;
+  border-radius: 15px;
+  box-shadow: 0 12px 28px var(--primary-alpha-30), inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+:global(html[data-theme="macos26"] .login-button:hover:not(:disabled)) {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px var(--primary-alpha-30), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+}
+
+:global(html[data-theme="macos26"] .login-footer) {
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.38);
+}
+
+@media (max-width: 520px) {
+  :global(html[data-theme="macos26"] .login-container) {
+    padding: 16px;
+  }
+
+  :global(html[data-theme="macos26"] .login-card) {
+    padding: 54px 24px 30px;
+    border-radius: 26px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(html[data-theme="macos26"] .bg-circle),
+  :global(html[data-theme="macos26"] .logo-icon) {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :global(html[data-theme="macos26"] .login-card) {
+    background: rgba(247, 250, 255, 0.94);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 </style>
