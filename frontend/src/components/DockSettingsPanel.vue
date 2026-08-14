@@ -372,7 +372,7 @@ onMounted(() => {
 
 .dock-settings-body {
   display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(340px, 1.1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-xl);
   padding: var(--spacing-xl);
 }
@@ -813,10 +813,6 @@ onMounted(() => {
 }
 
 @media (max-width: 1080px) {
-  .dock-settings-body {
-    grid-template-columns: 1fr;
-  }
-
   .dock-preview-stage {
     min-height: 250px;
   }
