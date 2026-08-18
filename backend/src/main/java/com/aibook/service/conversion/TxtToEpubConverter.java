@@ -82,8 +82,11 @@ public class TxtToEpubConverter implements BookConverter {
                 int end = Math.max(start, Math.min(text.length(), value(chapter.getEndIndex(), text.length())));
                 String filename = String.format(Locale.ROOT, "chapter-%04d.xhtml", i + 1);
                 chapterFiles.add(filename);
+                String chapterText = ChapterTitleFormatter.stripSourceTitle(
+                        text.substring(start, end),
+                        defaultString(chapter.getSourceTitle(), chapter.getTitle()));
                 write(zip, "OEBPS/" + filename,
-                        chapterPage(task, chapter.getTitle(), clean(text.substring(start, end), settings)));
+                        chapterPage(task, chapter.getTitle(), clean(chapterText, settings)));
             }
             write(zip, "OEBPS/nav.xhtml", navigation(task, chapters, chapterFiles));
             write(zip, "OEBPS/content.opf", packageDocument(task, chapters, chapterFiles,

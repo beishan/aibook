@@ -4,6 +4,7 @@ import com.aibook.dto.*;
 import com.aibook.model.entity.*;
 import com.aibook.repository.*;
 import com.aibook.service.conversion.BookConverter;
+import com.aibook.service.conversion.ChapterTitleFormatter;
 import com.aibook.service.repair.EncodingDetectService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -131,6 +132,7 @@ public class BookConversionService {
         for (int i = 0; i < raw.size(); i++) {
             Map<String, Object> chapter = raw.get(i);
             result.add(ConversionChapterDTO.builder().index(i)
+                    .sourceTitle(Objects.toString(chapter.get("title"), "第 " + (i + 1) + " 章"))
                     .title(Objects.toString(chapter.get("title"), "第 " + (i + 1) + " 章"))
                     .startIndex(((Number) chapter.getOrDefault("startIndex", 0)).intValue())
                     .endIndex(((Number) chapter.getOrDefault("endIndex", 0)).intValue()).ignored(false).build());
@@ -154,6 +156,16 @@ public class BookConversionService {
         task.setCategoryName(trim(request.getCategoryName())); task.setSeriesName(trim(request.getSeriesName()));
         task.setSeriesIndex(trim(request.getSeriesIndex())); task.setTagsJson(json(request.getTags()));
         if (request.getChapters() != null && !request.getChapters().isEmpty()) {
+            try {
+                if (request.getChapterTitleRemovePattern() != null
+                        && !request.getChapterTitleRemovePattern().isBlank()) {
+                    java.util.regex.Pattern.compile(request.getChapterTitleRemovePattern());
+                }
+                request.getChapters().forEach(chapter -> chapter.setSourceTitle(
+                        defaultString(chapter.getSourceTitle(), chapter.getTitle())));
+            } catch (java.util.regex.PatternSyntaxException exception) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "章节标题删除规则无效", exception);
+            }
             task.setChaptersJson(json(request.getChapters()));
         }
         request.setOutputFilename(safeEpubFilename(defaultString(request.getOutputFilename(), task.getTitle() + ".epub")));
@@ -165,14 +177,47 @@ public class BookConversionService {
     }
 
     @Transactional
+    public BookConversionTaskDTO formatChapters(
+            User user, Long id, BookConversionUpdateRequest request) {
+        BookConversionTask task = ownedTask(user, id);
+        if (task.getStatus() == BookConversionTask.Status.CONVERTING) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "任务正在转换，暂不能修改");
+        }
+        try {
+            if (request.getChapterTitleRemovePattern() != null
+                    && !request.getChapterTitleRemovePattern().isBlank()) {
+                java.util.regex.Pattern.compile(request.getChapterTitleRemovePattern());
+            }
+            BookConversionUpdateRequest settings = settings(task);
+            settings.setChapterTitleRemovePattern(trim(request.getChapterTitleRemovePattern()));
+            settings.setChapterTitleFormat(defaultString(
+                    trim(request.getChapterTitleFormat()), ChapterTitleFormatter.ORIGINAL_FORMAT));
+            List<ConversionChapterDTO> chapters = chapters(task);
+            applyChapterTitleRules(chapters, settings);
+            task.setChaptersJson(json(chapters));
+            task.setSettingsJson(json(settings));
+            task.setStage("已应用章节标题规则");
+            if (task.getStatus() == BookConversionTask.Status.SUCCESS
+                    || task.getStatus() == BookConversionTask.Status.FAILED) {
+                task.setStatus(BookConversionTask.Status.READY);
+                task.setProgress(25);
+            }
+            return toDTO(taskRepository.save(task));
+        } catch (java.util.regex.PatternSyntaxException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "章节标题删除规则无效", exception);
+        }
+    }
+
+    @Transactional
     public BookConversionTaskDTO reanalyze(User user, Long id, String chapterPattern) {
         BookConversionTask task = ownedTask(user, id);
         try {
             if (chapterPattern == null || chapterPattern.isBlank()) {
                 List<ConversionChapterDTO> chapters = parseChapters(Paths.get(task.getSourcePath()));
-                task.setChaptersJson(json(chapters));
                 BookConversionUpdateRequest settings = settings(task);
                 settings.setChapterPattern(null);
+                applyChapterTitleRules(chapters, settings);
+                task.setChaptersJson(json(chapters));
                 task.setSettingsJson(json(settings));
                 task.setStage("已恢复自动章节识别");
                 return toDTO(taskRepository.save(task));
@@ -186,7 +231,7 @@ public class BookConversionService {
                 String title = line.trim();
                 if (!title.isEmpty() && pattern.matcher(title).find()) {
                     chapters.add(ConversionChapterDTO.builder().index(chapters.size())
-                            .title(title).startIndex(offset).ignored(false).build());
+                            .sourceTitle(title).title(title).startIndex(offset).ignored(false).build());
                 }
                 offset += line.length() + 1;
             }
@@ -200,6 +245,8 @@ public class BookConversionService {
             task.setChaptersJson(json(chapters));
             BookConversionUpdateRequest settings = settings(task);
             settings.setChapterPattern(chapterPattern);
+            applyChapterTitleRules(chapters, settings);
+            task.setChaptersJson(json(chapters));
             task.setSettingsJson(json(settings));
             task.setStage("已按自定义规则重新识别章节");
             return toDTO(taskRepository.save(task));
@@ -209,6 +256,16 @@ public class BookConversionService {
             throw exception;
         } catch (Exception exception) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "章节重新识别失败", exception);
+        }
+    }
+
+    private void applyChapterTitleRules(
+            List<ConversionChapterDTO> chapters, BookConversionUpdateRequest settings) {
+        for (ConversionChapterDTO chapter : chapters) {
+            String sourceTitle = defaultString(chapter.getSourceTitle(), chapter.getTitle());
+            chapter.setSourceTitle(sourceTitle);
+            chapter.setTitle(ChapterTitleFormatter.format(sourceTitle,
+                    settings.getChapterTitleRemovePattern(), settings.getChapterTitleFormat()));
         }
     }
 
@@ -314,9 +371,12 @@ public class BookConversionService {
             String text = encodingDetectService.decodeWithEncoding(Paths.get(task.getSourcePath()), task.getEncoding());
             int start = Math.max(0, Math.min(text.length(), chapter.getStartIndex()));
             int end = Math.max(start, Math.min(text.length(), chapter.getEndIndex()));
+            String content = ChapterTitleFormatter.stripSourceTitle(
+                    text.substring(start, Math.min(end, start + 30000)),
+                    defaultString(chapter.getSourceTitle(), chapter.getTitle()));
             return Map.of("title", task.getTitle(), "author", defaultString(task.getAuthor(), "未知作者"),
                     "chapterIndex", selected, "chapterTitle", chapter.getTitle(), "chapterCount", chapters.size(),
-                    "content", text.substring(start, Math.min(end, start + 30000)));
+                    "content", content);
         } catch (Exception exception) { throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "预览生成失败", exception); }
     }
 

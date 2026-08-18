@@ -84,4 +84,30 @@ class TxtToEpubConverterTest {
             assertNull(epub.getEntry("OEBPS/chapter-0002.xhtml"));
         }
     }
+
+    @Test
+    void renamedChapterDoesNotRepeatOriginalSourceHeadingInBody() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        String sourceTitle = "正文 第两百五十五章 砸场";
+        Path source = Files.writeString(tempDir.resolve("rename.txt"), sourceTitle + "\n这是正文。",
+                StandardCharsets.UTF_8);
+        List<ConversionChapterDTO> chapters = List.of(ConversionChapterDTO.builder().index(0)
+                .sourceTitle(sourceTitle).title("第255章 砸场")
+                .startIndex(0).endIndex((int) Files.size(source)).build());
+        BookConversionTask task = BookConversionTask.builder().id(9L).sourcePath(source.toString())
+                .sourceFormat("txt").targetFormat("epub").title("格式测试").encoding("UTF-8")
+                .chaptersJson(mapper.writeValueAsString(chapters))
+                .settingsJson(mapper.writeValueAsString(new BookConversionUpdateRequest())).build();
+        Path output = tempDir.resolve("rename.epub");
+
+        new TxtToEpubConverter(mapper, new EncodingDetectService()).convert(task, output);
+
+        try (ZipFile epub = new ZipFile(output.toFile())) {
+            String chapter = new String(epub.getInputStream(epub.getEntry("OEBPS/chapter-0001.xhtml"))
+                    .readAllBytes(), StandardCharsets.UTF_8);
+            assertTrue(chapter.contains("<h1>第255章 砸场</h1>"));
+            assertTrue(chapter.contains("<p>这是正文。</p>"));
+            assertFalse(chapter.contains(sourceTitle));
+        }
+    }
 }

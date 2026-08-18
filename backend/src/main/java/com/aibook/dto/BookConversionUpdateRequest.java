@@ -18,6 +18,8 @@ public class BookConversionUpdateRequest {
     private String seriesIndex;
     private String outputFilename;
     private String chapterPattern;
+    private String chapterTitleRemovePattern;
+    private String chapterTitleFormat;
     private String epubVersion;
     private String firstLineIndent;
     private String paragraphSpacing;
