@@ -316,16 +316,20 @@
           </div>
 
           <div class="scheduler-config-grid" :class="{ disabled: !schedulerConfig.enabled }">
-            <label class="scheduler-config-item scheduler-time-item">
+            <div class="scheduler-config-item scheduler-time-item">
               <span class="scheduler-config-icon" aria-hidden="true">◷</span>
               <span class="scheduler-config-copy"><strong>执行时间</strong><small>每天按本地时间运行</small></span>
-              <input
+              <el-time-picker
                 v-model="schedulerTime"
-                type="time"
-                class="input scheduler-time-input"
+                class="scheduler-time-picker"
+                format="HH:mm"
+                value-format="HH:mm"
+                placeholder="选择时间"
+                :clearable="false"
                 :disabled="!schedulerConfig.enabled || loadingSchedulerConfig"
+                aria-label="定时扫描执行时间"
               />
-            </label>
+            </div>
             <div class="scheduler-config-item">
               <span class="scheduler-config-icon" aria-hidden="true">⌂</span>
               <span class="scheduler-config-copy"><strong>扫描范围</strong><small>当前账号下所有已启用目录</small></span>
@@ -1604,10 +1608,13 @@ onUnmounted(() => {
   box-shadow: var(--shadow-sm);
 }
 
-.scheduler-time-input {
-  width: 128px;
+.scheduler-time-picker {
+  width: 142px;
   min-width: 0;
   flex: 0 0 auto;
+}
+
+.scheduler-time-picker :deep(.el-input__wrapper) {
   background: var(--surface-elevated);
 }
 
@@ -2246,12 +2253,12 @@ onUnmounted(() => {
     grid-template-columns: 38px minmax(0, 1fr);
   }
 
-  .scheduler-time-input,
+  .scheduler-time-picker,
   .scheduler-scope-value {
     grid-column: 2;
   }
 
-  .scheduler-time-input {
+  .scheduler-time-picker {
     width: 100%;
   }
 
