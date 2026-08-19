@@ -287,41 +287,64 @@
 
     <!-- 定时任务 -->
     <div v-show="activeTab === 'scheduler'" class="tab-content">
-      <div class="card glass">
+      <div class="card glass scheduler-card">
         <div class="card-header">
-          <span>⏰ 定时扫描配置</span>
+          <div class="scheduler-heading">
+            <span class="scheduler-heading-icon" aria-hidden="true">⏰</span>
+            <div><strong>定时扫描配置</strong><p>按每天固定时间自动检查已启用的书籍目录</p></div>
+          </div>
+          <span class="scheduler-status" :class="{ active: schedulerConfig.enabled }">
+            {{ schedulerConfig.enabled ? '运行中' : '已停用' }}
+          </span>
         </div>
 
-        <div class="settings-form">
-          <div class="form-group">
-            <div class="form-row">
-              <label class="form-label">启用定时扫描</label>
-              <label class="switch">
-                <input type="checkbox" v-model="schedulerConfig.enabled" />
-                <span class="switch-slider"></span>
-              </label>
+        <div class="scheduler-content">
+          <div class="scheduler-enable-row">
+            <div class="scheduler-setting-copy">
+              <strong>每日自动扫描</strong>
+              <span>关闭后不会影响手动扫描和现有目录配置</span>
+            </div>
+            <label class="switch" :class="{ disabled: loadingSchedulerConfig }">
+              <input
+                v-model="schedulerConfig.enabled"
+                type="checkbox"
+                :disabled="loadingSchedulerConfig"
+                aria-label="启用定时扫描"
+              />
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="scheduler-config-grid" :class="{ disabled: !schedulerConfig.enabled }">
+            <label class="scheduler-config-item scheduler-time-item">
+              <span class="scheduler-config-icon" aria-hidden="true">◷</span>
+              <span class="scheduler-config-copy"><strong>执行时间</strong><small>每天按本地时间运行</small></span>
+              <input
+                v-model="schedulerTime"
+                type="time"
+                class="input scheduler-time-input"
+                :disabled="!schedulerConfig.enabled || loadingSchedulerConfig"
+              />
+            </label>
+            <div class="scheduler-config-item">
+              <span class="scheduler-config-icon" aria-hidden="true">⌂</span>
+              <span class="scheduler-config-copy"><strong>扫描范围</strong><small>当前账号下所有已启用目录</small></span>
+              <span class="scheduler-scope-value">全部目录</span>
             </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">扫描时间</label>
-            <input
-              type="time"
-              v-model="schedulerTime"
-              class="input"
-              :disabled="!schedulerConfig.enabled || loadingSchedulerConfig"
-            />
-            <p class="field-hint">到点后会扫描当前账号下所有已启用的扫描目录。</p>
+          <div class="scheduler-actions">
+            <p class="field-hint">配置保存后立即生效；执行时会跳过已停用的扫描目录。</p>
+            <button
+              type="button"
+              class="btn btn-primary scheduler-save-button"
+              :disabled="savingSchedulerConfig || loadingSchedulerConfig"
+              @click="handleSaveScheduler"
+            >
+              <span aria-hidden="true">💾</span>
+              <span>{{ savingSchedulerConfig ? '保存中…' : '保存配置' }}</span>
+            </button>
           </div>
-
-          <button
-            class="btn btn-primary"
-            :disabled="savingSchedulerConfig || loadingSchedulerConfig"
-            @click="handleSaveScheduler"
-          >
-            <span>💾</span>
-            <span>{{ savingSchedulerConfig ? '保存中…' : '保存配置' }}</span>
-          </button>
         </div>
       </div>
     </div>
@@ -1441,20 +1464,180 @@ onUnmounted(() => {
   color: var(--danger) !important;
 }
 
-/* 设置表单 */
-.settings-form {
+/* 定时扫描配置 */
+.scheduler-card {
+  box-shadow: var(--shadow-lg);
+}
+
+.scheduler-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.scheduler-heading-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--primary-alpha-10);
+  font-size: 22px;
+}
+
+.scheduler-heading strong {
+  color: var(--text-primary);
+}
+
+.scheduler-heading p {
+  margin: 4px 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+}
+
+.scheduler-status {
+  display: inline-flex;
+  min-width: 62px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  background: var(--surface-hover);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.scheduler-status.active {
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
+  background: var(--success-alpha-15);
+  color: var(--success);
+}
+
+.scheduler-content {
+  display: grid;
+  gap: var(--spacing-lg);
   padding: var(--spacing-lg);
-  max-width: 400px;
+}
+
+.scheduler-enable-row,
+.scheduler-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+}
+
+.scheduler-enable-row {
+  padding: var(--spacing-lg);
+  border: 1px solid var(--primary-alpha-15);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface-card));
+}
+
+.scheduler-setting-copy,
+.scheduler-config-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scheduler-setting-copy strong,
+.scheduler-config-copy strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.scheduler-setting-copy span,
+.scheduler-config-copy small {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.switch.disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.scheduler-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-md);
+  transition: opacity var(--transition-fast);
+}
+
+.scheduler-config-grid.disabled {
+  opacity: .58;
+}
+
+.scheduler-config-item {
+  display: grid;
+  min-width: 0;
+  min-height: 92px;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+}
+
+.scheduler-config-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--surface-elevated);
+  color: var(--primary);
+  font-size: 21px;
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+}
+
+.scheduler-time-input {
+  width: 128px;
+  min-width: 0;
+  flex: 0 0 auto;
+  background: var(--surface-elevated);
+}
+
+.scheduler-scope-value {
+  padding: 5px 9px;
+  border-radius: var(--radius-full);
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.scheduler-actions {
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border-color-light);
+}
+
+.scheduler-actions .field-hint {
+  max-width: 540px;
+  margin: 0;
+}
+
+.scheduler-save-button {
+  min-width: 132px;
+  flex: 0 0 auto;
 }
 
 .form-group {
   margin-bottom: var(--spacing-lg);
-}
-
-.form-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .form-label {
@@ -1994,6 +2177,10 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
+  .scheduler-config-grid {
+    grid-template-columns: 1fr;
+  }
+
   .theme-settings-tabs :deep(.el-tabs__header) {
     padding: 10px;
     overflow: hidden;
@@ -2039,6 +2226,43 @@ onUnmounted(() => {
 }
 
 @media (max-width: 640px) {
+  .scheduler-card .card-header,
+  .scheduler-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scheduler-status {
+    align-self: flex-start;
+  }
+
+  .scheduler-enable-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--spacing-md);
+  }
+
+  .scheduler-config-item {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .scheduler-time-input,
+  .scheduler-scope-value {
+    grid-column: 2;
+  }
+
+  .scheduler-time-input {
+    width: 100%;
+  }
+
+  .scheduler-scope-value {
+    justify-self: start;
+  }
+
+  .scheduler-save-button {
+    width: 100%;
+  }
+
   .scan-performance-settings {
     align-items: stretch;
     flex-direction: column;
