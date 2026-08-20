@@ -1,13 +1,7 @@
 <template>
   <div class="layout-container" :style="dockStyle">
     <!-- 内容区 -->
-    <main
-      class="layout-main"
-      :class="{
-        'layout-main--reader': isReaderRoute,
-        'layout-main--repair-config': route.name === 'TextRepairConfig',
-      }"
-    >
+    <main class="layout-main" :class="{ 'layout-main--reader': isReaderRoute }">
       <router-view v-slot="{ Component }">
         <Transition name="fade" mode="out-in">
           <component :is="Component" />
@@ -327,11 +321,6 @@ onUnmounted(() => {
 .layout-main.layout-main--reader {
   padding: 0;
   overflow: hidden;
-}
-
-.layout-main.layout-main--repair-config {
-  padding-right: 0;
-  padding-left: 0;
 }
 
 /* Dock 导航 */

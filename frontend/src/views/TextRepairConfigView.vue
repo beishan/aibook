@@ -959,9 +959,9 @@ function handleSaveGeneralSettings() {
 .repair-config-view {
   position: relative;
   width: 100%;
-  max-width: none;
-  margin: 0;
-  padding: 24px 0 72px;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 28px 0 70px;
 }
 
 .page-header {
@@ -1133,41 +1133,41 @@ function handleSaveGeneralSettings() {
   font-size: 11px;
 }
 
-:global(html[data-theme="modern"] .tabs) {
+:global(html[data-theme="modern"] .repair-config-view .tabs) {
   border-color: #cfd6e2;
   border-radius: 13px;
   background: #f3f5f8;
   box-shadow: 0 8px 22px rgba(15, 23, 42, .08);
 }
 
-:global(html[data-theme="modern"] .tab-btn) {
+:global(html[data-theme="modern"] .repair-config-view .tab-btn) {
   border-radius: 8px;
 }
 
-:global(html[data-theme="modern"] .tab-btn.active) {
+:global(html[data-theme="modern"] .repair-config-view .tab-btn.active) {
   border-color: color-mix(in srgb, var(--primary) 22%, #d4d9e2);
   background: #fff;
   box-shadow: 0 4px 12px rgba(15, 23, 42, .09);
 }
 
-:global(html[data-theme="warm"] .tabs) {
+:global(html[data-theme="warm"] .repair-config-view .tabs) {
   border-color: color-mix(in srgb, var(--primary) 25%, var(--border-color));
   border-radius: 15px;
   background: color-mix(in srgb, #fffaf1 92%, var(--primary) 8%);
   box-shadow: 0 10px 26px rgba(89, 57, 35, .11);
 }
 
-:global(html[data-theme="warm"] .tab-btn) {
+:global(html[data-theme="warm"] .repair-config-view .tab-btn) {
   border-radius: 9px;
 }
 
-:global(html[data-theme="warm"] .tab-btn.active) {
+:global(html[data-theme="warm"] .repair-config-view .tab-btn.active) {
   border-color: color-mix(in srgb, var(--primary) 32%, #e4d5c3);
   background: #fffdf8;
   box-shadow: 0 5px 14px rgba(89, 57, 35, .12), inset 0 1px 0 rgba(255, 255, 255, .9);
 }
 
-:global(html[data-theme="natural"] .tabs) {
+:global(html[data-theme="natural"] .repair-config-view .tabs) {
   border-color: color-mix(in srgb, var(--primary) 26%, rgba(255, 255, 255, .78));
   background: rgba(247, 253, 249, .7);
   box-shadow: 0 14px 34px rgba(35, 83, 62, .14), inset 0 1px 0 rgba(255, 255, 255, .88);
@@ -1175,13 +1175,13 @@ function handleSaveGeneralSettings() {
   -webkit-backdrop-filter: blur(20px) saturate(145%);
 }
 
-:global(html[data-theme="natural"] .tab-btn.active) {
+:global(html[data-theme="natural"] .repair-config-view .tab-btn.active) {
   border-color: rgba(255, 255, 255, .88);
   background: color-mix(in srgb, rgba(255, 255, 255, .86) 84%, var(--primary) 16%);
   box-shadow: 0 8px 20px rgba(35, 83, 62, .14), inset 0 1px 0 rgba(255, 255, 255, .95);
 }
 
-:global(html[data-theme="macos26"] .tabs) {
+:global(html[data-theme="macos26"] .repair-config-view .tabs) {
   isolation: isolate;
   padding: 9px;
   border-color: rgba(255, 255, 255, .82);
@@ -1195,7 +1195,7 @@ function handleSaveGeneralSettings() {
   -webkit-backdrop-filter: blur(32px) saturate(185%) contrast(103%);
 }
 
-:global(html[data-theme="macos26"] .tabs::before) {
+:global(html[data-theme="macos26"] .repair-config-view .tabs::before) {
   position: absolute;
   z-index: -1;
   top: 2px;
@@ -1208,18 +1208,18 @@ function handleSaveGeneralSettings() {
   pointer-events: none;
 }
 
-:global(html[data-theme="macos26"] .tab-btn) {
+:global(html[data-theme="macos26"] .repair-config-view .tab-btn) {
   min-height: 66px;
   border-radius: 15px;
   text-shadow: 0 1px 0 rgba(255, 255, 255, .62);
 }
 
-:global(html[data-theme="macos26"] .tab-btn:hover) {
+:global(html[data-theme="macos26"] .repair-config-view .tab-btn:hover) {
   border-color: rgba(255, 255, 255, .66);
   background: rgba(255, 255, 255, .3);
 }
 
-:global(html[data-theme="macos26"] .tab-btn.active) {
+:global(html[data-theme="macos26"] .repair-config-view .tab-btn.active) {
   border-color: rgba(255, 255, 255, .94);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, .76), rgba(231, 242, 255, .53)),
@@ -1230,14 +1230,14 @@ function handleSaveGeneralSettings() {
     inset 0 -1px 0 rgba(87, 128, 184, .13);
 }
 
-:global(html[data-theme="macos26"] .tab-icon-lg) {
+:global(html[data-theme="macos26"] .repair-config-view .tab-icon-lg) {
   border-color: rgba(255, 255, 255, .72);
   border-radius: 12px;
   background: rgba(255, 255, 255, .34);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .86);
 }
 
-:global(html[data-theme="macos26"] .tab-btn.active .tab-icon-lg) {
+:global(html[data-theme="macos26"] .repair-config-view .tab-btn.active .tab-icon-lg) {
   border-color: rgba(255, 255, 255, .96);
   background: color-mix(in srgb, rgba(255, 255, 255, .72) 84%, var(--primary) 16%);
   box-shadow: 0 5px 14px rgba(49, 84, 132, .14), inset 0 1px 0 #fff;
@@ -1951,52 +1951,52 @@ function handleSaveGeneralSettings() {
 .records-empty strong { color: var(--text-primary); }
 .records-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; color: var(--text-secondary); font-size: 13px; }
 
-:global(html[data-theme="modern"] .page-header) {
+:global(html[data-theme="modern"] .repair-config-view .page-header) {
   border-color: #d4dae4;
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 12px 30px rgba(15, 23, 42, .09);
 }
 
-:global(html[data-theme="modern"] .page-heading-icon) {
+:global(html[data-theme="modern"] .repair-config-view .page-heading-icon) {
   border-radius: 9px;
   background: var(--primary-alpha-10);
   box-shadow: none;
 }
 
-:global(html[data-theme="modern"] .rule-item),
-:global(html[data-theme="modern"] .template-item),
-:global(html[data-theme="modern"] .record-card),
-:global(html[data-theme="modern"] .general-settings) {
+:global(html[data-theme="modern"] .repair-config-view .rule-item),
+:global(html[data-theme="modern"] .repair-config-view .template-item),
+:global(html[data-theme="modern"] .repair-config-view .record-card),
+:global(html[data-theme="modern"] .repair-config-view .general-settings) {
   border-color: #dde2ea;
   border-radius: 10px;
   background: #fff;
   box-shadow: 0 5px 15px rgba(15, 23, 42, .06);
 }
 
-:global(html[data-theme="warm"] .page-header) {
+:global(html[data-theme="warm"] .repair-config-view .page-header) {
   border-color: color-mix(in srgb, var(--primary) 23%, #e5d8c8);
   border-radius: 16px;
   background: #fffdf8;
   box-shadow: 0 14px 34px rgba(89, 57, 35, .12);
 }
 
-:global(html[data-theme="warm"] .page-heading-icon) {
+:global(html[data-theme="warm"] .repair-config-view .page-heading-icon) {
   border-radius: 10px 10px 10px 4px;
   background: color-mix(in srgb, var(--primary) 12%, #fff9ef);
 }
 
-:global(html[data-theme="warm"] .rule-item),
-:global(html[data-theme="warm"] .template-item),
-:global(html[data-theme="warm"] .record-card),
-:global(html[data-theme="warm"] .general-settings),
-:global(html[data-theme="warm"] .feature-card) {
+:global(html[data-theme="warm"] .repair-config-view .rule-item),
+:global(html[data-theme="warm"] .repair-config-view .template-item),
+:global(html[data-theme="warm"] .repair-config-view .record-card),
+:global(html[data-theme="warm"] .repair-config-view .general-settings),
+:global(html[data-theme="warm"] .repair-config-view .feature-card) {
   border-color: color-mix(in srgb, var(--primary) 18%, #e8ddcf);
   background: #fffaf3;
   box-shadow: 0 6px 17px rgba(89, 57, 35, .07);
 }
 
-:global(html[data-theme="natural"] .page-header) {
+:global(html[data-theme="natural"] .repair-config-view .page-header) {
   border-color: color-mix(in srgb, var(--primary) 24%, rgba(255, 255, 255, .82));
   background: rgba(249, 255, 251, .76);
   box-shadow: 0 18px 44px rgba(35, 83, 62, .14), inset 0 1px 0 rgba(255, 255, 255, .94);
@@ -2004,17 +2004,17 @@ function handleSaveGeneralSettings() {
   -webkit-backdrop-filter: blur(22px) saturate(150%);
 }
 
-:global(html[data-theme="natural"] .rule-item),
-:global(html[data-theme="natural"] .template-item),
-:global(html[data-theme="natural"] .record-card),
-:global(html[data-theme="natural"] .general-settings),
-:global(html[data-theme="natural"] .feature-card) {
+:global(html[data-theme="natural"] .repair-config-view .rule-item),
+:global(html[data-theme="natural"] .repair-config-view .template-item),
+:global(html[data-theme="natural"] .repair-config-view .record-card),
+:global(html[data-theme="natural"] .repair-config-view .general-settings),
+:global(html[data-theme="natural"] .repair-config-view .feature-card) {
   border-color: color-mix(in srgb, var(--primary) 18%, rgba(255, 255, 255, .86));
   background: rgba(255, 255, 255, .76);
   box-shadow: 0 8px 22px rgba(35, 83, 62, .09), inset 0 1px 0 rgba(255, 255, 255, .9);
 }
 
-:global(html[data-theme="macos26"] .page-header) {
+:global(html[data-theme="macos26"] .repair-config-view .page-header) {
   position: relative;
   border-color: rgba(255, 255, 255, .88);
   border-radius: 24px;
@@ -2027,7 +2027,7 @@ function handleSaveGeneralSettings() {
   -webkit-backdrop-filter: blur(34px) saturate(185%) contrast(103%);
 }
 
-:global(html[data-theme="macos26"] .page-header::after) {
+:global(html[data-theme="macos26"] .repair-config-view .page-header::after) {
   position: absolute;
   top: 1px;
   right: 10%;
@@ -2039,30 +2039,30 @@ function handleSaveGeneralSettings() {
   pointer-events: none;
 }
 
-:global(html[data-theme="macos26"] .page-heading),
-:global(html[data-theme="macos26"] .page-capabilities) {
+:global(html[data-theme="macos26"] .repair-config-view .page-heading),
+:global(html[data-theme="macos26"] .repair-config-view .page-capabilities) {
   position: relative;
   z-index: 1;
 }
 
-:global(html[data-theme="macos26"] .page-heading-icon) {
+:global(html[data-theme="macos26"] .repair-config-view .page-heading-icon) {
   border-color: rgba(255, 255, 255, .94);
   border-radius: 17px;
   background: linear-gradient(145deg, rgba(255, 255, 255, .8), rgba(220, 237, 255, .55));
   box-shadow: 0 9px 22px rgba(48, 84, 132, .16), inset 0 1px 0 #fff;
 }
 
-:global(html[data-theme="macos26"] .page-capabilities span) {
+:global(html[data-theme="macos26"] .repair-config-view .page-capabilities span) {
   border-color: rgba(255, 255, 255, .88);
   background: rgba(255, 255, 255, .4);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9);
 }
 
-:global(html[data-theme="macos26"] .rule-item),
-:global(html[data-theme="macos26"] .template-item),
-:global(html[data-theme="macos26"] .record-card),
-:global(html[data-theme="macos26"] .general-settings),
-:global(html[data-theme="macos26"] .feature-card) {
+:global(html[data-theme="macos26"] .repair-config-view .rule-item),
+:global(html[data-theme="macos26"] .repair-config-view .template-item),
+:global(html[data-theme="macos26"] .repair-config-view .record-card),
+:global(html[data-theme="macos26"] .repair-config-view .general-settings),
+:global(html[data-theme="macos26"] .repair-config-view .feature-card) {
   border-color: rgba(255, 255, 255, .9);
   border-radius: 17px;
   background: linear-gradient(145deg, rgba(255, 255, 255, .72), rgba(235, 245, 255, .47));
@@ -2071,7 +2071,7 @@ function handleSaveGeneralSettings() {
   -webkit-backdrop-filter: blur(22px) saturate(165%);
 }
 
-:global(html[data-theme="macos26"] .modal-content) {
+:global(html[data-theme="macos26"] .repair-config-view .modal-content) {
   border-color: rgba(255, 255, 255, .92);
   border-radius: 22px;
   background: rgba(244, 250, 255, .78);
@@ -2082,7 +2082,7 @@ function handleSaveGeneralSettings() {
 
 @media (max-width: 760px) {
   .repair-config-view {
-    padding: 0 0 72px;
+    padding: 18px 0 70px;
   }
 
   .page-header {
