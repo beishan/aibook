@@ -1,26 +1,45 @@
 <template>
   <div class="repair-config-view">
-    <div class="page-header">
-      <h1 class="page-title">🔧 内容修复配置</h1>
-      <p class="page-subtitle">管理检测记录、广告规则、修复模板和默认检测功能</p>
-    </div>
+    <header class="page-header">
+      <div class="page-heading">
+        <span class="page-heading-icon" aria-hidden="true">修</span>
+        <div>
+          <span class="page-eyebrow">内容质量工具</span>
+          <h1 class="page-title">内容修复配置</h1>
+          <p class="page-subtitle">管理检测记录、广告规则、修复模板和默认检测功能</p>
+        </div>
+      </div>
+      <div class="page-capabilities" aria-label="内容修复能力">
+        <span>编码修复</span>
+        <span>章节整理</span>
+        <span>内容清理</span>
+      </div>
+    </header>
 
     <!-- 标签页 -->
-    <div class="tabs">
+    <div class="tabs" role="tablist" aria-label="内容修复配置导航">
       <button
         v-for="tab in tabs"
         :key="tab.key"
         class="tab-btn"
         :class="{ active: activeTab === tab.key }"
+        type="button"
+        role="tab"
+        :id="`repair-tab-${tab.key}`"
+        :aria-controls="`repair-panel-${tab.key}`"
+        :aria-selected="activeTab === tab.key"
         @click="selectTab(tab.key)"
       >
-        <span class="tab-icon-lg">{{ tab.icon }}</span>
-        <span>{{ tab.label }}</span>
+        <span class="tab-icon-lg" aria-hidden="true">{{ tab.icon }}</span>
+        <span class="tab-copy">
+          <strong>{{ tab.label }}</strong>
+          <small>{{ tab.description }}</small>
+        </span>
       </button>
     </div>
 
     <!-- 广告规则 -->
-    <div v-show="activeTab === 'rules'" class="tab-content">
+    <div id="repair-panel-rules" v-show="activeTab === 'rules'" class="tab-content" role="tabpanel" aria-labelledby="repair-tab-rules">
       <div class="section-header">
         <h3>广告规则</h3>
         <button class="btn btn-primary" @click="showRuleDialog = true">+ 添加规则</button>
@@ -74,7 +93,7 @@
     </div>
 
     <!-- 修复模板 -->
-    <div v-show="activeTab === 'templates'" class="tab-content">
+    <div id="repair-panel-templates" v-show="activeTab === 'templates'" class="tab-content" role="tabpanel" aria-labelledby="repair-tab-templates">
       <div class="section-header">
         <h3>修复模板</h3>
         <button class="btn btn-primary" @click="handleCreateTemplate">+ 添加模板</button>
@@ -124,7 +143,7 @@
     </div>
 
     <!-- 检测结果记录 -->
-    <div v-show="activeTab === 'records'" class="tab-content">
+    <div id="repair-panel-records" v-show="activeTab === 'records'" class="tab-content" role="tabpanel" aria-labelledby="repair-tab-records">
       <div class="section-header records-header">
         <div>
           <h3>检测结果记录</h3>
@@ -186,7 +205,7 @@
     </div>
 
     <!-- 通用设置 -->
-    <div v-show="activeTab === 'general'" class="tab-content">
+    <div id="repair-panel-general" v-show="activeTab === 'general'" class="tab-content" role="tabpanel" aria-labelledby="repair-tab-general">
       <div class="section-header">
         <div>
           <h3>修复功能配置</h3>
@@ -548,10 +567,10 @@ const generalSettings = reactive<Record<string, any>>({
 })
 
 const tabs = [
-  { key: 'rules', label: '广告规则', icon: '📋' },
-  { key: 'templates', label: '修复模板', icon: '⚙️' },
-  { key: 'general', label: '修复功能', icon: '🧰' },
-  { key: 'records', label: '检测结果记录', icon: '🗂️' },
+  { key: 'rules', label: '广告规则', description: '管理匹配与清理规则', icon: '📋' },
+  { key: 'templates', label: '修复模板', description: '复用常用修复方案', icon: '⚙️' },
+  { key: 'general', label: '修复功能', description: '设置默认检测能力', icon: '🧰' },
+  { key: 'records', label: '检测结果记录', description: '继续处理历史任务', icon: '🗂️' },
 ]
 
 const featureGroups = [
@@ -940,78 +959,327 @@ function handleSaveGeneralSettings() {
 .repair-config-view {
   max-width: 1120px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 24px 16px 72px;
 }
 
 .page-header {
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: space-between;
+  gap: 24px;
   margin-bottom: 20px;
+  padding: 22px 24px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 14%, var(--border-color));
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--surface-card, var(--glass-bg)) 94%, var(--primary, #409eff) 3%);
+  box-shadow: var(--shadow-md);
+}
+
+.page-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 15px;
+}
+
+.page-heading-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 20%, transparent);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 13%, var(--surface-card, transparent));
+  color: var(--primary, var(--accent-color, #409eff));
+  font-size: 21px;
+  font-weight: 800;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+}
+
+.page-eyebrow {
+  color: var(--primary, var(--accent-color, #409eff));
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
 }
 
 .page-title {
-  font-size: 20px;
-  font-weight: 600;
+  margin: 3px 0 0;
   color: var(--text-primary);
-  margin: 0;
+  font-size: 25px;
+  font-weight: 750;
 }
 
 .page-subtitle {
-  font-size: 13px;
+  margin: 5px 0 0;
   color: var(--text-secondary);
-  margin: 4px 0 0 0;
+  font-size: 13px;
+}
+
+.page-capabilities {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.page-capabilities span {
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 15%, var(--border-color));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 7%, var(--surface-card, transparent));
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .tabs {
-  display: flex;
-  gap: 4px;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
   margin-bottom: 20px;
-  border-bottom: 2px solid var(--border-color);
+  padding: 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 16%, var(--border-color));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-card, var(--glass-bg)) 92%, var(--primary, #409eff) 3%);
+  box-shadow: var(--shadow-sm);
 }
 
 .tab-btn {
+  position: relative;
   display: flex;
+  min-width: 0;
+  min-height: 64px;
   align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
+  gap: 10px;
+  padding: 10px 12px;
   background: transparent;
-  border: none;
-  border-bottom: 3px solid transparent;
-  margin-bottom: -2px;
+  border: 1px solid transparent;
+  border-radius: 12px;
   cursor: pointer;
-  font-size: 15px;
-  font-weight: 500;
+  font: inherit;
   color: var(--text-secondary);
-  transition: all 0.2s;
+  text-align: left;
+  transition: color .2s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 }
 
 .tab-btn:hover {
   color: var(--text-primary);
-  background: var(--glass-bg);
+  background: var(--surface-hover, var(--glass-hover));
+  transform: translateY(-1px);
 }
 
 .tab-btn.active {
-  color: var(--accent-color, var(--primary, #409eff));
-  border-bottom-color: var(--accent-color, var(--primary, #409eff));
-  font-weight: 600;
+  border-color: color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 25%, var(--border-color));
+  background: var(--surface-elevated, var(--surface-card));
+  box-shadow: var(--shadow-md);
+  color: var(--primary, var(--accent-color, #409eff));
+  transform: translateY(-1px);
+}
+
+.tab-btn:focus-visible {
+  outline: 2px solid var(--primary, var(--accent-color, #409eff));
+  outline-offset: 2px;
 }
 
 .tab-icon-lg {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 12%, var(--border-color));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 8%, var(--surface-card, transparent));
   font-size: 18px;
+  transition: background .2s ease, border-color .2s ease, transform .2s ease;
+}
+
+.tab-btn.active .tab-icon-lg {
+  border-color: color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 26%, transparent);
+  background: color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 14%, var(--surface-card, transparent));
+  transform: scale(1.04);
+}
+
+.tab-copy {
+  min-width: 0;
+}
+
+.tab-copy strong,
+.tab-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-copy strong {
+  color: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.tab-copy small {
+  margin-top: 3px;
+  color: var(--text-tertiary, var(--text-secondary));
+  font-size: 11px;
+}
+
+:global(html[data-theme="modern"]) .tabs {
+  border-color: #cfd6e2;
+  border-radius: 13px;
+  background: #f3f5f8;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .08);
+}
+
+:global(html[data-theme="modern"]) .tab-btn {
+  border-radius: 8px;
+}
+
+:global(html[data-theme="modern"]) .tab-btn.active {
+  border-color: color-mix(in srgb, var(--primary) 22%, #d4d9e2);
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .09);
+}
+
+:global(html[data-theme="warm"]) .tabs {
+  border-color: color-mix(in srgb, var(--primary) 25%, var(--border-color));
+  border-radius: 15px;
+  background: color-mix(in srgb, #fffaf1 92%, var(--primary) 8%);
+  box-shadow: 0 10px 26px rgba(89, 57, 35, .11);
+}
+
+:global(html[data-theme="warm"]) .tab-btn {
+  border-radius: 9px;
+}
+
+:global(html[data-theme="warm"]) .tab-btn.active {
+  border-color: color-mix(in srgb, var(--primary) 32%, #e4d5c3);
+  background: #fffdf8;
+  box-shadow: 0 5px 14px rgba(89, 57, 35, .12), inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+
+:global(html[data-theme="natural"]) .tabs {
+  border-color: color-mix(in srgb, var(--primary) 26%, rgba(255, 255, 255, .78));
+  background: rgba(247, 253, 249, .7);
+  box-shadow: 0 14px 34px rgba(35, 83, 62, .14), inset 0 1px 0 rgba(255, 255, 255, .88);
+  backdrop-filter: blur(20px) saturate(145%);
+  -webkit-backdrop-filter: blur(20px) saturate(145%);
+}
+
+:global(html[data-theme="natural"]) .tab-btn.active {
+  border-color: rgba(255, 255, 255, .88);
+  background: color-mix(in srgb, rgba(255, 255, 255, .86) 84%, var(--primary) 16%);
+  box-shadow: 0 8px 20px rgba(35, 83, 62, .14), inset 0 1px 0 rgba(255, 255, 255, .95);
+}
+
+:global(html[data-theme="macos26"]) .tabs {
+  isolation: isolate;
+  padding: 9px;
+  border-color: rgba(255, 255, 255, .82);
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .48), rgba(218, 234, 252, .28));
+  box-shadow:
+    0 18px 46px rgba(48, 78, 118, .18),
+    inset 0 1px 0 rgba(255, 255, 255, .96),
+    inset 0 -1px 0 rgba(118, 151, 193, .12);
+  backdrop-filter: blur(32px) saturate(185%) contrast(103%);
+  -webkit-backdrop-filter: blur(32px) saturate(185%) contrast(103%);
+}
+
+:global(html[data-theme="macos26"]) .tabs::before {
+  position: absolute;
+  z-index: -1;
+  top: 2px;
+  right: 12%;
+  left: 12%;
+  height: 42%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0));
+  content: '';
+  pointer-events: none;
+}
+
+:global(html[data-theme="macos26"]) .tab-btn {
+  min-height: 66px;
+  border-radius: 15px;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .62);
+}
+
+:global(html[data-theme="macos26"]) .tab-btn:hover {
+  border-color: rgba(255, 255, 255, .66);
+  background: rgba(255, 255, 255, .3);
+}
+
+:global(html[data-theme="macos26"]) .tab-btn.active {
+  border-color: rgba(255, 255, 255, .94);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .76), rgba(231, 242, 255, .53)),
+    color-mix(in srgb, var(--primary) 7%, transparent);
+  box-shadow:
+    0 10px 26px rgba(46, 79, 124, .18),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(87, 128, 184, .13);
+}
+
+:global(html[data-theme="macos26"]) .tab-icon-lg {
+  border-color: rgba(255, 255, 255, .72);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .86);
+}
+
+:global(html[data-theme="macos26"]) .tab-btn.active .tab-icon-lg {
+  border-color: rgba(255, 255, 255, .96);
+  background: color-mix(in srgb, rgba(255, 255, 255, .72) 84%, var(--primary) 16%);
+  box-shadow: 0 5px 14px rgba(49, 84, 132, .14), inset 0 1px 0 #fff;
+}
+
+.tab-content {
+  min-height: 420px;
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 12%, var(--border-color));
+  border-radius: 20px;
+  background: var(--surface-card, var(--glass-bg));
+  box-shadow: var(--shadow-md);
+  animation: repair-content-in .22s ease-out both;
+}
+
+@keyframes repair-content-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .section-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   margin: 0;
-  font-size: 16px;
   color: var(--text-primary);
+  font-size: 18px;
+}
+
+.section-header h3::before {
+  width: 4px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--primary, var(--accent-color, #409eff));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 9%, transparent);
+  content: '';
 }
 
 .section-note {
@@ -1025,10 +1293,27 @@ function handleSaveGeneralSettings() {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 16px;
-  border-radius: 10px;
-  margin-bottom: 8px;
-  gap: 12px;
+  gap: 18px;
+  margin-bottom: 10px;
+  padding: 17px 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-elevated, var(--surface-card)) 94%, transparent);
+  box-shadow: var(--shadow-sm);
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.rule-item:hover,
+.template-item:hover {
+  border-color: color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 25%, var(--border-color));
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.rule-info,
+.template-info {
+  min-width: 0;
+  flex: 1;
 }
 
 .rule-name,
@@ -1046,10 +1331,11 @@ function handleSaveGeneralSettings() {
   font-family: monospace;
   font-size: 12px;
   color: var(--text-secondary);
-  padding: 4px 8px;
+  margin-bottom: 9px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 8%, var(--border-color));
+  border-radius: 7px;
   background: var(--code-bg);
-  border-radius: 4px;
-  margin-bottom: 6px;
   word-break: break-all;
 }
 
@@ -1060,6 +1346,13 @@ function handleSaveGeneralSettings() {
   flex-wrap: wrap;
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.rule-meta span,
+.template-config span {
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: var(--surface-hover, var(--glass-hover));
 }
 
 .template-desc {
@@ -1074,6 +1367,11 @@ function handleSaveGeneralSettings() {
   flex-direction: column;
   gap: 4px;
   flex-shrink: 0;
+}
+
+.rule-actions .btn,
+.template-actions .btn {
+  min-width: 88px;
 }
 
 .risk-tag {
@@ -1100,12 +1398,14 @@ function handleSaveGeneralSettings() {
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(15, 23, 42, .48);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 20px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .modal-content {
@@ -1114,14 +1414,18 @@ function handleSaveGeneralSettings() {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 14%, var(--border-color));
+  border-radius: 18px;
+  background: var(--surface-card, var(--glass-bg));
+  box-shadow: 0 26px 72px rgba(15, 23, 42, .28);
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
+  padding: 17px 19px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -1135,7 +1439,7 @@ function handleSaveGeneralSettings() {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 16px;
+  padding: 14px 19px;
   border-top: 1px solid var(--border-color);
 }
 
@@ -1271,7 +1575,10 @@ function handleSaveGeneralSettings() {
 /* 通用设置 */
 .general-settings {
   padding: 24px;
-  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-elevated, var(--surface-card)) 94%, transparent);
+  box-shadow: var(--shadow-sm);
 }
 
 .form-group .el-select {
@@ -1285,7 +1592,7 @@ function handleSaveGeneralSettings() {
   margin-bottom: 18px;
   padding: 10px 12px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 11px;
   background: color-mix(in srgb, var(--glass-bg) 82%, var(--accent-color, #409eff) 8%);
   color: var(--text-secondary);
   font-size: 12px;
@@ -1305,6 +1612,12 @@ function handleSaveGeneralSettings() {
   color: var(--accent-color, #409eff);
 }
 
+.preset-strip button:focus-visible,
+.feature-switch input:focus-visible + .switch-visual {
+  outline: 2px solid var(--primary, var(--accent-color, #409eff));
+  outline-offset: 2px;
+}
+
 .feature-config-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1317,8 +1630,15 @@ function handleSaveGeneralSettings() {
   min-width: 0;
   padding: 16px;
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: 13px;
   background: color-mix(in srgb, var(--input-bg, var(--glass-bg)) 92%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-card, white) 75%, transparent);
+  transition: border-color .18s ease, transform .18s ease;
+}
+
+.feature-card:hover {
+  border-color: color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 22%, var(--border-color));
+  transform: translateY(-1px);
 }
 
 .feature-card-heading {
@@ -1567,6 +1887,11 @@ function handleSaveGeneralSettings() {
   flex: 1;
 }
 
+.setting-row .setting-select,
+.setting-row .setting-input {
+  max-width: none;
+}
+
 .setting-actions {
   margin-top: 20px;
   padding-top: 16px;
@@ -1583,7 +1908,16 @@ function handleSaveGeneralSettings() {
   gap: 24px;
   padding: 18px 20px;
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-elevated, var(--surface-card)) 94%, transparent);
+  box-shadow: var(--shadow-sm);
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.record-card:hover {
+  border-color: color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 23%, var(--border-color));
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
 .record-main { flex: 1; min-width: 0; }
@@ -1603,17 +1937,207 @@ function handleSaveGeneralSettings() {
 .record-meta { margin-top: 6px; color: var(--text-secondary); font-size: 12px; }
 .record-progress { max-width: 620px; margin-top: 14px; }
 .progress-track { height: 7px; overflow: hidden; border-radius: 99px; background: var(--border-color); }
-.progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--accent-color); }
+.progress-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary, var(--accent-color, #409eff)), color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 62%, #fff)); }
 .progress-labels,
 .record-counts { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 12px; color: var(--text-secondary); }
 .record-counts { justify-content: flex-start; flex-wrap: wrap; }
 .record-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .record-delete { margin-left: 2px; }
-.records-empty { display: grid; place-items: center; gap: 6px; min-height: 220px; padding: 32px; color: var(--text-secondary); border: 1px dashed var(--border-color); border-radius: 10px; }
+.records-empty { display: grid; place-items: center; gap: 6px; min-height: 220px; padding: 32px; color: var(--text-secondary); border: 1px dashed color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 24%, var(--border-color)); border-radius: 14px; background: var(--surface-hover, var(--glass-hover)); }
 .records-empty strong { color: var(--text-primary); }
 .records-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; color: var(--text-secondary); font-size: 13px; }
 
+:global(html[data-theme="modern"]) .page-header,
+:global(html[data-theme="modern"]) .tab-content {
+  border-color: #d4dae4;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .09);
+}
+
+:global(html[data-theme="modern"]) .page-heading-icon {
+  border-radius: 9px;
+  background: var(--primary-alpha-10);
+  box-shadow: none;
+}
+
+:global(html[data-theme="modern"]) .rule-item,
+:global(html[data-theme="modern"]) .template-item,
+:global(html[data-theme="modern"]) .record-card,
+:global(html[data-theme="modern"]) .general-settings {
+  border-color: #dde2ea;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 5px 15px rgba(15, 23, 42, .06);
+}
+
+:global(html[data-theme="warm"]) .page-header,
+:global(html[data-theme="warm"]) .tab-content {
+  border-color: color-mix(in srgb, var(--primary) 23%, #e5d8c8);
+  border-radius: 16px;
+  background: #fffdf8;
+  box-shadow: 0 14px 34px rgba(89, 57, 35, .12);
+}
+
+:global(html[data-theme="warm"]) .page-heading-icon {
+  border-radius: 10px 10px 10px 4px;
+  background: color-mix(in srgb, var(--primary) 12%, #fff9ef);
+}
+
+:global(html[data-theme="warm"]) .rule-item,
+:global(html[data-theme="warm"]) .template-item,
+:global(html[data-theme="warm"]) .record-card,
+:global(html[data-theme="warm"]) .general-settings,
+:global(html[data-theme="warm"]) .feature-card {
+  border-color: color-mix(in srgb, var(--primary) 18%, #e8ddcf);
+  background: #fffaf3;
+  box-shadow: 0 6px 17px rgba(89, 57, 35, .07);
+}
+
+:global(html[data-theme="natural"]) .page-header,
+:global(html[data-theme="natural"]) .tab-content {
+  border-color: color-mix(in srgb, var(--primary) 24%, rgba(255, 255, 255, .82));
+  background: rgba(249, 255, 251, .76);
+  box-shadow: 0 18px 44px rgba(35, 83, 62, .14), inset 0 1px 0 rgba(255, 255, 255, .94);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+}
+
+:global(html[data-theme="natural"]) .rule-item,
+:global(html[data-theme="natural"]) .template-item,
+:global(html[data-theme="natural"]) .record-card,
+:global(html[data-theme="natural"]) .general-settings,
+:global(html[data-theme="natural"]) .feature-card {
+  border-color: color-mix(in srgb, var(--primary) 18%, rgba(255, 255, 255, .86));
+  background: rgba(255, 255, 255, .76);
+  box-shadow: 0 8px 22px rgba(35, 83, 62, .09), inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+
+:global(html[data-theme="macos26"]) .page-header,
+:global(html[data-theme="macos26"]) .tab-content {
+  position: relative;
+  border-color: rgba(255, 255, 255, .88);
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .66), rgba(223, 238, 255, .42));
+  box-shadow:
+    0 24px 64px rgba(45, 76, 118, .19),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(100, 139, 190, .12);
+  backdrop-filter: blur(34px) saturate(185%) contrast(103%);
+  -webkit-backdrop-filter: blur(34px) saturate(185%) contrast(103%);
+}
+
+:global(html[data-theme="macos26"]) .page-header::after {
+  position: absolute;
+  top: 1px;
+  right: 10%;
+  left: 10%;
+  height: 45%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .48), transparent);
+  content: '';
+  pointer-events: none;
+}
+
+:global(html[data-theme="macos26"]) .page-heading,
+:global(html[data-theme="macos26"]) .page-capabilities {
+  position: relative;
+  z-index: 1;
+}
+
+:global(html[data-theme="macos26"]) .page-heading-icon {
+  border-color: rgba(255, 255, 255, .94);
+  border-radius: 17px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .8), rgba(220, 237, 255, .55));
+  box-shadow: 0 9px 22px rgba(48, 84, 132, .16), inset 0 1px 0 #fff;
+}
+
+:global(html[data-theme="macos26"]) .page-capabilities span {
+  border-color: rgba(255, 255, 255, .88);
+  background: rgba(255, 255, 255, .4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+
+:global(html[data-theme="macos26"]) .rule-item,
+:global(html[data-theme="macos26"]) .template-item,
+:global(html[data-theme="macos26"]) .record-card,
+:global(html[data-theme="macos26"]) .general-settings,
+:global(html[data-theme="macos26"]) .feature-card {
+  border-color: rgba(255, 255, 255, .9);
+  border-radius: 17px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .72), rgba(235, 245, 255, .47));
+  box-shadow: 0 12px 30px rgba(49, 81, 124, .13), inset 0 1px 0 rgba(255, 255, 255, .98);
+  backdrop-filter: blur(22px) saturate(165%);
+  -webkit-backdrop-filter: blur(22px) saturate(165%);
+}
+
+:global(html[data-theme="macos26"]) .modal-content {
+  border-color: rgba(255, 255, 255, .92);
+  border-radius: 22px;
+  background: rgba(244, 250, 255, .78);
+  box-shadow: 0 30px 90px rgba(29, 52, 84, .3), inset 0 1px 0 #fff;
+  backdrop-filter: blur(36px) saturate(185%);
+  -webkit-backdrop-filter: blur(36px) saturate(185%);
+}
+
 @media (max-width: 760px) {
+  .repair-config-view {
+    padding: 12px;
+  }
+
+  .page-header {
+    align-items: stretch;
+    padding: 17px;
+    flex-direction: column;
+  }
+
+  .page-heading-icon {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+    border-radius: 13px;
+  }
+
+  .page-title {
+    font-size: 21px;
+  }
+
+  .page-capabilities {
+    justify-content: flex-start;
+  }
+
+  .tab-content {
+    min-height: 360px;
+    padding: 15px;
+    border-radius: 16px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 7px;
+    padding: 7px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-btn {
+    min-width: 168px;
+    min-height: 58px;
+    flex: 0 0 168px;
+    padding: 8px 10px;
+  }
+
+  .tab-icon-lg {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+    font-size: 16px;
+  }
+
   .feature-config-grid,
   .template-feature-groups,
   .template-parameter-grid {
@@ -1645,11 +2169,32 @@ function handleSaveGeneralSettings() {
 
   .template-section { padding: 12px; }
 
+  .rule-item,
+  .template-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rule-actions,
+  .template-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .rule-actions .btn,
+  .template-actions .btn {
+    flex: 1;
+  }
+
   .record-card { align-items: stretch; flex-direction: column; gap: 14px; }
   .record-actions .btn { flex: 1; }
 }
 
 @media (min-width: 761px) and (max-width: 920px) {
+  .tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .feature-config-grid {
     grid-template-columns: 1fr;
   }

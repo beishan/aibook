@@ -15,19 +15,51 @@
           </section>
           <section class="panel source-picker">
             <div class="section-title"><div><span class="step">01</span><h2>{{ task ? '选择新的源文件' : '选择源文件' }}</h2></div><el-tag>第一期仅支持 TXT</el-tag></div>
-            <el-tabs v-model="sourceMode" class="source-mode-tabs" stretch>
-              <el-tab-pane label="上传本地 TXT" name="upload">
+            <div class="source-method-field">
+              <label for="conversion-source-method">书籍来源方式</label>
+              <el-select id="conversion-source-method" v-model="sourceMode" class="source-method-select" @change="handleSourceModeChange">
+                <el-option label="上传本地书籍" value="upload" />
+                <el-option label="从书库选择" value="library" />
+              </el-select>
+              <small>选择来源后，下方将展示对应的书籍选择方式。</small>
+            </div>
+
+            <div class="source-method-content">
+              <div v-if="sourceMode === 'upload'" class="upload-source-panel">
                 <el-upload drag :auto-upload="false" :limit="1" accept=".txt,text/plain" :on-change="onSourceSelected" :on-remove="() => selectedFile = null">
                   <div class="upload-icon">⇄</div><div>拖放 TXT 到这里，或点击选择</div><small>文件仅用于转换，不会自动入库</small>
                 </el-upload>
                 <el-button class="primary-wide" type="primary" :loading="creating" :disabled="!selectedFile" @click="createFromUpload">分析 TXT 并继续</el-button>
-              </el-tab-pane>
-              <el-tab-pane label="从书库选择" name="library">
-                <el-select v-model="selectedBookId" filterable placeholder="选择书籍" class="wide" @change="loadBookVersions"><el-option v-for="book in books" :key="book.id" :label="`${book.title} · ${book.author || '未知作者'}`" :value="book.id" /></el-select>
-                <div v-if="bookVersions.length" class="source-versions"><label v-for="version in bookVersions" :key="version.id" :class="{ disabled: version.format !== 'txt' }"><el-radio v-model="selectedVersionId" :label="version.id" :disabled="version.format !== 'txt'"><span class="sr-only">选择 {{ version.displayName }}</span></el-radio><strong>{{ version.format.toUpperCase() }}</strong><span>{{ version.displayName }} · {{ formatSize(version.fileSize) }}</span></label></div>
-                <el-button class="primary-wide" type="primary" :loading="creating" :disabled="!selectedVersionId" @click="createFromBook">分析所选版本并继续</el-button>
-              </el-tab-pane>
-            </el-tabs>
+              </div>
+
+              <div v-else class="library-source-panel">
+                <div class="library-search-bar">
+                  <el-input v-model="libraryKeyword" clearable placeholder="搜索书名、作者或 ISBN" :prefix-icon="Search" @keyup.enter="searchLibraryBooks" @clear="searchLibraryBooks" />
+                  <el-button type="primary" :loading="libraryLoading" @click="searchLibraryBooks">搜索书库</el-button>
+                </div>
+                <div v-loading="libraryLoading" class="library-results">
+                  <div v-if="libraryBooks.length" class="library-book-grid">
+                    <article v-for="book in libraryBooks" :key="book.id" class="library-book-card" :class="{ selected: selectedBookId === book.id }">
+                      <div class="library-book-cover">
+                        <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" :alt="`${book.title}封面`" />
+                        <span v-else>{{ book.title?.charAt(0) || '书' }}</span>
+                        <em>{{ (book.format || '未知').toUpperCase() }}</em>
+                      </div>
+                      <div class="library-book-info">
+                        <h3 :title="book.title">{{ book.title }}</h3>
+                        <p :title="book.author || '未知作者'">{{ book.author || '未知作者' }}</p>
+                        <small>{{ book.categoryName || '未分类' }}<template v-if="book.fileSize"> · {{ formatSize(book.fileSize) }}</template></small>
+                      </div>
+                      <el-button type="primary" plain :loading="selectingBookId === book.id" :disabled="creating || selectingBookId !== null" @click="selectLibraryBook(book)">选择转换此书籍</el-button>
+                    </article>
+                  </div>
+                  <el-empty v-else :description="libraryKeyword ? '没有找到匹配的书籍' : '书库中暂无书籍'" />
+                </div>
+                <div v-if="libraryTotal > 0" class="library-pagination-box">
+                  <el-pagination v-model:current-page="libraryPage" background layout="prev, pager, next, jumper, total" :page-size="libraryPageSize" :total="libraryTotal" :pager-count="5" @current-change="loadLibraryBooks" />
+                </div>
+              </div>
+            </div>
           </section>
         </div>
       </el-tab-pane>
@@ -46,7 +78,7 @@
 
           <section class="panel">
             <div class="section-title"><div><span class="step">03</span><h2>书籍元信息</h2></div><small>修改仅影响本次 EPUB</small></div>
-            <el-form label-position="top" class="metadata-grid"><el-form-item label="书籍名称（必填）"><el-input v-model="form.title" /></el-form-item><el-form-item label="作者"><el-input v-model="form.author" /></el-form-item><el-form-item label="ISBN"><el-input v-model="form.isbn" /></el-form-item><el-form-item label="出版社"><el-input v-model="form.publisher" /></el-form-item><el-form-item label="出版日期"><el-input v-model="form.publishDate" /></el-form-item><el-form-item label="语言"><el-input v-model="form.language" /></el-form-item><el-form-item label="分类"><el-input v-model="form.categoryName" /></el-form-item><el-form-item label="标签（逗号分隔）"><el-input v-model="tagInput" /></el-form-item><el-form-item label="系列名称"><el-input v-model="form.seriesName" /></el-form-item><el-form-item label="系列序号"><el-input v-model="form.seriesIndex" /></el-form-item><el-form-item label="简介" class="full"><el-input v-model="form.description" type="textarea" :rows="4" /></el-form-item></el-form>
+            <el-form label-position="top" class="metadata-grid"><el-form-item label="书籍名称（必填）"><el-input v-model="form.title" /></el-form-item><el-form-item label="作者"><el-input v-model="form.author" /></el-form-item><el-form-item label="ISBN"><el-input v-model="form.isbn" /></el-form-item><el-form-item label="出版社"><el-input v-model="form.publisher" /></el-form-item><el-form-item label="出版日期"><el-date-picker v-model="form.publishDate" class="conversion-date-picker" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" placeholder="选择出版日期" /></el-form-item><el-form-item label="语言"><el-input v-model="form.language" /></el-form-item><el-form-item label="分类"><el-input v-model="form.categoryName" /></el-form-item><el-form-item label="标签（逗号分隔）"><el-input v-model="tagInput" /></el-form-item><el-form-item label="系列名称"><el-input v-model="form.seriesName" /></el-form-item><el-form-item label="系列序号"><el-input v-model="form.seriesIndex" /></el-form-item><el-form-item label="简介" class="full"><el-input v-model="form.description" type="textarea" :rows="4" /></el-form-item></el-form>
           </section>
 
           <section class="panel">
@@ -80,7 +112,7 @@
         <div v-if="task" class="tab-content-shell result-tab-shell">
           <section v-if="!['CONVERTING','SUCCESS','FAILED'].includes(task.status)" class="panel result-empty"><span class="result-empty-icon">⇄</span><h2>尚未开始转换</h2><p>源书籍已经分析完成，请检查信息与 EPUB 参数后开始转换。</p><el-button type="primary" @click="activeTab = 'source'">前往书籍源信息</el-button></section>
           <section v-else class="panel progress-panel"><div class="section-title"><div><span class="step">06</span><h2>转换进度</h2></div><strong>{{ task.progress }}%</strong></div><el-progress :percentage="task.progress" :status="task.status === 'FAILED' ? 'exception' : task.status === 'SUCCESS' ? 'success' : undefined" /><p>{{ task.stage }}</p><el-alert v-if="task.status === 'FAILED'" :title="task.errorMessage || '转换失败，请保留配置后重试'" type="error" :closable="false" show-icon /><div v-if="task.status === 'FAILED'" class="retry-action"><el-button type="primary" @click="activeTab = 'source'">检查配置并重新转换</el-button></div></section>
-          <section v-if="task.status === 'SUCCESS'" class="panel result-panel"><div class="result-summary"><span class="success-mark">✓</span><div><h2>转换成功</h2><p>{{ task.outputFilename }} · {{ formatSize(task.outputSize) }} · {{ activeChapters.length }} 章 · {{ formatElapsed(task.elapsedMillis) }}</p></div></div><div class="result-actions"><el-button type="primary" @click="download(task)">下载 EPUB</el-button><el-button @click="activeTab = 'source'">修改并重新转换</el-button><el-button type="danger" plain @click="removeTask(task.id)">删除转换结果</el-button></div><div class="library-actions"><el-button v-if="task.sourceBookId" type="success" size="large" @click="attachToBook(task.sourceBookId)">加入到当前书籍的新版本</el-button><template v-else><el-button type="success" size="large" @click="createBook">创建新书籍</el-button><el-button size="large" @click="showBookDialog = true">关联已有书籍</el-button></template></div></section>
+          <section v-if="task.status === 'SUCCESS'" class="panel result-panel"><div class="result-summary"><span class="success-mark">✓</span><div><h2>转换成功</h2><p>{{ task.outputFilename }} · {{ formatSize(task.outputSize) }} · {{ activeChapters.length }} 章 · {{ formatElapsed(task.elapsedMillis) }}</p></div></div><div class="result-actions"><el-button type="primary" @click="download(task)">下载 EPUB</el-button><el-button @click="activeTab = 'source'">修改并重新转换</el-button><el-button type="danger" plain @click="removeTask(task.id)">删除转换结果</el-button></div><div class="library-actions"><el-button v-if="task.sourceBookId" type="success" size="large" @click="attachToBook(task.sourceBookId)">加入到当前书籍的新版本</el-button><template v-else><el-button type="success" size="large" @click="createBook">创建新书籍</el-button><el-button size="large" @click="openAttachBookDialog">关联已有书籍</el-button></template></div></section>
           <section v-if="task.status === 'SUCCESS'" class="panel preview-panel"><div class="section-title"><div><span class="step">07</span><h2>EPUB 预览</h2></div><div><el-button :disabled="preview.chapterIndex <= 0" @click="loadPreview(preview.chapterIndex - 1)">上一章</el-button><el-button :disabled="preview.chapterIndex >= preview.chapterCount - 1" @click="loadPreview(preview.chapterIndex + 1)">下一章</el-button></div></div><div class="reader-preview" :class="{ night: previewNight }"><div class="preview-tools"><el-select :model-value="preview.chapterIndex" @change="loadPreview"><el-option v-for="(chapter, index) in activeChapters" :key="chapter.index" :label="chapter.title" :value="index" /></el-select><el-button @click="previewNight = !previewNight">{{ previewNight ? '日间' : '夜间' }}</el-button></div><div class="preview-book"><img v-if="coverObjectUrl" :src="coverObjectUrl" alt="封面" /><div><h1>{{ task.title }}</h1><p>{{ task.author || '未知作者' }}</p></div></div><article><h2>{{ preview.chapterTitle }}</h2><p v-for="(paragraph, index) in previewParagraphs" :key="index">{{ paragraph }}</p></article></div></section>
         </div>
       </el-tab-pane>
@@ -95,7 +127,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CircleCheckFilled, Document, UploadFilled } from '@element-plus/icons-vue'
+import { CircleCheckFilled, Document, Search, UploadFilled } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
 import { message, confirm } from '@/utils/message'
@@ -104,6 +136,7 @@ const route = useRoute(); const router = useRouter()
 const task = ref<any>(null); const history = ref<any[]>([]); const books = ref<any[]>([]); const bookVersions = ref<any[]>([])
 const activeTab = ref<'select' | 'source' | 'result'>('select')
 const sourceMode = ref('upload'); const selectedFile = ref<File | null>(null); const selectedBookId = ref<number | null>(null); const selectedVersionId = ref<number | null>(null)
+const libraryBooks = ref<any[]>([]); const libraryKeyword = ref(''); const libraryPage = ref(1); const libraryPageSize = 8; const libraryTotal = ref(0); const libraryLoading = ref(false); const selectingBookId = ref<number | null>(null)
 const creating = ref(false); const saving = ref(false); const converting = ref(false); const randomizing = ref(false); const analyzingChapters = ref(false); const formattingChapters = ref(false); const showHistory = ref(false)
 const coverInput = ref<HTMLInputElement | null>(null); const coverObjectUrl = ref(''); const showCoverDialog = ref(false); const covers = ref<any[]>([]); const coverSearch = ref('')
 const showBookDialog = ref(false); const attachBookId = ref<number | null>(null); const tagInput = ref(''); const previewNight = ref(false)
@@ -116,8 +149,13 @@ const filteredCovers = computed(() => covers.value.filter(c => !coverSearch.valu
 
 const syncTask = (value: any) => { task.value = value; Object.assign(form, { chapterPattern: '', chapterTitleRemovePattern: '', chapterTitleFormat: '{original}' }, value.settings || {}, { title: value.title, author: value.author || '', description: value.description || '', isbn: value.isbn || '', publisher: value.publisher || '', publishDate: value.publishDate || '', language: value.language || 'zh-CN', categoryName: value.categoryName || '', seriesName: value.seriesName || '', seriesIndex: value.seriesIndex || '', outputFilename: value.outputFilename || `${value.title}.epub`, chapters: (value.chapters || []).map((c: any) => ({ ...c })) }); chapterMode.value = form.chapterPattern ? 'custom' : 'auto'; tagInput.value = (value.tags || []).join(', '); void refreshCover() }
 const loadBooks = async () => { const { data } = await api.get('/api/books', { params: { page: 0, size: 1000, sortBy: 'title', sortDir: 'asc' } }); books.value = data.content || [] }
+const openAttachBookDialog = async () => { if (!books.value.length) await loadBooks(); showBookDialog.value = true }
+const loadLibraryBooks = async (page = libraryPage.value) => { libraryLoading.value = true; try { libraryPage.value = page; const keyword = libraryKeyword.value.trim(); const url = keyword ? '/api/books/search' : '/api/books'; const params = keyword ? { keyword, page: page - 1, size: libraryPageSize } : { page: page - 1, size: libraryPageSize, sortBy: 'title', sortDir: 'asc' }; const { data } = await api.get(url, { params }); libraryBooks.value = data.content || []; libraryTotal.value = data.totalElements || 0 } catch (e: any) { libraryBooks.value = []; libraryTotal.value = 0; message.error(e.response?.data?.message || '书库加载失败') } finally { libraryLoading.value = false } }
+const searchLibraryBooks = () => { void loadLibraryBooks(1) }
+const handleSourceModeChange = (mode: string | number | boolean | undefined) => { if (mode === 'library' && !libraryBooks.value.length && !libraryLoading.value) void loadLibraryBooks(1) }
 const loadHistory = async () => { history.value = (await api.get('/api/conversions')).data || [] }
 const loadBookVersions = async () => { selectedVersionId.value = null; if (!selectedBookId.value) return; bookVersions.value = (await api.get(`/api/books/${selectedBookId.value}/versions`)).data || []; selectedVersionId.value = bookVersions.value.find((v: any) => v.format === 'txt')?.id || null }
+const selectLibraryBook = async (book: any) => { selectingBookId.value = book.id; selectedBookId.value = book.id; try { await loadBookVersions(); if (!selectedVersionId.value) { message.warning(`《${book.title}》没有可用于转换的 TXT 文件版本`); return } await createFromBook() } catch (e: any) { message.error(e.response?.data?.message || '读取书籍文件版本失败') } finally { selectingBookId.value = null } }
 const onSourceSelected = (upload: any) => { selectedFile.value = upload.raw }
 const createFromUpload = async () => { if (!selectedFile.value) return; creating.value = true; try { const data = new FormData(); data.append('file', selectedFile.value); const response = await api.post('/api/conversions/upload', data); syncTask(response.data); activeTab.value = 'source'; await router.replace({ path: '/format-conversion', query: { taskId: response.data.id } }); await loadHistory() } catch (e: any) { message.error(e.response?.data?.message || 'TXT 分析失败') } finally { creating.value = false } }
 const createFromBook = async () => { if (!selectedBookId.value || !selectedVersionId.value) return; creating.value = true; try { const { data } = await api.post('/api/conversions/from-book', { bookId: selectedBookId.value, versionId: selectedVersionId.value }); syncTask(data); activeTab.value = 'source'; await router.replace({ path: '/format-conversion', query: { taskId: data.id } }); await loadHistory() } catch (e: any) { message.error(e.response?.data?.message || '书籍分析失败') } finally { creating.value = false } }
@@ -145,13 +183,13 @@ const formatElapsed = (ms?: number) => ms == null ? '-' : `${(ms / 1000).toFixed
 const statusText = (s: string) => ({ CREATED:'已创建',ANALYZING:'正在分析',READY:'等待转换',CONVERTING:'正在转换',SUCCESS:'成功',FAILED:'失败',CANCELLED:'已取消' } as any)[s] || s
 const statusType = (s: string) => s === 'SUCCESS' ? 'success' : s === 'FAILED' ? 'danger' : s === 'CONVERTING' ? 'warning' : 'info'
 
-onMounted(async () => { await Promise.all([loadBooks(), loadHistory()]); const taskId = Number(route.query.taskId); if (taskId) await openTask(taskId); else { const bookId = Number(route.query.bookId), versionId = Number(route.query.versionId); if (bookId && versionId) { selectedBookId.value = bookId; selectedVersionId.value = versionId; await createFromBook() } } })
+onMounted(async () => { await loadHistory(); const taskId = Number(route.query.taskId); if (taskId) await openTask(taskId); else { const bookId = Number(route.query.bookId), versionId = Number(route.query.versionId); if (bookId && versionId) { selectedBookId.value = bookId; selectedVersionId.value = versionId; await createFromBook() } } })
 onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjectUrl.value) })
 </script>
 
 <style scoped>
 .sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-.conversion-page{max-width:1120px;margin:0 auto;padding:28px 0 70px}.page-heading,.section-title,.source-grid,.convert-actions,.result-summary,.result-actions,.library-actions,.chapter-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px}.page-heading{margin-bottom:22px}.page-heading h1{margin:3px 0;font-size:32px}.page-heading p,.section-title small,.chapter-toolbar span{margin:0;color:var(--text-secondary)}.eyebrow,.step{color:var(--primary);font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.step{padding:4px 7px;border-radius:7px;background:var(--primary-alpha-10)}.panel{margin-bottom:18px;padding:24px;border:1px solid color-mix(in srgb,var(--primary) 14%,var(--border-color));border-radius:22px;background:var(--surface-elevated);box-shadow:var(--shadow-md),inset 0 1px 0 color-mix(in srgb,var(--surface-elevated) 88%,white)}.section-title{margin-bottom:22px}.section-title h2{margin:3px 0 0;font-size:20px}.wide,.primary-wide{width:100%}.primary-wide{margin-top:18px}.upload-icon{margin:8px;font-size:42px;color:var(--primary)}.source-versions{display:grid;gap:10px;margin-top:16px}.source-versions label{display:grid;grid-template-columns:auto 80px 1fr;align-items:center;padding:13px;border:1px solid var(--border-color);border-radius:12px;background:var(--surface-hover)}.source-versions label.disabled{opacity:.5}.source-grid{justify-content:flex-start;align-items:flex-start}.cover-box{position:relative;display:grid;width:150px;aspect-ratio:2/3;flex:0 0 auto;place-items:center;overflow:hidden;border-radius:14px;background:linear-gradient(145deg,var(--primary-alpha-10),var(--surface-hover));color:var(--primary);font-size:54px;cursor:pointer}.cover-box img{width:100%;height:100%;object-fit:cover}.cover-box em{position:absolute;inset:auto 0 0;padding:8px;background:#0009;color:#fff;font-size:12px;font-style:normal;text-align:center}.source-main{flex:1}.source-main h3{margin:4px 0;font-size:27px}.source-main p{color:var(--text-secondary)}.facts,.analysis-row{display:grid;grid-template-columns:repeat(3,minmax(100px,1fr));gap:10px}.facts span,.analysis-row div{display:flex;padding:12px;flex-direction:column;border:1px solid color-mix(in srgb,var(--primary) 8%,var(--border-color-light));border-radius:12px;background:var(--surface-hover)}.facts b,.analysis-row span{color:var(--text-secondary);font-size:12px}.analysis-row b{font-size:20px}.cover-actions{display:flex;gap:8px;margin-top:16px}.metadata-grid,.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}.metadata-grid .full{grid-column:1/-1}.chapter-toolbar{margin:22px 0 10px}.chapter-list{max-height:390px;overflow:auto;border:1px solid var(--border-color);border-radius:12px;background:var(--surface-hover)}.chapter-row{display:grid;grid-template-columns:50px 1fr 70px;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border-color)}.chapter-row:last-child{border:0}.chapter-row.ignored{opacity:.55}.cleanup-options{display:flex;gap:24px;flex-wrap:wrap}.convert-actions{justify-content:flex-end;margin-top:22px}.progress-panel p{text-align:center;color:var(--text-secondary)}.reader-preview{overflow:hidden;border:1px solid var(--border-color);border-radius:16px;background:#f8f1df;color:#332b22}.reader-preview.night{background:#1f2428;color:#d7dadd}.preview-tools{display:flex;justify-content:space-between;padding:10px;border-bottom:1px solid #8884}.reader-preview article{max-height:540px;padding:32px 8%;overflow:auto}.reader-preview article h2{text-align:center}.reader-preview article p{text-indent:2em;line-height:1.8}.success-mark{display:grid;width:52px;height:52px;place-items:center;border-radius:50%;background:#e7f7ed;color:#2d9b58;font-size:28px}.result-summary{justify-content:flex-start}.result-summary h2{margin:0}.result-summary p{margin:5px 0;color:var(--text-secondary)}.result-actions,.library-actions{justify-content:flex-start;margin-top:20px}.library-actions{padding-top:20px;border-top:1px solid var(--border-color)}.cover-library{display:grid;grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:12px;margin-top:16px;max-height:55vh;overflow:auto}.cover-library button{padding:0;overflow:hidden;border:2px solid transparent;border-radius:12px;background:var(--surface-hover);cursor:pointer}.cover-library button:hover{border-color:var(--primary)}.cover-library img{width:100%;aspect-ratio:2/3;object-fit:cover}.cover-library span{display:block;padding:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.history-panel{overflow:auto}@media(max-width:720px){.conversion-page{padding:18px 0}.page-heading,.source-grid{align-items:stretch;flex-direction:column}.panel{padding:18px;border-radius:16px}.source-grid .cover-box{align-self:center}.metadata-grid,.settings-grid,.facts,.analysis-row{grid-template-columns:1fr}.result-actions,.library-actions{align-items:stretch;flex-direction:column}.result-actions :deep(button),.library-actions :deep(button){margin-left:0}.chapter-row{grid-template-columns:38px 1fr}.chapter-row :deep(.el-checkbox){grid-column:2}}
+.conversion-page{max-width:1120px;margin:0 auto;padding:28px 0 70px}.page-heading,.section-title,.source-grid,.convert-actions,.result-summary,.result-actions,.library-actions,.chapter-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px}.page-heading{margin-bottom:22px}.page-heading h1{margin:3px 0;font-size:32px}.page-heading p,.section-title small,.chapter-toolbar span{margin:0;color:var(--text-secondary)}.eyebrow,.step{color:var(--primary);font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.step{padding:4px 7px;border-radius:7px;background:var(--primary-alpha-10)}.panel{margin-bottom:18px;padding:24px;border:1px solid color-mix(in srgb,var(--primary) 14%,var(--border-color));border-radius:22px;background:var(--surface-elevated);box-shadow:var(--shadow-md),inset 0 1px 0 color-mix(in srgb,var(--surface-elevated) 88%,white)}.section-title{margin-bottom:22px}.section-title h2{margin:3px 0 0;font-size:20px}.wide,.primary-wide{width:100%}.primary-wide{margin-top:18px}.upload-icon{margin:8px;font-size:42px;color:var(--primary)}.source-grid{justify-content:flex-start;align-items:flex-start}.cover-box{position:relative;display:grid;width:150px;aspect-ratio:2/3;flex:0 0 auto;place-items:center;overflow:hidden;border-radius:14px;background:linear-gradient(145deg,var(--primary-alpha-10),var(--surface-hover));color:var(--primary);font-size:54px;cursor:pointer}.cover-box img{width:100%;height:100%;object-fit:cover}.cover-box em{position:absolute;inset:auto 0 0;padding:8px;background:#0009;color:#fff;font-size:12px;font-style:normal;text-align:center}.source-main{flex:1}.source-main h3{margin:4px 0;font-size:27px}.source-main p{color:var(--text-secondary)}.facts,.analysis-row{display:grid;grid-template-columns:repeat(3,minmax(100px,1fr));gap:10px}.facts span,.analysis-row div{display:flex;padding:12px;flex-direction:column;border:1px solid color-mix(in srgb,var(--primary) 8%,var(--border-color-light));border-radius:12px;background:var(--surface-hover)}.facts b,.analysis-row span{color:var(--text-secondary);font-size:12px}.analysis-row b{font-size:20px}.cover-actions{display:flex;gap:8px;margin-top:16px}.metadata-grid,.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}.metadata-grid .full{grid-column:1/-1}.chapter-toolbar{margin:22px 0 10px}.chapter-list{max-height:390px;overflow:auto;border:1px solid var(--border-color);border-radius:12px;background:var(--surface-hover)}.chapter-row{display:grid;grid-template-columns:50px 1fr 70px;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border-color)}.chapter-row:last-child{border:0}.chapter-row.ignored{opacity:.55}.cleanup-options{display:flex;gap:24px;flex-wrap:wrap}.convert-actions{justify-content:flex-end;margin-top:22px}.progress-panel p{text-align:center;color:var(--text-secondary)}.reader-preview{overflow:hidden;border:1px solid var(--border-color);border-radius:16px;background:#f8f1df;color:#332b22}.reader-preview.night{background:#1f2428;color:#d7dadd}.preview-tools{display:flex;justify-content:space-between;padding:10px;border-bottom:1px solid #8884}.reader-preview article{max-height:540px;padding:32px 8%;overflow:auto}.reader-preview article h2{text-align:center}.reader-preview article p{text-indent:2em;line-height:1.8}.success-mark{display:grid;width:52px;height:52px;place-items:center;border-radius:50%;background:#e7f7ed;color:#2d9b58;font-size:28px}.result-summary{justify-content:flex-start}.result-summary h2{margin:0}.result-summary p{margin:5px 0;color:var(--text-secondary)}.result-actions,.library-actions{justify-content:flex-start;margin-top:20px}.library-actions{padding-top:20px;border-top:1px solid var(--border-color)}.cover-library{display:grid;grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:12px;margin-top:16px;max-height:55vh;overflow:auto}.cover-library button{padding:0;overflow:hidden;border:2px solid transparent;border-radius:12px;background:var(--surface-hover);cursor:pointer}.cover-library button:hover{border-color:var(--primary)}.cover-library img{width:100%;aspect-ratio:2/3;object-fit:cover}.cover-library span{display:block;padding:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.history-panel{overflow:auto}@media(max-width:720px){.conversion-page{padding:18px 0}.page-heading,.source-grid{align-items:stretch;flex-direction:column}.panel{padding:18px;border-radius:16px}.source-grid .cover-box{align-self:center}.metadata-grid,.settings-grid,.facts,.analysis-row{grid-template-columns:1fr}.result-actions,.library-actions{align-items:stretch;flex-direction:column}.result-actions :deep(button),.library-actions :deep(button){margin-left:0}.chapter-row{grid-template-columns:38px 1fr}.chapter-row :deep(.el-checkbox){grid-column:2}}
 .chapter-rule{display:flex;align-items:center;gap:10px;margin-top:18px}.chapter-rule :deep(.el-input){flex:1}.preview-book{display:flex;align-items:center;justify-content:center;gap:18px;padding:28px 8% 0;text-align:left}.preview-book img{width:72px;aspect-ratio:2/3;object-fit:cover;border-radius:6px}.preview-book h1,.preview-book p{margin:4px}@media(max-width:720px){.chapter-rule{align-items:stretch;flex-direction:column}}
 .chapter-title-rules{margin-top:18px;padding:18px;border:1px solid var(--primary-alpha-15);border-radius:14px;background:var(--primary-alpha-10)}.chapter-title-rules__heading,.chapter-title-rules__footer{display:flex;align-items:center;justify-content:space-between;gap:16px}.chapter-title-rules h3,.chapter-title-rules p{margin:0}.chapter-title-rules p,.chapter-title-rules small{color:var(--text-secondary)}.chapter-title-rules__fields{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}.chapter-title-rules__fields :deep(.el-form-item){margin-bottom:12px}.chapter-title-rules__footer small{line-height:1.6}@media(max-width:720px){.chapter-title-rules__heading,.chapter-title-rules__footer{align-items:stretch;flex-direction:column}.chapter-title-rules__fields{grid-template-columns:1fr}}
 
@@ -293,8 +331,153 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   box-shadow: 0 0 0 5px var(--primary-alpha-10);
 }
 
-.source-mode-tabs :deep(.el-tabs__header) {
-  margin-bottom: 20px;
+.source-method-field {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) minmax(240px, 360px) 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--surface-hover);
+}
+
+.source-method-field label {
+  font-weight: 700;
+}
+
+.source-method-field small {
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.source-method-select {
+  width: 100%;
+}
+
+.conversion-date-picker {
+  width: 100%;
+}
+
+.source-method-content {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-color);
+}
+
+.library-search-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.library-results {
+  min-height: 300px;
+  margin-top: 18px;
+}
+
+.library-book-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.library-book-card {
+  display: flex;
+  min-width: 0;
+  padding: 12px;
+  flex-direction: column;
+  border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-color));
+  border-radius: 15px;
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.library-book-card:hover,
+.library-book-card.selected {
+  border-color: var(--primary-alpha-30, var(--primary));
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.library-book-cover {
+  position: relative;
+  display: grid;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 10px;
+  background: linear-gradient(145deg, var(--primary-alpha-10), var(--surface-hover));
+  color: var(--primary);
+  font-size: 44px;
+  font-weight: 700;
+}
+
+.library-book-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.library-book-cover em {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(20, 24, 32, .72);
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+  letter-spacing: .04em;
+}
+
+.library-book-info {
+  min-width: 0;
+  padding: 12px 2px;
+  flex: 1;
+}
+
+.library-book-info h3,
+.library-book-info p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-book-info h3 {
+  margin: 0 0 5px;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.library-book-info p {
+  margin: 0 0 7px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.library-book-info small {
+  color: var(--text-tertiary, var(--text-secondary));
+  font-size: 11px;
+}
+
+.library-book-card :deep(.el-button) {
+  width: 100%;
+  margin-left: 0;
+}
+
+.library-pagination-box {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  padding: 14px;
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 13px;
+  background: var(--surface-hover);
 }
 
 .result-empty {
@@ -355,6 +538,12 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   box-shadow: 0 8px 22px rgba(15, 23, 42, .08);
 }
 
+:global(html[data-theme="modern"]) .library-book-card {
+  border-color: #d9dee8;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .07);
+}
+
 :global(html[data-theme="modern"]) .conversion-tabs > :deep(.el-tabs__header .el-tabs__item.is-active) {
   background: var(--primary-alpha-10);
   box-shadow: inset 0 0 0 1px var(--primary-alpha-15);
@@ -390,6 +579,13 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   box-shadow: 0 9px 24px rgba(89, 57, 35, .1);
 }
 
+:global(html[data-theme="warm"]) .library-book-card {
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--border-color));
+  border-radius: 11px;
+  background: #fffdf9;
+  box-shadow: 0 5px 16px rgba(89, 57, 35, .08);
+}
+
 :global(html[data-theme="natural"]) .conversion-tabs {
   border-color: color-mix(in srgb, var(--primary) 30%, rgba(255, 255, 255, .72));
   background: rgba(255, 255, 255, .78);
@@ -406,6 +602,12 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   border-color: color-mix(in srgb, var(--primary) 20%, rgba(255, 255, 255, .82));
   background: rgba(255, 255, 255, .9);
   box-shadow: 0 10px 28px rgba(35, 83, 62, .12);
+}
+
+:global(html[data-theme="natural"]) .library-book-card {
+  border-color: color-mix(in srgb, var(--primary) 20%, rgba(255, 255, 255, .82));
+  background: rgba(255, 255, 255, .82);
+  box-shadow: 0 8px 22px rgba(35, 83, 62, .1);
 }
 
 :global(html[data-theme="macos26"]) .conversion-tabs {
@@ -443,6 +645,14 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
     inset 0 1px 0 rgba(255, 255, 255, .96);
   backdrop-filter: blur(24px) saturate(165%);
   -webkit-backdrop-filter: blur(24px) saturate(165%);
+}
+
+:global(html[data-theme="macos26"]) .library-book-card {
+  border-color: rgba(255, 255, 255, .88);
+  background: rgba(255, 255, 255, .68);
+  box-shadow: 0 10px 26px rgba(50, 80, 120, .14), inset 0 1px 0 rgba(255, 255, 255, .92);
+  backdrop-filter: blur(18px) saturate(155%);
+  -webkit-backdrop-filter: blur(18px) saturate(155%);
 }
 
 @keyframes conversion-pane-in {
@@ -499,6 +709,39 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   .current-task-banner > div {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .source-method-field {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .library-search-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .library-book-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .library-book-card {
+    padding: 9px;
+  }
+
+  .library-pagination-box {
+    justify-content: flex-start;
+  }
+
+  .library-pagination-box :deep(.el-pagination__jump),
+  .library-pagination-box :deep(.el-pagination__total) {
+    display: none;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 980px) {
+  .library-book-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 </style>

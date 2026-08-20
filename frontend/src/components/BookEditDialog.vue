@@ -71,7 +71,14 @@
           <el-input v-model.trim="form.isbn" maxlength="32" />
         </el-form-item>
         <el-form-item label="出版日期">
-          <el-input v-model.trim="form.publishDate" placeholder="例如：2026-07-29" />
+          <el-date-picker
+            v-model="form.publishDate"
+            class="book-date-picker"
+            type="date"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            placeholder="选择出版日期"
+          />
         </el-form-item>
         <el-form-item label="语言">
           <el-input v-model.trim="form.language" placeholder="例如：zh-CN" />
@@ -198,7 +205,7 @@ const saveBook = async () => {
       author: form.author.trim(),
       publisher: form.publisher.trim(),
       isbn: form.isbn.trim(),
-      publishDate: form.publishDate.trim(),
+      publishDate: form.publishDate?.trim() || '',
       language: form.language.trim(),
       description: form.description.trim(),
     })
@@ -283,6 +290,10 @@ watch(() => [props.visible, props.book?.id], ([visible]) => {
 }
 
 .form-grid :deep(.el-select) {
+  width: 100%;
+}
+
+.book-date-picker {
   width: 100%;
 }
 
