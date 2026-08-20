@@ -1051,6 +1051,7 @@ function handleSaveGeneralSettings() {
 
 .tab-btn {
   position: relative;
+  z-index: 1;
   display: flex;
   min-width: 0;
   min-height: 64px;
@@ -1064,6 +1065,7 @@ function handleSaveGeneralSettings() {
   font: inherit;
   color: var(--text-secondary);
   text-align: left;
+  touch-action: manipulation;
   transition: color .2s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 }
 
@@ -2082,7 +2084,8 @@ function handleSaveGeneralSettings() {
 
 @media (max-width: 760px) {
   .repair-config-view {
-    padding: 12px;
+    width: 100%;
+    padding: 0 0 72px;
   }
 
   .page-header {
@@ -2113,21 +2116,17 @@ function handleSaveGeneralSettings() {
   }
 
   .tabs {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 7px;
     padding: 7px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .tabs::-webkit-scrollbar {
-    display: none;
+    overflow: visible;
   }
 
   .tab-btn {
-    min-width: 168px;
+    width: 100%;
+    min-width: 0;
     min-height: 58px;
-    flex: 0 0 168px;
     padding: 8px 10px;
   }
 
@@ -2188,6 +2187,56 @@ function handleSaveGeneralSettings() {
 
   .record-card { align-items: stretch; flex-direction: column; gap: 14px; }
   .record-actions .btn { flex: 1; }
+}
+
+@media (max-width: 420px) {
+  .page-header {
+    padding: 14px;
+  }
+
+  .page-heading {
+    gap: 11px;
+  }
+
+  .page-heading-icon {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+  }
+
+  .page-capabilities span {
+    padding: 5px 8px;
+  }
+
+  .tabs {
+    gap: 5px;
+    padding: 5px;
+  }
+
+  .tab-btn {
+    min-height: 50px;
+    gap: 7px;
+    padding: 7px 8px;
+  }
+
+  .tab-icon-lg {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+    font-size: 14px;
+  }
+
+  .tab-copy strong {
+    font-size: 13px;
+  }
+
+  .tab-copy small {
+    display: none;
+  }
+
+  .tab-content {
+    padding: 12px;
+  }
 }
 
 @media (min-width: 761px) and (max-width: 920px) {
