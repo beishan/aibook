@@ -970,12 +970,10 @@ function handleSaveGeneralSettings() {
   justify-content: space-between;
   gap: 24px;
   margin-bottom: 20px;
-  padding: 22px 24px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 14%, var(--border-color));
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--surface-card, var(--glass-bg)) 94%, var(--primary, #409eff) 3%);
-  box-shadow: var(--shadow-md);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .page-heading {
@@ -1951,13 +1949,6 @@ function handleSaveGeneralSettings() {
 .records-empty strong { color: var(--text-primary); }
 .records-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; color: var(--text-secondary); font-size: 13px; }
 
-:global(html[data-theme="modern"] .repair-config-view .page-header) {
-  border-color: #d4dae4;
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, .09);
-}
-
 :global(html[data-theme="modern"] .repair-config-view .page-heading-icon) {
   border-radius: 9px;
   background: var(--primary-alpha-10);
@@ -1972,13 +1963,6 @@ function handleSaveGeneralSettings() {
   border-radius: 10px;
   background: #fff;
   box-shadow: 0 5px 15px rgba(15, 23, 42, .06);
-}
-
-:global(html[data-theme="warm"] .repair-config-view .page-header) {
-  border-color: color-mix(in srgb, var(--primary) 23%, #e5d8c8);
-  border-radius: 16px;
-  background: #fffdf8;
-  box-shadow: 0 14px 34px rgba(89, 57, 35, .12);
 }
 
 :global(html[data-theme="warm"] .repair-config-view .page-heading-icon) {
@@ -1996,14 +1980,6 @@ function handleSaveGeneralSettings() {
   box-shadow: 0 6px 17px rgba(89, 57, 35, .07);
 }
 
-:global(html[data-theme="natural"] .repair-config-view .page-header) {
-  border-color: color-mix(in srgb, var(--primary) 24%, rgba(255, 255, 255, .82));
-  background: rgba(249, 255, 251, .76);
-  box-shadow: 0 18px 44px rgba(35, 83, 62, .14), inset 0 1px 0 rgba(255, 255, 255, .94);
-  backdrop-filter: blur(22px) saturate(150%);
-  -webkit-backdrop-filter: blur(22px) saturate(150%);
-}
-
 :global(html[data-theme="natural"] .repair-config-view .rule-item),
 :global(html[data-theme="natural"] .repair-config-view .template-item),
 :global(html[data-theme="natural"] .repair-config-view .record-card),
@@ -2012,31 +1988,6 @@ function handleSaveGeneralSettings() {
   border-color: color-mix(in srgb, var(--primary) 18%, rgba(255, 255, 255, .86));
   background: rgba(255, 255, 255, .76);
   box-shadow: 0 8px 22px rgba(35, 83, 62, .09), inset 0 1px 0 rgba(255, 255, 255, .9);
-}
-
-:global(html[data-theme="macos26"] .repair-config-view .page-header) {
-  position: relative;
-  border-color: rgba(255, 255, 255, .88);
-  border-radius: 24px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, .66), rgba(223, 238, 255, .42));
-  box-shadow:
-    0 24px 64px rgba(45, 76, 118, .19),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 -1px 0 rgba(100, 139, 190, .12);
-  backdrop-filter: blur(34px) saturate(185%) contrast(103%);
-  -webkit-backdrop-filter: blur(34px) saturate(185%) contrast(103%);
-}
-
-:global(html[data-theme="macos26"] .repair-config-view .page-header::after) {
-  position: absolute;
-  top: 1px;
-  right: 10%;
-  left: 10%;
-  height: 45%;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .48), transparent);
-  content: '';
-  pointer-events: none;
 }
 
 :global(html[data-theme="macos26"] .repair-config-view .page-heading),
@@ -2087,7 +2038,6 @@ function handleSaveGeneralSettings() {
 
   .page-header {
     align-items: stretch;
-    padding: 17px;
     flex-direction: column;
   }
 
@@ -2185,10 +2135,6 @@ function handleSaveGeneralSettings() {
 }
 
 @media (max-width: 420px) {
-  .page-header {
-    padding: 14px;
-  }
-
   .page-heading {
     gap: 11px;
   }
