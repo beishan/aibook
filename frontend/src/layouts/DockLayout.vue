@@ -1,7 +1,13 @@
 <template>
   <div class="layout-container" :style="dockStyle">
     <!-- 内容区 -->
-    <main class="layout-main" :class="{ 'layout-main--reader': isReaderRoute }">
+    <main
+      class="layout-main"
+      :class="{
+        'layout-main--reader': isReaderRoute,
+        'layout-main--repair-config': route.name === 'TextRepairConfig',
+      }"
+    >
       <router-view v-slot="{ Component }">
         <Transition name="fade" mode="out-in">
           <component :is="Component" />
@@ -323,12 +329,18 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.layout-main.layout-main--repair-config {
+  padding-right: 0;
+  padding-left: 0;
+}
+
 /* Dock 导航 */
 .dock-nav {
   position: fixed;
   bottom: 18px;
   left: 50%;
-  z-index: 1000;
+  z-index: 2000;
+  pointer-events: auto;
   padding: 7px 10px 9px;
   border: 1px solid rgba(255, 255, 255, 0.76);
   border-radius: calc(var(--dock-size) * 0.44);
@@ -432,7 +444,7 @@ onUnmounted(() => {
   right: auto;
   bottom: var(--dock-trash-window-bottom);
   left: 50%;
-  z-index: 1100;
+  z-index: 2100;
   display: flex;
   width: min(900px, calc(100vw - 32px));
   max-height: min(680px, calc(100vh - var(--dock-trash-window-bottom) - 16px));

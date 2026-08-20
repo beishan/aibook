@@ -957,9 +957,11 @@ function handleSaveGeneralSettings() {
 
 <style scoped>
 .repair-config-view {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 24px 16px 72px;
+  position: relative;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 24px 0 72px;
 }
 
 .page-header {
@@ -1243,11 +1245,11 @@ function handleSaveGeneralSettings() {
 
 .tab-content {
   min-height: 420px;
-  padding: 22px;
-  border: 1px solid color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 12%, var(--border-color));
-  border-radius: 20px;
-  background: var(--surface-card, var(--glass-bg));
-  box-shadow: var(--shadow-md);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   animation: repair-content-in .22s ease-out both;
 }
 
@@ -1404,7 +1406,7 @@ function handleSaveGeneralSettings() {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 3000;
   padding: 20px;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -1949,8 +1951,7 @@ function handleSaveGeneralSettings() {
 .records-empty strong { color: var(--text-primary); }
 .records-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; color: var(--text-secondary); font-size: 13px; }
 
-:global(html[data-theme="modern"]) .page-header,
-:global(html[data-theme="modern"]) .tab-content {
+:global(html[data-theme="modern"]) .page-header {
   border-color: #d4dae4;
   border-radius: 14px;
   background: #fff;
@@ -1973,8 +1974,7 @@ function handleSaveGeneralSettings() {
   box-shadow: 0 5px 15px rgba(15, 23, 42, .06);
 }
 
-:global(html[data-theme="warm"]) .page-header,
-:global(html[data-theme="warm"]) .tab-content {
+:global(html[data-theme="warm"]) .page-header {
   border-color: color-mix(in srgb, var(--primary) 23%, #e5d8c8);
   border-radius: 16px;
   background: #fffdf8;
@@ -1996,8 +1996,7 @@ function handleSaveGeneralSettings() {
   box-shadow: 0 6px 17px rgba(89, 57, 35, .07);
 }
 
-:global(html[data-theme="natural"]) .page-header,
-:global(html[data-theme="natural"]) .tab-content {
+:global(html[data-theme="natural"]) .page-header {
   border-color: color-mix(in srgb, var(--primary) 24%, rgba(255, 255, 255, .82));
   background: rgba(249, 255, 251, .76);
   box-shadow: 0 18px 44px rgba(35, 83, 62, .14), inset 0 1px 0 rgba(255, 255, 255, .94);
@@ -2015,8 +2014,7 @@ function handleSaveGeneralSettings() {
   box-shadow: 0 8px 22px rgba(35, 83, 62, .09), inset 0 1px 0 rgba(255, 255, 255, .9);
 }
 
-:global(html[data-theme="macos26"]) .page-header,
-:global(html[data-theme="macos26"]) .tab-content {
+:global(html[data-theme="macos26"]) .page-header {
   position: relative;
   border-color: rgba(255, 255, 255, .88);
   border-radius: 24px;
@@ -2084,7 +2082,6 @@ function handleSaveGeneralSettings() {
 
 @media (max-width: 760px) {
   .repair-config-view {
-    width: 100%;
     padding: 0 0 72px;
   }
 
@@ -2111,8 +2108,6 @@ function handleSaveGeneralSettings() {
 
   .tab-content {
     min-height: 360px;
-    padding: 15px;
-    border-radius: 16px;
   }
 
   .tabs {
@@ -2234,9 +2229,6 @@ function handleSaveGeneralSettings() {
     display: none;
   }
 
-  .tab-content {
-    padding: 12px;
-  }
 }
 
 @media (min-width: 761px) and (max-width: 920px) {

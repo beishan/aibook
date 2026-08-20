@@ -60,7 +60,13 @@
     </header>
 
     <!-- 内容区 -->
-    <main class="layout-main" :class="{ 'library-layout-main': route.path === '/books' }">
+    <main
+      class="layout-main"
+      :class="{
+        'library-layout-main': route.path === '/books',
+        'repair-layout-main': route.name === 'TextRepairConfig',
+      }"
+    >
       <router-view v-slot="{ Component }">
         <Transition name="fade" mode="out-in">
           <component :is="Component" />
@@ -337,6 +343,12 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 
 .layout-main.library-layout-main {
   max-width: none;
+}
+
+.layout-main.repair-layout-main {
+  max-width: none;
+  padding-right: 0;
+  padding-left: 0;
 }
 
 /* 动画 */
