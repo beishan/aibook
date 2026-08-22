@@ -54,6 +54,12 @@ public class BookConversionController {
         return conversionService.reanalyze(user(authentication), id, body.get("pattern"));
     }
 
+    @PostMapping("/{id}/format-chapters")
+    public BookConversionTaskDTO formatChapters(Authentication authentication, @PathVariable Long id,
+            @RequestBody BookConversionUpdateRequest request) {
+        return conversionService.formatChapters(user(authentication), id, request);
+    }
+
     @PostMapping(value = "/{id}/cover", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public BookConversionTaskDTO uploadCover(Authentication authentication, @PathVariable Long id,
             @RequestParam("file") MultipartFile file) {

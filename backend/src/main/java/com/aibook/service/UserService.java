@@ -33,8 +33,8 @@ public class UserService implements UserDetailsService {
     private static final Set<String> LIBRARY_VIEW_MODES =
             Set.of("card", "compact-card", "list");
     private static final Set<Integer> LIBRARY_PAGE_SIZES =
-            Set.of(12, 18, 24, 36, 60);
-    private static final int DEFAULT_LIBRARY_PAGE_SIZE = 18;
+            Set.of(10, 30, 50, 100, 200);
+    private static final int DEFAULT_LIBRARY_PAGE_SIZE = 10;
     private static final Set<String> DOCK_ICON_STYLES =
             Set.of("minimal", "skeuomorphic", "macos26", "custom");
     private static final int DEFAULT_DOCK_SIZE = 58;
@@ -184,9 +184,9 @@ public class UserService implements UserDetailsService {
     }
 
     private UserPreferencesDTO toPreferences(User user) {
-        int cardPageSize = defaultIfNull(
-                user.getLibraryPageSize(), DEFAULT_LIBRARY_PAGE_SIZE);
-        int listPageSize = defaultIfNull(user.getLibraryListPageSize(), cardPageSize);
+        int cardPageSize = normalizeLibraryPageSize(user.getLibraryPageSize(),
+                DEFAULT_LIBRARY_PAGE_SIZE);
+        int listPageSize = normalizeLibraryPageSize(user.getLibraryListPageSize(), cardPageSize);
         return UserPreferencesDTO.builder()
                 .theme(user.getWebTheme())
                 .modernThemeColor(defaultIfBlank(
@@ -214,6 +214,10 @@ public class UserService implements UserDetailsService {
                 .uiFontId(activeFontId(user.getUiFontId()))
                 .readerFontId(activeFontId(user.getReaderFontId()))
                 .build();
+    }
+
+    private int normalizeLibraryPageSize(Integer value, int fallback) {
+        return value != null && LIBRARY_PAGE_SIZES.contains(value) ? value : fallback;
     }
 
     private void validateFont(Long id) {

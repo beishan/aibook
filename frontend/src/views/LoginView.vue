@@ -44,16 +44,31 @@
 
           <div class="form-group">
             <label class="form-label" for="login-password">密码</label>
-            <div class="input-wrapper">
+            <div class="input-wrapper password-input-wrapper">
               <span class="input-icon">🔒</span>
               <input
                 v-model="loginForm.password"
                 id="login-password"
-                type="password"
+                :type="showPassword ? 'text' : 'password'"
                 class="input"
                 placeholder="请输入密码"
                 autocomplete="current-password"
               />
+              <button
+                type="button"
+                class="password-toggle"
+                :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+                :aria-pressed="showPassword"
+                :title="showPassword ? '隐藏密码' : '显示密码'"
+                @click="showPassword = !showPassword"
+              >
+                <svg v-if="showPassword" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 4.2A10.8 10.8 0 0 1 12 4c5.5 0 9 5.3 9 5.3a13.8 13.8 0 0 1-2.2 2.7M6.2 6.2C4.1 7.6 3 9.3 3 9.3s3.5 5.3 9 5.3c1 0 1.9-.2 2.7-.4" />
+                </svg>
+                <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 12s3.5-5.3 9-5.3S21 12 21 12s-3.5 5.3-9 5.3S3 12 3 12Z" /><circle cx="12" cy="12" r="2.4" />
+                </svg>
+              </button>
             </div>
             <span v-if="errors.password" class="error-text">{{ errors.password }}</span>
           </div>
@@ -87,6 +102,7 @@ const userStore = useUserStore()
 const themeStore = useThemeStore()
 
 const loading = ref(false)
+const showPassword = ref(false)
 const loginStyle = computed(() => websiteSettings.loginStyles[themeStore.currentTheme] || 'glass')
 const loginIcon = computed(loginIconSrc)
 
@@ -296,6 +312,47 @@ const handleLogin = async () => {
   padding-left: 44px;
 }
 
+.password-input-wrapper .input {
+  padding-right: 48px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 9px;
+  z-index: 2;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 7px;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.password-toggle:hover {
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.password-toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
 .login-button {
   width: 100%;
   padding: 14px;
@@ -466,15 +523,10 @@ const handleLogin = async () => {
   height: 82px;
   margin: 0 auto var(--spacing-md);
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.86);
-  border-radius: 23px;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(197, 228, 255, 0.3)),
-    var(--primary-gradient);
-  box-shadow:
-    0 16px 34px var(--primary-alpha-20),
-    inset 0 1px 0 rgba(255, 255, 255, 0.96),
-    inset 0 -10px 22px rgba(0, 99, 204, 0.1);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   font-size: 43px;
   animation: macos-logo-float 5s ease-in-out infinite;
 }

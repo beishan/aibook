@@ -71,11 +71,15 @@
 
           <div class="form-group">
             <label class="form-label">出生日期</label>
-            <input
+            <el-date-picker
               v-model="profileForm.birthDate"
-              class="input"
+              class="profile-date-picker"
               type="date"
-              :max="maxBirthDate"
+              format="YYYY-MM-DD"
+              value-format="YYYY-MM-DD"
+              placeholder="选择出生日期"
+              :disabled-date="disableBirthDate"
+              aria-label="出生日期"
             />
           </div>
         </div>
@@ -159,13 +163,9 @@ const profileForm = reactive({
 const userInitial = computed(() =>
   userStore.userInfo?.username?.charAt(0)?.toUpperCase() || 'U'
 )
-const yesterday = new Date()
-yesterday.setDate(yesterday.getDate() - 1)
-const maxBirthDate = [
-  yesterday.getFullYear(),
-  String(yesterday.getMonth() + 1).padStart(2, '0'),
-  String(yesterday.getDate()).padStart(2, '0'),
-].join('-')
+const todayStart = new Date()
+todayStart.setHours(0, 0, 0, 0)
+const disableBirthDate = (date: Date) => date.getTime() >= todayStart.getTime()
 
 const applyProfile = () => {
   const profile = userStore.userInfo
@@ -372,6 +372,10 @@ onBeforeUnmount(closeCropper)
 .form-label {
   display: block;
   margin-bottom: var(--spacing-sm);
+}
+
+.profile-date-picker {
+  width: 100%;
 }
 
 .textarea {

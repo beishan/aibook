@@ -37,14 +37,14 @@ class UserServiceTest {
                 "reader",
                 UserPreferencesDTO.builder()
                         .libraryViewMode("compact-card")
-                        .libraryPageSize(36)
+                        .libraryPageSize(30)
                         .build());
 
         assertEquals("warm", result.getTheme());
         assertEquals("compact-card", result.getLibraryViewMode());
-        assertEquals(36, result.getLibraryPageSize());
-        assertEquals(36, result.getLibraryCardPageSize());
-        assertEquals(36, result.getLibraryListPageSize());
+        assertEquals(30, result.getLibraryPageSize());
+        assertEquals(30, result.getLibraryCardPageSize());
+        assertEquals(30, result.getLibraryListPageSize());
         assertEquals(2, result.getScanThreadCount());
         assertEquals(58, result.getDockSize());
         assertEquals(72, result.getDockOpacity());
@@ -301,14 +301,33 @@ class UserServiceTest {
     }
 
     @Test
-    void storesCardAndListPageSizesIndependently() {
+    void normalizesLegacyLibraryPageSizesToNewDefault() {
         UserRepository repository = mock(UserRepository.class);
         User user = User.builder()
                 .username("reader")
                 .email("reader@example.com")
                 .password("encoded")
                 .libraryPageSize(18)
-                .libraryListPageSize(18)
+                .libraryListPageSize(60)
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        UserService service = new UserService(repository);
+
+        UserPreferencesDTO result = service.getPreferences("reader");
+
+        assertEquals(10, result.getLibraryCardPageSize());
+        assertEquals(10, result.getLibraryListPageSize());
+    }
+
+    @Test
+    void storesCardAndListPageSizesIndependently() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .libraryPageSize(10)
+                .libraryListPageSize(10)
                 .build();
         when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
         when(repository.save(user)).thenReturn(user);
@@ -317,14 +336,14 @@ class UserServiceTest {
         UserPreferencesDTO result = service.updatePreferences(
                 "reader",
                 UserPreferencesDTO.builder()
-                        .libraryCardPageSize(36)
-                        .libraryListPageSize(60)
+                        .libraryCardPageSize(50)
+                        .libraryListPageSize(200)
                         .build());
 
-        assertEquals(36, user.getLibraryPageSize());
-        assertEquals(60, user.getLibraryListPageSize());
-        assertEquals(36, result.getLibraryCardPageSize());
-        assertEquals(60, result.getLibraryListPageSize());
+        assertEquals(50, user.getLibraryPageSize());
+        assertEquals(200, user.getLibraryListPageSize());
+        assertEquals(50, result.getLibraryCardPageSize());
+        assertEquals(200, result.getLibraryListPageSize());
     }
 
     @Test
