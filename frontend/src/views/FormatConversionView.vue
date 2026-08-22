@@ -46,7 +46,7 @@
                   </div>
                 </div>
                 <div v-loading="libraryLoading" class="library-results">
-                  <div v-if="libraryBooks.length && libraryViewMode === 'card'" class="library-book-grid">
+                  <div v-if="libraryBooks.length && libraryViewMode !== 'list'" class="library-book-grid" :class="{ 'is-compact': libraryViewMode === 'compact' }">
                     <article v-for="book in libraryBooks" :key="book.id" class="library-book-card" :class="{ selected: selectedBookId === book.id }">
                       <div class="library-book-cover">
                         <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
@@ -58,21 +58,7 @@
                         <p :title="book.author || '未知作者'">{{ book.author || '未知作者' }}</p>
                         <small>{{ book.categoryName || '未分类' }}<template v-if="book.fileSize"> · {{ formatSize(book.fileSize) }}</template></small>
                       </div>
-                      <el-button type="primary" plain :loading="selectingBookId === book.id" :disabled="creating || selectingBookId !== null" @click="selectLibraryBook(book)">选择转换此书籍</el-button>
-                    </article>
-                  </div>
-                  <div v-else-if="libraryBooks.length && libraryViewMode === 'compact'" class="library-compact-grid">
-                    <article v-for="book in libraryBooks" :key="book.id" class="library-compact-card" :class="{ selected: selectedBookId === book.id }">
-                      <div class="library-compact-cover">
-                        <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
-                        <span v-else>{{ book.title?.charAt(0) || '书' }}</span>
-                      </div>
-                      <div class="library-compact-info">
-                        <h3 :title="book.title">{{ book.title }}</h3>
-                        <p :title="book.author || '未知作者'">{{ book.author || '未知作者' }}</p>
-                        <div class="library-meta-line"><span>{{ (book.format || '未知').toUpperCase() }}</span><span>{{ book.categoryName || '未分类' }}</span><span>{{ formatSize(book.fileSize) }}</span></div>
-                      </div>
-                      <el-button type="primary" plain size="small" :loading="selectingBookId === book.id" :disabled="creating || selectingBookId !== null" @click="selectLibraryBook(book)">选择</el-button>
+                      <el-button type="primary" plain :size="libraryViewMode === 'compact' ? 'small' : 'default'" :loading="selectingBookId === book.id" :disabled="creating || selectingBookId !== null" @click="selectLibraryBook(book)">{{ libraryViewMode === 'compact' ? '选择' : '选择转换此书籍' }}</el-button>
                     </article>
                   </div>
                   <div v-else-if="libraryBooks.length" class="library-book-list">
@@ -454,6 +440,11 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   gap: 14px;
 }
 
+.library-book-grid.is-compact {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .library-book-card {
   display: flex;
   min-width: 0;
@@ -541,13 +532,49 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   margin-left: 0;
 }
 
-.library-compact-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+.library-book-grid.is-compact .library-book-card {
+  padding: 8px;
+  border-radius: 11px;
 }
 
-.library-compact-card,
+.library-book-grid.is-compact .library-book-cover {
+  border-radius: 7px;
+  font-size: 30px;
+}
+
+.library-book-grid.is-compact .library-book-cover em {
+  right: 5px;
+  bottom: 5px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 8px;
+}
+
+.library-book-grid.is-compact .library-book-info {
+  padding: 8px 1px;
+}
+
+.library-book-grid.is-compact .library-book-info h3 {
+  margin-bottom: 3px;
+  font-size: 13px;
+}
+
+.library-book-grid.is-compact .library-book-info p {
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+.library-book-grid.is-compact .library-book-info small {
+  font-size: 10px;
+}
+
+.library-book-grid.is-compact .library-book-card :deep(.el-button) {
+  min-height: 28px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+
 .library-book-list-row {
   min-width: 0;
   border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-color));
@@ -556,16 +583,6 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
 
-.library-compact-card {
-  display: grid;
-  grid-template-columns: 62px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 10px;
-  border-radius: 14px;
-}
-
-.library-compact-cover,
 .library-list-cover {
   display: grid;
   place-items: center;
@@ -575,27 +592,16 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   font-weight: 700;
 }
 
-.library-compact-cover {
-  width: 62px;
-  aspect-ratio: 2 / 3;
-  border-radius: 8px;
-  font-size: 24px;
-}
-
-.library-compact-cover img,
 .library-list-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.library-compact-info,
 .library-list-primary {
   min-width: 0;
 }
 
-.library-compact-info h3,
-.library-compact-info p,
 .library-list-primary h3,
 .library-list-primary p {
   overflow: hidden;
@@ -603,21 +609,18 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   white-space: nowrap;
 }
 
-.library-compact-info h3,
 .library-list-primary h3 {
   margin: 0 0 5px;
   color: var(--text-primary);
   font-size: 14px;
 }
 
-.library-compact-info p,
 .library-list-primary p {
   margin: 0 0 7px;
   color: var(--text-secondary);
   font-size: 12px;
 }
 
-.library-meta-line,
 .library-list-meta {
   display: flex;
   min-width: 0;
@@ -626,7 +629,6 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   font-size: 11px;
 }
 
-.library-meta-line span,
 .library-list-meta span {
   min-width: 0;
   overflow: hidden;
@@ -634,7 +636,6 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   white-space: nowrap;
 }
 
-.library-meta-line span + span::before,
 .library-list-meta span + span::before {
   margin-right: 6px;
   color: var(--border-color);
@@ -670,8 +671,6 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   justify-content: flex-end;
 }
 
-.library-compact-card:hover,
-.library-compact-card.selected,
 .library-book-list-row:hover,
 .library-book-list-row.selected {
   border-color: var(--primary-alpha-30, var(--primary));
@@ -749,7 +748,6 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
 }
 
 :global(html[data-theme="modern"]) .library-book-card,
-:global(html[data-theme="modern"]) .library-compact-card,
 :global(html[data-theme="modern"]) .library-book-list-row {
   border-color: #d9dee8;
   background: #fff;
@@ -792,7 +790,6 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
 }
 
 :global(html[data-theme="warm"]) .library-book-card,
-:global(html[data-theme="warm"]) .library-compact-card,
 :global(html[data-theme="warm"]) .library-book-list-row {
   border-color: color-mix(in srgb, var(--primary) 22%, var(--border-color));
   border-radius: 11px;
@@ -819,7 +816,6 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
 }
 
 :global(html[data-theme="natural"]) .library-book-card,
-:global(html[data-theme="natural"]) .library-compact-card,
 :global(html[data-theme="natural"]) .library-book-list-row {
   border-color: color-mix(in srgb, var(--primary) 20%, rgba(255, 255, 255, .82));
   background: rgba(255, 255, 255, .82);
@@ -864,7 +860,6 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
 }
 
 :global(html[data-theme="macos26"]) .library-book-card,
-:global(html[data-theme="macos26"]) .library-compact-card,
 :global(html[data-theme="macos26"]) .library-book-list-row {
   border-color: rgba(255, 255, 255, .88);
   background: rgba(255, 255, 255, .68);
@@ -951,19 +946,8 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
     padding: 9px;
   }
 
-  .library-compact-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .library-compact-card {
-    grid-template-columns: 54px minmax(0, 1fr) auto;
-    gap: 10px;
-    padding: 8px;
-  }
-
-  .library-compact-cover {
-    width: 54px;
+  .library-book-grid.is-compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .library-book-list-row {
@@ -997,15 +981,20 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .library-compact-grid {
-    grid-template-columns: 1fr;
+  .library-book-grid.is-compact {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .library-book-grid.is-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .tab-content-shell,
   .library-book-card,
-  .library-compact-card,
   .library-book-list-row,
   .library-view-switch :deep(.el-button) {
     animation: none;

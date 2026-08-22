@@ -122,11 +122,17 @@ interface RandomBookCover {
 }
 
 const COVER_VIEW_MODE_STORAGE_KEY = 'aibook-random-cover-library-view-mode'
+const PAGE_SIZE_STORAGE_KEY = 'aibook-random-cover-library-page-size'
 const coverViewModes = ['standard', 'compact'] as const
+const pageSizeOptions = [12, 24, 48] as const
 type CoverViewMode = typeof coverViewModes[number]
+type PageSize = typeof pageSizeOptions[number]
 
 const isCoverViewMode = (value: string | null): value is CoverViewMode =>
   coverViewModes.includes(value as CoverViewMode)
+
+const isPageSize = (value: number): value is PageSize =>
+  pageSizeOptions.includes(value as PageSize)
 
 const readCoverViewMode = (): CoverViewMode => {
   try {
@@ -137,6 +143,18 @@ const readCoverViewMode = (): CoverViewMode => {
   }
 }
 
+const readPageSize = (): PageSize => {
+  try {
+    const savedPageSize = localStorage.getItem(PAGE_SIZE_STORAGE_KEY)
+    if (!savedPageSize?.trim()) return 12
+
+    const pageSize = Number(savedPageSize)
+    return isPageSize(pageSize) ? pageSize : 12
+  } catch {
+    return 12
+  }
+}
+
 const covers = ref<RandomBookCover[]>([])
 const loading = ref(true)
 const uploading = ref(false)
@@ -144,8 +162,7 @@ const deletingId = ref<number | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const coverViewMode = ref<CoverViewMode>(readCoverViewMode())
 const currentPage = ref(1)
-const pageSize = ref(12)
-const pageSizeOptions = [12, 24, 48]
+const pageSize = ref<PageSize>(readPageSize())
 const pageCount = computed(() => Math.max(1, Math.ceil(covers.value.length / pageSize.value)))
 const paginatedCovers = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
@@ -229,7 +246,13 @@ const formatFileSize = (bytes: number) => {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-const handlePageSizeChange = () => {
+const handlePageSizeChange = (nextSize: number) => {
+  pageSize.value = isPageSize(nextSize) ? nextSize : 12
+  try {
+    localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(pageSize.value))
+  } catch {
+    // 浏览器禁止本地存储时仍可在当前页面调整每页数量。
+  }
   currentPage.value = 1
 }
 

@@ -15,6 +15,7 @@ import com.aibook.model.entity.ScanRecord;
 import com.aibook.model.entity.User;
 import com.aibook.repository.ScanDirectoryRepository;
 import com.aibook.repository.ScanRecordRepository;
+import com.aibook.repository.BookScanSourceRepository;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
@@ -42,10 +43,13 @@ class ScanDirectoryTaskServiceTest {
         ScanDirectoryRepository repository = mock(ScanDirectoryRepository.class);
         FileScannerService fileScannerService = mock(FileScannerService.class);
         ScanRecordRepository scanRecordRepository = mock(ScanRecordRepository.class);
+        BookScanSourceRepository sourceRepository = mock(BookScanSourceRepository.class);
         when(repository.findByIdAndUser(2L, user))
                 .thenReturn(Optional.of(directory));
         when(repository.findByIdAndUserId(2L, 1L))
                 .thenReturn(Optional.of(directory));
+        when(sourceRepository.countDistinctActiveBooksByScanDirectoryAndUser(directory, user))
+                .thenReturn(1L);
         when(fileScannerService.scanDirectory(
                 eq(tempDir.toString()),
                 eq(1L),
@@ -68,7 +72,7 @@ class ScanDirectoryTaskServiceTest {
 
         ScanDirectoryTaskService service =
                 new ScanDirectoryTaskService(
-                        repository, fileScannerService, scanRecordRepository);
+                        repository, sourceRepository, fileScannerService, scanRecordRepository);
         try {
             Map<String, Object> started = service.startScan(2L, user);
             assertThat(started.get("status")).isIn("PENDING", "RUNNING");
@@ -82,7 +86,8 @@ class ScanDirectoryTaskServiceTest {
             assertThat(progress.get("newBooks")).isEqualTo(1);
             assertThat(progress.get("skippedBooks")).isEqualTo(1);
             assertThat(progress.get("failedBooks")).isEqualTo(1);
-            assertThat(directory.getBookCount()).isEqualTo(2);
+            assertThat(directory.getBookCount()).isEqualTo(1);
+            assertThat(progress.get("bookCount")).isEqualTo(1);
             verify(repository).save(directory);
             ArgumentCaptor<ScanRecord> recordCaptor =
                     ArgumentCaptor.forClass(ScanRecord.class);
@@ -113,6 +118,7 @@ class ScanDirectoryTaskServiceTest {
         when(repository.findByIdAndUser(2L, user)).thenReturn(Optional.of(directory));
         ScanDirectoryTaskService service = new ScanDirectoryTaskService(
                 repository,
+                mock(BookScanSourceRepository.class),
                 mock(FileScannerService.class),
                 mock(ScanRecordRepository.class));
 

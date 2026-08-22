@@ -10,8 +10,10 @@ import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.ScanDirectory;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookScanSourceRepository;
+import com.aibook.repository.ScanDirectoryBookCountProjection;
 import com.aibook.repository.ScanDirectoryRepository;
 import java.util.Optional;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ScanDirectoryServiceTest {
@@ -56,5 +58,36 @@ class ScanDirectoryServiceTest {
                 "书库隐藏扫描目录",
                 "/books/fiction");
         verify(directoryRepository, never()).delete(directory);
+    }
+
+    @Test
+    void returnsCurrentGroupedSourceCountsInsteadOfCachedScanResult() {
+        User user = User.builder().id(1L).username("reader").build();
+        ScanDirectory first = ScanDirectory.builder()
+                .id(2L).path("/books/fiction").user(user).bookCount(44).build();
+        ScanDirectory second = ScanDirectory.builder()
+                .id(3L).path("/books/tech").user(user).bookCount(12).build();
+        ScanDirectoryRepository directoryRepository = mock(ScanDirectoryRepository.class);
+        BookScanSourceRepository sourceRepository = mock(BookScanSourceRepository.class);
+        ScanDirectoryBookCountProjection firstCount = mock(ScanDirectoryBookCountProjection.class);
+        when(firstCount.getScanDirectoryId()).thenReturn(2L);
+        when(firstCount.getBookCount()).thenReturn(67L);
+        when(directoryRepository.findByUser(user)).thenReturn(List.of(first, second));
+        when(sourceRepository.countDistinctActiveBooksByDirectoryAndUser(user))
+                .thenReturn(List.of(firstCount));
+
+        ScanDirectoryService service = new ScanDirectoryService(
+                directoryRepository,
+                mock(FileScannerService.class),
+                mock(CategoryService.class),
+                sourceRepository,
+                mock(OperationLogService.class));
+
+        List<ScanDirectory> directories = service.getAllDirectories(user);
+
+        assertThat(directories).containsExactly(first, second);
+        assertThat(first.getBookCount()).isEqualTo(67);
+        assertThat(second.getBookCount()).isZero();
+        verify(sourceRepository).countDistinctActiveBooksByDirectoryAndUser(user);
     }
 }

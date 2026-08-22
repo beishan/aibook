@@ -9,6 +9,8 @@ import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookScanSourceBackfillProjection;
 import com.aibook.repository.BookScanSourceKeyProjection;
 import com.aibook.repository.BookScanSourceRepository;
+import com.aibook.repository.BookVersionRepository;
+import com.aibook.repository.BookVersionScanSourceBackfillProjection;
 import com.aibook.repository.ScanDirectoryRepository;
 import com.aibook.repository.SystemConfigRepository;
 import jakarta.persistence.EntityManager;
@@ -32,11 +34,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class BookScanSourceBackfillInitializer {
 
-    static final String MIGRATION_KEY = "migration.book-scan-sources.v1";
+    /** v2 also checks every BookVersion.filePath; v1 completion must not skip this repair. */
+    static final String MIGRATION_KEY = "migration.book-scan-sources.v2";
     private static final int BATCH_SIZE = 500;
 
     private final ScanDirectoryRepository scanDirectoryRepository;
     private final BookRepository bookRepository;
+    private final BookVersionRepository bookVersionRepository;
     private final BookScanSourceRepository bookScanSourceRepository;
     private final SystemConfigRepository systemConfigRepository;
     private final EntityManager entityManager;
@@ -56,6 +60,18 @@ public class BookScanSourceBackfillInitializer {
                 .filter(java.util.Objects::nonNull)
                 .toList();
 
+        int created = backfillBookPaths(directories);
+        created += backfillVersionPaths(directories);
+
+        systemConfigRepository.save(SystemConfig.builder()
+                .configKey(MIGRATION_KEY)
+                .configValue("complete")
+                .description("历史书籍及版本扫描目录来源回填已完成")
+                .build());
+        log.info("历史书籍及版本扫描目录来源回填完成，新增 {} 条关联", created);
+    }
+
+    private int backfillBookPaths(List<DirectorySource> directories) {
         long afterId = 0L;
         int created = 0;
         while (true) {
@@ -65,45 +81,67 @@ public class BookScanSourceBackfillInitializer {
             if (books.isEmpty()) {
                 break;
             }
-            created += backfillBatch(books, directories);
+            created += backfillPaths(
+                    books.stream()
+                            .map(book -> new PathCandidate(
+                                    book.getId(), book.getUserId(), book.getFilePath()))
+                            .toList(),
+                    directories);
             afterId = books.get(books.size() - 1).getId();
             entityManager.flush();
             entityManager.clear();
         }
-
-        systemConfigRepository.save(SystemConfig.builder()
-                .configKey(MIGRATION_KEY)
-                .configValue("complete")
-                .description("历史书籍扫描目录来源回填已完成")
-                .build());
-        log.info("历史书籍扫描目录来源回填完成，新增 {} 条关联", created);
+        return created;
     }
 
-    private int backfillBatch(
-            List<BookScanSourceBackfillProjection> books,
+    private int backfillVersionPaths(List<DirectorySource> directories) {
+        long afterId = 0L;
+        int created = 0;
+        while (true) {
+            List<BookVersionScanSourceBackfillProjection> versions =
+                    bookVersionRepository.findScanSourceBackfillCandidatesAfterId(
+                            afterId, PageRequest.of(0, BATCH_SIZE));
+            if (versions.isEmpty()) {
+                break;
+            }
+            created += backfillPaths(
+                    versions.stream()
+                            .map(version -> new PathCandidate(
+                                    version.getBookId(), version.getUserId(), version.getFilePath()))
+                            .toList(),
+                    directories);
+            afterId = versions.get(versions.size() - 1).getId();
+            entityManager.flush();
+            entityManager.clear();
+        }
+        return created;
+    }
+
+    private int backfillPaths(
+            List<PathCandidate> candidates,
             List<DirectorySource> directories) {
-        List<Long> bookIds = books.stream().map(BookScanSourceBackfillProjection::getId).toList();
+        List<Long> bookIds = candidates.stream().map(PathCandidate::bookId).distinct().toList();
         Set<SourceKey> existing = new HashSet<>();
         for (BookScanSourceKeyProjection key : bookScanSourceRepository.findKeysByBookIds(bookIds)) {
             existing.add(new SourceKey(key.getBookId(), key.getScanDirectoryId()));
         }
 
         List<BookScanSource> sources = new ArrayList<>();
-        for (BookScanSourceBackfillProjection book : books) {
-            Path bookPath = normalizedPath(book.getFilePath());
+        for (PathCandidate candidate : candidates) {
+            Path bookPath = normalizedPath(candidate.filePath());
             if (bookPath == null) {
                 continue;
             }
             for (DirectorySource directory : directories) {
-                SourceKey key = new SourceKey(book.getId(), directory.id());
-                if (directory.userId().equals(book.getUserId())
+                SourceKey key = new SourceKey(candidate.bookId(), directory.id());
+                if (directory.userId().equals(candidate.userId())
                         && bookPath.startsWith(directory.path())
                         && existing.add(key)) {
                     sources.add(BookScanSource.builder()
-                            .book(entityManager.getReference(Book.class, book.getId()))
+                            .book(entityManager.getReference(Book.class, candidate.bookId()))
                             .scanDirectory(entityManager.getReference(
                                     ScanDirectory.class, directory.id()))
-                            .user(entityManager.getReference(User.class, book.getUserId()))
+                            .user(entityManager.getReference(User.class, candidate.userId()))
                             .build());
                 }
             }
@@ -135,6 +173,8 @@ public class BookScanSourceBackfillInitializer {
     }
 
     private record DirectorySource(Long id, Long userId, Path path) {}
+
+    private record PathCandidate(Long bookId, Long userId, String filePath) {}
 
     private record SourceKey(Long bookId, Long directoryId) {}
 }

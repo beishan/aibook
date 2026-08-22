@@ -7,6 +7,7 @@ import com.aibook.model.entity.ScanRecord;
 import com.aibook.model.entity.User;
 import com.aibook.repository.ScanDirectoryRepository;
 import com.aibook.repository.ScanRecordRepository;
+import com.aibook.repository.BookScanSourceRepository;
 import com.aibook.dto.ScanRecordDTO;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -40,6 +41,7 @@ public class ScanDirectoryTaskService {
     private static final AtomicInteger TASK_THREAD_SEQUENCE = new AtomicInteger();
 
     private final ScanDirectoryRepository scanDirectoryRepository;
+    private final BookScanSourceRepository bookScanSourceRepository;
     private final FileScannerService fileScannerService;
     private final ScanRecordRepository scanRecordRepository;
     private final Map<ScanTaskKey, ScanTask> tasks = new ConcurrentHashMap<>();
@@ -250,8 +252,10 @@ public class ScanDirectoryTaskService {
             return;
         }
         directory.setLastScanTime(LocalDateTime.now());
-        directory.setBookCount(
-                task.result.getNewCount() + task.result.getSkippedCount());
+        long bookCount = bookScanSourceRepository
+                .countDistinctActiveBooksByScanDirectoryAndUser(directory, directory.getUser());
+        directory.setBookCount(Math.toIntExact(bookCount));
+        task.bookCount = directory.getBookCount();
         scanDirectoryRepository.save(directory);
     }
 
@@ -278,6 +282,7 @@ public class ScanDirectoryTaskService {
         private volatile String message = "等待扫描";
         private volatile long startedAt;
         private volatile long finishedAt;
+        private volatile Integer bookCount;
 
         private ScanTask(
                 ScanRecord record,
@@ -316,6 +321,9 @@ public class ScanDirectoryTaskService {
             progress.put("threadCount", threadCount);
             progress.put("startedAt", startedAt);
             progress.put("finishedAt", finishedAt);
+            if (bookCount != null) {
+                progress.put("bookCount", bookCount);
+            }
             return progress;
         }
     }

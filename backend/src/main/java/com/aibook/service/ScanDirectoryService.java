@@ -4,6 +4,7 @@ import com.aibook.exception.ResourceNotFoundException;
 import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.ScanDirectory;
 import com.aibook.model.entity.User;
+import com.aibook.repository.ScanDirectoryBookCountProjection;
 import com.aibook.repository.BookScanSourceRepository;
 import com.aibook.repository.ScanDirectoryRepository;
 import java.nio.file.Files;
@@ -12,6 +13,7 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,15 +36,17 @@ public class ScanDirectoryService {
     /**
      * 获取所有扫描目录
      */
+    @Transactional(readOnly = true)
     public List<ScanDirectory> getAllDirectories(User user) {
-        return scanDirectoryRepository.findByUser(user);
+        return applyCurrentBookCounts(scanDirectoryRepository.findByUser(user), user);
     }
 
     /**
      * 获取用户的扫描目录
      */
+    @Transactional(readOnly = true)
     public List<ScanDirectory> getDirectories(User user) {
-        return scanDirectoryRepository.findByUser(user);
+        return getAllDirectories(user);
     }
 
     /**
@@ -89,7 +93,7 @@ public class ScanDirectoryService {
         ScanDirectory saved = scanDirectoryRepository.save(directory);
         log.info("添加扫描目录: {} (存在: {})", path, exists);
 
-        return saved;
+        return applyCurrentBookCount(saved, user);
     }
 
     /**
@@ -131,7 +135,7 @@ public class ScanDirectoryService {
 
         // 更新扫描目录记录
         dir.setLastScanTime(LocalDateTime.now());
-        dir.setBookCount(scanResult.getNewCount() + scanResult.getSkippedCount());
+        int bookCount = applyCurrentBookCount(dir, user).getBookCount();
         scanDirectoryRepository.save(dir);
 
         log.info("扫描目录完成: {}, 新增: {}, 跳过: {}, 失败: {}",
@@ -145,7 +149,7 @@ public class ScanDirectoryService {
             "skippedBooks", scanResult.getSkippedCount(),
             "failedBooks", scanResult.getFailedCount(),
             "threadCount", scanResult.getThreadCount(),
-            "bookCount", scanResult.getNewCount() + scanResult.getSkippedCount()
+            "bookCount", bookCount
         );
     }
 
@@ -158,7 +162,7 @@ public class ScanDirectoryService {
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
 
         dir.setEnabled(!Boolean.TRUE.equals(dir.getEnabled()));
-        return scanDirectoryRepository.save(dir);
+        return applyCurrentBookCount(scanDirectoryRepository.save(dir), user);
     }
 
     /** 更新目录在书库中的展示状态；重复提交同一状态不产生额外副作用。 */
@@ -167,7 +171,7 @@ public class ScanDirectoryService {
         ScanDirectory dir = scanDirectoryRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
         if (Boolean.valueOf(visible).equals(dir.getLibraryVisible())) {
-            return dir;
+            return applyCurrentBookCount(dir, user);
         }
         dir.setLibraryVisible(visible);
         ScanDirectory saved = scanDirectoryRepository.save(dir);
@@ -177,7 +181,7 @@ public class ScanDirectoryService {
                 null,
                 (visible ? "书库显示" : "书库隐藏") + "扫描目录",
                 dir.getPath());
-        return saved;
+        return applyCurrentBookCount(saved, user);
     }
 
     /**
@@ -190,7 +194,31 @@ public class ScanDirectoryService {
         dir.setDefaultCategory(categoryId == null
                 ? null
                 : categoryService.getOwnedCategory(categoryId, user));
-        return scanDirectoryRepository.save(dir);
+        return applyCurrentBookCount(scanDirectoryRepository.save(dir), user);
+    }
+
+    /**
+     * 设置仅用于 API 响应和后续保存的目录书籍数。真实来源是 BookScanSource，不能由某次扫描结果推断。
+     */
+    private ScanDirectory applyCurrentBookCount(ScanDirectory directory, User user) {
+        long count = bookScanSourceRepository
+                .countDistinctActiveBooksByScanDirectoryAndUser(directory, user);
+        directory.setBookCount(Math.toIntExact(count));
+        return directory;
+    }
+
+    /** 目录列表使用一次 group-by 查询回填响应数字，避免 N+1。 */
+    private List<ScanDirectory> applyCurrentBookCounts(
+            List<ScanDirectory> directories, User user) {
+        Map<Long, Long> counts = bookScanSourceRepository
+                .countDistinctActiveBooksByDirectoryAndUser(user)
+                .stream()
+                .collect(Collectors.toMap(
+                        ScanDirectoryBookCountProjection::getScanDirectoryId,
+                        ScanDirectoryBookCountProjection::getBookCount));
+        directories.forEach(directory -> directory.setBookCount(
+                Math.toIntExact(counts.getOrDefault(directory.getId(), 0L))));
+        return directories;
     }
 
     /**
