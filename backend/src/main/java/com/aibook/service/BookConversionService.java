@@ -399,7 +399,7 @@ public class BookConversionService {
             Book book = Book.builder().title(task.getTitle()).author(task.getAuthor()).description(task.getDescription())
                     .isbn(task.getIsbn()).publisher(task.getPublisher()).publishDate(task.getPublishDate())
                     .language(task.getLanguage()).format("epub").filePath(target.toString()).fileSize(Files.size(target))
-                    .fileHash(hash).user(user).coverUrl(copyCoverToLibrary(task)).build();
+                    .fileHash(hash).sourceType(Book.SourceType.UPLOAD).user(user).coverUrl(copyCoverToLibrary(task)).build();
             if (task.getCategoryName() != null && !task.getCategoryName().isBlank()) {
                 Category category = categoryRepository.findByUser(user).stream()
                         .filter(item -> item.getName().equalsIgnoreCase(task.getCategoryName()))
@@ -415,7 +415,9 @@ public class BookConversionService {
                 tags.add(tag);
             }
             book.setTags(tags); book = bookRepository.save(book); bookVersionService.ensurePrimaryVersion(book, task.getOutputFilename());
-            return BookDTO.builder().id(book.getId()).title(book.getTitle()).author(book.getAuthor()).format(book.getFormat()).coverUrl(book.getCoverUrl()).build();
+            return BookDTO.builder().id(book.getId()).title(book.getTitle()).author(book.getAuthor())
+                    .format(book.getFormat()).coverUrl(book.getCoverUrl())
+                    .sourceType(book.getSourceType().name()).build();
         } catch (ResponseStatusException exception) { throw exception; }
         catch (Exception exception) { try { Files.deleteIfExists(target); } catch (Exception ignored) { } throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "新建书籍失败", exception); }
     }

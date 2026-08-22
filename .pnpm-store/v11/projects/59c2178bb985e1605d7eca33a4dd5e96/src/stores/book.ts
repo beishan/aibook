@@ -14,6 +14,8 @@ export interface Book {
   coverUrl?: string
   format: string
   filePath: string
+  sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN'
+  sourcePath?: string
   fileSize?: number
   language?: string
   rating?: number

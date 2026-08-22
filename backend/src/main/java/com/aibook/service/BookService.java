@@ -436,6 +436,10 @@ public class BookService {
                 .coverUrl(book.getCoverUrl())
                 .format(book.getFormat())
                 .filePath(book.getFilePath())
+                .sourceType(book.getSourceType() == null ? null : book.getSourceType().name())
+                .sourcePath(book.getSourceType() == Book.SourceType.DIRECTORY_SCAN
+                        ? book.getFilePath()
+                        : null)
                 .fileSize(book.getFileSize())
                 .language(book.getLanguage())
                 .rating(book.getRating())

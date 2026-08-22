@@ -114,6 +114,7 @@ public class FileUploadController {
                         .title(title)
                         .format(extension.substring(1).toLowerCase())
                         .filePath(filePath.toString())
+                        .sourceType(Book.SourceType.UPLOAD)
                         .fileSize(file.getSize())
                         .fileHash(fileHash)
                         .user(user)

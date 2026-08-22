@@ -50,6 +50,7 @@ public class ScannedBookPersistenceService {
 
         book.setUser(user);
         book.setCategory(category);
+        book.setSourceType(Book.SourceType.DIRECTORY_SCAN);
         Book savedBook = bookRepository.save(book);
         savedBook = randomBookCoverService.assignIfMissing(savedBook, user);
         recordSource(savedBook, user, directoryId);

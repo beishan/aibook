@@ -27,6 +27,8 @@ public class BookDTO {
     private String coverUrl;
     private String format;
     private String filePath;
+    private String sourceType;
+    private String sourcePath;
     private Long fileSize;
     private String language;
     private Integer rating;

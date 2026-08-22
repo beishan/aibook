@@ -37,11 +37,19 @@
                   <el-input v-model="libraryKeyword" clearable placeholder="搜索书名、作者或 ISBN" :prefix-icon="Search" @keyup.enter="searchLibraryBooks" @clear="searchLibraryBooks" />
                   <el-button type="primary" :loading="libraryLoading" @click="searchLibraryBooks">搜索书库</el-button>
                 </div>
+                <div class="library-results-toolbar">
+                  <span>书库展示方式</span>
+                  <div class="library-view-switch" role="group" aria-label="选择书库展示方式">
+                    <el-button :type="libraryViewMode === 'card' ? 'primary' : 'default'" :plain="libraryViewMode !== 'card'" circle aria-label="大卡片显示" title="大卡片显示" :aria-pressed="libraryViewMode === 'card'" @click="setLibraryViewMode('card')"><el-icon><Grid /></el-icon></el-button>
+                    <el-button :type="libraryViewMode === 'compact' ? 'primary' : 'default'" :plain="libraryViewMode !== 'compact'" circle aria-label="小卡片显示" title="小卡片显示" :aria-pressed="libraryViewMode === 'compact'" @click="setLibraryViewMode('compact')"><el-icon><Tickets /></el-icon></el-button>
+                    <el-button :type="libraryViewMode === 'list' ? 'primary' : 'default'" :plain="libraryViewMode !== 'list'" circle aria-label="列表显示" title="列表显示" :aria-pressed="libraryViewMode === 'list'" @click="setLibraryViewMode('list')"><el-icon><List /></el-icon></el-button>
+                  </div>
+                </div>
                 <div v-loading="libraryLoading" class="library-results">
-                  <div v-if="libraryBooks.length" class="library-book-grid">
+                  <div v-if="libraryBooks.length && libraryViewMode === 'card'" class="library-book-grid">
                     <article v-for="book in libraryBooks" :key="book.id" class="library-book-card" :class="{ selected: selectedBookId === book.id }">
                       <div class="library-book-cover">
-                        <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" :alt="`${book.title}封面`" />
+                        <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
                         <span v-else>{{ book.title?.charAt(0) || '书' }}</span>
                         <em>{{ (book.format || '未知').toUpperCase() }}</em>
                       </div>
@@ -51,6 +59,34 @@
                         <small>{{ book.categoryName || '未分类' }}<template v-if="book.fileSize"> · {{ formatSize(book.fileSize) }}</template></small>
                       </div>
                       <el-button type="primary" plain :loading="selectingBookId === book.id" :disabled="creating || selectingBookId !== null" @click="selectLibraryBook(book)">选择转换此书籍</el-button>
+                    </article>
+                  </div>
+                  <div v-else-if="libraryBooks.length && libraryViewMode === 'compact'" class="library-compact-grid">
+                    <article v-for="book in libraryBooks" :key="book.id" class="library-compact-card" :class="{ selected: selectedBookId === book.id }">
+                      <div class="library-compact-cover">
+                        <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
+                        <span v-else>{{ book.title?.charAt(0) || '书' }}</span>
+                      </div>
+                      <div class="library-compact-info">
+                        <h3 :title="book.title">{{ book.title }}</h3>
+                        <p :title="book.author || '未知作者'">{{ book.author || '未知作者' }}</p>
+                        <div class="library-meta-line"><span>{{ (book.format || '未知').toUpperCase() }}</span><span>{{ book.categoryName || '未分类' }}</span><span>{{ formatSize(book.fileSize) }}</span></div>
+                      </div>
+                      <el-button type="primary" plain size="small" :loading="selectingBookId === book.id" :disabled="creating || selectingBookId !== null" @click="selectLibraryBook(book)">选择</el-button>
+                    </article>
+                  </div>
+                  <div v-else-if="libraryBooks.length" class="library-book-list">
+                    <article v-for="book in libraryBooks" :key="book.id" class="library-book-list-row" :class="{ selected: selectedBookId === book.id }">
+                      <div class="library-list-cover">
+                        <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
+                        <span v-else>{{ book.title?.charAt(0) || '书' }}</span>
+                      </div>
+                      <div class="library-list-primary">
+                        <h3 :title="book.title">{{ book.title }}</h3>
+                        <p :title="book.author || '未知作者'">{{ book.author || '未知作者' }}</p>
+                      </div>
+                      <div class="library-list-meta"><span>{{ (book.format || '未知').toUpperCase() }}</span><span>{{ book.categoryName || '未分类' }}</span><span>{{ formatSize(book.fileSize) }}</span></div>
+                      <el-button type="primary" plain size="small" :loading="selectingBookId === book.id" :disabled="creating || selectingBookId !== null" @click="selectLibraryBook(book)">选择</el-button>
                     </article>
                   </div>
                   <el-empty v-else :description="libraryKeyword ? '没有找到匹配的书籍' : '书库中暂无书籍'" />
@@ -127,7 +163,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CircleCheckFilled, Document, Search, UploadFilled } from '@element-plus/icons-vue'
+import { CircleCheckFilled, Document, Grid, List, Search, Tickets, UploadFilled } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
 import { message, confirm } from '@/utils/message'
@@ -135,8 +171,12 @@ import { message, confirm } from '@/utils/message'
 const route = useRoute(); const router = useRouter()
 const task = ref<any>(null); const history = ref<any[]>([]); const books = ref<any[]>([]); const bookVersions = ref<any[]>([])
 const activeTab = ref<'select' | 'source' | 'result'>('select')
-const sourceMode = ref('upload'); const selectedFile = ref<File | null>(null); const selectedBookId = ref<number | null>(null); const selectedVersionId = ref<number | null>(null)
-const libraryBooks = ref<any[]>([]); const libraryKeyword = ref(''); const libraryPage = ref(1); const libraryPageSize = 8; const libraryTotal = ref(0); const libraryLoading = ref(false); const selectingBookId = ref<number | null>(null)
+const sourceMode = ref('library'); const selectedFile = ref<File | null>(null); const selectedBookId = ref<number | null>(null); const selectedVersionId = ref<number | null>(null)
+type LibraryViewMode = 'card' | 'compact' | 'list'
+const libraryViewModeStorageKey = 'aibook-conversion-library-view-mode'
+const isLibraryViewMode = (value: string | null): value is LibraryViewMode => value === 'card' || value === 'compact' || value === 'list'
+const libraryViewMode = ref<LibraryViewMode>('card')
+const libraryBooks = ref<any[]>([]); const libraryKeyword = ref(''); const libraryPage = ref(1); const libraryPageSize = 8; const libraryTotal = ref(0); const libraryLoading = ref(false); const libraryLoaded = ref(false); const selectingBookId = ref<number | null>(null)
 const creating = ref(false); const saving = ref(false); const converting = ref(false); const randomizing = ref(false); const analyzingChapters = ref(false); const formattingChapters = ref(false); const showHistory = ref(false)
 const coverInput = ref<HTMLInputElement | null>(null); const coverObjectUrl = ref(''); const showCoverDialog = ref(false); const covers = ref<any[]>([]); const coverSearch = ref('')
 const showBookDialog = ref(false); const attachBookId = ref<number | null>(null); const tagInput = ref(''); const previewNight = ref(false)
@@ -150,15 +190,16 @@ const filteredCovers = computed(() => covers.value.filter(c => !coverSearch.valu
 const syncTask = (value: any) => { task.value = value; Object.assign(form, { chapterPattern: '', chapterTitleRemovePattern: '', chapterTitleFormat: '{original}' }, value.settings || {}, { title: value.title, author: value.author || '', description: value.description || '', isbn: value.isbn || '', publisher: value.publisher || '', publishDate: value.publishDate || '', language: value.language || 'zh-CN', categoryName: value.categoryName || '', seriesName: value.seriesName || '', seriesIndex: value.seriesIndex || '', outputFilename: value.outputFilename || `${value.title}.epub`, chapters: (value.chapters || []).map((c: any) => ({ ...c })) }); chapterMode.value = form.chapterPattern ? 'custom' : 'auto'; tagInput.value = (value.tags || []).join(', '); void refreshCover() }
 const loadBooks = async () => { const { data } = await api.get('/api/books', { params: { page: 0, size: 1000, sortBy: 'title', sortDir: 'asc' } }); books.value = data.content || [] }
 const openAttachBookDialog = async () => { if (!books.value.length) await loadBooks(); showBookDialog.value = true }
-const loadLibraryBooks = async (page = libraryPage.value) => { libraryLoading.value = true; try { libraryPage.value = page; const keyword = libraryKeyword.value.trim(); const url = keyword ? '/api/books/search' : '/api/books'; const params = keyword ? { keyword, page: page - 1, size: libraryPageSize } : { page: page - 1, size: libraryPageSize, sortBy: 'title', sortDir: 'asc' }; const { data } = await api.get(url, { params }); libraryBooks.value = data.content || []; libraryTotal.value = data.totalElements || 0 } catch (e: any) { libraryBooks.value = []; libraryTotal.value = 0; message.error(e.response?.data?.message || '书库加载失败') } finally { libraryLoading.value = false } }
+const loadLibraryBooks = async (page = libraryPage.value) => { libraryLoading.value = true; try { libraryPage.value = page; const keyword = libraryKeyword.value.trim(); const url = keyword ? '/api/books/search' : '/api/books'; const params = keyword ? { keyword, page: page - 1, size: libraryPageSize } : { page: page - 1, size: libraryPageSize, sortBy: 'title', sortDir: 'asc' }; const { data } = await api.get(url, { params }); libraryBooks.value = data.content || []; libraryTotal.value = data.totalElements || 0; libraryLoaded.value = true } catch (e: any) { libraryBooks.value = []; libraryTotal.value = 0; message.error(e.response?.data?.message || '书库加载失败') } finally { libraryLoading.value = false } }
 const searchLibraryBooks = () => { void loadLibraryBooks(1) }
-const handleSourceModeChange = (mode: string | number | boolean | undefined) => { if (mode === 'library' && !libraryBooks.value.length && !libraryLoading.value) void loadLibraryBooks(1) }
+const setLibraryViewMode = (mode: LibraryViewMode) => { libraryViewMode.value = mode; try { localStorage.setItem(libraryViewModeStorageKey, mode) } catch { /* 存储不可用时仅保留本次选择 */ } }
+const handleSourceModeChange = (mode: string | number | boolean | undefined) => { if (mode === 'library' && !libraryLoaded.value && !libraryLoading.value) void loadLibraryBooks(1) }
 const loadHistory = async () => { history.value = (await api.get('/api/conversions')).data || [] }
-const loadBookVersions = async () => { selectedVersionId.value = null; if (!selectedBookId.value) return; bookVersions.value = (await api.get(`/api/books/${selectedBookId.value}/versions`)).data || []; selectedVersionId.value = bookVersions.value.find((v: any) => v.format === 'txt')?.id || null }
-const selectLibraryBook = async (book: any) => { selectingBookId.value = book.id; selectedBookId.value = book.id; try { await loadBookVersions(); if (!selectedVersionId.value) { message.warning(`《${book.title}》没有可用于转换的 TXT 文件版本`); return } await createFromBook() } catch (e: any) { message.error(e.response?.data?.message || '读取书籍文件版本失败') } finally { selectingBookId.value = null } }
+const loadBookVersions = async (bookId = selectedBookId.value) => { selectedVersionId.value = null; if (!bookId) return null; const versions = (await api.get(`/api/books/${bookId}/versions`)).data || []; if (selectedBookId.value !== bookId) return null; bookVersions.value = versions; selectedVersionId.value = versions.find((v: any) => v.format === 'txt')?.id || null; return selectedVersionId.value }
+const selectLibraryBook = async (book: any) => { const currentBookId = book.id; selectingBookId.value = currentBookId; selectedBookId.value = currentBookId; try { const versionId = await loadBookVersions(currentBookId); if (selectedBookId.value !== currentBookId) return; if (!versionId) { selectedBookId.value = null; selectedVersionId.value = null; message.warning(`《${book.title}》没有可用于转换的 TXT 文件版本`); return } await createFromBook() } catch (e: any) { if (selectedBookId.value === currentBookId) { selectedBookId.value = null; selectedVersionId.value = null; message.error(e.response?.data?.message || '读取书籍文件版本失败') } } finally { if (selectingBookId.value === currentBookId) selectingBookId.value = null } }
 const onSourceSelected = (upload: any) => { selectedFile.value = upload.raw }
 const createFromUpload = async () => { if (!selectedFile.value) return; creating.value = true; try { const data = new FormData(); data.append('file', selectedFile.value); const response = await api.post('/api/conversions/upload', data); syncTask(response.data); activeTab.value = 'source'; await router.replace({ path: '/format-conversion', query: { taskId: response.data.id } }); await loadHistory() } catch (e: any) { message.error(e.response?.data?.message || 'TXT 分析失败') } finally { creating.value = false } }
-const createFromBook = async () => { if (!selectedBookId.value || !selectedVersionId.value) return; creating.value = true; try { const { data } = await api.post('/api/conversions/from-book', { bookId: selectedBookId.value, versionId: selectedVersionId.value }); syncTask(data); activeTab.value = 'source'; await router.replace({ path: '/format-conversion', query: { taskId: data.id } }); await loadHistory() } catch (e: any) { message.error(e.response?.data?.message || '书籍分析失败') } finally { creating.value = false } }
+const createFromBook = async (loadHistoryAfter = true) => { if (!selectedBookId.value || !selectedVersionId.value) return; creating.value = true; try { const { data } = await api.post('/api/conversions/from-book', { bookId: selectedBookId.value, versionId: selectedVersionId.value }); syncTask(data); activeTab.value = 'source'; await router.replace({ path: '/format-conversion', query: { taskId: data.id } }); if (loadHistoryAfter) await loadHistory() } catch (e: any) { message.error(e.response?.data?.message || '书籍分析失败') } finally { creating.value = false } }
 const saveConfig = async (quiet = false) => { if (!form.title.trim()) { message.warning('书籍名称不能为空'); throw new Error('title') } saving.value = true; try { const payload = { ...form, title: form.title.trim(), tags: tagInput.value.split(/[,，]/).map(v => v.trim()).filter(Boolean) }; const { data } = await api.put(`/api/conversions/${task.value.id}`, payload); syncTask(data); if (!quiet) message.success('转换配置已保存'); return data } finally { saving.value = false } }
 const startConversion = async () => { converting.value = true; try { await saveConfig(true); task.value.status = 'CONVERTING'; task.value.progress = 55; task.value.stage = '正在生成 EPUB 内容'; activeTab.value = 'result'; const { data } = await api.post(`/api/conversions/${task.value.id}/convert`); syncTask(data); if (data.status === 'SUCCESS') { message.success('EPUB 转换完成'); await loadPreview(0) } else message.error(data.errorMessage || '转换失败') } catch (e: any) { if (e.message !== 'title') message.error(e.response?.data?.message || '转换失败') } finally { converting.value = false; await loadHistory() } }
 const uploadCover = async (event: Event) => { const input = event.target as HTMLInputElement; const file = input.files?.[0]; if (!file) return; const body = new FormData(); body.append('file', file); try { syncTask((await api.post(`/api/conversions/${task.value.id}/cover`, body)).data); message.success('封面已更新') } catch (e: any) { message.error(e.response?.data?.message || '封面上传失败') } finally { input.value = '' } }
@@ -176,14 +217,14 @@ const attachToBook = async (bookId: number) => { try { await api.post(`/api/conv
 const createBook = async () => { try { const { data } = await api.post(`/api/conversions/${task.value.id}/create-book`); message.success('新书籍已创建'); await router.push(`/books/${data.id}`) } catch (e: any) { message.error(e.response?.data?.message || '新建书籍失败') } }
 const openTask = async (id: number) => { syncTask((await api.get(`/api/conversions/${id}`)).data); showHistory.value = false; activeTab.value = task.value.status === 'SUCCESS' || task.value.status === 'FAILED' ? 'result' : 'source'; await router.replace({ path: '/format-conversion', query: { taskId: id } }); if (task.value.status === 'SUCCESS') await loadPreview(0) }
 const removeTask = async (id: number) => { if (!await confirm('确定删除该转换任务及临时结果吗？')) return; await api.delete(`/api/conversions/${id}`); if (task.value?.id === id) resetTask(); await loadHistory(); message.success('转换任务已删除') }
-const resetTask = () => { task.value = null; selectedFile.value = null; selectedBookId.value = null; selectedVersionId.value = null; activeTab.value = 'select'; void router.replace('/format-conversion') }
+const resetTask = () => { task.value = null; selectedFile.value = null; selectedBookId.value = null; selectedVersionId.value = null; sourceMode.value = 'library'; activeTab.value = 'select'; if (!libraryLoaded.value && !libraryLoading.value) void loadLibraryBooks(1); void router.replace('/format-conversion') }
 const formatSize = (bytes?: number) => { if (!bytes) return '0 B'; const units = ['B','KB','MB','GB']; let value = bytes; let i = 0; while (value >= 1024 && i < 3) { value /= 1024; i++ } return `${value.toFixed(i ? 2 : 0)} ${units[i]}` }
 const formatNumber = (n?: number) => new Intl.NumberFormat('zh-CN').format(n || 0)
 const formatElapsed = (ms?: number) => ms == null ? '-' : `${(ms / 1000).toFixed(1)} 秒`
 const statusText = (s: string) => ({ CREATED:'已创建',ANALYZING:'正在分析',READY:'等待转换',CONVERTING:'正在转换',SUCCESS:'成功',FAILED:'失败',CANCELLED:'已取消' } as any)[s] || s
 const statusType = (s: string) => s === 'SUCCESS' ? 'success' : s === 'FAILED' ? 'danger' : s === 'CONVERTING' ? 'warning' : 'info'
 
-onMounted(async () => { await loadHistory(); const taskId = Number(route.query.taskId); if (taskId) await openTask(taskId); else { const bookId = Number(route.query.bookId), versionId = Number(route.query.versionId); if (bookId && versionId) { selectedBookId.value = bookId; selectedVersionId.value = versionId; await createFromBook() } } })
+onMounted(async () => { try { const savedViewMode = localStorage.getItem(libraryViewModeStorageKey); if (isLibraryViewMode(savedViewMode)) libraryViewMode.value = savedViewMode } catch { /* 存储不可用时使用大卡片默认值 */ } const taskId = Number(route.query.taskId); if (taskId) { await openTask(taskId); return } const bookId = Number(route.query.bookId), versionId = Number(route.query.versionId); if (bookId && versionId) { selectedBookId.value = bookId; selectedVersionId.value = versionId; await createFromBook(false); return } await Promise.all([loadHistory(), loadLibraryBooks(1)]) })
 onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjectUrl.value) })
 </script>
 
@@ -371,6 +412,37 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   gap: 10px;
 }
 
+.library-results-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.library-view-switch {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-hover);
+}
+
+.library-view-switch :deep(.el-button) {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  transition: color .18s ease, border-color .18s ease, background .18s ease, transform .18s ease;
+}
+
+.library-view-switch :deep(.el-button:focus-visible) {
+  outline: 3px solid var(--primary-alpha-30, var(--primary));
+  outline-offset: 2px;
+}
+
 .library-results {
   min-height: 300px;
   margin-top: 18px;
@@ -469,6 +541,144 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   margin-left: 0;
 }
 
+.library-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.library-compact-card,
+.library-book-list-row {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-color));
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.library-compact-card {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 14px;
+}
+
+.library-compact-cover,
+.library-list-cover {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: linear-gradient(145deg, var(--primary-alpha-10), var(--surface-hover));
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.library-compact-cover {
+  width: 62px;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  font-size: 24px;
+}
+
+.library-compact-cover img,
+.library-list-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.library-compact-info,
+.library-list-primary {
+  min-width: 0;
+}
+
+.library-compact-info h3,
+.library-compact-info p,
+.library-list-primary h3,
+.library-list-primary p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-compact-info h3,
+.library-list-primary h3 {
+  margin: 0 0 5px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.library-compact-info p,
+.library-list-primary p {
+  margin: 0 0 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.library-meta-line,
+.library-list-meta {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+  color: var(--text-tertiary, var(--text-secondary));
+  font-size: 11px;
+}
+
+.library-meta-line span,
+.library-list-meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-meta-line span + span::before,
+.library-list-meta span + span::before {
+  margin-right: 6px;
+  color: var(--border-color);
+  content: '·';
+}
+
+.library-book-list {
+  display: grid;
+  gap: 10px;
+}
+
+.library-book-list-row {
+  display: grid;
+  grid-template-columns: 42px minmax(150px, 1fr) minmax(210px, auto) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 12px;
+  border-radius: 13px;
+}
+
+.library-list-cover {
+  width: 42px;
+  aspect-ratio: 2 / 3;
+  border-radius: 6px;
+  font-size: 17px;
+}
+
+.library-list-primary p {
+  margin-bottom: 0;
+}
+
+.library-list-meta {
+  justify-content: flex-end;
+}
+
+.library-compact-card:hover,
+.library-compact-card.selected,
+.library-book-list-row:hover,
+.library-book-list-row.selected {
+  border-color: var(--primary-alpha-30, var(--primary));
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
 .library-pagination-box {
   display: flex;
   justify-content: center;
@@ -538,7 +748,9 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   box-shadow: 0 8px 22px rgba(15, 23, 42, .08);
 }
 
-:global(html[data-theme="modern"]) .library-book-card {
+:global(html[data-theme="modern"]) .library-book-card,
+:global(html[data-theme="modern"]) .library-compact-card,
+:global(html[data-theme="modern"]) .library-book-list-row {
   border-color: #d9dee8;
   background: #fff;
   box-shadow: 0 4px 14px rgba(15, 23, 42, .07);
@@ -579,7 +791,9 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   box-shadow: 0 9px 24px rgba(89, 57, 35, .1);
 }
 
-:global(html[data-theme="warm"]) .library-book-card {
+:global(html[data-theme="warm"]) .library-book-card,
+:global(html[data-theme="warm"]) .library-compact-card,
+:global(html[data-theme="warm"]) .library-book-list-row {
   border-color: color-mix(in srgb, var(--primary) 22%, var(--border-color));
   border-radius: 11px;
   background: #fffdf9;
@@ -604,7 +818,9 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   box-shadow: 0 10px 28px rgba(35, 83, 62, .12);
 }
 
-:global(html[data-theme="natural"]) .library-book-card {
+:global(html[data-theme="natural"]) .library-book-card,
+:global(html[data-theme="natural"]) .library-compact-card,
+:global(html[data-theme="natural"]) .library-book-list-row {
   border-color: color-mix(in srgb, var(--primary) 20%, rgba(255, 255, 255, .82));
   background: rgba(255, 255, 255, .82);
   box-shadow: 0 8px 22px rgba(35, 83, 62, .1);
@@ -647,7 +863,9 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   -webkit-backdrop-filter: blur(24px) saturate(165%);
 }
 
-:global(html[data-theme="macos26"]) .library-book-card {
+:global(html[data-theme="macos26"]) .library-book-card,
+:global(html[data-theme="macos26"]) .library-compact-card,
+:global(html[data-theme="macos26"]) .library-book-list-row {
   border-color: rgba(255, 255, 255, .88);
   background: rgba(255, 255, 255, .68);
   box-shadow: 0 10px 26px rgba(50, 80, 120, .14), inset 0 1px 0 rgba(255, 255, 255, .92);
@@ -720,6 +938,10 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
     grid-template-columns: 1fr;
   }
 
+  .library-results-toolbar {
+    justify-content: space-between;
+  }
+
   .library-book-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
@@ -727,6 +949,37 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
 
   .library-book-card {
     padding: 9px;
+  }
+
+  .library-compact-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .library-compact-card {
+    grid-template-columns: 54px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 8px;
+  }
+
+  .library-compact-cover {
+    width: 54px;
+  }
+
+  .library-book-list-row {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 8px;
+  }
+
+  .library-list-cover {
+    width: 38px;
+  }
+
+  .library-book-list-row .library-list-meta {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+    margin-top: -5px;
   }
 
   .library-pagination-box {
@@ -742,6 +995,21 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
 @media (min-width: 721px) and (max-width: 980px) {
   .library-book-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .library-compact-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-content-shell,
+  .library-book-card,
+  .library-compact-card,
+  .library-book-list-row,
+  .library-view-switch :deep(.el-button) {
+    animation: none;
+    transition: none;
   }
 }
 </style>

@@ -49,6 +49,7 @@ class ScannedBookPersistenceServiceTest {
 
         assertThat(saved.getUser()).isSameAs(userReference);
         assertThat(saved.getCategory()).isSameAs(categoryReference);
+        assertThat(saved.getSourceType()).isEqualTo(Book.SourceType.DIRECTORY_SCAN);
         verify(bookRepository).save(book);
         verify(randomCoverService).assignIfMissing(book, userReference);
     }

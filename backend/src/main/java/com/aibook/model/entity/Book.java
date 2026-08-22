@@ -77,6 +77,16 @@ public class Book {
     private String filePath;
 
     /**
+     * 书籍首次入库方式。历史数据由启动后的独立迁移回填；新书必须在入库时明确设置。
+     *
+     * <p>升级时保持数据库列可空，确保 PostgreSQL 的既有 books 表能够先完成 DDL 更新，
+     * 再由回填任务补齐历史记录。</p>
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type")
+    private SourceType sourceType;
+
+    /**
      * 文件大小（字节）
      */
     private Long fileSize;
@@ -198,5 +208,10 @@ public class Book {
         UNREADING,    // 未读
         READING,     // 正在阅读
         FINISHED     // 已读完
+    }
+
+    public enum SourceType {
+        UPLOAD,
+        DIRECTORY_SCAN
     }
 }

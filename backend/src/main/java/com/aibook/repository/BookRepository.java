@@ -42,6 +42,12 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     List<BookScanSourceBackfillProjection> findBackfillCandidatesAfterId(
             @Param("afterId") Long afterId, Pageable pageable);
 
+    /** 按主键游标分页读取尚未标记首次入库方式的历史书籍。 */
+    @Query("SELECT b.id AS id, b.filePath AS filePath FROM Book b "
+            + "WHERE b.sourceType IS NULL AND b.id > :afterId ORDER BY b.id")
+    List<BookSourceTypeBackfillProjection> findSourceTypeBackfillCandidatesAfterId(
+            @Param("afterId") Long afterId, Pageable pageable);
+
     /**
      * 根据用户分页查询书籍
      */

@@ -466,6 +466,17 @@
               <span class="info-value">{{ selectedVersionFormat.toUpperCase() }}</span>
             </div>
             <div class="info-item list-item">
+              <span class="info-label">来源</span>
+              <span class="info-value">{{ formatSourceType(book.sourceType) }}</span>
+            </div>
+            <div
+              v-if="book.sourceType === 'DIRECTORY_SCAN' && book.sourcePath"
+              class="info-item list-item"
+            >
+              <span class="info-label">扫描路径</span>
+              <span class="info-value source-path">{{ book.sourcePath }}</span>
+            </div>
+            <div class="info-item list-item">
               <span class="info-label">语言</span>
               <span class="info-value">{{ book.language || '未知' }}</span>
             </div>
@@ -1093,6 +1104,12 @@ const formatFileSize = (bytes?: number) => {
     unitIndex++
   }
   return `${size.toFixed(2)} ${units[unitIndex]}`
+}
+
+const formatSourceType = (sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN') => {
+  if (sourceType === 'UPLOAD') return '上传'
+  if (sourceType === 'DIRECTORY_SCAN') return '目录扫描'
+  return '未知'
 }
 
 const formatDate = (dateStr?: string) => {
@@ -1919,6 +1936,12 @@ onMounted(() => {
 .info-value {
   flex: 1;
   color: var(--text-primary);
+}
+
+.source-path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* 笔记 */
