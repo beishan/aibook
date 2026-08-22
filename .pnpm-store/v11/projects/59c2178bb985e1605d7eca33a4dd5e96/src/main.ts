@@ -8,7 +8,10 @@ import App from './App.vue'
 import router from './router'
 import { useThemeStore } from './stores/theme'
 import { usePreferencesStore } from './stores/preferences'
+import { useDockIconStore } from './stores/dockIcons'
+import { useUserStore } from './stores/user'
 import { loadSiteFavicon } from './utils/siteFavicon'
+import { loadWebsiteSettings } from './utils/siteSettings'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -22,6 +25,21 @@ const themeStore = useThemeStore(pinia)
 themeStore.initTheme()
 const preferencesStore = usePreferencesStore(pinia)
 void preferencesStore.hydrate()
+const dockIconStore = useDockIconStore(pinia)
+const userStore = useUserStore(pinia)
 void loadSiteFavicon()
 
-app.mount('#app')
+const bootstrap = async () => {
+  await loadWebsiteSettings()
+  if (localStorage.getItem('token')) {
+    await Promise.all([
+      dockIconStore.restoreCached(),
+      userStore.restoreCachedAvatar(),
+    ])
+    void dockIconStore.hydrate()
+    void userStore.hydrate()
+  }
+  app.mount('#app')
+}
+
+void bootstrap()

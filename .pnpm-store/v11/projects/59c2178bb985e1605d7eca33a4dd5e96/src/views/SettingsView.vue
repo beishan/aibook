@@ -255,6 +255,11 @@
       </div>
     </div>
 
+    <!-- 随机书籍封面库 -->
+    <div v-if="activeTab === 'covers'" class="tab-content">
+      <RandomCoverLibraryPanel />
+    </div>
+
     <!-- 分类管理 -->
     <div v-if="activeTab === 'categories'" class="tab-content">
       <CategoryManagementView />
@@ -331,9 +336,9 @@
       <UserManagementPanel />
     </div>
 
-    <!-- 网站图标（仅管理员） -->
-    <div v-if="isAdmin && activeTab === 'favicon'" class="tab-content">
-      <SiteFaviconSettingsPanel />
+    <!-- 网站设置（仅管理员） -->
+    <div v-if="isAdmin && activeTab === 'website'" class="tab-content">
+      <WebsiteSettingsPanel />
     </div>
 
     <!-- 系统信息 -->
@@ -355,7 +360,7 @@
         <div class="info-list grouped-list">
           <div class="info-item list-item">
             <span class="info-label">系统版本</span>
-            <span class="info-value">1.0.0</span>
+            <span class="info-value">{{ systemVersion }}</span>
           </div>
           <div class="info-item list-item">
             <span class="info-label">运行状态</span>
@@ -507,16 +512,18 @@ import FontManagementPanel from '@/components/FontManagementPanel.vue'
 import OperationLogPanel from '@/components/OperationLogPanel.vue'
 import UserManagementPanel from '@/components/UserManagementPanel.vue'
 import CurrentUserSettingsPanel from '@/components/CurrentUserSettingsPanel.vue'
-import SiteFaviconSettingsPanel from '@/components/SiteFaviconSettingsPanel.vue'
+import WebsiteSettingsPanel from '@/components/WebsiteSettingsPanel.vue'
 import DockSettingsPanel from '@/components/DockSettingsPanel.vue'
 import ThemeColorSettingsPanel from '@/components/ThemeColorSettingsPanel.vue'
 import ThemeBackgroundSettingsPanel from '@/components/ThemeBackgroundSettingsPanel.vue'
 import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
+import RandomCoverLibraryPanel from '@/components/RandomCoverLibraryPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
 import { useUserStore } from '@/stores/user'
 import { THEMES, type ThemeId } from '@/types/theme'
+import packageMetadata from '../../package.json'
 
 const CategoryManagementView = defineAsyncComponent(
   () => import('@/views/CategoryManagementView.vue'),
@@ -532,6 +539,7 @@ const preferencesStore = usePreferencesStore()
 const categoryStore = useCategoryStore()
 const userStore = useUserStore()
 const themes = THEMES
+const systemVersion = packageMetadata.version
 
 interface SystemRuntime {
   startedAt: string
@@ -711,6 +719,7 @@ const tabGroups = computed(() => [
     label: '书库',
     items: [
       { key: 'directories', label: '扫描目录', icon: '📂' },
+      { key: 'covers', label: '书籍封面库', icon: '🖼️' },
       { key: 'categories', label: '分类管理', icon: '🗂️' },
       { key: 'tags', label: '标签管理', icon: '🏷️' },
       { key: 'trash', label: '回收站', icon: '🗑️' },
@@ -731,7 +740,7 @@ const tabGroups = computed(() => [
   {
     label: '系统',
     items: [
-      ...(isAdmin.value ? [{ key: 'favicon', label: '网站图标', icon: '🌐' }] : []),
+      ...(isAdmin.value ? [{ key: 'website', label: '网站设置', icon: '🌐' }] : []),
       { key: 'info', label: '系统信息', icon: 'ℹ️' },
     ],
   },

@@ -16,6 +16,7 @@ import { applyThemeBackgroundTokens, normalizeThemeBackgroundConfig } from '@/ut
 const STORAGE_KEY = 'ai-book-theme'
 const ACCENT_STORAGE_KEY = 'ai-book-theme-accent-colors'
 const BACKGROUND_STORAGE_KEY = 'ai-book-theme-background-settings'
+const DEFAULT_THEME: ThemeId = 'macos26'
 
 const readAccentColors = (): ThemeAccentColors => {
   try {
@@ -53,12 +54,13 @@ const readBackgroundSettings = (): ThemeBackgroundSettings => {
 }
 
 export const useThemeStore = defineStore('theme', () => {
-  const currentTheme = ref<ThemeId>('natural')
+  const currentTheme = ref<ThemeId>(DEFAULT_THEME)
   const accentColors = ref<ThemeAccentColors>(readAccentColors())
   const backgroundSettings = ref<ThemeBackgroundSettings>(readBackgroundSettings())
 
   const currentThemeDef = computed<ThemeDefinition>(() => {
-    return THEMES.find(t => t.id === currentTheme.value) || THEMES[2]
+    return THEMES.find(t => t.id === currentTheme.value)
+      || THEMES.find(t => t.id === DEFAULT_THEME)!
   })
 
   const currentLayout = computed(() => currentThemeDef.value.layout)
@@ -114,7 +116,7 @@ export const useThemeStore = defineStore('theme', () => {
     if (saved && THEMES.some(t => t.id === saved)) {
       setTheme(saved)
     } else {
-      setTheme('natural')
+      setTheme(DEFAULT_THEME)
     }
   }
 

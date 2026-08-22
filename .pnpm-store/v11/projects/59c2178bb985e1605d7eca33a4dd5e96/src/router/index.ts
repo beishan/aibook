@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { loadWebsiteSettings } from '@/utils/siteSettings'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -46,6 +47,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/TextRepairConfigView.vue'),
       },
       {
+        path: 'format-conversion',
+        name: 'FormatConversion',
+        component: () => import('@/views/FormatConversionView.vue'),
+      },
+      {
         path: 'reader/:id',
         name: 'Reader',
         component: () => import('@/views/ReaderView.vue'),
@@ -90,13 +96,15 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const token = localStorage.getItem('token')
 
   if (to.meta.requiresAuth && !token) {
     next({ path: '/login', query: { redirect: to.fullPath } })
   } else if ((to.path === '/login' || to.path === '/register') && token) {
     next('/')
+  } else if (to.path === '/register' && !(await loadWebsiteSettings()).registrationEnabled) {
+    next('/login')
   } else {
     next()
   }

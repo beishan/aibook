@@ -79,6 +79,34 @@
               <span>{{ book.title.charAt(0) }}</span>
             </div>
           </div>
+          <div class="cover-action-row">
+            <button
+              class="btn cover-action-button"
+              type="button"
+              :disabled="uploadingCover || randomizingCover"
+              @click="coverInput?.click()"
+            >
+              <span aria-hidden="true">🖼️</span>
+              <span>{{ uploadingCover ? '上传中...' : '修改封面' }}</span>
+            </button>
+            <button
+              class="btn cover-action-button"
+              type="button"
+              :disabled="uploadingCover || randomizingCover"
+              @click="handleRandomCover"
+            >
+              <span aria-hidden="true">🎲</span>
+              <span>{{ randomizingCover ? '随机中...' : '随机封面' }}</span>
+            </button>
+          </div>
+          <input
+            ref="coverInput"
+            class="cover-file-input"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            :disabled="uploadingCover"
+            @change="handleCoverUpload"
+          />
           <div class="book-rating">
             <span class="rating-label">我的评分</span>
             <div class="rating-stars" aria-label="书籍评分">
@@ -240,16 +268,27 @@
             <h2>选择版本</h2>
             <p>格式或内容不同的版本会分别保存阅读进度。</p>
           </div>
-          <label class="btn version-upload-button" :class="{ disabled: uploadingVersion }">
-            <span>＋</span>
-            <span>{{ uploadingVersion ? '上传中...' : '添加版本' }}</span>
-            <input
-              type="file"
-              accept=".txt,.epub,.pdf,.mobi,.azw3,.docx,.doc,.html,.htm,.md,.cbz,.cbr"
-              :disabled="uploadingVersion"
-              @change="handleVersionUpload"
-            />
-          </label>
+          <div class="version-header-actions">
+            <button
+              class="btn"
+              type="button"
+              :disabled="selectedVersionFormat !== 'txt'"
+              :title="selectedVersionFormat !== 'txt' ? '第一期仅支持 TXT 转 EPUB' : '将当前 TXT 转换为 EPUB'"
+              @click="openFormatConversion"
+            >
+              <span>⇄</span><span>转换格式</span>
+            </button>
+            <label class="btn version-upload-button" :class="{ disabled: uploadingVersion }">
+              <span>＋</span>
+              <span>{{ uploadingVersion ? '上传中...' : '添加版本' }}</span>
+              <input
+                type="file"
+                accept=".txt,.epub,.pdf,.mobi,.azw3,.docx,.doc,.html,.htm,.md,.cbz,.cbr"
+                :disabled="uploadingVersion"
+                @change="handleVersionUpload"
+              />
+            </label>
+          </div>
         </div>
         <div class="version-list">
           <div
@@ -528,6 +567,9 @@ const activeTab = ref('description')
 const scraping = ref(false)
 const reparsing = ref(false)
 const downloadingCover = ref(false)
+const uploadingCover = ref(false)
+const randomizingCover = ref(false)
+const coverInput = ref<HTMLInputElement | null>(null)
 const showScraperDialog = ref(false)
 const moreActionsOpen = ref(false)
 const tocLoading = ref(false)
@@ -676,6 +718,14 @@ const handleRead = () => {
     query: selectedVersionId.value
       ? { versionId: String(selectedVersionId.value) }
       : undefined,
+  })
+}
+
+const openFormatConversion = () => {
+  if (!book.value || !selectedVersionId.value || selectedVersionFormat.value !== 'txt') return
+  router.push({
+    path: '/format-conversion',
+    query: { bookId: String(book.value.id), versionId: String(selectedVersionId.value) },
   })
 }
 
@@ -975,6 +1025,47 @@ const handleDownloadCover = async () => {
     message.error(error.response?.data?.message || '封面下载失败')
   } finally {
     downloadingCover.value = false
+  }
+}
+
+const handleCoverUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !book.value) return
+
+  if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
+    message.warning('仅支持 JPG、PNG、WebP 或 GIF 图片')
+    input.value = ''
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    message.warning('封面图片不能超过10MB')
+    input.value = ''
+    return
+  }
+
+  uploadingCover.value = true
+  try {
+    book.value = await bookStore.uploadBookCover(book.value.id, file)
+    message.success('书籍封面修改成功')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '书籍封面修改失败')
+  } finally {
+    uploadingCover.value = false
+    input.value = ''
+  }
+}
+
+const handleRandomCover = async () => {
+  if (!book.value) return
+  randomizingCover.value = true
+  try {
+    book.value = await bookStore.randomizeBookCover(book.value.id)
+    message.success('已随机更换书籍封面')
+  } catch (error: any) {
+    message.warning(error.response?.data?.message || '随机封面失败')
+  } finally {
+    randomizingCover.value = false
   }
 }
 
@@ -1303,6 +1394,37 @@ onMounted(() => {
   box-shadow: var(--shadow-lg);
 }
 
+.cover-action-row {
+  display: grid;
+  width: 208px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.cover-action-button {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-right: 8px;
+  padding-left: 8px;
+  border-color: var(--primary-alpha-20);
+  background: var(--surface-card);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cover-action-button:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--primary-alpha-10);
+}
+
+.cover-file-input {
+  display: none;
+}
+
 .cover-image {
   width: 100%;
   height: 100%;
@@ -1579,6 +1701,12 @@ onMounted(() => {
 
 .version-upload-button {
   flex-shrink: 0;
+}
+
+.version-header-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
 }
 
 .version-upload-button.disabled {
@@ -1862,6 +1990,10 @@ onMounted(() => {
     height: 254px;
   }
 
+  .cover-action-row {
+    width: 180px;
+  }
+
   .organization-panel {
     grid-template-columns: 1fr;
   }
@@ -1940,6 +2072,10 @@ onMounted(() => {
 
   .version-upload-button {
     justify-content: center;
+  }
+
+  .version-header-actions {
+    flex-direction: column;
   }
 
   .version-list {

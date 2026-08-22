@@ -309,6 +309,7 @@
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="scrape">✨ 刮削元数据</el-dropdown-item>
+                    <el-dropdown-item command="random-cover">🎲 随机封面</el-dropdown-item>
                     <el-dropdown-item command="reparse">🔄 重新解析</el-dropdown-item>
                     <el-dropdown-item command="repair">🔧 内容修复</el-dropdown-item>
                     <el-dropdown-item command="edit">✏️ 编辑书籍</el-dropdown-item>
@@ -433,6 +434,7 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="scrape">✨ 刮削元数据</el-dropdown-item>
+                <el-dropdown-item command="random-cover">🎲 随机封面</el-dropdown-item>
                 <el-dropdown-item command="reparse">🔄 重新解析</el-dropdown-item>
                 <el-dropdown-item command="repair">🔧 内容修复</el-dropdown-item>
                 <el-dropdown-item command="edit">✏️ 编辑书籍</el-dropdown-item>
@@ -903,6 +905,9 @@ const handleMoreCommand = async (command: string, book: Book) => {
     case 'scrape':
       await handleScrapeBook(book)
       break
+    case 'random-cover':
+      await handleRandomCover(book)
+      break
     case 'reparse':
       await handleReparseBook(book)
       break
@@ -920,6 +925,18 @@ const handleMoreCommand = async (command: string, book: Book) => {
     case 'delete':
       await handleDelete(book.id)
       break
+  }
+}
+
+const handleRandomCover = async (book: Book) => {
+  processingBookId.value = book.id
+  try {
+    await bookStore.randomizeBookCover(book.id)
+    message.success('已随机更换书籍封面')
+  } catch (error: any) {
+    message.warning(error.response?.data?.message || '随机封面失败')
+  } finally {
+    processingBookId.value = null
   }
 }
 
