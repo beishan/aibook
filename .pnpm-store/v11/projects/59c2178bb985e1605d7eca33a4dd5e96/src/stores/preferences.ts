@@ -14,7 +14,7 @@ import { normalizeThemeBackgroundConfig } from '@/utils/themeBackground'
 
 export type LibraryViewMode = 'card' | 'compact-card' | 'list'
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
-export const LIBRARY_PAGE_SIZE_OPTIONS = [12, 18, 24, 36, 60] as const
+export const LIBRARY_PAGE_SIZE_OPTIONS = [10, 30, 50, 100, 200] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
 
 interface UserPreferences {
@@ -47,7 +47,7 @@ const DOCK_OPACITY_KEY = 'aibook-dock-opacity'
 const DOCK_MAGNIFICATION_KEY = 'aibook-dock-magnification'
 const DOCK_BLUR_KEY = 'aibook-dock-blur'
 const DOCK_ICON_STYLE_KEY = 'aibook-dock-icon-style'
-const DEFAULT_LIBRARY_PAGE_SIZE: LibraryPageSize = 18
+const DEFAULT_LIBRARY_PAGE_SIZE: LibraryPageSize = 10
 const DEFAULT_SCAN_THREAD_COUNT = 2
 export const DEFAULT_DOCK_SIZE = 58
 export const DEFAULT_DOCK_OPACITY = 72
