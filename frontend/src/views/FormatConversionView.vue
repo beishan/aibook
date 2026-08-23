@@ -78,7 +78,7 @@
                   <el-empty v-else :description="libraryKeyword ? '没有找到匹配的书籍' : '书库中暂无书籍'" />
                 </div>
                 <div v-if="libraryTotal > 0" class="library-pagination-box">
-                  <el-pagination v-model:current-page="libraryPage" background layout="prev, pager, next, jumper, total" :page-size="libraryPageSize" :total="libraryTotal" :pager-count="5" @current-change="loadLibraryBooks" />
+                  <el-pagination v-model:current-page="libraryPage" v-model:page-size="libraryPageSize" background layout="total, sizes, prev, pager, next, jumper" :page-sizes="libraryPageSizes" :total="libraryTotal" :pager-count="5" @current-change="loadLibraryBooks" @size-change="handleLibraryPageSizeChange" />
                 </div>
               </div>
             </div>
@@ -160,9 +160,12 @@ const activeTab = ref<'select' | 'source' | 'result'>('select')
 const sourceMode = ref('library'); const selectedFile = ref<File | null>(null); const selectedBookId = ref<number | null>(null); const selectedVersionId = ref<number | null>(null)
 type LibraryViewMode = 'card' | 'compact' | 'list'
 const libraryViewModeStorageKey = 'aibook-conversion-library-view-mode'
+const libraryPageSizeStorageKey = 'aibook-conversion-library-page-size'
+const libraryPageSizes = [8, 16, 32, 64] as const
 const isLibraryViewMode = (value: string | null): value is LibraryViewMode => value === 'card' || value === 'compact' || value === 'list'
+const readLibraryPageSize = () => { try { const value = Number(localStorage.getItem(libraryPageSizeStorageKey)); return libraryPageSizes.includes(value as typeof libraryPageSizes[number]) ? value : libraryPageSizes[0] } catch { return libraryPageSizes[0] } }
 const libraryViewMode = ref<LibraryViewMode>('card')
-const libraryBooks = ref<any[]>([]); const libraryKeyword = ref(''); const libraryPage = ref(1); const libraryPageSize = 8; const libraryTotal = ref(0); const libraryLoading = ref(false); const libraryLoaded = ref(false); const selectingBookId = ref<number | null>(null)
+const libraryBooks = ref<any[]>([]); const libraryKeyword = ref(''); const libraryPage = ref(1); const libraryPageSize = ref(readLibraryPageSize()); const libraryTotal = ref(0); const libraryLoading = ref(false); const libraryLoaded = ref(false); const selectingBookId = ref<number | null>(null)
 const creating = ref(false); const saving = ref(false); const converting = ref(false); const randomizing = ref(false); const analyzingChapters = ref(false); const formattingChapters = ref(false); const showHistory = ref(false)
 const coverInput = ref<HTMLInputElement | null>(null); const coverObjectUrl = ref(''); const showCoverDialog = ref(false); const covers = ref<any[]>([]); const coverSearch = ref('')
 const showBookDialog = ref(false); const attachBookId = ref<number | null>(null); const tagInput = ref(''); const previewNight = ref(false)
@@ -176,9 +179,10 @@ const filteredCovers = computed(() => covers.value.filter(c => !coverSearch.valu
 const syncTask = (value: any) => { task.value = value; Object.assign(form, { chapterPattern: '', chapterTitleRemovePattern: '', chapterTitleFormat: '{original}' }, value.settings || {}, { title: value.title, author: value.author || '', description: value.description || '', isbn: value.isbn || '', publisher: value.publisher || '', publishDate: value.publishDate || '', language: value.language || 'zh-CN', categoryName: value.categoryName || '', seriesName: value.seriesName || '', seriesIndex: value.seriesIndex || '', outputFilename: value.outputFilename || `${value.title}.epub`, chapters: (value.chapters || []).map((c: any) => ({ ...c })) }); chapterMode.value = form.chapterPattern ? 'custom' : 'auto'; tagInput.value = (value.tags || []).join(', '); void refreshCover() }
 const loadBooks = async () => { const { data } = await api.get('/api/books', { params: { page: 0, size: 1000, sortBy: 'title', sortDir: 'asc' } }); books.value = data.content || [] }
 const openAttachBookDialog = async () => { if (!books.value.length) await loadBooks(); showBookDialog.value = true }
-const loadLibraryBooks = async (page = libraryPage.value) => { libraryLoading.value = true; try { libraryPage.value = page; const keyword = libraryKeyword.value.trim(); const url = keyword ? '/api/books/search' : '/api/books'; const params = keyword ? { keyword, page: page - 1, size: libraryPageSize } : { page: page - 1, size: libraryPageSize, sortBy: 'title', sortDir: 'asc' }; const { data } = await api.get(url, { params }); libraryBooks.value = data.content || []; libraryTotal.value = data.totalElements || 0; libraryLoaded.value = true } catch (e: any) { libraryBooks.value = []; libraryTotal.value = 0; message.error(e.response?.data?.message || '书库加载失败') } finally { libraryLoading.value = false } }
+const loadLibraryBooks = async (page = libraryPage.value) => { libraryLoading.value = true; try { libraryPage.value = page; const keyword = libraryKeyword.value.trim(); const url = keyword ? '/api/books/search' : '/api/books'; const params = keyword ? { keyword, page: page - 1, size: libraryPageSize.value } : { page: page - 1, size: libraryPageSize.value, sortBy: 'title', sortDir: 'asc' }; const { data } = await api.get(url, { params }); libraryBooks.value = data.content || []; libraryTotal.value = data.totalElements || 0; libraryLoaded.value = true } catch (e: any) { libraryBooks.value = []; libraryTotal.value = 0; message.error(e.response?.data?.message || '书库加载失败') } finally { libraryLoading.value = false } }
 const searchLibraryBooks = () => { void loadLibraryBooks(1) }
 const setLibraryViewMode = (mode: LibraryViewMode) => { libraryViewMode.value = mode; try { localStorage.setItem(libraryViewModeStorageKey, mode) } catch { /* 存储不可用时仅保留本次选择 */ } }
+const handleLibraryPageSizeChange = (size: number) => { if (!libraryPageSizes.includes(size as typeof libraryPageSizes[number])) return; try { localStorage.setItem(libraryPageSizeStorageKey, String(size)) } catch { /* 存储不可用时仅保留本次选择 */ } void loadLibraryBooks(1) }
 const handleSourceModeChange = (mode: string | number | boolean | undefined) => { if (mode === 'library' && !libraryLoaded.value && !libraryLoading.value) void loadLibraryBooks(1) }
 const loadHistory = async () => { history.value = (await api.get('/api/conversions')).data || [] }
 const loadBookVersions = async (bookId = selectedBookId.value) => { selectedVersionId.value = null; if (!bookId) return null; const versions = (await api.get(`/api/books/${bookId}/versions`)).data || []; if (selectedBookId.value !== bookId) return null; bookVersions.value = versions; selectedVersionId.value = versions.find((v: any) => v.format === 'txt')?.id || null; return selectedVersionId.value }
