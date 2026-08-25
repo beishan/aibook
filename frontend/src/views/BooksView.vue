@@ -8,6 +8,16 @@
       </div>
       <div class="page-header-actions">
         <button
+          class="btn image-privacy-button"
+          :class="{ active: allBookCoversHidden }"
+          :aria-pressed="allBookCoversHidden"
+          :title="allBookCoversHidden ? '显示书库和书架中的所有封面' : '隐藏书库和书架中的所有封面'"
+          @click="toggleAllBookCovers"
+        >
+          <el-icon aria-hidden="true"><View v-if="allBookCoversHidden" /><Hide v-else /></el-icon>
+          <span>{{ allBookCoversHidden ? '显示全部封面' : '隐藏全部封面' }}</span>
+        </button>
+        <button
           class="btn"
           title="遍历书库并自动聚合同一本书的不同文件版本"
           @click="showVersionRebuildDialog = true"
@@ -256,12 +266,18 @@
             :src="getCoverUrl(book.coverUrl)"
             alt="封面"
             class="cover-image"
+            :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
             loading="lazy"
             decoding="async"
           />
           <div v-else class="no-cover">
             <span>{{ book.title.charAt(0) }}</span>
           </div>
+          <BookCoverPrivacyButton
+            v-if="book.coverUrl"
+            :book-id="book.id"
+            :book-title="book.title"
+          />
           <div class="book-cover-actions" @click.stop>
             <button
               class="action-btn"
@@ -367,10 +383,17 @@
             v-if="row.coverUrl"
             :src="getCoverUrl(row.coverUrl)"
             alt="封面"
+            :class="{ 'is-hidden': isBookCoverHidden(row.id) }"
             loading="lazy"
             decoding="async"
           />
           <div v-else class="no-cover-small">{{ row.title.charAt(0) }}</div>
+          <BookCoverPrivacyButton
+            v-if="row.coverUrl"
+            :book-id="row.id"
+            :book-title="row.title"
+            compact
+          />
         </div>
         <div class="book-list-info">
           <div class="book-list-title">{{ row.title }}</div>
@@ -547,7 +570,7 @@
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
-import { MoreFilled } from '@element-plus/icons-vue'
+import { Hide, MoreFilled, View } from '@element-plus/icons-vue'
 import { message, confirm } from '@/utils/message'
 import { formatChinaDate } from '@/utils/dateTime'
 import { useBookStore, type Book } from '@/stores/book'
@@ -564,7 +587,13 @@ import BookEditDialog from '@/components/BookEditDialog.vue'
 import ScraperDialog from '@/components/ScraperDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import BookVersionRebuildDialog from '@/components/BookVersionRebuildDialog.vue'
+import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import { getCoverUrl } from '@/utils/cover'
+import {
+  allBookCoversHidden,
+  isBookCoverHidden,
+  toggleAllBookCovers,
+} from '@/utils/imagePrivacy'
 import { scrapeBook } from '@/utils/scraper'
 
 const route = useRoute()
@@ -1097,6 +1126,12 @@ onMounted(async () => {
   gap: var(--spacing-sm);
 }
 
+.image-privacy-button.active {
+  border-color: var(--primary);
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+}
+
 .page-title {
   font-size: var(--font-size-4xl);
   font-weight: 700;
@@ -1343,10 +1378,11 @@ onMounted(async () => {
 
   .page-header-actions {
     width: 100%;
+    flex-wrap: wrap;
   }
 
   .page-header-actions .btn {
-    flex: 1;
+    flex: 1 1 calc(50% - var(--spacing-sm));
   }
 }
 
@@ -1499,6 +1535,12 @@ onMounted(async () => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.cover-image.is-hidden {
+  filter: blur(16px);
+  transform: scale(1.12);
 }
 
 .no-cover {
@@ -1517,9 +1559,9 @@ onMounted(async () => {
   position: absolute;
   bottom: 8px;
   left: 8px;
-  right: 8px;
+  right: 46px;
   width: fit-content;
-  max-width: calc(100% - 16px);
+  max-width: calc(100% - 54px);
   padding: 3px 7px;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.95);
@@ -1721,6 +1763,7 @@ onMounted(async () => {
 }
 
 .book-cover-small {
+  position: relative;
   width: 50px;
   height: 70px;
   border-radius: var(--radius-sm);
@@ -1734,6 +1777,12 @@ onMounted(async () => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.book-cover-small img.is-hidden {
+  filter: blur(16px);
+  transform: scale(1.18);
 }
 
 .no-cover-small {
@@ -1917,7 +1966,9 @@ onMounted(async () => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .book-cover-actions {
+  .book-cover-actions,
+  .cover-image,
+  .book-cover-small img {
     transition: none;
   }
 }

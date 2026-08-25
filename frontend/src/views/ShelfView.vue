@@ -150,8 +150,19 @@
             @click="$router.push(`/books/${book.id}`)"
           >
             <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-              <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+              <img
+                v-if="book.coverUrl"
+                :src="getCoverUrl(book.coverUrl)"
+                :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+                alt="封面"
+              />
               <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+              <BookCoverPrivacyButton
+                v-if="book.coverUrl"
+                :book-id="book.id"
+                :book-title="book.title"
+                :compact="viewMode === 'list'"
+              />
               <div v-if="viewMode === 'grid'" class="book-cover-actions shelf-book-actions" @click.stop>
                 <button
                   v-if="selectedShelfGroup !== 'all'"
@@ -239,8 +250,19 @@
           @click="$router.push(`/books/${book.id}`)"
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+            <img
+              v-if="book.coverUrl"
+              :src="getCoverUrl(book.coverUrl)"
+              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+              alt="封面"
+            />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+            <BookCoverPrivacyButton
+              v-if="book.coverUrl"
+              :book-id="book.id"
+              :book-title="book.title"
+              :compact="viewMode === 'list'"
+            />
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ book.title }}</div>
@@ -273,8 +295,19 @@
           @click="$router.push(`/reader/${book.id}`)"
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+            <img
+              v-if="book.coverUrl"
+              :src="getCoverUrl(book.coverUrl)"
+              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+              alt="封面"
+            />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+            <BookCoverPrivacyButton
+              v-if="book.coverUrl"
+              :book-id="book.id"
+              :book-title="book.title"
+              :compact="viewMode === 'list'"
+            />
             <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
               <button
                 class="action-btn remove-reading-action"
@@ -321,8 +354,19 @@
           @click="$router.push(`/books/${book.id}`)"
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+            <img
+              v-if="book.coverUrl"
+              :src="getCoverUrl(book.coverUrl)"
+              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+              alt="封面"
+            />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+            <BookCoverPrivacyButton
+              v-if="book.coverUrl"
+              :book-id="book.id"
+              :book-title="book.title"
+              :compact="viewMode === 'list'"
+            />
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ book.title }}</div>
@@ -355,8 +399,19 @@
           @click="$router.push(`/books/${book.id}`)"
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+            <img
+              v-if="book.coverUrl"
+              :src="getCoverUrl(book.coverUrl)"
+              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+              alt="封面"
+            />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+            <BookCoverPrivacyButton
+              v-if="book.coverUrl"
+              :book-id="book.id"
+              :book-title="book.title"
+              :compact="viewMode === 'list'"
+            />
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ book.title }}</div>
@@ -395,8 +450,19 @@
               :key="book.id"
               class="list-book-cover"
             >
-              <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+              <img
+                v-if="book.coverUrl"
+                :src="getCoverUrl(book.coverUrl)"
+                :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+                alt="封面"
+              />
               <div v-else class="no-cover-small">{{ book.title.charAt(0) }}</div>
+              <BookCoverPrivacyButton
+                v-if="book.coverUrl"
+                :book-id="book.id"
+                :book-title="book.title"
+                compact
+              />
             </div>
           </div>
         </div>
@@ -472,6 +538,8 @@ import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
+import { isBookCoverHidden } from '@/utils/imagePrivacy'
+import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import type { Book } from '@/stores/book'
 
 const router = useRouter()
@@ -1294,6 +1362,14 @@ button.shelf-folder-card {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.book-cover img.is-hidden,
+.book-list-cover img.is-hidden,
+.list-book-cover img.is-hidden {
+  filter: blur(16px);
+  transform: scale(1.15);
 }
 
 .book-cover-actions {
@@ -1441,6 +1517,7 @@ button.shelf-folder-card {
 }
 
 .book-list-cover {
+  position: relative;
   width: 50px;
   height: 70px;
   border-radius: var(--radius-sm);
@@ -1452,6 +1529,7 @@ button.shelf-folder-card {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter 0.2s ease, transform 0.2s ease;
 }
 
 .book-list-cover .no-cover {
@@ -1541,6 +1619,7 @@ button.shelf-folder-card {
 }
 
 .list-book-cover {
+  position: relative;
   width: 50px;
   height: 70px;
   border-radius: var(--radius-sm);
@@ -1552,6 +1631,7 @@ button.shelf-folder-card {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter 0.2s ease, transform 0.2s ease;
 }
 
 .no-cover-small {
@@ -1745,7 +1825,10 @@ button.shelf-folder-card {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .book-cover-actions {
+  .book-cover-actions,
+  .book-cover img,
+  .book-list-cover img,
+  .list-book-cover img {
     transition: none;
   }
 }
