@@ -58,7 +58,12 @@
           @keydown.enter="$router.push(`/books/${book.id}`)"
         >
           <div class="added-cover">
-            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" :alt="`${book.title}封面`" />
+            <img
+              v-if="book.coverUrl"
+              :src="getCoverUrl(book.coverUrl)"
+              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+              :alt="`${book.title}封面`"
+            />
             <div v-else class="added-no-cover">
               <span>{{ book.title.charAt(0) }}</span>
               <small>{{ book.format?.toUpperCase() }}</small>
@@ -96,7 +101,12 @@
             @click="$router.push(`/reader/${book.id}`)"
           >
             <div class="book-cover">
-              <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+              <img
+                v-if="book.coverUrl"
+                :src="getCoverUrl(book.coverUrl)"
+                :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+                alt="封面"
+              />
               <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
             </div>
             <div class="book-info">
@@ -143,6 +153,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useBookStore } from '@/stores/book'
 import type { Book } from '@/stores/book'
 import { getCoverUrl } from '@/utils/cover'
+import { isBookCoverHidden } from '@/utils/imagePrivacy'
 
 const bookStore = useBookStore()
 
@@ -301,11 +312,17 @@ function formatAddedDate(value: string) {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 260ms ease;
+  transition: filter 0.2s ease, transform 260ms ease;
 }
 
 .added-book-card:hover .added-cover img {
   transform: scale(1.035);
+}
+
+.added-cover img.is-hidden,
+.added-book-card:hover .added-cover img.is-hidden {
+  filter: blur(16px);
+  transform: scale(1.15);
 }
 
 .added-no-cover {
@@ -531,6 +548,12 @@ function formatAddedDate(value: string) {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.book-cover img.is-hidden {
+  filter: blur(16px);
+  transform: scale(1.18);
 }
 
 .no-cover {
@@ -646,6 +669,13 @@ function formatAddedDate(value: string) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px 14px;
     padding: var(--spacing-md);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .added-cover img,
+  .book-cover img {
+    transition: none;
   }
 }
 </style>

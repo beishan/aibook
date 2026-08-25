@@ -20,10 +20,23 @@
         </div>
         <p>导入或扫描到没有封面的新书时，将从这里自动随机选择一张封面。</p>
       </div>
-      <button class="btn btn-primary" type="button" :disabled="uploading" @click="fileInput?.click()">
-        <span>＋</span>
-        <span>{{ uploading ? '上传中...' : '添加封面' }}</span>
-      </button>
+      <div class="library-header-actions">
+        <button
+          class="btn image-privacy-button"
+          :class="{ active: allRandomCoversHidden }"
+          type="button"
+          :aria-pressed="allRandomCoversHidden"
+          :title="allRandomCoversHidden ? '显示封面库中的全部图片' : '隐藏封面库中的全部图片'"
+          @click="toggleAllRandomCovers"
+        >
+          <el-icon aria-hidden="true"><View v-if="allRandomCoversHidden" /><Hide v-else /></el-icon>
+          <span>{{ allRandomCoversHidden ? '显示全部封面' : '隐藏全部封面' }}</span>
+        </button>
+        <button class="btn btn-primary" type="button" :disabled="uploading" @click="fileInput?.click()">
+          <span>＋</span>
+          <span>{{ uploading ? '上传中...' : '添加封面' }}</span>
+        </button>
+      </div>
       <input
         ref="fileInput"
         class="file-input"
@@ -71,7 +84,25 @@
       <div class="cover-grid" :class="{ 'cover-grid--compact': coverViewMode === 'compact' }">
         <article v-for="cover in paginatedCovers" :key="cover.id" class="cover-item">
           <div class="cover-preview">
-            <img :src="getCoverUrl(cover.coverUrl)" :alt="cover.name" loading="lazy" />
+            <img
+              :src="getCoverUrl(cover.coverUrl)"
+              :alt="cover.name"
+              :class="{ 'is-hidden': isRandomCoverHidden(cover.id) }"
+              loading="lazy"
+            />
+            <button
+              class="cover-privacy-button"
+              :class="{ 'is-hidden': isRandomCoverHidden(cover.id) }"
+              type="button"
+              :aria-label="isRandomCoverHidden(cover.id) ? `显示封面 ${cover.name}` : `隐藏封面 ${cover.name}`"
+              :title="isRandomCoverHidden(cover.id) ? '显示此封面' : '隐藏此封面'"
+              @click="toggleRandomCover(cover.id)"
+            >
+              <el-icon aria-hidden="true">
+                <View v-if="isRandomCoverHidden(cover.id)" />
+                <Hide v-else />
+              </el-icon>
+            </button>
             <button
               class="delete-cover"
               type="button"
@@ -107,9 +138,16 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { QuestionFilled } from '@element-plus/icons-vue'
+import { Hide, QuestionFilled, View } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
+import {
+  allRandomCoversHidden,
+  isRandomCoverHidden,
+  removeRandomCoverOverride,
+  toggleAllRandomCovers,
+  toggleRandomCover,
+} from '@/utils/randomCoverPrivacy'
 import { confirm, message } from '@/utils/message'
 
 interface RandomBookCover {
@@ -233,6 +271,7 @@ const removeCover = async (cover: RandomBookCover) => {
       headers: { 'X-Suppress-Error-Toast': 'true' },
     })
     covers.value = covers.value.filter(item => item.id !== cover.id)
+    removeRandomCoverOverride(cover.id)
     message.success('封面已删除')
   } catch (error: any) {
     message.error(error.response?.data?.message || '封面删除失败')
@@ -266,11 +305,13 @@ onMounted(loadCovers)
 <style scoped>
 .cover-library { overflow: hidden; }
 .library-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing-lg); padding: var(--spacing-xl); border-bottom: 1px solid var(--border-color-light); }
+.library-header-actions { display: flex; align-items: center; gap: var(--spacing-sm); flex: none; }
+.image-privacy-button.active { border-color: var(--primary); background: var(--primary-alpha-10); color: var(--primary); }
 .library-title-row { display: inline-flex; align-items: center; gap: 6px; }
 .library-title { color: var(--text-primary); font-size: var(--font-size-lg); font-weight: 700; }
 .library-help-button { display: inline-grid; width: 24px; height: 24px; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-tertiary); cursor: help; font-size: 16px; line-height: 1; transition: background-color .18s ease, color .18s ease; }
 .library-help-button:hover { background: var(--primary-alpha-10); color: var(--primary); }
-.library-help-button:focus-visible, .cover-view-button:focus-visible, .delete-cover:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.library-help-button:focus-visible, .cover-view-button:focus-visible, .cover-privacy-button:focus-visible, .delete-cover:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .library-header p { margin: 7px 0 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
 .file-input { display: none; }
 .library-state { display: flex; min-height: 260px; align-items: center; justify-content: center; gap: 10px; color: var(--text-secondary); }
@@ -288,7 +329,10 @@ onMounted(loadCovers)
 .cover-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(138px, 1fr)); gap: var(--spacing-lg); padding: var(--spacing-xl); }
 .cover-item { min-width: 0; padding: 9px; border: 1px solid var(--border-color-light); border-radius: var(--radius-lg); background: var(--surface-card); }
 .cover-preview { position: relative; aspect-ratio: 3 / 4; overflow: hidden; border-radius: var(--radius-md); background: var(--surface-hover); }
-.cover-preview img { width: 100%; height: 100%; object-fit: cover; }
+.cover-preview img { width: 100%; height: 100%; object-fit: cover; transition: filter .2s ease, transform .2s ease; }
+.cover-preview img.is-hidden { filter: blur(16px); transform: scale(1.12); }
+.cover-privacy-button { position: absolute; z-index: 2; right: 7px; bottom: 7px; display: grid; width: 30px; height: 30px; place-items: center; padding: 0; border: 1px solid rgba(255,255,255,.45); border-radius: 50%; background: rgba(24,24,27,.72); color: white; cursor: pointer; backdrop-filter: blur(8px); }
+.cover-privacy-button:hover, .cover-privacy-button.is-hidden { background: color-mix(in srgb, var(--primary) 82%, rgba(24,24,27,.72)); }
 .delete-cover { position: absolute; top: 7px; right: 7px; display: grid; width: 27px; height: 27px; place-items: center; border: 1px solid rgba(255,255,255,.45); border-radius: 50%; background: rgba(24,24,27,.72); color: white; cursor: pointer; font-size: 19px; line-height: 1; backdrop-filter: blur(8px); }
 .delete-cover:hover:not(:disabled) { background: var(--danger); }
 .cover-meta { display: grid; min-width: 0; margin-top: 9px; }
@@ -298,15 +342,16 @@ onMounted(loadCovers)
 .cover-grid--compact .cover-item { padding: 6px; border-radius: var(--radius-md); }
 .cover-grid--compact .cover-preview { border-radius: var(--radius-sm); }
 .cover-grid--compact .delete-cover { top: 5px; right: 5px; }
+.cover-grid--compact .cover-privacy-button { right: 5px; bottom: 5px; width: 24px; height: 24px; font-size: 12px; }
 .cover-grid--compact .cover-meta { margin-top: 6px; }
 .cover-grid--compact .cover-meta strong { font-size: 11px; }
 .cover-grid--compact .cover-meta small { margin-top: 2px; font-size: 11px; }
 .library-pagination { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-lg); padding: 0 var(--spacing-xl) var(--spacing-xl); border-top: 1px solid var(--border-color-light); padding-top: var(--spacing-lg); }
 .pagination-summary { flex: none; color: var(--text-secondary); font-size: var(--font-size-sm); }
 .library-pagination :deep(.el-pagination) { min-width: 0; }
-@media (max-width: 640px) { .library-header { flex-direction: column; }.library-header .btn { width: 100%; justify-content: center; }.library-toolbar { padding: var(--spacing-lg) var(--spacing-lg) 0; }.cover-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: var(--spacing-lg); }.cover-grid--compact { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }.library-pagination { align-items: flex-start; flex-direction: column; padding: var(--spacing-lg); }.library-pagination :deep(.el-pagination) { flex-wrap: wrap; justify-content: flex-start; gap: 6px 0; } }
+@media (max-width: 640px) { .library-header { flex-direction: column; }.library-header-actions { width: 100%; flex-wrap: wrap; }.library-header-actions .btn { flex: 1 1 calc(50% - var(--spacing-sm)); justify-content: center; }.library-toolbar { padding: var(--spacing-lg) var(--spacing-lg) 0; }.cover-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: var(--spacing-lg); }.cover-grid--compact { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }.library-pagination { align-items: flex-start; flex-direction: column; padding: var(--spacing-lg); }.library-pagination :deep(.el-pagination) { flex-wrap: wrap; justify-content: flex-start; gap: 6px 0; } }
 @media (max-width: 360px) { .library-toolbar { align-items: flex-start; flex-direction: column; }.cover-grid--compact { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (prefers-reduced-motion: reduce) { .cover-view-button { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .cover-view-button, .cover-preview img { transition: none; } }
 </style>
 
 <style>
