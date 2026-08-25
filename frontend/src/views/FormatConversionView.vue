@@ -49,7 +49,7 @@
                   <div v-if="libraryBooks.length && libraryViewMode !== 'list'" class="library-book-grid" :class="{ 'is-compact': libraryViewMode === 'compact' }">
                     <article v-for="book in libraryBooks" :key="book.id" class="library-book-card" :class="{ selected: selectedBookId === book.id }">
                       <div class="library-book-cover">
-                        <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
+                        <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" :class="{ 'is-hidden': isBookCoverHidden(book.id) }" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
                         <span v-else>{{ book.title?.charAt(0) || '书' }}</span>
                         <em>{{ (book.format || '未知').toUpperCase() }}</em>
                       </div>
@@ -64,7 +64,7 @@
                   <div v-else-if="libraryBooks.length" class="library-book-list">
                     <article v-for="book in libraryBooks" :key="book.id" class="library-book-list-row" :class="{ selected: selectedBookId === book.id }">
                       <div class="library-list-cover">
-                        <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
+                        <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" :class="{ 'is-hidden': isBookCoverHidden(book.id) }" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
                         <span v-else>{{ book.title?.charAt(0) || '书' }}</span>
                       </div>
                       <div class="library-list-primary">
@@ -152,6 +152,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { CircleCheckFilled, Document, Grid, List, Search, Tickets, UploadFilled } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
+import { isBookCoverHidden } from '@/utils/imagePrivacy'
 import { message, confirm } from '@/utils/message'
 
 const route = useRoute(); const router = useRouter()
@@ -486,6 +487,13 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter .2s ease, transform .2s ease;
+}
+
+.library-book-cover img.is-hidden,
+.library-list-cover img.is-hidden {
+  filter: blur(16px);
+  transform: scale(1.15);
 }
 
 .library-book-cover em {
@@ -600,6 +608,7 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter .2s ease, transform .2s ease;
 }
 
 .library-list-primary {
@@ -1000,7 +1009,9 @@ onBeforeUnmount(() => { if (coverObjectUrl.value) URL.revokeObjectURL(coverObjec
   .tab-content-shell,
   .library-book-card,
   .library-book-list-row,
-  .library-view-switch :deep(.el-button) {
+  .library-view-switch :deep(.el-button),
+  .library-book-cover img,
+  .library-list-cover img {
     animation: none;
     transition: none;
   }

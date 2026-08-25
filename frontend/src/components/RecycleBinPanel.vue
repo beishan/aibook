@@ -82,7 +82,12 @@
         <template #default="{ row }">
           <div class="book-cell">
             <div class="trash-cover">
-              <img v-if="row.coverUrl" :src="getCoverUrl(row.coverUrl)" alt="" />
+              <img
+                v-if="row.coverUrl"
+                :src="getCoverUrl(row.coverUrl)"
+                :class="{ 'is-hidden': isBookCoverHidden(row.id) }"
+                alt=""
+              />
               <span v-else>{{ row.title?.charAt(0) || '书' }}</span>
             </div>
             <div class="book-summary">
@@ -127,6 +132,7 @@ import { onMounted, ref } from 'vue'
 import { Delete, DeleteFilled, RefreshRight, Search } from '@element-plus/icons-vue'
 import { useBookStore, type Book } from '@/stores/book'
 import { getCoverUrl } from '@/utils/cover'
+import { isBookCoverHidden } from '@/utils/imagePrivacy'
 import { confirm, message } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import api from '@/utils/api'
@@ -288,7 +294,8 @@ onMounted(() => {
 .selected-count { color: var(--el-text-color-secondary); font-size: 13px; }
 .book-cell { display: flex; align-items: center; min-width: 0; gap: 12px; }
 .trash-cover { display: grid; width: 38px; height: 52px; flex: 0 0 auto; place-items: center; overflow: hidden; border-radius: 5px; background: var(--el-fill-color); color: var(--el-text-color-secondary); }
-.trash-cover img { width: 100%; height: 100%; object-fit: cover; }
+.trash-cover img { width: 100%; height: 100%; object-fit: cover; transition: filter .2s ease, transform .2s ease; }
+.trash-cover img.is-hidden { filter: blur(16px); transform: scale(1.2); }
 .book-summary { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
 .book-summary strong, .book-summary span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .book-summary span { color: var(--el-text-color-secondary); font-size: 13px; }
@@ -301,4 +308,5 @@ onMounted(() => {
   .cleanup-control :deep(.el-select) { flex: 1; width: auto; }
   .toolbar-actions { justify-content: flex-start; }
 }
+@media (prefers-reduced-motion: reduce) { .trash-cover img { transition: none; } }
 </style>
