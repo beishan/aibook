@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.aibook.dto.TrashCleanupSettingsDTO;
 import com.aibook.model.entity.User;
+import com.aibook.model.entity.UserPreference;
 import com.aibook.repository.UserRepository;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -46,9 +47,15 @@ class TrashCleanupServiceTest {
         UserRepository userRepository = mock(UserRepository.class);
         BookService bookService = mock(BookService.class);
         User enabled = User.builder()
-                .id(1L).enabled(true).trashRetentionDays(15).build();
+                .id(1L)
+                .enabled(true)
+                .preferences(UserPreference.builder().trashRetentionDays(15).build())
+                .build();
         User disabled = User.builder()
-                .id(2L).enabled(false).trashRetentionDays(30).build();
+                .id(2L)
+                .enabled(false)
+                .preferences(UserPreference.builder().trashRetentionDays(30).build())
+                .build();
         when(userRepository.findByTrashRetentionDaysGreaterThan(0))
                 .thenReturn(List.of(enabled, disabled));
         TrashCleanupService service = new TrashCleanupService(userRepository, bookService);

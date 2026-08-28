@@ -2,6 +2,7 @@ package com.aibook.service;
 
 import com.aibook.dto.UserPreferencesDTO;
 import com.aibook.model.entity.User;
+import com.aibook.model.entity.UserPreference;
 import com.aibook.model.entity.FontAsset;
 import com.aibook.repository.FontAssetRepository;
 import com.aibook.repository.UserRepository;
@@ -26,8 +27,10 @@ class UserServiceTest {
                 .username("reader")
                 .email("reader@example.com")
                 .password("encoded")
-                .webTheme("warm")
-                .libraryViewMode("card")
+                .preferences(UserPreference.builder()
+                        .webTheme("warm")
+                        .libraryViewMode("card")
+                        .build())
                 .build();
         when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
         when(repository.save(user)).thenReturn(user);
@@ -307,8 +310,10 @@ class UserServiceTest {
                 .username("reader")
                 .email("reader@example.com")
                 .password("encoded")
-                .libraryPageSize(18)
-                .libraryListPageSize(60)
+                .preferences(UserPreference.builder()
+                        .libraryPageSize(18)
+                        .libraryListPageSize(60)
+                        .build())
                 .build();
         when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
         UserService service = new UserService(repository);
@@ -326,8 +331,10 @@ class UserServiceTest {
                 .username("reader")
                 .email("reader@example.com")
                 .password("encoded")
-                .libraryPageSize(10)
-                .libraryListPageSize(10)
+                .preferences(UserPreference.builder()
+                        .libraryPageSize(10)
+                        .libraryListPageSize(10)
+                        .build())
                 .build();
         when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
         when(repository.save(user)).thenReturn(user);
@@ -354,8 +361,10 @@ class UserServiceTest {
                 .username("reader")
                 .email("reader@example.com")
                 .password("encoded")
-                .uiFontId(8L)
-                .readerFontId(9L)
+                .preferences(UserPreference.builder()
+                        .uiFontId(8L)
+                        .readerFontId(9L)
+                        .build())
                 .build();
         when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
         when(repository.save(user)).thenReturn(user);

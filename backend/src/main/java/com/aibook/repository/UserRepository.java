@@ -46,7 +46,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findFirstByOrderByCreatedAtAscIdAsc();
 
-    List<User> findByTrashRetentionDaysGreaterThan(Integer retentionDays);
+    @Query("SELECT u FROM User u JOIN u.preferences p WHERE p.trashRetentionDays > :retentionDays")
+    List<User> findByTrashRetentionDaysGreaterThan(
+            @Param("retentionDays") Integer retentionDays);
 
     @Query("""
             SELECT u FROM User u

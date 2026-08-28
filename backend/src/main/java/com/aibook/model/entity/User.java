@@ -1,5 +1,6 @@
 package com.aibook.model.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -76,115 +77,13 @@ public class User implements UserDetails {
      */
     private LocalDate birthDate;
 
-    /**
-     * 偏好的书籍类型、作者或阅读主题。
-     */
-    @Column(columnDefinition = "TEXT")
-    private String bookPreferences;
-
-    /**
-     * Web 端主题偏好（modern、warm、natural）
-     */
-    private String webTheme;
-
-    /**
-     * 现代简约主题强调色（#RRGGBB）
-     */
-    private String modernThemeColor;
-
-    /**
-     * 暖色文艺主题强调色（#RRGGBB）
-     */
-    private String warmThemeColor;
-
-    /**
-     * 自然清新主题强调色（#RRGGBB）
-     */
-    private String naturalThemeColor;
-
-    /**
-     * MACOS26 Liquid Glass 主题强调色（#RRGGBB）
-     */
-    private String macos26ThemeColor;
-
-    /**
-     * Web 端各主题的页面、导航与卡片背景配置（JSON）。
-     */
-    @Column(columnDefinition = "TEXT")
-    private String themeBackgroundSettings;
-
-    /**
-     * Web 端书库显示方式（card、compact-card、list）
-     */
-    private String libraryViewMode;
-
-    /**
-     * Web 端书库每页显示数量
-     */
-    private Integer libraryPageSize;
-
-    /**
-     * Web 端书库列表视图每页显示数量；卡片视图继续使用 libraryPageSize。
-     */
-    private Integer libraryListPageSize;
-
-    /**
-     * 后端目录扫描工作线程数
-     */
-    private Integer scanThreadCount;
-
-    /**
-     * 是否按用户设置的时间自动扫描已启用目录。
-     */
-    @Column(name = "scheduled_scan_enabled")
-    private Boolean scheduledScanEnabled;
-
-    /**
-     * 每日自动扫描时间，格式为 HH:mm。
-     */
-    @Column(name = "scheduled_scan_time", length = 5)
-    private String scheduledScanTime;
-
-    /**
-     * 回收站记录保留天数；0 表示不自动清理。
-     */
-    @Column(name = "trash_retention_days")
-    private Integer trashRetentionDays;
-
-    /**
-     * 自然清新主题 Dock 图标尺寸（像素）
-     */
-    private Integer dockSize;
-
-    /**
-     * 自然清新主题 Dock 玻璃底色透明度（百分比）
-     */
-    private Integer dockOpacity;
-
-    /**
-     * 自然清新主题 Dock 悬浮放大比例（百分比）
-     */
-    private Integer dockMagnification;
-
-    /**
-     * 自然清新主题 Dock 背景模糊半径（像素）
-     */
-    private Integer dockBlur;
-
-    /**
-     * MACOS 主题 Dock 图标风格（minimal、skeuomorphic、macos26、custom）
-     */
-    private String dockIconStyle;
-
-    /**
-     * 系统界面字体资源 ID。
-     */
-    private Long uiFontId;
-
-    /**
-     * 阅读器默认字体资源 ID。
-     */
-    private Long readerFontId;
+    @JsonIgnore
+    @OneToOne(
+            mappedBy = "user",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true,
+            fetch = FetchType.EAGER)
+    private UserPreference preferences;
 
     /**
      * 角色 (USER, ADMIN)
@@ -209,6 +108,213 @@ public class User implements UserDetails {
     public enum Role {
         USER,
         ADMIN
+    }
+
+    private UserPreference preference() {
+        if (preferences == null) {
+            preferences = UserPreference.builder().user(this).build();
+        }
+        return preferences;
+    }
+
+    public String getBookPreferences() {
+        return preference().getBookPreferences();
+    }
+
+    public void setBookPreferences(String value) {
+        preference().setBookPreferences(value);
+    }
+
+    public String getWebTheme() {
+        return preference().getWebTheme();
+    }
+
+    public void setWebTheme(String value) {
+        preference().setWebTheme(value);
+    }
+
+    public String getModernThemeColor() {
+        return preference().getModernThemeColor();
+    }
+
+    public void setModernThemeColor(String value) {
+        preference().setModernThemeColor(value);
+    }
+
+    public String getWarmThemeColor() {
+        return preference().getWarmThemeColor();
+    }
+
+    public void setWarmThemeColor(String value) {
+        preference().setWarmThemeColor(value);
+    }
+
+    public String getNaturalThemeColor() {
+        return preference().getNaturalThemeColor();
+    }
+
+    public void setNaturalThemeColor(String value) {
+        preference().setNaturalThemeColor(value);
+    }
+
+    public String getMacos26ThemeColor() {
+        return preference().getMacos26ThemeColor();
+    }
+
+    public void setMacos26ThemeColor(String value) {
+        preference().setMacos26ThemeColor(value);
+    }
+
+    public String getThemeBackgroundSettings() {
+        return preference().getThemeBackgroundSettings();
+    }
+
+    public void setThemeBackgroundSettings(String value) {
+        preference().setThemeBackgroundSettings(value);
+    }
+
+    public String getLibraryViewMode() {
+        return preference().getLibraryViewMode();
+    }
+
+    public void setLibraryViewMode(String value) {
+        preference().setLibraryViewMode(value);
+    }
+
+    public Integer getLibraryPageSize() {
+        return preference().getLibraryPageSize();
+    }
+
+    public void setLibraryPageSize(Integer value) {
+        preference().setLibraryPageSize(value);
+    }
+
+    public Integer getLibraryListPageSize() {
+        return preference().getLibraryListPageSize();
+    }
+
+    public void setLibraryListPageSize(Integer value) {
+        preference().setLibraryListPageSize(value);
+    }
+
+    public Integer getScanThreadCount() {
+        return preference().getScanThreadCount();
+    }
+
+    public void setScanThreadCount(Integer value) {
+        preference().setScanThreadCount(value);
+    }
+
+    public Boolean getScheduledScanEnabled() {
+        return preference().getScheduledScanEnabled();
+    }
+
+    public void setScheduledScanEnabled(Boolean value) {
+        preference().setScheduledScanEnabled(value);
+    }
+
+    public String getScheduledScanTime() {
+        return preference().getScheduledScanTime();
+    }
+
+    public void setScheduledScanTime(String value) {
+        preference().setScheduledScanTime(value);
+    }
+
+    public Integer getTrashRetentionDays() {
+        return preference().getTrashRetentionDays();
+    }
+
+    public void setTrashRetentionDays(Integer value) {
+        preference().setTrashRetentionDays(value);
+    }
+
+    public Integer getDockSize() {
+        return preference().getDockSize();
+    }
+
+    public void setDockSize(Integer value) {
+        preference().setDockSize(value);
+    }
+
+    public Integer getDockOpacity() {
+        return preference().getDockOpacity();
+    }
+
+    public void setDockOpacity(Integer value) {
+        preference().setDockOpacity(value);
+    }
+
+    public Integer getDockMagnification() {
+        return preference().getDockMagnification();
+    }
+
+    public void setDockMagnification(Integer value) {
+        preference().setDockMagnification(value);
+    }
+
+    public Integer getDockBlur() {
+        return preference().getDockBlur();
+    }
+
+    public void setDockBlur(Integer value) {
+        preference().setDockBlur(value);
+    }
+
+    public String getDockIconStyle() {
+        return preference().getDockIconStyle();
+    }
+
+    public void setDockIconStyle(String value) {
+        preference().setDockIconStyle(value);
+    }
+
+    public Long getUiFontId() {
+        return preference().getUiFontId();
+    }
+
+    public void setUiFontId(Long value) {
+        preference().setUiFontId(value);
+    }
+
+    public Long getReaderFontId() {
+        return preference().getReaderFontId();
+    }
+
+    public void setReaderFontId(Long value) {
+        preference().setReaderFontId(value);
+    }
+
+    public Boolean getAllBookCoversHidden() {
+        return preference().getAllBookCoversHidden();
+    }
+
+    public void setAllBookCoversHidden(Boolean value) {
+        preference().setAllBookCoversHidden(value);
+    }
+
+    public String getBookCoverVisibilityOverrides() {
+        return preference().getBookCoverVisibilityOverrides();
+    }
+
+    public void setBookCoverVisibilityOverrides(String value) {
+        preference().setBookCoverVisibilityOverrides(value);
+    }
+
+    public Boolean getAllRandomCoversHidden() {
+        return preference().getAllRandomCoversHidden();
+    }
+
+    public void setAllRandomCoversHidden(Boolean value) {
+        preference().setAllRandomCoversHidden(value);
+    }
+
+    public String getRandomCoverVisibilityOverrides() {
+        return preference().getRandomCoverVisibilityOverrides();
+    }
+
+    public void setRandomCoverVisibilityOverrides(String value) {
+        preference().setRandomCoverVisibilityOverrides(value);
     }
 
     @Override

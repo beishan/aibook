@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.aibook.model.entity.ScanDirectory;
 import com.aibook.model.entity.ScanRecord;
 import com.aibook.model.entity.User;
+import com.aibook.model.entity.UserPreference;
 import com.aibook.repository.ScanDirectoryRepository;
 import com.aibook.repository.ScanRecordRepository;
 import com.aibook.repository.BookScanSourceRepository;
@@ -33,7 +34,7 @@ class ScanDirectoryTaskServiceTest {
         User user = User.builder()
                 .id(1L)
                 .username("reader")
-                .scanThreadCount(3)
+                .preferences(UserPreference.builder().scanThreadCount(3).build())
                 .build();
         ScanDirectory directory = ScanDirectory.builder()
                 .id(2L)

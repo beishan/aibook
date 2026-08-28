@@ -497,26 +497,87 @@
 
         <!-- 详细信息 -->
         <div v-show="activeTab === 'info'" class="tab-content">
+          <div class="info-panel-header">
+            <div>
+              <h2>书籍详细信息</h2>
+              <p>{{ editingInfo ? '修改可编辑的书籍元数据，系统信息保持只读。' : '查看书籍元数据及文件信息。' }}</p>
+            </div>
+            <div v-if="editingInfo" class="info-edit-actions">
+              <button class="btn" type="button" :disabled="savingInfo" @click="cancelEditInfo">
+                取消
+              </button>
+              <button class="btn btn-primary" type="button" :disabled="savingInfo" @click="saveInfo">
+                {{ savingInfo ? '保存中...' : '保存修改' }}
+              </button>
+            </div>
+            <button v-else class="btn info-edit-button" type="button" @click="startEditInfo">
+              <span aria-hidden="true">✎</span>
+              <span>编辑</span>
+            </button>
+          </div>
           <div class="info-list grouped-list">
             <div class="info-item list-item">
               <span class="info-label">书名</span>
-              <span class="info-value">{{ book.title }}</span>
+              <el-input
+                v-if="editingInfo"
+                v-model="infoEditForm.title"
+                class="info-edit-control"
+                maxlength="255"
+                show-word-limit
+                :disabled="savingInfo"
+              />
+              <span v-else class="info-value">{{ book.title }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">作者</span>
-              <span class="info-value">{{ book.author || '未知' }}</span>
+              <el-input
+                v-if="editingInfo"
+                v-model="infoEditForm.author"
+                class="info-edit-control"
+                maxlength="255"
+                placeholder="未知作者"
+                :disabled="savingInfo"
+              />
+              <span v-else class="info-value">{{ book.author || '未知' }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">ISBN</span>
-              <span class="info-value">{{ book.isbn || '无' }}</span>
+              <el-input
+                v-if="editingInfo"
+                v-model="infoEditForm.isbn"
+                class="info-edit-control"
+                maxlength="32"
+                placeholder="无"
+                :disabled="savingInfo"
+              />
+              <span v-else class="info-value">{{ book.isbn || '无' }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">出版社</span>
-              <span class="info-value">{{ book.publisher || '未知' }}</span>
+              <el-input
+                v-if="editingInfo"
+                v-model="infoEditForm.publisher"
+                class="info-edit-control"
+                maxlength="255"
+                placeholder="未知出版社"
+                :disabled="savingInfo"
+              />
+              <span v-else class="info-value">{{ book.publisher || '未知' }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">出版日期</span>
-              <span class="info-value">{{ book.publishDate || '未知' }}</span>
+              <el-date-picker
+                v-if="editingInfo"
+                v-model="infoEditForm.publishDate"
+                class="info-edit-control info-date-control"
+                type="date"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                placeholder="选择出版日期"
+                clearable
+                :disabled="savingInfo"
+              />
+              <span v-else class="info-value">{{ book.publishDate || '未知' }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">格式</span>
@@ -535,7 +596,15 @@
             </div>
             <div class="info-item list-item">
               <span class="info-label">语言</span>
-              <span class="info-value">{{ book.language || '未知' }}</span>
+              <el-input
+                v-if="editingInfo"
+                v-model="infoEditForm.language"
+                class="info-edit-control"
+                maxlength="50"
+                placeholder="例如：zh-CN"
+                :disabled="savingInfo"
+              />
+              <span v-else class="info-value">{{ book.language || '未知' }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">文件大小</span>
@@ -801,6 +870,16 @@ const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 const editingTitle = ref(false)
 const editTitleValue = ref('')
 const savingTitle = ref(false)
+const editingInfo = ref(false)
+const savingInfo = ref(false)
+const infoEditForm = reactive({
+  title: '',
+  author: '',
+  isbn: '',
+  publisher: '',
+  publishDate: '',
+  language: '',
+})
 const selectedTagIds = ref<number[]>([])
 const savingTags = ref(false)
 const showCreateTagDialog = ref(false)
@@ -1269,6 +1348,55 @@ const saveTitle = async () => {
     message.error('书名修改失败')
   } finally {
     savingTitle.value = false
+  }
+}
+
+const hydrateInfoEditForm = () => {
+  if (!book.value) return
+  Object.assign(infoEditForm, {
+    title: book.value.title || '',
+    author: book.value.author || '',
+    isbn: book.value.isbn || '',
+    publisher: book.value.publisher || '',
+    publishDate: book.value.publishDate || '',
+    language: book.value.language || '',
+  })
+}
+
+const startEditInfo = () => {
+  hydrateInfoEditForm()
+  editingInfo.value = true
+}
+
+const cancelEditInfo = () => {
+  hydrateInfoEditForm()
+  editingInfo.value = false
+}
+
+const saveInfo = async () => {
+  const title = infoEditForm.title.trim()
+  if (!title) {
+    message.warning('书名不能为空')
+    return
+  }
+
+  savingInfo.value = true
+  try {
+    book.value = await bookStore.updateBookMetadata(book.value.id, {
+      title,
+      author: infoEditForm.author.trim(),
+      isbn: infoEditForm.isbn.trim(),
+      publisher: infoEditForm.publisher.trim(),
+      publishDate: String(infoEditForm.publishDate || '').trim(),
+      language: infoEditForm.language.trim(),
+    })
+    editingInfo.value = false
+    hydrateInfoEditForm()
+    message.success('书籍详细信息已保存')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '书籍详细信息保存失败')
+  } finally {
+    savingInfo.value = false
   }
 }
 
@@ -2364,6 +2492,41 @@ onMounted(() => {
 }
 
 /* 信息列表 */
+.info-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.info-panel-header h2,
+.info-panel-header p {
+  margin: 0;
+}
+
+.info-panel-header h2 {
+  color: var(--text-primary);
+  font-size: 17px;
+}
+
+.info-panel-header p {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.info-edit-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.info-edit-button {
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
 .info-list {
   background: var(--bg-primary);
   backdrop-filter: blur(10px);
@@ -2374,6 +2537,8 @@ onMounted(() => {
 
 .info-item {
   display: flex;
+  align-items: center;
+  gap: 12px;
   padding: var(--spacing-md) var(--spacing-lg);
   border-bottom: 1px solid var(--border-light);
 }
@@ -2391,6 +2556,15 @@ onMounted(() => {
 .info-value {
   flex: 1;
   color: var(--text-primary);
+}
+
+.info-edit-control {
+  min-width: 0;
+  flex: 1;
+}
+
+.info-date-control {
+  width: 100%;
 }
 
 .source-path {
@@ -2594,6 +2768,16 @@ onMounted(() => {
     grid-template-columns: auto auto;
     align-items: center;
   }
+
+  .info-panel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .info-edit-actions,
+  .info-edit-button {
+    align-self: flex-end;
+  }
 }
 
 @media (max-width: 480px) {
@@ -2621,6 +2805,16 @@ onMounted(() => {
 
   .version-selected-badge {
     display: none;
+  }
+
+  .info-item {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .info-label {
+    width: auto;
   }
 }
 

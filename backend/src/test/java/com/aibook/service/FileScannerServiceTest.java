@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.Category;
 import com.aibook.model.entity.User;
+import com.aibook.model.entity.UserPreference;
 import com.aibook.repository.BookRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -117,7 +118,7 @@ class FileScannerServiceTest {
         User user = User.builder()
                 .id(1L)
                 .username("reader")
-                .scanThreadCount(3)
+                .preferences(UserPreference.builder().scanThreadCount(3).build())
                 .build();
         BookRepository bookRepository = mock(BookRepository.class);
         ScannedBookPersistenceService persistenceService =
@@ -159,7 +160,7 @@ class FileScannerServiceTest {
         User user = User.builder()
                 .id(1L)
                 .username("reader")
-                .scanThreadCount(2)
+                .preferences(UserPreference.builder().scanThreadCount(2).build())
                 .build();
         BookRepository bookRepository = mock(BookRepository.class);
         ScannedBookPersistenceService persistenceService =

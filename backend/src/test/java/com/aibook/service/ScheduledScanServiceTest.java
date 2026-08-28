@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.aibook.dto.ScheduledScanSettingsDTO;
 import com.aibook.model.entity.ScanDirectory;
 import com.aibook.model.entity.User;
+import com.aibook.model.entity.UserPreference;
 import com.aibook.repository.ScanDirectoryRepository;
 import com.aibook.repository.UserRepository;
 import java.time.LocalDateTime;
@@ -24,8 +25,10 @@ class ScheduledScanServiceTest {
                 .id(1L)
                 .username("reader")
                 .enabled(true)
-                .scheduledScanEnabled(true)
-                .scheduledScanTime("03:15")
+                .preferences(UserPreference.builder()
+                        .scheduledScanEnabled(true)
+                        .scheduledScanTime("03:15")
+                        .build())
                 .build();
         ScanDirectory enabledDirectory = ScanDirectory.builder()
                 .id(10L)
@@ -61,14 +64,18 @@ class ScheduledScanServiceTest {
         User disabledSchedule = User.builder()
                 .id(1L)
                 .enabled(true)
-                .scheduledScanEnabled(false)
-                .scheduledScanTime("03:15")
+                .preferences(UserPreference.builder()
+                        .scheduledScanEnabled(false)
+                        .scheduledScanTime("03:15")
+                        .build())
                 .build();
         User laterSchedule = User.builder()
                 .id(2L)
                 .enabled(true)
-                .scheduledScanEnabled(true)
-                .scheduledScanTime("04:15")
+                .preferences(UserPreference.builder()
+                        .scheduledScanEnabled(true)
+                        .scheduledScanTime("04:15")
+                        .build())
                 .build();
         UserRepository userRepository = mock(UserRepository.class);
         ScanDirectoryRepository directoryRepository = mock(ScanDirectoryRepository.class);
