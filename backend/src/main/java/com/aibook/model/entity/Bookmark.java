@@ -45,10 +45,21 @@ public class Bookmark {
     private String title;
 
     /**
+     * 书签位置附近的正文摘要，用于没有自定义名称时展示。
+     */
+    @Column(length = 1000)
+    private String excerpt;
+
+    /**
      * 章节名称
      */
     @Column(length = 500)
     private String chapter;
+
+    /**
+     * 章节序号，从 1 开始。
+     */
+    private Integer chapterIndex;
 
     /**
      * EPUB CFI 位置

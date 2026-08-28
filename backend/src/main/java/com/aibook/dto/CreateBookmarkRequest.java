@@ -16,7 +16,11 @@ public class CreateBookmarkRequest {
 
     private String title;
 
+    private String excerpt;
+
     private String chapter;
+
+    private Integer chapterIndex;
 
     private String cfi;
 

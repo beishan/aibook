@@ -473,7 +473,9 @@ interface Chapter {
 interface Bookmark {
   id: number
   title: string
+  excerpt?: string
   chapter?: string
+  chapterIndex?: number
   page?: number
   cfi?: string
   scrollPosition?: number
@@ -1094,6 +1096,41 @@ const loadHighlights = async (bookId: number) => {
   }
 }
 
+const normalizeBookmarkExcerpt = (value?: string | null) =>
+  (value || '').replace(/\s+/g, ' ').trim().slice(0, 160)
+
+const getCurrentBookmarkExcerpt = () => {
+  if (book.value?.format === 'epub' && rendition) {
+    const epubText = rendition.getContents()
+      .map((contents: any) => contents?.document?.body?.innerText || '')
+      .find((text: string) => text.trim())
+    return normalizeBookmarkExcerpt(epubText)
+  }
+
+  const readerBody = document.querySelector<HTMLElement>('.reader-body')
+  if (!readerBody) return ''
+  const bodyRect = readerBody.getBoundingClientRect()
+  const contentElements = Array.from(
+    readerBody.querySelectorAll<HTMLElement>('.reader-text > *, .reader-html > *'),
+  )
+  const visibleElement = contentElements.find(element => {
+    const rect = element.getBoundingClientRect()
+    return rect.bottom > bodyRect.top + 12 && rect.top < bodyRect.bottom - 12
+  })
+  return normalizeBookmarkExcerpt(visibleElement?.textContent || readerBody.textContent)
+}
+
+const getCurrentBookmarkChapterIndex = () => {
+  const chapterName = currentChapterName.value.trim()
+  const index = tocItems.value.findIndex(item => {
+    if (book.value?.format === 'epub' && currentTocHref.value && item.href) {
+      return item.href === currentTocHref.value
+    }
+    return chapterName && item.title.trim() === chapterName
+  })
+  return index >= 0 ? index + 1 : undefined
+}
+
 /**
  * 添加书签
  */
@@ -1103,7 +1140,9 @@ const handleAddBookmark = async () => {
   try {
     const bookmarkData: any = {
       title: currentChapterName.value || '书签',
+      excerpt: getCurrentBookmarkExcerpt(),
       chapter: currentChapterName.value,
+      chapterIndex: getCurrentBookmarkChapterIndex(),
     }
 
     if (book.value.format === 'epub' && rendition) {
