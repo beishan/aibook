@@ -17,25 +17,38 @@
     </header>
 
     <!-- 标签页 -->
-    <div class="tabs" role="tablist" aria-label="内容修复配置导航">
-      <button
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="tab-btn"
-        :class="{ active: activeTab === tab.key }"
-        type="button"
-        role="tab"
-        :id="`repair-tab-${tab.key}`"
-        :aria-controls="`repair-panel-${tab.key}`"
-        :aria-selected="activeTab === tab.key"
-        @click="selectTab(tab.key)"
+    <div class="repair-tabs-scroll">
+      <div
+        class="tabs"
+        role="tablist"
+        aria-label="内容修复配置导航"
+        :style="{
+          '--repair-tab-count': tabs.length,
+          '--repair-tab-index': activeTabIndex,
+        }"
       >
-        <span class="tab-icon-lg" aria-hidden="true">{{ tab.icon }}</span>
-        <span class="tab-copy">
-          <strong>{{ tab.label }}</strong>
-          <small>{{ tab.description }}</small>
-        </span>
-      </button>
+        <span class="tab-slider" aria-hidden="true"></span>
+        <button
+          v-for="(tab, index) in tabs"
+          :id="`repair-tab-${tab.key}`"
+          :key="tab.key"
+          class="tab-btn"
+          :class="{ active: activeTab === tab.key }"
+          type="button"
+          role="tab"
+          :aria-controls="`repair-panel-${tab.key}`"
+          :aria-selected="activeTab === tab.key"
+          :tabindex="activeTab === tab.key ? 0 : -1"
+          @click="selectTab(tab.key)"
+          @keydown="handleTabKeydown($event, index)"
+        >
+          <span class="tab-icon-lg" aria-hidden="true">{{ tab.icon }}</span>
+          <span class="tab-copy">
+            <strong>{{ tab.label }}</strong>
+            <small>{{ tab.description }}</small>
+          </span>
+        </button>
+      </div>
     </div>
 
     <!-- 广告规则 -->
@@ -572,6 +585,9 @@ const tabs = [
   { key: 'general', label: '修复功能', description: '设置默认检测能力', icon: '🧰' },
   { key: 'records', label: '检测结果记录', description: '继续处理历史任务', icon: '🗂️' },
 ]
+const activeTabIndex = computed(() =>
+  Math.max(0, tabs.findIndex(tab => tab.key === activeTab.value))
+)
 
 const featureGroups = [
   {
@@ -672,6 +688,21 @@ onMounted(async () => {
 async function selectTab(tab: string) {
   activeTab.value = tab
   if (tab === 'records' && !repairStore.records.length) await loadRecords()
+}
+
+function handleTabKeydown(event: KeyboardEvent, index: number) {
+  let nextIndex: number | null = null
+  if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length
+  if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length
+  if (event.key === 'Home') nextIndex = 0
+  if (event.key === 'End') nextIndex = tabs.length - 1
+  if (nextIndex === null) return
+
+  event.preventDefault()
+  void selectTab(tabs[nextIndex].key)
+  const tabButtons = (event.currentTarget as HTMLButtonElement)
+    .parentElement?.querySelectorAll<HTMLButtonElement>('.tab-btn')
+  tabButtons?.[nextIndex]?.focus()
 }
 
 async function loadRecords() {
@@ -1035,18 +1066,62 @@ function handleSaveGeneralSettings() {
   font-weight: 600;
 }
 
-.tabs {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+.repair-tabs-scroll {
   margin-bottom: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.repair-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.tabs {
+  --repair-tab-count: 4;
+  --repair-tab-index: 0;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(var(--repair-tab-count), minmax(0, 1fr));
+  gap: 0;
+  min-width: 720px;
+  margin-bottom: 0;
   padding: 8px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 16%, var(--border-color));
   border-radius: 18px;
   background: color-mix(in srgb, var(--surface-card, var(--glass-bg)) 92%, var(--primary, #409eff) 3%);
   box-shadow: var(--shadow-sm);
+}
+
+.tab-slider {
+  position: absolute;
+  z-index: -1;
+  top: 8px;
+  bottom: 8px;
+  left: 8px;
+  width: calc((100% - 16px) / var(--repair-tab-count));
+  border: 1px solid color-mix(in srgb, white 84%, var(--border-color));
+  border-radius: 13px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .92), rgba(225, 239, 255, .7)),
+    color-mix(in srgb, var(--primary, #409eff) 5%, transparent);
+  box-shadow:
+    0 8px 22px rgba(45, 65, 98, .15),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(90, 116, 153, .12);
+  transform: translateX(calc(var(--repair-tab-index) * 100%));
+  transition: transform 360ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.tab-slider::after {
+  position: absolute;
+  inset: 1px 12% auto;
+  height: 44%;
+  border-radius: inherit;
+  background: linear-gradient(rgba(255, 255, 255, .52), transparent);
+  content: '';
+  pointer-events: none;
 }
 
 .tab-btn {
@@ -1069,23 +1144,21 @@ function handleSaveGeneralSettings() {
   transition: color .2s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 }
 
-.tab-btn:hover {
+.tab-btn:hover:not(.active) {
   color: var(--text-primary);
-  background: var(--surface-hover, var(--glass-hover));
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--surface-hover, var(--glass-hover)) 64%, transparent);
 }
 
 .tab-btn.active {
-  border-color: color-mix(in srgb, var(--primary, var(--accent-color, #409eff)) 25%, var(--border-color));
-  background: var(--surface-elevated, var(--surface-card));
-  box-shadow: var(--shadow-md);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
   color: var(--primary, var(--accent-color, #409eff));
-  transform: translateY(-1px);
 }
 
 .tab-btn:focus-visible {
   outline: 2px solid var(--primary, var(--accent-color, #409eff));
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
 .tab-icon-lg {
@@ -1143,9 +1216,15 @@ function handleSaveGeneralSettings() {
 }
 
 :global(html[data-theme="modern"] .repair-config-view .tab-btn.active) {
-  border-color: color-mix(in srgb, var(--primary) 22%, #d4d9e2);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+:global(html[data-theme="modern"] .repair-config-view .tab-slider) {
+  border-color: color-mix(in srgb, var(--primary) 18%, #d4d9e2);
   background: #fff;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, .09);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .09), inset 0 1px 0 #fff;
 }
 
 :global(html[data-theme="warm"] .repair-config-view .tabs) {
@@ -1160,6 +1239,12 @@ function handleSaveGeneralSettings() {
 }
 
 :global(html[data-theme="warm"] .repair-config-view .tab-btn.active) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+:global(html[data-theme="warm"] .repair-config-view .tab-slider) {
   border-color: color-mix(in srgb, var(--primary) 32%, #e4d5c3);
   background: #fffdf8;
   box-shadow: 0 5px 14px rgba(89, 57, 35, .12), inset 0 1px 0 rgba(255, 255, 255, .9);
@@ -1174,14 +1259,18 @@ function handleSaveGeneralSettings() {
 }
 
 :global(html[data-theme="natural"] .repair-config-view .tab-btn.active) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+:global(html[data-theme="natural"] .repair-config-view .tab-slider) {
   border-color: rgba(255, 255, 255, .88);
   background: color-mix(in srgb, rgba(255, 255, 255, .86) 84%, var(--primary) 16%);
   box-shadow: 0 8px 20px rgba(35, 83, 62, .14), inset 0 1px 0 rgba(255, 255, 255, .95);
 }
 
 :global(html[data-theme="macos26"] .repair-config-view .tabs) {
-  isolation: isolate;
-  padding: 9px;
   border-color: rgba(255, 255, 255, .82);
   border-radius: 22px;
   background: linear-gradient(145deg, rgba(255, 255, 255, .48), rgba(218, 234, 252, .28));
@@ -1212,15 +1301,21 @@ function handleSaveGeneralSettings() {
   text-shadow: 0 1px 0 rgba(255, 255, 255, .62);
 }
 
-:global(html[data-theme="macos26"] .repair-config-view .tab-btn:hover) {
+:global(html[data-theme="macos26"] .repair-config-view .tab-btn:hover:not(.active)) {
   border-color: rgba(255, 255, 255, .66);
   background: rgba(255, 255, 255, .3);
 }
 
 :global(html[data-theme="macos26"] .repair-config-view .tab-btn.active) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+:global(html[data-theme="macos26"] .repair-config-view .tab-slider) {
   border-color: rgba(255, 255, 255, .94);
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, .76), rgba(231, 242, 255, .53)),
+    linear-gradient(145deg, rgba(255, 255, 255, .82), rgba(231, 242, 255, .58)),
     color-mix(in srgb, var(--primary) 7%, transparent);
   box-shadow:
     0 10px 26px rgba(46, 79, 124, .18),
@@ -2061,11 +2156,7 @@ function handleSaveGeneralSettings() {
   }
 
   .tabs {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 7px;
-    padding: 7px;
-    overflow: visible;
+    min-width: 660px;
   }
 
   .tab-btn {
@@ -2149,10 +2240,7 @@ function handleSaveGeneralSettings() {
     padding: 5px 8px;
   }
 
-  .tabs {
-    gap: 5px;
-    padding: 5px;
-  }
+  .tabs { min-width: 600px; }
 
   .tab-btn {
     min-height: 50px;
@@ -2178,12 +2266,18 @@ function handleSaveGeneralSettings() {
 }
 
 @media (min-width: 761px) and (max-width: 920px) {
-  .tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .feature-config-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-slider {
+    transition: none;
+  }
+
+  .tab-content {
+    animation: none;
   }
 }
 </style>

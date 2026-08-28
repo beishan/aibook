@@ -57,6 +57,7 @@ class BookServiceRecycleBinTest {
                 bookListRepository,
                 mock(CategoryService.class),
                 mock(TagService.class),
+                mock(AuthorService.class),
                 mock(OperationLogService.class));
 
         when(bookRepository.findByIdAndUserAndDeletedAtIsNull(9L, user))

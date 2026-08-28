@@ -82,6 +82,11 @@ const routes: RouteRecordRaw[] = [
         redirect: { path: '/settings', query: { tab: 'tags' } },
       },
       {
+        path: 'authors',
+        name: 'Authors',
+        redirect: { path: '/settings', query: { tab: 'authors' } },
+      },
+      {
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/SettingsView.vue'),

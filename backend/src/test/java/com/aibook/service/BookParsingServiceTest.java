@@ -385,7 +385,8 @@ class BookParsingServiceTest {
                 repository,
                 new TxtParserService(),
                 new ObjectMapper(),
-                coverService);
+                coverService,
+                mock(AuthorService.class));
     }
 
     private void addEntry(ZipOutputStream zip, String name, String content) throws Exception {

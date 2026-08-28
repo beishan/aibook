@@ -34,6 +34,7 @@ class ScannedBookPersistenceServiceTest {
         when(categoryRepository.getReferenceById(2L)).thenReturn(categoryReference);
         when(bookRepository.save(book)).thenReturn(book);
         RandomBookCoverService randomCoverService = mock(RandomBookCoverService.class);
+        AuthorService authorService = mock(AuthorService.class);
         when(randomCoverService.assignIfMissing(book, userReference)).thenReturn(book);
 
         ScannedBookPersistenceService service = new ScannedBookPersistenceService(
@@ -43,7 +44,8 @@ class ScannedBookPersistenceServiceTest {
                 mock(OperationLogService.class),
                 mock(BookScanSourceRepository.class),
                 mock(ScanDirectoryRepository.class),
-                randomCoverService);
+                randomCoverService,
+                authorService);
 
         Book saved = service.save(book, 1L, 2L);
 
@@ -51,6 +53,7 @@ class ScannedBookPersistenceServiceTest {
         assertThat(saved.getCategory()).isSameAs(categoryReference);
         assertThat(saved.getSourceType()).isEqualTo(Book.SourceType.DIRECTORY_SCAN);
         verify(bookRepository).save(book);
+        verify(authorService).synchronizeBook(book);
         verify(randomCoverService).assignIfMissing(book, userReference);
     }
 
@@ -78,7 +81,8 @@ class ScannedBookPersistenceServiceTest {
                 mock(OperationLogService.class),
                 mock(BookScanSourceRepository.class),
                 mock(ScanDirectoryRepository.class),
-                randomCoverService);
+                randomCoverService,
+                mock(AuthorService.class));
 
         Book saved = service.save(book, 1L, null);
 

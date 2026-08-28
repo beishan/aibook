@@ -40,6 +40,7 @@ public class BookService {
     private final BookListRepository bookListRepository;
     private final CategoryService categoryService;
     private final TagService tagService;
+    private final AuthorService authorService;
     private final OperationLogService operationLogService;
 
     /**
@@ -322,6 +323,7 @@ public class BookService {
         if (bookDTO.getNotes() != null) book.setNotes(bookDTO.getNotes());
 
         bookRepository.save(book);
+        authorService.synchronizeBook(book);
         return convertToDTO(book);
     }
 

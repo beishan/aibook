@@ -56,6 +56,7 @@ public class BookParsingService {
     private final TxtParserService txtParserService;
     private final ObjectMapper objectMapper;
     private final BookCoverService bookCoverService;
+    private final AuthorService authorService;
 
     @Transactional
     public ParseResult reparse(Book book) {
@@ -77,6 +78,7 @@ public class BookParsingService {
             }
 
             Book saved = bookRepository.save(book);
+            authorService.synchronizeBook(saved);
             String message = switch (format) {
                 case "txt", "md" -> "文本信息与章节已重新解析";
                 case "epub" -> "EPUB 元数据、内容简介与章节已重新解析";

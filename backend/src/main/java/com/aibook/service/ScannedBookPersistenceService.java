@@ -31,6 +31,7 @@ public class ScannedBookPersistenceService {
     private final BookScanSourceRepository bookScanSourceRepository;
     private final ScanDirectoryRepository scanDirectoryRepository;
     private final RandomBookCoverService randomBookCoverService;
+    private final AuthorService authorService;
 
     /**
      * 使用当前事务创建的实体引用，避免跨线程共享 Hibernate 代理。
@@ -52,6 +53,7 @@ public class ScannedBookPersistenceService {
         book.setCategory(category);
         book.setSourceType(Book.SourceType.DIRECTORY_SCAN);
         Book savedBook = bookRepository.save(book);
+        authorService.synchronizeBook(savedBook);
         savedBook = randomBookCoverService.assignIfMissing(savedBook, user);
         recordSource(savedBook, user, directoryId);
         operationLogService.record(

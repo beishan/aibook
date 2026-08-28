@@ -3,6 +3,7 @@ package com.aibook.service.scraper;
 import com.aibook.model.entity.Book;
 import com.aibook.repository.BookRepository;
 import com.aibook.service.SystemConfigService;
+import com.aibook.service.AuthorService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class MetadataScrapingService {
     private final MetadataCacheService cacheService;
     private final CoverDownloadService coverDownloadService;
     private final SystemConfigService configService;
+    private final AuthorService authorService;
 
     /**
      * 为单本书籍刮削元数据
@@ -51,6 +53,7 @@ public class MetadataScrapingService {
                 log.info("使用缓存元数据: {}", book.getTitle());
                 applyMetadata(book, cachedMetadata, forceUpdate);
                 bookRepository.save(book);
+                authorService.synchronizeBook(book);
                 return book;
             }
         }
@@ -76,6 +79,7 @@ public class MetadataScrapingService {
                     // 应用元数据
                     applyMetadata(book, metadata, forceUpdate);
                     bookRepository.save(book);
+                    authorService.synchronizeBook(book);
 
                     // 下载封面（强制更新或无封面时）
                     if (metadata.getCoverUrl() != null && (forceUpdate || book.getCoverUrl() == null)) {

@@ -38,6 +38,16 @@ public class Book {
      */
     private String author;
 
+    /** 规范化作者关联；author 字符串继续用于兼容现有接口和显示。 */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "book_authors",
+        joinColumns = @JoinColumn(name = "book_id"),
+        inverseJoinColumns = @JoinColumn(name = "author_id")
+    )
+    @Builder.Default
+    private Set<Author> authors = new HashSet<>();
+
     /**
      * ISBN
      */

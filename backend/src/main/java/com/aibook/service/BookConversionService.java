@@ -38,6 +38,7 @@ public class BookConversionService {
     private final TagRepository tagRepository;
     private final CategoryRepository categoryRepository;
     private final RandomBookCoverRepository randomBookCoverRepository;
+    private final AuthorService authorService;
 
     @Value("${conversion.path:./conversion-tasks}") private String conversionPath;
     @Value("${conversion.retention-days:7}") private int retentionDays;
@@ -414,7 +415,7 @@ public class BookConversionService {
                 if (tag == null) tag = tagRepository.save(Tag.builder().name(name).color("#5f9e7d").user(user).build());
                 tags.add(tag);
             }
-            book.setTags(tags); book = bookRepository.save(book); bookVersionService.ensurePrimaryVersion(book, task.getOutputFilename());
+            book.setTags(tags); book = bookRepository.save(book); authorService.synchronizeBook(book); bookVersionService.ensurePrimaryVersion(book, task.getOutputFilename());
             return BookDTO.builder().id(book.getId()).title(book.getTitle()).author(book.getAuthor())
                     .format(book.getFormat()).coverUrl(book.getCoverUrl())
                     .sourceType(book.getSourceType().name()).build();

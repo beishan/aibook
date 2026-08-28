@@ -25,6 +25,7 @@ class BookSourceTypeDtoTest {
                 mock(BookListRepository.class),
                 mock(CategoryService.class),
                 mock(TagService.class),
+                mock(AuthorService.class),
                 mock(OperationLogService.class));
         User user = User.builder().id(1L).build();
         Book scanned = Book.builder()
