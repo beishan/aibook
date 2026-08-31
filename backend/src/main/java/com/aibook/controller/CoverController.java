@@ -8,10 +8,12 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.WebRequest;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -19,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 
 /**
  * 封面图片控制器
@@ -39,14 +42,33 @@ public class CoverController {
      * 获取本地封面图片
      */
     @GetMapping("/{filename}")
-    public ResponseEntity<Resource> getCover(@PathVariable String filename) {
+    public ResponseEntity<Resource> getCover(
+            @PathVariable String filename, WebRequest webRequest) throws IOException {
         Path coverPath = Paths.get(uploadDir, coverDir, filename);
 
-        if (!Files.exists(coverPath)) {
+        if (!Files.isRegularFile(coverPath)) {
             return ResponseEntity.notFound().build();
         }
 
         Resource resource = new FileSystemResource(coverPath.toFile());
+        long lastModified = Files.getLastModifiedTime(coverPath).toMillis();
+        long fileSize = Files.size(coverPath);
+        String etag = "\""
+                + Long.toHexString(fileSize)
+                + "-"
+                + Long.toHexString(lastModified)
+                + "\"";
+        CacheControl cacheControl = CacheControl.maxAge(Duration.ofDays(365))
+                .cachePublic()
+                .immutable();
+
+        if (webRequest.checkNotModified(etag, lastModified)) {
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
+                    .eTag(etag)
+                    .lastModified(lastModified)
+                    .cacheControl(cacheControl)
+                    .build();
+        }
 
         // 确定 Content-Type
         String contentType = "image/jpeg";
@@ -59,8 +81,11 @@ public class CoverController {
         }
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, contentType)
-                .header(HttpHeaders.CACHE_CONTROL, "max-age=86400")
+                .contentType(MediaType.parseMediaType(contentType))
+                .contentLength(fileSize)
+                .eTag(etag)
+                .lastModified(lastModified)
+                .cacheControl(cacheControl)
                 .body(resource);
     }
 

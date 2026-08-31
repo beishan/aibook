@@ -74,10 +74,16 @@
               :src="getCoverUrl(book.coverUrl)"
               alt="封面"
               class="cover-image"
+              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
             />
             <div v-else class="no-cover">
               <span>{{ book.title.charAt(0) }}</span>
             </div>
+            <BookCoverPrivacyButton
+              v-if="book.coverUrl"
+              :book-id="book.id"
+              :book-title="book.title"
+            />
           </div>
           <div class="cover-action-row">
             <button
@@ -376,7 +382,55 @@
         <!-- 简介 -->
         <div v-show="activeTab === 'description'" class="tab-content">
           <div class="book-description">
-            <p v-if="book.description">{{ book.description }}</p>
+            <div class="description-panel-header">
+              <div>
+                <h2>内容简介</h2>
+                <p>{{ editingDescription ? '修改这本书的简介，支持保留段落与换行。' : '了解这本书的主要内容。' }}</p>
+              </div>
+              <div v-if="editingDescription" class="description-edit-actions">
+                <button
+                  class="btn"
+                  type="button"
+                  :disabled="savingDescription"
+                  @click="cancelEditDescription"
+                >
+                  取消
+                </button>
+                <button
+                  class="btn btn-primary"
+                  type="button"
+                  :disabled="savingDescription"
+                  @click="saveDescription"
+                >
+                  {{ savingDescription ? '保存中...' : '保存简介' }}
+                </button>
+              </div>
+              <button
+                v-else
+                class="btn description-edit-button"
+                type="button"
+                @click="startEditDescription"
+              >
+                <span aria-hidden="true">✎</span>
+                <span>编辑简介</span>
+              </button>
+            </div>
+            <div v-if="editingDescription" class="description-editor">
+              <el-input
+                ref="descriptionInput"
+                v-model="descriptionEditValue"
+                type="textarea"
+                :autosize="{ minRows: 8, maxRows: 18 }"
+                placeholder="输入这本书的内容简介..."
+                :disabled="savingDescription"
+                aria-label="书籍简介"
+                @keydown.ctrl.enter.prevent="saveDescription"
+                @keydown.meta.enter.prevent="saveDescription"
+                @keydown.esc.prevent="cancelEditDescription"
+              />
+              <span class="description-shortcut">Ctrl / ⌘ + Enter 保存 · Esc 取消</span>
+            </div>
+            <p v-else-if="book.description" class="book-description-text">{{ book.description }}</p>
             <div v-else class="no-description">
               <span>暂无简介</span>
               <button
@@ -767,6 +821,8 @@ import { getCoverUrl } from '@/utils/cover'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import ScraperDialog from '@/components/ScraperDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
+import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
+import { isBookCoverHidden } from '@/utils/imagePrivacy'
 
 const route = useRoute()
 const router = useRouter()
@@ -870,6 +926,10 @@ const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 const editingTitle = ref(false)
 const editTitleValue = ref('')
 const savingTitle = ref(false)
+const editingDescription = ref(false)
+const descriptionEditValue = ref('')
+const savingDescription = ref(false)
+const descriptionInput = ref<any>(null)
 const editingInfo = ref(false)
 const savingInfo = ref(false)
 const infoEditForm = reactive({
@@ -1348,6 +1408,40 @@ const saveTitle = async () => {
     message.error('书名修改失败')
   } finally {
     savingTitle.value = false
+  }
+}
+
+const startEditDescription = async () => {
+  descriptionEditValue.value = book.value?.description || ''
+  editingDescription.value = true
+  await nextTick()
+  descriptionInput.value?.focus()
+}
+
+const cancelEditDescription = () => {
+  descriptionEditValue.value = book.value?.description || ''
+  editingDescription.value = false
+}
+
+const saveDescription = async () => {
+  if (!book.value || savingDescription.value) return
+
+  const description = descriptionEditValue.value.trim()
+  if (description === (book.value.description || '').trim()) {
+    editingDescription.value = false
+    return
+  }
+
+  savingDescription.value = true
+  try {
+    book.value = await bookStore.updateBookMetadata(book.value.id, { description })
+    descriptionEditValue.value = book.value.description || ''
+    editingDescription.value = false
+    message.success(description ? '书籍简介已保存' : '书籍简介已清除')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '书籍简介保存失败')
+  } finally {
+    savingDescription.value = false
   }
 }
 
@@ -1870,6 +1964,7 @@ onMounted(() => {
 }
 
 .book-cover {
+  position: relative;
   width: 208px;
   height: 292px;
   border-radius: var(--radius-lg);
@@ -1912,6 +2007,12 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.cover-image.is-hidden {
+  filter: blur(18px);
+  transform: scale(1.12);
 }
 
 .no-cover {
@@ -2358,7 +2459,67 @@ onMounted(() => {
   font-size: var(--font-size-base);
 }
 
-.book-description > p {
+.description-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.description-panel-header h2,
+.description-panel-header p {
+  margin: 0;
+}
+
+.description-panel-header h2 {
+  color: var(--text-primary);
+  font-size: 17px;
+  line-height: 1.4;
+}
+
+.description-panel-header p {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.description-edit-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.description-edit-button {
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
+.description-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.description-editor :deep(.el-textarea__inner) {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.8;
+  resize: vertical;
+}
+
+.description-shortcut {
+  justify-self: end;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.book-description-text {
+  margin: 0;
   white-space: pre-line;
 }
 
@@ -2774,6 +2935,13 @@ onMounted(() => {
     flex-direction: column;
   }
 
+  .description-panel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .description-edit-actions,
+  .description-edit-button,
   .info-edit-actions,
   .info-edit-button {
     align-self: flex-end;
@@ -2915,5 +3083,11 @@ onMounted(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cover-image {
+    transition: none;
+  }
 }
 </style>

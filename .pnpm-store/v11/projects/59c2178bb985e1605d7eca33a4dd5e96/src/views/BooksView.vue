@@ -226,9 +226,9 @@
     </div>
 
     <!-- 加载中 -->
-    <div v-if="bookStore.loading" class="loading">
+    <div v-if="libraryLoading" class="loading" role="status" aria-live="polite">
       <div class="loading-spinner"></div>
-      <p>加载中...</p>
+      <p>{{ bookStore.loading ? '加载中...' : '正在准备封面...' }}</p>
     </div>
 
     <!-- 空状态 -->
@@ -267,7 +267,7 @@
             alt="封面"
             class="cover-image"
             :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
-            loading="lazy"
+            loading="eager"
             decoding="async"
           />
           <div v-else class="no-cover">
@@ -384,7 +384,7 @@
             :src="getCoverUrl(row.coverUrl)"
             alt="封面"
             :class="{ 'is-hidden': isBookCoverHidden(row.id) }"
-            loading="lazy"
+            loading="eager"
             decoding="async"
           />
           <div v-else class="no-cover-small">{{ row.title.charAt(0) }}</div>
@@ -474,7 +474,12 @@
     <div class="pagination" v-if="bookStore.totalElements > 0">
       <label class="page-size-control">
         <span>每页</span>
-        <el-select v-model="pageSize" class="page-size-select" @change="handlePageSizeChange">
+        <el-select
+          v-model="pageSize"
+          class="page-size-select"
+          :disabled="libraryLoading"
+          @change="handlePageSizeChange"
+        >
           <el-option
             v-for="size in pageSizeOptions"
             :key="size"
@@ -483,7 +488,7 @@
           />
         </el-select>
       </label>
-      <button class="btn" :disabled="currentPage <= 1" @click="prevPage">
+      <button class="btn" :disabled="libraryLoading || currentPage <= 1" @click="prevPage">
         <span>‹</span>
         <span>上一页</span>
       </button>
@@ -494,6 +499,7 @@
             v-else
             class="page-number-button"
             :class="{ active: item.page === currentPage }"
+            :disabled="libraryLoading"
             :aria-current="item.page === currentPage ? 'page' : undefined"
             :aria-label="`跳转到第 ${item.page} 页`"
             @click="goToPage(item.page)"
@@ -502,7 +508,7 @@
           </button>
         </template>
       </nav>
-      <button class="btn" :disabled="currentPage >= totalPages" @click="nextPage">
+      <button class="btn" :disabled="libraryLoading || currentPage >= totalPages" @click="nextPage">
         <span>下一页</span>
         <span>›</span>
       </button>
@@ -638,6 +644,12 @@ const bookToAddToList = ref<Book | null>(null)
 const processingBookId = ref<number | null>(null)
 const showVersionRebuildDialog = ref(false)
 const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
+const coversPreparing = ref(false)
+const libraryLoading = computed(() => bookStore.loading || coversPreparing.value)
+const coverImageCache = new Map<string, HTMLImageElement>()
+const coverImageLoads = new Map<string, Promise<void>>()
+const MAX_DECODED_COVER_CACHE_SIZE = 200
+let loadBooksSequence = 0
 
 // 多选相关状态
 const selectionMode = ref(false)
@@ -736,17 +748,83 @@ const handleVersionRebuildComplete = () => {
   void loadBooks()
 }
 
+const rememberCoverImage = (url: string, image: HTMLImageElement) => {
+  coverImageCache.delete(url)
+  coverImageCache.set(url, image)
+  while (coverImageCache.size > MAX_DECODED_COVER_CACHE_SIZE) {
+    const oldestUrl = coverImageCache.keys().next().value
+    if (!oldestUrl) break
+    coverImageCache.delete(oldestUrl)
+  }
+}
+
+const preloadCoverImage = (url: string) => {
+  const cachedImage = coverImageCache.get(url)
+  if (cachedImage?.complete) {
+    rememberCoverImage(url, cachedImage)
+    return cachedImage.decode?.().catch(() => undefined) || Promise.resolve()
+  }
+
+  const activeLoad = coverImageLoads.get(url)
+  if (activeLoad) return activeLoad
+
+  const image = cachedImage || new Image()
+  image.decoding = 'async'
+  rememberCoverImage(url, image)
+
+  const load = new Promise<void>(resolve => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeoutId)
+      image.onload = null
+      image.onerror = null
+      coverImageLoads.delete(url)
+      resolve()
+    }
+    const decodeAndFinish = () => {
+      const decode = image.decode?.()
+      if (decode) decode.then(finish).catch(finish)
+      else finish()
+    }
+    const timeoutId = window.setTimeout(finish, 4000)
+    image.onload = decodeAndFinish
+    image.onerror = finish
+    if (!cachedImage) image.src = url
+    if (image.complete) decodeAndFinish()
+  })
+
+  coverImageLoads.set(url, load)
+  return load
+}
+
+const prepareBookCovers = async (books: Book[]) => {
+  const coverUrls = Array.from(new Set(
+    books
+      .map(book => getCoverUrl(book.coverUrl))
+      .filter((url): url is string => Boolean(url)),
+  ))
+  await Promise.all(coverUrls.map(preloadCoverImage))
+}
+
 const loadBooks = async () => {
-  if (searchKeyword.value) {
-    await bookStore.searchBooks(searchKeyword.value, currentPage.value - 1, pageSize.value)
-  } else {
-    await bookStore.fetchBooks(currentPage.value - 1, pageSize.value, sortBy.value, 'desc', {
-      format: filterFormat.value || undefined,
-      status: filterStatus.value || undefined,
-      categoryId: filterCategoryId.value ? Number(filterCategoryId.value) : undefined,
-      includeChildren: Boolean(filterCategoryId.value),
-      tagId: filterTagId.value ? Number(filterTagId.value) : undefined,
-    })
+  const sequence = ++loadBooksSequence
+  coversPreparing.value = true
+  try {
+    const data = searchKeyword.value
+      ? await bookStore.searchBooks(searchKeyword.value, currentPage.value - 1, pageSize.value)
+      : await bookStore.fetchBooks(currentPage.value - 1, pageSize.value, sortBy.value, 'desc', {
+        format: filterFormat.value || undefined,
+        status: filterStatus.value || undefined,
+        categoryId: filterCategoryId.value ? Number(filterCategoryId.value) : undefined,
+        includeChildren: Boolean(filterCategoryId.value),
+        tagId: filterTagId.value ? Number(filterTagId.value) : undefined,
+      })
+    if (sequence !== loadBooksSequence) return
+    await prepareBookCovers(data.content)
+  } finally {
+    if (sequence === loadBooksSequence) coversPreparing.value = false
   }
 }
 
