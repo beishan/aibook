@@ -215,6 +215,7 @@
               <el-select
                 class="category-select"
                 :model-value="book.categoryId || ''"
+                placeholder="未分类"
                 filterable
                 @change="handleCategoryChange"
               >
@@ -252,9 +253,10 @@
               </el-select>
               <button
                 class="btn btn-text tag-manage-link"
-                @click="$router.push({ path: '/settings', query: { tab: 'tags' } })"
+                type="button"
+                @click="openCreateTagDialog"
               >
-                管理
+                新建标签
               </button>
             </div>
           </div>
@@ -349,6 +351,14 @@
           </div>
           <div
             class="tab-item"
+            :class="{ active: activeTab === 'bookmarks' }"
+            @click="activeTab = 'bookmarks'"
+          >
+            书签
+            <span v-if="bookmarks.length" class="tab-count">{{ bookmarks.length }}</span>
+          </div>
+          <div
+            class="tab-item"
             :class="{ active: activeTab === 'info' }"
             @click="activeTab = 'info'"
           >
@@ -438,28 +448,136 @@
           </div>
         </div>
 
+        <!-- 书签 -->
+        <div v-show="activeTab === 'bookmarks'" class="tab-content">
+          <div v-if="bookmarksLoading" class="bookmarks-state">
+            <div class="loading-spinner-small"></div>
+            <span>正在读取书签...</span>
+          </div>
+          <div v-else-if="bookmarksError" class="bookmarks-state">
+            <span class="bookmarks-state-icon">⚠️</span>
+            <p>{{ bookmarksError }}</p>
+            <button class="btn btn-text" type="button" @click="loadBookmarks">重新加载</button>
+          </div>
+          <div v-else-if="bookmarks.length === 0" class="bookmarks-state">
+            <span class="bookmarks-state-icon">🔖</span>
+            <p>这本书还没有书签</p>
+            <span class="bookmarks-state-hint">阅读时可将当前位置加入书签。</span>
+          </div>
+          <div v-else class="detail-bookmark-list">
+            <div class="detail-bookmark-summary">
+              <span>我的书签</span>
+              <span>共 {{ bookmarks.length }} 条</span>
+            </div>
+            <article
+              v-for="bookmark in bookmarks"
+              :key="bookmark.id"
+              class="detail-bookmark-item"
+            >
+              <div class="detail-bookmark-icon" aria-hidden="true">🔖</div>
+              <div class="detail-bookmark-content">
+                <h3 :title="getBookmarkDisplayName(bookmark)">
+                  {{ getBookmarkDisplayName(bookmark) }}
+                </h3>
+                <p v-if="getBookmarkSecondaryText(bookmark)">
+                  {{ getBookmarkSecondaryText(bookmark) }}
+                </p>
+              </div>
+              <div class="detail-bookmark-meta">
+                <span class="bookmark-chapter-badge">
+                  {{ getBookmarkChapterLabel(bookmark) }}
+                </span>
+                <time :datetime="bookmark.createdAt">
+                  {{ formatDate(bookmark.createdAt) }}
+                </time>
+              </div>
+            </article>
+          </div>
+        </div>
+
         <!-- 详细信息 -->
         <div v-show="activeTab === 'info'" class="tab-content">
+          <div class="info-panel-header">
+            <div>
+              <h2>书籍详细信息</h2>
+              <p>{{ editingInfo ? '修改可编辑的书籍元数据，系统信息保持只读。' : '查看书籍元数据及文件信息。' }}</p>
+            </div>
+            <div v-if="editingInfo" class="info-edit-actions">
+              <button class="btn" type="button" :disabled="savingInfo" @click="cancelEditInfo">
+                取消
+              </button>
+              <button class="btn btn-primary" type="button" :disabled="savingInfo" @click="saveInfo">
+                {{ savingInfo ? '保存中...' : '保存修改' }}
+              </button>
+            </div>
+            <button v-else class="btn info-edit-button" type="button" @click="startEditInfo">
+              <span aria-hidden="true">✎</span>
+              <span>编辑</span>
+            </button>
+          </div>
           <div class="info-list grouped-list">
             <div class="info-item list-item">
               <span class="info-label">书名</span>
-              <span class="info-value">{{ book.title }}</span>
+              <el-input
+                v-if="editingInfo"
+                v-model="infoEditForm.title"
+                class="info-edit-control"
+                maxlength="255"
+                show-word-limit
+                :disabled="savingInfo"
+              />
+              <span v-else class="info-value">{{ book.title }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">作者</span>
-              <span class="info-value">{{ book.author || '未知' }}</span>
+              <el-input
+                v-if="editingInfo"
+                v-model="infoEditForm.author"
+                class="info-edit-control"
+                maxlength="255"
+                placeholder="未知作者"
+                :disabled="savingInfo"
+              />
+              <span v-else class="info-value">{{ book.author || '未知' }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">ISBN</span>
-              <span class="info-value">{{ book.isbn || '无' }}</span>
+              <el-input
+                v-if="editingInfo"
+                v-model="infoEditForm.isbn"
+                class="info-edit-control"
+                maxlength="32"
+                placeholder="无"
+                :disabled="savingInfo"
+              />
+              <span v-else class="info-value">{{ book.isbn || '无' }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">出版社</span>
-              <span class="info-value">{{ book.publisher || '未知' }}</span>
+              <el-input
+                v-if="editingInfo"
+                v-model="infoEditForm.publisher"
+                class="info-edit-control"
+                maxlength="255"
+                placeholder="未知出版社"
+                :disabled="savingInfo"
+              />
+              <span v-else class="info-value">{{ book.publisher || '未知' }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">出版日期</span>
-              <span class="info-value">{{ book.publishDate || '未知' }}</span>
+              <el-date-picker
+                v-if="editingInfo"
+                v-model="infoEditForm.publishDate"
+                class="info-edit-control info-date-control"
+                type="date"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                placeholder="选择出版日期"
+                clearable
+                :disabled="savingInfo"
+              />
+              <span v-else class="info-value">{{ book.publishDate || '未知' }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">格式</span>
@@ -478,7 +596,15 @@
             </div>
             <div class="info-item list-item">
               <span class="info-label">语言</span>
-              <span class="info-value">{{ book.language || '未知' }}</span>
+              <el-input
+                v-if="editingInfo"
+                v-model="infoEditForm.language"
+                class="info-edit-control"
+                maxlength="50"
+                placeholder="例如：zh-CN"
+                :disabled="savingInfo"
+              />
+              <span v-else class="info-value">{{ book.language || '未知' }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">文件大小</span>
@@ -547,11 +673,88 @@
       :book="book"
       @close="showAddToListDialog = false"
     />
+
+    <el-dialog
+      v-model="showCreateTagDialog"
+      title="新建标签"
+      width="min(440px, calc(100vw - 32px))"
+      append-to-body
+      destroy-on-close
+      :close-on-click-modal="!creatingTag"
+      :close-on-press-escape="!creatingTag"
+      @closed="resetCreateTagForm"
+    >
+      <div class="create-tag-form">
+        <label class="create-tag-field">
+          <span>标签名称</span>
+          <el-input
+            v-model="newTagForm.name"
+            maxlength="30"
+            show-word-limit
+            placeholder="例如：精品、待读、系列"
+            :disabled="creatingTag"
+            @keyup.enter="handleCreateTag"
+          />
+        </label>
+        <fieldset class="create-tag-field create-tag-colors">
+          <legend>标签颜色</legend>
+          <div class="tag-color-palette" role="listbox" aria-label="选择标签颜色">
+            <button
+              v-for="color in tagPresetColors"
+              :key="color"
+              class="tag-color-swatch"
+              :class="{ selected: newTagForm.color === color }"
+              type="button"
+              role="option"
+              :style="{ backgroundColor: color }"
+              :aria-label="color"
+              :aria-selected="newTagForm.color === color"
+              :disabled="creatingTag"
+              @click="newTagForm.color = color"
+            >
+              <span v-if="newTagForm.color === color" aria-hidden="true">✓</span>
+            </button>
+          </div>
+          <div class="tag-custom-color">
+            <input
+              v-model="newTagForm.color"
+              class="tag-color-picker"
+              type="color"
+              aria-label="自定义标签颜色"
+              :disabled="creatingTag"
+            />
+            <el-input
+              v-model="newTagForm.color"
+              maxlength="7"
+              aria-label="标签颜色值"
+              placeholder="#64748B"
+              :disabled="creatingTag"
+            />
+            <span class="new-tag-preview" :style="newTagPreviewStyle">
+              {{ newTagForm.name.trim() || '标签预览' }}
+            </span>
+          </div>
+        </fieldset>
+      </div>
+      <template #footer>
+        <button class="btn" type="button" :disabled="creatingTag" @click="showCreateTagDialog = false">
+          取消
+        </button>
+        <button
+          class="btn btn-primary"
+          type="button"
+          :disabled="creatingTag || !newTagForm.name.trim()"
+          @click="handleCreateTag"
+        >
+          {{ creatingTag ? '创建中...' : '创建并添加' }}
+        </button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, nextTick } from 'vue'
+import { computed, reactive, ref, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { message, confirm } from '@/utils/message'
@@ -602,6 +805,15 @@ interface ReadingProgress {
   lastReadAt?: string
 }
 
+interface Bookmark {
+  id: number
+  title?: string
+  excerpt?: string
+  chapter?: string
+  chapterIndex?: number
+  createdAt: string
+}
+
 interface BookVersion {
   id: number
   displayName: string
@@ -615,6 +827,9 @@ interface BookVersion {
 
 const tocItems = ref<TocItem[]>([])
 const readingProgress = ref<ReadingProgress | null>(null)
+const bookmarks = ref<Bookmark[]>([])
+const bookmarksLoading = ref(false)
+const bookmarksError = ref('')
 const versions = ref<BookVersion[]>([])
 const selectedVersionId = ref<number | null>(null)
 const uploadingVersion = ref(false)
@@ -655,8 +870,36 @@ const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 const editingTitle = ref(false)
 const editTitleValue = ref('')
 const savingTitle = ref(false)
+const editingInfo = ref(false)
+const savingInfo = ref(false)
+const infoEditForm = reactive({
+  title: '',
+  author: '',
+  isbn: '',
+  publisher: '',
+  publishDate: '',
+  language: '',
+})
 const selectedTagIds = ref<number[]>([])
 const savingTags = ref(false)
+const showCreateTagDialog = ref(false)
+const creatingTag = ref(false)
+const defaultTagColor = '#64748B'
+const newTagForm = reactive({ name: '', color: defaultTagColor })
+const tagPresetColors = [
+  '#64748B', '#EF4444', '#F97316', '#F59E0B', '#22C55E', '#14B8A6',
+  '#0EA5E9', '#3B82F6', '#6366F1', '#8B5CF6', '#D946EF', '#EC4899',
+]
+const newTagPreviewStyle = computed(() => {
+  const color = /^#[0-9a-fA-F]{6}$/.test(newTagForm.color)
+    ? newTagForm.color
+    : defaultTagColor
+  return {
+    color,
+    borderColor: `${color}88`,
+    backgroundColor: `${color}16`,
+  }
+})
 
 const loadBook = async () => {
   const id = Number(route.params.id)
@@ -670,7 +913,7 @@ const loadBook = async () => {
     notes.value = book.value.notes || ''
     selectedTagIds.value = (book.value.tags || []).map((tag: any) => tag.id)
     await loadVersions()
-    await Promise.all([loadToc(), loadReadingProgress()])
+    await Promise.all([loadToc(), loadReadingProgress(), loadBookmarks()])
     syncTocPageToCurrentChapter()
   } catch (error) {
     console.error('Failed to load book:', error)
@@ -704,6 +947,56 @@ const loadReadingProgress = async () => {
     readingProgress.value = null
     console.error('Failed to load reading progress:', error)
   }
+}
+
+const loadBookmarks = async () => {
+  if (!book.value) return
+  bookmarksLoading.value = true
+  bookmarksError.value = ''
+  try {
+    const response = await api.get(`/api/books/${book.value.id}/bookmarks`)
+    bookmarks.value = response.data || []
+  } catch (error: any) {
+    bookmarks.value = []
+    bookmarksError.value = error.response?.data?.message || '书签读取失败'
+  } finally {
+    bookmarksLoading.value = false
+  }
+}
+
+const normalizeBookmarkText = (value?: string) =>
+  (value || '').replace(/\s+/g, ' ').trim()
+
+const getBookmarkDisplayName = (bookmark: Bookmark) => {
+  const title = normalizeBookmarkText(bookmark.title)
+  if (title && title !== '书签') return title
+
+  const excerpt = normalizeBookmarkText(bookmark.excerpt)
+  if (excerpt) return excerpt.length > 72 ? `${excerpt.slice(0, 72)}…` : excerpt
+
+  const chapter = normalizeBookmarkText(bookmark.chapter)
+  return chapter || '未命名书签'
+}
+
+const getBookmarkSecondaryText = (bookmark: Bookmark) => {
+  const title = normalizeBookmarkText(bookmark.title)
+  const excerpt = normalizeBookmarkText(bookmark.excerpt)
+  if (!excerpt || !title || title === '书签') return ''
+  return excerpt.length > 110 ? `${excerpt.slice(0, 110)}…` : excerpt
+}
+
+const getBookmarkChapterIndex = (bookmark: Bookmark) => {
+  if (bookmark.chapterIndex && bookmark.chapterIndex > 0) return bookmark.chapterIndex
+  const chapter = normalizeBookmarkText(bookmark.chapter)
+  if (!chapter) return undefined
+  const index = tocItems.value.findIndex(item => normalizeBookmarkText(item.title) === chapter)
+  return index >= 0 ? index + 1 : undefined
+}
+
+const getBookmarkChapterLabel = (bookmark: Bookmark) => {
+  const chapterIndex = getBookmarkChapterIndex(bookmark)
+  if (chapterIndex) return `第 ${chapterIndex} 章`
+  return normalizeBookmarkText(bookmark.chapter) || '章节未知'
 }
 
 const isCurrentChapter = (chapter: TocItem) => {
@@ -911,6 +1204,45 @@ const handleTagsChange = async () => {
   }
 }
 
+const resetCreateTagForm = () => {
+  newTagForm.name = ''
+  newTagForm.color = defaultTagColor
+}
+
+const openCreateTagDialog = () => {
+  resetCreateTagForm()
+  showCreateTagDialog.value = true
+}
+
+const handleCreateTag = async () => {
+  const name = newTagForm.name.trim()
+  if (!name || creatingTag.value || !book.value) return
+  if (!/^#[0-9a-fA-F]{6}$/.test(newTagForm.color)) {
+    message.warning('请输入正确的颜色值，例如 #64748B')
+    return
+  }
+
+  creatingTag.value = true
+  try {
+    const createdTag = await tagStore.createTag(name, newTagForm.color.toUpperCase())
+    const nextTagIds = Array.from(new Set([...selectedTagIds.value, createdTag.id]))
+    try {
+      book.value = await bookStore.updateBookTags(book.value.id, nextTagIds)
+      selectedTagIds.value = (book.value.tags || []).map((tag: any) => tag.id)
+      await tagStore.fetchTags()
+      message.success(`已新建并添加标签“${createdTag.name}”`)
+    } catch (error: any) {
+      await tagStore.fetchTags()
+      message.warning(error.response?.data?.message || '标签已新建，但添加到当前书籍失败')
+    }
+    showCreateTagDialog.value = false
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '标签创建失败，名称可能已存在')
+  } finally {
+    creatingTag.value = false
+  }
+}
+
 const handleDelete = async () => {
   const result = await confirm(
     '确定将这本书移入回收站吗？\n\nNAS 上的原始文件不会被删除或移动，可随时恢复。',
@@ -1016,6 +1348,55 @@ const saveTitle = async () => {
     message.error('书名修改失败')
   } finally {
     savingTitle.value = false
+  }
+}
+
+const hydrateInfoEditForm = () => {
+  if (!book.value) return
+  Object.assign(infoEditForm, {
+    title: book.value.title || '',
+    author: book.value.author || '',
+    isbn: book.value.isbn || '',
+    publisher: book.value.publisher || '',
+    publishDate: book.value.publishDate || '',
+    language: book.value.language || '',
+  })
+}
+
+const startEditInfo = () => {
+  hydrateInfoEditForm()
+  editingInfo.value = true
+}
+
+const cancelEditInfo = () => {
+  hydrateInfoEditForm()
+  editingInfo.value = false
+}
+
+const saveInfo = async () => {
+  const title = infoEditForm.title.trim()
+  if (!title) {
+    message.warning('书名不能为空')
+    return
+  }
+
+  savingInfo.value = true
+  try {
+    book.value = await bookStore.updateBookMetadata(book.value.id, {
+      title,
+      author: infoEditForm.author.trim(),
+      isbn: infoEditForm.isbn.trim(),
+      publisher: infoEditForm.publisher.trim(),
+      publishDate: String(infoEditForm.publishDate || '').trim(),
+      language: infoEditForm.language.trim(),
+    })
+    editingInfo.value = false
+    hydrateInfoEditForm()
+    message.success('书籍详细信息已保存')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '书籍详细信息保存失败')
+  } finally {
+    savingInfo.value = false
   }
 }
 
@@ -1283,6 +1664,91 @@ onMounted(() => {
 
 .tag-manage-link {
   padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.create-tag-form {
+  display: grid;
+  gap: 20px;
+}
+
+.create-tag-field {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.create-tag-colors legend {
+  margin-bottom: 9px;
+  padding: 0;
+}
+
+.tag-color-palette {
+  display: grid;
+  grid-template-columns: repeat(6, 32px);
+  gap: 10px;
+}
+
+.tag-color-swatch {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.tag-color-swatch:hover:not(:disabled),
+.tag-color-swatch.selected {
+  border-color: var(--text-primary);
+}
+
+.tag-color-swatch:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.tag-custom-color {
+  display: grid;
+  grid-template-columns: 42px minmax(110px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.tag-color-picker {
+  width: 42px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  cursor: pointer;
+}
+
+.new-tag-preview {
+  display: inline-flex;
+  max-width: 140px;
+  overflow: hidden;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 加载中和空状态 */
@@ -1908,7 +2374,159 @@ onMounted(() => {
   color: var(--text-tertiary);
 }
 
+/* 书签 */
+.bookmarks-state {
+  display: flex;
+  min-height: 190px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.bookmarks-state p {
+  margin: 0;
+}
+
+.bookmarks-state-icon {
+  font-size: 34px;
+}
+
+.bookmarks-state-hint {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.detail-bookmark-list {
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+}
+
+.detail-bookmark-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.detail-bookmark-summary span:first-child {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.detail-bookmark-item {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.detail-bookmark-item:last-child {
+  border-bottom: 0;
+}
+
+.detail-bookmark-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--primary-alpha-10);
+  font-size: 17px;
+}
+
+.detail-bookmark-content {
+  min-width: 0;
+}
+
+.detail-bookmark-content h3,
+.detail-bookmark-content p {
+  margin: 0;
+}
+
+.detail-bookmark-content h3 {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-bookmark-content p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.detail-bookmark-meta {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.bookmark-chapter-badge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+  font-weight: 600;
+}
+
 /* 信息列表 */
+.info-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.info-panel-header h2,
+.info-panel-header p {
+  margin: 0;
+}
+
+.info-panel-header h2 {
+  color: var(--text-primary);
+  font-size: 17px;
+}
+
+.info-panel-header p {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.info-edit-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.info-edit-button {
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
 .info-list {
   background: var(--bg-primary);
   backdrop-filter: blur(10px);
@@ -1919,6 +2537,8 @@ onMounted(() => {
 
 .info-item {
   display: flex;
+  align-items: center;
+  gap: 12px;
   padding: var(--spacing-md) var(--spacing-lg);
   border-bottom: 1px solid var(--border-light);
 }
@@ -1936,6 +2556,15 @@ onMounted(() => {
 .info-value {
   flex: 1;
   color: var(--text-primary);
+}
+
+.info-edit-control {
+  min-width: 0;
+  flex: 1;
+}
+
+.info-date-control {
+  width: 100%;
 }
 
 .source-path {
@@ -2122,6 +2751,33 @@ onMounted(() => {
     justify-content: flex-start;
     padding: 14px 12px;
   }
+
+  .detail-bookmark-item {
+    grid-template-columns: 32px minmax(0, 1fr);
+    padding: 14px;
+  }
+
+  .detail-bookmark-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .detail-bookmark-meta {
+    grid-column: 2;
+    justify-items: start;
+    grid-template-columns: auto auto;
+    align-items: center;
+  }
+
+  .info-panel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .info-edit-actions,
+  .info-edit-button {
+    align-self: flex-end;
+  }
 }
 
 @media (max-width: 480px) {
@@ -2149,6 +2805,16 @@ onMounted(() => {
 
   .version-selected-badge {
     display: none;
+  }
+
+  .info-item {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .info-label {
+    width: auto;
   }
 }
 

@@ -12,6 +12,8 @@ import { useDockIconStore } from './stores/dockIcons'
 import { useUserStore } from './stores/user'
 import { loadSiteFavicon } from './utils/siteFavicon'
 import { loadWebsiteSettings } from './utils/siteSettings'
+import { hydrateBookCoverPrivacy } from './utils/imagePrivacy'
+import { hydrateRandomCoverPrivacy } from './utils/randomCoverPrivacy'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -36,8 +38,14 @@ const bootstrap = async () => {
       dockIconStore.restoreCached(),
       userStore.restoreCachedAvatar(),
     ])
+    const profile = await userStore.hydrate()
+    if (profile?.id) {
+      await Promise.all([
+        hydrateBookCoverPrivacy(profile.id),
+        hydrateRandomCoverPrivacy(profile.id),
+      ])
+    }
     void dockIconStore.hydrate()
-    void userStore.hydrate()
   }
   app.mount('#app')
 }

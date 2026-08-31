@@ -8,10 +8,18 @@
       </div>
       <div class="header-actions">
         <!-- 视图切换 -->
-        <div class="view-toggle">
+        <div
+          class="view-toggle"
+          :class="{ 'is-list-view': viewMode === 'list' }"
+          role="group"
+          aria-label="书架显示方式"
+        >
+          <span class="view-toggle-slider" aria-hidden="true"></span>
           <button
             class="view-btn"
             :class="{ active: viewMode === 'grid' }"
+            :aria-pressed="viewMode === 'grid'"
+            aria-label="卡片视图"
             @click="viewMode = 'grid'"
             title="网格视图"
           >
@@ -20,6 +28,8 @@
           <button
             class="view-btn"
             :class="{ active: viewMode === 'list' }"
+            :aria-pressed="viewMode === 'list'"
+            aria-label="列表视图"
             @click="viewMode = 'list'"
             title="列表视图"
           >
@@ -46,22 +56,46 @@
       </div>
     </div>
 
-    <!-- 选项卡 -->
-    <div class="tabs">
+    <!-- macOS 26 风格滑块选项卡 -->
+    <div class="shelf-tabs-scroll">
       <div
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="tab-item"
-        :class="{ active: activeTab === tab.key }"
-        @click="handleTabChange(tab.key)"
+        class="shelf-segmented-tabs"
+        role="tablist"
+        aria-label="书架内容分类"
+        :style="{
+          '--shelf-tab-count': tabs.length,
+          '--shelf-tab-index': activeTabIndex,
+        }"
       >
-        <span class="tab-icon">{{ tab.icon }}</span>
-        <span>{{ tab.label }}</span>
+        <span class="shelf-tab-slider" aria-hidden="true"></span>
+        <button
+          v-for="(tab, index) in tabs"
+          :id="`shelf-tab-${tab.key}`"
+          :key="tab.key"
+          type="button"
+          role="tab"
+          class="shelf-tab-button"
+          :class="{ active: activeTab === tab.key }"
+          :aria-selected="activeTab === tab.key"
+          :aria-controls="`shelf-panel-${tab.key}`"
+          :tabindex="activeTab === tab.key ? 0 : -1"
+          @click="handleTabChange(tab.key)"
+          @keydown="handleTabKeydown($event, index)"
+        >
+          <span class="shelf-tab-icon" aria-hidden="true">{{ tab.icon }}</span>
+          <span>{{ tab.label }}</span>
+        </button>
       </div>
     </div>
 
     <!-- 书架 -->
-    <div v-show="activeTab === 'shelf'" class="tab-content shelf-tab-content">
+    <div
+      id="shelf-panel-shelf"
+      v-show="activeTab === 'shelf'"
+      class="tab-content shelf-tab-content"
+      role="tabpanel"
+      aria-labelledby="shelf-tab-shelf"
+    >
       <div class="shelf-tab-toolbar">
         <div>
           <h2>我的书架</h2>
@@ -150,8 +184,19 @@
             @click="$router.push(`/books/${book.id}`)"
           >
             <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-              <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+              <img
+                v-if="book.coverUrl"
+                :src="getCoverUrl(book.coverUrl)"
+                :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+                alt="封面"
+              />
               <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+              <BookCoverPrivacyButton
+                v-if="book.coverUrl"
+                :book-id="book.id"
+                :book-title="book.title"
+                :compact="viewMode === 'list'"
+              />
               <div v-if="viewMode === 'grid'" class="book-cover-actions shelf-book-actions" @click.stop>
                 <button
                   v-if="selectedShelfGroup !== 'all'"
@@ -221,7 +266,13 @@
     </div>
 
     <!-- 收藏 -->
-    <div v-show="activeTab === 'favorite'" class="tab-content">
+    <div
+      id="shelf-panel-favorite"
+      v-show="activeTab === 'favorite'"
+      class="tab-content"
+      role="tabpanel"
+      aria-labelledby="shelf-tab-favorite"
+    >
       <div v-if="favoriteLoading" class="loading glass">
         <div class="loading-spinner"></div>
         <p>正在加载...</p>
@@ -239,8 +290,19 @@
           @click="$router.push(`/books/${book.id}`)"
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+            <img
+              v-if="book.coverUrl"
+              :src="getCoverUrl(book.coverUrl)"
+              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+              alt="封面"
+            />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+            <BookCoverPrivacyButton
+              v-if="book.coverUrl"
+              :book-id="book.id"
+              :book-title="book.title"
+              :compact="viewMode === 'list'"
+            />
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ book.title }}</div>
@@ -255,7 +317,13 @@
     </div>
 
     <!-- 正在阅读 -->
-    <div v-show="activeTab === 'reading'" class="tab-content">
+    <div
+      id="shelf-panel-reading"
+      v-show="activeTab === 'reading'"
+      class="tab-content"
+      role="tabpanel"
+      aria-labelledby="shelf-tab-reading"
+    >
       <div v-if="readingLoading" class="loading glass">
         <div class="loading-spinner"></div>
         <p>正在加载...</p>
@@ -273,8 +341,19 @@
           @click="$router.push(`/reader/${book.id}`)"
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+            <img
+              v-if="book.coverUrl"
+              :src="getCoverUrl(book.coverUrl)"
+              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+              alt="封面"
+            />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+            <BookCoverPrivacyButton
+              v-if="book.coverUrl"
+              :book-id="book.id"
+              :book-title="book.title"
+              :compact="viewMode === 'list'"
+            />
             <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
               <button
                 class="action-btn remove-reading-action"
@@ -308,7 +387,13 @@
     </div>
 
     <!-- 已读完 -->
-    <div v-show="activeTab === 'finished'" class="tab-content">
+    <div
+      id="shelf-panel-finished"
+      v-show="activeTab === 'finished'"
+      class="tab-content"
+      role="tabpanel"
+      aria-labelledby="shelf-tab-finished"
+    >
       <div v-if="finishedBooks.length === 0" class="empty glass">
         <div class="empty-icon">✅</div>
         <p>暂无已读完的书籍</p>
@@ -321,8 +406,19 @@
           @click="$router.push(`/books/${book.id}`)"
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+            <img
+              v-if="book.coverUrl"
+              :src="getCoverUrl(book.coverUrl)"
+              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+              alt="封面"
+            />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+            <BookCoverPrivacyButton
+              v-if="book.coverUrl"
+              :book-id="book.id"
+              :book-title="book.title"
+              :compact="viewMode === 'list'"
+            />
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ book.title }}</div>
@@ -337,7 +433,13 @@
     </div>
 
     <!-- 想读 -->
-    <div v-show="activeTab === 'wanted'" class="tab-content">
+    <div
+      id="shelf-panel-wanted"
+      v-show="activeTab === 'wanted'"
+      class="tab-content"
+      role="tabpanel"
+      aria-labelledby="shelf-tab-wanted"
+    >
       <div v-if="wantedLoading" class="loading glass">
         <div class="loading-spinner"></div>
         <p>正在加载...</p>
@@ -355,8 +457,19 @@
           @click="$router.push(`/books/${book.id}`)"
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+            <img
+              v-if="book.coverUrl"
+              :src="getCoverUrl(book.coverUrl)"
+              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+              alt="封面"
+            />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+            <BookCoverPrivacyButton
+              v-if="book.coverUrl"
+              :book-id="book.id"
+              :book-title="book.title"
+              :compact="viewMode === 'list'"
+            />
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ book.title }}</div>
@@ -371,7 +484,13 @@
     </div>
 
     <!-- 我的书单 -->
-    <div v-show="activeTab === 'lists'" class="tab-content">
+    <div
+      id="shelf-panel-lists"
+      v-show="activeTab === 'lists'"
+      class="tab-content"
+      role="tabpanel"
+      aria-labelledby="shelf-tab-lists"
+    >
       <div v-if="bookLists.length === 0" class="empty glass">
         <div class="empty-icon">📚</div>
         <p>暂无书单</p>
@@ -395,8 +514,19 @@
               :key="book.id"
               class="list-book-cover"
             >
-              <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+              <img
+                v-if="book.coverUrl"
+                :src="getCoverUrl(book.coverUrl)"
+                :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+                alt="封面"
+              />
               <div v-else class="no-cover-small">{{ book.title.charAt(0) }}</div>
+              <BookCoverPrivacyButton
+                v-if="book.coverUrl"
+                :book-id="book.id"
+                :book-title="book.title"
+                compact
+              />
             </div>
           </div>
         </div>
@@ -472,6 +602,8 @@ import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
+import { isBookCoverHidden } from '@/utils/imagePrivacy'
+import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import type { Book } from '@/stores/book'
 
 const router = useRouter()
@@ -511,6 +643,7 @@ interface ShelfOverview {
 }
 
 const activeTab = ref('shelf')
+const activeTabIndex = computed(() => Math.max(0, tabs.findIndex(tab => tab.key === activeTab.value)))
 const showCreateListDialog = ref(false)
 const bookLists = ref<any[]>([])
 const favoriteBooks = ref<Book[]>([])
@@ -849,6 +982,21 @@ const handleTabChange = (tab: string) => {
   }
 }
 
+const handleTabKeydown = (event: KeyboardEvent, index: number) => {
+  let nextIndex: number | null = null
+  if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length
+  if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length
+  if (event.key === 'Home') nextIndex = 0
+  if (event.key === 'End') nextIndex = tabs.length - 1
+  if (nextIndex === null) return
+
+  event.preventDefault()
+  handleTabChange(tabs[nextIndex].key)
+  const tabButtons = (event.currentTarget as HTMLButtonElement)
+    .parentElement?.querySelectorAll<HTMLButtonElement>('.shelf-tab-button')
+  tabButtons?.[nextIndex]?.focus()
+}
+
 const handleCreateList = async () => {
   if (!newListForm.value.name.trim()) {
     message.warning('请输入书单名称')
@@ -914,13 +1062,165 @@ onMounted(() => {
   gap: var(--spacing-md);
 }
 
+/* macOS 26 风格分段滑块 */
+.shelf-tabs-scroll {
+  margin-bottom: var(--spacing-xl);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.shelf-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.shelf-segmented-tabs {
+  --shelf-tab-count: 6;
+  --shelf-tab-index: 0;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(var(--shelf-tab-count), minmax(0, 1fr));
+  min-width: 680px;
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, white 66%, var(--border-color));
+  border-radius: 17px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.48), rgba(229, 239, 251, 0.24));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    inset 0 -1px 0 rgba(70, 92, 126, 0.1),
+    0 10px 28px rgba(45, 63, 94, 0.1);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+}
+
+.shelf-tab-slider {
+  position: absolute;
+  z-index: -1;
+  top: 5px;
+  bottom: 5px;
+  left: 5px;
+  width: calc((100% - 10px) / var(--shelf-tab-count));
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: 13px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(225, 239, 255, 0.7));
+  box-shadow:
+    0 7px 18px rgba(45, 65, 98, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(90, 116, 153, 0.12);
+  transform: translateX(calc(var(--shelf-tab-index) * 100%));
+  transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.shelf-tab-slider::after {
+  content: '';
+  position: absolute;
+  inset: 1px 12% auto;
+  height: 45%;
+  border-radius: inherit;
+  background: linear-gradient(rgba(255, 255, 255, 0.5), transparent);
+  pointer-events: none;
+}
+
+.shelf-tab-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 13px;
+  color: var(--text-secondary);
+  background: transparent;
+  font: inherit;
+  font-weight: 560;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 180ms ease, background-color 180ms ease;
+}
+
+.shelf-tab-button:hover:not(.active) {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.shelf-tab-button.active {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.shelf-tab-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.shelf-tab-icon {
+  font-size: 16px;
+  filter: saturate(0.9);
+  transform: translateY(-0.5px);
+}
+
+:global(html[data-theme="macos26"]) .shelf-segmented-tabs {
+  border-color: rgba(255, 255, 255, 0.74);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.58), rgba(221, 237, 255, 0.28));
+  box-shadow:
+    0 18px 38px rgba(48, 66, 100, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -1px 0 rgba(88, 112, 148, 0.11);
+}
+
+:global(html[data-theme="macos26"]) .shelf-tab-slider {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(222, 239, 255, 0.72));
+  box-shadow:
+    0 8px 22px rgba(48, 66, 100, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(83, 113, 153, 0.14);
+}
+
 /* 视图切换 */
 .view-toggle {
+  position: relative;
+  isolation: isolate;
   display: flex;
-  background: var(--surface-card);
-  border: var(--glass-border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, white 66%, var(--border-color));
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.5), rgba(229, 239, 251, 0.26));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(70, 92, 126, 0.1),
+    0 7px 18px rgba(45, 63, 94, 0.1);
+  backdrop-filter: blur(18px) saturate(175%);
+  -webkit-backdrop-filter: blur(18px) saturate(175%);
+}
+
+.view-toggle-slider {
+  position: absolute;
+  z-index: -1;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 10px) / 2);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(225, 239, 255, 0.72));
+  box-shadow:
+    0 5px 14px rgba(45, 65, 98, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(90, 116, 153, 0.12);
+  transform: translateX(0);
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.view-toggle.is-list-view .view-toggle-slider {
+  transform: translateX(calc(100% + 2px));
 }
 
 .view-btn {
@@ -930,6 +1230,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   border: none;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -937,13 +1238,31 @@ onMounted(() => {
   font-size: 16px;
 }
 
-.view-btn:hover {
-  background: var(--bg-secondary);
+.view-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary);
 }
 
 .view-btn.active {
-  background: var(--primary);
-  color: white;
+  color: var(--text-primary);
+}
+
+.view-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+:global(html[data-theme="macos26"]) .view-toggle {
+  border-color: rgba(255, 255, 255, 0.74);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.6), rgba(221, 237, 255, 0.3));
+}
+
+:global(html[data-theme="macos26"]) .view-toggle-slider {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(220, 238, 255, 0.74));
+  box-shadow:
+    0 6px 17px rgba(48, 66, 100, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(83, 113, 153, 0.14);
 }
 
 /* 卡片大小选择器 */
@@ -1294,6 +1613,14 @@ button.shelf-folder-card {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.book-cover img.is-hidden,
+.book-list-cover img.is-hidden,
+.list-book-cover img.is-hidden {
+  filter: blur(16px);
+  transform: scale(1.15);
 }
 
 .book-cover-actions {
@@ -1441,6 +1768,7 @@ button.shelf-folder-card {
 }
 
 .book-list-cover {
+  position: relative;
   width: 50px;
   height: 70px;
   border-radius: var(--radius-sm);
@@ -1452,6 +1780,7 @@ button.shelf-folder-card {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter 0.2s ease, transform 0.2s ease;
 }
 
 .book-list-cover .no-cover {
@@ -1541,6 +1870,7 @@ button.shelf-folder-card {
 }
 
 .list-book-cover {
+  position: relative;
   width: 50px;
   height: 70px;
   border-radius: var(--radius-sm);
@@ -1552,6 +1882,7 @@ button.shelf-folder-card {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter 0.2s ease, transform 0.2s ease;
 }
 
 .no-cover-small {
@@ -1702,14 +2033,14 @@ button.shelf-folder-card {
     justify-content: flex-end;
   }
 
-  .tabs {
-    flex-wrap: wrap;
-    justify-content: center;
+  .shelf-segmented-tabs {
+    min-width: 650px;
   }
 
-  .tab-item {
-    padding: 8px 12px;
-    font-size: var(--font-size-xs);
+  .shelf-tab-button {
+    min-height: 42px;
+    padding-inline: 10px;
+    font-size: var(--font-size-sm);
   }
 
   .shelf-tab-toolbar,
@@ -1745,7 +2076,12 @@ button.shelf-folder-card {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .book-cover-actions {
+  .book-cover-actions,
+  .book-cover img,
+  .book-list-cover img,
+  .list-book-cover img,
+  .shelf-tab-slider,
+  .view-toggle-slider {
     transition: none;
   }
 }

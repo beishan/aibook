@@ -4,6 +4,11 @@ import api from '@/utils/api'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useDockIconStore } from '@/stores/dockIcons'
 import { AUTH_EXPIRED_EVENT } from '@/utils/authSession'
+import { hydrateBookCoverPrivacy, resetBookCoverPrivacy } from '@/utils/imagePrivacy'
+import {
+  hydrateRandomCoverPrivacy,
+  resetRandomCoverPrivacy,
+} from '@/utils/randomCoverPrivacy'
 import {
   deleteCachedUserAvatar,
   readCachedUserAvatar,
@@ -132,10 +137,16 @@ export const useUserStore = defineStore('user', () => {
       email: data.email,
       role: data.role,
     }
-    await Promise.all([
+    const [, profile] = await Promise.all([
       usePreferencesStore().hydrate(true),
       hydrate(true),
     ])
+    if (profile?.id) {
+      await Promise.all([
+        hydrateBookCoverPrivacy(profile.id),
+        hydrateRandomCoverPrivacy(profile.id),
+      ])
+    }
     return data
   }
 
@@ -156,10 +167,16 @@ export const useUserStore = defineStore('user', () => {
       email: data.email,
       role: data.role,
     }
-    await Promise.all([
+    const [, profile] = await Promise.all([
       usePreferencesStore().hydrate(true),
       hydrate(true),
     ])
+    if (profile?.id) {
+      await Promise.all([
+        hydrateBookCoverPrivacy(profile.id),
+        hydrateRandomCoverPrivacy(profile.id),
+      ])
+    }
     return data
   }
 
@@ -174,6 +191,8 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem(ACTIVE_AVATAR_USER_KEY)
     usePreferencesStore().resetHydration()
     useDockIconStore().reset()
+    resetBookCoverPrivacy()
+    resetRandomCoverPrivacy()
   }
 
   window.addEventListener(AUTH_EXPIRED_EVENT, logout)

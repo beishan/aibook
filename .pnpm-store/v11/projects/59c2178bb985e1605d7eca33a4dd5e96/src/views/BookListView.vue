@@ -27,8 +27,18 @@
         @click="$router.push(`/books/${book.id}`)"
       >
         <div class="book-cover">
-          <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="封面" />
+          <img
+            v-if="book.coverUrl"
+            :src="getCoverUrl(book.coverUrl)"
+            :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
+            alt="封面"
+          />
           <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+          <BookCoverPrivacyButton
+            v-if="book.coverUrl"
+            :book-id="book.id"
+            :book-title="book.title"
+          />
         </div>
         <div class="book-info">
           <div class="book-title">{{ book.title }}</div>
@@ -51,6 +61,8 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
+import { isBookCoverHidden } from '@/utils/imagePrivacy'
+import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -167,13 +179,21 @@ onMounted(loadBookList)
 }
 
 .book-cover {
+  position: relative;
   height: 220px;
+  overflow: hidden;
 }
 
 .book-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.book-cover img.is-hidden {
+  filter: blur(16px);
+  transform: scale(1.15);
 }
 
 .no-cover {
@@ -222,5 +242,11 @@ onMounted(loadBookList)
   font-size: 64px;
   margin-bottom: var(--spacing-md);
   opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .book-cover img {
+    transition: none;
+  }
 }
 </style>

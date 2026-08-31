@@ -270,6 +270,11 @@
       <TagManagementView />
     </div>
 
+    <!-- 作者管理 -->
+    <div v-if="activeTab === 'authors'" class="tab-content">
+      <AuthorManagementView />
+    </div>
+
     <!-- 系统回收站 -->
     <div v-if="activeTab === 'trash'" class="tab-content">
       <div class="card glass recycle-settings-card">
@@ -558,6 +563,9 @@ const CategoryManagementView = defineAsyncComponent(
 const TagManagementView = defineAsyncComponent(
   () => import('@/views/TagManagementView.vue'),
 )
+const AuthorManagementView = defineAsyncComponent(
+  () => import('@/views/AuthorManagementView.vue'),
+)
 
 const themeStore = useThemeStore()
 const route = useRoute()
@@ -749,6 +757,7 @@ const tabGroups = computed(() => [
       { key: 'covers', label: '书籍封面库', icon: '🖼️' },
       { key: 'categories', label: '分类管理', icon: '🗂️' },
       { key: 'tags', label: '标签管理', icon: '🏷️' },
+      { key: 'authors', label: '作者管理', icon: '✍️' },
       { key: 'trash', label: '回收站', icon: '🗑️' },
       { key: 'scheduler', label: '定时任务', icon: '⏰' },
     ],
