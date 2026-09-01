@@ -3,6 +3,8 @@ package com.aibook.android.navigation
 sealed class Screen(val route: String) {
     data object Shelf : Screen("shelf")
     data object Store : Screen("store")
+    data object ServerLibrary : Screen("server-library")
+    data object ServerShelf : Screen("server-shelf")
     data object StoreCategory : Screen("store-category")
     data object StoreSearch : Screen("store-search")
     data object StoreRemoteBookDetail : Screen("store-remote-book/{bookId}") {

@@ -80,11 +80,13 @@ import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
 import com.aibook.android.ui.design.WarmProgress
+import com.aibook.android.ui.design.SlidingSegmentedControl
 
 @Composable
 fun ShelfScreen(
     onBookClick: (String) -> Unit,
     onReadClick: (String) -> Unit,
+    onServerShelfClick: () -> Unit = {},
     viewModel: ShelfViewModel = viewModel(factory = ShelfViewModel.Factory),
     importViewModel: LocalBookImportViewModel = viewModel(factory = LocalBookImportViewModel.Factory)
 ) {
@@ -151,6 +153,13 @@ fun ShelfScreen(
         }
     ) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            item {
+                SlidingSegmentedControl(
+                    options = listOf("本地书架", "服务端书架"),
+                    selectedIndex = 0,
+                    onSelected = { if (it == 1) onServerShelfClick() }
+                )
+            }
             if (showSearch) {
                 item {
                     OutlinedTextField(

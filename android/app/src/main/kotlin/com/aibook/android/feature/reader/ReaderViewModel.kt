@@ -25,6 +25,7 @@ import com.aibook.android.core.model.ReaderImportedFont
 import com.aibook.android.core.model.ReaderOrientationMode
 import com.aibook.android.core.model.ReaderSettings
 import com.aibook.android.core.model.ReaderTheme
+import com.aibook.android.core.model.ReadingProgress
 import com.aibook.android.core.model.TextAlignment
 import com.aibook.android.core.reader.EpubBookContent
 import com.aibook.android.core.reader.EpubContentParser
@@ -63,6 +64,7 @@ data class ReaderUiState(
     val currentScrollOffset: Int = 0,
     val isRemote: Boolean = false,
     val remoteBookId: Long? = null,
+    val remoteProgress: ReadingProgress? = null,
     val settings: ReaderSettings = ReaderSettings(),
     val importedFonts: List<ReaderImportedFont> = emptyList(),
     val isBookSpecific: Boolean = false,
@@ -79,6 +81,7 @@ data class ReaderUiState(
         loadedChapters.lastOrNull()?.title
             ?: chapters.getOrNull(currentChapterIndex)?.title
             ?: book?.progress?.chapterTitle
+            ?: remoteProgress?.chapterTitle
             ?: ""
     val isCurrentPositionBookmarked: Boolean get() = bookmarks.any {
         it.chapterIndex == currentChapterIndex && it.lineIndex == currentLineIndex
@@ -144,7 +147,13 @@ class ReaderViewModel(
     fun loadLocalBook(bookId: String) {
         viewModelScope.launch {
             readingStartedAtMillis = System.currentTimeMillis()
-            _state.value = _state.value.copy(isLoading = true, errorMessage = null, isRemote = false, remoteBookId = null)
+            _state.value = _state.value.copy(
+                isLoading = true,
+                errorMessage = null,
+                isRemote = false,
+                remoteBookId = null,
+                remoteProgress = null
+            )
 
             val book = bookRepository.getBook(bookId)
             if (book == null) {
@@ -238,6 +247,7 @@ class ReaderViewModel(
 
     fun loadRemoteBook(bookId: Long) {
         viewModelScope.launch {
+            readingStartedAtMillis = System.currentTimeMillis()
             bookmarkObservationJob?.cancel()
             _state.value = _state.value.copy(
                 book = null,
@@ -245,16 +255,32 @@ class ReaderViewModel(
                 isLoading = true,
                 errorMessage = null,
                 isRemote = true,
-                remoteBookId = bookId
+                remoteBookId = bookId,
+                remoteProgress = null
             )
             try {
-                val result = serverRepository.getProcessedContent(bookId)
-                result.onSuccess { response ->
-                    val chapters = withContext(Dispatchers.Default) { TextChapterParser.parse(response.text) }
-                    applyChapters(chapters, fallbackText = response.text)
-                }.onFailure { e ->
-                    _state.value = _state.value.copy(isLoading = false, errorMessage = "加载失败：${e.message}")
+                serverRepository.getReadingProgress(bookId).getOrNull()?.let { saved ->
+                    _state.update {
+                        it.copy(
+                            remoteProgress = ReadingProgress(
+                                chapterHref = saved.currentChapter,
+                                chapterTitle = saved.currentChapterTitle,
+                                percent = (saved.totalProgress / 100f).coerceIn(0f, 1f)
+                            ),
+                            scrollProgress = (saved.totalProgress / 100f).coerceIn(0f, 1f)
+                        )
+                    }
                 }
+                val metadata = serverRepository.getBookById(bookId).getOrThrow()
+                val format = metadata.format
+                    ?.let { BookFormat.fromFileName("book.${it.lowercase()}") }
+                    ?: throw IllegalArgumentException("暂不支持该书籍格式")
+                val cacheFile = File(appContext.cacheDir, "server-books/$bookId.${format.extension}")
+                val downloaded = serverRepository.downloadBookContent(bookId, cacheFile)
+                if (downloaded.isFailure && (!cacheFile.exists() || cacheFile.length() == 0L)) {
+                    throw downloaded.exceptionOrNull() ?: IllegalStateException("下载书籍失败")
+                }
+                loadRemoteFile(bookId, cacheFile, format)
             } catch (e: Exception) {
                 _state.value = _state.value.copy(isLoading = false, errorMessage = "加载失败：${e.message}")
             }
@@ -796,10 +822,11 @@ class ReaderViewModel(
         }
         if (state.isRemote && state.remoteBookId != null) {
             serverRepository.saveReadingProgress(
-                state.remoteBookId,
-                null,
-                (percent * 100).toInt(),
-                (percent * 100).toInt()
+                bookId = state.remoteBookId,
+                chapter = chapter?.href,
+                chapterTitle = chapter?.title,
+                chapterProgress = (percent * 100).toInt(),
+                totalProgress = (percent * 100).toInt()
             )
         }
     }
@@ -818,6 +845,51 @@ class ReaderViewModel(
         applyChapters(chapters, fallbackText = text)
     }
 
+    private suspend fun loadRemoteFile(bookId: Long, file: File, format: BookFormat) {
+        val preferredHref = _state.value.remoteProgress?.chapterHref
+        when (format) {
+            BookFormat.EPUB -> {
+                var epub = runCatching { ReadiumEpubReader(appContext).parse(file, preferredHref) }.getOrNull()
+                if (epub == null || epub.chapters.isEmpty()) {
+                    epub = runCatching { EpubContentParser.parse(file.readBytes()) }.getOrNull()
+                        ?: epub
+                        ?: EpubBookContent()
+                }
+                applyChapters(epub.chapters, epub.fullText.takeIf { epub.chapters.isEmpty() })
+            }
+            BookFormat.PDF -> _state.update {
+                it.copy(isLoading = false, errorMessage = "PDF 阅读器正在开发中，当前支持 EPUB、TXT、MOBI、AZW3、Markdown 和 HTML")
+            }
+            BookFormat.MARKDOWN,
+            BookFormat.MOBI,
+            BookFormat.AZW3 -> {
+                val loader = contentLoaderRegistry.loaderFor(format)
+                val result = loader?.load(
+                    BookContentRequest(
+                        bookId = "remote-$bookId",
+                        file = file,
+                        format = format,
+                        preferredChapterHref = preferredHref,
+                        cacheDirectory = bookRepository.parsedBookDirectory("remote-$bookId")
+                    )
+                ) ?: BookContentResult.Failure(BookContentError.UnsupportedVariant)
+                when (result) {
+                    is BookContentResult.Success -> applyChapters(result.content.chapters, fallbackText = null)
+                    is BookContentResult.Failure -> _state.update {
+                        it.copy(isLoading = false, errorMessage = BookContentErrorText.forError(result.error))
+                    }
+                }
+            }
+            BookFormat.TXT,
+            BookFormat.HTML,
+            BookFormat.HTM -> {
+                val text = withContext(Dispatchers.IO) { readTxtFile(file) }
+                val chapters = withContext(Dispatchers.Default) { TextChapterParser.parse(text) }
+                applyChapters(chapters, fallbackText = text)
+            }
+        }
+    }
+
     private fun applyChapters(chapters: List<ReaderChapter>, fallbackText: String?) {
         if (chapters.isEmpty()) {
             val loaded = fallbackText?.takeIf { it.isNotBlank() }?.let { text ->
@@ -827,15 +899,15 @@ class ReaderViewModel(
                 loadedChapters = loaded,
                 chapters = emptyList(),
                 currentChapterIndex = 0,
-                currentLineIndex = _state.value.book?.progress?.lineIndex ?: 0,
-                currentScrollOffset = _state.value.book?.progress?.scrollOffset ?: 0,
-                scrollProgress = _state.value.book?.progress?.percent ?: 0f,
+                currentLineIndex = (_state.value.book?.progress ?: _state.value.remoteProgress)?.lineIndex ?: 0,
+                currentScrollOffset = (_state.value.book?.progress ?: _state.value.remoteProgress)?.scrollOffset ?: 0,
+                scrollProgress = (_state.value.book?.progress ?: _state.value.remoteProgress)?.percent ?: 0f,
                 isLoading = false,
                 errorMessage = if (loaded.isEmpty()) "未解析到可阅读内容" else null
             )
             return
         }
-        val savedProgress = _state.value.book?.progress
+        val savedProgress = _state.value.book?.progress ?: _state.value.remoteProgress
         val initialIndex = ReaderChapterSelection.selectInitialIndex(
             chapters = chapters,
             preferredHref = savedProgress?.chapterHref,

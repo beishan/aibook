@@ -22,6 +22,17 @@
 
 ## 变更记录
 
+### REQ-20260901-004 Android 本地、OPDS 与后端统一阅读接入
+
+- 需求时间：2026-09-01
+- 完成时间：2026-09-01
+- 状态：已完成
+- 应用版本：`1.3.0`
+- 需求内容：Android 阅读端同时支持本地书籍、OPDS 书籍和后端服务书籍；本地与 OPDS 下载书籍的进度保存在本地，后端书籍进度保存到服务端；发现页区分本地与后端书籍，并支持服务端书架、收藏和书单浏览。
+- 完成情况：新增后端书库入口与服务端书架入口，支持浏览全部书籍、收藏、书架和书单，支持加入/移出服务端书架及切换收藏；后端书籍可下载到应用缓存并进入现有阅读器，恢复和回写服务端阅读进度。进度上传失败时会暂存本地并在下次读取服务端进度前重试。
+- 主要改动：扩展 Android Retrofit 服务端书架、书单、收藏、原文件和阅读进度接口；新增服务端书库 ViewModel 与 Compose 页面；在发现页和书架页增加滑块分段来源切换；复用现有解析器支持服务端 EPUB、TXT、MOBI、AZW3、Markdown、HTML/HTM；增加原子文件缓存和离线回退；补充服务端封面地址解析与 DTO 契约测试。
+- 验证结果：`ANDROID_HOME=/Users/beibei/Library/Android/sdk ./gradlew :app:compileDebugKotlin :core:network:test --no-daemon -Dkotlin.compiler.execution.strategy=in-process` 通过。现有 Android PDF 阅读器仍处于开发中，本次未扩大其格式支持范围；项目 `android/local.properties` 仍含无效旧 SDK 路径，验证时通过环境变量指定本机 SDK。
+
 ### REQ-20260901-003 增加阅读背景图片管理与选择
 
 - 需求时间：2026-09-01

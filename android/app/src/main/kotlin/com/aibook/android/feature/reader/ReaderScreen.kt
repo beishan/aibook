@@ -367,7 +367,7 @@ private fun ReaderMainPage(
     // 章节切换时滚动到顶部；初次打开时恢复到保存的章节内行号
     LaunchedEffect(state.loadedChapters.firstOrNull()?.index, state.book?.id, state.remoteBookId, settings.pageTurnMode) {
         if (state.loadedChapters.size == 1 && !settings.pageTurnMode.usesPagedReading()) {
-            val savedProgress = state.book?.progress
+            val savedProgress = state.book?.progress ?: state.remoteProgress
             val loadedChapter = state.loadedChapters.firstOrNull()
             val canRestore = !restoredInitialPosition &&
                 savedProgress != null &&
@@ -949,7 +949,7 @@ private fun ReaderPagedContent(
     LaunchedEffect(state.loadedChapters.firstOrNull()?.index, pages.size, settings.pageTurnMode) {
         if (pages.isEmpty()) return@LaunchedEffect
 
-        val savedProgress = state.book?.progress
+        val savedProgress = state.book?.progress ?: state.remoteProgress
         val loadedChapter = state.loadedChapters.firstOrNull()
         val canRestore = !restoredInitialPage &&
             savedProgress != null &&
@@ -2864,6 +2864,7 @@ private fun readerColors(theme: ReaderTheme): ReaderPalette = when (theme) {
 private fun currentChapterTitle(state: ReaderUiState): String =
     state.chapters.getOrNull(state.currentChapterIndex)?.title
         ?: state.book?.progress?.chapterTitle
+        ?: state.remoteProgress?.chapterTitle
         ?: "第一章 科学边界"
 
 private fun normalizedChapters(state: ReaderUiState): List<ReaderChapter> {

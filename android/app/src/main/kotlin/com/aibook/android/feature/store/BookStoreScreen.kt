@@ -77,10 +77,12 @@ import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
 import com.aibook.android.ui.design.SourceBadge
+import com.aibook.android.ui.design.SlidingSegmentedControl
 import com.aibook.android.core.data.repository.DownloadStatus
 
 @Composable
 fun BookStoreScreen(
+    onServerLibraryClick: () -> Unit = {},
     onCategoryClick: () -> Unit = {},
     onSearchClick: () -> Unit = {},
     onDownloadsClick: () -> Unit = {},
@@ -179,6 +181,11 @@ fun BookStoreScreen(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
+            SlidingSegmentedControl(
+                options = listOf("本地与 OPDS", "后端服务"),
+                selectedIndex = 0,
+                onSelected = { if (it == 1) onServerLibraryClick() }
+            )
             actionState.message?.let { message ->
                 SoftCard(color = Color.White) {
                     Row(

@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.aibook.android.core.data.security.PassthroughSecretCipher
 import com.aibook.android.core.data.security.SecretCipher
@@ -88,4 +89,52 @@ class ServerConfigStore(
             context.serverConfigStore.edit { it[Keys.JWT_TOKEN] = secretCipher.encrypt(stored) }
         }
     }
+
+    suspend fun savePendingReadingProgress(
+        bookId: Long,
+        chapter: String?,
+        chapterTitle: String?,
+        chapterProgress: Int,
+        totalProgress: Int
+    ) {
+        context.serverConfigStore.edit { prefs ->
+            val prefix = "pending_progress_${bookId}_"
+            if (chapter == null) prefs.remove(stringPreferencesKey("${prefix}chapter"))
+            else prefs[stringPreferencesKey("${prefix}chapter")] = chapter
+            if (chapterTitle == null) prefs.remove(stringPreferencesKey("${prefix}title"))
+            else prefs[stringPreferencesKey("${prefix}title")] = chapterTitle
+            prefs[intPreferencesKey("${prefix}chapter_percent")] = chapterProgress
+            prefs[intPreferencesKey("${prefix}total_percent")] = totalProgress
+        }
+    }
+
+    suspend fun pendingReadingProgress(bookId: Long): PendingReadingProgress? {
+        val prefs = context.serverConfigStore.data.first()
+        val prefix = "pending_progress_${bookId}_"
+        val totalKey = intPreferencesKey("${prefix}total_percent")
+        val total = prefs[totalKey] ?: return null
+        return PendingReadingProgress(
+            chapter = prefs[stringPreferencesKey("${prefix}chapter")],
+            chapterTitle = prefs[stringPreferencesKey("${prefix}title")],
+            chapterProgress = prefs[intPreferencesKey("${prefix}chapter_percent")] ?: total,
+            totalProgress = total
+        )
+    }
+
+    suspend fun clearPendingReadingProgress(bookId: Long) {
+        context.serverConfigStore.edit { prefs ->
+            val prefix = "pending_progress_${bookId}_"
+            prefs.remove(stringPreferencesKey("${prefix}chapter"))
+            prefs.remove(stringPreferencesKey("${prefix}title"))
+            prefs.remove(intPreferencesKey("${prefix}chapter_percent"))
+            prefs.remove(intPreferencesKey("${prefix}total_percent"))
+        }
+    }
 }
+
+data class PendingReadingProgress(
+    val chapter: String?,
+    val chapterTitle: String?,
+    val chapterProgress: Int,
+    val totalProgress: Int
+)

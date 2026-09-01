@@ -51,6 +51,8 @@ import com.aibook.android.feature.store.BookStoreScreen
 import com.aibook.android.feature.store.StoreRemoteBookDetailScreen
 import com.aibook.android.feature.store.StoreCategoryScreen
 import com.aibook.android.feature.store.StoreSearchScreen
+import com.aibook.android.feature.server.ServerLibraryScreen
+import com.aibook.android.feature.server.ServerLibrarySection
 import com.aibook.android.feature.downloads.DownloadManagerScreen
 import com.aibook.android.navigation.Screen
 import com.aibook.android.ui.design.DesignTokens
@@ -63,8 +65,8 @@ private data class BottomTab(
 
 private val bottomTabs = listOf(
     BottomTab(Screen.Shelf, "书架", Icons.Default.Book),
-    BottomTab(Screen.Store, "书城", Icons.Default.LocalMall),
-    BottomTab(Screen.Opds, "发现", Icons.Default.Explore),
+    BottomTab(Screen.Store, "发现", Icons.Default.LocalMall),
+    BottomTab(Screen.Opds, "OPDS", Icons.Default.Explore),
     BottomTab(Screen.Settings, "设置", Icons.Default.Settings)
 )
 
@@ -75,7 +77,8 @@ fun AiBookApp() {
     val currentRoute = backStackEntry?.destination?.route
 
     val selectedBottomRoute = when (currentRoute) {
-        Screen.StoreCategory.route, Screen.StoreSearch.route -> Screen.Store.route
+        Screen.ServerShelf.route -> Screen.Shelf.route
+        Screen.StoreCategory.route, Screen.StoreSearch.route, Screen.ServerLibrary.route -> Screen.Store.route
         Screen.StoreRemoteBookDetail.route -> Screen.Store.route
         Screen.OpdsAddSource.route -> Screen.Opds.route
         Screen.ScanDirectories.route -> Screen.Settings.route
@@ -92,6 +95,8 @@ fun AiBookApp() {
             Screen.StoreCategory.route,
             Screen.StoreSearch.route,
             Screen.StoreRemoteBookDetail.route,
+            Screen.ServerLibrary.route,
+            Screen.ServerShelf.route,
             Screen.OpdsAddSource.route,
             Screen.ShelfSettings.route,
             Screen.ScanDirectories.route,
@@ -161,7 +166,8 @@ fun AiBookApp() {
                         },
                         onReadClick = { bookId ->
                             navController.navigate(Screen.Reader.createRoute(bookId))
-                        }
+                        },
+                        onServerShelfClick = { navController.navigate(Screen.ServerShelf.route) }
                     )
                 }
             }
@@ -176,6 +182,7 @@ fun AiBookApp() {
             composable(Screen.Store.route) {
                 PaddedScreen(paddingValues) {
                     BookStoreScreen(
+                        onServerLibraryClick = { navController.navigate(Screen.ServerLibrary.route) },
                         onCategoryClick = { navController.navigate(Screen.StoreCategory.route) },
                         onSearchClick = { navController.navigate(Screen.StoreSearch.route) },
                         onDownloadsClick = { navController.navigate(Screen.Downloads.route) },
@@ -185,6 +192,23 @@ fun AiBookApp() {
                         onRemoteBookClick = { bookId ->
                             navController.navigate(Screen.StoreRemoteBookDetail.createRoute(bookId))
                         }
+                    )
+                }
+            }
+            composable(Screen.ServerLibrary.route) {
+                PaddedScreen(paddingValues) {
+                    ServerLibraryScreen(
+                        onLocalLibraryClick = { navController.popBackStack() },
+                        onReadBook = { bookId -> navController.navigate(Screen.RemoteReader.createRoute(bookId)) }
+                    )
+                }
+            }
+            composable(Screen.ServerShelf.route) {
+                PaddedScreen(paddingValues) {
+                    ServerLibraryScreen(
+                        onLocalLibraryClick = { navController.popBackStack() },
+                        onReadBook = { bookId -> navController.navigate(Screen.RemoteReader.createRoute(bookId)) },
+                        initialSection = ServerLibrarySection.SHELF
                     )
                 }
             }
