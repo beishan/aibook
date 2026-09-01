@@ -61,7 +61,7 @@ fun ServerLibraryScreen(
         title = when {
             initialSection == ServerLibrarySection.SHELF -> "书架"
             !overviewMode -> initialSection.label
-            else -> "发现"
+            else -> "书城"
         },
         modifier = Modifier.fillMaxSize(),
         actions = {

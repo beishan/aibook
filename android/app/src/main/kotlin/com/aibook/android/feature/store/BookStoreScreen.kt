@@ -82,13 +82,13 @@ import com.aibook.android.core.data.repository.DownloadStatus
 
 @Composable
 fun BookStoreScreen(
-    onOpdsClick: () -> Unit = {},
     onServerLibraryClick: () -> Unit = {},
     onCategoryClick: () -> Unit = {},
     onSearchClick: () -> Unit = {},
     onDownloadsClick: () -> Unit = {},
     onBookClick: (String) -> Unit = {},
     onRemoteBookClick: (String) -> Unit = {},
+    initialSourceIndex: Int = 0,
     viewModel: StoreViewModel = viewModel(factory = StoreViewModel.Factory)
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -101,7 +101,10 @@ fun BookStoreScreen(
     var managementMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var shelfRemovalBook by remember { mutableStateOf<StoreBook?>(null) }
-    val filteredBooks = uiState.filteredBooks.filter { it.kind == StoreItemKind.LOCAL }
+    var sourceIndex by remember { mutableIntStateOf(initialSourceIndex.coerceIn(0, 1)) }
+    val filteredBooks = uiState.filteredBooks.filter {
+        if (sourceIndex == 0) it.kind == StoreItemKind.LOCAL else it.kind == StoreItemKind.OPDS
+    }
     val localBooks = filteredBooks.filter { it.kind == StoreItemKind.LOCAL }
     val selectedLocalBooks = filteredBooks.filter { it.kind == StoreItemKind.LOCAL && it.id in selectedIds }
     val allLocalSelected = localBooks.isNotEmpty() && localBooks.all { it.id in selectedIds }
@@ -120,7 +123,7 @@ fun BookStoreScreen(
     }
 
     DesignPage(
-        title = if (managementMode) "已选 ${selectedLocalBooks.size} 本" else "",
+        title = if (managementMode) "已选 ${selectedLocalBooks.size} 本" else "书城",
         modifier = Modifier.fillMaxSize(),
         actions = {
             Icon(
@@ -158,24 +161,18 @@ fun BookStoreScreen(
                     onClick = onCategoryClick
                 )
             )
-            Text(
-                "筛选",
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onCategoryClick
+            if (sourceIndex == 0) {
+                Text(
+                    if (managementMode) "取消" else "管理",
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        managementMode = !managementMode
+                        selectedIds = emptySet()
+                    }
                 )
-            )
-            Text(
-                if (managementMode) "取消" else "管理",
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    managementMode = !managementMode
-                    selectedIds = emptySet()
-                }
-            )
+            }
         }
     ) {
         Column(
@@ -184,10 +181,14 @@ fun BookStoreScreen(
         ) {
             SlidingSegmentedControl(
                 options = listOf("本地", "OPDS", "远程"),
-                selectedIndex = 0,
+                selectedIndex = sourceIndex,
                 onSelected = {
                     when (it) {
-                        1 -> onOpdsClick()
+                        0, 1 -> {
+                            sourceIndex = it
+                            managementMode = false
+                            selectedIds = emptySet()
+                        }
                         2 -> onServerLibraryClick()
                     }
                 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.LocalMall
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -64,7 +65,8 @@ private data class BottomTab(
 
 private val bottomTabs = listOf(
     BottomTab(Screen.Shelf, "书架", Icons.Default.Book),
-    BottomTab(Screen.Store, "发现", Icons.Default.Explore),
+    BottomTab(Screen.Store, "书城", Icons.Default.LocalMall),
+    BottomTab(Screen.Opds, "发现", Icons.Default.Explore),
     BottomTab(Screen.Settings, "设置", Icons.Default.Settings)
 )
 
@@ -84,11 +86,11 @@ fun AiBookApp() {
         Screen.ServerShelf.route -> Screen.Shelf.route
         Screen.StoreCategory.route,
         Screen.StoreSearch.route,
+        Screen.StoreOpds.route,
         Screen.ServerLibrary.route,
-        Screen.ServerLibraryDetail.route,
-        Screen.Opds.route,
-        Screen.OpdsAddSource.route -> Screen.Store.route
+        Screen.ServerLibraryDetail.route -> Screen.Store.route
         Screen.StoreRemoteBookDetail.route -> Screen.Store.route
+        Screen.OpdsAddSource.route -> Screen.Opds.route
         Screen.ScanDirectories.route -> Screen.Settings.route
         Screen.ShelfSettings.route -> Screen.Settings.route
         Screen.SyncConnectionSettings.route -> Screen.Settings.route
@@ -102,6 +104,7 @@ fun AiBookApp() {
         listOf(
             Screen.StoreCategory.route,
             Screen.StoreSearch.route,
+            Screen.StoreOpds.route,
             Screen.StoreRemoteBookDetail.route,
             Screen.ServerLibrary.route,
             Screen.ServerLibraryDetail.route,
@@ -185,15 +188,13 @@ fun AiBookApp() {
                 PaddedScreen(paddingValues) {
                     OpdsScreen(
                         onAddSourceClick = { navController.navigate(Screen.OpdsAddSource.route) },
-                        onLocalClick = { navigateDiscoverySource(Screen.Store.route) },
-                        onServerClick = { navigateDiscoverySource(Screen.ServerLibrary.route) }
+                        onScanDirectoriesClick = { navController.navigate(Screen.ScanDirectories.route) }
                     )
                 }
             }
             composable(Screen.Store.route) {
                 PaddedScreen(paddingValues) {
                     BookStoreScreen(
-                        onOpdsClick = { navigateDiscoverySource(Screen.Opds.route) },
                         onServerLibraryClick = { navigateDiscoverySource(Screen.ServerLibrary.route) },
                         onCategoryClick = { navController.navigate(Screen.StoreCategory.route) },
                         onSearchClick = { navController.navigate(Screen.StoreSearch.route) },
@@ -207,11 +208,26 @@ fun AiBookApp() {
                     )
                 }
             }
+            composable(Screen.StoreOpds.route) {
+                PaddedScreen(paddingValues) {
+                    BookStoreScreen(
+                        onServerLibraryClick = { navigateDiscoverySource(Screen.ServerLibrary.route) },
+                        onCategoryClick = { navController.navigate(Screen.StoreCategory.route) },
+                        onSearchClick = { navController.navigate(Screen.StoreSearch.route) },
+                        onDownloadsClick = { navController.navigate(Screen.Downloads.route) },
+                        onBookClick = { bookId -> navController.navigate(Screen.BookDetail.createRoute(bookId)) },
+                        onRemoteBookClick = { bookId ->
+                            navController.navigate(Screen.StoreRemoteBookDetail.createRoute(bookId))
+                        },
+                        initialSourceIndex = 1
+                    )
+                }
+            }
             composable(Screen.ServerLibrary.route) {
                 PaddedScreen(paddingValues) {
                     ServerLibraryScreen(
                         onLocalLibraryClick = { navigateDiscoverySource(Screen.Store.route) },
-                        onOpdsClick = { navigateDiscoverySource(Screen.Opds.route) },
+                        onOpdsClick = { navigateDiscoverySource(Screen.StoreOpds.route) },
                         onReadBook = { bookId -> navController.navigate(Screen.RemoteReader.createRoute(bookId)) },
                         onSectionClick = { section ->
                             navController.navigate(Screen.ServerLibraryDetail.createRoute(section.name.lowercase()))

@@ -22,6 +22,17 @@
 
 ## 变更记录
 
+### REQ-20260901-006 拆分 Android 书城与发现页面并恢复导入功能
+
+- 需求时间：2026-09-01
+- 完成时间：2026-09-01
+- 状态：已完成
+- 应用版本：`1.3.2`
+- 需求内容：将当前统一书籍浏览页面改名为书城；恢复原有文件导入、目录扫描和 OPDS 配置页面，并继续命名为发现。
+- 完成情况：底部导航恢复独立的书城与发现入口；书城保留本地、OPDS、远程三级来源浏览，发现页恢复立即导入文件、扫描本地目录、OPDS 连接管理和定时同步配置。
+- 主要改动：书城的 OPDS 来源改为直接筛选并展示已同步 OPDS 书籍；新增书城 OPDS 导航状态；恢复发现页的系统文件选择器、导入状态、目录扫描入口及 OPDS 配置主体；调整页面标题和底部导航选中映射。
+- 验证结果：`ANDROID_HOME=/Users/beibei/Library/Android/sdk ./gradlew :app:compileDebugKotlin --no-daemon -Dkotlin.compiler.execution.strategy=in-process` 通过；使用 JDK 21 执行。项目 `android/local.properties` 的旧 SDK 路径警告仍由环境变量覆盖。
+
 ### REQ-20260901-005 重构 Android 发现页来源切换与远程概览
 
 - 需求时间：2026-09-01

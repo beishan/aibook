@@ -3,6 +3,7 @@ package com.aibook.android.navigation
 sealed class Screen(val route: String) {
     data object Shelf : Screen("shelf")
     data object Store : Screen("store")
+    data object StoreOpds : Screen("store-opds")
     data object ServerLibrary : Screen("server-library")
     data object ServerLibraryDetail : Screen("server-library/{section}") {
         fun createRoute(section: String) = "server-library/$section"
