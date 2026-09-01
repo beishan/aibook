@@ -82,6 +82,7 @@ import com.aibook.android.core.data.repository.DownloadStatus
 
 @Composable
 fun BookStoreScreen(
+    onOpdsClick: () -> Unit = {},
     onServerLibraryClick: () -> Unit = {},
     onCategoryClick: () -> Unit = {},
     onSearchClick: () -> Unit = {},
@@ -100,7 +101,7 @@ fun BookStoreScreen(
     var managementMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var shelfRemovalBook by remember { mutableStateOf<StoreBook?>(null) }
-    val filteredBooks = uiState.filteredBooks
+    val filteredBooks = uiState.filteredBooks.filter { it.kind == StoreItemKind.LOCAL }
     val localBooks = filteredBooks.filter { it.kind == StoreItemKind.LOCAL }
     val selectedLocalBooks = filteredBooks.filter { it.kind == StoreItemKind.LOCAL && it.id in selectedIds }
     val allLocalSelected = localBooks.isNotEmpty() && localBooks.all { it.id in selectedIds }
@@ -182,9 +183,14 @@ fun BookStoreScreen(
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             SlidingSegmentedControl(
-                options = listOf("本地与 OPDS", "后端服务"),
+                options = listOf("本地", "OPDS", "远程"),
                 selectedIndex = 0,
-                onSelected = { if (it == 1) onServerLibraryClick() }
+                onSelected = {
+                    when (it) {
+                        1 -> onOpdsClick()
+                        2 -> onServerLibraryClick()
+                    }
+                }
             )
             actionState.message?.let { message ->
                 SoftCard(color = Color.White) {

@@ -95,13 +95,11 @@ import com.aibook.android.core.network.opds.OpdsConnection
 import com.aibook.android.core.network.opds.OpdsEntry
 import com.aibook.android.core.network.opds.OpdsRequestFactory
 import com.aibook.android.core.network.opds.OpdsSyncState
-import com.aibook.android.feature.importer.LocalBookImportViewModel
-import com.aibook.android.feature.importer.rememberLocalBookImportLauncher
-import com.aibook.android.feature.importer.supportedBookMimeTypes
 import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SectionHeader
 import com.aibook.android.ui.design.SoftCard
+import com.aibook.android.ui.design.SlidingSegmentedControl
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -110,16 +108,12 @@ import java.util.Locale
 @Composable
 fun OpdsScreen(
     onAddSourceClick: () -> Unit = {},
-    onScanDirectoriesClick: () -> Unit = {},
-    viewModel: OpdsViewModel = viewModel(factory = OpdsViewModel.Factory),
-    importViewModel: LocalBookImportViewModel = viewModel(factory = LocalBookImportViewModel.Factory)
+    onLocalClick: () -> Unit = {},
+    onServerClick: () -> Unit = {},
+    viewModel: OpdsViewModel = viewModel(factory = OpdsViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val importState by importViewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val picker = rememberLocalBookImportLauncher { uris ->
-        importViewModel.importBooks(uris)
-    }
 
     LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let {
@@ -146,6 +140,17 @@ fun OpdsScreen(
             }
         }
     ) {
+        SlidingSegmentedControl(
+            options = listOf("本地", "OPDS", "远程"),
+            selectedIndex = 1,
+            onSelected = {
+                when (it) {
+                    0 -> onLocalClick()
+                    2 -> onServerClick()
+                }
+            }
+        )
+        Spacer(Modifier.height(14.dp))
         if (state.showConnectionForm) {
             ConnectionForm(state, viewModel)
         } else if (state.currentFeed != null) {
@@ -153,9 +158,6 @@ fun OpdsScreen(
         } else {
             DiscoveryHome(
                 state = state,
-                importState = importState,
-                onImportClick = { picker.launch(supportedBookMimeTypes) },
-                onScanDirectoriesClick = onScanDirectoriesClick,
                 onAddSourceClick = onAddSourceClick,
                 onBrowseConnection = viewModel::selectConnection,
                 onEditConnection = viewModel::editConnection,
@@ -185,9 +187,6 @@ fun OpdsScreen(
 @Composable
 private fun DiscoveryHome(
     state: OpdsUiState,
-    importState: com.aibook.android.feature.importer.LocalBookImportState,
-    onImportClick: () -> Unit,
-    onScanDirectoriesClick: () -> Unit,
     onAddSourceClick: () -> Unit,
     onBrowseConnection: (OpdsConnection) -> Unit,
     onEditConnection: (OpdsConnection) -> Unit,
@@ -198,26 +197,6 @@ private fun DiscoveryHome(
     onDeleteConnection: (String) -> Unit
 ) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                DiscoveryActionCard(
-                    modifier = Modifier.weight(1f),
-                    icon = { Icon(Icons.Default.CloudUpload, null, tint = DesignTokens.Accent, modifier = Modifier.size(58.dp)) },
-                    title = "立即导入文件",
-                    subtitle = if (importState.isImporting) "正在导入本地书籍" else "手动选择文件导入书城",
-                    accent = DesignTokens.Accent,
-                    onClick = onImportClick
-                )
-                DiscoveryActionCard(
-                    modifier = Modifier.weight(1f),
-                    icon = { Icon(Icons.Default.Folder, null, tint = DesignTokens.Success, modifier = Modifier.size(58.dp)) },
-                    title = "扫描本地目录",
-                    subtitle = "自动查找书籍文件",
-                    accent = DesignTokens.Success,
-                    onClick = onScanDirectoriesClick
-                )
-            }
-        }
 //        item { SectionHeader("已配置扫描目录", "+ 添加目录") }
 //        item {
 //            SoftCard {

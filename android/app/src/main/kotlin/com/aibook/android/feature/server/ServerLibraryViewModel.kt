@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 enum class ServerLibrarySection(val label: String) {
-    ALL("全部"),
+    ALL("书籍列表"),
     FAVORITES("收藏"),
     SHELF("书架"),
     LISTS("书单")
@@ -27,6 +27,8 @@ enum class ServerLibrarySection(val label: String) {
 data class ServerLibraryUiState(
     val section: ServerLibrarySection = ServerLibrarySection.ALL,
     val books: List<BookDTO> = emptyList(),
+    val overviewBooks: List<BookDTO> = emptyList(),
+    val favoritePreview: List<BookDTO> = emptyList(),
     val shelfBookIds: Set<Long> = emptySet(),
     val bookLists: List<BookListDTO> = emptyList(),
     val selectedListId: Long? = null,
@@ -42,11 +44,11 @@ class ServerLibraryViewModel(
     private val _uiState = MutableStateFlow(ServerLibraryUiState())
     val uiState: StateFlow<ServerLibraryUiState> = _uiState.asStateFlow()
 
-    init {
+    private fun verifyLogin(onLoggedIn: () -> Unit) {
         viewModelScope.launch {
             val loggedIn = serverRepository.isLoggedIn.first()
             _uiState.update { it.copy(isLoggedIn = loggedIn) }
-            if (loggedIn) refresh() else {
+            if (loggedIn) onLoggedIn() else {
                 _uiState.update {
                     it.copy(isLoading = false, errorMessage = "请先在设置中连接并登录后端服务")
                 }
@@ -55,9 +57,49 @@ class ServerLibraryViewModel(
     }
 
     fun selectSection(section: ServerLibrarySection) {
-        if (_uiState.value.section == section) return
         _uiState.update { it.copy(section = section, actionMessage = null) }
-        if (_uiState.value.isLoggedIn) refresh()
+        verifyLogin(::refresh)
+    }
+
+    fun loadOverview() {
+        viewModelScope.launch {
+            val loggedIn = serverRepository.isLoggedIn.first()
+            if (!loggedIn) {
+                _uiState.update {
+                    it.copy(isLoggedIn = false, isLoading = false, errorMessage = "请先在设置中连接并登录后端服务")
+                }
+                return@launch
+            }
+            _uiState.update { it.copy(isLoggedIn = true, isLoading = true, errorMessage = null) }
+            val shelfResult = serverRepository.getShelf()
+            val allResult = serverRepository.getBooks(size = 6)
+            val favoriteResult = serverRepository.getFavoriteBooks()
+            val listResult = serverRepository.getBookLists()
+            val firstError = listOf(
+                allResult.exceptionOrNull(),
+                favoriteResult.exceptionOrNull(),
+                listResult.exceptionOrNull()
+            ).firstOrNull { it != null }
+            if (firstError != null && allResult.isFailure && favoriteResult.isFailure && listResult.isFailure) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = firstError.readableMessage()) }
+                return@launch
+            }
+            val shelfIds = shelfResult.getOrNull()
+                ?.let { shelf -> shelf.ungroupedBooks + shelf.groups.flatMap { it.books } }
+                ?.mapNotNull { it.id }
+                ?.toSet()
+                .orEmpty()
+            _uiState.update {
+                it.copy(
+                    overviewBooks = allResult.getOrNull()?.content.orEmpty().take(4),
+                    favoritePreview = favoriteResult.getOrNull()?.content.orEmpty().take(4),
+                    bookLists = listResult.getOrNull().orEmpty().take(4),
+                    shelfBookIds = shelfIds,
+                    isLoading = false,
+                    errorMessage = null
+                )
+            }
+        }
     }
 
     fun selectBookList(listId: Long) {

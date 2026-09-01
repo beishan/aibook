@@ -4,6 +4,9 @@ sealed class Screen(val route: String) {
     data object Shelf : Screen("shelf")
     data object Store : Screen("store")
     data object ServerLibrary : Screen("server-library")
+    data object ServerLibraryDetail : Screen("server-library/{section}") {
+        fun createRoute(section: String) = "server-library/$section"
+    }
     data object ServerShelf : Screen("server-shelf")
     data object StoreCategory : Screen("store-category")
     data object StoreSearch : Screen("store-search")
