@@ -83,7 +83,6 @@ fun AiBookApp() {
     val currentRoute = backStackEntry?.destination?.route
 
     val selectedBottomRoute = when (currentRoute) {
-        Screen.ServerShelf.route -> Screen.Shelf.route
         Screen.StoreCategory.route,
         Screen.StoreSearch.route,
         Screen.StoreOpds.route,
@@ -108,7 +107,6 @@ fun AiBookApp() {
             Screen.StoreRemoteBookDetail.route,
             Screen.ServerLibrary.route,
             Screen.ServerLibraryDetail.route,
-            Screen.ServerShelf.route,
             Screen.Opds.route,
             Screen.OpdsAddSource.route,
             Screen.ShelfSettings.route,
@@ -180,7 +178,9 @@ fun AiBookApp() {
                         onReadClick = { bookId ->
                             navController.navigate(Screen.Reader.createRoute(bookId))
                         },
-                        onServerShelfClick = { navController.navigate(Screen.ServerShelf.route) }
+                        onRemoteReadClick = { bookId ->
+                            navController.navigate(Screen.RemoteReader.createRoute(bookId))
+                        }
                     )
                 }
             }
@@ -250,16 +250,6 @@ fun AiBookApp() {
                         initialSection = section,
                         overviewMode = false,
                         onBack = { navController.popBackStack() }
-                    )
-                }
-            }
-            composable(Screen.ServerShelf.route) {
-                PaddedScreen(paddingValues) {
-                    ServerLibraryScreen(
-                        onLocalLibraryClick = { navController.popBackStack() },
-                        onReadBook = { bookId -> navController.navigate(Screen.RemoteReader.createRoute(bookId)) },
-                        initialSection = ServerLibrarySection.SHELF,
-                        overviewMode = false
                     )
                 }
             }

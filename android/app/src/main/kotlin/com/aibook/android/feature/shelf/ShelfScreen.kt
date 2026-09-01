@@ -80,25 +80,26 @@ import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
 import com.aibook.android.ui.design.WarmProgress
-import com.aibook.android.ui.design.SlidingSegmentedControl
 
 @Composable
 fun ShelfScreen(
     onBookClick: (String) -> Unit,
     onReadClick: (String) -> Unit,
-    onServerShelfClick: () -> Unit = {},
+    onRemoteReadClick: (Long) -> Unit = {},
     viewModel: ShelfViewModel = viewModel(factory = ShelfViewModel.Factory),
     importViewModel: LocalBookImportViewModel = viewModel(factory = LocalBookImportViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { viewModel.refreshRemoteShelf() }
     val importState by importViewModel.state.collectAsStateWithLifecycle()
     val picker = rememberLocalBookImportLauncher { uris ->
         importViewModel.importBooks(uris)
     }
     val visibleBooks = state.filteredBooks
+    val visibleLocalBooks = visibleBooks.filterNot { it.isServerBook() }
     val featuredBooks = visibleBooks.take(3)
-    val hasBooks = state.books.isNotEmpty()
-    val allVisibleSelected = visibleBooks.isNotEmpty() && visibleBooks.all { it.id in state.selectedIds }
+    val hasBooks = state.books.isNotEmpty() || state.remoteBooks.isNotEmpty()
+    val allVisibleSelected = visibleLocalBooks.isNotEmpty() && visibleLocalBooks.all { it.id in state.selectedIds }
     val selectedFavorite = state.selectedBooks.isNotEmpty() && state.selectedBooks.all { it.favorite }
     var showMoveDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -153,13 +154,6 @@ fun ShelfScreen(
         }
     ) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            item {
-                SlidingSegmentedControl(
-                    options = listOf("本地书架", "服务端书架"),
-                    selectedIndex = 0,
-                    onSelected = { if (it == 1) onServerShelfClick() }
-                )
-            }
             if (showSearch) {
                 item {
                     OutlinedTextField(
@@ -179,9 +173,9 @@ fun ShelfScreen(
                         folders = state.folders,
                         folderCounts = state.folderCounts,
                         selection = state.folderSelection,
-                        favoriteCount = state.books.count { it.favorite },
+                        favoriteCount = state.books.count { it.favorite } + state.remoteBooks.count { it.favorite },
                         unfiledCount = state.books.count { it.folderId == null },
-                        totalCount = state.books.size,
+                        totalCount = state.books.size + state.remoteBooks.size,
                         onSelect = viewModel::selectFolder
                     )
                 }
@@ -215,7 +209,9 @@ fun ShelfScreen(
                         featuredBooks.forEach { book ->
                             ContinueReadingCard(
                                 book = book,
-                                onReadClick = { onReadClick(book.id) },
+                                onReadClick = {
+                                    book.serverBookId()?.let(onRemoteReadClick) ?: onReadClick(book.id)
+                                },
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -230,12 +226,24 @@ fun ShelfScreen(
                         managementMode = state.managementMode,
                         selectedIds = state.selectedIds,
                         onBookClick = { book ->
-                            if (state.managementMode) viewModel.toggleBookSelection(book.id) else onBookClick(book.id)
+                            if (state.managementMode) {
+                                if (!book.isServerBook()) viewModel.toggleBookSelection(book.id)
+                            } else {
+                                book.serverBookId()?.let(onRemoteReadClick) ?: onBookClick(book.id)
+                            }
                         },
-                        onReadClick = { onReadClick(it.id) },
-                        onSelect = { viewModel.toggleBookSelection(it.id) },
-                        onFavoriteClick = { viewModel.setFavorite(it.id, !it.favorite) },
-                        onRemoveClick = { viewModel.toggleShelved(it.id, false) },
+                        onReadClick = { book ->
+                            book.serverBookId()?.let(onRemoteReadClick) ?: onReadClick(book.id)
+                        },
+                        onSelect = { if (!it.isServerBook()) viewModel.toggleBookSelection(it.id) },
+                        onFavoriteClick = { book ->
+                            book.serverBookId()?.let(viewModel::toggleRemoteFavorite)
+                                ?: viewModel.setFavorite(book.id, !book.favorite)
+                        },
+                        onRemoveClick = { book ->
+                            book.serverBookId()?.let(viewModel::removeRemoteFromShelf)
+                                ?: viewModel.toggleShelved(book.id, false)
+                        },
                         onLoadMore = viewModel::loadNextPage
                     )
                 }
@@ -323,7 +331,7 @@ private fun ReadingBooksView(
                 if (book.id == books.lastOrNull()?.id) LaunchedEffect(book.id) { onLoadMore() }
                 ReadingBookCard(
                     book = book,
-                    managementMode = managementMode,
+                    managementMode = managementMode && !book.isServerBook(),
                     selected = book.id in selectedIds,
                     onCoverClick = { onBookClick(book) },
                     onReadClick = { onReadClick(book) },
@@ -343,7 +351,7 @@ private fun ReadingBooksView(
                 if (book.id == books.lastOrNull()?.id) LaunchedEffect(book.id) { onLoadMore() }
                 ShelfCoverListItem(
                     book = book,
-                    managementMode = managementMode,
+                    managementMode = managementMode && !book.isServerBook(),
                     selected = book.id in selectedIds,
                     onClick = { onBookClick(book) },
                     onSelect = { onSelect(book) }
@@ -360,7 +368,7 @@ private fun ReadingBooksView(
                 if (book.id == books.lastOrNull()?.id) LaunchedEffect(book.id) { onLoadMore() }
                 ShelfCompactListItem(
                     book = book,
-                    managementMode = managementMode,
+                    managementMode = managementMode && !book.isServerBook(),
                     selected = book.id in selectedIds,
                     onClick = { onBookClick(book) },
                     onSelect = { onSelect(book) }
@@ -388,7 +396,7 @@ private fun ShelfCoverListItem(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ShelfMetadataBadge("${shelfFormatLabel(book)}｜本")
+                    ShelfMetadataBadge("${shelfFormatLabel(book)}｜${if (book.isServerBook()) "远" else "本"}")
                     Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
                 }
                 Text("阅读进度 ${(book.progress.percent * 100).toInt()}%", color = DesignTokens.SoftText, style = MaterialTheme.typography.labelSmall)
@@ -418,7 +426,7 @@ private fun ShelfCompactListItem(
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                ShelfMetadataBadge("${shelfFormatLabel(book)}｜本")
+                ShelfMetadataBadge("${shelfFormatLabel(book)}｜${if (book.isServerBook()) "远" else "本"}")
                 Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -450,6 +458,11 @@ private fun ShelfSelectionMark(selected: Boolean) {
 
 private fun shelfFormatLabel(book: LocalBook): String =
     book.format.displayName.firstOrNull()?.uppercaseChar()?.toString().orEmpty()
+
+private fun LocalBook.isServerBook(): Boolean = id.startsWith("server:")
+
+private fun LocalBook.serverBookId(): Long? =
+    id.takeIf { isServerBook() }?.removePrefix("server:")?.toLongOrNull()
 
 @Composable
 private fun ShelfViewModeDialog(
