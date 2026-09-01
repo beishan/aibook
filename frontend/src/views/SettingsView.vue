@@ -260,6 +260,11 @@
       <RandomCoverLibraryPanel />
     </div>
 
+    <!-- 阅读背景图片 -->
+    <div v-if="activeTab === 'reader-backgrounds'" class="tab-content">
+      <ReaderBackgroundManagementPanel />
+    </div>
+
     <!-- 分类管理 -->
     <div v-if="activeTab === 'categories'" class="tab-content">
       <CategoryManagementView />
@@ -550,6 +555,7 @@ import ThemeColorSettingsPanel from '@/components/ThemeColorSettingsPanel.vue'
 import ThemeBackgroundSettingsPanel from '@/components/ThemeBackgroundSettingsPanel.vue'
 import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
 import RandomCoverLibraryPanel from '@/components/RandomCoverLibraryPanel.vue'
+import ReaderBackgroundManagementPanel from '@/components/ReaderBackgroundManagementPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
@@ -748,6 +754,7 @@ const tabGroups = computed(() => [
     items: [
       { key: 'theme', label: '主题风格', icon: '🎨' },
       { key: 'fonts', label: '字体管理', icon: '🔤' },
+      { key: 'reader-backgrounds', label: '阅读背景', icon: '🌄' },
     ],
   },
   {

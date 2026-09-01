@@ -113,21 +113,6 @@
             :disabled="uploadingCover"
             @change="handleCoverUpload"
           />
-          <div class="book-rating">
-            <span class="rating-label">我的评分</span>
-            <div class="rating-stars" aria-label="书籍评分">
-              <button
-                v-for="i in 5"
-                :key="i"
-                class="star"
-                :class="{ active: i <= book.rating }"
-                :aria-label="`${i} 星`"
-                @click="setRating(i)"
-              >
-                ★
-              </button>
-            </div>
-          </div>
         </aside>
 
         <div class="book-summary">
@@ -175,6 +160,22 @@
             </span>
             <span v-if="book.language" class="detail-badge">{{ book.language }}</span>
             <span v-if="book.isbn" class="detail-badge">ISBN {{ book.isbn }}</span>
+          </div>
+
+          <div class="book-rating">
+            <span class="rating-label">我的评分</span>
+            <div class="rating-stars" aria-label="书籍评分">
+              <button
+                v-for="i in 5"
+                :key="i"
+                class="star"
+                :class="{ active: i <= book.rating }"
+                :aria-label="`${i} 星`"
+                @click="setRating(i)"
+              >
+                ★
+              </button>
+            </div>
           </div>
 
           <div v-if="hasReadingProgress" class="current-reading-card">
@@ -2408,10 +2409,11 @@ onMounted(() => {
 }
 
 .book-rating {
-  display: grid;
-  justify-items: center;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  width: fit-content;
+  margin-bottom: 20px;
   padding: 10px 8px;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
