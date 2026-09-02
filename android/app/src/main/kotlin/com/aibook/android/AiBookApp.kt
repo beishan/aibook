@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Explore
@@ -124,8 +127,10 @@ fun AiBookApp() {
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar(
-                    modifier = Modifier.height(64.dp),
-                    containerColor = MaterialTheme.colorScheme.background,
+                    modifier = Modifier
+                        .height(DesignTokens.BottomNavigationHeight)
+                        .border(0.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(0.dp)),
+                    containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     tonalElevation = 0.dp
                 ) {
@@ -140,7 +145,7 @@ fun AiBookApp() {
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(64.dp)
+                                    .height(DesignTokens.BottomNavigationHeight)
                                     .clickable(
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = null
@@ -156,8 +161,18 @@ fun AiBookApp() {
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
-                                Icon(tab.icon, contentDescription = tab.label, tint = color)
-                                Text(tab.label, color = color)
+                                Box(
+                                    modifier = Modifier
+                                        .background(
+                                            if (selected) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent,
+                                            RoundedCornerShape(DesignTokens.RadiusLarge)
+                                        )
+                                        .padding(horizontal = 18.dp, vertical = 4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(tab.icon, contentDescription = tab.label, tint = color)
+                                }
+                                Text(tab.label, color = color, style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }

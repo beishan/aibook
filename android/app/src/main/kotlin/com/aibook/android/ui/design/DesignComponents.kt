@@ -23,7 +23,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -41,7 +40,7 @@ fun DesignPage(
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val topPadding = if (title.isNotEmpty()) 20.dp else 0.dp
+    val topPadding = if (title.isNotEmpty()) DesignTokens.Space16 else 0.dp
     Column(
         modifier = modifier
             .background(MaterialTheme.colorScheme.background)
@@ -49,14 +48,14 @@ fun DesignPage(
     ) {
         if (title.isNotEmpty()) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 18.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = DesignTokens.Space8, bottom = DesignTokens.Space16),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.ExtraBold
+                    fontWeight = FontWeight.Bold
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp), content = actions)
             }
@@ -77,21 +76,15 @@ fun DesignPage(
 fun SoftCard(
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
-    contentPadding: Dp = 18.dp,
+    contentPadding: Dp = DesignTokens.Space16,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val containerColor = if (color == Color.Unspecified) MaterialTheme.colorScheme.surface else color
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = DesignTokens.SoftShadow,
-                shape = RoundedCornerShape(DesignTokens.CardRadius),
-                ambientColor = Color.Black.copy(alpha = 0.08f),
-                spotColor = Color.Black.copy(alpha = 0.08f)
-            ),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(DesignTokens.CardRadius),
-        colors = CardDefaults.cardColors(containerColor = containerColor)
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = DesignTokens.SoftShadow)
     ) {
         Column(Modifier.padding(contentPadding), content = content)
     }
@@ -105,7 +98,9 @@ fun SectionHeader(title: String, trailing: String? = null) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        trailing?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        trailing?.let {
+            Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+        }
     }
 }
 
@@ -130,8 +125,8 @@ fun BookCover(
             contentScale = ContentScale.Crop,
             modifier = modifier
                 .then(sizeModifier)
-                .clip(RoundedCornerShape(8.dp))
-                .background(brush, RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(DesignTokens.RadiusSmall))
+                .background(brush, RoundedCornerShape(DesignTokens.RadiusSmall))
         )
         return
     }
@@ -139,7 +134,7 @@ fun BookCover(
     Box(
         modifier = modifier
             .then(sizeModifier)
-            .background(brush, RoundedCornerShape(8.dp))
+            .background(brush, RoundedCornerShape(DesignTokens.RadiusSmall))
             .padding(10.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -156,11 +151,15 @@ fun BookCover(
 
 @Composable
 fun SourceBadge(text: String, source: String = text) {
-    val color = if (source.equals("OPDS", ignoreCase = true)) DesignTokens.OpdsGreen else DesignTokens.Accent
+    val color = when {
+        source.equals("OPDS", ignoreCase = true) -> DesignTokens.OpdsGreen
+        source.equals("后端", ignoreCase = true) || source.equals("远程", ignoreCase = true) -> DesignTokens.Warning
+        else -> DesignTokens.Accent
+    }
     Surface(
         color = color.copy(alpha = 0.12f),
         contentColor = color,
-        shape = RoundedCornerShape(8.dp)
+        shape = RoundedCornerShape(DesignTokens.RadiusSmall)
     ) {
         Text(
             text = text,

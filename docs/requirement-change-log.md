@@ -22,6 +22,18 @@
 
 ## 变更记录
 
+### REQ-20260902-001 按 UI 原型统一 Android 视觉体系
+
+- 需求时间：2026-09-02
+- 完成时间：2026-09-02
+- 状态：已完成
+- 应用版本：`1.4.0`
+- 需求内容：按照 `android/codex-ui-prototype` 的设计规范开发 Android 项目，统一页面颜色、间距、圆角、文字层级、卡片、滑块分段控件与底部导航样式。
+- 完成情况：Android 公共主题已切换为原型的暖色视觉体系；书架、书城、发现、设置及其二级页面共享新的设计令牌与卡片规范；书架恢复原型标题层级，并保持此前确认的多来源书籍合并展示；底部导航升级为 72dp 四入口导航和胶囊选中态。
+- 开源调研：原型指定的 Jetpack Compose、Material 3、Navigation Compose、ViewModel、StateFlow、Room、Retrofit、Coil 与 WorkManager 均为项目现有成熟方案；本次仅调整表现层，无需引入新依赖或复制外部代码。
+- 主要改动：按原型建立背景、表面、主色、正文、分隔线和状态色令牌；统一 4/8/12/16/24/32dp 间距、8/12/16/24dp 圆角和低海拔卡片；补齐 Material 3 明暗主题语义色和 12–32sp 排版层级；优化滑块分段控件动画、焦点与选中语义；调整书架三列网格纵向间距、页面标题和底部导航样式。
+- 验证结果：Android `:app:compileDebugKotlin` 与 `:app:testDebugUnitTest` 通过，Debug APK 成功生成；前端 Vite 生产构建通过（1949 个模块）。`installDebug` 因当前没有连接 Android 设备而未执行成功。验证使用 JDK 21 和 `ANDROID_HOME=/Users/beibei/Library/Android/sdk`，项目 `android/local.properties` 的旧 SDK 路径警告由环境变量覆盖。
+
 ### REQ-20260901-007 合并 Android 多来源书架展示
 
 - 需求时间：2026-09-01

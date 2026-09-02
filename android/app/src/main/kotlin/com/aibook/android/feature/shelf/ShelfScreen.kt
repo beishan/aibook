@@ -122,7 +122,7 @@ fun ShelfScreen(
     }
 
     DesignPage(
-        title = if (state.managementMode) "已选 ${state.selectedIds.size} 本" else "",
+        title = if (state.managementMode) "已选 ${state.selectedIds.size} 本" else "我的书架",
         modifier = Modifier.fillMaxSize(),
         actions = {
             Icon(
@@ -153,7 +153,7 @@ fun ShelfScreen(
             )
         }
     ) {
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
             if (showSearch) {
                 item {
                     OutlinedTextField(
@@ -324,7 +324,7 @@ private fun ReadingBooksView(
             columns = GridCells.Fixed(if (viewMode == 0) 3 else 4),
             contentPadding = PaddingValues(bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(if (viewMode == 0) 12.dp else 10.dp),
-            verticalArrangement = Arrangement.spacedBy(if (viewMode == 0) 12.dp else 10.dp),
+            verticalArrangement = Arrangement.spacedBy(if (viewMode == 0) DesignTokens.Space16 else DesignTokens.Space12),
             modifier = Modifier.fillMaxWidth().height(620.dp)
         ) {
             gridItems(books, key = { it.id }) { book ->
