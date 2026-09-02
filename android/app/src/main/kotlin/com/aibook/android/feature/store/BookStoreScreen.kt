@@ -96,8 +96,8 @@ fun BookStoreScreen(
     val actionState by viewModel.actionState.collectAsState()
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("store_prefs", Context.MODE_PRIVATE) }
-    // 0=网格视图(3列), 1=带封面列表, 2=紧凑列表, 3=小网格视图(4列)
-    var viewMode by remember { mutableIntStateOf(prefs.getInt("view_mode", 0)) }
+    // 新视觉稿仅保留卡片与列表两种模式，并兼容清理旧版本保存的 2/3 模式。
+    var viewMode by remember { mutableIntStateOf(prefs.getInt("view_mode", 0).coerceIn(0, 1)) }
     var collectionFilter by remember { mutableIntStateOf(0) }
     var managementMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -125,7 +125,13 @@ fun BookStoreScreen(
     }
 
     DesignPage(
-        title = if (managementMode) "已选 ${selectedLocalBooks.size} 本" else "书城",
+        title = if (managementMode) {
+            "已选 ${selectedLocalBooks.size} 本"
+        } else if (sourceIndex == 0) {
+            "本地书籍"
+        } else {
+            "OPDS 书籍"
+        },
         modifier = Modifier.fillMaxSize(),
         actions = {
             Icon(
@@ -171,10 +177,10 @@ fun BookStoreScreen(
     ) {
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
         ) {
             SlidingSegmentedControl(
-                options = listOf("本地", "OPDS", "远程"),
+                options = listOf("本地书籍", "OPDS", "后端服务"),
                 selectedIndex = sourceIndex,
                 onSelected = {
                     when (it) {
@@ -190,9 +196,17 @@ fun BookStoreScreen(
             )
             SlidingSegmentedControl(
                 options = if (sourceIndex == 0) {
-                    listOf("全部", "已加入书架", "未加入")
+                    listOf(
+                        "全部 ${sourceBooks.size}",
+                        "已加入 ${sourceBooks.count { it.shelved }}",
+                        "未加入 ${sourceBooks.count { !it.shelved }}"
+                    )
                 } else {
-                    listOf("全部", "已下载", "未下载")
+                    listOf(
+                        "全部 ${sourceBooks.size}",
+                        "已下载 ${sourceBooks.count { it.isDownloaded }}",
+                        "未下载 ${sourceBooks.count { !it.isDownloaded }}"
+                    )
                 },
                 selectedIndex = collectionFilter,
                 onSelected = { collectionFilter = it }
@@ -238,18 +252,29 @@ fun BookStoreScreen(
                     }
                 )
             }
-            SectionHeader(
-                if (sourceIndex == 0) "本地书籍" else "OPDS 书籍",
-                "${filteredBooks.size} 本"
-            )
-            SlidingSegmentedControl(
-                options = listOf("卡片", "列表"),
-                selectedIndex = viewMode.coerceIn(0, 1),
-                onSelected = { mode ->
-                    viewMode = mode
-                    prefs.edit().putInt("view_mode", mode).apply()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        if (sourceIndex == 0) "我的本地书库" else "可下载书籍",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text("共 ${filteredBooks.size} 本", color = DesignTokens.SoftText)
                 }
-            )
+                SlidingSegmentedControl(
+                    options = listOf("卡片", "列表"),
+                    selectedIndex = viewMode,
+                    onSelected = { mode ->
+                        viewMode = mode
+                        prefs.edit().putInt("view_mode", mode).apply()
+                    },
+                    modifier = Modifier.width(156.dp)
+                )
+            }
             when (viewMode) {
                 0 -> {
                     // 网格视图
@@ -289,62 +314,6 @@ fun BookStoreScreen(
                     ) {
                         items(filteredBooks) { book ->
                             StoreListItem(
-                                book = book,
-                                downloading = actionState.downloadTasks[book.id]?.status in setOf(DownloadStatus.QUEUED, DownloadStatus.RUNNING),
-                                managementMode = managementMode,
-                                selected = book.id in selectedIds,
-                                onBookClick = {
-                                    if (managementMode && it.kind == StoreItemKind.LOCAL) {
-                                        selectedIds = toggleSelection(selectedIds, it.id)
-                                    } else {
-                                        openBook(it)
-                                    }
-                                },
-                                onDownloadClick = viewModel::downloadRemoteBook,
-                                onLocalShelfClick = viewModel::addLocalBookToShelf,
-                                onLocalShelfRemoveClick = { shelfRemovalBook = it }
-                            )
-                        }
-                    }
-                }
-                2 -> {
-                    // 紧凑列表视图（无封面）
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        contentPadding = PaddingValues(bottom = 8.dp),
-                        modifier = Modifier.fillMaxWidth().weight(1f)
-                    ) {
-                        items(filteredBooks) { book ->
-                            StoreCompactListItem(
-                                book = book,
-                                downloading = actionState.downloadTasks[book.id]?.status in setOf(DownloadStatus.QUEUED, DownloadStatus.RUNNING),
-                                managementMode = managementMode,
-                                selected = book.id in selectedIds,
-                                onBookClick = {
-                                    if (managementMode && it.kind == StoreItemKind.LOCAL) {
-                                        selectedIds = toggleSelection(selectedIds, it.id)
-                                    } else {
-                                        openBook(it)
-                                    }
-                                },
-                                onDownloadClick = viewModel::downloadRemoteBook,
-                                onLocalShelfClick = viewModel::addLocalBookToShelf,
-                                onLocalShelfRemoveClick = { shelfRemovalBook = it }
-                            )
-                        }
-                    }
-                }
-                3 -> {
-                    // 小网格视图（4列）
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(4),
-                        contentPadding = PaddingValues(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxWidth().weight(1f)
-                    ) {
-                        gridItems(filteredBooks) { book ->
-                            StoreSmallBookCard(
                                 book = book,
                                 downloading = actionState.downloadTasks[book.id]?.status in setOf(DownloadStatus.QUEUED, DownloadStatus.RUNNING),
                                 managementMode = managementMode,
@@ -1099,7 +1068,8 @@ private fun StoreBookCard(
                 indication = null
             ) { onBookClick(book) },
         shape = RoundedCornerShape(DesignTokens.CardRadius),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = DesignTokens.SoftShadow)
     ) {
         Column {
             Box {
@@ -1107,15 +1077,18 @@ private fun StoreBookCard(
                     title = book.title,
                     modifier = Modifier.fillMaxWidth(),
                     width = null,
-                    height = 180.dp,
+                    height = 168.dp,
                     imageUri = book.coverUri,
                     brush = Brush.verticalGradient(listOf(titleColor(book.title), Color(0xFF1C1B18)))
                 )
-                CoverSourceBadge(
-                    text = "${CompactStoreRowLabels.format(book.format)}｜${CompactStoreRowLabels.source(book.kind)}",
+                Text(
+                    text = "⋮",
                     modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(6.dp)
+                        .align(Alignment.TopEnd)
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(bottomStart = 14.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = DesignTokens.TextPrimary
                 )
                 if (managementMode && book.kind == StoreItemKind.LOCAL) {
                     StoreSelectionMark(
@@ -1127,29 +1100,58 @@ private fun StoreBookCard(
                 }
             }
             Column(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                modifier = Modifier.padding(DesignTokens.Space12),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Text(
+                    text = book.title,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = book.author,
+                    color = DesignTokens.SoftText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    text = "${book.format.uppercase()}  |  ${book.sourceName}",
+                    color = DesignTokens.SoftText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelSmall
+                )
+                val actionLabel = when {
+                    book.kind == StoreItemKind.LOCAL && book.shelved -> "✓  已在书架"
+                    book.kind == StoreItemKind.LOCAL -> "加入书架"
+                    book.isDownloaded -> "✓  已下载"
+                    downloading -> "下载中…"
+                    else -> "下载到书架"
+                }
+                Button(
+                    onClick = {
+                        when {
+                            book.kind == StoreItemKind.LOCAL && book.shelved -> onLocalShelfRemoveClick(book)
+                            book.kind == StoreItemKind.LOCAL -> onLocalShelfClick(book)
+                            !book.isDownloaded && !downloading -> onDownloadClick(book)
+                        }
+                    },
+                    enabled = !managementMode && !downloading,
+                    modifier = Modifier.fillMaxWidth().height(38.dp),
+                    shape = RoundedCornerShape(DesignTokens.RadiusSmall),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (book.shelved || book.isDownloaded) DesignTokens.WarmCard else DesignTokens.Accent,
+                        contentColor = if (book.shelved || book.isDownloaded) DesignTokens.AccentDark else Color.White,
+                        disabledContainerColor = DesignTokens.WarmCard,
+                        disabledContentColor = DesignTokens.SoftText
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp)
                 ) {
-                    Text(
-                        text = book.title,
-                        modifier = Modifier.weight(1f),
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    CompactStoreBookAction(
-                        book = book,
-                        downloading = downloading,
-                        managementMode = managementMode,
-                        onDownloadClick = onDownloadClick,
-                        onLocalShelfClick = onLocalShelfClick,
-                        onLocalShelfRemoveClick = onLocalShelfRemoveClick
-                    )
+                    Text(actionLabel, maxLines = 1, style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
