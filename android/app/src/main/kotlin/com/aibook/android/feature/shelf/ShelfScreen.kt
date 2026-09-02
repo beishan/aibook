@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -46,6 +47,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -102,7 +105,16 @@ fun ShelfScreen(
         importViewModel.importBooks(uris)
     }
     var onlyUnread by remember { mutableStateOf(false) }
-    val visibleBooks = state.filteredBooks.filter { !onlyUnread || it.progress.percent <= 0f }
+    var sourceFilter by remember { mutableIntStateOf(0) }
+    val visibleBooks = state.filteredBooks.filter { book ->
+        val sourceMatches = when (sourceFilter) {
+            1 -> book.isLocalSource()
+            2 -> book.isOpdsSource()
+            3 -> book.isServerBook()
+            else -> true
+        }
+        sourceMatches && (!onlyUnread || book.progress.percent <= 0f)
+    }
     val visibleLocalBooks = visibleBooks.filterNot { it.isServerBook() }
     val featuredBook = visibleBooks.firstOrNull()
     val hasBooks = state.books.isNotEmpty() || state.remoteBooks.isNotEmpty()
@@ -111,11 +123,12 @@ fun ShelfScreen(
     var showMoveDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val prefs = remember(context) { ShelfPreferences.preferences(context) }
-    var viewMode by remember { mutableIntStateOf(prefs.getInt("reading_view_mode", 0)) }
+    var viewMode by remember { mutableIntStateOf(prefs.getInt("reading_view_mode", 0).coerceIn(0, 1)) }
     var showContinueReadingCards by remember {
         mutableStateOf(ShelfPreferences.showContinueReadingCards(prefs))
     }
     var showSearch by remember { mutableStateOf(state.query.isNotBlank()) }
+    var showTopMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(prefs) {
         val savedSort = prefs.getString(ShelfPreferences.KEY_SORT_OPTION, null)
@@ -149,21 +162,43 @@ fun ShelfScreen(
                 contentDescription = if (showSearch) "关闭搜索" else "搜索书架",
                 modifier = Modifier.clickable { showSearch = !showSearch }
             )
-            Row(
-                modifier = Modifier.clickable(onClick = onSortClick),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "排序")
-                Text(state.sortOption.label)
+            if (state.managementMode) {
+                Text("完成", modifier = Modifier.clickable { viewModel.setManagementMode(false) })
+            } else {
+                Box {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "更多",
+                        modifier = Modifier.clickable { showTopMenu = true }
+                    )
+                    DropdownMenu(expanded = showTopMenu, onDismissRequest = { showTopMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("排序与筛选") },
+                            onClick = { showTopMenu = false; onSortClick() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("最近阅读") },
+                            onClick = { showTopMenu = false; onRecentReadingClick() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("批量管理") },
+                            onClick = { showTopMenu = false; viewModel.setManagementMode(true) }
+                        )
+                    }
+                }
             }
-            Text(
-                if (state.managementMode) "取消" else "管理",
-                modifier = Modifier.clickable { viewModel.setManagementMode(!state.managementMode) }
-            )
         }
     ) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
+            if (!state.managementMode) {
+                item {
+                    SlidingSegmentedControl(
+                        options = listOf("全部", "本地", "OPDS", "后端"),
+                        selectedIndex = sourceFilter,
+                        onSelected = { sourceFilter = it }
+                    )
+                }
+            }
             if (showSearch) {
                 item {
                     OutlinedTextField(
@@ -179,7 +214,6 @@ fun ShelfScreen(
             }
             if (hasBooks) {
                 if (showContinueReadingCards && featuredBook != null && !state.managementMode) {
-                    item { SectionHeader("继续阅读", "阅读记录 ›", onRecentReadingClick) }
                     item {
                         ContinueReadingHero(
                             book = featuredBook,
@@ -227,16 +261,23 @@ fun ShelfScreen(
             }
             if (visibleBooks.isNotEmpty()) {
                 if (!state.managementMode) {
-                    item { SectionHeader("全部书籍", "${visibleBooks.size} 本") }
                     item {
-                        SlidingSegmentedControl(
-                            options = listOf("卡片", "列表"),
-                            selectedIndex = viewMode.coerceIn(0, 1),
-                            onSelected = { mode ->
-                                viewMode = mode
-                                prefs.edit().putInt("reading_view_mode", mode).apply()
-                            }
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("全部书籍", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            SlidingSegmentedControl(
+                                options = listOf("▦", "☷"),
+                                selectedIndex = viewMode.coerceIn(0, 1),
+                                onSelected = { mode ->
+                                    viewMode = mode
+                                    prefs.edit().putInt("reading_view_mode", mode).apply()
+                                },
+                                modifier = Modifier.width(112.dp)
+                            )
+                        }
                     }
                 }
                 item {
@@ -329,12 +370,12 @@ private fun ReadingBooksView(
     onLoadMore: () -> Unit
 ) {
     when (viewMode) {
-        0, 3 -> LazyVerticalGrid(
-            columns = GridCells.Fixed(if (viewMode == 0) 3 else 4),
+        0 -> LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
             contentPadding = PaddingValues(bottom = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (viewMode == 0) 12.dp else 10.dp),
-            verticalArrangement = Arrangement.spacedBy(if (viewMode == 0) DesignTokens.Space16 else DesignTokens.Space12),
-            modifier = Modifier.fillMaxWidth().height(620.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16),
+            modifier = Modifier.fillMaxWidth().height((((books.size + 2) / 3).coerceAtLeast(1) * 244).dp)
         ) {
             gridItems(books, key = { it.id }) { book ->
                 if (book.id == books.lastOrNull()?.id) LaunchedEffect(book.id) { onLoadMore() }
@@ -473,6 +514,11 @@ private fun LocalBook.isServerBook(): Boolean = id.startsWith("server:")
 private fun LocalBook.serverBookId(): Long? =
     id.takeIf { isServerBook() }?.removePrefix("server:")?.toLongOrNull()
 
+private fun LocalBook.isOpdsSource(): Boolean =
+    source.equals("OPDS", ignoreCase = true) || uri.contains("/downloads/", ignoreCase = true)
+
+private fun LocalBook.isLocalSource(): Boolean = !isServerBook() && !isOpdsSource()
+
 @Composable
 private fun ShelfFolderFilterRow(
     folders: List<ShelfFolder>,
@@ -528,7 +574,7 @@ private fun ShelfFolderChip(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .background(
                 if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
@@ -544,9 +590,11 @@ private fun ShelfFolderChip(
                 indication = null,
                 onClick = onClick
             )
-            .width(124.dp)
+            .width(142.dp)
+            .height(76.dp)
             .padding(DesignTokens.Space12),
-        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)
+        horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
@@ -556,14 +604,16 @@ private fun ShelfFolderChip(
         ) {
             Icon(Icons.Default.Folder, contentDescription = null, tint = DesignTokens.Accent)
         }
-        Text(
-            label,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text("$count 本", color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                label,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text("$count 本", color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
@@ -769,13 +819,18 @@ private fun ContinueReadingHero(
 ) {
     SoftCard(
         modifier = Modifier.clickable(onClick = onReadClick),
-        color = MaterialTheme.colorScheme.primaryContainer
+        color = MaterialTheme.colorScheme.surface
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+            Text("◷", color = DesignTokens.Accent, style = MaterialTheme.typography.titleLarge)
+            Text("继续阅读", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(DesignTokens.Space12))
         Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16), verticalAlignment = Alignment.CenterVertically) {
             BookCover(
                 title = book.title,
-                width = 76.dp,
-                height = 108.dp,
+                width = 84.dp,
+                height = 120.dp,
                 imageUri = book.coverUri,
                 placeholderTitleMaxLength = 8,
                 placeholderMaxLines = 4
@@ -783,9 +838,17 @@ private fun ContinueReadingHero(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
                 Text(book.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("阅读进度 ${(book.progress.percent * 100).toInt()}%", color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
-                WarmProgress(book.progress.percent, Modifier.fillMaxWidth())
-                Text("继续阅读  ›", color = DesignTokens.Accent, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+                    WarmProgress(book.progress.percent, Modifier.weight(1f))
+                    Text("${(book.progress.percent * 100).toInt()}%", color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+                }
+                Text(book.progress.chapterTitle ?: book.progress.positionLabel ?: "继续上次阅读", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Button(
+                    onClick = onReadClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+                    elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
+                    modifier = Modifier.align(Alignment.End)
+                ) { Text("继续阅读") }
             }
         }
     }
@@ -843,10 +906,21 @@ private fun ReadingBookCard(
                 }
             }
             Column(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 0.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Text(book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
+                Text(
+                    book.author ?: "未知作者",
+                    color = DesignTokens.SoftText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    WarmProgress(book.progress.percent, Modifier.weight(1f))
+                    Text("${(book.progress.percent * 100).toInt()}%", color = DesignTokens.SoftText, style = MaterialTheme.typography.labelSmall)
+                }
                 if (managementMode) {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         IconButton(onClick = onFavoriteClick, modifier = Modifier.size(34.dp)) {
@@ -862,7 +936,6 @@ private fun ReadingBookCard(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(2.dp))
         }
     }
 }

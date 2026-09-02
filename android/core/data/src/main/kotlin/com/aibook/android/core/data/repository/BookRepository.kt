@@ -370,6 +370,7 @@ class BookRepository(
             uri = destFile.absolutePath,
             sha256 = sha256,
             coverUri = coverUri,
+            source = "OPDS",
             importedAt = Instant.now()
         )
 

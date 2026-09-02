@@ -313,6 +313,7 @@ class ShelfViewModel(
                             favorite = book.isFavorite == true,
                             shelved = true,
                             visibleInStore = false,
+                            source = "SERVER",
                             importedAt = Instant.EPOCH
                         )
                     }

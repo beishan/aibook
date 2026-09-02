@@ -40,4 +40,20 @@ class EntityMappersPdfProgressTest {
         assertEquals(listOf("科幻", "经典"), domain.tags)
         assertEquals("科幻|经典", domain.toEntity().tags)
     }
+
+    @Test
+    fun sourceRoundTripsThroughBookEntity() {
+        val entity = BookEntity(
+            id = "opds-book",
+            title = "OPDS 书籍",
+            format = "EPUB",
+            uri = "/downloads/book.epub",
+            source = "OPDS"
+        )
+
+        val domain = entity.toDomain()
+
+        assertEquals("OPDS", domain.source)
+        assertEquals("OPDS", domain.toEntity().source)
+    }
 }
