@@ -29,6 +29,7 @@ data class ScanDirectoryUiState(
     val duplicateHandling: DuplicateHandling = DuplicateHandling.CANCEL,
     val autoScanOnStart: Boolean = false,
     val scanIntervalHours: Int = 0,
+    val lastScanStats: ScanImportStats? = null,
     val message: String? = null
 )
 
@@ -84,10 +85,11 @@ class ScanDirectoryViewModel(
 
     fun scanAll() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isScanning = true, scanningDirectoryId = null, message = null)
+            _state.value = _state.value.copy(isScanning = true, scanningDirectoryId = null, lastScanStats = null, message = null)
             val stats = repository.scanAllEnabled(_state.value.duplicateHandling)
             _state.value = _state.value.copy(
                 isScanning = false,
+                lastScanStats = stats,
                 message = stats.toMessage("扫描完成")
             )
         }
@@ -95,11 +97,12 @@ class ScanDirectoryViewModel(
 
     fun scanDirectory(directory: ScanDirectory) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isScanning = true, scanningDirectoryId = directory.id, message = null)
+            _state.value = _state.value.copy(isScanning = true, scanningDirectoryId = directory.id, lastScanStats = null, message = null)
             val stats = repository.scanDirectory(directory.id, _state.value.duplicateHandling)
             _state.value = _state.value.copy(
                 isScanning = false,
                 scanningDirectoryId = null,
+                lastScanStats = stats,
                 message = stats.toMessage("${directory.name} 扫描完成")
             )
         }

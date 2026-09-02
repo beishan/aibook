@@ -69,6 +69,7 @@ fun ScanDirectoryScreen(
     viewModel: ScanDirectoryViewModel = viewModel(factory = ScanDirectoryViewModel.Factory)
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val completedStats = state.lastScanStats
     val snackbarHostState = remember { SnackbarHostState() }
     val directoryPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let { viewModel.addDirectory(it) }
@@ -116,6 +117,42 @@ fun ScanDirectoryScreen(
                     style = MaterialTheme.typography.displaySmall,
                     fontWeight = FontWeight.ExtraBold
                 )
+            }
+            if (state.isScanning) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(DesignTokens.CardRadius)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(DesignTokens.Space32),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
+                    ) {
+                        Box(Modifier.size(156.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.fillMaxSize(), strokeWidth = 10.dp, color = DesignTokens.Accent)
+                            Icon(Icons.Default.Folder, null, tint = DesignTokens.Accent, modifier = Modifier.size(54.dp))
+                        }
+                        Text("正在扫描中…", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        Text("发现新书将自动加入书城", color = DesignTokens.SoftText)
+                    }
+                }
+            } else if (completedStats != null) {
+                val stats = completedStats
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(DesignTokens.CardRadius)
+                ) {
+                    Column(Modifier.padding(DesignTokens.Space16), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                        Text("扫描完成 · 共发现 ${stats.scanned} 本", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("新增 ${stats.added + stats.restored} 本", color = DesignTokens.Success)
+                            Text("已存在 ${stats.duplicate} 本", color = DesignTokens.SoftText)
+                            Text("无法识别 ${stats.unsupported + stats.failed} 本", color = DesignTokens.Warning)
+                        }
+                    }
+                }
             }
             Card(
                 modifier = Modifier.fillMaxWidth(),

@@ -204,6 +204,22 @@ class ServerRepository(
     suspend fun getBookList(listId: Long): Result<BookListDTO> =
         runCatching { getServerLibraryApi().getBookList(listId) }
 
+    suspend fun createBookList(name: String, description: String): Result<BookListDTO> =
+        runCatching {
+            getServerLibraryApi().createBookList(mapOf("name" to name, "description" to description))
+        }
+
+    suspend fun updateBookList(listId: Long, name: String, description: String): Result<BookListDTO> =
+        runCatching {
+            getServerLibraryApi().updateBookList(
+                listId,
+                mapOf("name" to name, "description" to description)
+            )
+        }
+
+    suspend fun deleteBookList(listId: Long): Result<Unit> =
+        runCatching { getServerLibraryApi().deleteBookList(listId) }
+
     fun resolveCoverUrl(coverUrl: String?): String? {
         if (coverUrl.isNullOrBlank()) return null
         val baseUrl = cachedServerUrl.trimEnd('/')

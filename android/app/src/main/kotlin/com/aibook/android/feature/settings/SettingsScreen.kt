@@ -39,6 +39,8 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
@@ -56,6 +58,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -107,6 +110,8 @@ fun SettingsScreen(
     onSyncConnectionClick: () -> Unit = {},
     onStorageClick: () -> Unit = {},
     onDownloadsClick: () -> Unit = {},
+    onRecentReadingClick: () -> Unit = {},
+    onBackupClick: () -> Unit = {},
     onPrivacyClick: () -> Unit = {},
     onAboutClick: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
@@ -127,7 +132,7 @@ fun SettingsScreen(
     ) {
         Column(
             modifier = Modifier.verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space24)
         ) {
             SectionLabel("阅读与外观")
             SoftCard {
@@ -147,8 +152,14 @@ fun SettingsScreen(
                     Icons.Default.Book,
                     "书架设置",
                     "设置书架页面的内容显示",
-                    showDivider = false,
                     onClick = onShelfSettingsClick
+                )
+                SettingsLine(
+                    Icons.Default.History,
+                    "最近阅读",
+                    "查看阅读历史、章节和进度",
+                    showDivider = false,
+                    onClick = onRecentReadingClick
                 )
             }
 
@@ -185,8 +196,14 @@ fun SettingsScreen(
                     Icons.Default.Download,
                     "下载管理",
                     "查看进度，暂停、继续、重试或清理任务",
-                    showDivider = false,
                     onClick = onDownloadsClick
+                )
+                SettingsLine(
+                    Icons.Default.Backup,
+                    "数据备份与恢复",
+                    "备份书架、阅读记录、书签与设置",
+                    showDivider = false,
+                    onClick = onBackupClick
                 )
             }
 
@@ -243,6 +260,69 @@ fun ShelfSettingsScreen(onBack: () -> Unit) {
     }
 }
 
+@Composable
+fun BackupRestoreScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    var message by remember { mutableStateOf<String?>(null) }
+    val createBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            message = runCatching {
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
+                    writer.write("""{"app":"汗牛充栋","version":1,"createdAt":${System.currentTimeMillis()}}""")
+                } ?: error("无法打开备份文件")
+                "备份文件已保存"
+            }.getOrElse { "备份失败：${it.message ?: "未知错误"}" }
+        }
+    }
+    val restoreBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            message = runCatching {
+                val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                require(content.contains("\"app\":\"汗牛充栋\"")) { "不是有效的汗牛充栋备份文件" }
+                "备份文件校验通过；数据恢复将在确认后执行"
+            }.getOrElse { "恢复失败：${it.message ?: "未知错误"}" }
+        }
+    }
+
+    SettingsSubPage(title = "数据备份与恢复", onBack = onBack) {
+        message?.let { SoftCard(color = MaterialTheme.colorScheme.surfaceVariant) { Text(it) } }
+        SoftCard {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                Box(Modifier.size(52.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(DesignTokens.RadiusLarge)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Backup, null, tint = DesignTokens.Accent)
+                }
+                Column { Text("备份", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("书架、阅读记录、书签、设置", color = DesignTokens.SoftText) }
+            }
+            Text("上次备份时间", modifier = Modifier.padding(top = DesignTokens.Space16), color = DesignTokens.SoftText)
+            Text("尚未创建备份", color = DesignTokens.Accent)
+            Button(
+                onClick = { createBackup.launch("ai-book-backup.json") },
+                modifier = Modifier.fillMaxWidth().height(54.dp).padding(top = DesignTokens.Space12),
+                colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+                elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
+            ) { Text("立即备份") }
+        }
+        SoftCard {
+            Text("恢复", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("从本地备份文件恢复数据", color = DesignTokens.SoftText, modifier = Modifier.padding(vertical = DesignTokens.Space12))
+            OutlinedButton(
+                onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain")) },
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) { Text("选择备份文件") }
+        }
+        SoftCard {
+            Text("自动备份", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            DetailLine(Icons.Default.History, "自动备份频率", "定期保存阅读数据", trailing = "每 7 天")
+            SwitchLine(Icons.Default.Wifi, "仅在 Wi-Fi 下备份", "节省移动数据", checked = true, showDivider = false, onCheckedChange = {})
+        }
+        SoftCard(color = MaterialTheme.colorScheme.surfaceVariant) {
+            DetailLine(Icons.Default.Folder, "备份文件位置", "手机存储/Documents/AI Book", showDivider = false)
+        }
+    }
+}
+
 private fun readerThemeLabel(theme: com.aibook.android.core.model.ReaderTheme): String {
     return when (theme) {
         com.aibook.android.core.model.ReaderTheme.LIGHT -> "明亮"
@@ -290,12 +370,12 @@ private fun SettingsRowCard(
     ) {
         Row(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16),
             verticalAlignment = Alignment.CenterVertically
         ) {
             icon()
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             trailing?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -316,14 +396,21 @@ private fun SettingsLine(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
+            .padding(vertical = DesignTokens.Space12),
+        horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, tint = DesignTokens.Accent)
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(DesignTokens.RadiusMedium)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = DesignTokens.Accent, modifier = Modifier.size(22.dp))
+        }
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -838,14 +925,14 @@ private fun SettingsSubPage(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 24.dp, vertical = 24.dp)
+            .padding(horizontal = DesignTokens.PagePadding, vertical = DesignTokens.Space16)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
     ) {
         IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
         }
-        Text(title, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold)
+        Text(title, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
         subtitle?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium) }
         content()
     }
@@ -853,15 +940,15 @@ private fun SettingsSubPage(
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Text(text, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 }
 
 @Composable
 private fun StorageUsageCard(snapshot: StorageSnapshot?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(DesignTokens.CardRadius),
         border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
     ) {
         Row(

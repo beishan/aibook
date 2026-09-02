@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
@@ -41,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedIconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -89,6 +92,7 @@ fun BookDetailScreen(
     onReadClick: () -> Unit,
     onBack: () -> Unit,
     onRelatedBookClick: (String) -> Unit = {},
+    onSourcesClick: () -> Unit = {},
     viewModel: ShelfViewModel = viewModel(factory = ShelfViewModel.Factory)
 ) {
     val context = LocalContext.current
@@ -124,11 +128,12 @@ fun BookDetailScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(DesignTokens.PagePadding),
+        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
+            Text("书籍详情", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Row {
                 IconButton(
                     onClick = {
@@ -138,6 +143,11 @@ fun BookDetailScreen(
                 Column {
                     IconButton(onClick = { showMore = true }) { Icon(Icons.Default.MoreVert, contentDescription = "更多操作") }
                     DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+                        DropdownMenuItem(
+                            text = { Text("可用版本 / 来源") },
+                            leadingIcon = { Icon(Icons.Default.FolderOpen, null) },
+                            onClick = { showMore = false; onSourcesClick() }
+                        )
                         DropdownMenuItem(
                             text = { Text("编辑元数据") },
                             leadingIcon = { Icon(Icons.Default.Edit, null) },
@@ -228,17 +238,13 @@ fun BookDetailScreen(
 
         SoftCard {
             SectionHeader("书籍信息")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                InfoItem("文件格式", currentBook.format.displayName)
-                InfoItem("文件大小", fileSizeLabel(fileStats?.fileSizeBytes))
-                InfoItem("字数", wordCountLabel(fileStats?.wordCount))
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                InfoItem("阅读进度", "${(currentBook.progress.percent * 100).toInt()}%")
-                InfoItem("累计阅读", readingDurationLabel(currentBook.readingDurationSeconds))
-                InfoItem("最近阅读", lastReadLabel(currentBook.lastReadAt))
-            }
+            DetailInfoRow("作者", currentBook.author ?: "未知作者")
+            DetailInfoRow("格式", currentBook.format.displayName)
+            DetailInfoRow("大小", fileSizeLabel(fileStats?.fileSizeBytes))
+            DetailInfoRow("字数", wordCountLabel(fileStats?.wordCount))
+            DetailInfoRow("阅读进度", "${(currentBook.progress.percent * 100).toInt()}%")
+            DetailInfoRow("累计阅读", readingDurationLabel(currentBook.readingDurationSeconds))
+            DetailInfoRow("最近阅读", lastReadLabel(currentBook.lastReadAt), showDivider = false)
         }
 
         val versions = relatedVersions(currentBook, allBooks)
@@ -246,23 +252,27 @@ fun BookDetailScreen(
         if (versions.isNotEmpty()) BookRelationSection("关联版本", versions, onRelatedBookClick)
         if (related.isNotEmpty()) BookRelationSection("相关书籍", related, onRelatedBookClick)
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            FilledIconButton(
+        Button(
                 onClick = onReadClick,
                 enabled = !fileMissing,
-                modifier = Modifier.weight(1f).size(56.dp),
-                colors = IconButtonDefaults.filledIconButtonColors(containerColor = DesignTokens.Accent, contentColor = Color.White)
-            ) { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "开始阅读") }
-            OutlinedIconButton(
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+                elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null)
+                Text(if (currentBook.progress.percent > 0f) "继续阅读 · ${(currentBook.progress.percent * 100).toInt()}%" else "开始阅读")
+            }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+            OutlinedButton(
                 onClick = { viewModel.toggleShelved(currentBook.id, !currentBook.shelved) },
-                modifier = Modifier.weight(1f).size(56.dp),
-                colors = IconButtonDefaults.outlinedIconButtonColors(
-                    containerColor = if (currentBook.shelved) DesignTokens.Accent else Color.Transparent,
-                    contentColor = if (currentBook.shelved) Color.White else DesignTokens.Accent
-                )
-            ) { Icon(if (currentBook.shelved) Icons.Default.Check else Icons.Default.Add, contentDescription = if (currentBook.shelved) "移除书架" else "加入书架") }
-            IconButton(onClick = { viewModel.setFavorite(currentBook.id, !currentBook.favorite) }, modifier = Modifier.weight(1f).size(56.dp)) {
+                modifier = Modifier.weight(1f).height(52.dp)
+            ) {
+                Icon(if (currentBook.shelved) Icons.Default.Check else Icons.Default.Add, contentDescription = null)
+                Text(if (currentBook.shelved) "已在书架" else "加入书架")
+            }
+            OutlinedButton(onClick = { viewModel.setFavorite(currentBook.id, !currentBook.favorite) }, modifier = Modifier.weight(1f).height(52.dp)) {
                 Icon(if (currentBook.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "收藏", tint = if (currentBook.favorite) DesignTokens.Accent else DesignTokens.SoftText)
+                Text(if (currentBook.favorite) "已收藏" else "收藏")
             }
         }
 
@@ -312,10 +322,10 @@ fun BookDetailScreen(
 
 @Composable
 private fun BookIdentity(book: LocalBook) {
-    Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
-        BookCover(title = book.title, width = 142.dp, height = 212.dp, imageUri = book.coverUri)
+    Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16), verticalAlignment = Alignment.CenterVertically) {
+        BookCover(title = book.title, width = 128.dp, height = 192.dp, imageUri = book.coverUri)
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(book.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(book.title, style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
             Text(book.author ?: "未知作者", color = DesignTokens.SoftText)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 SourceBadge("本地")
@@ -470,6 +480,19 @@ private fun InfoItem(label: String, value: String) {
         Text(label, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
         Text(value, fontWeight = FontWeight.Medium, maxLines = 1)
     }
+}
+
+@Composable
+private fun DetailInfoRow(label: String, value: String, showDivider: Boolean = true) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space12),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, color = DesignTokens.SoftText)
+        Text(value, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+    if (showDivider) HorizontalDivider(color = DesignTokens.Hairline)
 }
 
 private fun loadChapterTitles(book: LocalBook): List<String> = runCatching {

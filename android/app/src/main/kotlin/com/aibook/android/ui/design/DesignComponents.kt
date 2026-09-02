@@ -1,6 +1,7 @@
 package com.aibook.android.ui.design
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -91,7 +92,7 @@ fun SoftCard(
 }
 
 @Composable
-fun SectionHeader(title: String, trailing: String? = null) {
+fun SectionHeader(title: String, trailing: String? = null, onTrailingClick: (() -> Unit)? = null) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -99,7 +100,12 @@ fun SectionHeader(title: String, trailing: String? = null) {
     ) {
         Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         trailing?.let {
-            Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+            Text(
+                it,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = if (onTrailingClick != null) Modifier.clickable(onClick = onTrailingClick) else Modifier
+            )
         }
     }
 }

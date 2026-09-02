@@ -4,6 +4,7 @@ import com.aibook.android.core.network.api.dto.BookDTO
 import com.aibook.android.core.network.api.dto.BookListDTO
 import com.aibook.android.core.network.api.dto.ShelfOverviewDTO
 import retrofit2.http.DELETE
+import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
@@ -27,6 +28,18 @@ interface ServerLibraryApi {
 
     @GET("api/booklists/{listId}")
     suspend fun getBookList(@Path("listId") listId: Long): BookListDTO
+
+    @POST("api/booklists")
+    suspend fun createBookList(@Body body: Map<String, String>): BookListDTO
+
+    @PUT("api/booklists/{listId}")
+    suspend fun updateBookList(
+        @Path("listId") listId: Long,
+        @Body body: Map<String, String>
+    ): BookListDTO
+
+    @DELETE("api/booklists/{listId}")
+    suspend fun deleteBookList(@Path("listId") listId: Long)
 
     @POST("api/booklists/{listId}/books/{bookId}")
     suspend fun addBookToList(

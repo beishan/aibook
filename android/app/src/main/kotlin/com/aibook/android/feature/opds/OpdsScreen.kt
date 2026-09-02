@@ -102,6 +102,7 @@ import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SectionHeader
 import com.aibook.android.ui.design.SoftCard
+import com.aibook.android.ui.design.SlidingSegmentedControl
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -111,6 +112,7 @@ import java.util.Locale
 fun OpdsScreen(
     onAddSourceClick: () -> Unit = {},
     onScanDirectoriesClick: () -> Unit = {},
+    onImportBooksClick: () -> Unit = {},
     viewModel: OpdsViewModel = viewModel(factory = OpdsViewModel.Factory),
     importViewModel: LocalBookImportViewModel = viewModel(factory = LocalBookImportViewModel.Factory)
 ) {
@@ -154,7 +156,7 @@ fun OpdsScreen(
             DiscoveryHome(
                 state = state,
                 importState = importState,
-                onImportClick = { picker.launch(supportedBookMimeTypes) },
+                onImportClick = onImportBooksClick,
                 onScanDirectoriesClick = onScanDirectoriesClick,
                 onAddSourceClick = onAddSourceClick,
                 onBrowseConnection = viewModel::selectConnection,
@@ -197,22 +199,23 @@ private fun DiscoveryHome(
     onShowError: (OpdsConnection) -> Unit,
     onDeleteConnection: (String) -> Unit
 ) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
+        item { SectionHeader("本地书籍", "EPUB · TXT · MOBI · PDF · AZW3") }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12), modifier = Modifier.fillMaxWidth()) {
                 DiscoveryActionCard(
-                    modifier = Modifier.weight(1f),
-                    icon = { Icon(Icons.Default.CloudUpload, null, tint = DesignTokens.Accent, modifier = Modifier.size(58.dp)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = { Icon(Icons.Default.CloudUpload, null, tint = DesignTokens.Accent, modifier = Modifier.size(32.dp)) },
                     title = "立即导入文件",
-                    subtitle = if (importState.isImporting) "正在导入本地书籍" else "手动选择文件导入书城",
+                    subtitle = if (importState.isImporting) "正在导入本地书籍" else "选择一个或多个书籍文件，导入后可加入书架",
                     accent = DesignTokens.Accent,
                     onClick = onImportClick
                 )
                 DiscoveryActionCard(
-                    modifier = Modifier.weight(1f),
-                    icon = { Icon(Icons.Default.Folder, null, tint = DesignTokens.Success, modifier = Modifier.size(58.dp)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = { Icon(Icons.Default.Folder, null, tint = DesignTokens.Success, modifier = Modifier.size(32.dp)) },
                     title = "扫描本地目录",
-                    subtitle = "自动查找书籍文件",
+                    subtitle = "管理扫描目录、子目录规则并自动发现书籍",
                     accent = DesignTokens.Success,
                     onClick = onScanDirectoriesClick
                 )
@@ -246,7 +249,7 @@ private fun DiscoveryHome(
 //        }
         item { SectionHeader("OPDS 数据源", "${state.connections.size} 个已配置") }
         item {
-            SoftCard(color = Color.White) {
+            SoftCard {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Icon(Icons.Default.Schedule, contentDescription = null, tint = DesignTokens.Accent)
@@ -255,15 +258,12 @@ private fun DiscoveryHome(
                             Text("遵循设置中的“仅 Wi-Fi 同步”，完成或失败时发送通知", color = DesignTokens.SoftText)
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(0 to "关闭", 1 to "每小时", 6 to "每 6 小时", 24 to "每天").forEach { (hours, label) ->
-                            val selected = state.opdsIntervalHours == hours
-                            Text(label, modifier = Modifier
-                                .background(if (selected) DesignTokens.Accent else DesignTokens.Accent.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
-                                .clickable { onSetSyncInterval(hours) }
-                                .padding(horizontal = 12.dp, vertical = 9.dp), color = if (selected) Color.White else DesignTokens.Accent, fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    val intervals = listOf(0 to "关闭", 1 to "每小时", 6 to "6 小时", 24 to "每天")
+                    SlidingSegmentedControl(
+                        options = intervals.map { it.second },
+                        selectedIndex = intervals.indexOfFirst { it.first == state.opdsIntervalHours }.coerceAtLeast(0),
+                        onSelected = { index -> onSetSyncInterval(intervals[index].first) }
+                    )
                 }
             }
         }
@@ -318,29 +318,24 @@ private fun DiscoveryActionCard(
         modifier = modifier.clickable(onClick = onClick),
         color = accent.copy(alpha = 0.08f)
     ) {
-        Column(
-            modifier = Modifier.height(150.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleLarge, color = accent, fontWeight = FontWeight.Bold)
-                    Text(subtitle, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodyMedium)
-                }
-                icon()
-            }
             Box(
                 modifier = Modifier
-                    .size(34.dp)
-                    .background(accent, CircleShape),
+                    .size(52.dp)
+                    .background(accent.copy(alpha = 0.14f), RoundedCornerShape(DesignTokens.RadiusMedium)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color.White, modifier = Modifier.size(22.dp))
+                icon()
             }
+            Column(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space4), modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleLarge, color = accent, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodyMedium)
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = accent, modifier = Modifier.size(26.dp))
         }
     }
 }

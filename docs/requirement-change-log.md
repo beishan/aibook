@@ -22,17 +22,17 @@
 
 ## 变更记录
 
-### REQ-20260902-001 按 UI 原型统一 Android 视觉体系
+### REQ-20260902-001 按 Codex UI Bundle 完整改造 Android 界面
 
 - 需求时间：2026-09-02
 - 完成时间：2026-09-02
 - 状态：已完成
 - 应用版本：`1.4.0`
-- 需求内容：按照 `android/codex-ui-prototype` 的设计规范开发 Android 项目，统一页面颜色、间距、圆角、文字层级、卡片、滑块分段控件与底部导航样式。
-- 完成情况：Android 公共主题已切换为原型的暖色视觉体系；书架、书城、发现、设置及其二级页面共享新的设计令牌与卡片规范；书架恢复原型标题层级，并保持此前确认的多来源书籍合并展示；底部导航升级为 72dp 四入口导航和胶囊选中态。
+- 需求内容：按照 `android/codex-ui-bundle` 的页面清单、视觉稿和原型规范完整开发 Android 项目，不只替换全局主题，还需落地对应页面结构、二级入口和交互状态。
+- 完成情况：已按视觉稿重构书架、书城、发现、后端书库、详情、下载、扫描和设置页面；新增书架文件夹列表/详情/新建、排序筛选、最近阅读、独立书籍导入、多来源版本选择、下载详情、数据备份恢复、新建/编辑/删除后端书单等二级页面，并接入现有 Room、OPDS 与后端数据能力。
 - 开源调研：原型指定的 Jetpack Compose、Material 3、Navigation Compose、ViewModel、StateFlow、Room、Retrofit、Coil 与 WorkManager 均为项目现有成熟方案；本次仅调整表现层，无需引入新依赖或复制外部代码。
-- 主要改动：按原型建立背景、表面、主色、正文、分隔线和状态色令牌；统一 4/8/12/16/24/32dp 间距、8/12/16/24dp 圆角和低海拔卡片；补齐 Material 3 明暗主题语义色和 12–32sp 排版层级；优化滑块分段控件动画、焦点与选中语义；调整书架三列网格纵向间距、页面标题和底部导航样式。
-- 验证结果：Android `:app:compileDebugKotlin` 与 `:app:testDebugUnitTest` 通过，Debug APK 成功生成；前端 Vite 生产构建通过（1949 个模块）。`installDebug` 因当前没有连接 Android 设备而未执行成功。验证使用 JDK 21 和 `ANDROID_HOME=/Users/beibei/Library/Android/sdk`，项目 `android/local.properties` 的旧 SDK 路径警告由环境变量覆盖。
+- 主要改动：建立暖米色背景、棕色强调色、衬线大标题、低海拔卡片和统一间距圆角体系；底部导航与所有互斥 Tab 使用滑块式选中反馈；书架卡片/列表、继续阅读、文件夹和批量管理重新布局；发现页恢复本地文件导入、目录扫描与 OPDS 服务管理；书城统一本地、OPDS、远程来源浏览；后端首页按书籍、收藏、书单卡片纵向展示并提供真实书单 CRUD；补齐下载与扫描状态、阅读来源和备份恢复页面。
+- 验证结果：Android `:app:compileDebugKotlin`、67 个 `:app:testDebugUnitTest` 和 `:app:assembleDebug` 全部通过；`installDebug` 已成功安装到 Android 15 真机 `2203121C`。前端 Vite 生产构建此前已通过（1949 个模块）。验证使用 JDK 21 和 `ANDROID_HOME=/Users/beibei/Library/Android/sdk`；`android/local.properties` 的旧 SDK 路径警告由环境变量覆盖。设备处于锁屏且系统拒绝 ADB 注入按键，因此未取得可用的自动截图。
 
 ### REQ-20260901-007 合并 Android 多来源书架展示
 

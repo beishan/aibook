@@ -3,6 +3,7 @@ package com.aibook.android.feature.downloads
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -23,6 +25,9 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -43,6 +48,8 @@ import com.aibook.android.core.data.repository.DownloadStatus
 import com.aibook.android.core.data.repository.DownloadTask
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
+import com.aibook.android.ui.design.SlidingSegmentedControl
+import com.aibook.android.ui.design.BookCover
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -50,6 +57,7 @@ import java.util.Locale
 @Composable
 fun DownloadManagerScreen(
     onBack: () -> Unit,
+    onTaskClick: (String) -> Unit = {},
     viewModel: DownloadManagerViewModel = viewModel(factory = DownloadManagerViewModel.Factory)
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -65,18 +73,11 @@ fun DownloadManagerScreen(
             }
         }
 
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(DownloadFilter.entries) { filter ->
-                val selected = state.filter == filter
-                Text(
-                    filter.label,
-                    modifier = Modifier.background(if (selected) DesignTokens.Accent else DesignTokens.Accent.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
-                        .clickable { viewModel.setFilter(filter) }.padding(horizontal = 14.dp, vertical = 9.dp),
-                    color = if (selected) Color.White else DesignTokens.Accent,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
+        SlidingSegmentedControl(
+            options = listOf("下载中 (${state.activeCount})", "已完成 (${state.completedCount})"),
+            selectedIndex = if (state.filter == DownloadFilter.COMPLETED) 1 else 0,
+            onSelected = { viewModel.setFilter(if (it == 0) DownloadFilter.ACTIVE else DownloadFilter.COMPLETED) }
+        )
 
         if (state.selectedIds.isNotEmpty()) {
             val selectedTasks = state.tasks.filter { it.id in state.selectedIds }
@@ -111,7 +112,7 @@ fun DownloadManagerScreen(
         } else {
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(state.visibleTasks, key = { it.id }) { task ->
-                    DownloadTaskCard(task, state.speeds[task.id] ?: 0L, task.id in state.selectedIds, viewModel)
+                    DownloadTaskCard(task, state.speeds[task.id] ?: 0L, task.id in state.selectedIds, viewModel) { onTaskClick(task.id) }
                 }
                 item { Spacer(Modifier.height(12.dp)) }
             }
@@ -120,8 +121,8 @@ fun DownloadManagerScreen(
 }
 
 @Composable
-private fun DownloadTaskCard(task: DownloadTask, speed: Long, selected: Boolean, viewModel: DownloadManagerViewModel) {
-    SoftCard(color = Color.White, modifier = Modifier.clickable { viewModel.toggleSelection(task.id) }) {
+private fun DownloadTaskCard(task: DownloadTask, speed: Long, selected: Boolean, viewModel: DownloadManagerViewModel, onOpen: () -> Unit) {
+    SoftCard(modifier = Modifier.clickable(onClick = onOpen)) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = selected, onCheckedChange = { viewModel.toggleSelection(task.id) })
@@ -153,6 +154,79 @@ private fun DownloadTaskCard(task: DownloadTask, speed: Long, selected: Boolean,
             }
         }
     }
+}
+
+@Composable
+fun DownloadDetailScreen(
+    taskId: String,
+    onBack: () -> Unit,
+    viewModel: DownloadManagerViewModel = viewModel(factory = DownloadManagerViewModel.Factory)
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val task = state.tasks.firstOrNull { it.id == taskId }
+    Column(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(DesignTokens.PagePadding),
+        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+            Text("下载详情", modifier = Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        }
+        if (task == null) {
+            SoftCard { Text("下载任务不存在或已被清理", color = DesignTokens.SoftText) }
+            return@Column
+        }
+        SoftCard {
+            Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16), verticalAlignment = Alignment.CenterVertically) {
+                BookCover(task.title, width = 94.dp, height = 136.dp)
+                Column(Modifier.weight(1f)) {
+                    Text(task.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text(task.fileName, color = DesignTokens.SoftText)
+                }
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(230.dp), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(
+                progress = { task.progress / 100f },
+                modifier = Modifier.size(190.dp),
+                strokeWidth = 12.dp,
+                color = DesignTokens.Accent,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+            Text("${task.progress}%", style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold)
+        }
+        Text(downloadDetail(task, state.speeds[task.id] ?: 0L), modifier = Modifier.align(Alignment.CenterHorizontally), color = DesignTokens.Accent)
+        SoftCard {
+            DownloadInfoRow("来源", task.connectionId)
+            DownloadInfoRow("文件大小", bytesLabel(task.totalBytes))
+            DownloadInfoRow("已下载", bytesLabel(task.downloadedBytes))
+            DownloadInfoRow("开始时间", SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(task.createdAt)))
+            DownloadInfoRow("存储位置", "手机存储/Books/Downloads", false)
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+            Button(
+                onClick = { if (task.status == DownloadStatus.PAUSED) viewModel.resume(task.id) else viewModel.pause(task.id) },
+                modifier = Modifier.weight(1f).height(54.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = DesignTokens.Accent),
+                elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
+            ) { Text(if (task.status == DownloadStatus.PAUSED) "继续" else "暂停") }
+            Button(
+                onClick = { viewModel.cancel(task.id); onBack() },
+                modifier = Modifier.weight(1f).height(54.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+                elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
+            ) { Text("取消") }
+        }
+    }
+}
+
+@Composable
+private fun DownloadInfoRow(label: String, value: String, divider: Boolean = true) {
+    Row(Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space12), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = DesignTokens.SoftText)
+        Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+    if (divider) androidx.compose.material3.HorizontalDivider(color = DesignTokens.Hairline)
 }
 
 private fun statusLabel(status: DownloadStatus) = when (status) {

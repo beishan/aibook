@@ -41,7 +41,7 @@ class DownloadManagerViewModel(
     private val queue: DownloadQueueManager
 ) : ViewModel() {
     private val tasks = MutableStateFlow<List<DownloadTask>>(emptyList())
-    private val filter = MutableStateFlow(DownloadFilter.ALL)
+    private val filter = MutableStateFlow(DownloadFilter.ACTIVE)
     private val selectedIds = MutableStateFlow<Set<String>>(emptySet())
     private val speeds = MutableStateFlow<Map<String, Long>>(emptyMap())
     private val samples = mutableMapOf<String, Pair<Long, Long>>()
@@ -117,7 +117,7 @@ class DownloadManagerViewModel(
 
 internal fun DownloadFilter.matchesStatus(status: DownloadStatus): Boolean = when (this) {
     DownloadFilter.ALL -> true
-    DownloadFilter.ACTIVE -> status == DownloadStatus.RUNNING || status == DownloadStatus.QUEUED
+    DownloadFilter.ACTIVE -> status in setOf(DownloadStatus.RUNNING, DownloadStatus.QUEUED, DownloadStatus.PAUSED, DownloadStatus.FAILED)
     DownloadFilter.PAUSED -> status == DownloadStatus.PAUSED
     DownloadFilter.FAILED -> status == DownloadStatus.FAILED
     DownloadFilter.COMPLETED -> status == DownloadStatus.COMPLETED

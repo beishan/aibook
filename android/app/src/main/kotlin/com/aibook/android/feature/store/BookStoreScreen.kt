@@ -78,6 +78,7 @@ import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
 import com.aibook.android.ui.design.SourceBadge
 import com.aibook.android.ui.design.SlidingSegmentedControl
+import com.aibook.android.ui.design.SectionHeader
 import com.aibook.android.core.data.repository.DownloadStatus
 
 @Composable
@@ -97,13 +98,20 @@ fun BookStoreScreen(
     val prefs = remember { context.getSharedPreferences("store_prefs", Context.MODE_PRIVATE) }
     // 0=网格视图(3列), 1=带封面列表, 2=紧凑列表, 3=小网格视图(4列)
     var viewMode by remember { mutableIntStateOf(prefs.getInt("view_mode", 0)) }
-    var showViewModeDialog by remember { mutableStateOf(false) }
+    var collectionFilter by remember { mutableIntStateOf(0) }
     var managementMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var shelfRemovalBook by remember { mutableStateOf<StoreBook?>(null) }
     var sourceIndex by remember { mutableIntStateOf(initialSourceIndex.coerceIn(0, 1)) }
-    val filteredBooks = uiState.filteredBooks.filter {
+    val sourceBooks = uiState.filteredBooks.filter {
         if (sourceIndex == 0) it.kind == StoreItemKind.LOCAL else it.kind == StoreItemKind.OPDS
+    }
+    val filteredBooks = sourceBooks.filter { book ->
+        when (collectionFilter) {
+            1 -> if (sourceIndex == 0) book.shelved else book.isDownloaded
+            2 -> if (sourceIndex == 0) !book.shelved else !book.isDownloaded
+            else -> true
+        }
     }
     val localBooks = filteredBooks.filter { it.kind == StoreItemKind.LOCAL }
     val selectedLocalBooks = filteredBooks.filter { it.kind == StoreItemKind.LOCAL && it.id in selectedIds }
@@ -114,12 +122,6 @@ fun BookStoreScreen(
             book.downloadedLocalId != null -> onBookClick(book.downloadedLocalId)
             book.kind == StoreItemKind.OPDS -> onRemoteBookClick(book.id)
         }
-    }
-
-    val viewModeIcon = when (viewMode) {
-        0 -> Icons.Default.GridView
-        1 -> Icons.AutoMirrored.Filled.FormatListBulleted
-        else -> Icons.AutoMirrored.Filled.ViewList
     }
 
     DesignPage(
@@ -143,14 +145,6 @@ fun BookStoreScreen(
                     indication = null,
                     onClick = onSearchClick
                 )
-            )
-            Icon(
-                viewModeIcon,
-                contentDescription = "切换视图",
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { showViewModeDialog = true }
             )
             Icon(
                 Icons.Default.FilterList,
@@ -186,12 +180,22 @@ fun BookStoreScreen(
                     when (it) {
                         0, 1 -> {
                             sourceIndex = it
+                            collectionFilter = 0
                             managementMode = false
                             selectedIds = emptySet()
                         }
                         2 -> onServerLibraryClick()
                     }
                 }
+            )
+            SlidingSegmentedControl(
+                options = if (sourceIndex == 0) {
+                    listOf("全部", "已加入书架", "未加入")
+                } else {
+                    listOf("全部", "已下载", "未下载")
+                },
+                selectedIndex = collectionFilter,
+                onSelected = { collectionFilter = it }
             )
             actionState.message?.let { message ->
                 SoftCard(color = Color.White) {
@@ -234,8 +238,18 @@ fun BookStoreScreen(
                     }
                 )
             }
-//            StoreHeroCard(featuredBooks = featuredBooks, onExploreClick = onCategoryClick)
-//            SectionHeader("全部浏览", "全部书籍 ${filteredBooks.size} ›")
+            SectionHeader(
+                if (sourceIndex == 0) "本地书籍" else "OPDS 书籍",
+                "${filteredBooks.size} 本"
+            )
+            SlidingSegmentedControl(
+                options = listOf("卡片", "列表"),
+                selectedIndex = viewMode.coerceIn(0, 1),
+                onSelected = { mode ->
+                    viewMode = mode
+                    prefs.edit().putInt("view_mode", mode).apply()
+                }
+            )
             when (viewMode) {
                 0 -> {
                     // 网格视图
@@ -359,18 +373,6 @@ fun BookStoreScreen(
         }
     }
 
-    if (showViewModeDialog) {
-        ViewModeDialog(
-            currentMode = viewMode,
-            onDismiss = { showViewModeDialog = false },
-            onSelect = { mode ->
-                viewMode = mode
-                prefs.edit().putInt("view_mode", mode).apply()
-                showViewModeDialog = false
-            }
-        )
-    }
-
     shelfRemovalBook?.let { book ->
         AlertDialog(
             onDismissRequest = { shelfRemovalBook = null },
@@ -389,72 +391,6 @@ fun BookStoreScreen(
             }
         )
     }
-}
-
-@Composable
-private fun ViewModeDialog(
-    currentMode: Int,
-    onDismiss: () -> Unit,
-    onSelect: (Int) -> Unit
-) {
-    val viewModes = listOf(
-        Triple(0, Icons.Default.GridView, "网格视图"),
-        Triple(1, Icons.AutoMirrored.Filled.FormatListBulleted, "封面列表"),
-        Triple(2, Icons.AutoMirrored.Filled.ViewList, "紧凑列表"),
-        Triple(3, Icons.Default.GridView, "小网格视图")
-    )
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("选择视图模式", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                viewModes.forEach { (mode, icon, label) ->
-                    val isSelected = mode == currentMode
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                if (isSelected) DesignTokens.Accent.copy(alpha = 0.1f) else Color.Transparent,
-                                RoundedCornerShape(12.dp)
-                            )
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { onSelect(mode) }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            icon,
-                            contentDescription = null,
-                            tint = if (isSelected) DesignTokens.Accent else DesignTokens.SoftText
-                        )
-                        Text(
-                            label,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) DesignTokens.Accent else Color.Unspecified
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        if (isSelected) {
-                            Icon(
-                                Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = DesignTokens.Accent,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        }
-    )
 }
 
 private fun toggleSelection(selectedIds: Set<String>, id: String): Set<String> {

@@ -184,6 +184,10 @@ class ShelfViewModel(
         _sortOption.value = options[(currentIndex + 1) % options.size]
     }
 
+    fun setSortOption(option: ShelfSortOption) {
+        _sortOption.value = option
+    }
+
     fun setManagementMode(enabled: Boolean) {
         _managementMode.value = enabled
         if (!enabled) {
@@ -247,6 +251,12 @@ class ShelfViewModel(
             _selectedIds.value = emptySet()
             _managementMode.value = false
         }
+    }
+
+    fun createFolder(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch { bookRepository.createShelfFolder(trimmed) }
     }
 
     fun moveSelectedToFolder(folderId: String?) {

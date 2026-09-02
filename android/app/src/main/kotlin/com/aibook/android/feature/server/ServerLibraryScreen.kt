@@ -49,6 +49,8 @@ fun ServerLibraryScreen(
     initialSection: ServerLibrarySection = ServerLibrarySection.ALL,
     overviewMode: Boolean = true,
     onSectionClick: (ServerLibrarySection) -> Unit = {},
+    onCreateBookList: () -> Unit = {},
+    onEditBookList: (Long) -> Unit = {},
     onBack: (() -> Unit)? = null,
     viewModel: ServerLibraryViewModel = viewModel(factory = ServerLibraryViewModel.Factory)
 ) {
@@ -128,6 +130,8 @@ fun ServerLibraryScreen(
                 state = state,
                 coverUrl = viewModel::coverUrl,
                 onSelectBookList = viewModel::selectBookList,
+                onCreateBookList = onCreateBookList,
+                onEditBookList = onEditBookList,
                 onReadBook = onReadBook,
                 onToggleShelf = viewModel::toggleShelf,
                 onToggleFavorite = viewModel::toggleFavorite
@@ -271,11 +275,25 @@ private fun ServerSectionContent(
     state: ServerLibraryUiState,
     coverUrl: (BookDTO) -> String?,
     onSelectBookList: (Long) -> Unit,
+    onCreateBookList: () -> Unit,
+    onEditBookList: (Long) -> Unit,
     onReadBook: (Long) -> Unit,
     onToggleShelf: (BookDTO) -> Unit,
     onToggleFavorite: (BookDTO) -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
+        if (state.section == ServerLibrarySection.LISTS) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("我的书单", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    state.selectedListId?.let { id -> ServerAction("编辑") { onEditBookList(id) } }
+                    ServerAction("＋ 新建", onCreateBookList)
+                }
+            }
+        }
         if (state.section == ServerLibrarySection.LISTS && state.bookLists.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(state.bookLists, key = { it.id }) { list ->
