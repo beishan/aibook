@@ -1,0 +1,14 @@
+{
+  "screen": "BookSources",
+  "route": "book/{bookId}/sources",
+  "title": "可用版本 / 来源",
+  "sources": [
+    "本地文件",
+    "家庭 Calibre",
+    "我的书库"
+  ],
+  "actions": [
+    "选择",
+    "使用该版本"
+  ]
+}

@@ -113,6 +113,10 @@ fun OpdsScreen(
     onAddSourceClick: () -> Unit = {},
     onScanDirectoriesClick: () -> Unit = {},
     onImportBooksClick: () -> Unit = {},
+    servicesOnly: Boolean = false,
+    initialConnectionId: String? = null,
+    pageTitle: String? = null,
+    onConnectionClick: ((String) -> Unit)? = null,
     viewModel: OpdsViewModel = viewModel(factory = OpdsViewModel.Factory),
     importViewModel: LocalBookImportViewModel = viewModel(factory = LocalBookImportViewModel.Factory)
 ) {
@@ -121,6 +125,12 @@ fun OpdsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val picker = rememberLocalBookImportLauncher { uris ->
         importViewModel.importBooks(uris)
+    }
+
+    LaunchedEffect(initialConnectionId, state.connections) {
+        if (initialConnectionId != null && state.activeConnection?.id != initialConnectionId) {
+            state.connections.firstOrNull { it.id == initialConnectionId }?.let(viewModel::selectConnection)
+        }
     }
 
     LaunchedEffect(state.errorMessage) {
@@ -137,7 +147,7 @@ fun OpdsScreen(
     }
 
     DesignPage(
-        title = if (state.currentFeed == null) "发现" else "OPDS 数据源",
+        title = pageTitle ?: if (state.currentFeed == null) (if (servicesOnly) "OPDS 服务" else "发现") else "OPDS 数据源",
         modifier = Modifier.fillMaxSize(),
         actions = {
             if (state.currentFeed != null) {
@@ -156,10 +166,14 @@ fun OpdsScreen(
             DiscoveryHome(
                 state = state,
                 importState = importState,
+                showLocalActions = !servicesOnly,
                 onImportClick = onImportBooksClick,
                 onScanDirectoriesClick = onScanDirectoriesClick,
                 onAddSourceClick = onAddSourceClick,
-                onBrowseConnection = viewModel::selectConnection,
+                onBrowseConnection = { connection ->
+                    if (onConnectionClick != null) onConnectionClick(connection.id)
+                    else viewModel.selectConnection(connection)
+                },
                 onEditConnection = viewModel::editConnection,
                 onToggleConnection = viewModel::toggleConnectionEnabled,
                 onSyncConnection = viewModel::syncConnection,
@@ -188,6 +202,7 @@ fun OpdsScreen(
 private fun DiscoveryHome(
     state: OpdsUiState,
     importState: com.aibook.android.feature.importer.LocalBookImportState,
+    showLocalActions: Boolean,
     onImportClick: () -> Unit,
     onScanDirectoriesClick: () -> Unit,
     onAddSourceClick: () -> Unit,
@@ -200,25 +215,27 @@ private fun DiscoveryHome(
     onDeleteConnection: (String) -> Unit
 ) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
-        item { SectionHeader("本地书籍", "EPUB · TXT · MOBI · PDF · AZW3") }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12), modifier = Modifier.fillMaxWidth()) {
-                DiscoveryActionCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    icon = { Icon(Icons.Default.CloudUpload, null, tint = DesignTokens.Accent, modifier = Modifier.size(32.dp)) },
-                    title = "立即导入文件",
-                    subtitle = if (importState.isImporting) "正在导入本地书籍" else "选择一个或多个书籍文件，导入后可加入书架",
-                    accent = DesignTokens.Accent,
-                    onClick = onImportClick
-                )
-                DiscoveryActionCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    icon = { Icon(Icons.Default.Folder, null, tint = DesignTokens.Success, modifier = Modifier.size(32.dp)) },
-                    title = "扫描本地目录",
-                    subtitle = "管理扫描目录、子目录规则并自动发现书籍",
-                    accent = DesignTokens.Success,
-                    onClick = onScanDirectoriesClick
-                )
+        if (showLocalActions) {
+            item { SectionHeader("本地书籍", "EPUB · TXT · MOBI · PDF · AZW3") }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12), modifier = Modifier.fillMaxWidth()) {
+                    DiscoveryActionCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = { Icon(Icons.Default.CloudUpload, null, tint = DesignTokens.Accent, modifier = Modifier.size(32.dp)) },
+                        title = "立即导入文件",
+                        subtitle = if (importState.isImporting) "正在导入本地书籍" else "选择一个或多个书籍文件，导入后可加入书架",
+                        accent = DesignTokens.Accent,
+                        onClick = onImportClick
+                    )
+                    DiscoveryActionCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = { Icon(Icons.Default.Folder, null, tint = DesignTokens.Success, modifier = Modifier.size(32.dp)) },
+                        title = "扫描本地目录",
+                        subtitle = "管理扫描目录、子目录规则并自动发现书籍",
+                        accent = DesignTokens.Success,
+                        onClick = onScanDirectoriesClick
+                    )
+                }
             }
         }
 //        item { SectionHeader("已配置扫描目录", "+ 添加目录") }

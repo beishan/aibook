@@ -1,0 +1,14 @@
+{
+  "screen": "ReadingSettings",
+  "route": "settings/reading",
+  "sections": [
+    "翻页方式",
+    "字体设置",
+    "页面设置"
+  ],
+  "controls": [
+    "radio",
+    "slider",
+    "toggle"
+  ]
+}

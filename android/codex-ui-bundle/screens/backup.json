@@ -1,0 +1,10 @@
+{
+  "screen": "BackupRestore",
+  "route": "settings/backup",
+  "sections": [
+    "备份",
+    "恢复",
+    "自动备份",
+    "备份文件位置"
+  ]
+}

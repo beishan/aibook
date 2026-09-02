@@ -1,0 +1,12 @@
+{
+  "name": "ShelfFolderCard",
+  "props": [
+    "name",
+    "count",
+    "previewCovers",
+    "color"
+  ],
+  "interaction": {
+    "tap": "openFolder"
+  }
+}

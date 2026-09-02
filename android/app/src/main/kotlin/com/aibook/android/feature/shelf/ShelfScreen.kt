@@ -95,6 +95,8 @@ fun ShelfScreen(
     onFoldersClick: () -> Unit = {},
     onRecentReadingClick: () -> Unit = {},
     onSortClick: () -> Unit = {},
+    initialViewMode: Int? = null,
+    initialManagementMode: Boolean = false,
     viewModel: ShelfViewModel = viewModel(factory = ShelfViewModel.Factory),
     importViewModel: LocalBookImportViewModel = viewModel(factory = LocalBookImportViewModel.Factory)
 ) {
@@ -129,6 +131,11 @@ fun ShelfScreen(
     }
     var showSearch by remember { mutableStateOf(state.query.isNotBlank()) }
     var showTopMenu by remember { mutableStateOf(false) }
+
+    LaunchedEffect(initialViewMode, initialManagementMode) {
+        initialViewMode?.let { viewMode = it.coerceIn(0, 1) }
+        if (initialManagementMode) viewModel.setManagementMode(true)
+    }
 
     LaunchedEffect(prefs) {
         val savedSort = prefs.getString(ShelfPreferences.KEY_SORT_OPTION, null)

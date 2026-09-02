@@ -1,0 +1,14 @@
+{
+  "name": "OpdsServiceCard",
+  "props": [
+    "name",
+    "url",
+    "bookCount",
+    "categoryCount",
+    "lastUpdated",
+    "recentBooks"
+  ],
+  "interaction": {
+    "tap": "openService"
+  }
+}

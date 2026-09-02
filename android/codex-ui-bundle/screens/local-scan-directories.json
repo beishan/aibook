@@ -1,0 +1,15 @@
+{
+  "screen": "ScanDirectories",
+  "route": "bookstore/local/scan-directories",
+  "appBar": {
+    "title": "扫描目录管理"
+  },
+  "content": {
+    "type": "DirectoryList",
+    "supportsIncludeSubdirs": true
+  },
+  "actions": [
+    "添加扫描目录",
+    "开始扫描"
+  ]
+}

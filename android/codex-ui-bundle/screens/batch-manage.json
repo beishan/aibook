@@ -1,0 +1,21 @@
+{
+  "screen": "BookshelfBatchManage",
+  "route": "bookshelf/batch",
+  "appBar": {
+    "title": "已选择 {count} 本",
+    "actions": [
+      "selectAll",
+      "clearAll"
+    ]
+  },
+  "content": {
+    "type": "SelectableBookGrid"
+  },
+  "bottomActions": [
+    "加入文件夹",
+    "收藏",
+    "下载",
+    "移出书架",
+    "更多"
+  ]
+}

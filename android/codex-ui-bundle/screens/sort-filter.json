@@ -1,0 +1,32 @@
+{
+  "screen": "SortFilter",
+  "route": "bookshelf/sort-filter",
+  "sections": [
+    {
+      "title": "排序方式",
+      "type": "RadioList",
+      "options": [
+        "最近阅读",
+        "最近加入",
+        "书名 A-Z",
+        "作者 A-Z",
+        "阅读进度"
+      ]
+    },
+    {
+      "title": "筛选",
+      "type": "FilterList",
+      "items": [
+        "来源",
+        "格式",
+        "是否下载",
+        "是否已读",
+        "是否收藏"
+      ]
+    }
+  ],
+  "bottomActions": [
+    "重置",
+    "确定"
+  ]
+}

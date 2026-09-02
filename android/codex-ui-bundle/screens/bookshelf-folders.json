@@ -1,0 +1,14 @@
+{
+  "screen": "ShelfFolders",
+  "route": "bookshelf/folders",
+  "appBar": {
+    "title": "书架文件夹",
+    "actions": [
+      "addFolder"
+    ]
+  },
+  "content": {
+    "type": "FolderList",
+    "sort": "name"
+  }
+}

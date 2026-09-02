@@ -66,6 +66,7 @@ import java.util.Locale
 @Composable
 fun ScanDirectoryScreen(
     onBack: () -> Unit,
+    onStartScan: (() -> Unit)? = null,
     viewModel: ScanDirectoryViewModel = viewModel(factory = ScanDirectoryViewModel.Factory)
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -170,7 +171,7 @@ fun ScanDirectoryScreen(
                         title = if (state.isScanning && state.scanningDirectoryId == null) "正在扫描" else "立即扫描",
                         subtitle = "手动扫描所有已启用目录",
                         enabled = !state.isScanning && state.directories.any { it.enabled && !it.requiresAuthorization },
-                        onClick = viewModel::scanAll
+                        onClick = onStartScan ?: viewModel::scanAll
                     )
                     Spacer(
                         Modifier
@@ -311,6 +312,75 @@ fun ScanDirectoryScreen(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+    }
+}
+
+@Composable
+fun LocalScanScreen(
+    onBack: () -> Unit,
+    onComplete: () -> Unit,
+    viewModel: ScanDirectoryViewModel = viewModel(factory = ScanDirectoryViewModel.Factory)
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    var started by remember { mutableStateOf(false) }
+    LaunchedEffect(state.directories, started) {
+        if (!started && state.directories.isNotEmpty()) {
+            started = true
+            viewModel.scanAll()
+        }
+    }
+    LaunchedEffect(started, state.isScanning, state.lastScanStats) {
+        if (started && !state.isScanning && state.lastScanStats != null) onComplete()
+    }
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(
+            Modifier.fillMaxSize().padding(horizontal = DesignTokens.PagePadding, vertical = DesignTokens.Space24),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space24)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+                Text("扫描本地书籍", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(DesignTokens.CardRadius)
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(DesignTokens.Space32),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(120.dp), strokeWidth = 9.dp, color = DesignTokens.Accent)
+                    Text(if (state.directories.isEmpty()) "没有可扫描的目录" else "正在扫描…", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("扫描目录 ${state.directories.count { it.enabled }} 个", color = DesignTokens.SoftText)
+                    Text("发现书籍后会自动整理到本地书城", color = DesignTokens.SoftText)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ScanResultScreen(onBack: () -> Unit, onImport: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(
+            Modifier.fillMaxSize().padding(horizontal = DesignTokens.PagePadding, vertical = DesignTokens.Space24),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+                Text("扫描结果", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            }
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(DesignTokens.CardRadius)) {
+                Column(Modifier.fillMaxWidth().padding(DesignTokens.Space24), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                    Icon(Icons.Default.Folder, null, tint = DesignTokens.Success, modifier = Modifier.size(48.dp))
+                    Text("扫描完成", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("新发现的书籍已加入本地书城，可继续选择文件导入。", color = DesignTokens.SoftText)
+                    Text("导入其他文件 ›", color = DesignTokens.Accent, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onImport).padding(vertical = DesignTokens.Space8))
+                }
+            }
+        }
     }
 }
 

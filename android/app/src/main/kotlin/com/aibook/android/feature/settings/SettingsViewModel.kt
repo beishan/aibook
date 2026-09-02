@@ -12,6 +12,7 @@ import com.aibook.android.core.data.repository.ServerRepository
 import com.aibook.android.core.model.AccentColor
 import com.aibook.android.core.model.AppThemeMode
 import com.aibook.android.core.model.ReaderTheme
+import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.di.ServiceLocator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +32,7 @@ data class SettingsUiState(
     val readerTheme: ReaderTheme = ReaderTheme.PAPER,
     val appThemeMode: AppThemeMode = AppThemeMode.SYSTEM,
     val accentColor: AccentColor = AccentColor.ORANGE,
+    val pageTurnMode: PageTurnMode = PageTurnMode.SIMULATION,
     val loginFormUsername: String = "",
     val loginFormPassword: String = "",
     val isLoggingIn: Boolean = false,
@@ -101,6 +103,11 @@ class SettingsViewModel(
         viewModelScope.launch {
             readerSettingsStore.accentColor.collect { color ->
                 _state.update { it.copy(accentColor = color) }
+            }
+        }
+        viewModelScope.launch {
+            readerSettingsStore.pageTurnMode.collect { mode ->
+                _state.update { it.copy(pageTurnMode = mode) }
             }
         }
     }
@@ -179,6 +186,10 @@ class SettingsViewModel(
 
     fun setAccentColor(color: AccentColor) {
         viewModelScope.launch { readerSettingsStore.setAccentColor(color) }
+    }
+
+    fun setPageTurnMode(mode: PageTurnMode) {
+        viewModelScope.launch { readerSettingsStore.setPageTurnMode(mode) }
     }
 
     companion object {

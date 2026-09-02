@@ -1,0 +1,22 @@
+{
+  "screen": "ImportBooks",
+  "route": "bookstore/local/import",
+  "appBar": {
+    "title": "导入书籍"
+  },
+  "tabs": [
+    "文件",
+    "文件夹"
+  ],
+  "supported": [
+    "EPUB",
+    "TXT",
+    "MOBI",
+    "PDF",
+    "AZW3"
+  ],
+  "multiSelect": true,
+  "actions": [
+    "导入"
+  ]
+}

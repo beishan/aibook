@@ -1,0 +1,77 @@
+{
+  "meta": {
+    "name": "Android Novel Reader UI",
+    "targetDevice": "Xiaomi 17 Pro Max",
+    "designLanguage": "Material 3 inspired",
+    "theme": "warm reading",
+    "unit": "dp/sp"
+  },
+  "colors": {
+    "background": "#FFF9F2",
+    "surface": "#FFFDF9",
+    "surfaceVariant": "#F7EFE6",
+    "primary": "#9B5E24",
+    "primaryContainer": "#EED9C1",
+    "onPrimary": "#FFFFFF",
+    "textPrimary": "#2B2118",
+    "textSecondary": "#8A7A6A",
+    "divider": "#EEE3D7",
+    "success": "#4E8A52",
+    "warning": "#C7872D",
+    "danger": "#C94A45"
+  },
+  "radius": {
+    "small": 8,
+    "medium": 12,
+    "large": 16,
+    "xl": 24
+  },
+  "spacing": {
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "xxl": 32
+  },
+  "typography": {
+    "display": {
+      "size": 32,
+      "weight": 600
+    },
+    "titleLarge": {
+      "size": 28,
+      "weight": 600
+    },
+    "titleMedium": {
+      "size": 22,
+      "weight": 600
+    },
+    "titleSmall": {
+      "size": 18,
+      "weight": 600
+    },
+    "bodyLarge": {
+      "size": 16,
+      "weight": 400
+    },
+    "bodyMedium": {
+      "size": 14,
+      "weight": 400
+    },
+    "caption": {
+      "size": 12,
+      "weight": 400
+    }
+  },
+  "elevation": {
+    "card": 1,
+    "floating": 3
+  },
+  "bookGrid": {
+    "columns": 3,
+    "horizontalGap": 12,
+    "verticalGap": 16,
+    "coverAspectRatio": 0.67
+  }
+}

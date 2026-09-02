@@ -1,0 +1,19 @@
+{
+  "screen": "BackendFavorites",
+  "route": "bookstore/backend/favorites",
+  "appBar": {
+    "title": "收藏",
+    "actions": [
+      "search",
+      "sort"
+    ]
+  },
+  "filters": [
+    "全部",
+    "已加入书架",
+    "未加入书架"
+  ],
+  "content": {
+    "type": "BookList"
+  }
+}

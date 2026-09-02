@@ -1,0 +1,24 @@
+{
+  "screen": "LocalBooks",
+  "route": "bookstore/local",
+  "bottomTab": "书城",
+  "appBar": {
+    "title": "本地书籍",
+    "actions": [
+      "search",
+      "filter"
+    ]
+  },
+  "tabs": [
+    "全部",
+    "已加入书架",
+    "未加入"
+  ],
+  "viewModes": [
+    "grid",
+    "list"
+  ],
+  "content": {
+    "type": "LocalBookCollection"
+  }
+}

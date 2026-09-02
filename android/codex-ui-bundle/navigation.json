@@ -1,0 +1,59 @@
+{
+  "bottomTabs": [
+    {
+      "route": "bookshelf",
+      "label": "书架",
+      "icon": "bookshelf"
+    },
+    {
+      "route": "bookstore",
+      "label": "书城",
+      "icon": "store"
+    },
+    {
+      "route": "discover",
+      "label": "发现",
+      "icon": "explore"
+    },
+    {
+      "route": "settings",
+      "label": "设置",
+      "icon": "settings"
+    }
+  ],
+  "routes": [
+    "bookshelf/grid",
+    "bookshelf/list",
+    "bookshelf/folders",
+    "bookshelf/folder/{folderId}",
+    "bookshelf/batch",
+    "bookshelf/sort-filter",
+    "bookstore/local",
+    "bookstore/local/scan",
+    "bookstore/local/scan-directories",
+    "bookstore/local/scan-result",
+    "bookstore/local/import",
+    "bookstore/opds",
+    "bookstore/opds/add",
+    "bookstore/opds/{serviceId}",
+    "bookstore/opds/{serviceId}/categories",
+    "bookstore/opds/{serviceId}/category/{categoryId}",
+    "bookstore/backend",
+    "bookstore/backend/recent",
+    "bookstore/backend/favorites",
+    "bookstore/backend/booklists",
+    "bookstore/backend/booklist/{booklistId}",
+    "bookstore/backend/booklist/new",
+    "bookstore/backend/booklist/{booklistId}/edit",
+    "book/{bookId}",
+    "book/{bookId}/sources",
+    "search",
+    "downloads",
+    "downloads/{taskId}",
+    "reading/recent",
+    "settings/reading",
+    "settings/theme",
+    "settings/backup",
+    "settings/about"
+  ]
+}

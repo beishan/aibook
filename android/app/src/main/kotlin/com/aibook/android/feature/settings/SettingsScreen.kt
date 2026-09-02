@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -61,6 +62,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
@@ -92,6 +95,7 @@ import com.aibook.android.feature.shelf.ShelfPreferences
 import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
+import com.aibook.android.ui.design.SlidingSegmentedControl
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -105,6 +109,7 @@ import org.json.JSONObject
 @Composable
 fun SettingsScreen(
     onThemeClick: () -> Unit = {},
+    onReadingSettingsClick: () -> Unit = {},
     onShelfSettingsClick: () -> Unit = {},
     onScanDirectoriesClick: () -> Unit = {},
     onSyncConnectionClick: () -> Unit = {},
@@ -146,7 +151,7 @@ fun SettingsScreen(
                     Icons.Default.FormatSize,
                     "字体与排版",
                     "字号 ${"%.0f".format(state.fontScale * 100)}% · 行距 ${"%.2f".format(state.lineHeight)}",
-                    onClick = onThemeClick
+                    onClick = onReadingSettingsClick
                 )
                 SettingsLine(
                     Icons.Default.Book,
@@ -226,6 +231,72 @@ fun SettingsScreen(
                 trailing = "版本 $versionName",
                 onClick = onAboutClick
             )
+        }
+    }
+}
+
+@Composable
+fun ReadingSettingsScreen(
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    DesignPage(
+        title = "阅读设置",
+        modifier = Modifier.fillMaxSize(),
+        actions = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } }
+    ) {
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
+        ) {
+            SectionLabel("翻页方式")
+            SoftCard {
+                SlidingSegmentedControl(
+                    options = listOf("仿真", "滑动", "覆盖", "平移", "上下"),
+                    selectedIndex = state.pageTurnMode.ordinal,
+                    onSelected = { viewModel.setPageTurnMode(com.aibook.android.core.model.PageTurnMode.entries[it]) }
+                )
+            }
+            SectionLabel("字体设置")
+            SoftCard {
+                Text("字号 · ${"%.0f".format(state.fontScale * 100)}%", fontWeight = FontWeight.Bold)
+                Slider(
+                    value = state.fontScale,
+                    onValueChange = viewModel::setFontScale,
+                    valueRange = 0.75f..1.6f,
+                    colors = SliderDefaults.colors(thumbColor = DesignTokens.Accent, activeTrackColor = DesignTokens.Accent)
+                )
+                Text("行距 · ${"%.2f".format(state.lineHeight)}", fontWeight = FontWeight.Bold)
+                Slider(
+                    value = state.lineHeight,
+                    onValueChange = viewModel::setLineHeight,
+                    valueRange = 1.1f..2.2f,
+                    colors = SliderDefaults.colors(thumbColor = DesignTokens.Accent, activeTrackColor = DesignTokens.Accent)
+                )
+            }
+            SectionLabel("页面设置")
+            SoftCard {
+                Text("阅读背景", fontWeight = FontWeight.Bold)
+                SlidingSegmentedControl(
+                    options = listOf("纸张", "浅色", "深色"),
+                    selectedIndex = when (state.readerTheme) {
+                        com.aibook.android.core.model.ReaderTheme.PAPER -> 0
+                        com.aibook.android.core.model.ReaderTheme.LIGHT -> 1
+                        else -> 2
+                    },
+                    onSelected = {
+                        viewModel.setReaderTheme(
+                            when (it) {
+                                0 -> com.aibook.android.core.model.ReaderTheme.PAPER
+                                1 -> com.aibook.android.core.model.ReaderTheme.LIGHT
+                                else -> com.aibook.android.core.model.ReaderTheme.DARK
+                            }
+                        )
+                    }
+                )
+            }
+            Spacer(Modifier.height(DesignTokens.Space24))
         }
     }
 }

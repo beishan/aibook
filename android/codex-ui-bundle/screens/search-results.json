@@ -1,0 +1,15 @@
+{
+  "screen": "SearchResults",
+  "route": "search?query={query}",
+  "tabs": [
+    "全部",
+    "本地",
+    "OPDS",
+    "后端"
+  ],
+  "groupBySource": true,
+  "actions": [
+    "加入书架",
+    "更多"
+  ]
+}

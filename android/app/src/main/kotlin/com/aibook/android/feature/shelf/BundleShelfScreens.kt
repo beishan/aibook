@@ -315,8 +315,13 @@ fun BookSourcesScreen(
                             Icon(Icons.Default.Folder, null, tint = DesignTokens.Accent)
                         }
                         Column(Modifier.weight(1f)) {
-                            Text(if (book.id == bookId) "本地文件" else book.format.displayName, fontWeight = FontWeight.Bold)
-                            Text("${book.format.displayName} · 可离线阅读", color = DesignTokens.SoftText)
+                            val sourceLabel = when (book.source.uppercase()) {
+                                "OPDS" -> "OPDS 下载"
+                                "SERVER", "BACKEND" -> "后端服务"
+                                else -> "本地文件"
+                            }
+                            Text(sourceLabel, fontWeight = FontWeight.Bold)
+                            Text("${book.format.displayName} · ${if (book.source.equals("SERVER", true)) "在线阅读" else "可离线阅读"}", color = DesignTokens.SoftText)
                         }
                         if (book.id == selectedId) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.background(DesignTokens.Accent, CircleShape).padding(6.dp))
                     }

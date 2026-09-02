@@ -1,0 +1,20 @@
+{
+  "screen": "OpdsCategoryBooks",
+  "route": "bookstore/opds/{serviceId}/category/{categoryId}",
+  "appBar": {
+    "title": "{category.name}",
+    "subtitle": "共 {count} 本",
+    "actions": [
+      "search",
+      "filter"
+    ]
+  },
+  "viewModes": [
+    "grid",
+    "list"
+  ],
+  "content": {
+    "type": "BookGrid",
+    "columns": 3
+  }
+}

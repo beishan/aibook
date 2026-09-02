@@ -1,0 +1,25 @@
+{
+  "screen": "OpdsServiceDetail",
+  "route": "bookstore/opds/{serviceId}",
+  "appBar": {
+    "title": "{service.name}",
+    "actions": [
+      "search",
+      "more"
+    ]
+  },
+  "quickActions": [
+    "最近添加",
+    "最新更新",
+    "作者",
+    "分类",
+    "系列",
+    "标签",
+    "搜索",
+    "关于"
+  ],
+  "sections": [
+    "最近加入",
+    "最近更新"
+  ]
+}

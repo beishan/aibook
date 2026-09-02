@@ -59,6 +59,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.ui.Alignment
@@ -829,13 +830,25 @@ fun StoreCategoryScreen(
 @Composable
 fun StoreSearchScreen(
     onBack: () -> Unit,
+    initialQuery: String? = null,
     onBookClick: (String) -> Unit = {},
     onRemoteBookClick: (String) -> Unit = {},
     viewModel: StoreViewModel = viewModel(factory = StoreViewModel.Factory)
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    LaunchedEffect(initialQuery) {
+        if (!initialQuery.isNullOrBlank()) viewModel.setQuery(initialQuery)
+    }
     val query = uiState.filter.query
-    val results = if (query.isBlank()) emptyList() else uiState.filteredBooks
+    var sourceIndex by rememberSaveable { mutableIntStateOf(0) }
+    val results = if (query.isBlank()) emptyList() else uiState.filteredBooks.filter { book ->
+        when (sourceIndex) {
+            1 -> book.kind == StoreItemKind.LOCAL
+            2 -> book.kind == StoreItemKind.OPDS
+            3 -> false // 后端结果由独立服务仓库加载；未连接时保持空态。
+            else -> true
+        }
+    }
     val authors = results.groupingBy { it.author }.eachCount().entries.sortedByDescending { it.value }.take(8)
     val categories = results.flatMap { it.categories }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(8)
     val sources = results.groupBy { it.sourceId }.mapNotNull { (id, books) ->
@@ -866,8 +879,22 @@ fun StoreSearchScreen(
             singleLine = true,
             shape = RoundedCornerShape(18.dp)
         )
+        SlidingSegmentedControl(
+            options = listOf("全部", "本地", "OPDS", "后端"),
+            selectedIndex = sourceIndex,
+            onSelected = { sourceIndex = it }
+        )
         if (query.isBlank()) {
-            SoftCard(color = Color.White) { Text("输入关键词后，将按作者、分类、OPDS 源和书籍分组展示结果。", color = DesignTokens.SoftText) }
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("最近搜索", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                SoftCard(color = Color.White) { Text("暂无最近搜索", color = DesignTokens.SoftText) }
+                Text("热门搜索", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(listOf("科幻", "文学", "历史", "三体", "人类简史", "编程")) { keyword ->
+                        StoreChip(label = keyword, selected = false, onClick = { viewModel.setQuery(keyword) })
+                    }
+                }
+            }
         } else if (results.isEmpty()) {
             SoftCard(color = Color.White) { Text("没有找到与“$query”相关的内容", color = DesignTokens.SoftText) }
         } else {

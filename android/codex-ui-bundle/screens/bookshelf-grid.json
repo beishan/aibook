@@ -1,0 +1,45 @@
+{
+  "screen": "BookshelfGrid",
+  "route": "bookshelf/grid",
+  "bottomTab": "书架",
+  "appBar": {
+    "title": "我的书架",
+    "actions": [
+      "search",
+      "more"
+    ]
+  },
+  "sourceTabs": [
+    "全部",
+    "本地",
+    "OPDS",
+    "后端"
+  ],
+  "sections": [
+    {
+      "type": "ContinueReadingCard"
+    },
+    {
+      "type": "FolderRow",
+      "title": "文件夹",
+      "actions": [
+        "viewAll"
+      ]
+    },
+    {
+      "type": "BookGrid",
+      "title": "全部书籍",
+      "columns": 3,
+      "viewToggle": [
+        "grid",
+        "list"
+      ]
+    }
+  ],
+  "states": [
+    "default",
+    "empty",
+    "loading",
+    "batchSelection"
+  ]
+}

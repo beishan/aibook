@@ -1,0 +1,16 @@
+{
+  "screen": "DownloadDetail",
+  "route": "downloads/{taskId}",
+  "fields": [
+    "来源",
+    "文件大小",
+    "已下载",
+    "开始时间",
+    "预计剩余时间",
+    "存储位置"
+  ],
+  "actions": [
+    "暂停",
+    "取消"
+  ]
+}

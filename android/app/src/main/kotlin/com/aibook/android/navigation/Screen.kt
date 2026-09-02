@@ -1,40 +1,60 @@
 package com.aibook.android.navigation
 
 sealed class Screen(val route: String) {
-    data object Shelf : Screen("shelf")
-    data object ShelfFolders : Screen("shelf-folders")
-    data object ShelfFolderDetail : Screen("shelf-folder/{folderId}") {
-        fun createRoute(folderId: String) = "shelf-folder/$folderId"
+    data object Shelf : Screen("bookshelf/grid")
+    data object ShelfList : Screen("bookshelf/list")
+    data object ShelfFolders : Screen("bookshelf/folders")
+    data object ShelfFolderDetail : Screen("bookshelf/folder/{folderId}") {
+        fun createRoute(folderId: String) = "bookshelf/folder/$folderId"
     }
-    data object NewShelfFolder : Screen("shelf-folder-new")
-    data object RecentReading : Screen("recent-reading")
-    data object Store : Screen("store")
-    data object StoreOpds : Screen("store-opds")
-    data object ServerLibrary : Screen("server-library")
-    data object ServerLibraryDetail : Screen("server-library/{section}") {
-        fun createRoute(section: String) = "server-library/$section"
+    data object NewShelfFolder : Screen("bookshelf/folder/new")
+    data object ShelfBatch : Screen("bookshelf/batch")
+    data object RecentReading : Screen("reading/recent")
+    data object Store : Screen("bookstore/local")
+    data object StoreOpds : Screen("bookstore/opds")
+    data object OpdsServiceDetail : Screen("bookstore/opds/{serviceId}") {
+        fun createRoute(serviceId: String) = "bookstore/opds/$serviceId"
     }
-    data object NewBookList : Screen("booklist/new")
-    data object EditBookList : Screen("booklist/{listId}/edit") {
-        fun createRoute(listId: Long) = "booklist/$listId/edit"
+    data object OpdsCategories : Screen("bookstore/opds/{serviceId}/categories") {
+        fun createRoute(serviceId: String) = "bookstore/opds/$serviceId/categories"
     }
-    data object ShelfSortFilter : Screen("shelf-sort-filter")
-    data object StoreCategory : Screen("store-category")
-    data object StoreSearch : Screen("store-search")
-    data object StoreRemoteBookDetail : Screen("store-remote-book/{bookId}") {
-        fun createRoute(bookId: String) = "store-remote-book/$bookId"
+    data object OpdsCategoryBooks : Screen("bookstore/opds/{serviceId}/category/{categoryId}") {
+        fun createRoute(serviceId: String, categoryId: String) = "bookstore/opds/$serviceId/category/$categoryId"
     }
-    data object Opds : Screen("opds")
-    data object ImportBooks : Screen("import-books")
-    data object OpdsAddSource : Screen("opds-add-source") {
+    data object ServerLibrary : Screen("bookstore/backend")
+    data object BackendRecent : Screen("bookstore/backend/recent")
+    data object BackendFavorites : Screen("bookstore/backend/favorites")
+    data object BackendBooklists : Screen("bookstore/backend/booklists")
+    data object BackendBookListDetail : Screen("bookstore/backend/booklist/{listId}") {
+        fun createRoute(listId: Long) = "bookstore/backend/booklist/$listId"
+    }
+    data object NewBookList : Screen("bookstore/backend/booklist/new")
+    data object EditBookList : Screen("bookstore/backend/booklist/{listId}/edit") {
+        fun createRoute(listId: Long) = "bookstore/backend/booklist/$listId/edit"
+    }
+    data object ShelfSortFilter : Screen("bookshelf/sort-filter")
+    data object StoreCategory : Screen("bookstore/local/category")
+    data object StoreSearch : Screen("search")
+    data object StoreSearchResults : Screen("search?query={query}") {
+        fun createRoute(query: String) = "search?query=${android.net.Uri.encode(query)}"
+    }
+    data object StoreRemoteBookDetail : Screen("bookstore/book/{bookId}") {
+        fun createRoute(bookId: String) = "bookstore/book/$bookId"
+    }
+    data object Opds : Screen("discovery")
+    data object ImportBooks : Screen("bookstore/local/import")
+    data object LocalScan : Screen("bookstore/local/scan")
+    data object ScanResult : Screen("bookstore/local/scan-result")
+    data object OpdsAddSource : Screen("bookstore/opds/add") {
         fun createRoute(connectionId: String? = null): String =
-            if (connectionId != null) "opds-add-source?connectionId=$connectionId"
-            else "opds-add-source"
+            if (connectionId != null) "bookstore/opds/add?connectionId=$connectionId"
+            else "bookstore/opds/add"
     }
     data object Settings : Screen("settings")
-    data object ThemeSettings : Screen("theme-settings")
-    data object ShelfSettings : Screen("shelf-settings")
-    data object ScanDirectories : Screen("scan-directories")
+    data object ReadingSettings : Screen("settings/reading")
+    data object ThemeSettings : Screen("settings/theme")
+    data object ShelfSettings : Screen("settings/bookshelf")
+    data object ScanDirectories : Screen("bookstore/local/scan-directories")
     data object SyncConnectionSettings : Screen("sync-connection-settings")
     data object StorageCache : Screen("storage-cache")
     data object Downloads : Screen("downloads")
@@ -42,16 +62,16 @@ sealed class Screen(val route: String) {
         fun createRoute(taskId: String) = "downloads/$taskId"
     }
     data object PrivacyPermissions : Screen("privacy-permissions")
-    data object About : Screen("about")
-    data object BackupRestore : Screen("backup-restore")
+    data object About : Screen("settings/about")
+    data object BackupRestore : Screen("settings/backup")
     data object BookDetail : Screen("book/{bookId}") {
         fun createRoute(bookId: String) = "book/$bookId"
     }
     data object BookSources : Screen("book/{bookId}/sources") {
         fun createRoute(bookId: String) = "book/$bookId/sources"
     }
-    data object RemoteBookDetail : Screen("remote-book/{bookId}") {
-        fun createRoute(bookId: Long) = "remote-book/$bookId"
+    data object RemoteBookDetail : Screen("bookstore/backend/book/{bookId}") {
+        fun createRoute(bookId: Long) = "bookstore/backend/book/$bookId"
     }
     data object Reader : Screen("reader/{bookId}") {
         fun createRoute(bookId: String) = "reader/$bookId"

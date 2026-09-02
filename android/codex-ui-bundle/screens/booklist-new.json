@@ -1,0 +1,16 @@
+{
+  "screen": "BooklistNew",
+  "route": "bookstore/backend/booklist/new",
+  "fields": [
+    "书单名称",
+    "描述",
+    "封面"
+  ],
+  "options": [
+    "同步到后端服务"
+  ],
+  "actions": [
+    "取消",
+    "创建"
+  ]
+}

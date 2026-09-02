@@ -1,0 +1,11 @@
+{
+  "screen": "ThemeSettings",
+  "route": "settings/theme",
+  "sections": [
+    "主题模式",
+    "主题色",
+    "应用图标",
+    "显示设置",
+    "书架封面圆角"
+  ]
+}

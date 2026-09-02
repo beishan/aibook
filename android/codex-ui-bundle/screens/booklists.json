@@ -1,0 +1,14 @@
+{
+  "screen": "Booklists",
+  "route": "bookstore/backend/booklists",
+  "appBar": {
+    "title": "书单",
+    "actions": [
+      "new",
+      "more"
+    ]
+  },
+  "content": {
+    "type": "BooklistList"
+  }
+}
