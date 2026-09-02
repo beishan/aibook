@@ -4,6 +4,17 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val appSemVer = Regex("\"version\"\\s*:\\s*\"([^\"]+)\"")
+    .find(file("../../frontend/package.json").readText())
+    ?.groupValues
+    ?.get(1)
+    ?: "0.0.0"
+val appVersionCode = appSemVer.split('.').mapNotNull(String::toIntOrNull).let { parts ->
+    (parts.getOrElse(0) { 0 } * 10_000) +
+        (parts.getOrElse(1) { 0 } * 100) +
+        parts.getOrElse(2) { 0 }
+}
+
 android {
     namespace = "com.aibook.android"
     compileSdk = 36
@@ -12,8 +23,8 @@ android {
         applicationId = "com.aibook.android"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appSemVer
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
