@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cancel
@@ -47,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibook.android.core.data.repository.DownloadStatus
 import com.aibook.android.core.data.repository.DownloadTask
+import com.aibook.android.feature.server.CloudMockNotice
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
 import com.aibook.android.ui.design.SlidingSegmentedControl
@@ -68,6 +71,7 @@ fun DownloadManagerScreen(
             Text("下载管理", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
             IconButton(onClick = viewModel::clearFinished) { Icon(Icons.Default.MoreVert, "更多") }
         }
+        CloudMockNotice()
 
         SlidingSegmentedControl(
             options = listOf("下载中 (${state.activeCount})", "已完成 (${state.completedCount})"),
@@ -188,7 +192,7 @@ fun DownloadDetailScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val task = state.tasks.firstOrNull { it.id == taskId }
     Column(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(DesignTokens.PagePadding),
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).verticalScroll(rememberScrollState()).padding(DesignTokens.PagePadding),
         verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -196,6 +200,7 @@ fun DownloadDetailScreen(
             Text("下载详情", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.size(48.dp))
         }
+        CloudMockNotice()
         if (task == null) {
             SoftCard { Text("下载任务不存在或已被清理", color = DesignTokens.SoftText) }
             return@Column
@@ -244,6 +249,7 @@ fun DownloadDetailScreen(
                 elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
             ) { Text("取消") }
         }
+        Spacer(Modifier.height(DesignTokens.Space16))
     }
 }
 

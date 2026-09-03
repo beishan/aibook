@@ -37,8 +37,8 @@
 | 31 | 多来源版本选择-重制稿 | `book/{bookId}/sources` | 云端 Mock 主书状态真机通过，待本地/OPDS 同名聚合复核 |
 | 32 | 热门搜索-重制稿 | `search` | 第二轮真机通过 |
 | 33 | 搜索页-重制稿 | `search` | 第二轮真机通过 |
-| 34 | 下载管理 | `downloads` | 空状态真机通过，待下载中状态 |
-| 35 | 下载详情 | `downloads/{taskId}` | 第五轮按原型重做，待真实下载任务复核 |
+| 34 | 下载管理 | `downloads` | 可交互 Mock 任务状态真机通过 |
+| 35 | 下载详情 | `downloads/{taskId}` | Mock 下载中状态真机通过，已适配小屏滚动 |
 | 36 | 最近阅读 | `reading/recent` | 第二轮真机通过 |
 | 37 | 阅读设置 | `settings/reading` | 第二轮真机通过 |
 | 38 | 主题与外观 | `settings/theme` | 第二轮真机通过 |
