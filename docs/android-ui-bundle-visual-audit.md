@@ -33,12 +33,12 @@
 | 27 | 编辑书单 | `bookstore/backend/booklist/{booklistId}/edit` | 第二轮已重做，待真机复核 |
 | 28 | 搜索页 | `search` | 第二轮真机通过 |
 | 29 | 搜索结果页 | `search?query={query}` | 已接入本地/OPDS/后端，待后端数据复验 |
-| 30 | 多来源版本选择 | `book/{bookId}/sources` | 待真机复核 |
-| 31 | 多来源版本选择-重制稿 | `book/{bookId}/sources` | 待真机复核 |
+| 30 | 多来源版本选择 | `book/{bookId}/sources` | 第五轮按原型重做，待多来源数据复核 |
+| 31 | 多来源版本选择-重制稿 | `book/{bookId}/sources` | 第五轮按重制稿统一，待多来源数据复核 |
 | 32 | 热门搜索-重制稿 | `search` | 第二轮真机通过 |
 | 33 | 搜索页-重制稿 | `search` | 第二轮真机通过 |
 | 34 | 下载管理 | `downloads` | 空状态真机通过，待下载中状态 |
-| 35 | 下载详情 | `downloads/{taskId}` | 待真机复核 |
+| 35 | 下载详情 | `downloads/{taskId}` | 第五轮按原型重做，待真实下载任务复核 |
 | 36 | 最近阅读 | `reading/recent` | 第二轮真机通过 |
 | 37 | 阅读设置 | `settings/reading` | 第二轮真机通过 |
 | 38 | 主题与外观 | `settings/theme` | 第二轮真机通过 |

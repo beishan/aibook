@@ -41,6 +41,8 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -402,15 +404,27 @@ fun BookSourcesScreen(
         (local + opds + backend).distinctBy { it.id }
     }.orEmpty()
     var selectedId by remember(bookId) { mutableStateOf(bookId) }
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(DesignTokens.PagePadding)) {
-        BundleHeaderRow("可用版本 / 来源", onBack)
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = DesignTokens.PagePadding)) {
+        Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+            Text("可用版本 / 来源", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.size(48.dp))
+        }
         current?.let {
-            Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = DesignTokens.Space16)) {
-                BookCover(it.title, width = 76.dp, height = 108.dp, imageUri = it.coverUri)
-                Column { Text(it.title, style = MaterialTheme.typography.displaySmall); Text(it.author ?: "未知作者", color = DesignTokens.SoftText) }
+            Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space24), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = DesignTokens.Space24)) {
+                BookCover(it.title, width = 108.dp, height = 154.dp, imageUri = it.coverUri)
+                Column(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                    Text(it.title, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                    Text(it.author ?: "未知作者", color = DesignTokens.SoftText, style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+                        it.tags.take(2).ifEmpty { listOf(it.format.displayName) }.forEach { tag ->
+                            Text(tag, modifier = Modifier.background(DesignTokens.WarmCard, RoundedCornerShape(DesignTokens.RadiusLarge)).padding(horizontal = 12.dp, vertical = 7.dp), color = DesignTokens.Accent)
+                        }
+                    }
+                }
             }
         }
-        Text("检测到以下可用版本，请选择要阅读的来源", color = DesignTokens.SoftText)
+        Text("检测到以下可用版本，请选择要阅读的来源", color = DesignTokens.SoftText, style = MaterialTheme.typography.titleMedium)
         LazyColumn(Modifier.weight(1f).padding(top = DesignTokens.Space16), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
             items(versions, key = { it.id }) { version ->
                 SoftCard(
@@ -418,10 +432,30 @@ fun BookSourcesScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
                         Box(Modifier.size(56.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(DesignTokens.RadiusMedium)), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Folder, null, tint = DesignTokens.Accent)
+                            Icon(
+                                when {
+                                    version.id.startsWith("backend:") -> Icons.Default.Cloud
+                                    version.id.startsWith("opds:") -> Icons.Default.Storage
+                                    else -> Icons.Default.Folder
+                                },
+                                null,
+                                tint = DesignTokens.Accent
+                            )
                         }
                         Column(Modifier.weight(1f)) {
-                            Text(version.source, fontWeight = FontWeight.Bold)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+                                Text(version.source, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text(
+                                    when {
+                                        version.id.startsWith("backend:") -> "云端"
+                                        version.id.startsWith("opds:") -> "可下载"
+                                        else -> "已下载"
+                                    },
+                                    modifier = Modifier.background(DesignTokens.WarmCard, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp),
+                                    color = DesignTokens.Accent,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
                             Text("${version.format} · ${version.detail}", color = DesignTokens.SoftText)
                         }
                         if (version.id == selectedId) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.background(DesignTokens.Accent, CircleShape).padding(6.dp))

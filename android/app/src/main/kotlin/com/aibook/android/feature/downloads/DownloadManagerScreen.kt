@@ -62,13 +62,10 @@ fun DownloadManagerScreen(
     viewModel: DownloadManagerViewModel = viewModel(factory = DownloadManagerViewModel.Factory)
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    Column(Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = DesignTokens.PagePadding, vertical = DesignTokens.Space16), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
-            Column(Modifier.weight(1f)) {
-                Text("下载管理", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
-                Text("下载中 ${state.activeCount} · 失败 ${state.failedCount} · 已完成 ${state.completedCount}", color = DesignTokens.SoftText)
-            }
+            Text("下载管理", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
             IconButton(onClick = viewModel::clearFinished) { Icon(Icons.Default.MoreVert, "更多") }
         }
 
@@ -109,8 +106,20 @@ fun DownloadManagerScreen(
                 }
             }
         } else {
+            val runningTasks = state.visibleTasks.filter { it.status in setOf(DownloadStatus.RUNNING, DownloadStatus.QUEUED) }
+            val pausedTasks = state.visibleTasks.filter { it.status in setOf(DownloadStatus.PAUSED, DownloadStatus.FAILED) }
+            val otherTasks = state.visibleTasks.filterNot { it in runningTasks || it in pausedTasks }
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(state.visibleTasks, key = { it.id }) { task ->
+                items(runningTasks, key = { it.id }) { task ->
+                    DownloadTaskCard(task, state.speeds[task.id] ?: 0L, task.id in state.selectedIds, viewModel) { onTaskClick(task.id) }
+                }
+                if (pausedTasks.isNotEmpty()) item {
+                    Text("已暂停", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = DesignTokens.Accent)
+                }
+                items(pausedTasks, key = { it.id }) { task ->
+                    DownloadTaskCard(task, state.speeds[task.id] ?: 0L, task.id in state.selectedIds, viewModel) { onTaskClick(task.id) }
+                }
+                items(otherTasks, key = { it.id }) { task ->
                     DownloadTaskCard(task, state.speeds[task.id] ?: 0L, task.id in state.selectedIds, viewModel) { onTaskClick(task.id) }
                 }
                 item { Spacer(Modifier.height(12.dp)) }
@@ -184,7 +193,8 @@ fun DownloadDetailScreen(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
-            Text("下载详情", modifier = Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("下载详情", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.size(48.dp))
         }
         if (task == null) {
             SoftCard { Text("下载任务不存在或已被清理", color = DesignTokens.SoftText) }
@@ -192,7 +202,7 @@ fun DownloadDetailScreen(
         }
         SoftCard {
             Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16), verticalAlignment = Alignment.CenterVertically) {
-                BookCover(task.title, width = 94.dp, height = 136.dp)
+                BookCover(task.title, width = 112.dp, height = 160.dp)
                 Column(Modifier.weight(1f)) {
                     Text(task.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text(task.fileName, color = DesignTokens.SoftText)
