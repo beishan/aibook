@@ -77,6 +77,14 @@ class BookListEditorViewModel(private val repository: ServerRepository) : ViewMo
 
     fun load(listId: Long?) {
         if (listId == null) return
+        if (CloudMockData.enabled) {
+            val list = CloudMockData.bookList(listId)
+            _state.update {
+                if (list == null) it.copy(loading = false, error = "Mock 书单不存在")
+                else it.copy(name = list.name, description = list.description.orEmpty(), loading = false, error = null)
+            }
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
             repository.getBookList(listId)
@@ -98,6 +106,10 @@ class BookListEditorViewModel(private val repository: ServerRepository) : ViewMo
             _state.update { it.copy(error = "请输入书单名称") }
             return
         }
+        if (CloudMockData.enabled) {
+            _state.update { it.copy(loading = false, saved = true, error = null) }
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
             val result = if (listId == null) {
@@ -111,6 +123,10 @@ class BookListEditorViewModel(private val repository: ServerRepository) : ViewMo
     }
 
     fun delete(listId: Long) {
+        if (CloudMockData.enabled) {
+            _state.update { it.copy(loading = false, deleted = true, error = null) }
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
             repository.deleteBookList(listId)
@@ -158,6 +174,7 @@ fun BookListEditorScreen(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
         ) {
+            CloudMockNotice()
             if (listId == null) {
                 Text("✦ 创建你的专属书单，收藏心仪的小说", modifier = Modifier.fillMaxWidth(), color = DesignTokens.Accent, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }

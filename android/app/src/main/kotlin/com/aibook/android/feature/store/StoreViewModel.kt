@@ -17,6 +17,7 @@ import com.aibook.android.core.data.repository.DownloadTaskRepository
 import com.aibook.android.core.data.repository.DownloadStatus
 import com.aibook.android.core.data.repository.ServerRepository
 import com.aibook.android.core.network.api.dto.BookDTO
+import com.aibook.android.feature.server.CloudMockData
 import com.aibook.android.background.DownloadQueueManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -159,6 +160,14 @@ class StoreViewModel(
             _backendSearchState.value = BackendSearchState()
             return
         }
+        if (CloudMockData.enabled) {
+            _backendSearchState.value = BackendSearchState(
+                books = CloudMockData.search(query),
+                shelfBookIds = CloudMockData.shelfBookIds,
+                isLoading = false
+            )
+            return
+        }
         backendSearchJob = viewModelScope.launch {
             _backendSearchState.update { it.copy(isLoading = true, errorMessage = null) }
             val shelfIds = serverRepository.getShelf().getOrNull()
@@ -183,6 +192,13 @@ class StoreViewModel(
 
     fun toggleBackendShelf(book: BookDTO) {
         val id = book.id ?: return
+        if (CloudMockData.enabled) {
+            _backendSearchState.update { current ->
+                val removing = id in current.shelfBookIds
+                current.copy(shelfBookIds = if (removing) current.shelfBookIds - id else current.shelfBookIds + id)
+            }
+            return
+        }
         viewModelScope.launch {
             val removing = id in _backendSearchState.value.shelfBookIds
             val result = if (removing) serverRepository.removeFromShelf(id) else serverRepository.addToShelf(id)

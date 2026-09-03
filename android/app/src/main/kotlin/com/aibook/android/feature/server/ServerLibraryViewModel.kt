@@ -45,6 +45,11 @@ class ServerLibraryViewModel(
     val uiState: StateFlow<ServerLibraryUiState> = _uiState.asStateFlow()
 
     private fun verifyLogin(onLoggedIn: () -> Unit) {
+        if (CloudMockData.enabled) {
+            _uiState.update { it.copy(isLoggedIn = true, errorMessage = null) }
+            onLoggedIn()
+            return
+        }
         viewModelScope.launch {
             val loggedIn = serverRepository.isLoggedIn.first()
             _uiState.update { it.copy(isLoggedIn = loggedIn) }
@@ -62,6 +67,21 @@ class ServerLibraryViewModel(
     }
 
     fun loadOverview() {
+        if (CloudMockData.enabled) {
+            _uiState.update {
+                it.copy(
+                    overviewBooks = CloudMockData.books.take(4),
+                    favoritePreview = CloudMockData.favorites().take(4),
+                    bookLists = CloudMockData.bookLists,
+                    shelfBookIds = CloudMockData.shelfBookIds,
+                    isLoggedIn = true,
+                    isLoading = false,
+                    errorMessage = null,
+                    actionMessage = "当前展示 Mock 演示数据"
+                )
+            }
+            return
+        }
         viewModelScope.launch {
             val loggedIn = serverRepository.isLoggedIn.first()
             if (!loggedIn) {
@@ -104,10 +124,48 @@ class ServerLibraryViewModel(
 
     fun selectBookList(listId: Long) {
         _uiState.update { it.copy(selectedListId = listId) }
+        if (CloudMockData.enabled) {
+            val list = CloudMockData.bookList(listId)
+            _uiState.update {
+                it.copy(
+                    bookLists = CloudMockData.bookLists,
+                    books = list?.books.orEmpty(),
+                    shelfBookIds = CloudMockData.shelfBookIds,
+                    isLoading = false,
+                    errorMessage = null
+                )
+            }
+            return
+        }
         refresh()
     }
 
     fun refresh() {
+        if (CloudMockData.enabled) {
+            val state = _uiState.value
+            val selectedList = CloudMockData.bookList(state.selectedListId ?: CloudMockData.bookLists.first().id)
+            val books = when (state.section) {
+                ServerLibrarySection.ALL -> CloudMockData.books
+                ServerLibrarySection.FAVORITES -> CloudMockData.favorites()
+                ServerLibrarySection.SHELF -> CloudMockData.books.filter { it.id in CloudMockData.shelfBookIds }
+                ServerLibrarySection.LISTS -> selectedList?.books.orEmpty()
+            }
+            _uiState.update {
+                it.copy(
+                    books = books,
+                    overviewBooks = CloudMockData.books.take(4),
+                    favoritePreview = CloudMockData.favorites().take(4),
+                    bookLists = CloudMockData.bookLists,
+                    selectedListId = if (state.section == ServerLibrarySection.LISTS) selectedList?.id else state.selectedListId,
+                    shelfBookIds = CloudMockData.shelfBookIds,
+                    isLoggedIn = true,
+                    isLoading = false,
+                    errorMessage = null,
+                    actionMessage = "当前展示 Mock 演示数据"
+                )
+            }
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val shelfResult = serverRepository.getShelf()
@@ -140,6 +198,16 @@ class ServerLibraryViewModel(
 
     fun toggleShelf(book: BookDTO) {
         val id = book.id ?: return
+        if (CloudMockData.enabled) {
+            _uiState.update { state ->
+                val alreadyOnShelf = id in state.shelfBookIds
+                state.copy(
+                    shelfBookIds = if (alreadyOnShelf) state.shelfBookIds - id else state.shelfBookIds + id,
+                    actionMessage = if (alreadyOnShelf) "已从 Mock 书架移出" else "已加入 Mock 书架"
+                )
+            }
+            return
+        }
         viewModelScope.launch {
             val alreadyOnShelf = id in _uiState.value.shelfBookIds
             val result = if (alreadyOnShelf) {
@@ -158,6 +226,21 @@ class ServerLibraryViewModel(
 
     fun toggleFavorite(book: BookDTO) {
         val id = book.id ?: return
+        if (CloudMockData.enabled) {
+            val favorite = book.isFavorite != true
+            _uiState.update { state ->
+                val updateBook: (BookDTO) -> BookDTO = { item -> if (item.id == id) item.copy(isFavorite = favorite) else item }
+                state.copy(
+                    books = state.books.map(updateBook).filter { state.section != ServerLibrarySection.FAVORITES || it.isFavorite == true },
+                    overviewBooks = state.overviewBooks.map(updateBook),
+                    favoritePreview = if (favorite) (state.favoritePreview + book.copy(isFavorite = true)).distinctBy { it.id }.take(4)
+                    else state.favoritePreview.filterNot { it.id == id },
+                    bookLists = state.bookLists.map { list -> list.copy(books = list.books.map(updateBook)) },
+                    actionMessage = if (favorite) "已加入 Mock 收藏" else "已取消 Mock 收藏"
+                )
+            }
+            return
+        }
         viewModelScope.launch {
             serverRepository.toggleFavorite(id)
                 .onSuccess {
@@ -168,7 +251,7 @@ class ServerLibraryViewModel(
         }
     }
 
-    fun coverUrl(book: BookDTO): String? = serverRepository.resolveCoverUrl(book.coverUrl)
+    fun coverUrl(book: BookDTO): String? = if (CloudMockData.enabled) book.coverUrl else serverRepository.resolveCoverUrl(book.coverUrl)
 
     fun clearMessage() {
         _uiState.update { it.copy(actionMessage = null) }

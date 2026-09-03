@@ -133,6 +133,8 @@ fun BackendCollectionScreen(
             IconButton(onClick = {}) { Icon(Icons.Default.FilterList, "筛选") }
         }
     ) {
+        CloudMockNotice()
+        Spacer(Modifier.height(DesignTokens.Space12))
         if (section == ServerLibrarySection.FAVORITES) {
             SlidingSegmentedControl(
                 options = listOf("全部", "已加入书架", "未加入书架"),
@@ -251,6 +253,8 @@ fun BackendBooklistsScreen(
             IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, "更多") }
         }
     ) {
+        CloudMockNotice()
+        Spacer(Modifier.height(DesignTokens.Space12))
         when {
             state.isLoading -> BookCollectionScreen(BookCollectionState.Loading, onBookClick = {})
             state.errorMessage != null -> BookCollectionScreen(BookCollectionState.Error(state.errorMessage.orEmpty()), onBookClick = {}, onRetry = viewModel::refresh)
@@ -322,6 +326,21 @@ class BackendBookDetailViewModel(private val repository: ServerRepository) : Vie
     val state: StateFlow<BackendBookDetailState> = _state.asStateFlow()
 
     fun load(id: Long) {
+        if (CloudMockData.enabled) {
+            val book = CloudMockData.book(id)
+            _state.value = if (book == null) {
+                BackendBookDetailState(loading = false, error = "Mock 云端书籍不存在")
+            } else {
+                BackendBookDetailState(
+                    loading = false,
+                    book = book,
+                    coverUrl = book.coverUrl,
+                    progress = CloudMockData.progress(id),
+                    onShelf = id in CloudMockData.shelfBookIds
+                )
+            }
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
             val bookResult = repository.getBookById(id)
@@ -344,6 +363,13 @@ class BackendBookDetailViewModel(private val repository: ServerRepository) : Vie
     fun toggleShelf() {
         val book = _state.value.book ?: return
         val id = book.id ?: return
+        if (CloudMockData.enabled) {
+            _state.update {
+                val removing = it.onShelf
+                it.copy(onShelf = !removing, message = if (removing) "已从 Mock 书架移出" else "已加入 Mock 书架")
+            }
+            return
+        }
         viewModelScope.launch {
             val removing = _state.value.onShelf
             val result = if (removing) repository.removeFromShelf(id) else repository.addToShelf(id)
@@ -354,6 +380,13 @@ class BackendBookDetailViewModel(private val repository: ServerRepository) : Vie
 
     fun toggleFavorite() {
         val id = _state.value.book?.id ?: return
+        if (CloudMockData.enabled) {
+            _state.update { state ->
+                val favorite = state.book?.isFavorite != true
+                state.copy(book = state.book?.copy(isFavorite = favorite), message = if (favorite) "已加入 Mock 收藏" else "已取消 Mock 收藏")
+            }
+            return
+        }
         viewModelScope.launch {
             repository.toggleFavorite(id).onSuccess {
                 _state.update { state -> state.copy(book = state.book?.copy(isFavorite = state.book.isFavorite != true), message = "收藏状态已更新") }
@@ -401,6 +434,7 @@ fun BackendBookDetailScreen(
             onFavorite = viewModel::toggleFavorite,
             onMore = { showMore = true }
         )
+        CloudMockNotice()
         DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
             DropdownMenuItem(text = { Text("刷新书籍信息") }, onClick = { showMore = false; viewModel.load(bookId) })
             DropdownMenuItem(text = { Text("云端书籍 ID：$bookId") }, onClick = { showMore = false })
@@ -432,7 +466,9 @@ fun BackendBookDetailScreen(
                             style = MaterialTheme.typography.bodyLarge
                         )
                         WarmProgress(progress / 100f, Modifier.fillMaxWidth())
-                        DetailPrimaryButton(if (progress > 0) "继续阅读" else "开始阅读") { onRead(bookId) }
+                        DetailPrimaryButton(if (progress > 0) "继续阅读" else "开始阅读") {
+                            if (CloudMockData.enabled) localMessage = "Mock 数据仅用于页面预览，暂不提供正文阅读" else onRead(bookId)
+                        }
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
@@ -444,7 +480,7 @@ fun BackendBookDetailScreen(
                         viewModel::toggleFavorite
                     )
                     DetailActionButton(Icons.Default.CloudDownload, "下载到本地") {
-                        localMessage = "云端书籍可在线阅读，本地下载任务将在下载管理中提供"
+                        localMessage = if (CloudMockData.enabled) "Mock 数据暂不提供文件下载" else "云端书籍可在线阅读，本地下载任务将在下载管理中提供"
                     }
                 }
                 Text(
@@ -467,6 +503,14 @@ fun BackendBookDetailScreen(
                 Spacer(Modifier.height(DesignTokens.Space24))
             }
         }
+    }
+}
+
+@Composable
+fun CloudMockNotice() {
+    if (!CloudMockData.enabled) return
+    SoftCard(color = DesignTokens.WarmCard, contentPadding = DesignTokens.Space12) {
+        Text("演示模式 · 当前页面使用 Mock 云端数据", color = DesignTokens.Accent, fontWeight = FontWeight.Bold)
     }
 }
 

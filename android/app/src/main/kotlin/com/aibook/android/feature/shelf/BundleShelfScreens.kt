@@ -75,6 +75,7 @@ import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.ShelfFolderSelection
 import com.aibook.android.core.model.ShelfSortOption
 import com.aibook.android.core.network.api.dto.BookDTO
+import com.aibook.android.feature.server.CloudMockData
 import com.aibook.android.di.ServiceLocator
 import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignTokens
@@ -386,9 +387,13 @@ fun BookSourcesScreen(
     val current = state.books.firstOrNull { it.id == bookId }
     val backendBooks by androidx.compose.runtime.produceState<List<BookDTO>>(emptyList(), current?.title) {
         value = current?.title?.let { title ->
-            locator.serverRepository.searchBooks(title).getOrNull()?.content
-                ?.filter { it.title.equals(title, ignoreCase = true) }
-                .orEmpty()
+            if (CloudMockData.enabled) {
+                CloudMockData.search(title).filter { it.title.equals(title, ignoreCase = true) }
+            } else {
+                locator.serverRepository.searchBooks(title).getOrNull()?.content
+                    ?.filter { it.title.equals(title, ignoreCase = true) }
+                    .orEmpty()
+            }
         }.orEmpty()
     }
     val versions = current?.let { book ->
@@ -399,7 +404,7 @@ fun BookSourcesScreen(
             SourceVersion("opds:${it.id}", it.sourceName, it.format, "OPDS · 可下载", null)
         }
         val backend = backendBooks.map {
-            SourceVersion("backend:${it.id}", "云端书库", it.format ?: "在线", "云端 · 在线阅读", locator.serverRepository.resolveCoverUrl(it.coverUrl))
+            SourceVersion("backend:${it.id}", "云端书库", it.format ?: "在线", "云端 · 在线阅读", if (CloudMockData.enabled) it.coverUrl else locator.serverRepository.resolveCoverUrl(it.coverUrl))
         }
         (local + opds + backend).distinctBy { it.id }
     }.orEmpty()

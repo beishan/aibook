@@ -997,7 +997,10 @@ private fun BackendSearchCard(
 ) {
     SoftCard(contentPadding = DesignTokens.Space16) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("云端书库", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Column {
+                Text("云端书库", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Mock 演示数据", color = DesignTokens.Accent, style = MaterialTheme.typography.labelMedium)
+            }
             Text("${books.size} 个结果", color = DesignTokens.SoftText)
         }
         books.forEach { book ->
