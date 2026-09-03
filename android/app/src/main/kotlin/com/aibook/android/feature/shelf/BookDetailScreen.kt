@@ -73,10 +73,18 @@ import com.aibook.android.core.reader.EpubContentParser
 import com.aibook.android.core.reader.TextChapterParser
 import com.aibook.android.di.ServiceLocator
 import com.aibook.android.ui.design.BookCover
+import com.aibook.android.ui.design.BookDetailTopBar
+import com.aibook.android.ui.design.DetailActionButton
+import com.aibook.android.ui.design.DetailInfoCard
+import com.aibook.android.ui.design.DetailInfoItem
+import com.aibook.android.ui.design.DetailIntroduction
+import com.aibook.android.ui.design.DetailPrimaryButton
+import com.aibook.android.ui.design.DetailTag
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SectionHeader
 import com.aibook.android.ui.design.SoftCard
 import com.aibook.android.ui.design.SourceBadge
+import com.aibook.android.ui.design.WarmProgress
 import com.aibook.android.feature.importer.supportedBookMimeTypes
 import java.io.File
 import java.time.Duration
@@ -128,52 +136,45 @@ fun BookDetailScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(DesignTokens.PagePadding),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = DesignTokens.PagePadding),
         verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
-            Text("书籍详情", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Row {
-                IconButton(
-                    onClick = {
-                        if (currentBook != null) actionMessage = shareBook(context, currentBook)
-                    }
-                ) { Icon(Icons.Default.IosShare, contentDescription = "分享书籍文件") }
-                Column {
-                    IconButton(onClick = { showMore = true }) { Icon(Icons.Default.MoreVert, contentDescription = "更多操作") }
-                    DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
-                        DropdownMenuItem(
-                            text = { Text("可用版本 / 来源") },
-                            leadingIcon = { Icon(Icons.Default.FolderOpen, null) },
-                            onClick = { showMore = false; onSourcesClick() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("编辑元数据") },
-                            leadingIcon = { Icon(Icons.Default.Edit, null) },
-                            onClick = { showMore = false; showEdit = true }
-                        )
-                        if (currentBook != null && !File(currentBook.uri).isFile) {
-                            DropdownMenuItem(
-                                text = { Text("重新定位文件") },
-                                leadingIcon = { Icon(Icons.Default.FolderOpen, null) },
-                                onClick = { showMore = false; relocatePicker.launch(supportedBookMimeTypes) }
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text("替换封面") },
-                            leadingIcon = { Icon(Icons.Default.Image, null) },
-                            onClick = { showMore = false; coverPicker.launch("image/*") }
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("删除或移出") },
-                            leadingIcon = { Icon(Icons.Default.Delete, null) },
-                            onClick = { showMore = false; showDelete = true }
-                        )
-                    }
-                }
+        BookDetailTopBar(
+            favorite = currentBook?.favorite == true,
+            onBack = onBack,
+            onShare = { currentBook?.let { actionMessage = shareBook(context, it) } },
+            onFavorite = { currentBook?.let { viewModel.setFavorite(it.id, !it.favorite) } },
+            onMore = { showMore = true }
+        )
+        DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+            DropdownMenuItem(
+                text = { Text("可用版本 / 来源") },
+                leadingIcon = { Icon(Icons.Default.FolderOpen, null) },
+                onClick = { showMore = false; onSourcesClick() }
+            )
+            DropdownMenuItem(
+                text = { Text("编辑元数据") },
+                leadingIcon = { Icon(Icons.Default.Edit, null) },
+                onClick = { showMore = false; showEdit = true }
+            )
+            if (currentBook != null && !File(currentBook.uri).isFile) {
+                DropdownMenuItem(
+                    text = { Text("重新定位文件") },
+                    leadingIcon = { Icon(Icons.Default.FolderOpen, null) },
+                    onClick = { showMore = false; relocatePicker.launch(supportedBookMimeTypes) }
+                )
             }
+            DropdownMenuItem(
+                text = { Text("替换封面") },
+                leadingIcon = { Icon(Icons.Default.Image, null) },
+                onClick = { showMore = false; coverPicker.launch("image/*") }
+            )
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("删除或移出") },
+                leadingIcon = { Icon(Icons.Default.Delete, null) },
+                onClick = { showMore = false; showDelete = true }
+            )
         }
 
         if (currentBook == null) {
@@ -208,14 +209,6 @@ fun BookDetailScreen(
             }
         }
 
-        BookIdentity(currentBook)
-
-        if (currentBook.tags.isNotEmpty()) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(currentBook.tags) { tag -> SourceBadge(tag) }
-            }
-        }
-
         val chapterTitles by produceState<List<String>>(emptyList(), currentBook.id, currentBook.description) {
             value = if (currentBook.description.isNullOrBlank()) withContext(Dispatchers.IO) { loadChapterTitles(currentBook) } else emptyList()
         }
@@ -223,63 +216,74 @@ fun BookDetailScreen(
             value = repository.bookFileStats(currentBook)
         }
 
-        SoftCard {
-            SectionHeader("书籍简介")
-            val description = currentBook.description
-            when {
-                !description.isNullOrBlank() -> Text(description, color = DesignTokens.SoftText)
-                chapterTitles.isNotEmpty() -> {
-                    chapterTitles.take(10).forEachIndexed { index, title -> Text("${index + 1}. $title", color = DesignTokens.SoftText) }
-                    if (chapterTitles.size > 10) Text("共 ${chapterTitles.size} 章", color = DesignTokens.Accent)
+        val progressPercent = (currentBook.progress.percent * 100).toInt()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16),
+            verticalAlignment = Alignment.Top
+        ) {
+            BookCover(title = currentBook.title, width = 132.dp, height = 204.dp, imageUri = currentBook.coverUri)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                Text(currentBook.title, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(currentBook.author ?: "未知作者", style = MaterialTheme.typography.titleMedium, color = DesignTokens.TextPrimary)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+                    items(currentBook.tags.take(3).ifEmpty { listOf(currentBook.format.displayName) }) { DetailTag(it) }
                 }
-                else -> Text("暂无简介，可通过“更多 → 编辑元数据”补充。", color = DesignTokens.SoftText)
+                Text(
+                    listOfNotNull(
+                        "$progressPercent%",
+                        currentBook.progress.chapterTitle ?: currentBook.progress.positionLabel,
+                        readingDurationLabel(currentBook.readingDurationSeconds).takeIf { currentBook.readingDurationSeconds > 0 }
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                WarmProgress(currentBook.progress.percent, Modifier.fillMaxWidth())
+                DetailPrimaryButton(
+                    label = if (progressPercent > 0) "继续阅读 · $progressPercent%" else "开始阅读",
+                    enabled = !fileMissing,
+                    onClick = onReadClick
+                )
             }
         }
 
-        SoftCard {
-            SectionHeader("书籍信息")
-            DetailInfoRow("作者", currentBook.author ?: "未知作者")
-            DetailInfoRow("格式", currentBook.format.displayName)
-            DetailInfoRow("大小", fileSizeLabel(fileStats?.fileSizeBytes))
-            DetailInfoRow("字数", wordCountLabel(fileStats?.wordCount))
-            DetailInfoRow("阅读进度", "${(currentBook.progress.percent * 100).toInt()}%")
-            DetailInfoRow("累计阅读", readingDurationLabel(currentBook.readingDurationSeconds))
-            DetailInfoRow("最近阅读", lastReadLabel(currentBook.lastReadAt), showDivider = false)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+            DetailActionButton(
+                icon = if (currentBook.shelved) Icons.Default.Check else Icons.AutoMirrored.Filled.MenuBook,
+                label = if (currentBook.shelved) "已在书架" else "加入书架",
+                selected = currentBook.shelved,
+                onClick = { viewModel.toggleShelved(currentBook.id, !currentBook.shelved) }
+            )
+            DetailActionButton(
+                icon = if (currentBook.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                label = if (currentBook.favorite) "已收藏" else "收藏",
+                selected = currentBook.favorite,
+                onClick = { viewModel.setFavorite(currentBook.id, !currentBook.favorite) }
+            )
         }
+
+        val description = when {
+            !currentBook.description.isNullOrBlank() -> currentBook.description.orEmpty()
+            chapterTitles.isNotEmpty() -> chapterTitles.take(5).joinToString("\n")
+            else -> "暂无简介，可通过右上角菜单编辑书籍信息。"
+        }
+        DetailIntroduction(description)
+
+        DetailInfoCard(
+            items = listOf(
+                DetailInfoItem("作者", currentBook.author ?: "未知作者"),
+                DetailInfoItem("格式", currentBook.format.displayName),
+                DetailInfoItem("大小", fileSizeLabel(fileStats?.fileSizeBytes)),
+                DetailInfoItem("文件路径", currentBook.uri),
+                DetailInfoItem("来源", "本地文件")
+            )
+        )
 
         val versions = relatedVersions(currentBook, allBooks)
         val related = relatedBooks(currentBook, allBooks, versions.map { it.id }.toSet())
         if (versions.isNotEmpty()) BookRelationSection("关联版本", versions, onRelatedBookClick)
         if (related.isNotEmpty()) BookRelationSection("相关书籍", related, onRelatedBookClick)
 
-        Button(
-                onClick = onReadClick,
-                enabled = !fileMissing,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
-                elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
-            ) {
-                Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null)
-                Text(if (currentBook.progress.percent > 0f) "继续阅读 · ${(currentBook.progress.percent * 100).toInt()}%" else "开始阅读")
-            }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
-            OutlinedButton(
-                onClick = { viewModel.toggleShelved(currentBook.id, !currentBook.shelved) },
-                modifier = Modifier.weight(1f).height(52.dp)
-            ) {
-                Icon(if (currentBook.shelved) Icons.Default.Check else Icons.Default.Add, contentDescription = null)
-                Text(if (currentBook.shelved) "已在书架" else "加入书架")
-            }
-            OutlinedButton(onClick = { viewModel.setFavorite(currentBook.id, !currentBook.favorite) }, modifier = Modifier.weight(1f).height(52.dp)) {
-                Icon(if (currentBook.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "收藏", tint = if (currentBook.favorite) DesignTokens.Accent else DesignTokens.SoftText)
-                Text(if (currentBook.favorite) "已收藏" else "收藏")
-            }
-        }
-
-        TextButton(onClick = { showDelete = true }, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.Delete, contentDescription = null)
-            Text("删除或移出书库")
-        }
+        Spacer(Modifier.height(DesignTokens.Space24))
     }
 
     if (currentBook != null && showEdit) {

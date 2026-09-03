@@ -1,6 +1,7 @@
 package com.aibook.android.feature.server
 
 import android.app.Application
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,7 +23,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.FilterList
@@ -32,6 +36,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +52,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -56,17 +64,26 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aibook.android.core.data.repository.ServerRepository
 import com.aibook.android.core.network.api.dto.BookDTO
+import com.aibook.android.core.network.api.dto.ReadingProgressDTO
 import com.aibook.android.di.ServiceLocator
 import com.aibook.android.ui.design.BookCollectionScreen
 import com.aibook.android.ui.design.BookCollectionState
 import com.aibook.android.ui.design.BookCover
+import com.aibook.android.ui.design.BookDetailTopBar
 import com.aibook.android.ui.design.BookSource
 import com.aibook.android.ui.design.BookSourceType
 import com.aibook.android.ui.design.CollectionBook
 import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
+import com.aibook.android.ui.design.DetailActionButton
+import com.aibook.android.ui.design.DetailInfoCard
+import com.aibook.android.ui.design.DetailInfoItem
+import com.aibook.android.ui.design.DetailIntroduction
+import com.aibook.android.ui.design.DetailPrimaryButton
+import com.aibook.android.ui.design.DetailTag
 import com.aibook.android.ui.design.SoftCard
 import com.aibook.android.ui.design.SlidingSegmentedControl
+import com.aibook.android.ui.design.WarmProgress
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -294,6 +311,7 @@ data class BackendBookDetailState(
     val loading: Boolean = true,
     val book: BookDTO? = null,
     val coverUrl: String? = null,
+    val progress: ReadingProgressDTO? = null,
     val onShelf: Boolean = false,
     val error: String? = null,
     val message: String? = null
@@ -308,6 +326,7 @@ class BackendBookDetailViewModel(private val repository: ServerRepository) : Vie
             _state.update { it.copy(loading = true, error = null) }
             val bookResult = repository.getBookById(id)
             val shelfResult = repository.getShelf()
+            val progressResult = repository.getReadingProgress(id)
             bookResult.onSuccess { book ->
                 val shelfIds = shelfResult.getOrNull()?.let { it.ungroupedBooks + it.groups.flatMap { group -> group.books } }
                     ?.mapNotNull { it.id }.orEmpty()
@@ -315,6 +334,7 @@ class BackendBookDetailViewModel(private val repository: ServerRepository) : Vie
                     loading = false,
                     book = book,
                     coverUrl = repository.resolveCoverUrl(book.coverUrl),
+                    progress = progressResult.getOrNull(),
                     onShelf = id in shelfIds
                 )
             }.onFailure { _state.update { current -> current.copy(loading = false, error = it.message ?: "加载失败") } }
@@ -359,49 +379,99 @@ fun BackendBookDetailScreen(
     viewModel: BackendBookDetailViewModel = viewModel(factory = BackendBookDetailViewModel.Factory)
 ) {
     val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
+    var showMore by remember { mutableStateOf(false) }
+    var localMessage by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(bookId) { viewModel.load(bookId) }
-    DesignPage(
-        title = "书籍详情",
-        modifier = Modifier.fillMaxSize(),
-        navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } }
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = DesignTokens.PagePadding),
+        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
     ) {
+        BookDetailTopBar(
+            favorite = state.book?.isFavorite == true,
+            onBack = onBack,
+            onShare = {
+                state.book?.let { book ->
+                    context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, listOf(book.title, book.author).filterNotNull().joinToString("\n"))
+                    }, "分享书籍"))
+                }
+            },
+            onFavorite = viewModel::toggleFavorite,
+            onMore = { showMore = true }
+        )
+        DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+            DropdownMenuItem(text = { Text("刷新书籍信息") }, onClick = { showMore = false; viewModel.load(bookId) })
+            DropdownMenuItem(text = { Text("后端书籍 ID：$bookId") }, onClick = { showMore = false })
+        }
         when {
             state.loading -> BookCollectionScreen(BookCollectionState.Loading, onBookClick = {})
             state.error != null -> BookCollectionScreen(BookCollectionState.Error(state.error.orEmpty()), onBookClick = {}, onRetry = { viewModel.load(bookId) })
             state.book != null -> {
                 val book = state.book!!
-                Column(
-                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
+                val progress = state.progress?.totalProgress?.coerceIn(0, 100) ?: 0
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
-                        BookCover(book.title, width = 118.dp, height = 168.dp, imageUri = state.coverUrl)
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
-                            Text(book.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Text(book.author ?: "未知作者", color = DesignTokens.SoftText)
-                            Text(listOfNotNull(book.format, book.publisher, book.publishDate).joinToString(" · "), color = DesignTokens.SoftText)
+                    BookCover(book.title, width = 132.dp, height = 204.dp, imageUri = state.coverUrl)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                        Text(book.title, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, maxLines = 3)
+                        Text(book.author ?: "未知作者", style = MaterialTheme.typography.titleMedium)
+                        DetailTag(book.categoryName ?: "我的书库")
+                        Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+                            book.tagNames.orEmpty().take(2).forEach { DetailTag(it) }
                         }
+                        Text(
+                            listOfNotNull(
+                                "$progress%",
+                                state.progress?.currentChapterTitle ?: book.chapterInfo
+                            ).joinToString(" · "),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        WarmProgress(progress / 100f, Modifier.fillMaxWidth())
+                        DetailPrimaryButton(if (progress > 0) "继续阅读" else "开始阅读") { onRead(bookId) }
                     }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
-                        Button(onClick = { onRead(bookId) }, modifier = Modifier.weight(1f)) { Text("开始阅读") }
-                        Button(onClick = viewModel::toggleShelf, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Default.LibraryAdd, null)
-                            Text(if (state.onShelf) "移出书架" else "加入书架")
-                        }
-                    }
-                    Button(onClick = viewModel::toggleFavorite, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Default.Favorite, null)
-                        Text(if (book.isFavorite == true) "取消收藏" else "收藏")
-                    }
-                    state.message?.let { Text(it, color = DesignTokens.Accent) }
-                    SoftCard {
-                        Text("内容简介", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(DesignTokens.Space8))
-                        Text(book.description?.ifBlank { "暂无简介" } ?: "暂无简介", color = DesignTokens.SoftText)
-                    }
-                    Spacer(Modifier.height(DesignTokens.Space24))
                 }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+                    DetailActionButton(Icons.AutoMirrored.Filled.MenuBook, if (state.onShelf) "已在书架" else "加入书架", state.onShelf, viewModel::toggleShelf)
+                    DetailActionButton(
+                        if (book.isFavorite == true) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        if (book.isFavorite == true) "已收藏" else "收藏",
+                        book.isFavorite == true,
+                        viewModel::toggleFavorite
+                    )
+                    DetailActionButton(Icons.Default.CloudDownload, "下载到本地") {
+                        localMessage = "后端书籍可在线阅读，本地下载任务将在下载管理中提供"
+                    }
+                }
+                Text(
+                    "☁ 收藏与阅读进度将同步到后端服务",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = DesignTokens.SoftText,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                (localMessage ?: state.message)?.let { Text(it, color = DesignTokens.Accent) }
+                DetailIntroduction(book.description?.ifBlank { "暂无简介" } ?: "暂无简介")
+                DetailInfoCard(
+                    items = listOf(
+                        DetailInfoItem("作者", book.author ?: "未知作者"),
+                        DetailInfoItem("来源", book.categoryName ?: "我的书库"),
+                        DetailInfoItem("字数 / 大小", book.fileSize?.let(::backendFileSizeLabel) ?: "未知"),
+                        DetailInfoItem("格式", book.format ?: "未知"),
+                        DetailInfoItem("最后阅读", state.progress?.lastReadAt ?: "尚未阅读")
+                    )
+                )
+                Spacer(Modifier.height(DesignTokens.Space24))
             }
         }
     }
+}
+
+private fun backendFileSizeLabel(bytes: Long): String = when {
+    bytes >= 1024L * 1024L -> String.format("%.1f MB", bytes / (1024f * 1024f))
+    bytes >= 1024L -> String.format("%.1f KB", bytes / 1024f)
+    else -> "$bytes B"
 }

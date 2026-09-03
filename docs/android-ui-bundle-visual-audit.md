@@ -11,9 +11,9 @@
 | 5 | 新建文件夹 | `bookshelf/folder/new` | 第二轮真机通过 |
 | 6 | 批量管理 | `bookshelf/batch` | 待真机复核 |
 | 7 | 排序筛选 | `bookshelf/sort-filter` | 第二轮真机通过 |
-| 8 | 书籍详情-本地 | `book/{bookId}` | 待真机复核 |
-| 9 | 书籍详情-OPDS | OPDS 书籍详情 | 待真机复核 |
-| 10 | 书籍详情-后端 | 后端书籍详情 | 待真机复核 |
+| 8 | 书籍详情-本地 | `book/{bookId}` | 已按原型重做，待亮屏截图复核 |
+| 9 | 书籍详情-OPDS | OPDS 书籍详情 | 已按原型重做，待配置数据与亮屏截图复核 |
+| 10 | 书籍详情-后端 | 后端书籍详情 | 已按原型重做，待配置后端与亮屏截图复核 |
 | 11 | 扫描本地书籍 | `bookstore/local/scan` | 第二轮已重做，待真机复核 |
 | 12 | 扫描目录管理 | `bookstore/local/scan-directories` | 第二轮真机通过 |
 | 13 | 扫描结果 | `bookstore/local/scan-result` | 第二轮已重做，待真机复核 |

@@ -22,6 +22,18 @@
 
 ## 变更记录
 
+### REQ-20260903-002 按原型重做 Android 书籍详情页
+
+- 需求时间：2026-09-03
+- 完成时间：2026-09-03
+- 状态：部分完成
+- 应用版本：`1.5.2`
+- 需求内容：修正 Android 书籍详情页面与 `codex-ui-bundle` 原型不一致的问题。
+- 完成情况：已同时重做本地、OPDS 与后端三类书籍详情页，统一顶部操作、封面信息区、主阅读按钮、书架/收藏/下载操作、简介和书籍信息卡的视觉层级；OPDS 补齐可用格式选择区，后端补齐阅读进度和同步提示；详情页恢复原型中的底部导航。真机已完成安装，但设备在截图阶段息屏且系统禁止 ADB 注入唤醒事件，因此视觉截图复核仍待亮屏后完成。
+- 开源调研：属于现有 Jetpack Compose 页面重构，继续使用 Material 3 和项目设计组件，无需新增依赖。
+- 主要改动：新增可复用 `BookDetailTopBar`、`DetailPrimaryButton`、`DetailActionButton`、`DetailIntroduction`、`DetailInfoCard` 与 `DetailTag`；本地详情保留编辑元数据、封面替换、文件重定位、来源版本和删除能力；OPDS 保留下载任务状态；后端详情读取服务端阅读进度并保持书架、收藏与在线阅读交互。
+- 验证结果：Android `:app:compileDebugKotlin` 已通过，Debug APK 已成功安装到 Android 15 真机。待手机亮屏后补充三类详情页截图结果，并执行完整单元测试与构建验证。
+
 ### REQ-20260903-001 严格按 Codex UI Bundle 补齐 Android 全页面结构
 
 - 需求时间：2026-09-02

@@ -118,7 +118,8 @@ fun AiBookApp(initialDebugRoute: String? = null) {
         Screen.NewShelfFolder.route,
         Screen.ShelfBatch.route,
         Screen.RecentReading.route,
-        Screen.ShelfSortFilter.route -> Screen.Shelf.route
+        Screen.ShelfSortFilter.route,
+        Screen.BookDetail.route -> Screen.Shelf.route
         Screen.StoreCategory.route,
         Screen.StoreSearch.route,
         Screen.StoreOpds.route,
@@ -132,7 +133,8 @@ fun AiBookApp(initialDebugRoute: String? = null) {
         Screen.BackendBookListDetail.route,
         Screen.NewBookList.route,
         Screen.EditBookList.route -> Screen.Store.route
-        Screen.StoreRemoteBookDetail.route -> Screen.Store.route
+        Screen.StoreRemoteBookDetail.route,
+        Screen.RemoteBookDetail.route -> Screen.Store.route
         Screen.OpdsAddSource.route -> Screen.Opds.route
         Screen.ImportBooks.route -> Screen.Opds.route
         Screen.ScanDirectories.route -> Screen.Settings.route
@@ -157,9 +159,12 @@ fun AiBookApp(initialDebugRoute: String? = null) {
         Screen.BackendFavorites.route,
         Screen.BackendBooklists.route,
         Screen.BackendBookListDetail.route,
+        Screen.StoreRemoteBookDetail.route,
+        Screen.RemoteBookDetail.route,
         Screen.ShelfFolders.route,
         Screen.ShelfFolderDetail.route,
-        Screen.ShelfList.route
+        Screen.ShelfList.route,
+        Screen.BookDetail.route
     )
     val showBottomBar = currentRoute in bottomBarRoutes
 

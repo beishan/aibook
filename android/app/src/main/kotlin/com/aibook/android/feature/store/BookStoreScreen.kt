@@ -1,6 +1,8 @@
 package com.aibook.android.feature.store
 
 import android.content.Context
+import android.content.Intent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.AddCircleOutline
@@ -41,6 +44,11 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
@@ -75,7 +83,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aibook.android.ui.design.BookCover
+import com.aibook.android.ui.design.BookDetailTopBar
 import com.aibook.android.ui.design.CoverSourceBadge
+import com.aibook.android.ui.design.DetailActionButton
+import com.aibook.android.ui.design.DetailInfoCard
+import com.aibook.android.ui.design.DetailInfoItem
+import com.aibook.android.ui.design.DetailIntroduction
+import com.aibook.android.ui.design.DetailPrimaryButton
+import com.aibook.android.ui.design.DetailTag
 import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
@@ -378,6 +393,11 @@ fun StoreRemoteBookDetailScreen(
 ) {
     val books by viewModel.books.collectAsState()
     val actionState by viewModel.actionState.collectAsState()
+    val context = LocalContext.current
+    var favorite by rememberSaveable(bookId) { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(false) }
+    var selectedFormat by rememberSaveable(bookId) { mutableIntStateOf(0) }
+    var detailMessage by remember { mutableStateOf<String?>(null) }
     val book = remember(books, bookId) {
         books.firstOrNull { it.id == bookId && it.kind == StoreItemKind.OPDS }
     }
@@ -387,21 +407,32 @@ fun StoreRemoteBookDetailScreen(
             .fillMaxSize()
             .background(DesignTokens.AppBackground)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+            .padding(horizontal = DesignTokens.PagePadding),
+        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-            }
-            Text(
-                "书籍详情",
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.ExtraBold
+        BookDetailTopBar(
+            title = "书籍详情 · OPDS",
+            favorite = favorite,
+            onBack = onBack,
+            onShare = {
+                val current = book ?: return@BookDetailTopBar
+                val text = listOf(current.title, current.author, current.acquisitionHref).filterNotNull().joinToString("\n")
+                context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, text)
+                }, "分享书籍"))
+            },
+            onFavorite = { favorite = !favorite; detailMessage = if (favorite) "已收藏" else "已取消收藏" },
+            onMore = { showMore = true }
+        )
+        DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+            DropdownMenuItem(
+                text = { Text("来源：${book?.sourceName ?: "OPDS"}") },
+                onClick = { showMore = false }
+            )
+            DropdownMenuItem(
+                text = { Text("刷新书籍信息") },
+                onClick = { showMore = false; detailMessage = "书籍信息来自最近一次 OPDS 同步" }
             )
         }
 
@@ -412,7 +443,7 @@ fun StoreRemoteBookDetailScreen(
             return@Column
         }
 
-        actionState.message?.let { message ->
+        (detailMessage ?: actionState.message)?.let { message ->
             SoftCard(color = Color.White) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -428,58 +459,84 @@ fun StoreRemoteBookDetailScreen(
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
-                            ) { viewModel.clearMessage() }
+                            ) { detailMessage = null; viewModel.clearMessage() }
                             .padding(horizontal = 8.dp, vertical = 6.dp)
                     )
                 }
             }
         }
 
-        SoftCard(color = Color.White) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
-                BookCover(
-                    title = book.title,
-                    width = 92.dp,
-                    height = 132.dp,
-                    brush = Brush.verticalGradient(listOf(titleColor(book.title), Color(0xFF1C1B18)))
-                )
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(book.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
-                    Text(book.author, color = DesignTokens.SoftText)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SourceBadge(book.sourceName)
-                        SourceBadge(book.format)
-                    }
-                    Text(
-                        if (book.isDownloaded) "已下载到本地书架" else "来自 OPDS 书城缓存",
-                        color = DesignTokens.Accent,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        SoftCard(color = Color.White) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("简介", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    book.summary?.takeIf { it.isNotBlank() } ?: "暂无简介",
-                    color = DesignTokens.SoftText,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
-
-        SoftCard(color = Color.White) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("分类", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16), modifier = Modifier.fillMaxWidth()) {
+            BookCover(
+                title = book.title,
+                width = 132.dp,
+                height = 204.dp,
+                imageUri = book.coverUri,
+                brush = Brush.verticalGradient(listOf(titleColor(book.title), Color(0xFF1C1B18)))
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                Text(book.title, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(book.author, style = MaterialTheme.typography.titleMedium)
+                DetailTag(book.sourceName)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(book.categories) { category ->
-                        StoreChip(label = category, selected = false, onClick = {})
+                    items(book.categories.take(3).ifEmpty { listOf("未分类") }) { DetailTag(it) }
+                }
+                Text(book.format.uppercase(), color = DesignTokens.SoftText, style = MaterialTheme.typography.bodyLarge)
+                DetailPrimaryButton(
+                    label = if (book.downloadedLocalId != null) "开始阅读" else "下载后阅读",
+                    onClick = {
+                        book.downloadedLocalId?.let(onOpenLocalBook) ?: viewModel.downloadRemoteBook(book)
+                    }
+                )
+            }
+        }
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+            DetailActionButton(Icons.Default.Download, if (book.isDownloaded) "已下载" else "下载", book.isDownloaded) {
+                book.downloadedLocalId?.let(onOpenLocalBook) ?: viewModel.downloadRemoteBook(book)
+            }
+            DetailActionButton(Icons.AutoMirrored.Filled.MenuBook, if (book.isDownloaded) "已在书架" else "加入书架", book.isDownloaded) {
+                book.downloadedLocalId?.let(onOpenLocalBook) ?: viewModel.downloadRemoteBook(book)
+            }
+            DetailActionButton(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, if (favorite) "已收藏" else "收藏", favorite) {
+                favorite = !favorite
+                detailMessage = if (favorite) "已收藏" else "已取消收藏"
+            }
+        }
+
+        val formats = book.format.split('/', ',', '，', ';').map(String::trim).filter(String::isNotBlank).ifEmpty { listOf("EPUB") }
+        SoftCard(color = DesignTokens.CardBackground) {
+            Text("可用格式", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            LazyRow(Modifier.padding(top = DesignTokens.Space12), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                items(formats.indices.toList()) { index ->
+                    val format = formats[index].uppercase()
+                    Surface(
+                        modifier = Modifier.width(112.dp).height(116.dp),
+                        shape = RoundedCornerShape(DesignTokens.RadiusMedium),
+                        color = DesignTokens.CardBackground,
+                        border = BorderStroke(1.dp, if (selectedFormat == index) DesignTokens.Accent else DesignTokens.Hairline),
+                        onClick = { selectedFormat = index }
+                    ) {
+                        Column(Modifier.padding(DesignTokens.Space12), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+                            Text(if (selectedFormat == index) "●" else "○", color = if (selectedFormat == index) DesignTokens.Accent else DesignTokens.SoftText)
+                            Text(format, fontWeight = FontWeight.Bold)
+                            Text(formatDescription(format), color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }
         }
+
+        DetailIntroduction(book.summary?.takeIf(String::isNotBlank) ?: "暂无简介", card = true)
+
+        DetailInfoCard(
+            items = listOf(
+                DetailInfoItem("来源", book.sourceName),
+                DetailInfoItem("地址", book.acquisitionHref ?: "由 OPDS 服务提供"),
+                DetailInfoItem("格式", formats.getOrElse(selectedFormat) { formats.first() }.uppercase()),
+                DetailInfoItem("语言", "未知")
+            )
+        )
 
         val task = actionState.downloadTasks[book.id]
         val downloading = task?.status in setOf(DownloadStatus.QUEUED, DownloadStatus.RUNNING)
@@ -503,38 +560,16 @@ fun StoreRemoteBookDetailScreen(
                 }
             }
         }
-        Text(
-            when {
-                book.downloadedLocalId != null -> "打开本地书籍"
-                task?.status == DownloadStatus.PAUSED -> "继续下载"
-                task?.status == DownloadStatus.FAILED -> "重新下载"
-                downloading -> "下载中 ${task?.progress ?: 0}%"
-                else -> "下载到书架"
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(DesignTokens.Accent, RoundedCornerShape(18.dp))
-                .clickable(
-                    enabled = !downloading,
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    val localId = book.downloadedLocalId
-                    if (localId != null) {
-                        onOpenLocalBook(localId)
-                    } else when (task?.status) {
-                        DownloadStatus.PAUSED -> viewModel.resumeDownload(book.id)
-                        DownloadStatus.FAILED -> viewModel.retryDownload(book.id)
-                        else -> viewModel.downloadRemoteBook(book)
-                    }
-                }
-                .padding(vertical = 15.dp),
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            style = MaterialTheme.typography.titleMedium
-        )
+        Spacer(Modifier.height(DesignTokens.Space24))
     }
+}
+
+private fun formatDescription(format: String): String = when (format.uppercase()) {
+    "EPUB" -> "电子书格式"
+    "MOBI", "AZW3" -> "Kindle 格式"
+    "PDF" -> "便携式文档"
+    "TXT" -> "纯文本格式"
+    else -> "可用电子书格式"
 }
 
 @Composable
