@@ -2,6 +2,8 @@ package com.aibook.android.feature.server
 
 import android.app.Application
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,9 +19,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -37,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -139,13 +146,12 @@ fun BookListEditorScreen(
 
     DesignPage(
         title = if (listId == null) "新建书单" else "编辑书单",
+        centerTitle = true,
         modifier = Modifier.fillMaxSize(),
         navigation = {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "返回",
-                modifier = Modifier.clickable(onClick = onBack)
-            )
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            }
         }
     ) {
         Column(
@@ -156,7 +162,7 @@ fun BookListEditorScreen(
                 Text("✦ 创建你的专属书单，收藏心仪的小说", modifier = Modifier.fillMaxWidth(), color = DesignTokens.Accent, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
             SoftCard {
-                Text(if (listId == null) "书单名称" else "基本信息", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                EditorFieldLabel(Icons.AutoMirrored.Filled.MenuBook, if (listId == null) "书单名称" else "基本信息")
                 Spacer(Modifier.height(DesignTokens.Space12))
                 OutlinedTextField(
                     value = state.name.take(20),
@@ -168,6 +174,8 @@ fun BookListEditorScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(DesignTokens.Space12))
+                EditorFieldLabel(Icons.Default.Edit, "描述")
+                Spacer(Modifier.height(DesignTokens.Space8))
                 OutlinedTextField(
                     value = state.description.take(200),
                     onValueChange = { viewModel.setDescription(it.take(200)) },
@@ -177,8 +185,17 @@ fun BookListEditorScreen(
                     minLines = 4,
                     modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(Modifier.height(DesignTokens.Space16))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                    EditorFieldLabel(Icons.Default.Image, "封面")
+                    Text(
+                        "✦ AI 自动生成",
+                        modifier = Modifier.background(DesignTokens.WarmCard, RoundedCornerShape(DesignTokens.RadiusLarge)).padding(horizontal = 12.dp, vertical = 6.dp),
+                        color = DesignTokens.Accent,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
                 Spacer(Modifier.height(DesignTokens.Space12))
-                Text("封面", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 BooklistCoverPlaceholder()
                 if (listId == null) {
                     Spacer(Modifier.height(DesignTokens.Space16))
@@ -230,18 +247,28 @@ fun BookListEditorScreen(
 
 @Composable
 private fun BooklistCoverPlaceholder() {
-    Column(
-        Modifier.fillMaxWidth().height(210.dp).background(DesignTokens.WarmCard, RoundedCornerShape(DesignTokens.CardRadius)).padding(3.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        repeat(2) { row ->
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                repeat(2) { column ->
-                    val colors = if ((row + column) % 2 == 0) listOf(Color(0xFF617A87), Color(0xFF263640)) else listOf(Color(0xFFC99461), Color(0xFF74452C))
-                    Spacer(Modifier.weight(1f).height(104.dp).background(Brush.verticalGradient(colors), RoundedCornerShape(DesignTokens.RadiusSmall)))
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.fillMaxWidth(0.58f).aspectRatio(1f).background(DesignTokens.WarmCard, RoundedCornerShape(DesignTokens.CardRadius)).padding(3.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            repeat(2) { row ->
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    repeat(2) { column ->
+                        val colors = if ((row + column) % 2 == 0) listOf(Color(0xFF617A87), Color(0xFF263640)) else listOf(Color(0xFFC99461), Color(0xFF74452C))
+                        Spacer(Modifier.weight(1f).fillMaxSize().background(Brush.verticalGradient(colors), RoundedCornerShape(DesignTokens.RadiusSmall)))
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun EditorFieldLabel(icon: ImageVector, title: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+        Icon(icon, contentDescription = null, tint = DesignTokens.Accent)
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     }
 }
 

@@ -25,11 +25,11 @@
 | 19 | OPDS 分类书籍 | `bookstore/opds/{serviceId}/category/{categoryId}` | 第四轮改为动态分类标题，待 OPDS 数据复核 |
 | 20 | 添加 OPDS 服务 | `bookstore/opds/add` | 第二轮真机通过 |
 | 21 | 后端服务首页 | `bookstore/backend` | 空状态真机通过，待有数据状态 |
-| 22 | 最近加入列表 | `bookstore/backend/recent` | 第二轮已重做，待真机复核 |
+| 22 | 最近加入列表 | `bookstore/backend/recent` | 第六轮未登录错误态真机通过，待后端数据复核 |
 | 23 | 收藏列表 | `bookstore/backend/favorites` | 第二轮已重做，待真机复核 |
 | 24 | 书单列表 | `bookstore/backend/booklists` | 第二轮已重做，待真机复核 |
 | 25 | 书单详情 | `bookstore/backend/booklist/{booklistId}` | 第二轮已重做，待真机复核 |
-| 26 | 新建书单 | `bookstore/backend/booklist/new` | 第二轮已重做，待真机复核 |
+| 26 | 新建书单 | `bookstore/backend/booklist/new` | 第六轮按原型重做并真机通过 |
 | 27 | 编辑书单 | `bookstore/backend/booklist/{booklistId}/edit` | 第二轮已重做，待真机复核 |
 | 28 | 搜索页 | `search` | 第二轮真机通过 |
 | 29 | 搜索结果页 | `search?query={query}` | 已接入本地/OPDS/后端，待后端数据复验 |
