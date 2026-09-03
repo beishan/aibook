@@ -4,7 +4,7 @@
     "全部",
     "本地",
     "OPDS",
-    "后端"
+    "云端"
   ],
   "behavior": "singleSelect"
 }

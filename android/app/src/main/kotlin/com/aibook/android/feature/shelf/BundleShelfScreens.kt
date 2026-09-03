@@ -399,7 +399,7 @@ fun BookSourcesScreen(
             SourceVersion("opds:${it.id}", it.sourceName, it.format, "OPDS · 可下载", null)
         }
         val backend = backendBooks.map {
-            SourceVersion("backend:${it.id}", "我的书库", it.format ?: "在线", "后端服务 · 在线阅读", locator.serverRepository.resolveCoverUrl(it.coverUrl))
+            SourceVersion("backend:${it.id}", "云端书库", it.format ?: "在线", "云端 · 在线阅读", locator.serverRepository.resolveCoverUrl(it.coverUrl))
         }
         (local + opds + backend).distinctBy { it.id }
     }.orEmpty()

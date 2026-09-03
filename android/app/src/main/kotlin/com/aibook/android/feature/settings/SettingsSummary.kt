@@ -6,8 +6,8 @@ object SettingsSummary {
         isLoggedIn: Boolean,
         username: String?
     ): String {
-        if (serverUrl.isBlank()) return "未配置服务器"
-        if (!isLoggedIn) return "已配置服务器，未登录"
+        if (serverUrl.isBlank()) return "未配置云端"
+        if (!isLoggedIn) return "云端已配置，未登录"
         return "已登录：${username?.takeIf { it.isNotBlank() } ?: "当前用户"}"
     }
 

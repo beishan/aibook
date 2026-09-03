@@ -185,7 +185,7 @@ fun SettingsScreen(
             SoftCard {
                 SettingsLine(
                     Icons.Default.CloudSync,
-                    "服务器与同步",
+                    "云端与同步",
                     SettingsSummary.connectionSubtitle(
                         serverUrl = state.serverUrl,
                         isLoggedIn = state.isLoggedIn,
@@ -851,7 +851,7 @@ fun SyncConnectionSettingsScreen(
         }
     }
 
-    SettingsSubPage(title = "服务器与同步", subtitle = "配置私有书库服务器、登录状态与同步规则", onBack = onBack) {
+    SettingsSubPage(title = "云端与同步", subtitle = "配置私有云端、登录状态与同步规则", onBack = onBack) {
         SoftCard {
             DetailLine(
                 Icons.Default.CloudSync,
@@ -866,14 +866,14 @@ fun SyncConnectionSettingsScreen(
             )
         }
 
-        SectionLabel("服务器")
+        SectionLabel("云端服务")
         SoftCard {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
                     value = state.serverUrlInput,
                     onValueChange = viewModel::updateServerUrlInput,
-                    label = { Text("服务器地址") },
+                    label = { Text("云端服务地址") },
                     placeholder = { Text("http://192.168.1.10:8080") },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp)
@@ -884,7 +884,7 @@ fun SyncConnectionSettingsScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Text("保存服务器地址", fontWeight = FontWeight.Bold)
+                    Text("保存云端地址", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -938,7 +938,7 @@ fun SyncConnectionSettingsScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Text(if (state.isLoggingIn) "登录中..." else "登录服务器", fontWeight = FontWeight.Bold)
+                        Text(if (state.isLoggingIn) "登录中..." else "登录云端", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1075,7 +1075,7 @@ fun PrivacyPermissionsScreen(
         AlertDialog(
             onDismissRequest = { showDeleteData = false },
             title = { Text("删除全部本机数据？", fontWeight = FontWeight.Bold) },
-            text = { Text("此操作不可撤销，将删除本机书籍文件、阅读进度、标签、评分、封面及登录信息。服务器端数据不会被自动删除。") },
+            text = { Text("此操作不可撤销，将删除本机书籍文件、阅读进度、标签、评分、封面及登录信息。云端数据不会被自动删除。") },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteData = false
@@ -1461,10 +1461,10 @@ private fun readLicenseNotices(context: Context): String {
     }
 }
 
-private const val PRIVACY_POLICY = """汗牛充栋是一款本地优先的私有书库应用。书籍文件、阅读进度、标签和评分默认仅保存在本机；只有在您主动配置私有服务器并执行同步时，相关数据才会发送到该服务器。应用不集成广告 SDK，不出售个人信息。文件导入通过 Android 系统选择器完成，应用只能访问您明确选择的文件或目录。您可以随时导出或删除本机数据。"""
+private const val PRIVACY_POLICY = """汗牛充栋是一款本地优先的私有书库应用。书籍文件、阅读进度、标签和评分默认仅保存在本机；只有在您主动配置私有云端并执行同步时，相关数据才会发送到该云端服务。应用不集成广告 SDK，不出售个人信息。文件导入通过 Android 系统选择器完成，应用只能访问您明确选择的文件或目录。您可以随时导出或删除本机数据。"""
 
-private const val USER_AGREEMENT = """您应仅导入、下载和阅读自己有权使用的内容。应用按现状提供，本地文件删除、服务器配置和同步操作由用户确认后执行。请在永久删除前自行备份重要书籍与阅读数据。"""
+private const val USER_AGREEMENT = """您应仅导入、下载和阅读自己有权使用的内容。应用按现状提供，本地文件删除、云端配置和同步操作由用户确认后执行。请在永久删除前自行备份重要书籍与阅读数据。"""
 
-private const val THIRD_PARTY_NOTICE = """本版本未集成广告、用户画像或第三方统计 SDK。网络访问仅用于用户配置的私有服务器、OPDS 数据源以及主动执行的 GitHub 版本检查。开源组件的许可证可在“开源许可证”中查看。"""
+private const val THIRD_PARTY_NOTICE = """本版本未集成广告、用户画像或第三方统计 SDK。网络访问仅用于用户配置的私有云端、OPDS 数据源以及主动执行的 GitHub 版本检查。开源组件的许可证可在“开源许可证”中查看。"""
 
-private const val PERSONAL_DATA_NOTICE = """本机可能保存：书籍文件及封面、书名和作者等元数据、个人标签与评分、阅读进度、书签和批注、扫描目录授权、OPDS 连接配置以及私有服务器登录令牌。上述数据可通过隐私页面导出或删除。"""
+private const val PERSONAL_DATA_NOTICE = """本机可能保存：书籍文件及封面、书名和作者等元数据、个人标签与评分、阅读进度、书签和批注、扫描目录授权、OPDS 连接配置以及私有云端登录令牌。上述数据可通过隐私页面导出或删除。"""

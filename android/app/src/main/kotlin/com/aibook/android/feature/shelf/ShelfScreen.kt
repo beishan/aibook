@@ -235,7 +235,7 @@ fun ShelfScreen(
             if (!state.managementMode) {
                 item {
                     SlidingSegmentedControl(
-                        options = listOf("全部", "本地", "OPDS", "后端"),
+                        options = listOf("全部", "本地", "OPDS", "云端"),
                         selectedIndex = sourceFilter,
                         onSelected = { sourceFilter = it }
                     )
@@ -612,7 +612,7 @@ private fun ShelfCoverListItem(
                 Text(book.progress.chapterTitle ?: book.progress.positionLabel ?: "尚未开始阅读", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ShelfMetadataBadge(when { book.isServerBook() -> "后端"; book.isOpdsSource() -> "OPDS"; else -> "本地" })
+                ShelfMetadataBadge(when { book.isServerBook() -> "云端"; book.isOpdsSource() -> "OPDS"; else -> "本地" })
                 Text("${(book.progress.percent * 100).toInt()}%", color = DesignTokens.Accent, style = MaterialTheme.typography.titleMedium)
                 Icon(Icons.Default.MoreVert, contentDescription = "更多", tint = DesignTokens.SoftText, modifier = Modifier.size(20.dp))
             }

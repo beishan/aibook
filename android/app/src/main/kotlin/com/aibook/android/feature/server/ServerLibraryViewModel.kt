@@ -50,7 +50,7 @@ class ServerLibraryViewModel(
             _uiState.update { it.copy(isLoggedIn = loggedIn) }
             if (loggedIn) onLoggedIn() else {
                 _uiState.update {
-                    it.copy(isLoading = false, errorMessage = "请先在设置中连接并登录后端服务")
+                    it.copy(isLoading = false, errorMessage = "请先在设置中连接并登录云端")
                 }
             }
         }
@@ -66,7 +66,7 @@ class ServerLibraryViewModel(
             val loggedIn = serverRepository.isLoggedIn.first()
             if (!loggedIn) {
                 _uiState.update {
-                    it.copy(isLoggedIn = false, isLoading = false, errorMessage = "请先在设置中连接并登录后端服务")
+                    it.copy(isLoggedIn = false, isLoading = false, errorMessage = "请先在设置中连接并登录云端")
                 }
                 return@launch
             }
@@ -149,7 +149,7 @@ class ServerLibraryViewModel(
             }
             result.onSuccess {
                 _uiState.update { state ->
-                    state.copy(actionMessage = if (alreadyOnShelf) "已移出服务端书架" else "已加入服务端书架")
+                    state.copy(actionMessage = if (alreadyOnShelf) "已移出云端书架" else "已加入云端书架")
                 }
                 refresh()
             }.onFailure(::showActionError)

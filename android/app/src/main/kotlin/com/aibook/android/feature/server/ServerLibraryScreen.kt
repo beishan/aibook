@@ -71,7 +71,7 @@ fun ServerLibraryScreen(
         title = when {
             initialSection == ServerLibrarySection.SHELF -> "书架"
             !overviewMode -> initialSection.label
-            else -> "我的书库"
+            else -> "云端书库"
         },
         modifier = Modifier.fillMaxSize(),
         navigation = {
@@ -91,9 +91,9 @@ fun ServerLibraryScreen(
         if (onBack == null && !overviewMode) {
             SlidingSegmentedControl(
                 options = if (initialSection == ServerLibrarySection.SHELF) {
-                    listOf("本地书架", "服务端书架")
+                    listOf("本地书架", "云端书架")
                 } else {
-                    listOf("本地", "OPDS", "远程")
+                    listOf("本地", "OPDS", "云端")
                 },
                 selectedIndex = if (initialSection == ServerLibrarySection.SHELF) 1 else 2,
                 onSelected = { index ->

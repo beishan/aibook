@@ -201,7 +201,7 @@ fun BookListEditorScreen(
                     Spacer(Modifier.height(DesignTokens.Space16))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("同步到后端服务", fontWeight = FontWeight.Bold)
+                            Text("同步到云端", fontWeight = FontWeight.Bold)
                             Text("创建后支持多设备访问", color = DesignTokens.SoftText)
                         }
                         Switch(checked = syncToServer, onCheckedChange = { syncToServer = it })

@@ -302,7 +302,7 @@ private fun BookDTO.asCollectionBook(cover: String?, onShelf: Boolean) = Collect
     title = title,
     author = author ?: "未知作者",
     coverUri = cover,
-    source = BookSource(BookSourceType.BACKEND, id?.toString(), "后端"),
+    source = BookSource(BookSourceType.BACKEND, id?.toString(), "云端"),
     inShelf = onShelf,
     favorite = isFavorite == true
 )
@@ -403,7 +403,7 @@ fun BackendBookDetailScreen(
         )
         DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
             DropdownMenuItem(text = { Text("刷新书籍信息") }, onClick = { showMore = false; viewModel.load(bookId) })
-            DropdownMenuItem(text = { Text("后端书籍 ID：$bookId") }, onClick = { showMore = false })
+            DropdownMenuItem(text = { Text("云端书籍 ID：$bookId") }, onClick = { showMore = false })
         }
         when {
             state.loading -> BookCollectionScreen(BookCollectionState.Loading, onBookClick = {})
@@ -444,11 +444,11 @@ fun BackendBookDetailScreen(
                         viewModel::toggleFavorite
                     )
                     DetailActionButton(Icons.Default.CloudDownload, "下载到本地") {
-                        localMessage = "后端书籍可在线阅读，本地下载任务将在下载管理中提供"
+                        localMessage = "云端书籍可在线阅读，本地下载任务将在下载管理中提供"
                     }
                 }
                 Text(
-                    "☁ 收藏与阅读进度将同步到后端服务",
+                    "☁ 收藏与阅读进度将同步到云端",
                     modifier = Modifier.fillMaxWidth(),
                     color = DesignTokens.SoftText,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center

@@ -13,7 +13,7 @@
 | 7 | 排序筛选 | `bookshelf/sort-filter` | 第二轮真机通过 |
 | 8 | 书籍详情-本地 | `book/{bookId}` | 已按原型重做，待亮屏截图复核 |
 | 9 | 书籍详情-OPDS | OPDS 书籍详情 | 已按原型重做，待配置数据与亮屏截图复核 |
-| 10 | 书籍详情-后端 | 后端书籍详情 | 已按原型重做，待配置后端与亮屏截图复核 |
+| 10 | 书籍详情-云端 | 云端书籍详情 | 已按原型重做，待配置云端与亮屏截图复核 |
 | 11 | 扫描本地书籍 | `bookstore/local/scan` | 第四轮真实扫描真机通过 |
 | 12 | 扫描目录管理 | `bookstore/local/scan-directories` | 第二轮真机通过 |
 | 13 | 扫描结果 | `bookstore/local/scan-result` | 第四轮真实扫描真机通过 |
@@ -24,7 +24,7 @@
 | 18 | OPDS 分类 | `bookstore/opds/{serviceId}/categories` | 第四轮修正独立分类结构，待 OPDS 数据复核 |
 | 19 | OPDS 分类书籍 | `bookstore/opds/{serviceId}/category/{categoryId}` | 第四轮改为动态分类标题，待 OPDS 数据复核 |
 | 20 | 添加 OPDS 服务 | `bookstore/opds/add` | 第二轮真机通过 |
-| 21 | 后端服务首页 | `bookstore/backend` | 空状态真机通过，待有数据状态 |
+| 21 | 云端书库首页 | `bookstore/backend` | 空状态真机通过，待有数据状态 |
 | 22 | 最近加入列表 | `bookstore/backend/recent` | 第六轮未登录错误态真机通过，待后端数据复核 |
 | 23 | 收藏列表 | `bookstore/backend/favorites` | 第二轮已重做，待真机复核 |
 | 24 | 书单列表 | `bookstore/backend/booklists` | 第二轮已重做，待真机复核 |

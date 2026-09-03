@@ -128,7 +128,7 @@ class ServerRepository(
                     temporary.outputStream().buffered().use { output -> input.copyTo(output) }
                 }
             }
-            check(temporary.length() > 0L) { "服务端返回了空文件" }
+            check(temporary.length() > 0L) { "云端返回了空文件" }
             Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
         } finally {
             if (temporary.exists()) temporary.delete()

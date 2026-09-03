@@ -3,7 +3,7 @@
   "route": "bookstore/backend",
   "bottomTab": "书城",
   "appBar": {
-    "title": "我的书库",
+    "title": "云端书库",
     "actions": [
       "search",
       "more"

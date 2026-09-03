@@ -184,7 +184,7 @@ fun BookCover(
 fun SourceBadge(text: String, source: String = text) {
     val color = when {
         source.equals("OPDS", ignoreCase = true) -> DesignTokens.OpdsGreen
-        source.equals("后端", ignoreCase = true) || source.equals("远程", ignoreCase = true) -> DesignTokens.Warning
+        source.equals("云端", ignoreCase = true) || source.equals("后端", ignoreCase = true) || source.equals("远程", ignoreCase = true) -> DesignTokens.Warning
         else -> DesignTokens.Accent
     }
     Surface(

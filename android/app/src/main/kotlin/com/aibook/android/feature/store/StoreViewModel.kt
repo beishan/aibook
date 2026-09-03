@@ -174,7 +174,7 @@ class StoreViewModel(
                     _backendSearchState.value = BackendSearchState(
                         shelfBookIds = shelfIds,
                         isLoading = false,
-                        errorMessage = error.message ?: "后端搜索失败"
+                        errorMessage = error.message ?: "云端搜索失败"
                     )
                 }
             )
@@ -193,7 +193,7 @@ class StoreViewModel(
                     )
                 }
             }.onFailure { error ->
-                _actionState.update { it.copy(message = error.message ?: "更新后端书架失败") }
+                _actionState.update { it.copy(message = error.message ?: "更新云端书架失败") }
             }
         }
     }

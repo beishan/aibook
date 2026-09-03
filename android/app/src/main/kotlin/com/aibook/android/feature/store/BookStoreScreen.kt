@@ -198,7 +198,7 @@ fun BookStoreScreen(
             verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
         ) {
             SlidingSegmentedControl(
-                options = listOf("本地书籍", "OPDS", "后端服务"),
+                options = listOf("本地书籍", "OPDS", "云端"),
                 selectedIndex = sourceIndex,
                 onSelected = {
                     when (it) {
@@ -921,7 +921,7 @@ fun StoreSearchScreen(
             )
         }
         SlidingSegmentedControl(
-            options = listOf("全部", "本地", "OPDS", "后端"),
+            options = listOf("全部", "本地", "OPDS", "云端"),
             selectedIndex = sourceIndex,
             onSelected = { sourceIndex = it }
         )
@@ -997,7 +997,7 @@ private fun BackendSearchCard(
 ) {
     SoftCard(contentPadding = DesignTokens.Space16) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("后端书库", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("云端书库", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text("${books.size} 个结果", color = DesignTokens.SoftText)
         }
         books.forEach { book ->
@@ -1010,7 +1010,7 @@ private fun BackendSearchCard(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space4)) {
                     Text(book.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                     Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1)
-                    SourceBadge("后端 · ${book.format ?: "在线"}")
+                    SourceBadge("云端 · ${book.format ?: "在线"}", source = "云端")
                 }
                 Button(
                     onClick = { onToggleShelf(book) },
