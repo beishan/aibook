@@ -76,6 +76,7 @@ import com.aibook.android.core.model.ShelfFolderSelection
 import com.aibook.android.core.model.ShelfSortOption
 import com.aibook.android.core.network.api.dto.BookDTO
 import com.aibook.android.feature.server.CloudMockData
+import com.aibook.android.feature.server.CloudMockNotice
 import com.aibook.android.di.ServiceLocator
 import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignTokens
@@ -385,8 +386,16 @@ fun BookSourcesScreen(
     val locator = remember { ServiceLocator.get(context.applicationContext as android.app.Application) }
     val opdsEntries by locator.opdsCatalogCacheRepository.observeEntries().collectAsStateWithLifecycle(initialValue = emptyList())
     val current = state.books.firstOrNull { it.id == bookId }
-    val backendBooks by androidx.compose.runtime.produceState<List<BookDTO>>(emptyList(), current?.title) {
-        value = current?.title?.let { title ->
+    val mockCurrent = remember(bookId) {
+        bookId.removePrefix("backend:").toLongOrNull()?.let(CloudMockData::book)
+    }
+    val displayTitle = current?.title ?: mockCurrent?.title
+    val displayAuthor = current?.author ?: mockCurrent?.author
+    val displayCover = current?.coverUri ?: mockCurrent?.coverUrl
+    val displayTags = current?.tags.orEmpty().ifEmpty { mockCurrent?.tagNames.orEmpty() }
+    val displayFormat = current?.format?.displayName ?: mockCurrent?.format.orEmpty()
+    val backendBooks by androidx.compose.runtime.produceState<List<BookDTO>>(emptyList(), displayTitle) {
+        value = displayTitle?.let { title ->
             if (CloudMockData.enabled) {
                 CloudMockData.search(title).filter { it.title.equals(title, ignoreCase = true) }
             } else {
@@ -396,11 +405,11 @@ fun BookSourcesScreen(
             }
         }.orEmpty()
     }
-    val versions = current?.let { book ->
-        val local = state.books.filter { it.title.equals(book.title, true) }.map {
+    val versions = displayTitle?.let { title ->
+        val local = state.books.filter { it.title.equals(title, true) }.map {
             SourceVersion(it.id, "本地文件", it.format.displayName, "可离线阅读", it.coverUri)
         }
-        val opds = opdsEntries.filter { it.title.equals(book.title, true) }.map {
+        val opds = opdsEntries.filter { it.title.equals(title, true) }.map {
             SourceVersion("opds:${it.id}", it.sourceName, it.format, "OPDS · 可下载", null)
         }
         val backend = backendBooks.map {
@@ -408,21 +417,26 @@ fun BookSourcesScreen(
         }
         (local + opds + backend).distinctBy { it.id }
     }.orEmpty()
-    var selectedId by remember(bookId) { mutableStateOf(bookId) }
+    var selectedId by remember(bookId, mockCurrent?.id) {
+        mutableStateOf(mockCurrent?.id?.let { "backend:$it" } ?: bookId)
+    }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = DesignTokens.PagePadding)) {
         Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
             Text("可用版本 / 来源", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.size(48.dp))
         }
-        current?.let {
+        if (mockCurrent != null) {
+            CloudMockNotice()
+        }
+        if (displayTitle != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space24), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = DesignTokens.Space24)) {
-                BookCover(it.title, width = 108.dp, height = 154.dp, imageUri = it.coverUri)
+                BookCover(displayTitle, width = 108.dp, height = 154.dp, imageUri = displayCover)
                 Column(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
-                    Text(it.title, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-                    Text(it.author ?: "未知作者", color = DesignTokens.SoftText, style = MaterialTheme.typography.titleMedium)
+                    Text(displayTitle, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                    Text(displayAuthor ?: "未知作者", color = DesignTokens.SoftText, style = MaterialTheme.typography.titleMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
-                        it.tags.take(2).ifEmpty { listOf(it.format.displayName) }.forEach { tag ->
+                        displayTags.take(2).ifEmpty { listOf(displayFormat) }.filter { it.isNotBlank() }.forEach { tag ->
                             Text(tag, modifier = Modifier.background(DesignTokens.WarmCard, RoundedCornerShape(DesignTokens.RadiusLarge)).padding(horizontal = 12.dp, vertical = 7.dp), color = DesignTokens.Accent)
                         }
                     }

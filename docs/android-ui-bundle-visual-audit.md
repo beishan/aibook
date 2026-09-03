@@ -33,8 +33,8 @@
 | 27 | 编辑书单 | `bookstore/backend/booklist/{booklistId}/edit` | Mock 数据状态真机通过 |
 | 28 | 搜索页 | `search` | 第二轮真机通过 |
 | 29 | 搜索结果页 | `search?query={query}` | 已接入本地/OPDS/云端，云端暂使用 Mock 数据 |
-| 30 | 多来源版本选择 | `book/{bookId}/sources` | 第五轮按原型重做，待多来源数据复核 |
-| 31 | 多来源版本选择-重制稿 | `book/{bookId}/sources` | 第五轮按重制稿统一，待多来源数据复核 |
+| 30 | 多来源版本选择 | `book/{bookId}/sources` | 云端 Mock 主书状态真机通过，待本地/OPDS 同名聚合复核 |
+| 31 | 多来源版本选择-重制稿 | `book/{bookId}/sources` | 云端 Mock 主书状态真机通过，待本地/OPDS 同名聚合复核 |
 | 32 | 热门搜索-重制稿 | `search` | 第二轮真机通过 |
 | 33 | 搜索页-重制稿 | `search` | 第二轮真机通过 |
 | 34 | 下载管理 | `downloads` | 空状态真机通过，待下载中状态 |
