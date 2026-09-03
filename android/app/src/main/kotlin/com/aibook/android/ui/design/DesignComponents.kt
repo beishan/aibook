@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
 
 @Composable
@@ -122,6 +123,11 @@ fun BookCover(
     placeholderMaxLines: Int = 3,
     placeholderTextStyle: TextStyle? = null
 ) {
+    val context = LocalContext.current
+    val configuredRadius = context.getSharedPreferences("appearance_settings", android.content.Context.MODE_PRIVATE)
+        .getFloat("cover_radius", DesignTokens.RadiusSmall.value)
+        .coerceIn(0f, DesignTokens.RadiusLarge.value)
+        .dp
     val sizeModifier = if (width != null) Modifier.size(width, height) else Modifier.fillMaxWidth().height(height)
 
     if (!imageUri.isNullOrBlank()) {
@@ -131,8 +137,8 @@ fun BookCover(
             contentScale = ContentScale.Crop,
             modifier = modifier
                 .then(sizeModifier)
-                .clip(RoundedCornerShape(DesignTokens.RadiusSmall))
-                .background(brush, RoundedCornerShape(DesignTokens.RadiusSmall))
+                .clip(RoundedCornerShape(configuredRadius))
+                .background(brush, RoundedCornerShape(configuredRadius))
         )
         return
     }
@@ -140,7 +146,7 @@ fun BookCover(
     Box(
         modifier = modifier
             .then(sizeModifier)
-            .background(brush, RoundedCornerShape(DesignTokens.RadiusSmall))
+            .background(brush, RoundedCornerShape(configuredRadius))
             .padding(10.dp),
         contentAlignment = Alignment.Center
     ) {

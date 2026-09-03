@@ -22,6 +22,18 @@
 
 ## 变更记录
 
+### REQ-20260903-001 严格按 Codex UI Bundle 补齐 Android 全页面结构
+
+- 需求时间：2026-09-02
+- 完成时间：2026-09-03
+- 状态：已完成
+- 应用版本：`1.5.0`
+- 需求内容：以 `android/codex-ui-bundle/README.md` 为唯一 UI 根规范，按设计 Token、页面矩阵、组件规格和视觉索引开发 Android 全部页面。
+- 完成情况：已将书架、书城、发现、OPDS、后端书库、搜索、扫描、下载、阅读记录和设置体系对齐 UI Bundle 的页面层级；原先合并在单页内的后端最近加入、收藏、书单、书单详情和 OPDS 分类浏览现已拆为独立路由；保留真实 Room、OPDS、后端与下载数据链路。
+- 开源调研：设计包指定的 Jetpack Compose、Material 3、Navigation Compose、StateFlow、Room、Retrofit、Coil 与 WorkManager 均为项目既有依赖；本轮无需新增第三方库。
+- 主要改动：建立统一 `BookSource`、`CollectionBook` 和 `BookCollectionState` UI 模型，新增可复用 `BookCollectionScreen`、`BookGrid`、`BookListItem`；路由名称严格对齐 screen matrix；新增后端书籍详情及书单二级页、本地扫描进度与结果页、阅读设置页；搜索页增加全部/本地/OPDS/后端滑块及最近/热门搜索区；主题页补齐主题模式、主题色、应用图标、显示设置和书架封面圆角，并让精简信息及圆角设置作用于书架；OPDS 网络页面覆盖加载、空内容、错误重试状态。
+- 验证结果：Android `:app:compileDebugKotlin`、69 项 `:app:testDebugUnitTest`、`:core:data:testDebugUnitTest` 及 `:app:assembleDebug` 均通过；新增 UI Bundle 核心路由稳定性和外部标识编码测试。`1.5.0` 已安装到 Android 15 真机 `2203121C`，包管理器确认版本代码 `10500`、版本名 `1.5.0`；启动截图确认书架暖色主题、来源滑块、继续阅读、文件夹、集合视图和底部导航正常显示。设备系统仍拒绝 ADB 注入点击，因此其余页面完成构建与逻辑验证，未逐页自动截图。使用 JDK 21 与 `ANDROID_HOME=/Users/beibei/Library/Android/sdk` 验证，项目 `local.properties` 的旧 SDK 路径警告由环境变量覆盖。
+
 ### REQ-20260902-004 按参考图重做 Android 书架卡片视图
 
 - 需求时间：2026-09-02

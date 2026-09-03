@@ -115,8 +115,13 @@ fun OpdsScreen(
     onImportBooksClick: () -> Unit = {},
     servicesOnly: Boolean = false,
     initialConnectionId: String? = null,
+    initialHref: String? = null,
     pageTitle: String? = null,
     onConnectionClick: ((String) -> Unit)? = null,
+    onCategoriesClick: ((String) -> Unit)? = null,
+    onCategoryClick: ((String, String) -> Unit)? = null,
+    categoriesOnly: Boolean = false,
+    booksOnly: Boolean = false,
     viewModel: OpdsViewModel = viewModel(factory = OpdsViewModel.Factory),
     importViewModel: LocalBookImportViewModel = viewModel(factory = LocalBookImportViewModel.Factory)
 ) {
@@ -126,10 +131,17 @@ fun OpdsScreen(
     val picker = rememberLocalBookImportLauncher { uris ->
         importViewModel.importBooks(uris)
     }
+    var openedInitialHref by rememberSaveable(initialConnectionId, initialHref) { mutableStateOf(false) }
 
     LaunchedEffect(initialConnectionId, state.connections) {
         if (initialConnectionId != null && state.activeConnection?.id != initialConnectionId) {
             state.connections.firstOrNull { it.id == initialConnectionId }?.let(viewModel::selectConnection)
+        }
+    }
+    LaunchedEffect(initialHref, state.activeConnection?.id, state.currentFeed, openedInitialHref) {
+        if (!initialHref.isNullOrBlank() && state.activeConnection?.id == initialConnectionId && state.currentFeed != null && !openedInitialHref) {
+            openedInitialHref = true
+            viewModel.browseLink(initialHref)
         }
     }
 
@@ -161,7 +173,7 @@ fun OpdsScreen(
         if (state.showConnectionForm) {
             ConnectionForm(state, viewModel)
         } else if (state.currentFeed != null) {
-            CatalogBrowser(state, viewModel)
+            CatalogBrowser(state, viewModel, onCategoriesClick, onCategoryClick, categoriesOnly, booksOnly)
         } else {
             DiscoveryHome(
                 state = state,
@@ -1141,7 +1153,11 @@ private val sampleRecentImports = emptyList<RecentImport>()
 @Composable
 private fun CatalogBrowser(
     state: OpdsUiState,
-    viewModel: OpdsViewModel
+    viewModel: OpdsViewModel,
+    onCategoriesClick: ((String) -> Unit)?,
+    onCategoryClick: ((String, String) -> Unit)?,
+    categoriesOnly: Boolean,
+    booksOnly: Boolean
 ) {
     val feed = state.currentFeed ?: return
     val connection = state.activeConnection
@@ -1167,13 +1183,27 @@ private fun CatalogBrowser(
                 onBack = { viewModel.navigateBack() }
             )
         }
-        if (categoryEntries.isNotEmpty()) {
+        if (categoryEntries.isNotEmpty() && !booksOnly) {
+            item {
+                SectionHeader(
+                    title = "分类",
+                    trailing = "查看全部 ›",
+                    onTrailingClick = { connection?.id?.let { onCategoriesClick?.invoke(it) } }
+                )
+            }
             item {
                 CatalogCategoryChips(
                     entries = categoryEntries,
-                    onBrowse = { href -> viewModel.browseLink(href) }
+                    onBrowse = { href ->
+                        val connectionId = connection?.id
+                        if (connectionId != null && onCategoryClick != null) onCategoryClick(connectionId, href)
+                        else viewModel.browseLink(href)
+                    }
                 )
             }
+        }
+        if (categoriesOnly && categoryEntries.isEmpty() && !state.isLoading) {
+            item { CatalogEmptyState(hasCategories = false) }
         }
         if (state.isLoading) {
             item {
@@ -1182,12 +1212,12 @@ private fun CatalogBrowser(
                 }
             }
         }
-        if (recentEntries.isNotEmpty()) {
+        if (recentEntries.isNotEmpty() && !categoriesOnly && !booksOnly) {
             item {
                 CatalogRecentSection(recentEntries, connection)
             }
         }
-        item {
+        if (!categoriesOnly) item {
             CatalogListHeader(
                 count = displayedEntries.size,
                 availableFormats = availableFormats,
@@ -1205,11 +1235,11 @@ private fun CatalogBrowser(
                 }
             )
         }
-        if (displayedEntries.isEmpty()) {
+        if (!categoriesOnly && displayedEntries.isEmpty()) {
             item {
                 CatalogEmptyState(categoryEntries.isNotEmpty())
             }
-        } else {
+        } else if (!categoriesOnly) {
             items(displayedEntries, key = { "${it.title}-${it.acquisitionLink?.href.orEmpty()}" }) { entry ->
                 CatalogBookRow(
                     entry = entry,

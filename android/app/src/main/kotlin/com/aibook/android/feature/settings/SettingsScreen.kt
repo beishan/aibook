@@ -302,6 +302,89 @@ fun ReadingSettingsScreen(
 }
 
 @Composable
+fun AppThemeSettingsScreen(
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val preferences = remember { context.getSharedPreferences("appearance_settings", Context.MODE_PRIVATE) }
+    var appIcon by remember { mutableIntStateOf(preferences.getInt("app_icon", 0).coerceIn(0, 2)) }
+    var compactMetadata by remember { mutableStateOf(preferences.getBoolean("compact_metadata", false)) }
+    var coverRadius by remember { mutableStateOf(preferences.getFloat("cover_radius", 8f).coerceIn(0f, 24f)) }
+
+    DesignPage(
+        title = "主题与外观",
+        modifier = Modifier.fillMaxSize(),
+        actions = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } }
+    ) {
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
+        ) {
+            SectionLabel("主题模式")
+            SoftCard {
+                SlidingSegmentedControl(
+                    options = listOf("跟随系统", "浅色", "深色"),
+                    selectedIndex = state.appThemeMode.ordinal,
+                    onSelected = { viewModel.setAppThemeMode(com.aibook.android.core.model.AppThemeMode.entries[it]) }
+                )
+            }
+            SectionLabel("主题色")
+            SoftCard {
+                SlidingSegmentedControl(
+                    options = listOf("暖棕", "草木绿", "湖水蓝"),
+                    selectedIndex = state.accentColor.ordinal,
+                    onSelected = { viewModel.setAccentColor(com.aibook.android.core.model.AccentColor.entries[it]) }
+                )
+            }
+            SectionLabel("应用图标")
+            SoftCard {
+                SlidingSegmentedControl(
+                    options = listOf("经典", "纸张", "深色"),
+                    selectedIndex = appIcon,
+                    onSelected = {
+                        appIcon = it
+                        preferences.edit().putInt("app_icon", it).apply()
+                    }
+                )
+            }
+            SectionLabel("显示设置")
+            SoftCard {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("精简书籍信息", fontWeight = FontWeight.Bold)
+                        Text("隐藏次要元数据，让书架更紧凑", color = DesignTokens.SoftText)
+                    }
+                    Switch(
+                        checked = compactMetadata,
+                        onCheckedChange = {
+                            compactMetadata = it
+                            preferences.edit().putBoolean("compact_metadata", it).apply()
+                        },
+                        colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent)
+                    )
+                }
+            }
+            SectionLabel("书架封面圆角")
+            SoftCard {
+                Text("${coverRadius.toInt()} dp", color = DesignTokens.SoftText)
+                Slider(
+                    value = coverRadius,
+                    onValueChange = {
+                        coverRadius = it
+                        preferences.edit().putFloat("cover_radius", it).apply()
+                    },
+                    valueRange = 0f..24f,
+                    colors = SliderDefaults.colors(thumbColor = DesignTokens.Accent, activeTrackColor = DesignTokens.Accent)
+                )
+            }
+            Spacer(Modifier.height(DesignTokens.Space24))
+        }
+    }
+}
+
+@Composable
 fun ShelfSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val preferences = remember(context) { ShelfPreferences.preferences(context) }

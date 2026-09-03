@@ -1,5 +1,7 @@
 package com.aibook.android.feature.shelf
 
+import android.content.Context
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -872,6 +874,9 @@ private fun ReadingBookCard(
     onFavoriteClick: () -> Unit,
     onRemoveClick: () -> Unit
 ) {
+    val compactMetadata = LocalContext.current
+        .getSharedPreferences("appearance_settings", Context.MODE_PRIVATE)
+        .getBoolean("compact_metadata", false)
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -917,16 +922,18 @@ private fun ReadingBookCard(
                 verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Text(book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
-                Text(
-                    book.author ?: "未知作者",
-                    color = DesignTokens.SoftText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    WarmProgress(book.progress.percent, Modifier.weight(1f))
-                    Text("${(book.progress.percent * 100).toInt()}%", color = DesignTokens.SoftText, style = MaterialTheme.typography.labelSmall)
+                if (!compactMetadata) {
+                    Text(
+                        book.author ?: "未知作者",
+                        color = DesignTokens.SoftText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        WarmProgress(book.progress.percent, Modifier.weight(1f))
+                        Text("${(book.progress.percent * 100).toInt()}%", color = DesignTokens.SoftText, style = MaterialTheme.typography.labelSmall)
+                    }
                 }
                 if (managementMode) {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {

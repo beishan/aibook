@@ -19,7 +19,8 @@ sealed class Screen(val route: String) {
         fun createRoute(serviceId: String) = "bookstore/opds/$serviceId/categories"
     }
     data object OpdsCategoryBooks : Screen("bookstore/opds/{serviceId}/category/{categoryId}") {
-        fun createRoute(serviceId: String, categoryId: String) = "bookstore/opds/$serviceId/category/$categoryId"
+        fun createRoute(serviceId: String, categoryId: String) =
+            "bookstore/opds/${routeEncode(serviceId)}/category/${routeEncode(categoryId)}"
     }
     data object ServerLibrary : Screen("bookstore/backend")
     data object BackendRecent : Screen("bookstore/backend/recent")
@@ -36,7 +37,7 @@ sealed class Screen(val route: String) {
     data object StoreCategory : Screen("bookstore/local/category")
     data object StoreSearch : Screen("search")
     data object StoreSearchResults : Screen("search?query={query}") {
-        fun createRoute(query: String) = "search?query=${android.net.Uri.encode(query)}"
+        fun createRoute(query: String) = "search?query=${routeEncode(query)}"
     }
     data object StoreRemoteBookDetail : Screen("bookstore/book/{bookId}") {
         fun createRoute(bookId: String) = "bookstore/book/$bookId"
@@ -80,3 +81,6 @@ sealed class Screen(val route: String) {
         fun createRoute(bookId: Long) = "remote-reader/$bookId"
     }
 }
+
+private fun routeEncode(value: String): String =
+    java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8.toString()).replace("+", "%20")

@@ -41,7 +41,6 @@ import com.aibook.android.feature.opds.OpdsAddSourceScreen
 import com.aibook.android.feature.importer.ImportBooksScreen
 import com.aibook.android.feature.reader.ReaderScreen
 import com.aibook.android.feature.reader.BookReaderRoute
-import com.aibook.android.feature.reader.ReaderThemeSettingsScreen
 import com.aibook.android.feature.settings.AboutScreen
 import com.aibook.android.feature.settings.BackupRestoreScreen
 import com.aibook.android.feature.settings.PrivacyPermissionsScreen
@@ -50,6 +49,7 @@ import com.aibook.android.feature.settings.LocalScanScreen
 import com.aibook.android.feature.settings.ScanResultScreen
 import com.aibook.android.feature.settings.SettingsScreen
 import com.aibook.android.feature.settings.ReadingSettingsScreen
+import com.aibook.android.feature.settings.AppThemeSettingsScreen
 import com.aibook.android.feature.settings.ShelfSettingsScreen
 import com.aibook.android.feature.settings.StorageCacheScreen
 import com.aibook.android.feature.settings.SyncConnectionSettingsScreen
@@ -366,7 +366,11 @@ fun AiBookApp() {
                     OpdsScreen(
                         servicesOnly = true,
                         initialConnectionId = entry.arguments?.getString("serviceId"),
-                        onAddSourceClick = { navController.navigate(Screen.OpdsAddSource.route) }
+                        onAddSourceClick = { navController.navigate(Screen.OpdsAddSource.route) },
+                        onCategoriesClick = { navController.navigate(Screen.OpdsCategories.createRoute(it)) },
+                        onCategoryClick = { serviceId, href ->
+                            navController.navigate(Screen.OpdsCategoryBooks.createRoute(serviceId, href))
+                        }
                     )
                 }
             }
@@ -378,7 +382,11 @@ fun AiBookApp() {
                     OpdsScreen(
                         servicesOnly = true,
                         pageTitle = "全部分类",
-                        initialConnectionId = entry.arguments?.getString("serviceId")
+                        initialConnectionId = entry.arguments?.getString("serviceId"),
+                        categoriesOnly = true,
+                        onCategoryClick = { serviceId, href ->
+                            navController.navigate(Screen.OpdsCategoryBooks.createRoute(serviceId, href))
+                        }
                     )
                 }
             }
@@ -393,7 +401,9 @@ fun AiBookApp() {
                     OpdsScreen(
                         servicesOnly = true,
                         pageTitle = "分类书籍",
-                        initialConnectionId = entry.arguments?.getString("serviceId")
+                        initialConnectionId = entry.arguments?.getString("serviceId"),
+                        initialHref = entry.arguments?.getString("categoryId"),
+                        booksOnly = true
                     )
                 }
             }
@@ -537,7 +547,7 @@ fun AiBookApp() {
             }
             composable(Screen.ThemeSettings.route) {
                 PaddedScreen(paddingValues) {
-                    ReaderThemeSettingsScreen(
+                    AppThemeSettingsScreen(
                         onBack = { navController.popBackStack() }
                     )
                 }
