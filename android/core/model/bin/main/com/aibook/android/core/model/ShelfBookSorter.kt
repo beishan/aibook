@@ -2,9 +2,10 @@ package com.aibook.android.core.model
 
 enum class ShelfSortOption(val label: String) {
     RECENT_READ("最近阅读"),
-    IMPORTED_AT("添加时间"),
-    TITLE("书名"),
-    FAVORITE_FIRST("收藏优先")
+    IMPORTED_AT("最近加入"),
+    TITLE("书名 A-Z"),
+    AUTHOR("作者 A-Z"),
+    PROGRESS("阅读进度")
 }
 
 object ShelfBookSorter {
@@ -19,11 +20,8 @@ object ShelfBookSorter {
                     .thenBy { it.title.lowercase() }
             )
             ShelfSortOption.TITLE -> books.sortedBy { it.title.lowercase() }
-            ShelfSortOption.FAVORITE_FIRST -> books.sortedWith(
-                compareByDescending<LocalBook> { it.favorite }
-                    .thenByDescending { it.lastReadAt ?: it.importedAt }
-                    .thenBy { it.title.lowercase() }
-            )
+            ShelfSortOption.AUTHOR -> books.sortedWith(compareBy<LocalBook> { it.author.orEmpty().lowercase() }.thenBy { it.title.lowercase() })
+            ShelfSortOption.PROGRESS -> books.sortedByDescending { it.progress.percent }
         }
     }
 }

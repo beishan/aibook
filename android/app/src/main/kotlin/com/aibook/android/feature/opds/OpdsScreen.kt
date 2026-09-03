@@ -95,10 +95,12 @@ import com.aibook.android.core.network.opds.OpdsConnection
 import com.aibook.android.core.network.opds.OpdsEntry
 import com.aibook.android.core.network.opds.OpdsRequestFactory
 import com.aibook.android.core.network.opds.OpdsSyncState
+import com.aibook.android.core.data.repository.OpdsCatalogEntry
 import com.aibook.android.feature.importer.LocalBookImportViewModel
 import com.aibook.android.feature.importer.rememberLocalBookImportLauncher
 import com.aibook.android.feature.importer.supportedBookMimeTypes
 import com.aibook.android.ui.design.DesignPage
+import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SectionHeader
 import com.aibook.android.ui.design.SoftCard
@@ -161,12 +163,15 @@ fun OpdsScreen(
     DesignPage(
         title = pageTitle ?: if (state.currentFeed == null) (if (servicesOnly) "OPDS 服务" else "发现") else "OPDS 数据源",
         modifier = Modifier.fillMaxSize(),
-        actions = {
+        navigation = {
             if (state.currentFeed != null) {
-                TextButton(onClick = { viewModel.navigateBack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    Text("上一级")
-                }
+                IconButton(onClick = viewModel::navigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+            }
+        },
+        actions = {
+            if (state.currentFeed == null && servicesOnly) {
+                IconButton(onClick = onAddSourceClick) { Icon(Icons.Default.Add, contentDescription = "添加 OPDS 服务") }
+                IconButton(onClick = {}) { Icon(Icons.Default.Search, contentDescription = "搜索 OPDS 服务") }
             }
         }
     ) {
@@ -174,6 +179,15 @@ fun OpdsScreen(
             ConnectionForm(state, viewModel)
         } else if (state.currentFeed != null) {
             CatalogBrowser(state, viewModel, onCategoriesClick, onCategoryClick, categoriesOnly, booksOnly)
+        } else if (servicesOnly) {
+            OpdsServicesHome(
+                state = state,
+                onOpen = { connection ->
+                    if (onConnectionClick != null) onConnectionClick(connection.id)
+                    else viewModel.selectConnection(connection)
+                },
+                onRetry = { state.connections.filter { it.enabled }.forEach(viewModel::syncConnection) }
+            )
         } else {
             DiscoveryHome(
                 state = state,
@@ -207,6 +221,87 @@ fun OpdsScreen(
         }
 
         SnackbarHost(snackbarHostState)
+    }
+}
+
+@Composable
+private fun OpdsServicesHome(
+    state: OpdsUiState,
+    onOpen: (OpdsConnection) -> Unit,
+    onRetry: () -> Unit
+) {
+    when {
+        state.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = DesignTokens.Accent)
+        }
+        state.errorMessage != null && state.connections.isEmpty() -> Column(
+            Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(state.errorMessage, color = DesignTokens.SoftText)
+            TextButton(onClick = onRetry) { Text("重新加载") }
+        }
+        state.connections.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                Icon(Icons.Default.Book, null, tint = DesignTokens.Accent, modifier = Modifier.size(54.dp))
+                Text("还没有 OPDS 服务", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("点击右上角添加您的第一个书库", color = DesignTokens.SoftText)
+            }
+        }
+        else -> LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16),
+            contentPadding = PaddingValues(bottom = DesignTokens.Space24)
+        ) {
+            items(state.connections, key = { it.id }) { connection ->
+                OpdsServicePreviewCard(
+                    connection = connection,
+                    entries = state.cachedEntries.filter { it.connectionId == connection.id }.take(5),
+                    onClick = { onOpen(connection) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OpdsServicePreviewCard(
+    connection: OpdsConnection,
+    entries: List<OpdsCatalogEntry>,
+    onClick: () -> Unit
+) {
+    SoftCard(modifier = Modifier.clickable(onClick = onClick), contentPadding = DesignTokens.Space16) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+            Box(
+                modifier = Modifier.size(58.dp).background(DesignTokens.WarmCard, RoundedCornerShape(DesignTokens.RadiusMedium)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Book, null, tint = DesignTokens.Accent, modifier = Modifier.size(32.dp))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space4)) {
+                Text(connection.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(connection.baseUrl, color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = DesignTokens.Accent)
+        }
+        Spacer(Modifier.height(DesignTokens.Space12))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            OpdsMetaText("书籍", "${connection.bookCount} 本")
+            OpdsMetaText("分类", "${entries.flatMap { it.categories }.distinct().size} 个")
+            OpdsMetaText("最近更新", formatSyncTime(connection.lastSyncedAt))
+        }
+        if (entries.isNotEmpty()) {
+            Spacer(Modifier.height(DesignTokens.Space12))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+                entries.forEach { entry ->
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space4)) {
+                        BookCover(entry.title, width = null, height = 100.dp)
+                        Text(entry.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -793,222 +888,130 @@ fun OpdsAddSourceScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(DesignTokens.AppBackground)
-    ) {
+    Box(Modifier.fillMaxSize().background(DesignTokens.AppBackground)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 20.dp)
-                .padding(bottom = 128.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = DesignTokens.PagePadding, vertical = DesignTokens.Space16),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 640.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                }
+                Text(
+                    if (isEditing) "编辑 OPDS 服务" else "添加 OPDS 服务",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            OpdsPrototypeField(
+                label = "服务名称",
+                icon = Icons.Default.Book,
+                value = state.formName,
+                placeholder = "例如：家庭 Calibre",
+                onValueChange = { viewModel.updateFormField("name", it.take(50)) }
+            )
+            OpdsPrototypeField(
+                label = "OPDS 地址",
+                icon = Icons.Default.Link,
+                value = state.formBaseUrl,
+                placeholder = "http://192.168.1.10:8080/opds",
+                onValueChange = { viewModel.updateFormField("baseUrl", it.trim()) }
+            )
+            OpdsPrototypeField(
+                label = "用户名（可选）",
+                icon = Icons.Default.Person,
+                value = state.formUsername,
+                placeholder = "reader",
+                onValueChange = { viewModel.updateFormField("username", it) }
+            )
+            OpdsPrototypeField(
+                label = "密码（可选）",
+                icon = Icons.Default.Lock,
+                value = state.formPassword,
+                placeholder = "请输入密码",
+                password = true,
+                onValueChange = { viewModel.updateFormField("password", it) }
+            )
+
+            OutlinedButton(
+                onClick = viewModel::testConnection,
+                enabled = !state.isTesting && !state.isSaving,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                shape = RoundedCornerShape(DesignTokens.RadiusMedium)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                    Column(modifier = Modifier.padding(start = 8.dp)) {
-                        Text(
-                            if (isEditing) "编辑 OPDS 数据源" else "添加 OPDS 数据源",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                        Text(
-                            "连接你的在线电子书目录",
-                            color = DesignTokens.SoftText,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-
-                OpdsFormCard {
-                    OpdsFormSectionHeader(
-                        icon = Icons.Default.Book,
-                        title = "基本信息",
-                        subtitle = "填写数据源名称和 OPDS 目录地址"
-                    )
-                    OpdsInputField(
-                        icon = Icons.Default.Book,
-                        label = "数据源名称",
-                        value = state.formName,
-                        placeholder = "例如：我的电子书库",
-                        required = true,
-                        trailing = "${state.formName.length}/50",
-                        onValueChange = { viewModel.updateFormField("name", it.take(50)) }
-                    )
-                    OpdsInputField(
-                        icon = Icons.Default.Link,
-                        label = "服务器 URL",
-                        value = state.formBaseUrl,
-                        placeholder = "https://example.com/opds",
-                        helper = "以 http:// 或 https:// 开头",
-                        required = true,
-                        onValueChange = { viewModel.updateFormField("baseUrl", it.trim()) }
+                if (state.isTesting) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(
+                        if (isConnectionTested) Icons.Default.CheckCircle else Icons.Default.Wifi,
+                        contentDescription = null
                     )
                 }
-
-                OpdsFormCard {
-                    OpdsFormSectionHeader(
-                        icon = Icons.Default.Lock,
-                        title = "身份认证",
-                        subtitle = "公开目录可直接留空"
-                    )
-                    OpdsInputField(
-                        icon = Icons.Default.Person,
-                        label = "用户名",
-                        value = state.formUsername,
-                        placeholder = "请输入用户名",
-                        onValueChange = { viewModel.updateFormField("username", it) }
-                    )
-                    OpdsInputField(
-                        icon = Icons.Default.Lock,
-                        label = "密码",
-                        value = state.formPassword,
-                        placeholder = "请输入密码",
-                        password = true,
-                        onValueChange = { viewModel.updateFormField("password", it) }
-                    )
-                }
-
-                OpdsFormCard {
-                    OpdsFormSectionHeader(
-                        icon = Icons.Default.Refresh,
-                        title = "同步模式",
-                        subtitle = "选择目录内容的更新方式"
-                    )
-                    SyncChoice(
-                        "完全同步（推荐）",
-                        "每次同步时更新所有书目数据",
-                        selected = state.syncMode == com.aibook.android.core.network.opds.OpdsSyncMode.FULL
-                    ) {
-                        viewModel.setSyncMode(com.aibook.android.core.network.opds.OpdsSyncMode.FULL)
-                    }
-                    SyncChoice(
-                        "增量同步",
-                        "只写入新增或有变化的书目",
-                        selected = state.syncMode == com.aibook.android.core.network.opds.OpdsSyncMode.INCREMENTAL
-                    ) {
-                        viewModel.setSyncMode(com.aibook.android.core.network.opds.OpdsSyncMode.INCREMENTAL)
-                    }
-                }
-
-                OpdsFormCard {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            if (isConnectionTested) Icons.Default.CheckCircle else Icons.Default.Wifi,
-                            contentDescription = null,
-                            tint = if (isConnectionTested) DesignTokens.Success else DesignTokens.Accent
-                        )
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                if (isConnectionTested) "连接测试通过" else "测试连接",
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                if (isConnectionTested) "当前连接信息可以正常访问"
-                                else "保存前需要确认数据源可用",
-                                color = DesignTokens.SoftText,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = viewModel::testConnection,
-                            enabled = !state.isTesting && !state.isSaving,
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            if (state.isTesting) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Text(if (isConnectionTested) "重新测试" else "开始测试")
-                            }
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFFFFF4E8), RoundedCornerShape(14.dp))
-                        .padding(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Icon(Icons.Default.Info, contentDescription = null, tint = DesignTokens.Accent)
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("支持 OPDS 1.0 和 OPDS 2.0", fontWeight = FontWeight.Bold)
-                        Text(
-                            "部分私人服务器可能需要用户名和密码。",
-                            color = DesignTokens.SoftText,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                Spacer(Modifier.width(8.dp))
+                Text(if (isConnectionTested) "连接已通过" else "测试连接", fontWeight = FontWeight.Bold)
+            }
+            Button(
+                onClick = viewModel::save,
+                enabled = state.canSave,
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+                elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
+                shape = RoundedCornerShape(DesignTokens.RadiusMedium)
+            ) {
+                if (state.isSaving) {
+                    CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                } else {
+                    Text(if (isEditing) "保存修改" else "保存", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
             }
-        }
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .background(DesignTokens.AppBackground)
-                .border(width = 1.dp, color = DesignTokens.Hairline)
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Column(
+
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 640.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                    .background(DesignTokens.WarmCard, RoundedCornerShape(DesignTokens.RadiusLarge))
+                    .border(1.dp, DesignTokens.Hairline, RoundedCornerShape(DesignTokens.RadiusLarge))
+                    .padding(DesignTokens.Space16),
+                horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Button(
-                    onClick = viewModel::save,
-                    enabled = state.canSave,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    if (state.isSaving) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(22.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text(
-                            if (isEditing) "保存修改" else "保存并启用",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-                TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                    Text("取消", color = DesignTokens.Accent)
-                }
+                Icon(Icons.Default.Info, contentDescription = null, tint = DesignTokens.Accent)
+                Text(
+                    "支持标准 OPDS 目录服务。\n例如：Calibre with OPDS、Kobo OPDS 等。",
+                    color = DesignTokens.SoftText,
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
+            Spacer(Modifier.height(DesignTokens.Space24))
         }
         SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.TopCenter))
+    }
+}
+
+@Composable
+private fun OpdsPrototypeField(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    value: String,
+    placeholder: String,
+    password: Boolean = false,
+    onValueChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+        Text(label, color = DesignTokens.SoftText, fontWeight = FontWeight.Medium)
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            leadingIcon = { Icon(icon, contentDescription = null, tint = DesignTokens.Accent) },
+            placeholder = { Text(placeholder) },
+            visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+            singleLine = true,
+            shape = RoundedCornerShape(DesignTokens.RadiusMedium)
+        )
     }
 }
 
@@ -1179,27 +1182,26 @@ private fun CatalogBrowser(
             CatalogHeader(
                 connection = connection,
                 feedTitle = feed.title,
-                bookCount = bookEntries.size,
-                onBack = { viewModel.navigateBack() }
+                bookCount = bookEntries.size
             )
         }
-        if (categoryEntries.isNotEmpty() && !booksOnly) {
+        if (!categoriesOnly && !booksOnly) {
             item {
-                SectionHeader(
-                    title = "分类",
-                    trailing = "查看全部 ›",
-                    onTrailingClick = { connection?.id?.let { onCategoriesClick?.invoke(it) } }
+                CatalogQuickActions(
+                    onCategories = { connection?.id?.let { onCategoriesClick?.invoke(it) } }
                 )
             }
-            item {
-                CatalogCategoryChips(
-                    entries = categoryEntries,
-                    onBrowse = { href ->
+        }
+        if (categoryEntries.isNotEmpty() && categoriesOnly) {
+            items(categoryEntries, key = { "category-${it.title}" }) { entry ->
+                val count = state.cachedEntries.count { cached -> entry.title in cached.categories }
+                OpdsCategoryRow(entry.title, count) {
+                    entry.alternateLink?.href?.let { href ->
                         val connectionId = connection?.id
                         if (connectionId != null && onCategoryClick != null) onCategoryClick(connectionId, href)
                         else viewModel.browseLink(href)
                     }
-                )
+                }
             }
         }
         if (categoriesOnly && categoryEntries.isEmpty() && !state.isLoading) {
@@ -1239,6 +1241,15 @@ private fun CatalogBrowser(
             item {
                 CatalogEmptyState(categoryEntries.isNotEmpty())
             }
+        } else if (booksOnly) {
+            item {
+                CatalogBooksGrid(
+                    entries = displayedEntries,
+                    connection = connection,
+                    downloadingTitle = state.downloadingTitle,
+                    onDownload = viewModel::downloadEntry
+                )
+            }
         } else if (!categoriesOnly) {
             items(displayedEntries, key = { "${it.title}-${it.acquisitionLink?.href.orEmpty()}" }) { entry ->
                 CatalogBookRow(
@@ -1266,11 +1277,85 @@ private fun CatalogBrowser(
 }
 
 @Composable
+private fun CatalogBooksGrid(
+    entries: List<OpdsEntry>,
+    connection: OpdsConnection?,
+    downloadingTitle: String?,
+    onDownload: (OpdsEntry) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
+        entries.chunked(3).forEach { rowEntries ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                rowEntries.forEach { entry ->
+                    Column(
+                        modifier = Modifier.weight(1f).clickable(enabled = downloadingTitle != entry.title) { onDownload(entry) },
+                        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)
+                    ) {
+                        CatalogCover(entry, connection, width = null, height = 172.dp)
+                        Text(entry.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(entry.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                repeat(3 - rowEntries.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OpdsCategoryRow(title: String, count: Int, onClick: () -> Unit) {
+    SoftCard(modifier = Modifier.clickable(onClick = onClick), contentPadding = DesignTokens.Space16) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
+            Box(
+                Modifier.size(48.dp).background(DesignTokens.WarmCard, CircleShape),
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Default.Book, null, tint = DesignTokens.Accent) }
+            Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("$count 本", color = DesignTokens.Warning)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = DesignTokens.Accent)
+        }
+    }
+}
+
+@Composable
+private fun CatalogQuickActions(onCategories: () -> Unit) {
+    val actions = listOf(
+        Triple("最近添加", Icons.Default.Schedule, {}),
+        Triple("最新更新", Icons.Default.Refresh, {}),
+        Triple("作者", Icons.Default.Person, {}),
+        Triple("分类", Icons.Default.FilterList, onCategories),
+        Triple("系列", Icons.Default.Book, {}),
+        Triple("标签", Icons.Default.CheckCircle, {}),
+        Triple("搜索", Icons.Default.Search, {}),
+        Triple("关于", Icons.Default.Info, {})
+    )
+    SoftCard(contentPadding = DesignTokens.Space16) {
+        actions.chunked(4).forEachIndexed { rowIndex, rowActions ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                rowActions.forEach { (label, icon, action) ->
+                    Column(
+                        modifier = Modifier.width(68.dp).clickable(onClick = action),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)
+                    ) {
+                        Box(
+                            Modifier.size(52.dp).background(DesignTokens.WarmCard, RoundedCornerShape(DesignTokens.RadiusMedium)),
+                            contentAlignment = Alignment.Center
+                        ) { Icon(icon, null, tint = DesignTokens.TextPrimary) }
+                        Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                    }
+                }
+            }
+            if (rowIndex == 0) Spacer(Modifier.height(DesignTokens.Space16))
+        }
+    }
+}
+
+@Composable
 private fun CatalogHeader(
     connection: OpdsConnection?,
     feedTitle: String,
-    bookCount: Int,
-    onBack: () -> Unit
+    bookCount: Int
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(
@@ -1279,9 +1364,6 @@ private fun CatalogHeader(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                }
                 Box(
                     modifier = Modifier
                         .size(56.dp)
@@ -1495,7 +1577,7 @@ private fun SectionTitle(title: String) {
 private fun CatalogCover(
     entry: OpdsEntry,
     connection: OpdsConnection?,
-    width: androidx.compose.ui.unit.Dp,
+    width: androidx.compose.ui.unit.Dp?,
     height: androidx.compose.ui.unit.Dp
 ) {
     val title = entry.title
@@ -1520,9 +1602,10 @@ private fun CatalogCover(
             }
             .build()
     }
+    val coverWidth = if (width == null) Modifier.fillMaxWidth() else Modifier.width(width)
     Box(
         modifier = Modifier
-            .width(width)
+            .then(coverWidth)
             .height(height)
             .background(Brush.verticalGradient(colors), RoundedCornerShape(8.dp))
             .padding(8.dp),

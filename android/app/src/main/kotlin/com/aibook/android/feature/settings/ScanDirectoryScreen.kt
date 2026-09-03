@@ -3,10 +3,12 @@ package com.aibook.android.feature.settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -28,6 +31,10 @@ import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -91,6 +98,19 @@ fun ScanDirectoryScreen(
             snackbarHostState.showSnackbar(it)
             viewModel.clearMessage()
         }
+    }
+
+    if (onStartScan != null) {
+        ScanDirectoriesBundlePage(
+            state = state,
+            onBack = onBack,
+            onAdd = { directoryPicker.launch(null) },
+            onToggle = viewModel::setIncludeSubdirectories,
+            onDelete = viewModel::deleteDirectory,
+            onStartScan = onStartScan
+        )
+        SnackbarHost(snackbarHostState)
+        return
     }
 
     Box(
@@ -316,6 +336,77 @@ fun ScanDirectoryScreen(
 }
 
 @Composable
+private fun ScanDirectoriesBundlePage(
+    state: ScanDirectoryUiState,
+    onBack: () -> Unit,
+    onAdd: () -> Unit,
+    onToggle: (String, Boolean) -> Unit,
+    onDelete: (String) -> Unit,
+    onStartScan: () -> Unit
+) {
+    Column(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = DesignTokens.PagePadding, vertical = DesignTokens.Space16),
+        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+            Text("扫描目录管理", modifier = Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Icon(Icons.Default.MoreVert, "更多", tint = DesignTokens.TextPrimary)
+        }
+        Text("已添加的目录", color = DesignTokens.SoftText, style = MaterialTheme.typography.titleMedium)
+        if (state.directories.isEmpty()) {
+            SoftScanCard {
+                Text("还没有扫描目录", fontWeight = FontWeight.Bold)
+                Text("添加保存电子书的文件夹后即可开始扫描", color = DesignTokens.SoftText)
+            }
+        } else {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(DesignTokens.CardRadius)) {
+                state.directories.forEachIndexed { index, directory ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(DesignTokens.Space16),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)
+                    ) {
+                        Box(Modifier.size(52.dp).background(DesignTokens.WarmCard, CircleShape), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Folder, null, tint = DesignTokens.Warning)
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space4)) {
+                            Text(directory.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                androidx.compose.material3.Checkbox(
+                        checked = directory.includeSubdirectories,
+                                    onCheckedChange = { onToggle(directory.id, it) }
+                                )
+                                Text("包含子目录", color = DesignTokens.SoftText)
+                            }
+                        }
+                        IconButton(onClick = { onDelete(directory.id) }) { Icon(Icons.Default.Delete, "删除目录", tint = DesignTokens.SoftText) }
+                    }
+                    if (index != state.directories.lastIndex) HorizontalDivider(color = DesignTokens.Hairline)
+                }
+            }
+        }
+        Box(
+            Modifier.fillMaxWidth().height(116.dp).border(1.dp, DesignTokens.Accent.copy(alpha = 0.55f), RoundedCornerShape(DesignTokens.CardRadius)).clickable(onClick = onAdd),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Add, null, tint = DesignTokens.Accent)
+                Text("添加扫描目录", color = DesignTokens.Accent, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        Text(
+            "开始扫描",
+            modifier = Modifier.fillMaxWidth().background(DesignTokens.Accent, RoundedCornerShape(DesignTokens.RadiusMedium)).clickable(enabled = state.directories.any { it.enabled }, onClick = onStartScan).padding(vertical = DesignTokens.Space16),
+            color = Color.White,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
 fun LocalScanScreen(
     onBack: () -> Unit,
     onComplete: () -> Unit,
@@ -332,55 +423,139 @@ fun LocalScanScreen(
     LaunchedEffect(started, state.isScanning, state.lastScanStats) {
         if (started && !state.isScanning && state.lastScanStats != null) onComplete()
     }
+    val discovered = state.directories.sumOf { it.discoveredCount }
+    val activeDirectory = state.directories.firstOrNull { it.id == state.scanningDirectoryId }
+        ?: state.directories.firstOrNull { it.enabled }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
-            Modifier.fillMaxSize().padding(horizontal = DesignTokens.PagePadding, vertical = DesignTokens.Space24),
-            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space24)
+            Modifier.fillMaxSize().padding(horizontal = DesignTokens.PagePadding, vertical = DesignTokens.Space16).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
                 Text("扫描本地书籍", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             }
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(DesignTokens.CardRadius)
+            Column(
+                Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space16),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)
             ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(DesignTokens.Space32),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(120.dp), strokeWidth = 9.dp, color = DesignTokens.Accent)
-                    Text(if (state.directories.isEmpty()) "没有可扫描的目录" else "正在扫描…", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("扫描目录 ${state.directories.count { it.enabled }} 个", color = DesignTokens.SoftText)
-                    Text("发现书籍后会自动整理到本地书城", color = DesignTokens.SoftText)
+                Box(Modifier.size(190.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.fillMaxSize(), strokeWidth = 10.dp, color = DesignTokens.Accent, trackColor = DesignTokens.WarmCard)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Folder, null, tint = DesignTokens.Warning, modifier = Modifier.size(58.dp))
+                        Text(if (state.isScanning) "扫描中" else "准备中", color = DesignTokens.Accent, fontWeight = FontWeight.Bold)
+                    }
                 }
+                Text(if (state.directories.isEmpty()) "没有可扫描的目录" else "正在扫描中…", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text("发现新书将自动添加到书城", color = DesignTokens.SoftText)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                ScanMetricCard(Icons.Default.Folder, "扫描目录", "${state.directories.count { it.enabled }} 个", Modifier.weight(1f))
+                ScanMetricCard(Icons.Default.Book, "发现书籍", "$discovered 本", Modifier.weight(1f))
+                ScanMetricCard(Icons.Default.Schedule, "扫描状态", if (state.isScanning) "进行中" else "等待", Modifier.weight(1f))
+            }
+            SoftScanCard {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                    Icon(Icons.Default.Folder, null, tint = DesignTokens.Accent)
+                    Column(Modifier.weight(1f)) {
+                        Text("当前扫描路径", fontWeight = FontWeight.Bold)
+                        Text(activeDirectory?.name ?: "等待选择目录", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+            Text(
+                "停止扫描",
+                modifier = Modifier.fillMaxWidth().background(DesignTokens.Accent, RoundedCornerShape(DesignTokens.RadiusMedium)).clickable(onClick = viewModel::stopScan).padding(vertical = DesignTokens.Space16),
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            SoftScanCard {
+                Text("当前扫描状态", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(DesignTokens.Space12))
+                Text("正在扫描：${activeDirectory?.name ?: "等待目录"}", color = DesignTokens.SoftText)
+                Text("文件类型：EPUB、TXT、PDF、MOBI、AZW3", color = DesignTokens.SoftText)
+                Text("提示：大文件夹扫描可能需要较长时间，请耐心等待", color = DesignTokens.SoftText)
             }
         }
     }
 }
 
 @Composable
-fun ScanResultScreen(onBack: () -> Unit, onImport: () -> Unit) {
+fun ScanResultScreen(
+    onBack: () -> Unit,
+    onViewBooks: () -> Unit,
+    onDone: () -> Unit,
+    viewModel: ScanDirectoryViewModel = viewModel(factory = ScanDirectoryViewModel.Factory)
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val stats = state.lastScanStats
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
-            Modifier.fillMaxSize().padding(horizontal = DesignTokens.PagePadding, vertical = DesignTokens.Space24),
+            Modifier.fillMaxSize().padding(horizontal = DesignTokens.PagePadding, vertical = DesignTokens.Space16).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
-                Text("扫描结果", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text("扫描完成", modifier = Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Spacer(Modifier.size(48.dp))
             }
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(DesignTokens.CardRadius)) {
-                Column(Modifier.fillMaxWidth().padding(DesignTokens.Space24), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
-                    Icon(Icons.Default.Folder, null, tint = DesignTokens.Success, modifier = Modifier.size(48.dp))
-                    Text("扫描完成", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("新发现的书籍已加入本地书城，可继续选择文件导入。", color = DesignTokens.SoftText)
-                    Text("导入其他文件 ›", color = DesignTokens.Accent, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onImport).padding(vertical = DesignTokens.Space8))
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                Box(Modifier.size(128.dp).background(DesignTokens.Success.copy(alpha = 0.16f), CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.CheckCircle, null, tint = DesignTokens.Success, modifier = Modifier.size(76.dp))
+                }
+                Text("共发现 ${stats?.scanned ?: 0} 本书籍", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text("扫描已完成，书籍已自动分类整理", color = DesignTokens.SoftText)
+            }
+            SoftScanCard {
+                Text("结果摘要", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                ScanResultLine("新增书籍", (stats?.added ?: 0) + (stats?.restored ?: 0), DesignTokens.Success)
+                ScanResultLine("已存在书籍", stats?.duplicate ?: 0, DesignTokens.Accent)
+                ScanResultLine("无法识别", (stats?.unsupported ?: 0) + (stats?.failed ?: 0), DesignTokens.Warning)
+            }
+            SoftScanCard {
+                Text("扫描目录（${state.directories.size} 个）", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                state.directories.forEach { directory ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space8), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Folder, null, tint = DesignTokens.Warning)
+                        Text(directory.name, modifier = Modifier.weight(1f).padding(horizontal = DesignTokens.Space12), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${directory.discoveredCount} 本", color = DesignTokens.SoftText)
+                    }
                 }
             }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                Text("查看新增书籍", modifier = Modifier.weight(1f).background(DesignTokens.WarmCard, RoundedCornerShape(DesignTokens.RadiusMedium)).clickable(onClick = onViewBooks).padding(vertical = DesignTokens.Space16), textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = DesignTokens.Accent, fontWeight = FontWeight.Bold)
+                Text("完成", modifier = Modifier.weight(1f).background(DesignTokens.Accent, RoundedCornerShape(DesignTokens.RadiusMedium)).clickable(onClick = onDone).padding(vertical = DesignTokens.Space16), textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = Color.White, fontWeight = FontWeight.Bold)
+            }
         }
+    }
+}
+
+@Composable
+private fun ScanMetricCard(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String, modifier: Modifier) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(DesignTokens.CardRadius)) {
+        Column(Modifier.fillMaxWidth().padding(DesignTokens.Space12), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+            Icon(icon, null, tint = DesignTokens.Warning)
+            Text(label, color = DesignTokens.SoftText, style = MaterialTheme.typography.labelMedium)
+            Text(value, color = DesignTokens.Accent, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun SoftScanCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(DesignTokens.CardRadius)) {
+        Column(Modifier.fillMaxWidth().padding(DesignTokens.Space16), content = content)
+    }
+}
+
+@Composable
+private fun ScanResultLine(label: String, count: Int, color: Color) {
+    Row(Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space8), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(12.dp).background(color, CircleShape))
+        Text(label, modifier = Modifier.weight(1f).padding(horizontal = DesignTokens.Space12))
+        Text("$count 本", color = DesignTokens.Accent, fontWeight = FontWeight.Bold)
     }
 }
 

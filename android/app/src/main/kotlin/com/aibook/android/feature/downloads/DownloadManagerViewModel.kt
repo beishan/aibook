@@ -86,6 +86,10 @@ class DownloadManagerViewModel(
     fun remove(id: String) = perform { queue.remove(id) }
 
     fun pauseSelected() = performSelected({ it.status == DownloadStatus.RUNNING || it.status == DownloadStatus.QUEUED }) { queue.pause(it.id) }
+    fun pauseAll() = viewModelScope.launch {
+        state.value.tasks.filter { it.status == DownloadStatus.RUNNING || it.status == DownloadStatus.QUEUED }
+            .forEach { queue.pause(it.id) }
+    }
     fun resumeSelected() = performSelected({ it.status == DownloadStatus.PAUSED || it.status == DownloadStatus.FAILED }) { task ->
         if (task.status == DownloadStatus.FAILED) queue.retry(task.id) else queue.resume(task.id)
     }

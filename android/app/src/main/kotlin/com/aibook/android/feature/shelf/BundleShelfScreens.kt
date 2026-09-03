@@ -21,15 +21,25 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -37,7 +47,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,6 +71,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.ShelfFolderSelection
 import com.aibook.android.core.model.ShelfSortOption
+import com.aibook.android.core.network.api.dto.BookDTO
+import com.aibook.android.di.ServiceLocator
 import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SlidingSegmentedControl
@@ -74,12 +90,15 @@ fun ShelfSortFilterScreen(onBack: () -> Unit, onApplied: () -> Unit) {
         ?: ShelfSortOption.RECENT_READ
     var selected by remember { mutableStateOf(initial) }
     var onlyUnread by remember { mutableStateOf(prefs.getBoolean(ShelfPreferences.KEY_FILTER_UNREAD, false)) }
-    Column(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(DesignTokens.PagePadding),
-        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
-    ) {
-        BundleHeaderRow("排序与筛选", onBack)
-        SoftCard {
+    var favoriteOnly by remember { mutableStateOf(prefs.getBoolean("filter_favorite", false)) }
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                .padding(DesignTokens.PagePadding).padding(bottom = 76.dp),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
+        ) {
+            BundleHeaderRow("排序与筛选", onBack)
+            SoftCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
                 Icon(Icons.AutoMirrored.Filled.Sort, null, tint = DesignTokens.Accent)
                 Text("排序方式", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -90,33 +109,67 @@ fun ShelfSortFilterScreen(onBack: () -> Unit, onApplied: () -> Unit) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(option.label)
-                    if (selected == option) Icon(Icons.Default.Check, null, tint = DesignTokens.Accent)
+                    Text(option.label, fontWeight = FontWeight.Medium)
+                    RadioButton(
+                        selected = selected == option,
+                        onClick = { selected = option },
+                        colors = RadioButtonDefaults.colors(selectedColor = DesignTokens.Accent)
+                    )
                 }
             }
+            }
+            SoftCard {
+                Text("筛选", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                FilterSettingRow(Icons.Default.Storefront, "来源", "全部")
+                FilterSettingRow(Icons.Default.Description, "格式", "全部")
+                FilterSettingRow(Icons.Default.Download, "是否下载", "全部")
+                FilterSettingRow(Icons.Default.Book, "是否已读", if (onlyUnread) "未读" else "全部") { onlyUnread = !onlyUnread }
+                FilterSettingRow(Icons.Default.FavoriteBorder, "是否收藏", if (favoriteOnly) "已收藏" else "全部") { favoriteOnly = !favoriteOnly }
+            }
         }
-        SoftCard {
-            Text("阅读状态", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            SlidingSegmentedControl(
-                options = listOf("全部", "未读"),
-                selectedIndex = if (onlyUnread) 1 else 0,
-                onSelected = { onlyUnread = it == 1 },
-                modifier = Modifier.padding(top = DesignTokens.Space12)
-            )
+        Row(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(horizontal = DesignTokens.PagePadding, vertical = DesignTokens.Space12),
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)
+        ) {
+            OutlinedButton(
+                onClick = { selected = ShelfSortOption.RECENT_READ; onlyUnread = false; favoriteOnly = false },
+                modifier = Modifier.weight(1f).height(56.dp)
+            ) { Text("重置", fontWeight = FontWeight.Bold) }
+            Button(
+                onClick = {
+                    prefs.edit()
+                        .putString(ShelfPreferences.KEY_SORT_OPTION, selected.name)
+                        .putBoolean(ShelfPreferences.KEY_FILTER_UNREAD, onlyUnread)
+                        .putBoolean("filter_favorite", favoriteOnly)
+                        .apply()
+                    onApplied()
+                },
+                modifier = Modifier.weight(1f).height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+                elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
+            ) { Text("确定", fontWeight = FontWeight.Bold) }
         }
-        Spacer(Modifier.weight(1f))
-        Button(
-            onClick = {
-                prefs.edit()
-                    .putString(ShelfPreferences.KEY_SORT_OPTION, selected.name)
-                    .putBoolean(ShelfPreferences.KEY_FILTER_UNREAD, onlyUnread)
-                    .apply()
-                onApplied()
-            },
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
-            elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
-        ) { Text("应用", fontWeight = FontWeight.Bold) }
+    }
+}
+
+@Composable
+private fun FilterSettingRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    onClick: () -> Unit = {}
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)
+    ) {
+        Icon(icon, contentDescription = null, tint = DesignTokens.Accent)
+        Text(label, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
+        Text(value, color = DesignTokens.SoftText)
+        Text("›", color = DesignTokens.SoftText, style = MaterialTheme.typography.titleLarge)
     }
 }
 
@@ -128,32 +181,34 @@ fun ShelfFoldersScreen(
     viewModel: ShelfViewModel = viewModel(factory = ShelfViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    BundlePageHeader("书架文件夹", onBack, onCreateClick)
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(DesignTokens.PagePadding),
-        contentPadding = PaddingValues(top = 72.dp, bottom = DesignTokens.Space24),
-        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)
-    ) {
-        item {
-            SoftCard(color = MaterialTheme.colorScheme.surfaceVariant) {
-                Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
-                    Icon(Icons.Default.Folder, null, tint = DesignTokens.Accent)
-                    Text("共 ${state.folders.size} 个文件夹 · ${state.books.size} 本书", color = DesignTokens.SoftText)
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        BundlePageHeader("书架文件夹", onBack, onCreateClick)
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = DesignTokens.PagePadding),
+            contentPadding = PaddingValues(bottom = DesignTokens.Space24),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)
+        ) {
+            item {
+                SoftCard(color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                        Icon(Icons.Default.Folder, null, tint = DesignTokens.Accent)
+                        Text("共 ${state.folders.size} 个文件夹 · ${state.books.size} 本书", color = DesignTokens.SoftText)
+                    }
                 }
             }
-        }
-        items(state.folders, key = { it.id }) { folder ->
-            SoftCard(modifier = Modifier.clickable { onFolderClick(folder.id) }) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
-                    Box(
-                        modifier = Modifier.size(56.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(DesignTokens.RadiusMedium)),
-                        contentAlignment = Alignment.Center
-                    ) { Icon(Icons.Default.Folder, null, tint = DesignTokens.Accent, modifier = Modifier.size(32.dp)) }
-                    Column(Modifier.weight(1f)) {
-                        Text(folder.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text("${state.folderCounts[folder.id] ?: 0} 本", color = DesignTokens.SoftText)
+            items(state.folders, key = { it.id }) { folder ->
+                SoftCard(modifier = Modifier.clickable { onFolderClick(folder.id) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
+                        Box(
+                            modifier = Modifier.size(56.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(DesignTokens.RadiusMedium)),
+                            contentAlignment = Alignment.Center
+                        ) { Icon(Icons.Default.Folder, null, tint = DesignTokens.Accent, modifier = Modifier.size(32.dp)) }
+                        Column(Modifier.weight(1f)) {
+                            Text(folder.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            Text("${state.folderCounts[folder.id] ?: 0} 本", color = DesignTokens.SoftText)
+                        }
+                        Text("›", color = DesignTokens.SoftText, style = MaterialTheme.typography.headlineMedium)
                     }
-                    Text("›", color = DesignTokens.SoftText, style = MaterialTheme.typography.headlineMedium)
                 }
             }
         }
@@ -262,7 +317,11 @@ fun RecentReadingScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val books = state.books.filter { it.lastReadAt != null }.sortedByDescending { it.lastReadAt }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(DesignTokens.PagePadding)) {
-        BundleHeaderRow("最近阅读", onBack)
+        Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+            Text("最近阅读", modifier = Modifier.weight(1f), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, "更多") }
+        }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
             items(books, key = { it.id }) { book ->
                 SoftCard(modifier = Modifier.clickable { onBookClick(book.id) }) {
@@ -281,6 +340,14 @@ fun RecentReadingScreen(
                     }
                 }
             }
+            if (books.isNotEmpty()) {
+                item {
+                    TextButton(onClick = viewModel::clearReadingHistory, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Delete, null)
+                        Text("清除全部记录")
+                    }
+                }
+            }
         }
     }
 }
@@ -293,8 +360,29 @@ fun BookSourcesScreen(
     viewModel: ShelfViewModel = viewModel(factory = ShelfViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val locator = remember { ServiceLocator.get(context.applicationContext as android.app.Application) }
+    val opdsEntries by locator.opdsCatalogCacheRepository.observeEntries().collectAsStateWithLifecycle(initialValue = emptyList())
     val current = state.books.firstOrNull { it.id == bookId }
-    val versions = current?.let { book -> state.books.filter { it.title.equals(book.title, true) } }.orEmpty()
+    val backendBooks by androidx.compose.runtime.produceState<List<BookDTO>>(emptyList(), current?.title) {
+        value = current?.title?.let { title ->
+            locator.serverRepository.searchBooks(title).getOrNull()?.content
+                ?.filter { it.title.equals(title, ignoreCase = true) }
+                .orEmpty()
+        }.orEmpty()
+    }
+    val versions = current?.let { book ->
+        val local = state.books.filter { it.title.equals(book.title, true) }.map {
+            SourceVersion(it.id, "本地文件", it.format.displayName, "可离线阅读", it.coverUri)
+        }
+        val opds = opdsEntries.filter { it.title.equals(book.title, true) }.map {
+            SourceVersion("opds:${it.id}", it.sourceName, it.format, "OPDS · 可下载", null)
+        }
+        val backend = backendBooks.map {
+            SourceVersion("backend:${it.id}", "我的书库", it.format ?: "在线", "后端服务 · 在线阅读", locator.serverRepository.resolveCoverUrl(it.coverUrl))
+        }
+        (local + opds + backend).distinctBy { it.id }
+    }.orEmpty()
     var selectedId by remember(bookId) { mutableStateOf(bookId) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(DesignTokens.PagePadding)) {
         BundleHeaderRow("可用版本 / 来源", onBack)
@@ -306,24 +394,19 @@ fun BookSourcesScreen(
         }
         Text("检测到以下可用版本，请选择要阅读的来源", color = DesignTokens.SoftText)
         LazyColumn(Modifier.weight(1f).padding(top = DesignTokens.Space16), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
-            items(versions, key = { it.id }) { book ->
+            items(versions, key = { it.id }) { version ->
                 SoftCard(
-                    modifier = Modifier.border(if (book.id == selectedId) 1.dp else 0.dp, DesignTokens.Accent, RoundedCornerShape(DesignTokens.CardRadius)).clickable { selectedId = book.id }
+                    modifier = Modifier.border(if (version.id == selectedId) 1.dp else 0.dp, DesignTokens.Accent, RoundedCornerShape(DesignTokens.CardRadius)).clickable { selectedId = version.id }
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
                         Box(Modifier.size(56.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(DesignTokens.RadiusMedium)), contentAlignment = Alignment.Center) {
                             Icon(Icons.Default.Folder, null, tint = DesignTokens.Accent)
                         }
                         Column(Modifier.weight(1f)) {
-                            val sourceLabel = when (book.source.uppercase()) {
-                                "OPDS" -> "OPDS 下载"
-                                "SERVER", "BACKEND" -> "后端服务"
-                                else -> "本地文件"
-                            }
-                            Text(sourceLabel, fontWeight = FontWeight.Bold)
-                            Text("${book.format.displayName} · ${if (book.source.equals("SERVER", true)) "在线阅读" else "可离线阅读"}", color = DesignTokens.SoftText)
+                            Text(version.source, fontWeight = FontWeight.Bold)
+                            Text("${version.format} · ${version.detail}", color = DesignTokens.SoftText)
                         }
-                        if (book.id == selectedId) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.background(DesignTokens.Accent, CircleShape).padding(6.dp))
+                        if (version.id == selectedId) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.background(DesignTokens.Accent, CircleShape).padding(6.dp))
                     }
                 }
             }
@@ -339,6 +422,14 @@ fun BookSourcesScreen(
         ) { Text("使用该版本") }
     }
 }
+
+private data class SourceVersion(
+    val id: String,
+    val source: String,
+    val format: String,
+    val detail: String,
+    val coverUri: String?
+)
 
 @Composable
 private fun BundlePageHeader(title: String, onBack: () -> Unit, onAction: () -> Unit) {

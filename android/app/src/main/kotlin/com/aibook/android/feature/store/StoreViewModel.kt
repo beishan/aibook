@@ -15,6 +15,8 @@ import com.aibook.android.di.ServiceLocator
 import com.aibook.android.core.data.repository.DownloadTask
 import com.aibook.android.core.data.repository.DownloadTaskRepository
 import com.aibook.android.core.data.repository.DownloadStatus
+import com.aibook.android.core.data.repository.ServerRepository
+import com.aibook.android.core.network.api.dto.BookDTO
 import com.aibook.android.background.DownloadQueueManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 data class StoreActionState(
@@ -38,17 +41,28 @@ data class StoreUiState(
     val options: StoreCatalogOptions = StoreCatalogOptions()
 )
 
+data class BackendSearchState(
+    val books: List<BookDTO> = emptyList(),
+    val shelfBookIds: Set<Long> = emptySet(),
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null
+)
+
 class StoreViewModel(
     private val bookRepository: BookRepository,
     private val opdsConnectionRepository: OpdsConnectionRepository,
     private val opdsCatalogCacheRepository: OpdsCatalogCacheRepository,
     private val downloadTaskRepository: DownloadTaskRepository,
     private val downloadQueueManager: DownloadQueueManager,
+    private val serverRepository: ServerRepository,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     private val _actionState = MutableStateFlow(StoreActionState())
     val actionState: StateFlow<StoreActionState> = _actionState.asStateFlow()
+    private val _backendSearchState = MutableStateFlow(BackendSearchState())
+    val backendSearchState: StateFlow<BackendSearchState> = _backendSearchState.asStateFlow()
+    private var backendSearchJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -139,6 +153,51 @@ class StoreViewModel(
         _filter.update { it.copy(query = query) }
     }
 
+    fun searchBackend(query: String) {
+        backendSearchJob?.cancel()
+        if (query.isBlank()) {
+            _backendSearchState.value = BackendSearchState()
+            return
+        }
+        backendSearchJob = viewModelScope.launch {
+            _backendSearchState.update { it.copy(isLoading = true, errorMessage = null) }
+            val shelfIds = serverRepository.getShelf().getOrNull()
+                ?.let { shelf -> shelf.ungroupedBooks + shelf.groups.flatMap { it.books } }
+                ?.mapNotNull { it.id }
+                ?.toSet()
+                .orEmpty()
+            serverRepository.searchBooks(query).fold(
+                onSuccess = { page ->
+                    _backendSearchState.value = BackendSearchState(page.content, shelfIds, isLoading = false)
+                },
+                onFailure = { error ->
+                    _backendSearchState.value = BackendSearchState(
+                        shelfBookIds = shelfIds,
+                        isLoading = false,
+                        errorMessage = error.message ?: "后端搜索失败"
+                    )
+                }
+            )
+        }
+    }
+
+    fun toggleBackendShelf(book: BookDTO) {
+        val id = book.id ?: return
+        viewModelScope.launch {
+            val removing = id in _backendSearchState.value.shelfBookIds
+            val result = if (removing) serverRepository.removeFromShelf(id) else serverRepository.addToShelf(id)
+            result.onSuccess {
+                _backendSearchState.update { current ->
+                    current.copy(
+                        shelfBookIds = if (removing) current.shelfBookIds - id else current.shelfBookIds + id
+                    )
+                }
+            }.onFailure { error ->
+                _actionState.update { it.copy(message = error.message ?: "更新后端书架失败") }
+            }
+        }
+    }
+
     fun setSort(sort: StoreSortOption) {
         savedStateHandle["store.sort"] = sort.name
         _filter.update { it.copy(sort = sort) }
@@ -224,6 +283,7 @@ class StoreViewModel(
                     opdsCatalogCacheRepository = locator.opdsCatalogCacheRepository,
                     downloadTaskRepository = locator.downloadTaskRepository,
                     downloadQueueManager = DownloadQueueManager(app),
+                    serverRepository = locator.serverRepository,
                     savedStateHandle = createSavedStateHandle()
                 )
             }

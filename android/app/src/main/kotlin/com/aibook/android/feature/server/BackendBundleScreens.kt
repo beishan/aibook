@@ -9,18 +9,29 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +41,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,6 +66,7 @@ import com.aibook.android.ui.design.CollectionBook
 import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
+import com.aibook.android.ui.design.SlidingSegmentedControl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -69,28 +85,134 @@ fun BackendCollectionScreen(
     viewModel: ServerLibraryViewModel = viewModel(factory = ServerLibraryViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsState()
+    var showList by rememberSaveable { mutableStateOf(listMode) }
+    var shelfFilter by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(section, listId) {
         viewModel.selectSection(section)
         if (listId != null) viewModel.selectBookList(listId)
     }
+    val visibleBooks = state.books.filter { book ->
+        when (shelfFilter) {
+            1 -> book.id in state.shelfBookIds
+            2 -> book.id !in state.shelfBookIds
+            else -> true
+        }
+    }
     val collectionState = when {
         state.isLoading -> BookCollectionState.Loading
         state.errorMessage != null -> BookCollectionState.Error(state.errorMessage.orEmpty())
-        state.books.isEmpty() -> BookCollectionState.Empty(if (section == ServerLibrarySection.FAVORITES) "暂未收藏书籍" else "这里还没有书籍")
-        else -> BookCollectionState.Content(state.books.map { it.asCollectionBook(viewModel.coverUrl(it), it.id in state.shelfBookIds) })
+        visibleBooks.isEmpty() -> BookCollectionState.Empty(if (section == ServerLibrarySection.FAVORITES) "暂未收藏书籍" else "这里还没有书籍")
+        else -> BookCollectionState.Content(visibleBooks.map { it.asCollectionBook(viewModel.coverUrl(it), it.id in state.shelfBookIds) })
     }
+    val resolvedTitle = if (section == ServerLibrarySection.LISTS) {
+        state.bookLists.firstOrNull { it.id == listId }?.name ?: title
+    } else title
     DesignPage(
-        title = title,
+        title = resolvedTitle,
         modifier = Modifier.fillMaxSize(),
-        actions = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } }
+        navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
+        actions = {
+            IconButton(onClick = {}) { Icon(Icons.Default.Search, "搜索") }
+            IconButton(onClick = {}) { Icon(Icons.Default.FilterList, "筛选") }
+        }
     ) {
-        BookCollectionScreen(
-            state = collectionState,
-            columns = columns,
-            listMode = listMode,
-            onBookClick = { it.id.toLongOrNull()?.let(onBookClick) },
-            onRetry = viewModel::refresh
+        if (section == ServerLibrarySection.FAVORITES) {
+            SlidingSegmentedControl(
+                options = listOf("全部", "已加入书架", "未加入书架"),
+                selectedIndex = shelfFilter,
+                onSelected = { shelfFilter = it }
+            )
+            Spacer(Modifier.height(DesignTokens.Space12))
+        } else {
+            SlidingSegmentedControl(
+                options = listOf("卡片", "列表"),
+                selectedIndex = if (showList) 1 else 0,
+                onSelected = { showList = it == 1 }
+            )
+            Spacer(Modifier.height(DesignTokens.Space12))
+        }
+        if (section == ServerLibrarySection.LISTS && collectionState is BookCollectionState.Content) {
+            BackendBooklistContent(
+                books = visibleBooks,
+                coverUrl = viewModel::coverUrl,
+                shelfIds = state.shelfBookIds,
+                listMode = showList,
+                onBookClick = { it.id?.let(onBookClick) },
+                onToggleShelf = viewModel::toggleShelf
+            )
+        } else {
+            BookCollectionScreen(
+                state = collectionState,
+                columns = columns,
+                listMode = showList,
+                onBookClick = { it.id.toLongOrNull()?.let(onBookClick) },
+                onRetry = viewModel::refresh
+            )
+        }
+    }
+}
+
+@Composable
+private fun BackendBooklistContent(
+    books: List<BookDTO>,
+    coverUrl: (BookDTO) -> String?,
+    shelfIds: Set<Long>,
+    listMode: Boolean,
+    onBookClick: (BookDTO) -> Unit,
+    onToggleShelf: (BookDTO) -> Unit
+) {
+    if (listMode) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+            items(books, key = { it.id ?: it.title }) { book ->
+                BackendBooklistCard(book, coverUrl(book), book.id in shelfIds, onBookClick, onToggleShelf)
+            }
+        }
+    } else {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)
+        ) {
+            gridItems(books, key = { it.id ?: it.title }) { book ->
+                BackendBooklistCard(book, coverUrl(book), book.id in shelfIds, onBookClick, onToggleShelf)
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackendBooklistCard(
+    book: BookDTO,
+    coverUrl: String?,
+    onShelf: Boolean,
+    onBookClick: (BookDTO) -> Unit,
+    onToggleShelf: (BookDTO) -> Unit
+) {
+    SoftCard(contentPadding = DesignTokens.Space12, modifier = Modifier.clickable(
+        interactionSource = remember { MutableInteractionSource() }, indication = null
+    ) { onBookClick(book) }) {
+        BookCover(book.title, imageUri = coverUrl, width = null, height = 190.dp)
+        Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.padding(top = DesignTokens.Space8))
+        Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1)
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Icon(Icons.Default.Star, null, tint = DesignTokens.Warning, modifier = Modifier.size(16.dp))
+            Text(" ${book.rating ?: 0}.0", color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+        }
+        Text(
+            book.description?.ifBlank { "暂无简介" } ?: "暂无简介",
+            color = DesignTokens.SoftText,
+            maxLines = 2,
+            style = MaterialTheme.typography.bodySmall
         )
+        Button(
+            onClick = { onToggleShelf(book) },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (onShelf) MaterialTheme.colorScheme.surfaceVariant else DesignTokens.Accent,
+                contentColor = if (onShelf) DesignTokens.Accent else androidx.compose.ui.graphics.Color.White
+            ),
+            elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
+        ) { Text(if (onShelf) "已在书架" else "+ 加入书架") }
     }
 }
 
@@ -106,11 +228,10 @@ fun BackendBooklistsScreen(
     DesignPage(
         title = "书单",
         modifier = Modifier.fillMaxSize(),
+        navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
         actions = {
-            Text("新建", color = DesignTokens.Accent, modifier = Modifier.clickable(
-                interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onCreate
-            ))
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+            IconButton(onClick = onCreate) { Icon(Icons.Default.Add, "新建书单") }
+            IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, "更多") }
         }
     ) {
         when {
@@ -126,6 +247,8 @@ fun BackendBooklistsScreen(
                             ) { onBooklistClick(list.id) },
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                         ) {
+                            BooklistMosaic(list.books)
+                            Spacer(Modifier.width(DesignTokens.Space16))
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space4)) {
                                 Text(list.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                                 Text(list.description?.ifBlank { "暂无描述" } ?: "暂无描述", color = DesignTokens.SoftText)
@@ -135,6 +258,23 @@ fun BackendBooklistsScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BooklistMosaic(books: List<BookDTO>) {
+    Column(Modifier.width(112.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        books.take(4).chunked(2).forEach { rowBooks ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                rowBooks.forEach { book -> BookCover(book.title, width = null, height = 70.dp, modifier = Modifier.weight(1f)) }
+                repeat(2 - rowBooks.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+        if (books.isEmpty()) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                repeat(2) { BookCover("书单", width = null, height = 70.dp, modifier = Modifier.weight(1f)) }
             }
         }
     }
@@ -223,7 +363,7 @@ fun BackendBookDetailScreen(
     DesignPage(
         title = "书籍详情",
         modifier = Modifier.fillMaxSize(),
-        actions = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } }
+        navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } }
     ) {
         when {
             state.loading -> BookCollectionScreen(BookCollectionState.Loading, onBookClick = {})

@@ -77,9 +77,17 @@ fun ImportBooksScreen(
                 Text("浏览 ›", color = DesignTokens.Accent)
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("已选择 ${selectedUris.size} 项", fontWeight = FontWeight.SemiBold)
-            Text(state.message, color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (state.message.isNotBlank()) {
+                Text(
+                    state.message,
+                    color = DesignTokens.SoftText,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
             items(selectedUris, key = { it.toString() }) { uri ->

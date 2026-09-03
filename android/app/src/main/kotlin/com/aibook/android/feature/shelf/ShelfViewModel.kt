@@ -178,6 +178,10 @@ class ShelfViewModel(
         viewModelScope.launch { bookRepository.setFavorite(id, favorite) }
     }
 
+    fun clearReadingHistory() {
+        viewModelScope.launch { bookRepository.clearReadingHistory() }
+    }
+
     fun cycleSortOption() {
         val options = ShelfSortOption.entries
         val currentIndex = options.indexOf(_sortOption.value).takeIf { it >= 0 } ?: 0

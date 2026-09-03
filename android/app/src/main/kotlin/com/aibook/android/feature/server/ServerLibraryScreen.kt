@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -20,6 +21,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,15 +44,19 @@ import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SlidingSegmentedControl
+import com.aibook.android.ui.design.SectionHeader
+import com.aibook.android.ui.design.SoftCard
 
 @Composable
 fun ServerLibraryScreen(
     onLocalLibraryClick: () -> Unit,
     onOpdsClick: () -> Unit = {},
     onReadBook: (Long) -> Unit,
+    onBookClick: (Long) -> Unit = onReadBook,
     initialSection: ServerLibrarySection = ServerLibrarySection.ALL,
     overviewMode: Boolean = true,
     onSectionClick: (ServerLibrarySection) -> Unit = {},
+    onBookListClick: (Long) -> Unit = {},
     onCreateBookList: () -> Unit = {},
     onEditBookList: (Long) -> Unit = {},
     onBack: (() -> Unit)? = null,
@@ -63,27 +71,24 @@ fun ServerLibraryScreen(
         title = when {
             initialSection == ServerLibrarySection.SHELF -> "书架"
             !overviewMode -> initialSection.label
-            else -> "书城"
+            else -> "我的书库"
         },
         modifier = Modifier.fillMaxSize(),
-        actions = {
+        navigation = {
             onBack?.let { back ->
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
-                    modifier = Modifier.noRippleClick(back)
-                )
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", modifier = Modifier.noRippleClick(back))
             }
-            Icon(
-                Icons.Default.Refresh,
-                contentDescription = "刷新服务端书库",
-                modifier = Modifier.noRippleClick {
-                    if (overviewMode) viewModel.loadOverview() else viewModel.refresh()
-                }
-            )
+        },
+        actions = {
+            if (overviewMode) {
+                Icon(Icons.Default.Search, contentDescription = "搜索", modifier = Modifier.noRippleClick {})
+                Icon(Icons.Default.MoreVert, contentDescription = "更多", modifier = Modifier.noRippleClick(viewModel::loadOverview))
+            } else {
+                Icon(Icons.Default.Refresh, contentDescription = "刷新", modifier = Modifier.noRippleClick(viewModel::refresh))
+            }
         }
     ) {
-        if (onBack == null) {
+        if (onBack == null && !overviewMode) {
             SlidingSegmentedControl(
                 options = if (initialSection == ServerLibrarySection.SHELF) {
                     listOf("本地书架", "服务端书架")
@@ -124,7 +129,9 @@ fun ServerLibraryScreen(
                 favorites = state.favoritePreview,
                 bookLists = state.bookLists,
                 coverUrl = viewModel::coverUrl,
-                onSectionClick = onSectionClick
+                onSectionClick = onSectionClick,
+                onBookClick = onBookClick,
+                onBookListClick = onBookListClick
             )
             else -> ServerSectionContent(
                 state = state,
@@ -146,37 +153,68 @@ private fun RemoteOverview(
     favorites: List<BookDTO>,
     bookLists: List<BookListDTO>,
     coverUrl: (BookDTO) -> String?,
-    onSectionClick: (ServerLibrarySection) -> Unit
+    onSectionClick: (ServerLibrarySection) -> Unit,
+    onBookClick: (Long) -> Unit,
+    onBookListClick: (Long) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item {
-            RemoteBookPreviewCard(
-                title = "书籍列表",
-                emptyText = "服务端暂无书籍",
-                books = books,
-                coverUrl = coverUrl,
-                onClick = { onSectionClick(ServerLibrarySection.ALL) }
-            )
-        }
-        item {
-            RemoteBookPreviewCard(
-                title = "收藏",
-                emptyText = "暂未收藏书籍",
-                books = favorites,
-                coverUrl = coverUrl,
-                onClick = { onSectionClick(ServerLibrarySection.FAVORITES) }
-            )
-        }
-        item {
-            RemoteListPreviewCard(
-                lists = bookLists,
-                onClick = { onSectionClick(ServerLibrarySection.LISTS) }
-            )
-        }
+        item { RemoteHorizontalSection("最近加入", books, coverUrl, { onSectionClick(ServerLibrarySection.ALL) }, onBookClick) }
+        item { RemoteHorizontalSection("收藏", favorites, coverUrl, { onSectionClick(ServerLibrarySection.FAVORITES) }, onBookClick) }
+        item { SectionHeader("书单", "查看更多 ›") { onSectionClick(ServerLibrarySection.LISTS) } }
+        items(bookLists.take(2), key = { it.id }) { list -> RemoteBooklistPreviewRow(list) { onBookListClick(list.id) } }
         item { Spacer(Modifier.height(8.dp)) }
+    }
+}
+
+@Composable
+private fun RemoteHorizontalSection(
+    title: String,
+    books: List<BookDTO>,
+    coverUrl: (BookDTO) -> String?,
+    onMore: () -> Unit,
+    onBookClick: (Long) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+        SectionHeader(title, "查看更多 ›", onMore)
+        if (books.isEmpty()) {
+            Text("暂无内容", color = DesignTokens.SoftText)
+        } else {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                items(books, key = { it.id ?: it.title }) { book ->
+                    Column(
+                        modifier = Modifier.width(112.dp).noRippleClick { book.id?.let(onBookClick) },
+                        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)
+                    ) {
+                        BookCover(book.title, imageUri = coverUrl(book), width = 112.dp, height = 158.dp)
+                        Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RemoteBooklistPreviewRow(list: BookListDTO, onClick: () -> Unit) {
+    SoftCard(modifier = Modifier.noRippleClick(onClick)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
+            Box(
+                Modifier.size(54.dp).background(DesignTokens.WarmCard, RoundedCornerShape(DesignTokens.RadiusMedium)),
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Default.Book, null, tint = DesignTokens.Accent) }
+            Column(Modifier.weight(1f)) {
+                Text(list.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("${list.books.size} 本", color = DesignTokens.SoftText)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                list.books.take(4).forEach { book -> BookCover(book.title, width = 34.dp, height = 50.dp) }
+            }
+            Text("›", color = DesignTokens.Accent, style = MaterialTheme.typography.headlineMedium)
+        }
     }
 }
 

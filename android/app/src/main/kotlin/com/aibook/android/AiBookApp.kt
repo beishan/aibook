@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -36,6 +37,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibook.android.feature.opds.OpdsScreen
 import com.aibook.android.feature.opds.OpdsAddSourceScreen
 import com.aibook.android.feature.importer.ImportBooksScreen
@@ -47,6 +49,7 @@ import com.aibook.android.feature.settings.PrivacyPermissionsScreen
 import com.aibook.android.feature.settings.ScanDirectoryScreen
 import com.aibook.android.feature.settings.LocalScanScreen
 import com.aibook.android.feature.settings.ScanResultScreen
+import com.aibook.android.feature.settings.ScanDirectoryViewModel
 import com.aibook.android.feature.settings.SettingsScreen
 import com.aibook.android.feature.settings.ReadingSettingsScreen
 import com.aibook.android.feature.settings.AppThemeSettingsScreen
@@ -90,8 +93,9 @@ private val bottomTabs = listOf(
 )
 
 @Composable
-fun AiBookApp() {
+fun AiBookApp(initialDebugRoute: String? = null) {
     val navController = rememberNavController()
+    val scanViewModel: ScanDirectoryViewModel = viewModel(factory = ScanDirectoryViewModel.Factory)
     val navigateDiscoverySource: (String) -> Unit = { route ->
         navController.navigate(route) {
             popUpTo(Screen.Store.route) { inclusive = false }
@@ -100,6 +104,12 @@ fun AiBookApp() {
     }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+
+    LaunchedEffect(initialDebugRoute) {
+        if (!initialDebugRoute.isNullOrBlank() && initialDebugRoute != Screen.Shelf.route) {
+            navController.navigate(initialDebugRoute) { launchSingleTop = true }
+        }
+    }
 
     val selectedBottomRoute = when (currentRoute) {
         Screen.ShelfFolders.route,
@@ -112,10 +122,14 @@ fun AiBookApp() {
         Screen.StoreCategory.route,
         Screen.StoreSearch.route,
         Screen.StoreOpds.route,
+        Screen.OpdsServiceDetail.route,
+        Screen.OpdsCategories.route,
+        Screen.OpdsCategoryBooks.route,
         Screen.ServerLibrary.route,
         Screen.BackendRecent.route,
         Screen.BackendFavorites.route,
         Screen.BackendBooklists.route,
+        Screen.BackendBookListDetail.route,
         Screen.NewBookList.route,
         Screen.EditBookList.route -> Screen.Store.route
         Screen.StoreRemoteBookDetail.route -> Screen.Store.route
@@ -132,41 +146,22 @@ fun AiBookApp() {
         Screen.ReadingSettings.route -> Screen.Settings.route
         else -> currentRoute
     }
-    val bottomBarRoutes = bottomTabs.map { it.screen.route } +
-        listOf(
-            Screen.StoreCategory.route,
-            Screen.StoreSearch.route,
-            Screen.StoreOpds.route,
-            Screen.OpdsServiceDetail.route,
-            Screen.StoreRemoteBookDetail.route,
-            Screen.ServerLibrary.route,
-            Screen.BackendRecent.route,
-            Screen.BackendFavorites.route,
-            Screen.BackendBooklists.route,
-            Screen.Opds.route,
-            Screen.OpdsAddSource.route,
-            Screen.ImportBooks.route,
-            Screen.ShelfSettings.route,
-            Screen.ScanDirectories.route,
-            Screen.SyncConnectionSettings.route,
-            Screen.StorageCache.route,
-            Screen.Downloads.route,
-            Screen.PrivacyPermissions.route,
-            Screen.About.route,
-            Screen.ShelfFolders.route,
-            Screen.ShelfFolderDetail.route,
-            Screen.NewShelfFolder.route,
-            Screen.ShelfList.route,
-            Screen.ShelfBatch.route,
-            Screen.RecentReading.route,
-            Screen.ShelfSortFilter.route,
-            Screen.NewBookList.route,
-            Screen.EditBookList.route,
-            Screen.BackupRestore.route,
-            Screen.ReadingSettings.route
-        )
-    val showBottomBar = currentRoute in bottomBarRoutes ||
-        currentRoute?.startsWith("bookstore/opds/add") == true
+    val bottomBarRoutes = bottomTabs.map { it.screen.route } + listOf(
+        Screen.StoreCategory.route,
+        Screen.StoreOpds.route,
+        Screen.OpdsServiceDetail.route,
+        Screen.OpdsCategories.route,
+        Screen.OpdsCategoryBooks.route,
+        Screen.ServerLibrary.route,
+        Screen.BackendRecent.route,
+        Screen.BackendFavorites.route,
+        Screen.BackendBooklists.route,
+        Screen.BackendBookListDetail.route,
+        Screen.ShelfFolders.route,
+        Screen.ShelfFolderDetail.route,
+        Screen.ShelfList.route
+    )
+    val showBottomBar = currentRoute in bottomBarRoutes
 
     Scaffold(
         bottomBar = {
@@ -243,7 +238,8 @@ fun AiBookApp() {
                         },
                         onFoldersClick = { navController.navigate(Screen.ShelfFolders.route) },
                         onRecentReadingClick = { navController.navigate(Screen.RecentReading.route) },
-                        onSortClick = { navController.navigate(Screen.ShelfSortFilter.route) }
+                        onSortClick = { navController.navigate(Screen.ShelfSortFilter.route) },
+                        initialViewMode = 0
                     )
                 }
             }
@@ -413,6 +409,7 @@ fun AiBookApp() {
                         onLocalLibraryClick = { navigateDiscoverySource(Screen.Store.route) },
                         onOpdsClick = { navigateDiscoverySource(Screen.StoreOpds.route) },
                         onReadBook = { bookId -> navController.navigate(Screen.RemoteReader.createRoute(bookId)) },
+                        onBookClick = { bookId -> navController.navigate(Screen.RemoteBookDetail.createRoute(bookId)) },
                         onSectionClick = { section ->
                             val route = when (section) {
                                 ServerLibrarySection.ALL -> Screen.BackendRecent.route
@@ -421,7 +418,8 @@ fun AiBookApp() {
                                 ServerLibrarySection.LISTS -> Screen.BackendBooklists.route
                             }
                             navController.navigate(route)
-                        }
+                        },
+                        onBookListClick = { navController.navigate(Screen.BackendBookListDetail.createRoute(it)) }
                     )
                 }
             }
@@ -430,6 +428,7 @@ fun AiBookApp() {
                     BackendCollectionScreen(
                         section = ServerLibrarySection.ALL,
                         title = "最近加入",
+                        columns = 2,
                         onBack = { navController.popBackStack() },
                         onBookClick = { navController.navigate(Screen.RemoteBookDetail.createRoute(it)) }
                     )
@@ -511,7 +510,8 @@ fun AiBookApp() {
                         onBookClick = { bookId -> navController.navigate(Screen.BookDetail.createRoute(bookId)) },
                         onRemoteBookClick = { bookId ->
                             navController.navigate(Screen.StoreRemoteBookDetail.createRoute(bookId))
-                        }
+                        },
+                        onBackendBookClick = { bookId -> navController.navigate(Screen.RemoteBookDetail.createRoute(bookId)) }
                     )
                 }
             }
@@ -524,7 +524,8 @@ fun AiBookApp() {
                         initialQuery = entry.arguments?.getString("query"),
                         onBack = { navController.popBackStack() },
                         onBookClick = { navController.navigate(Screen.BookDetail.createRoute(it)) },
-                        onRemoteBookClick = { navController.navigate(Screen.StoreRemoteBookDetail.createRoute(it)) }
+                        onRemoteBookClick = { navController.navigate(Screen.StoreRemoteBookDetail.createRoute(it)) },
+                        onBackendBookClick = { navController.navigate(Screen.RemoteBookDetail.createRoute(it)) }
                     )
                 }
             }
@@ -566,7 +567,8 @@ fun AiBookApp() {
                 PaddedScreen(paddingValues) {
                     ScanDirectoryScreen(
                         onBack = { navController.popBackStack() },
-                        onStartScan = { navController.navigate(Screen.LocalScan.route) }
+                        onStartScan = { navController.navigate(Screen.LocalScan.route) },
+                        viewModel = scanViewModel
                     )
                 }
             }
@@ -574,7 +576,8 @@ fun AiBookApp() {
                 PaddedScreen(paddingValues) {
                     LocalScanScreen(
                         onBack = { navController.popBackStack() },
-                        onComplete = { navController.navigate(Screen.ScanResult.route) }
+                        onComplete = { navController.navigate(Screen.ScanResult.route) },
+                        viewModel = scanViewModel
                     )
                 }
             }
@@ -582,7 +585,9 @@ fun AiBookApp() {
                 PaddedScreen(paddingValues) {
                     ScanResultScreen(
                         onBack = { navController.popBackStack() },
-                        onImport = { navController.navigate(Screen.ImportBooks.route) }
+                        onViewBooks = { navController.navigate(Screen.Store.route) },
+                        onDone = { navController.navigate(Screen.Store.route) },
+                        viewModel = scanViewModel
                     )
                 }
             }
@@ -681,7 +686,15 @@ fun AiBookApp() {
                     BookSourcesScreen(
                         bookId = bookId,
                         onBack = { navController.popBackStack() },
-                        onSelect = { selectedId -> navController.navigate(Screen.BookDetail.createRoute(selectedId)) }
+                        onSelect = { selectedId ->
+                            when {
+                                selectedId.startsWith("opds:") -> navController.navigate(Screen.StoreRemoteBookDetail.createRoute(selectedId.removePrefix("opds:")))
+                                selectedId.startsWith("backend:") -> selectedId.removePrefix("backend:").toLongOrNull()?.let {
+                                    navController.navigate(Screen.RemoteBookDetail.createRoute(it))
+                                }
+                                else -> navController.navigate(Screen.BookDetail.createRoute(selectedId))
+                            }
+                        }
                     )
                 }
             }

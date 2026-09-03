@@ -39,6 +39,8 @@ import coil3.compose.AsyncImage
 fun DesignPage(
     title: String,
     modifier: Modifier = Modifier,
+    centerTitle: Boolean = false,
+    navigation: @Composable RowScope.() -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -49,17 +51,34 @@ fun DesignPage(
             .padding(horizontal = DesignTokens.PagePadding, vertical = topPadding)
     ) {
         if (title.isNotEmpty()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = DesignTokens.Space8, bottom = DesignTokens.Space16),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), content = actions)
+            if (centerTitle) {
+                Box(Modifier.fillMaxWidth().padding(top = DesignTokens.Space8, bottom = DesignTokens.Space16)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, content = navigation)
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), content = actions)
+                    }
+                    Text(
+                        text = title,
+                        modifier = Modifier.align(Alignment.Center),
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = DesignTokens.Space8, bottom = DesignTokens.Space16),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, content = navigation)
+                    Text(
+                        text = title,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), content = actions)
+                }
             }
         } else {
             Row(

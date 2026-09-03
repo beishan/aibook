@@ -4,11 +4,17 @@ import android.app.Application
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -19,6 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -27,6 +34,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -121,6 +131,7 @@ fun BookListEditorScreen(
 ) {
     val state by viewModel.state.collectAsState()
     var confirmDelete by remember { mutableStateOf(false) }
+    var syncToServer by remember { mutableStateOf(true) }
     LaunchedEffect(listId) { viewModel.load(listId) }
     LaunchedEffect(state.saved, state.deleted) {
         if (state.saved || state.deleted) onDone()
@@ -129,7 +140,7 @@ fun BookListEditorScreen(
     DesignPage(
         title = if (listId == null) "新建书单" else "编辑书单",
         modifier = Modifier.fillMaxSize(),
-        actions = {
+        navigation = {
             Icon(
                 Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "返回",
@@ -137,44 +148,68 @@ fun BookListEditorScreen(
             )
         }
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Column(
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
+        ) {
+            if (listId == null) {
+                Text("✦ 创建你的专属书单，收藏心仪的小说", modifier = Modifier.fillMaxWidth(), color = DesignTokens.Accent, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
             SoftCard {
-                Text("书单信息", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(16.dp))
+                Text(if (listId == null) "书单名称" else "基本信息", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(DesignTokens.Space12))
                 OutlinedTextField(
-                    value = state.name,
-                    onValueChange = viewModel::setName,
-                    label = { Text("书单名称") },
+                    value = state.name.take(20),
+                    onValueChange = { viewModel.setName(it.take(20)) },
+                    label = { Text(if (listId == null) "名称" else "书单名称") },
                     placeholder = { Text("例如：年度科幻精选") },
+                    supportingText = { Text("${state.name.length.coerceAtMost(20)}/20", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.End) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(DesignTokens.Space12))
                 OutlinedTextField(
-                    value = state.description,
-                    onValueChange = viewModel::setDescription,
-                    label = { Text("简介") },
+                    value = state.description.take(200),
+                    onValueChange = { viewModel.setDescription(it.take(200)) },
+                    label = { Text("描述") },
                     placeholder = { Text("记录这个书单的主题或阅读计划") },
-                    minLines = 5,
+                    supportingText = { Text("${state.description.length.coerceAtMost(200)}/200", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.End) },
+                    minLines = 4,
                     modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(Modifier.height(DesignTokens.Space12))
+                Text("封面", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                BooklistCoverPlaceholder()
+                if (listId == null) {
+                    Spacer(Modifier.height(DesignTokens.Space16))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("同步到后端服务", fontWeight = FontWeight.Bold)
+                            Text("创建后支持多设备访问", color = DesignTokens.SoftText)
+                        }
+                        Switch(checked = syncToServer, onCheckedChange = { syncToServer = it })
+                    }
+                }
+            }
+            if (listId != null) {
+                SoftCard {
+                    EditorActionRow("重命名", "修改书单名称", DesignTokens.Accent) {}
+                    EditorActionRow("修改描述", "修改书单的描述信息", DesignTokens.Accent) {}
+                    EditorActionRow("删除书单", "删除后将无法恢复，请谨慎操作", DesignTokens.Danger) { confirmDelete = true }
+                }
             }
             state.error?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 4.dp))
             }
-            Spacer(Modifier.weight(1f))
-            Button(
-                onClick = { viewModel.save(listId) },
-                enabled = !state.loading,
-                modifier = Modifier.fillMaxWidth().height(52.dp)
-            ) { Text(if (state.loading) "处理中…" else "保存书单", fontWeight = FontWeight.Bold) }
-            if (listId != null) {
-                OutlinedButton(
-                    onClick = { confirmDelete = true },
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f).height(54.dp)) { Text("取消") }
+                Button(
+                    onClick = { viewModel.save(listId) },
                     enabled = !state.loading,
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) { Text("删除书单", color = DesignTokens.Danger) }
+                    modifier = Modifier.weight(1f).height(54.dp)
+                ) { Text(if (state.loading) "处理中…" else if (listId == null) "创建" else "保存", fontWeight = FontWeight.Bold) }
             }
+            Spacer(Modifier.height(DesignTokens.Space16))
         }
     }
 
@@ -190,5 +225,36 @@ fun BookListEditorScreen(
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("取消") } }
         )
+    }
+}
+
+@Composable
+private fun BooklistCoverPlaceholder() {
+    Column(
+        Modifier.fillMaxWidth().height(210.dp).background(DesignTokens.WarmCard, RoundedCornerShape(DesignTokens.CardRadius)).padding(3.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        repeat(2) { row ->
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                repeat(2) { column ->
+                    val colors = if ((row + column) % 2 == 0) listOf(Color(0xFF617A87), Color(0xFF263640)) else listOf(Color(0xFFC99461), Color(0xFF74452C))
+                    Spacer(Modifier.weight(1f).height(104.dp).background(Brush.verticalGradient(colors), RoundedCornerShape(DesignTokens.RadiusSmall)))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditorActionRow(title: String, subtitle: String, color: Color, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = DesignTokens.Space12),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = color, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = DesignTokens.SoftText)
+        }
+        Text("›", color = color, style = MaterialTheme.typography.headlineMedium)
     }
 }

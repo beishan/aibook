@@ -109,6 +109,7 @@ fun ShelfScreen(
         importViewModel.importBooks(uris)
     }
     var onlyUnread by remember { mutableStateOf(false) }
+    var favoriteOnly by remember { mutableStateOf(false) }
     var sourceFilter by remember { mutableIntStateOf(0) }
     val visibleBooks = state.filteredBooks.filter { book ->
         val sourceMatches = when (sourceFilter) {
@@ -117,7 +118,7 @@ fun ShelfScreen(
             3 -> book.isServerBook()
             else -> true
         }
-        sourceMatches && (!onlyUnread || book.progress.percent <= 0f)
+        sourceMatches && (!onlyUnread || book.progress.percent <= 0f) && (!favoriteOnly || book.favorite)
     }
     val visibleLocalBooks = visibleBooks.filterNot { it.isServerBook() }
     val featuredBook = visibleBooks.firstOrNull()
@@ -144,6 +145,7 @@ fun ShelfScreen(
             ?.let { value -> runCatching { com.aibook.android.core.model.ShelfSortOption.valueOf(value) }.getOrNull() }
         if (savedSort != null) viewModel.setSortOption(savedSort)
         onlyUnread = prefs.getBoolean(ShelfPreferences.KEY_FILTER_UNREAD, false)
+        favoriteOnly = prefs.getBoolean("filter_favorite", false)
     }
 
     DisposableEffect(prefs) {
@@ -156,6 +158,8 @@ fun ShelfScreen(
                     ?.let(viewModel::setSortOption)
             } else if (key == ShelfPreferences.KEY_FILTER_UNREAD) {
                 onlyUnread = preferences.getBoolean(key, false)
+            } else if (key == "filter_favorite") {
+                favoriteOnly = preferences.getBoolean(key, false)
             }
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)

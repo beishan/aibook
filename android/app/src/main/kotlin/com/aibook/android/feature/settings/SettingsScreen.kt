@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -241,64 +243,140 @@ fun ReadingSettingsScreen(
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var eyeCare by remember { mutableStateOf(true) }
+    var keepScreenOn by remember { mutableStateOf(false) }
+    var pageMargin by remember { mutableStateOf(0.5f) }
+    var brightness by remember { mutableStateOf(0.78f) }
+    val turnModes = listOf(
+        com.aibook.android.core.model.PageTurnMode.SIMULATION,
+        com.aibook.android.core.model.PageTurnMode.COVER,
+        com.aibook.android.core.model.PageTurnMode.VERTICAL,
+        com.aibook.android.core.model.PageTurnMode.PAN
+    )
     DesignPage(
         title = "阅读设置",
         modifier = Modifier.fillMaxSize(),
-        actions = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } }
+        centerTitle = true,
+        navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } }
     ) {
         Column(
             modifier = Modifier.verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
         ) {
-            SectionLabel("翻页方式")
             SoftCard {
-                SlidingSegmentedControl(
-                    options = listOf("仿真", "滑动", "覆盖", "平移", "上下"),
-                    selectedIndex = state.pageTurnMode.ordinal,
-                    onSelected = { viewModel.setPageTurnMode(com.aibook.android.core.model.PageTurnMode.entries[it]) }
-                )
-            }
-            SectionLabel("字体设置")
-            SoftCard {
-                Text("字号 · ${"%.0f".format(state.fontScale * 100)}%", fontWeight = FontWeight.Bold)
-                Slider(
-                    value = state.fontScale,
-                    onValueChange = viewModel::setFontScale,
-                    valueRange = 0.75f..1.6f,
-                    colors = SliderDefaults.colors(thumbColor = DesignTokens.Accent, activeTrackColor = DesignTokens.Accent)
-                )
-                Text("行距 · ${"%.2f".format(state.lineHeight)}", fontWeight = FontWeight.Bold)
-                Slider(
-                    value = state.lineHeight,
-                    onValueChange = viewModel::setLineHeight,
-                    valueRange = 1.1f..2.2f,
-                    colors = SliderDefaults.colors(thumbColor = DesignTokens.Accent, activeTrackColor = DesignTokens.Accent)
-                )
-            }
-            SectionLabel("页面设置")
-            SoftCard {
-                Text("阅读背景", fontWeight = FontWeight.Bold)
-                SlidingSegmentedControl(
-                    options = listOf("纸张", "浅色", "深色"),
-                    selectedIndex = when (state.readerTheme) {
-                        com.aibook.android.core.model.ReaderTheme.PAPER -> 0
-                        com.aibook.android.core.model.ReaderTheme.LIGHT -> 1
-                        else -> 2
-                    },
-                    onSelected = {
-                        viewModel.setReaderTheme(
-                            when (it) {
-                                0 -> com.aibook.android.core.model.ReaderTheme.PAPER
-                                1 -> com.aibook.android.core.model.ReaderTheme.LIGHT
-                                else -> com.aibook.android.core.model.ReaderTheme.DARK
+                SectionLabel("翻页方式")
+                Row(Modifier.fillMaxWidth().padding(top = DesignTokens.Space16), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                    listOf("仿真翻页", "覆盖", "平滑滚动", "无").forEachIndexed { index, label ->
+                        val selected = turnModes.indexOf(state.pageTurnMode).coerceAtLeast(0) == index
+                        Column(Modifier.weight(1f).clickable { viewModel.setPageTurnMode(turnModes[index]) }, horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                Modifier.fillMaxWidth().height(92.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(DesignTokens.RadiusMedium))
+                                    .border(if (selected) 2.dp else 1.dp, if (selected) DesignTokens.Accent else DesignTokens.Hairline, RoundedCornerShape(DesignTokens.RadiusMedium))
+                                    .padding(10.dp)
+                            ) {
+                                TurnModePreview(index)
+                                if (selected) Text("✓", color = Color.White, modifier = Modifier.align(Alignment.TopEnd).background(DesignTokens.Accent, CircleShape).padding(4.dp))
                             }
-                        )
+                            Text(label, modifier = Modifier.padding(top = DesignTokens.Space8), color = if (selected) DesignTokens.Accent else MaterialTheme.colorScheme.onSurface)
+                        }
                     }
-                )
+                }
+            }
+            SoftCard {
+                SectionLabel("字体设置")
+                ReadingValueRow("字体", "系统字体")
+                ReadingValueRow("字体大小", "${(18 * state.fontScale).toInt()}")
+                ReadingValueRow("字间距", "2")
+                ReadingValueRow("行间距", "${"%.1f".format(state.lineHeight)}")
+            }
+            SoftCard {
+                SectionLabel("页面设置")
+                Text("背景颜色", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = DesignTokens.Space12))
+                Row(Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space16), horizontalArrangement = Arrangement.SpaceAround) {
+                    listOf(
+                        Triple("纸张", Color(0xFFF2E4CE), com.aibook.android.core.model.ReaderTheme.PAPER),
+                        Triple("护眼绿", Color(0xFFD3E8C9), com.aibook.android.core.model.ReaderTheme.GREEN),
+                        Triple("浅绿色", Color(0xFFE3EBDD), com.aibook.android.core.model.ReaderTheme.LIGHT),
+                        Triple("浅灰", Color(0xFFE0DED8), com.aibook.android.core.model.ReaderTheme.GRAY),
+                        Triple("夜间", Color(0xFF2B2B2B), com.aibook.android.core.model.ReaderTheme.DARK)
+                    ).forEach { (label, color, theme) ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { viewModel.setReaderTheme(theme) }) {
+                            Box(Modifier.size(44.dp).background(color, CircleShape).border(if (state.readerTheme == theme) 2.dp else 0.dp, DesignTokens.Accent, CircleShape))
+                            Text(label, style = MaterialTheme.typography.labelSmall, color = if (state.readerTheme == theme) DesignTokens.Accent else DesignTokens.SoftText)
+                        }
+                    }
+                }
+                HorizontalDivider(color = DesignTokens.Hairline)
+                ReadingSwitchRow("护眼模式", "减少蓝光，缓解视觉疲劳", eyeCare) { eyeCare = it }
+                ReadingSwitchRow("屏幕常亮", "阅读时屏幕保持常亮", keepScreenOn) { keepScreenOn = it }
+                Text("页面边距", fontWeight = FontWeight.Bold)
+                Slider(value = pageMargin, onValueChange = { pageMargin = it }, colors = SliderDefaults.colors(thumbColor = DesignTokens.Accent, activeTrackColor = DesignTokens.Accent, inactiveTrackColor = DesignTokens.Hairline))
+                Text("屏幕亮度 · ${(brightness * 100).toInt()}%", fontWeight = FontWeight.Bold)
+                Slider(value = brightness, onValueChange = { brightness = it }, colors = SliderDefaults.colors(thumbColor = DesignTokens.Accent, activeTrackColor = DesignTokens.Accent, inactiveTrackColor = DesignTokens.Hairline))
             }
             Spacer(Modifier.height(DesignTokens.Space24))
         }
     }
+}
+
+@Composable
+private fun TurnModePreview(index: Int) {
+    val ink = DesignTokens.SoftText.copy(alpha = 0.24f)
+    Row(
+        modifier = Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(if (index == 1) 3.dp else 0.dp)
+    ) {
+        repeat(if (index == 1) 2 else 1) { page ->
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxSize()
+                    .background(
+                        if (index == 2) Color.White.copy(alpha = 0.42f) else Color.Transparent,
+                        RoundedCornerShape(5.dp)
+                    )
+                    .padding(horizontal = 5.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                repeat(if (index == 3) 8 else 6) { line ->
+                    Box(
+                        Modifier
+                            .fillMaxWidth(if ((line + page) % 3 == 2) 0.58f else 0.9f)
+                            .height(2.dp)
+                            .background(ink, RoundedCornerShape(2.dp))
+                    )
+                }
+                if (index == 0) {
+                    Spacer(Modifier.weight(1f))
+                    Box(
+                        Modifier
+                            .align(Alignment.End)
+                            .size(26.dp)
+                            .background(Color.White.copy(alpha = 0.58f), RoundedCornerShape(topStart = 18.dp))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReadingValueRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space12), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, fontWeight = FontWeight.Medium)
+        Text("$value  ›", color = DesignTokens.SoftText)
+    }
+    HorizontalDivider(color = DesignTokens.Hairline)
+}
+
+@Composable
+private fun ReadingSwitchRow(label: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space12), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) { Text(label, fontWeight = FontWeight.Medium); Text(subtitle, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall) }
+        Switch(checked = checked, onCheckedChange = onChange, colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent))
+    }
+    HorizontalDivider(color = DesignTokens.Hairline)
 }
 
 @Composable
@@ -311,57 +389,97 @@ fun AppThemeSettingsScreen(
     val preferences = remember { context.getSharedPreferences("appearance_settings", Context.MODE_PRIVATE) }
     var appIcon by remember { mutableIntStateOf(preferences.getInt("app_icon", 0).coerceIn(0, 2)) }
     var compactMetadata by remember { mutableStateOf(preferences.getBoolean("compact_metadata", false)) }
+    var immersiveStatusBar by remember { mutableStateOf(preferences.getBoolean("immersive_status_bar", true)) }
     var coverRadius by remember { mutableStateOf(preferences.getFloat("cover_radius", 8f).coerceIn(0f, 24f)) }
 
     DesignPage(
         title = "主题与外观",
         modifier = Modifier.fillMaxSize(),
-        actions = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } }
+        centerTitle = true,
+        navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } }
     ) {
         Column(
             modifier = Modifier.verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
         ) {
             SectionLabel("主题模式")
-            SoftCard {
-                SlidingSegmentedControl(
-                    options = listOf("跟随系统", "浅色", "深色"),
-                    selectedIndex = state.appThemeMode.ordinal,
-                    onSelected = { viewModel.setAppThemeMode(com.aibook.android.core.model.AppThemeMode.entries[it]) }
-                )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                listOf(
+                    "浅色" to com.aibook.android.core.model.AppThemeMode.LIGHT,
+                    "深色" to com.aibook.android.core.model.AppThemeMode.DARK,
+                    "跟随系统" to com.aibook.android.core.model.AppThemeMode.SYSTEM
+                ).forEachIndexed { index, (label, mode) ->
+                    Column(
+                        Modifier.weight(1f).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(DesignTokens.RadiusLarge))
+                            .border(if (state.appThemeMode == mode) 2.dp else 1.dp, if (state.appThemeMode == mode) DesignTokens.Accent else DesignTokens.Hairline, RoundedCornerShape(DesignTokens.RadiusLarge))
+                            .clickable { viewModel.setAppThemeMode(mode) }.padding(DesignTokens.Space12),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)
+                    ) {
+                        Box(
+                            Modifier.fillMaxWidth().height(88.dp).background(
+                                when (index) {
+                                    1 -> androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFF282624), Color(0xFF282624)))
+                                    2 -> androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFFF6EEE2), Color(0xFF282624)))
+                                    else -> androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFFF6EEE2), Color(0xFFF6EEE2)))
+                                }, RoundedCornerShape(DesignTokens.RadiusMedium)
+                            ), contentAlignment = Alignment.Center
+                        ) { Text("A  ━\n▰  ━", color = if (index == 1) Color.LightGray else DesignTokens.SoftText) }
+                        Text(label, color = if (state.appThemeMode == mode) DesignTokens.Accent else MaterialTheme.colorScheme.onSurface)
+                    }
+                }
             }
             SectionLabel("主题色")
             SoftCard {
-                SlidingSegmentedControl(
-                    options = listOf("暖棕", "草木绿", "湖水蓝"),
-                    selectedIndex = state.accentColor.ordinal,
-                    onSelected = { viewModel.setAccentColor(com.aibook.android.core.model.AccentColor.entries[it]) }
-                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                    listOf(Color(0xFF9B5E24), Color(0xFFFF8124), Color(0xFF65A34C), Color(0xFF35A8A8), Color(0xFF477ACD), Color(0xFF7951A8)).forEachIndexed { index, color ->
+                        val selectableIndex = index.coerceAtMost(com.aibook.android.core.model.AccentColor.entries.lastIndex)
+                        val selected = state.accentColor.ordinal == selectableIndex && index == selectableIndex
+                        Box(Modifier.size(46.dp).background(color, CircleShape).border(if (selected) 3.dp else 0.dp, MaterialTheme.colorScheme.surface, CircleShape).clickable {
+                            viewModel.setAccentColor(com.aibook.android.core.model.AccentColor.entries[selectableIndex])
+                        })
+                    }
+                }
             }
             SectionLabel("应用图标")
             SoftCard {
-                SlidingSegmentedControl(
-                    options = listOf("经典", "纸张", "深色"),
-                    selectedIndex = appIcon,
-                    onSelected = {
-                        appIcon = it
-                        preferences.edit().putInt("app_icon", it).apply()
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                    repeat(4) { index ->
+                        Box(
+                            Modifier.size(66.dp).background(
+                                listOf(Color(0xFFFFF2DF), Color(0xFF2C231B), Color(0xFFEFD9B8), Color(0xFFF6F2EA))[index], RoundedCornerShape(DesignTokens.RadiusMedium)
+                            ).border(if (appIcon == index.coerceAtMost(2)) 2.dp else 0.dp, DesignTokens.Accent, RoundedCornerShape(DesignTokens.RadiusMedium))
+                                .clickable { appIcon = index.coerceAtMost(2); preferences.edit().putInt("app_icon", appIcon).apply() },
+                            contentAlignment = Alignment.Center
+                        ) { Text("书", color = if (index == 1) Color(0xFFFFD58B) else DesignTokens.Accent, style = MaterialTheme.typography.headlineMedium) }
                     }
-                )
+                }
             }
             SectionLabel("显示设置")
             SoftCard {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("精简书籍信息", fontWeight = FontWeight.Bold)
-                        Text("隐藏次要元数据，让书架更紧凑", color = DesignTokens.SoftText)
+                        Text("显示状态栏", fontWeight = FontWeight.Bold)
+                        Text("在阅读界面顶部显示系统状态栏", color = DesignTokens.SoftText)
                     }
                     Switch(
-                        checked = compactMetadata,
+                        checked = !compactMetadata,
                         onCheckedChange = {
-                            compactMetadata = it
-                            preferences.edit().putBoolean("compact_metadata", it).apply()
+                            compactMetadata = !it
+                            preferences.edit().putBoolean("compact_metadata", compactMetadata).apply()
                         },
+                        colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent)
+                    )
+                }
+                HorizontalDivider(color = DesignTokens.Hairline, modifier = Modifier.padding(vertical = DesignTokens.Space8))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("沉浸式状态栏", fontWeight = FontWeight.Bold)
+                        Text("阅读界面状态栏透明，内容沉浸式显示", color = DesignTokens.SoftText)
+                    }
+                    Switch(
+                        checked = immersiveStatusBar,
+                        onCheckedChange = { immersiveStatusBar = it; preferences.edit().putBoolean("immersive_status_bar", it).apply() },
                         colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent)
                     )
                 }
@@ -984,88 +1102,45 @@ fun AboutScreen(onBack: () -> Unit) {
     var dialogText by remember { mutableStateOf("") }
 
     SettingsSubPage(title = "关于", onBack = onBack) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(20.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
+        Column(
+            Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space24),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)
         ) {
-            Row(
-                modifier = Modifier.padding(22.dp),
-                horizontalArrangement = Arrangement.spacedBy(18.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier.size(86.dp).background(Color(0xFFFFE5C4), RoundedCornerShape(22.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("汗牛充栋", color = DesignTokens.Accent, fontWeight = FontWeight.ExtraBold)
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("汗牛充栋", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
-                    Text("让阅读，成为一种生活方式", color = DesignTokens.SoftText)
-                    Text(
-                        "版本 $versionName",
-                        modifier = Modifier.background(Color(0xFFFFF1E2), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 5.dp),
-                        color = DesignTokens.Accent,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
+            Box(
+                modifier = Modifier.size(126.dp).background(Color(0xFFFFE5C4), RoundedCornerShape(24.dp)),
+                contentAlignment = Alignment.Center
+            ) { Text("书", style = MaterialTheme.typography.displayLarge, color = DesignTokens.Accent, fontWeight = FontWeight.ExtraBold) }
+            Text("阅读器", style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.ExtraBold)
+            Text("版本 $versionName", color = DesignTokens.SoftText, style = MaterialTheme.typography.titleLarge)
+            Text("一款简洁、强大、支持多书源的小说阅读器", color = DesignTokens.SoftText)
         }
-        SoftCard {
-            DetailLine(
-                Icons.Default.Info, "检查更新",
-                if (checkingUpdate) "正在连接 GitHub…" else updateStatus,
-                trailing = if (checkingUpdate) "检查中" else null,
-                onClick = {
-                    if (!checkingUpdate) scope.launch {
-                        checkingUpdate = true
-                        updateStatus = checkLatestRelease(versionName)
-                        checkingUpdate = false
-                    }
-                }
-            )
-            DetailLine(
-                Icons.Default.Menu, "版本更新记录", "查看 GitHub Releases",
-                onClick = { openUrl(context, "https://github.com/beishan/aibook/releases") }
-            )
-            DetailLine(
-                Icons.Default.Policy,
-                "开源许可证",
-                "libmobi · LGPL-3.0-or-later；commonmark-java · BSD-2-Clause",
-                showDivider = false,
-                onClick = {
-                    dialogTitle = "开源许可证"
-                    dialogText = readLicenseNotices(context)
-                }
-            )
+        AboutActionCard(Icons.Default.Download, "检查更新") {
+            if (!checkingUpdate) scope.launch { checkingUpdate = true; updateStatus = checkLatestRelease(versionName); checkingUpdate = false }
         }
-        SoftCard {
-            DetailLine(
-                Icons.Default.Info, "帮助与反馈", "前往 GitHub Issues 提交问题或建议",
-                onClick = { openUrl(context, "https://github.com/beishan/aibook/issues") }
-            )
-            DetailLine(
-                Icons.Default.Notifications, "邮件反馈", "通过系统邮件应用发送反馈",
-                showDivider = false,
-                onClick = { sendFeedbackEmail(context, versionName) }
-            )
-        }
-        SoftCard {
-            DetailLine(Icons.Default.Security, "用户协议", "阅读本地使用协议", onClick = { dialogTitle = "用户协议"; dialogText = USER_AGREEMENT })
-            DetailLine(Icons.Default.Lock, "隐私政策", "了解我们如何保护您的隐私", onClick = { dialogTitle = "隐私政策"; dialogText = PRIVACY_POLICY })
-            DetailLine(Icons.Default.Policy, "第三方信息共享清单", "本版本未集成广告或统计 SDK", onClick = { dialogTitle = "第三方信息共享清单"; dialogText = THIRD_PARTY_NOTICE })
-            DetailLine(Icons.Default.Menu, "个人信息收集清单", "查看本机保存的数据类型", showDivider = false, onClick = { dialogTitle = "个人信息收集清单"; dialogText = PERSONAL_DATA_NOTICE })
-        }
+        AboutActionCard(Icons.Default.Menu, "用户协议") { dialogTitle = "用户协议"; dialogText = USER_AGREEMENT }
+        AboutActionCard(Icons.Default.Security, "隐私政策") { dialogTitle = "隐私政策"; dialogText = PRIVACY_POLICY }
+        AboutActionCard(Icons.Default.Policy, "开源许可") { dialogTitle = "开源许可证"; dialogText = readLicenseNotices(context) }
+        AboutActionCard(Icons.Default.Book, "致谢") { dialogTitle = "致谢"; dialogText = "感谢所有开源项目贡献者与每一位阅读者。" }
         Text(
-            "汗牛充栋 · 让每一本书，都找到朋友\n© 2026 Miaomiao. All Rights Reserved.",
-            modifier = Modifier.fillMaxWidth(),
+            "© 2026 Reader All Rights Reserved",
+            modifier = Modifier.fillMaxWidth().padding(top = DesignTokens.Space24),
             color = DesignTokens.SoftText,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
     }
     dialogTitle?.let { title -> InfoDialog(title, dialogText) { dialogTitle = null } }
+}
+
+@Composable
+private fun AboutActionCard(icon: ImageVector, title: String, onClick: () -> Unit) {
+    SoftCard(modifier = Modifier.clickable(onClick = onClick)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
+            Icon(icon, null, tint = DesignTokens.Accent, modifier = Modifier.size(30.dp))
+            Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+            Text("›", color = DesignTokens.SoftText, style = MaterialTheme.typography.headlineMedium)
+        }
+    }
 }
 
 @Composable
@@ -1083,10 +1158,13 @@ private fun SettingsSubPage(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
     ) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            }
+            Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Spacer(Modifier.size(48.dp))
         }
-        Text(title, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
         subtitle?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium) }
         content()
     }

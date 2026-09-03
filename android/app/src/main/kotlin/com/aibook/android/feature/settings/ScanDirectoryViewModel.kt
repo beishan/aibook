@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 data class ScanDirectoryUiState(
     val directories: List<ScanDirectory> = emptyList(),
@@ -38,6 +39,7 @@ class ScanDirectoryViewModel(
     private val repository: ScanDirectoryRepository,
     private val backgroundTaskStore: BackgroundTaskStore
 ) : ViewModel() {
+    private var activeScanJob: Job? = null
     private val _state = MutableStateFlow(ScanDirectoryUiState())
     val state: StateFlow<ScanDirectoryUiState> = repository.observeDirectories()
         .let { directoriesFlow ->
@@ -84,7 +86,8 @@ class ScanDirectoryViewModel(
     }
 
     fun scanAll() {
-        viewModelScope.launch {
+        activeScanJob?.cancel()
+        activeScanJob = viewModelScope.launch {
             _state.value = _state.value.copy(isScanning = true, scanningDirectoryId = null, lastScanStats = null, message = null)
             val stats = repository.scanAllEnabled(_state.value.duplicateHandling)
             _state.value = _state.value.copy(
@@ -95,8 +98,15 @@ class ScanDirectoryViewModel(
         }
     }
 
+    fun stopScan() {
+        activeScanJob?.cancel()
+        activeScanJob = null
+        _state.value = _state.value.copy(isScanning = false, scanningDirectoryId = null, message = "扫描已停止")
+    }
+
     fun scanDirectory(directory: ScanDirectory) {
-        viewModelScope.launch {
+        activeScanJob?.cancel()
+        activeScanJob = viewModelScope.launch {
             _state.value = _state.value.copy(isScanning = true, scanningDirectoryId = directory.id, lastScanStats = null, message = null)
             val stats = repository.scanDirectory(directory.id, _state.value.duplicateHandling)
             _state.value = _state.value.copy(
@@ -112,6 +122,10 @@ class ScanDirectoryViewModel(
         viewModelScope.launch {
             repository.setEnabled(id, enabled)
         }
+    }
+
+    fun setIncludeSubdirectories(id: String, included: Boolean) {
+        viewModelScope.launch { repository.setIncludeSubdirectories(id, included) }
     }
 
     fun deleteDirectory(id: String) {

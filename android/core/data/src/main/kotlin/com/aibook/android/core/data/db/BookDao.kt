@@ -70,6 +70,9 @@ interface BookDao {
         positionLabel: String?
     )
 
+    @Query("UPDATE books SET lastReadAt = NULL")
+    suspend fun clearReadingHistory()
+
     @Query("UPDATE books SET favorite = :favorite WHERE id = :id")
     suspend fun setFavorite(id: String, favorite: Boolean)
 

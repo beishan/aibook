@@ -405,6 +405,10 @@ class BookRepository(
         )
     }
 
+    suspend fun clearReadingHistory() {
+        bookDao.clearReadingHistory()
+    }
+
     suspend fun setFavorite(id: String, favorite: Boolean) {
         bookDao.setFavorite(id, favorite)
     }

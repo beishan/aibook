@@ -15,6 +15,7 @@ data class ScanDirectory(
     val uri: String,
     val name: String,
     val enabled: Boolean,
+    val includeSubdirectories: Boolean,
     val lastScanAt: Long?,
     val discoveredCount: Int,
     val addedCount: Int,
@@ -63,6 +64,7 @@ class ScanDirectoryRepository(
             uri = uriString,
             name = resolveDirectoryName(uri),
             enabled = existing?.enabled ?: true,
+            includeSubdirectories = existing?.includeSubdirectories ?: true,
             lastScanAt = existing?.lastScanAt,
             discoveredCount = existing?.discoveredCount ?: 0,
             addedCount = existing?.addedCount ?: 0,
@@ -92,6 +94,10 @@ class ScanDirectoryRepository(
         dao.setEnabled(id, enabled)
     }
 
+    suspend fun setIncludeSubdirectories(id: String, included: Boolean) {
+        dao.setIncludeSubdirectories(id, included)
+    }
+
     suspend fun deleteDirectory(id: String) {
         dao.deleteById(id)
     }
@@ -117,7 +123,7 @@ class ScanDirectoryRepository(
             return ScanImportStats(failed = 1)
         }
         return try {
-            val stats = scanTree(Uri.parse(directory.uri), duplicateHandling)
+            val stats = scanTree(Uri.parse(directory.uri), directory.includeSubdirectories, duplicateHandling)
             dao.insert(
                 directory.copy(
                     lastScanAt = System.currentTimeMillis(),
@@ -142,10 +148,10 @@ class ScanDirectoryRepository(
         }
     }
 
-    private suspend fun scanTree(treeUri: Uri, duplicateHandling: DuplicateHandling): ScanImportStats {
+    private suspend fun scanTree(treeUri: Uri, includeSubdirectories: Boolean, duplicateHandling: DuplicateHandling): ScanImportStats {
         val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
         val documents = mutableListOf<ScannedDocument>()
-        collectDocumentChildren(treeUri, rootDocumentId, relativeDirectory = "", documents)
+        collectDocumentChildren(treeUri, rootDocumentId, relativeDirectory = "", includeSubdirectories, documents)
         val resources = AuthorizedTreeResourceIndex(
             documents.map { TreeDocument(value = it.uri, relativePath = it.relativePath) }
         )
@@ -158,6 +164,7 @@ class ScanDirectoryRepository(
         treeUri: Uri,
         documentId: String,
         relativeDirectory: String,
+        includeSubdirectories: Boolean,
         documents: MutableList<ScannedDocument>
     ) {
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
@@ -182,7 +189,7 @@ class ScanDirectoryRepository(
                 if (!isSafeDocumentName(name)) continue
                 val relativePath = if (relativeDirectory.isEmpty()) name else "$relativeDirectory/$name"
                 if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                    collectDocumentChildren(treeUri, childId, relativePath, documents)
+                    if (includeSubdirectories) collectDocumentChildren(treeUri, childId, relativePath, true, documents)
                 } else {
                     documents += ScannedDocument(
                         uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId),
@@ -259,6 +266,7 @@ class ScanDirectoryRepository(
             uri = uri,
             name = name,
             enabled = enabled,
+            includeSubdirectories = includeSubdirectories,
             lastScanAt = lastScanAt,
             discoveredCount = discoveredCount,
             addedCount = addedCount,
