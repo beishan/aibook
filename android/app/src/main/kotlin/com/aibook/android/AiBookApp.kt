@@ -383,7 +383,7 @@ fun AiBookApp(initialDebugRoute: String? = null) {
                 PaddedScreen(paddingValues) {
                     OpdsScreen(
                         servicesOnly = true,
-                        pageTitle = "全部分类",
+                        pageTitle = "分类",
                         initialConnectionId = entry.arguments?.getString("serviceId"),
                         categoriesOnly = true,
                         onCategoryClick = { serviceId, href ->

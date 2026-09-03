@@ -462,6 +462,15 @@ fun LocalScanScreen(
                         Text("当前扫描路径", fontWeight = FontWeight.Bold)
                         Text(activeDirectory?.name ?: "等待选择目录", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
+                    Text(
+                        "更改路径 ›",
+                        modifier = Modifier
+                            .background(DesignTokens.WarmCard, RoundedCornerShape(DesignTokens.RadiusLarge))
+                            .clickable(onClick = onBack)
+                            .padding(horizontal = DesignTokens.Space12, vertical = DesignTokens.Space8),
+                        color = DesignTokens.Accent,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
             Text(

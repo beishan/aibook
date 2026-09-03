@@ -160,8 +160,14 @@ fun OpdsScreen(
         }
     }
 
+    val resolvedPageTitle = when {
+        state.currentFeed != null && booksOnly -> state.currentFeed?.title ?: "分类书籍"
+        state.currentFeed != null && categoriesOnly -> "分类"
+        state.currentFeed != null -> state.activeConnection?.name ?: state.currentFeed?.title ?: "OPDS 数据源"
+        else -> pageTitle ?: if (servicesOnly) "OPDS 服务" else "发现"
+    }
     DesignPage(
-        title = pageTitle ?: if (state.currentFeed == null) (if (servicesOnly) "OPDS 服务" else "发现") else "OPDS 数据源",
+        title = resolvedPageTitle,
         modifier = Modifier.fillMaxSize(),
         navigation = {
             if (state.currentFeed != null) {
@@ -172,6 +178,9 @@ fun OpdsScreen(
             if (state.currentFeed == null && servicesOnly) {
                 IconButton(onClick = onAddSourceClick) { Icon(Icons.Default.Add, contentDescription = "添加 OPDS 服务") }
                 IconButton(onClick = {}) { Icon(Icons.Default.Search, contentDescription = "搜索 OPDS 服务") }
+            } else if (state.currentFeed != null) {
+                IconButton(onClick = {}) { Icon(Icons.Default.Search, contentDescription = "搜索当前目录") }
+                IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, contentDescription = "更多") }
             }
         }
     ) {
@@ -1178,12 +1187,8 @@ private fun CatalogBrowser(
     }
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        item {
-            CatalogHeader(
-                connection = connection,
-                feedTitle = feed.title,
-                bookCount = bookEntries.size
-            )
+        if (!categoriesOnly && !booksOnly) item {
+            CatalogHeader(connection = connection, feedTitle = feed.title, bookCount = bookEntries.size)
         }
         if (!categoriesOnly && !booksOnly) {
             item {
