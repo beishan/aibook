@@ -289,7 +289,8 @@ fun AiBookApp(initialDebugRoute: String? = null) {
                     ShelfFolderDetailScreen(
                         folderId = folderId,
                         onBack = { navController.popBackStack() },
-                        onBookClick = { navController.navigate(Screen.BookDetail.createRoute(it)) }
+                        onBookClick = { navController.navigate(Screen.BookDetail.createRoute(it)) },
+                        onAddBooks = { navController.navigate(Screen.ShelfBatch.route) }
                     )
                 }
             }

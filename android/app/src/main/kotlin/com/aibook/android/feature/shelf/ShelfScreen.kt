@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.AddBusiness
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
@@ -51,6 +52,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -67,6 +69,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -164,6 +167,32 @@ fun ShelfScreen(
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    if (state.managementMode) {
+        ShelfBatchContent(
+            books = visibleLocalBooks,
+            selectedIds = state.selectedIds,
+            onToggle = { viewModel.toggleBookSelection(it) },
+            onSelectAll = {
+                if (allVisibleSelected) viewModel.clearSelection() else viewModel.selectAllVisible()
+            },
+            onDone = { viewModel.setManagementMode(false) },
+            onMove = { showMoveDialog = true },
+            onFavorite = { viewModel.setSelectedFavorite(!selectedFavorite) },
+            onRemove = viewModel::removeSelectedFromShelf
+        )
+        if (showMoveDialog) {
+            MoveToFolderDialog(
+                folders = state.folders,
+                selectedCount = state.selectedIds.size,
+                onDismiss = { showMoveDialog = false },
+                onMoveToUnfiled = { viewModel.moveSelectedToFolder(null); showMoveDialog = false },
+                onMoveToFolder = { viewModel.moveSelectedToFolder(it); showMoveDialog = false },
+                onCreateFolder = { viewModel.createFolderAndMoveSelected(it); showMoveDialog = false }
+            )
+        }
+        return
     }
 
     DesignPage(
@@ -406,9 +435,12 @@ private fun ReadingBooksView(
         }
 
         1 -> LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
             contentPadding = PaddingValues(bottom = 4.dp),
             modifier = Modifier.fillMaxWidth().height(620.dp)
+                .clip(RoundedCornerShape(DesignTokens.CardRadius))
+                .background(DesignTokens.CardBackground)
+                .border(1.dp, DesignTokens.Hairline, RoundedCornerShape(DesignTokens.CardRadius))
         ) {
             items(books, key = { it.id }) { book ->
                 if (book.id == books.lastOrNull()?.id) LaunchedEffect(book.id) { onLoadMore() }
@@ -442,6 +474,122 @@ private fun ReadingBooksView(
 }
 
 @Composable
+private fun ShelfBatchContent(
+    books: List<LocalBook>,
+    selectedIds: Set<String>,
+    onToggle: (String) -> Unit,
+    onSelectAll: () -> Unit,
+    onDone: () -> Unit,
+    onMove: () -> Unit,
+    onFavorite: () -> Unit,
+    onRemove: () -> Unit
+) {
+    var showMore by remember { mutableStateOf(false) }
+    val hasSelection = selectedIds.isNotEmpty()
+    val allSelected = books.isNotEmpty() && books.all { it.id in selectedIds }
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = DesignTokens.PagePadding).padding(bottom = 78.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(68.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (allSelected) "取消全选" else "全选",
+                    modifier = Modifier.clickable(onClick = onSelectAll),
+                    color = DesignTokens.Accent,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text("已选择 ${selectedIds.size} 本", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("完成", modifier = Modifier.clickable(onClick = onDone), color = DesignTokens.Accent, style = MaterialTheme.typography.titleMedium)
+            }
+            SoftCard(color = DesignTokens.WarmCard, contentPadding = 14.dp) {
+                Text("ⓘ  已选择 ${selectedIds.size} 本书，可进行批量管理操作", color = DesignTokens.SoftText)
+            }
+            Spacer(Modifier.height(DesignTokens.Space16))
+            if (books.isEmpty()) {
+                SoftCard { Text("书架中暂无可批量管理的本地书籍", color = DesignTokens.SoftText) }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
+                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16),
+                    contentPadding = PaddingValues(bottom = DesignTokens.Space16)
+                ) {
+                    gridItems(books, key = { it.id }) { book ->
+                        BatchBookCard(book, book.id in selectedIds) { onToggle(book.id) }
+                    }
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(76.dp)
+                .background(MaterialTheme.colorScheme.surface)
+                .border(0.5.dp, DesignTokens.Hairline, RoundedCornerShape(0.dp))
+                .padding(horizontal = DesignTokens.Space8),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BatchToolbarAction(Icons.Default.CreateNewFolder, "加入文件夹", hasSelection, onMove)
+            BatchToolbarAction(Icons.Default.FavoriteBorder, "收藏", hasSelection, onFavorite)
+            BatchToolbarAction(Icons.Default.Download, "下载", hasSelection) { }
+            BatchToolbarAction(Icons.Default.RemoveCircleOutline, "移出书架", hasSelection, onRemove)
+            Box {
+                BatchToolbarAction(Icons.Default.MoreVert, "更多", hasSelection) { showMore = true }
+                DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+                    DropdownMenuItem(text = { Text("取消选择") }, onClick = { showMore = false; onDone() })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BatchBookCard(book: LocalBook, selected: Boolean, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(DesignTokens.RadiusMedium),
+        colors = CardDefaults.cardColors(containerColor = DesignTokens.CardBackground),
+        elevation = CardDefaults.cardElevation(defaultElevation = DesignTokens.SoftShadow)
+    ) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Box {
+                BookCover(book.title, width = null, height = 112.dp, imageUri = book.coverUri)
+                Box(
+                    modifier = Modifier.align(Alignment.TopEnd).size(28.dp)
+                        .background(if (selected) DesignTokens.Accent else Color.White.copy(alpha = 0.94f), RoundedCornerShape(7.dp))
+                        .border(1.dp, DesignTokens.Accent.copy(alpha = 0.65f), RoundedCornerShape(7.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (selected) Icon(Icons.Default.CheckCircle, "已选择", tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+            }
+            Text(book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
+            Text(book.author ?: "未知作者", maxLines = 1, overflow = TextOverflow.Ellipsis, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+            Text(if (book.progress.percent > 0f) "已读 ${(book.progress.percent * 100).toInt()}%" else "未读", color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun BatchToolbarAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier.clickable(enabled = enabled, onClick = onClick).padding(horizontal = 4.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Icon(icon, contentDescription = label, tint = if (enabled) DesignTokens.AccentDark else DesignTokens.SoftText.copy(alpha = 0.45f))
+        Text(label, color = if (enabled) DesignTokens.TextPrimary else DesignTokens.SoftText.copy(alpha = 0.45f), style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
 private fun ShelfCoverListItem(
     book: LocalBook,
     managementMode: Boolean,
@@ -449,22 +597,27 @@ private fun ShelfCoverListItem(
     onClick: () -> Unit,
     onSelect: () -> Unit
 ) {
-    SoftCard(
-        modifier = Modifier.clickable { if (managementMode) onSelect() else onClick() },
-        contentPadding = 10.dp
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable { if (managementMode) onSelect() else onClick() }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             if (managementMode) ShelfSelectionMark(selected)
-            BookCover(book.title, width = 48.dp, height = 68.dp, imageUri = book.coverUri)
+            BookCover(book.title, width = 58.dp, height = 82.dp, imageUri = book.coverUri)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ShelfMetadataBadge("${shelfFormatLabel(book)}｜${if (book.isServerBook()) "远" else "本"}")
-                    Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                }
-                Text("阅读进度 ${(book.progress.percent * 100).toInt()}%", color = DesignTokens.SoftText, style = MaterialTheme.typography.labelSmall)
+                Text(book.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                Text(book.progress.chapterTitle ?: book.progress.positionLabel ?: "尚未开始阅读", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ShelfMetadataBadge(when { book.isServerBook() -> "后端"; book.isOpdsSource() -> "OPDS"; else -> "本地" })
+                Text("${(book.progress.percent * 100).toInt()}%", color = DesignTokens.Accent, style = MaterialTheme.typography.titleMedium)
+                Icon(Icons.Default.MoreVert, contentDescription = "更多", tint = DesignTokens.SoftText, modifier = Modifier.size(20.dp))
             }
         }
+        HorizontalDivider(color = DesignTokens.Hairline)
     }
 }
 
@@ -832,35 +985,37 @@ private fun ContinueReadingHero(
 ) {
     SoftCard(
         modifier = Modifier.clickable(onClick = onReadClick),
-        color = MaterialTheme.colorScheme.surface
+        color = MaterialTheme.colorScheme.surface,
+        contentPadding = DesignTokens.Space12
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
-            Text("◷", color = DesignTokens.Accent, style = MaterialTheme.typography.titleLarge)
-            Text("继续阅读", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("◷", color = DesignTokens.Accent, style = MaterialTheme.typography.titleMedium)
+            Text("继续阅读", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
-        Spacer(Modifier.height(DesignTokens.Space12))
-        Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16), verticalAlignment = Alignment.CenterVertically) {
+        Spacer(Modifier.height(DesignTokens.Space8))
+        Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12), verticalAlignment = Alignment.CenterVertically) {
             BookCover(
                 title = book.title,
-                width = 84.dp,
-                height = 120.dp,
+                width = 62.dp,
+                height = 88.dp,
                 imageUri = book.coverUri,
                 placeholderTitleMaxLength = 8,
                 placeholderMaxLines = 4
             )
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
-                Text(book.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space4)) {
+                Text(book.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
                     WarmProgress(book.progress.percent, Modifier.weight(1f))
                     Text("${(book.progress.percent * 100).toInt()}%", color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
                 }
-                Text(book.progress.chapterTitle ?: book.progress.positionLabel ?: "继续上次阅读", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(book.progress.chapterTitle ?: book.progress.positionLabel ?: "继续上次阅读", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
                 Button(
                     onClick = onReadClick,
                     colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
                     elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
-                    modifier = Modifier.align(Alignment.End)
+                    modifier = Modifier.align(Alignment.End).height(36.dp),
+                    contentPadding = PaddingValues(horizontal = DesignTokens.Space16, vertical = 0.dp)
                 ) { Text("继续阅读") }
             }
         }

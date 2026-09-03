@@ -5,11 +5,11 @@
 | # | 页面 | 路由/入口 | 当前状态 |
 |---:|---|---|---|
 | 1 | 书架-卡片模式 | `bookshelf/grid` | 第二轮真机通过 |
-| 2 | 书架-列表模式 | `bookshelf/list` | 待真机复核 |
+| 2 | 书架-列表模式 | `bookshelf/list` | 第三轮真机通过 |
 | 3 | 书架文件夹列表 | `bookshelf/folders` | 第二轮真机通过 |
-| 4 | 文件夹详情 | `bookshelf/folder/{folderId}` | 待真机复核 |
+| 4 | 文件夹详情 | `bookshelf/folder/{folderId}` | 第三轮空状态真机通过，待有书状态 |
 | 5 | 新建文件夹 | `bookshelf/folder/new` | 第二轮真机通过 |
-| 6 | 批量管理 | `bookshelf/batch` | 待真机复核 |
+| 6 | 批量管理 | `bookshelf/batch` | 第三轮真机通过 |
 | 7 | 排序筛选 | `bookshelf/sort-filter` | 第二轮真机通过 |
 | 8 | 书籍详情-本地 | `book/{bookId}` | 已按原型重做，待亮屏截图复核 |
 | 9 | 书籍详情-OPDS | OPDS 书籍详情 | 已按原型重做，待配置数据与亮屏截图复核 |

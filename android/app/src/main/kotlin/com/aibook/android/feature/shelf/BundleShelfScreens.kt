@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.Button
@@ -220,6 +221,7 @@ fun ShelfFolderDetailScreen(
     folderId: String,
     onBack: () -> Unit,
     onBookClick: (String) -> Unit,
+    onAddBooks: () -> Unit = {},
     viewModel: ShelfViewModel = viewModel(factory = ShelfViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -227,20 +229,36 @@ fun ShelfFolderDetailScreen(
     val folder = state.folders.firstOrNull { it.id == folderId }
     val books = state.books.filter { it.folderId == folderId }
     var viewMode by remember { mutableIntStateOf(0) }
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(DesignTokens.PagePadding)) {
-        BundleHeaderRow(folder?.name ?: "文件夹", onBack)
-        Text("${books.size} 本", color = DesignTokens.SoftText)
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = DesignTokens.PagePadding)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space16),
+            modifier = Modifier.fillMaxWidth().height(64.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = {}) { Icon(Icons.Default.Search, "搜索") }
+            IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, "更多") }
+        }
+        Text(folder?.name ?: "文件夹", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
+        Text("${books.size} 本", color = DesignTokens.SoftText, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = DesignTokens.Space8))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space24),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("＋ 添加书籍", color = DesignTokens.Accent, fontWeight = FontWeight.Bold)
+            OutlinedButton(
+                onClick = onAddBooks,
+                shape = RoundedCornerShape(DesignTokens.RadiusLarge),
+                modifier = Modifier.height(48.dp)
+            ) {
+                Icon(Icons.Default.Add, null)
+                Text("添加书籍", modifier = Modifier.padding(start = DesignTokens.Space8), fontWeight = FontWeight.Bold)
+            }
             SlidingSegmentedControl(
-                options = listOf("卡片", "列表"),
+                options = listOf("▦", "☷"),
                 selectedIndex = viewMode,
                 onSelected = { viewMode = it },
-                modifier = Modifier.width(180.dp)
+                modifier = Modifier.width(112.dp)
             )
         }
         if (viewMode == 0) {
