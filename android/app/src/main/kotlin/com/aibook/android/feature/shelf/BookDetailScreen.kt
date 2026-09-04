@@ -2,6 +2,7 @@ package com.aibook.android.feature.shelf
 
 import android.app.Application
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -105,10 +106,15 @@ fun BookDetailScreen(
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.get(context.applicationContext as Application).bookRepository }
-    val bookFlow = remember(bookId) { repository.observeBook(bookId) }
     val allBooksFlow = remember { repository.observeBooks() }
-    val book by bookFlow.collectAsStateWithLifecycle(initialValue = null as LocalBook?)
     val allBooks by allBooksFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val resolvedBookId = resolveLocalPreviewBookId(
+        requestedBookId = bookId,
+        firstLocalBookId = allBooks.firstOrNull()?.id,
+        debugBuild = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+    )
+    val bookFlow = remember(resolvedBookId) { repository.observeBook(resolvedBookId.orEmpty()) }
+    val book by bookFlow.collectAsStateWithLifecycle(initialValue = null as LocalBook?)
     val currentBook = book
     val scope = rememberCoroutineScope()
     var showMore by remember { mutableStateOf(false) }
@@ -322,6 +328,18 @@ fun BookDetailScreen(
             }
         )
     }
+}
+
+internal const val DEBUG_FIRST_LOCAL_BOOK_ID = "preview-first-local"
+
+internal fun resolveLocalPreviewBookId(
+    requestedBookId: String,
+    firstLocalBookId: String?,
+    debugBuild: Boolean
+): String? = if (debugBuild && requestedBookId == DEBUG_FIRST_LOCAL_BOOK_ID) {
+    firstLocalBookId
+} else {
+    requestedBookId
 }
 
 @Composable
