@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -50,6 +51,9 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Surface
@@ -65,6 +69,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -1000,13 +1005,7 @@ private fun BackendSearchCard(
     onToggleShelf: (com.aibook.android.core.network.api.dto.BookDTO) -> Unit
 ) {
     SoftCard(contentPadding = DesignTokens.Space16) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
-                Text("云端书库", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Mock 演示数据", color = DesignTokens.Accent, style = MaterialTheme.typography.labelMedium)
-            }
-            Text("${books.size} 个结果", color = DesignTokens.SoftText)
-        }
+        SearchSourceHeader("云端书库", "Mock 演示数据", books.size, Icons.Default.Cloud)
         books.forEach { book ->
             Row(
                 modifier = Modifier.fillMaxWidth().clickable { onBookClick(book) }.padding(top = DesignTokens.Space16),
@@ -1019,11 +1018,10 @@ private fun BackendSearchCard(
                     Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1)
                     SourceBadge("云端 · ${book.format ?: "在线"}", source = "云端")
                 }
-                Button(
-                    onClick = { onToggleShelf(book) },
-                    colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
-                    elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
-                ) { Text(if (book.id in shelfBookIds) "移出书架" else "+ 加入书架") }
+                SearchShelfAction(
+                    added = book.id in shelfBookIds,
+                    onClick = { onToggleShelf(book) }
+                )
             }
         }
     }
@@ -1063,10 +1061,12 @@ private fun SearchSourceCard(
 ) {
     val first = books.first()
     SoftCard(contentPadding = DesignTokens.Space16) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(first.sourceName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("${books.size} 个结果  ›", color = DesignTokens.SoftText)
-        }
+        SearchSourceHeader(
+            title = first.sourceName,
+            subtitle = null,
+            resultCount = books.size,
+            icon = if (first.kind == StoreItemKind.LOCAL) Icons.Default.FolderOpen else Icons.Default.Storage
+        )
         books.forEach { book ->
             Row(
                 modifier = Modifier.fillMaxWidth().clickable(
@@ -1081,17 +1081,65 @@ private fun SearchSourceCard(
                     Text(book.author, color = DesignTokens.SoftText, maxLines = 1)
                     SourceBadge("${book.sourceName} · ${book.format}", book.sourceName)
                 }
-                Button(
+                SearchShelfAction(
+                    added = book.shelved || book.isDownloaded,
+                    enabled = !book.shelved && !book.isDownloaded,
                     onClick = {
                         if (book.kind == StoreItemKind.LOCAL) viewModel.addLocalBookToShelf(book)
                         else viewModel.downloadRemoteBook(book)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
-                    elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
-                    enabled = !book.shelved && !book.isDownloaded
-                ) { Text(if (book.shelved || book.isDownloaded) "已在书架" else "+ 加入书架") }
+                    }
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun SearchSourceHeader(
+    title: String,
+    subtitle: String?,
+    resultCount: Int,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(42.dp).background(DesignTokens.Accent.copy(alpha = 0.72f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+            }
+            Column {
+                Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                subtitle?.let { Text(it, color = DesignTokens.Accent, style = MaterialTheme.typography.labelMedium) }
+            }
+        }
+        Text("$resultCount 个结果  ›", color = DesignTokens.SoftText)
+    }
+}
+
+@Composable
+private fun SearchShelfAction(
+    added: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    if (added) {
+        OutlinedButton(onClick = onClick, enabled = enabled) {
+            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text("已在书架", modifier = Modifier.padding(start = DesignTokens.Space4), maxLines = 1)
+        }
+    } else {
+        Button(
+            onClick = onClick,
+            enabled = enabled,
+            colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+            elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
+        ) { Text("+ 加入书架", maxLines = 1) }
     }
 }
 

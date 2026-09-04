@@ -32,7 +32,7 @@
 | 26 | 新建书单 | `bookstore/backend/booklist/new` | 第六轮按原型重做并真机通过，现使用 Mock 保存 |
 | 27 | 编辑书单 | `bookstore/backend/booklist/{booklistId}/edit` | Mock 数据状态真机通过 |
 | 28 | 搜索页 | `search` | 第二轮真机通过 |
-| 29 | 搜索结果页 | `search?query={query}` | 已接入本地/OPDS/云端，云端暂使用 Mock 数据 |
+| 29 | 搜索结果页 | `search?query={query}` | 云端 Mock 结果真机通过；来源图标、结果箭头和书架状态已按原型补齐，待 OPDS 数据聚合复核 |
 | 30 | 多来源版本选择 | `book/{bookId}/sources` | 云端 Mock 主书状态真机通过，待本地/OPDS 同名聚合复核 |
 | 31 | 多来源版本选择-重制稿 | `book/{bookId}/sources` | 云端 Mock 主书状态真机通过，待本地/OPDS 同名聚合复核 |
 | 32 | 热门搜索-重制稿 | `search` | 第二轮真机通过 |
