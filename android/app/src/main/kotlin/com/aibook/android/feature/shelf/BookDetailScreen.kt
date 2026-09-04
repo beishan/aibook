@@ -32,6 +32,9 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -276,11 +279,11 @@ fun BookDetailScreen(
 
         DetailInfoCard(
             items = listOf(
-                DetailInfoItem("作者", currentBook.author ?: "未知作者"),
-                DetailInfoItem("格式", currentBook.format.displayName),
-                DetailInfoItem("大小", fileSizeLabel(fileStats?.fileSizeBytes)),
-                DetailInfoItem("文件路径", currentBook.uri),
-                DetailInfoItem("来源", "本地文件")
+                DetailInfoItem("作者", currentBook.author ?: "未知作者", Icons.Default.Person),
+                DetailInfoItem("格式", currentBook.format.displayName, Icons.Default.Description),
+                DetailInfoItem("大小", fileSizeLabel(fileStats?.fileSizeBytes), Icons.Default.Storage),
+                DetailInfoItem("文件路径", currentBook.uri, Icons.Default.FolderOpen),
+                DetailInfoItem("来源", "本地文件", Icons.AutoMirrored.Filled.MenuBook)
             )
         )
 

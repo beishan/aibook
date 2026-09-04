@@ -33,6 +33,11 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -493,11 +498,11 @@ fun BackendBookDetailScreen(
                 DetailIntroduction(book.description?.ifBlank { "暂无简介" } ?: "暂无简介")
                 DetailInfoCard(
                     items = listOf(
-                        DetailInfoItem("作者", book.author ?: "未知作者"),
-                        DetailInfoItem("来源", book.categoryName ?: "我的书库"),
-                        DetailInfoItem("字数 / 大小", book.fileSize?.let(::backendFileSizeLabel) ?: "未知"),
-                        DetailInfoItem("格式", book.format ?: "未知"),
-                        DetailInfoItem("最后阅读", state.progress?.lastReadAt ?: "尚未阅读")
+                        DetailInfoItem("作者", book.author ?: "未知作者", Icons.Default.Person),
+                        DetailInfoItem("来源", book.categoryName ?: "我的书库", Icons.Default.Cloud),
+                        DetailInfoItem("字数 / 大小", book.fileSize?.let(::backendFileSizeLabel) ?: "未知", Icons.Default.Storage),
+                        DetailInfoItem("格式", book.format ?: "未知", Icons.Default.Description),
+                        DetailInfoItem("最后阅读", state.progress?.lastReadAt ?: "尚未阅读", Icons.Default.AccessTime)
                     )
                 )
                 Spacer(Modifier.height(DesignTokens.Space24))

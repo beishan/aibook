@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 data class DetailInfoItem(
     val label: String,
     val value: String,
+    val icon: ImageVector? = null,
     val onClick: (() -> Unit)? = null
 )
 
@@ -186,7 +188,20 @@ fun DetailInfoCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(item.label, color = DesignTokens.SoftText)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        item.icon?.let {
+                            Icon(
+                                imageVector = it,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = DesignTokens.TextPrimary
+                            )
+                        }
+                        Text(item.label, color = DesignTokens.SoftText)
+                    }
                     Text(
                         item.value,
                         modifier = Modifier.weight(1f).padding(start = DesignTokens.Space16),

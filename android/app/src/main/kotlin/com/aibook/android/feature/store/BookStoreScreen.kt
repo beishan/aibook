@@ -46,6 +46,10 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Surface
@@ -531,10 +535,10 @@ fun StoreRemoteBookDetailScreen(
 
         DetailInfoCard(
             items = listOf(
-                DetailInfoItem("来源", book.sourceName),
-                DetailInfoItem("地址", book.acquisitionHref ?: "由 OPDS 服务提供"),
-                DetailInfoItem("格式", formats.getOrElse(selectedFormat) { formats.first() }.uppercase()),
-                DetailInfoItem("语言", "未知")
+                DetailInfoItem("来源", book.sourceName, Icons.Default.Cloud),
+                DetailInfoItem("地址", book.acquisitionHref ?: "由 OPDS 服务提供", Icons.Default.Link),
+                DetailInfoItem("格式", formats.getOrElse(selectedFormat) { formats.first() }.uppercase(), Icons.Default.Description),
+                DetailInfoItem("语言", "未知", Icons.Default.Language)
             )
         )
 
