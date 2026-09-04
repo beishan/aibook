@@ -1,6 +1,6 @@
 {
   "name": "aibook-frontend",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "汗牛充栋 - 阅读书籍管理系统前端",
   "type": "module",
   "scripts": {
