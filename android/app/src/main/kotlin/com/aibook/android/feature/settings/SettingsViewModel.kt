@@ -37,6 +37,7 @@ data class SettingsUiState(
     val loginFormPassword: String = "",
     val isLoggingIn: Boolean = false,
     val loginMessage: String? = null,
+    val serverUrlMessage: String? = null,
     val serverUrlInput: String = ""
 )
 
@@ -113,13 +114,28 @@ class SettingsViewModel(
     }
 
     fun updateServerUrlInput(value: String) {
-        _state.update { it.copy(serverUrlInput = value) }
+        _state.update { it.copy(serverUrlInput = value, serverUrlMessage = null) }
     }
 
     fun saveServerUrl() {
         val url = _state.value.serverUrlInput.trim()
-        if (url.isNotBlank()) {
-            viewModelScope.launch { serverRepository.setServerUrl(url) }
+        if (url.isBlank()) {
+            _state.update { it.copy(serverUrlMessage = "请输入云端服务地址") }
+            return
+        }
+        viewModelScope.launch {
+            serverRepository.setServerUrl(url)
+                .onSuccess { normalized ->
+                    _state.update {
+                        it.copy(
+                            serverUrlInput = normalized,
+                            serverUrlMessage = "云端地址已保存；如地址发生变化，请重新登录"
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _state.update { it.copy(serverUrlMessage = error.message ?: "云端地址无效") }
+                }
         }
     }
 
@@ -132,6 +148,14 @@ class SettingsViewModel(
     }
 
     fun login() {
+        if (_state.value.serverUrl.isBlank()) {
+            _state.update { it.copy(loginMessage = "请先保存云端服务地址") }
+            return
+        }
+        if (_state.value.loginFormUsername.isBlank() || _state.value.loginFormPassword.isBlank()) {
+            _state.update { it.copy(loginMessage = "请输入用户名和密码") }
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(isLoggingIn = true, loginMessage = null) }
             val result = serverRepository.login(

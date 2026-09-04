@@ -96,6 +96,7 @@ class ServerLibraryViewModel(
             val favoriteResult = serverRepository.getFavoriteBooks()
             val listResult = serverRepository.getBookLists()
             val firstError = listOf(
+                shelfResult.exceptionOrNull(),
                 allResult.exceptionOrNull(),
                 favoriteResult.exceptionOrNull(),
                 listResult.exceptionOrNull()

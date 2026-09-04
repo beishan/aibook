@@ -272,6 +272,7 @@ class ReaderViewModel(
                     }
                 }
                 val metadata = serverRepository.getBookById(bookId).getOrThrow()
+                serverRepository.recordBookOpen(bookId)
                 val format = metadata.format
                     ?.let { BookFormat.fromFileName("book.${it.lowercase()}") }
                     ?: throw IllegalArgumentException("暂不支持该书籍格式")
@@ -833,10 +834,13 @@ class ReaderViewModel(
 
     private suspend fun persistReadingDuration() {
         val startedAt = readingStartedAtMillis
-        val bookId = _state.value.book?.id
-        if (startedAt == 0L || bookId == null) return
+        val state = _state.value
+        if (startedAt == 0L) return
         val seconds = ((System.currentTimeMillis() - startedAt) / 1000).coerceAtLeast(0)
-        bookRepository.addReadingDuration(bookId, seconds)
+        state.book?.id?.let { bookRepository.addReadingDuration(it, seconds) }
+        state.remoteBookId?.takeIf { state.isRemote }?.let {
+            serverRepository.addReadingTime(it, seconds)
+        }
         readingStartedAtMillis = System.currentTimeMillis()
     }
 

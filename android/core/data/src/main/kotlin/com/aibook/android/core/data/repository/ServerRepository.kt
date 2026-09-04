@@ -14,12 +14,14 @@ import com.aibook.android.core.network.api.dto.LoginRequest
 import com.aibook.android.core.network.api.dto.ProcessedContentResponse
 import com.aibook.android.core.network.api.dto.RegisterRequest
 import com.aibook.android.core.network.api.dto.SaveProgressRequest
+import com.aibook.android.core.network.api.dto.UpdateReadingTimeRequest
 import com.aibook.android.core.network.api.dto.ReadingProgressDTO
 import com.aibook.android.core.network.api.dto.ShelfOverviewDTO
 import com.aibook.android.core.network.api.dto.BookListDTO
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import retrofit2.Retrofit
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -57,12 +59,21 @@ class ServerRepository(
     val username: Flow<String?> = serverConfigStore.username
     val isLoggedIn: Flow<Boolean> = serverConfigStore.isLoggedIn
 
-    suspend fun setServerUrl(url: String) {
-        serverConfigStore.setServerUrl(url)
-        cachedServerUrl = url
+    suspend fun setServerUrl(url: String): Result<String> = runCatching {
+        val normalizedUrl = normalizeServerUrl(url)
+        requireNotNull(normalizedUrl.toHttpUrlOrNull()) { "云端地址格式无效" }
+        val previousUrl = cachedServerUrl.ifBlank { serverConfigStore.serverUrl.first().trim().trimEnd('/') }
+        val serverChanged = previousUrl.isNotBlank() && previousUrl != normalizedUrl
+        if (serverChanged) {
+            cachedToken = null
+            serverConfigStore.clearAuth()
+        }
+        serverConfigStore.setServerUrl(normalizedUrl)
+        cachedServerUrl = normalizedUrl
         retrofit = null
         okHttpClient = null
-        if (url.isNotBlank()) ensureRetrofit()
+        if (normalizedUrl.isNotBlank()) ensureRetrofit()
+        normalizedUrl
     }
 
     suspend fun login(username: String, password: String): Result<AuthResponse> {
@@ -110,6 +121,9 @@ class ServerRepository(
     suspend fun getBookById(id: Long): Result<BookDTO> {
         return runCatching { getBookApi().getBookById(id) }
     }
+
+    suspend fun recordBookOpen(bookId: Long, versionId: Long? = null): Result<Unit> =
+        runCatching { getBookApi().recordBookOpen(bookId, versionId) }
 
     suspend fun getProcessedContent(bookId: Long): Result<ProcessedContentResponse> {
         return runCatching { getBookApi().getProcessedContent(bookId) }
@@ -169,6 +183,20 @@ class ServerRepository(
         flushPendingReadingProgress(bookId, versionId)
         return runCatching { getReadingProgressApi().getProgress(bookId, versionId) }
     }
+
+    suspend fun addReadingTime(
+        bookId: Long,
+        seconds: Long,
+        versionId: Long? = null
+    ): Result<Unit> = runCatching {
+        if (seconds > 0) {
+            getReadingProgressApi().updateReadingTime(
+                bookId,
+                versionId,
+                UpdateReadingTimeRequest(seconds)
+            )
+        }
+    }.map { }
 
     private suspend fun flushPendingReadingProgress(bookId: Long, versionId: Long?) {
         val pending = serverConfigStore.pendingReadingProgress(bookId) ?: return
@@ -238,6 +266,11 @@ class ServerRepository(
     private suspend fun ensureRetrofit(): Retrofit {
         retrofit?.let { return it }
 
+        // Application 初始化与首屏请求可能并发，确保第一次真实请求已经拿到持久化 JWT。
+        if (cachedToken == null) {
+            cachedToken = serverConfigStore.tokenSync()
+        }
+
         val url = cachedServerUrl.ifBlank {
             serverConfigStore.serverUrl.first()
         }
@@ -254,6 +287,16 @@ class ServerRepository(
             return ApiServiceFactory.createRetrofit(url, client).also {
                 retrofit = it
             }
+        }
+    }
+
+    private fun normalizeServerUrl(url: String): String {
+        val trimmed = url.trim().trimEnd('/')
+        if (trimmed.isBlank()) return ""
+        return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            trimmed
+        } else {
+            "http://$trimmed"
         }
     }
 

@@ -13,7 +13,7 @@
 | 7 | 排序筛选 | `bookshelf/sort-filter` | 第二轮真机通过 |
 | 8 | 书籍详情-本地 | `book/{bookId}` | 第七轮真机通过；信息卡语义图标已按原型补齐 |
 | 9 | 书籍详情-OPDS | OPDS 书籍详情 | 已按原型重做，待配置数据与亮屏截图复核 |
-| 10 | 书籍详情-云端 | 云端书籍详情 | Mock 数据状态真机通过 |
+| 10 | 书籍详情-云端 | 云端书籍详情 | 已切换真实服务，契约测试通过，待部署实例登录验收 |
 | 11 | 扫描本地书籍 | `bookstore/local/scan` | 第四轮真实扫描真机通过 |
 | 12 | 扫描目录管理 | `bookstore/local/scan-directories` | 第二轮真机通过 |
 | 13 | 扫描结果 | `bookstore/local/scan-result` | 第四轮真实扫描真机通过 |
@@ -24,15 +24,15 @@
 | 18 | OPDS 分类 | `bookstore/opds/{serviceId}/categories` | 第四轮修正独立分类结构，待 OPDS 数据复核 |
 | 19 | OPDS 分类书籍 | `bookstore/opds/{serviceId}/category/{categoryId}` | 第四轮改为动态分类标题，待 OPDS 数据复核 |
 | 20 | 添加 OPDS 服务 | `bookstore/opds/add` | 第二轮真机通过 |
-| 21 | 云端书库首页 | `bookstore/backend` | Mock 数据状态真机通过 |
-| 22 | 最近加入列表 | `bookstore/backend/recent` | Mock 数据状态真机通过 |
-| 23 | 收藏列表 | `bookstore/backend/favorites` | Mock 数据状态真机通过 |
-| 24 | 书单列表 | `bookstore/backend/booklists` | Mock 数据状态真机通过 |
-| 25 | 书单详情 | `bookstore/backend/booklist/{booklistId}` | Mock 数据状态真机通过 |
-| 26 | 新建书单 | `bookstore/backend/booklist/new` | 第六轮按原型重做并真机通过，现使用 Mock 保存 |
-| 27 | 编辑书单 | `bookstore/backend/booklist/{booklistId}/edit` | Mock 数据状态真机通过 |
+| 21 | 云端书库首页 | `bookstore/backend` | 已切换真实服务，待部署实例登录验收 |
+| 22 | 最近加入列表 | `bookstore/backend/recent` | 已切换真实服务，待部署实例数据验收 |
+| 23 | 收藏列表 | `bookstore/backend/favorites` | 已切换真实服务，待收藏交互验收 |
+| 24 | 书单列表 | `bookstore/backend/booklists` | 已切换真实服务，书单契约测试通过 |
+| 25 | 书单详情 | `bookstore/backend/booklist/{booklistId}` | 已切换真实服务，待部署实例数据验收 |
+| 26 | 新建书单 | `bookstore/backend/booklist/new` | 第六轮按原型重做并真机通过，现已接入真实创建接口 |
+| 27 | 编辑书单 | `bookstore/backend/booklist/{booklistId}/edit` | 已接入真实查询、更新和删除接口 |
 | 28 | 搜索页 | `search` | 第二轮真机通过 |
-| 29 | 搜索结果页 | `search?query={query}` | 云端 Mock 结果真机通过；来源图标、结果箭头和书架状态已按原型补齐，待 OPDS 数据聚合复核 |
+| 29 | 搜索结果页 | `search?query={query}` | 来源卡片真机通过；云端已切换真实搜索，待部署实例与 OPDS 聚合复核 |
 | 30 | 多来源版本选择 | `book/{bookId}/sources` | 云端 Mock 主书状态真机通过，待本地/OPDS 同名聚合复核 |
 | 31 | 多来源版本选择-重制稿 | `book/{bookId}/sources` | 云端 Mock 主书状态真机通过，待本地/OPDS 同名聚合复核 |
 | 32 | 热门搜索-重制稿 | `search` | 第二轮真机通过 |

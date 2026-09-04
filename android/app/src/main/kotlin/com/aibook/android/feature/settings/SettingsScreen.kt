@@ -886,6 +886,12 @@ fun SyncConnectionSettingsScreen(
                 ) {
                     Text("保存云端地址", fontWeight = FontWeight.Bold)
                 }
+                state.serverUrlMessage?.let {
+                    Text(
+                        it,
+                        color = if (it.contains("已保存")) DesignTokens.Accent else MaterialTheme.colorScheme.error
+                    )
+                }
             }
         }
 

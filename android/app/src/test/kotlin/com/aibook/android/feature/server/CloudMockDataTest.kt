@@ -2,10 +2,16 @@ package com.aibook.android.feature.server
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class CloudMockDataTest {
+    @Test
+    fun `real cloud service is the default data source`() {
+        assertFalse(CloudMockData.enabled)
+    }
+
     @Test
     fun `mock catalog exposes books favorites shelf and lists`() {
         assertTrue(CloudMockData.books.size >= 6)

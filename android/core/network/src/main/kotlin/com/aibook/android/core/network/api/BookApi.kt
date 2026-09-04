@@ -4,6 +4,7 @@ import com.aibook.android.core.network.api.dto.BookDTO
 import com.aibook.android.core.network.api.dto.BookPage
 import com.aibook.android.core.network.api.dto.ProcessedContentResponse
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 import okhttp3.ResponseBody
@@ -35,6 +36,12 @@ interface BookApi {
 
     @GET("api/books/{id}")
     suspend fun getBookById(@Path("id") id: Long): BookDTO
+
+    @POST("api/books/{id}/open")
+    suspend fun recordBookOpen(
+        @Path("id") id: Long,
+        @Query("versionId") versionId: Long? = null
+    )
 
     @Streaming
     @GET("api/books/{id}/content")

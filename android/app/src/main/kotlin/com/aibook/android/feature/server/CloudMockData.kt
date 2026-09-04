@@ -4,9 +4,9 @@ import com.aibook.android.core.network.api.dto.BookDTO
 import com.aibook.android.core.network.api.dto.BookListDTO
 import com.aibook.android.core.network.api.dto.ReadingProgressDTO
 
-/** 云端接口联调完成前供所有云端页面共用的演示数据。 */
+/** 仅供需要离线验收 UI 时手动启用的云端演示数据。正式交互默认使用真实服务。 */
 object CloudMockData {
-    const val enabled = true
+    const val enabled = false
 
     val books = listOf(
         mockBook(9001, "三体", "刘慈欣", "科幻", listOf("科幻", "经典"), 5, true, "EPUB", "地球文明向宇宙发出第一声啼鸣，也为未知世界拉开序幕。"),
