@@ -20,6 +20,8 @@ public class BookDTO {
     private Long id;
     private String title;
     private String author;
+    private String seriesName;
+    private java.math.BigDecimal seriesIndex;
     private String isbn;
     private String publisher;
     private String publishDate;

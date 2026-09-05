@@ -312,6 +312,11 @@ public class BookService {
         Book book = getBookEntity(id, user);
 
         if (bookDTO.getTitle() != null) book.setTitle(bookDTO.getTitle());
+        if (bookDTO.getSeriesName() != null) {
+            com.aibook.util.BookSeriesMetadata.apply(book, bookDTO.getSeriesName(), bookDTO.getSeriesIndex());
+        } else if (bookDTO.getSeriesIndex() != null) {
+            com.aibook.util.BookSeriesMetadata.apply(book, book.getSeriesName(), bookDTO.getSeriesIndex());
+        }
         if (bookDTO.getAuthor() != null) book.setAuthor(bookDTO.getAuthor());
         if (bookDTO.getIsbn() != null) book.setIsbn(bookDTO.getIsbn());
         if (bookDTO.getPublisher() != null) book.setPublisher(bookDTO.getPublisher());
@@ -431,6 +436,8 @@ public class BookService {
                 .id(book.getId())
                 .title(book.getTitle())
                 .author(book.getAuthor())
+                .seriesName(book.getSeriesName())
+                .seriesIndex(book.getSeriesIndex())
                 .isbn(book.getIsbn())
                 .publisher(book.getPublisher())
                 .publishDate(book.getPublishDate())

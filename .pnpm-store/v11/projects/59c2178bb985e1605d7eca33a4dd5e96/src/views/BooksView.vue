@@ -29,6 +29,7 @@
           <span>📤</span>
           <span>上传书籍</span>
         </button>
+        <router-link class="btn" to="/series">系列与阅读顺序</router-link>
       </div>
     </div>
 
@@ -245,7 +246,7 @@
       :class="{ 'books-grid-compact': viewMode === 'compact-card' }"
     >
       <div
-        v-for="book in bookStore.books"
+        v-for="(book, index) in bookStore.books"
         :key="book.id"
         class="book-card"
         :class="{ selected: selectionMode && selectedBooks.has(book.id) }"
@@ -263,11 +264,11 @@
         <div class="book-cover">
           <img
             v-if="book.coverUrl"
-            :src="getCoverUrl(book.coverUrl)"
+            :src="getCoverThumbnailUrl(book.coverUrl)"
             alt="封面"
             class="cover-image"
             :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
-            loading="eager"
+            :loading="index < PRIORITY_COVER_COUNT ? 'eager' : 'lazy'"
             decoding="async"
           />
           <div v-else class="no-cover">
@@ -363,7 +364,7 @@
     <!-- 列表视图 -->
     <div v-else class="books-list glass">
       <div
-        v-for="row in bookStore.books"
+        v-for="(row, index) in bookStore.books"
         :key="row.id"
         class="book-list-item"
         :class="{ selected: selectionMode && selectedBooks.has(row.id) }"
@@ -381,10 +382,10 @@
         <div class="book-cover-small">
           <img
             v-if="row.coverUrl"
-            :src="getCoverUrl(row.coverUrl)"
+            :src="getCoverThumbnailUrl(row.coverUrl, 96)"
             alt="封面"
             :class="{ 'is-hidden': isBookCoverHidden(row.id) }"
-            loading="eager"
+            :loading="index < PRIORITY_COVER_COUNT ? 'eager' : 'lazy'"
             decoding="async"
           />
           <div v-else class="no-cover-small">{{ row.title.charAt(0) }}</div>
@@ -594,7 +595,7 @@ import ScraperDialog from '@/components/ScraperDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import BookVersionRebuildDialog from '@/components/BookVersionRebuildDialog.vue'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
-import { getCoverUrl } from '@/utils/cover'
+import { getCoverThumbnailUrl } from '@/utils/cover'
 import {
   allBookCoversHidden,
   isBookCoverHidden,
@@ -649,6 +650,8 @@ const libraryLoading = computed(() => bookStore.loading || coversPreparing.value
 const coverImageCache = new Map<string, HTMLImageElement>()
 const coverImageLoads = new Map<string, Promise<void>>()
 const MAX_DECODED_COVER_CACHE_SIZE = 200
+const PRIORITY_COVER_COUNT = 12
+const COVER_DISPLAY_WAIT_MS = 200
 let loadBooksSequence = 0
 
 // 多选相关状态
@@ -759,18 +762,17 @@ const rememberCoverImage = (url: string, image: HTMLImageElement) => {
 }
 
 const preloadCoverImage = (url: string) => {
-  const cachedImage = coverImageCache.get(url)
-  if (cachedImage?.complete) {
-    rememberCoverImage(url, cachedImage)
-    return cachedImage.decode?.().catch(() => undefined) || Promise.resolve()
-  }
-
   const activeLoad = coverImageLoads.get(url)
   if (activeLoad) return activeLoad
 
-  const image = cachedImage || new Image()
+  const cachedImage = coverImageCache.get(url)
+  if (cachedImage?.complete && cachedImage.naturalWidth > 0) {
+    rememberCoverImage(url, cachedImage)
+    return Promise.resolve()
+  }
+
+  const image = new Image()
   image.decoding = 'async'
-  rememberCoverImage(url, image)
 
   const load = new Promise<void>(resolve => {
     let settled = false
@@ -780,7 +782,7 @@ const preloadCoverImage = (url: string) => {
       window.clearTimeout(timeoutId)
       image.onload = null
       image.onerror = null
-      coverImageLoads.delete(url)
+      if (image.complete && image.naturalWidth > 0) rememberCoverImage(url, image)
       resolve()
     }
     const decodeAndFinish = () => {
@@ -791,21 +793,34 @@ const preloadCoverImage = (url: string) => {
     const timeoutId = window.setTimeout(finish, 4000)
     image.onload = decodeAndFinish
     image.onerror = finish
-    if (!cachedImage) image.src = url
+    image.src = url
     if (image.complete) decodeAndFinish()
   })
 
   coverImageLoads.set(url, load)
+  void load.then(() => coverImageLoads.delete(url))
   return load
 }
 
 const prepareBookCovers = async (books: Book[]) => {
   const coverUrls = Array.from(new Set(
     books
-      .map(book => getCoverUrl(book.coverUrl))
+      .slice(0, PRIORITY_COVER_COUNT)
+      .map(book => getCoverThumbnailUrl(book.coverUrl, viewMode.value === 'list' ? 96 : 320))
       .filter((url): url is string => Boolean(url)),
   ))
-  await Promise.all(coverUrls.map(preloadCoverImage))
+  // 快图仍可一起展示；慢图继续加载，但不能阻塞整页书籍和分页操作。
+  let timeoutId: number | undefined
+  try {
+    await Promise.race([
+      Promise.all(coverUrls.map(preloadCoverImage)),
+      new Promise<void>(resolve => {
+        timeoutId = window.setTimeout(resolve, COVER_DISPLAY_WAIT_MS)
+      }),
+    ])
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
 }
 
 const loadBooks = async () => {

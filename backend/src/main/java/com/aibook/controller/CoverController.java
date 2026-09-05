@@ -1,144 +1,87 @@
 package com.aibook.controller;
 
-import lombok.extern.slf4j.Slf4j;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
+import com.aibook.service.CoverImageCacheService;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
-import org.springframework.http.*;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.WebRequest;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.security.cert.X509Certificate;
-import java.time.Duration;
-
-/**
- * 封面图片控制器
- */
+/** 原图与固定尺寸缩略图共用地址，未传 width 的客户端保持原图行为。 */
 @RestController
 @RequestMapping("/api/covers")
 @CrossOrigin(origins = "*")
-@Slf4j
 public class CoverController {
+    private final CoverImageCacheService imageCache;
 
-    @Value("${app.upload.dir:/app/uploads}")
-    private String uploadDir;
+    @Value("${app.upload.dir:/app/uploads}") private String uploadDir;
+    @Value("${app.cover.dir:covers}") private String coverDir;
 
-    @Value("${app.cover.dir:covers}")
-    private String coverDir;
-
-    /**
-     * 获取本地封面图片
-     */
-    @GetMapping("/{filename}")
-    public ResponseEntity<Resource> getCover(
-            @PathVariable String filename, WebRequest webRequest) throws IOException {
-        Path coverPath = Paths.get(uploadDir, coverDir, filename);
-
-        if (!Files.isRegularFile(coverPath)) {
-            return ResponseEntity.notFound().build();
-        }
-
-        Resource resource = new FileSystemResource(coverPath.toFile());
-        long lastModified = Files.getLastModifiedTime(coverPath).toMillis();
-        long fileSize = Files.size(coverPath);
-        String etag = "\""
-                + Long.toHexString(fileSize)
-                + "-"
-                + Long.toHexString(lastModified)
-                + "\"";
-        CacheControl cacheControl = CacheControl.maxAge(Duration.ofDays(365))
-                .cachePublic()
-                .immutable();
-
-        if (webRequest.checkNotModified(etag, lastModified)) {
-            return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
-                    .eTag(etag)
-                    .lastModified(lastModified)
-                    .cacheControl(cacheControl)
-                    .build();
-        }
-
-        // 确定 Content-Type
-        String contentType = "image/jpeg";
-        if (filename.endsWith(".png")) {
-            contentType = "image/png";
-        } else if (filename.endsWith(".gif")) {
-            contentType = "image/gif";
-        } else if (filename.endsWith(".webp")) {
-            contentType = "image/webp";
-        }
-
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(contentType))
-                .contentLength(fileSize)
-                .eTag(etag)
-                .lastModified(lastModified)
-                .cacheControl(cacheControl)
-                .body(resource);
+    public CoverController(CoverImageCacheService imageCache) {
+        this.imageCache = imageCache;
     }
 
-    /**
-     * 代理获取远程封面图片（解决防盗链问题）
-     */
-    @GetMapping("/proxy")
-    public ResponseEntity<byte[]> proxyCover(@RequestParam String url) {
-        try {
-            log.info("代理获取封面: {}", url);
-
-            // 使用 Java 原生 HttpURLConnection，更灵活控制请求头
-            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-            connection.setRequestMethod("GET");
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            connection.setRequestProperty("Referer", "https://book.douban.com/");
-            connection.setRequestProperty("Accept", "image/webp,image/apng,image/*,*/*;q=0.8");
-            connection.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(10000);
-            connection.setInstanceFollowRedirects(true);
-
-            int responseCode = connection.getResponseCode();
-
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                InputStream inputStream = connection.getInputStream();
-                byte[] imageBytes = inputStream.readAllBytes();
-                inputStream.close();
-
-                // 确定 Content-Type
-                String contentType = connection.getContentType();
-                if (contentType == null || contentType.isEmpty()) {
-                    contentType = "image/jpeg";
-                }
-
-                return ResponseEntity.ok()
-                        .header(HttpHeaders.CONTENT_TYPE, contentType)
-                        .header(HttpHeaders.CACHE_CONTROL, "max-age=86400")
-                        .body(imageBytes);
-            } else if (responseCode == HttpURLConnection.HTTP_MOVED_PERM || responseCode == HttpURLConnection.HTTP_MOVED_TEMP) {
-                // 处理重定向
-                String newUrl = connection.getHeaderField("Location");
-                connection.disconnect();
-                if (newUrl != null) {
-                    return proxyCover(newUrl);
-                }
-            }
-
-            connection.disconnect();
-            return ResponseEntity.status(responseCode).build();
-        } catch (Exception e) {
-            log.error("代理获取封面失败: {}", url, e);
-            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
+    @GetMapping("/{filename}")
+    public ResponseEntity<Resource> getCover(@PathVariable String filename,
+            @RequestParam(required = false) Integer width, WebRequest request) throws IOException {
+        if (!validWidth(width)) return ResponseEntity.badRequest().build();
+        Path root = Path.of(uploadDir, coverDir).toAbsolutePath().normalize();
+        Path source = root.resolve(filename).normalize();
+        if (!source.getParent().equals(root) || !Files.isRegularFile(source)) {
+            return ResponseEntity.notFound().build();
         }
+        Path result = width == null ? source : imageCache.thumbnail(source, width);
+        CacheControl cache = width == null
+                ? CacheControl.maxAge(Duration.ofDays(365)).cachePublic().immutable()
+                : CacheControl.maxAge(Duration.ofDays(1)).cachePublic();
+        // 生成繁忙或失败时的原图回退不能长期占用缩略图 URL 的浏览器缓存。
+        if (width != null && result.equals(source)) cache = CacheControl.noCache();
+        return respond(result, cache, request);
+    }
+
+    @GetMapping("/proxy")
+    public ResponseEntity<Resource> proxyCover(@RequestParam String url,
+            @RequestParam(required = false) Integer width, WebRequest request) {
+        if (!validWidth(width)) return ResponseEntity.badRequest().build();
+        try {
+            Path source = imageCache.remote(url);
+            Path result = width == null ? source : imageCache.thumbnail(source, width);
+            CacheControl cache = CacheControl.maxAge(Duration.ofHours(1)).cachePublic();
+            if (width != null && result.equals(source)) cache = CacheControl.noCache();
+            return respond(result, cache, request);
+        } catch (IOException exception) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).cacheControl(CacheControl.noStore()).build();
+        }
+    }
+
+    private boolean validWidth(Integer width) {
+        return width == null || width == 96 || width == 320;
+    }
+
+    private ResponseEntity<Resource> respond(Path path, CacheControl cache, WebRequest request)
+            throws IOException {
+        long lastModified = Files.getLastModifiedTime(path).toMillis();
+        long size = Files.size(path);
+        String etag = "\"" + Long.toHexString(size) + "-" + Long.toHexString(lastModified) + "\"";
+        if (request.checkNotModified(etag, lastModified)) {
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag)
+                    .lastModified(lastModified).cacheControl(cache).build();
+        }
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(imageCache.contentType(path)))
+                .contentLength(size).eTag(etag).lastModified(lastModified).cacheControl(cache)
+                .body(new FileSystemResource(path));
     }
 }

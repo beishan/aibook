@@ -85,6 +85,8 @@ public class BookConversionService {
                 .sourcePath(version.getFilePath()).uploadedSource(false)
                 .status(BookConversionTask.Status.CREATED).stage("等待分析").progress(0)
                 .title(book.getTitle()).author(book.getAuthor()).description(book.getDescription())
+                .seriesName(book.getSeriesName())
+                .seriesIndex(book.getSeriesIndex() == null ? null : book.getSeriesIndex().toPlainString())
                 .isbn(book.getIsbn()).publisher(book.getPublisher()).publishDate(book.getPublishDate())
                 .language(defaultString(book.getLanguage(), "zh-CN"))
                 .categoryName(book.getCategory() == null ? null : book.getCategory().getName())
@@ -390,6 +392,9 @@ public class BookConversionService {
     @Transactional
     public BookDTO createBook(User user, Long id) {
         BookConversionTask task = successTask(user, id);
+        Book seriesMetadata = new Book();
+        com.aibook.util.BookSeriesMetadata.apply(seriesMetadata, task.getSeriesName(),
+                com.aibook.util.BookSeriesMetadata.parseIndex(task.getSeriesIndex()));
         Path target = Paths.get(uploadPath).resolve(UUID.randomUUID() + ".epub");
         try {
             Files.createDirectories(target.getParent()); Files.copy(result(user, id), target);
@@ -401,6 +406,8 @@ public class BookConversionService {
                     .isbn(task.getIsbn()).publisher(task.getPublisher()).publishDate(task.getPublishDate())
                     .language(task.getLanguage()).format("epub").filePath(target.toString()).fileSize(Files.size(target))
                     .fileHash(hash).sourceType(Book.SourceType.UPLOAD).user(user).coverUrl(copyCoverToLibrary(task)).build();
+            book.setSeriesName(seriesMetadata.getSeriesName());
+            book.setSeriesIndex(seriesMetadata.getSeriesIndex());
             if (task.getCategoryName() != null && !task.getCategoryName().isBlank()) {
                 Category category = categoryRepository.findByUser(user).stream()
                         .filter(item -> item.getName().equalsIgnoreCase(task.getCategoryName()))
@@ -417,6 +424,7 @@ public class BookConversionService {
             }
             book.setTags(tags); book = bookRepository.save(book); authorService.synchronizeBook(book); bookVersionService.ensurePrimaryVersion(book, task.getOutputFilename());
             return BookDTO.builder().id(book.getId()).title(book.getTitle()).author(book.getAuthor())
+                    .seriesName(book.getSeriesName()).seriesIndex(book.getSeriesIndex())
                     .format(book.getFormat()).coverUrl(book.getCoverUrl())
                     .sourceType(book.getSourceType().name()).build();
         } catch (ResponseStatusException exception) { throw exception; }

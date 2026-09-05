@@ -352,6 +352,12 @@ public class BookVersionAggregationService {
     }
 
     private void mergeMetadata(Book primary, Book duplicate) {
+        if (primary.getSeriesName() == null || primary.getSeriesName().isBlank()) {
+            primary.setSeriesName(duplicate.getSeriesName());
+            primary.setSeriesIndex(duplicate.getSeriesIndex());
+        } else if (primary.getSeriesName().equals(duplicate.getSeriesName()) && primary.getSeriesIndex() == null) {
+            primary.setSeriesIndex(duplicate.getSeriesIndex());
+        }
         primary.setAuthor(preferValue(primary.getAuthor(), duplicate.getAuthor()));
         primary.setIsbn(preferValue(primary.getIsbn(), duplicate.getIsbn()));
         primary.setPublisher(preferValue(primary.getPublisher(), duplicate.getPublisher()));

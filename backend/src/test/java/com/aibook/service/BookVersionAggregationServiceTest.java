@@ -35,6 +35,8 @@ class BookVersionAggregationServiceTest {
         duplicate.setFilePath("/books/三体-刘慈欣-精校版.pdf");
         duplicate.setDescription("这是另一个版本中更完整的内容简介");
         duplicate.setIsFavorite(true);
+        duplicate.setSeriesName("地球往事");
+        duplicate.setSeriesIndex(java.math.BigDecimal.ONE);
 
         BookVersion primaryVersion = version(11L, primary, true);
         BookVersion duplicateVersion = version(12L, duplicate, true);
@@ -74,6 +76,8 @@ class BookVersionAggregationServiceTest {
         int aggregatedVersions = service.aggregatePair(1L, 2L, user);
 
         assertEquals(1, aggregatedVersions);
+        assertEquals("地球往事", primary.getSeriesName());
+        assertEquals(java.math.BigDecimal.ONE, primary.getSeriesIndex());
         assertSame(primary, duplicateVersion.getBook());
         assertFalse(duplicateVersion.getPrimaryVersion());
         assertNotNull(duplicate.getDeletedAt());

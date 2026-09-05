@@ -2,7 +2,7 @@
   <el-dialog
     v-model="dialogVisible"
     title="编辑书籍"
-    width="680px"
+    width="min(680px, calc(100vw - 32px))"
     :close-on-click-modal="false"
     destroy-on-close
     @closed="resetForm"
@@ -33,6 +33,17 @@
         </el-form-item>
         <el-form-item label="作者">
           <el-input v-model.trim="form.author" maxlength="255" />
+        </el-form-item>
+        <el-form-item label="系列名称">
+          <el-select v-model="form.seriesName" filterable allow-create default-first-option clearable
+            placeholder="选择或输入系列名称">
+            <el-option v-for="name in seriesNames" :key="name" :label="name" :value="name" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="卷序（可留空）">
+          <el-input-number v-model="form.seriesIndex" :min="0" :max="9999.99" :precision="2"
+            :disabled="!form.seriesName" placeholder="如 1、2、1.5" :controls="false" />
+          <small class="series-hint">0 可作前传，小数可作番外；清空系列名称即可移出系列。</small>
         </el-form-item>
         <el-form-item label="类别">
           <el-select v-model="form.categoryId" clearable filterable placeholder="未分类">
@@ -112,6 +123,7 @@ import { useBookStore, type Book } from '@/stores/book'
 import { useCategoryStore } from '@/stores/category'
 import { useTagStore } from '@/stores/tag'
 import { getCoverUrl } from '@/utils/cover'
+import api from '@/utils/api'
 
 const props = defineProps<{
   visible: boolean
@@ -130,9 +142,12 @@ const saving = ref(false)
 const coverInput = ref<HTMLInputElement | null>(null)
 const coverFile = ref<File | null>(null)
 const localPreviewUrl = ref('')
+const seriesNames = ref<string[]>([])
 const form = reactive({
   title: '',
   author: '',
+  seriesName: '',
+  seriesIndex: undefined as number | undefined,
   publisher: '',
   isbn: '',
   publishDate: '',
@@ -158,6 +173,8 @@ const hydrateForm = () => {
   Object.assign(form, {
     title: props.book.title || '',
     author: props.book.author || '',
+    seriesName: props.book.seriesName || '',
+    seriesIndex: props.book.seriesIndex ?? undefined,
     publisher: props.book.publisher || '',
     isbn: props.book.isbn || '',
     publishDate: props.book.publishDate || '',
@@ -167,6 +184,9 @@ const hydrateForm = () => {
     tagIds: (props.book.tags || []).map(tag => tag.id),
   })
   void Promise.all([categoryStore.refresh(), tagStore.fetchTags()])
+  void api.get('/api/series').then(({ data }) => {
+    seriesNames.value = data.map((series: { name: string }) => series.name)
+  }).catch(() => { seriesNames.value = [] })
 }
 
 const clearLocalPreview = () => {
@@ -203,6 +223,8 @@ const saveBook = async () => {
     let updatedBook = await bookStore.updateBookMetadata(props.book.id, {
       title: form.title.trim(),
       author: form.author.trim(),
+      seriesName: (form.seriesName || '').trim(),
+      seriesIndex: form.seriesIndex ?? null,
       publisher: form.publisher.trim(),
       isbn: form.isbn.trim(),
       publishDate: form.publishDate?.trim() || '',
@@ -230,6 +252,7 @@ watch(() => [props.visible, props.book?.id], ([visible]) => {
 </script>
 
 <style scoped>
+.series-hint { display: block; margin-top: 6px; color: var(--text-secondary); line-height: 1.5; }
 .book-edit-form {
   max-height: min(68vh, 680px);
   padding-right: 4px;

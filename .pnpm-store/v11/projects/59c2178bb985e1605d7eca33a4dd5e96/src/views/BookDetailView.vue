@@ -215,6 +215,8 @@
             </button>
           </div>
 
+          <BookSeriesPanel :book="book" @updated="loadBook" />
+
           <div class="organization-panel">
             <div class="organization-row">
               <span class="organization-label">分类</span>
@@ -809,6 +811,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted, nextTick } from 'vue'
+import BookSeriesPanel from '@/components/BookSeriesPanel.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { message, confirm } from '@/utils/message'

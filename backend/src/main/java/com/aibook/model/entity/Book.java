@@ -16,7 +16,7 @@ import java.util.Set;
  * 书籍实体
  */
 @Entity
-@Table(name = "books")
+@Table(name = "books", indexes = @Index(name = "idx_books_user_series", columnList = "user_id,series_name"))
 @Data
 @Builder
 @NoArgsConstructor
@@ -37,6 +37,13 @@ public class Book {
      * 作者
      */
     private String author;
+
+    /** 同一用户内按系列名称归组；数字卷序支持前传和番外。 */
+    @Column(length = 120)
+    private String seriesName;
+
+    @Column(precision = 6, scale = 2)
+    private java.math.BigDecimal seriesIndex;
 
     /** 规范化作者关联；author 字符串继续用于兼容现有接口和显示。 */
     @ManyToMany(fetch = FetchType.LAZY)
