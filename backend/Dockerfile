@@ -37,8 +37,8 @@ RUN apk add --no-cache tzdata \
 # 复制构建好的 jar 包
 COPY --from=builder /app/target/*.jar app.jar
 
-# 创建上传目录
-RUN mkdir -p /app/uploads && chown -R appuser:appgroup /app
+# 创建上传与采集导出目录
+RUN mkdir -p /app/uploads /app/crawler-data && chown -R appuser:appgroup /app
 
 USER appuser
 

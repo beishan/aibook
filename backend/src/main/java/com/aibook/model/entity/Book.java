@@ -229,6 +229,7 @@ public class Book {
 
     public enum SourceType {
         UPLOAD,
-        DIRECTORY_SCAN
+        DIRECTORY_SCAN,
+        CRAWLER
     }
 }

@@ -151,6 +151,7 @@ import {
   SwitchButton,
   Tools,
   Switch,
+  Connection,
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
@@ -169,6 +170,7 @@ const menuItems = [
   { path: '/shelf', icon: Reading, title: '书架' },
   { path: '/text-repair', icon: Tools, title: '内容修复' },
   { path: '/format-conversion', icon: Switch, title: '格式转换' },
+  { path: '/crawler', icon: Connection, title: '书籍爬虫' },
   { path: '/settings', icon: Setting, title: '设置' },
 ]
 

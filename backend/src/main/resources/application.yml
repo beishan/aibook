@@ -53,6 +53,10 @@ conversion:
   path: ${CONVERSION_PATH:./conversion-tasks}
   retention-days: ${CONVERSION_RETENTION_DAYS:7}
 
+# 小说网站采集的结构化数据与中间导出文件。正式入库后会复制到 upload.path。
+crawler:
+  storage-path: ${CRAWLER_STORAGE_PATH:./crawler-data}
+
 # Book scanning configuration
 scanning:
   enabled: true

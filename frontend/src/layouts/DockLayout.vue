@@ -185,6 +185,7 @@ const menuItems: Array<{ path: string; icon: DockIconName; title: string }> = [
   { path: '/shelf', icon: 'shelf', title: '书架' },
   { path: '/text-repair', icon: 'repair', title: '内容修复' },
   { path: '/format-conversion', icon: 'conversion', title: '格式转换' },
+  { path: '/crawler', icon: 'repair', title: '书籍爬虫' },
   { path: '/settings', icon: 'settings', title: '设置' },
 ]
 

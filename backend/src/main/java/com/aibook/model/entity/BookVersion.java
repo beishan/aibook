@@ -60,6 +60,13 @@ public class BookVersion {
 
     private Integer chapterCount;
 
+    /** 可追溯的版本来源；爬虫导入时指向采集中心记录。 */
+    private String sourceType;
+    private String sourceId;
+    private String sourceSite;
+    @Column(length = 1500)
+    private String sourceUrl;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

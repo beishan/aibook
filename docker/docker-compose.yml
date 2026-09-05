@@ -49,6 +49,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?请配置 JWT_SECRET}
       SCANNING_DIRECTORIES: /scanfolder
       UPLOAD_PATH: /app/uploads
+      CRAWLER_STORAGE_PATH: /app/crawler-data
       JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m}
       LOGGING_LEVEL_COM_AIBOOK: ${APP_LOG_LEVEL:-INFO}
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: ${SECURITY_LOG_LEVEL:-INFO}
@@ -56,6 +57,7 @@ services:
       - "${BACKEND_PORT:-8080}:8080"
     volumes:
       - uploads_data:/app/uploads
+      - crawler_data:/app/crawler-data
       - ${BOOKS_PATH:?请配置飞牛 NAS 宿主机书籍目录 BOOKS_PATH}:/scanfolder
     depends_on:
       postgres:
@@ -101,6 +103,8 @@ volumes:
     name: aibook-postgres-data
   uploads_data:
     name: aibook-uploads-data
+  crawler_data:
+    name: aibook-crawler-data
   backups_data:
     name: aibook-backups
   deploy_state:
