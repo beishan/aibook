@@ -7,6 +7,7 @@ import java.util.*;
 
 public interface CrawlerSiteRepository extends JpaRepository<CrawlerSite, Long> {
     List<CrawlerSite> findByUserOrderByCreatedAtDesc(User user);
+    List<CrawlerSite> findByEnabledTrue();
     Optional<CrawlerSite> findByIdAndUser(Long id, User user);
     Optional<CrawlerSite> findByUserAndSiteCode(User user, String siteCode);
 }

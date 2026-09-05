@@ -15,7 +15,11 @@ public final class CrawlerDtos {
             @NotBlank String chapterItemSelector, String chapterTitleSelector,
             @NotBlank String chapterUrlSelector, String contentTitleSelector,
             @NotBlank String contentSelector, String removeSelectors,
-            String regexReplacementsJson, @Min(0) Integer minChapterLength) { }
+            String regexReplacementsJson, @Min(0) Integer minChapterLength,
+            String discoveryItemSelector, String discoveryUrlSelector,
+            String discoveryTitleSelector, String discoveryAuthorSelector,
+            String discoveryCoverSelector, String discoveryCategorySelector,
+            String discoveryLatestChapterSelector, String discoveryNextPageSelector) { }
 
     public record SitePayload(
             @NotBlank String siteName, @NotBlank @Pattern(regexp = "[a-zA-Z0-9_-]+") String siteCode,
@@ -24,24 +28,33 @@ public final class CrawlerDtos {
             @Min(100) Integer requestIntervalMillis, @Min(0) Integer randomDelayMillis,
             @Min(1) @Max(8) Integer maxConcurrency, @Min(1000) Integer timeoutMillis,
             @Min(0) @Max(8) Integer retryCount, String encoding, String userAgent,
-            String cookie, String headersJson, String proxy, @Valid @NotNull RulePayload rule) { }
+            String cookie, String headersJson, String proxy,
+            @Min(1) Integer scanIntervalMinutes, @Min(1) Integer updateIntervalMinutes,
+            @Min(1) @Max(50) Integer maxDiscoveryPages,
+            @Pattern(regexp = "(?i)TXT|EPUB|BOTH") String autoImportFormat,
+            @Valid @NotNull RulePayload rule) { }
 
     public record SiteView(Long id, String siteName, String siteCode, String baseUrl, String homeUrl,
             boolean enabled, boolean autoScan, boolean autoCrawl, boolean autoUpdate,
             boolean autoImportLibrary, int requestIntervalMillis, int randomDelayMillis,
             int maxConcurrency, int timeoutMillis, int retryCount, String encoding,
             String userAgent, String cookie, String headersJson, String proxy,
-            String status, long bookCount, RulePayload rule, LocalDateTime createdAt) { }
+            int scanIntervalMinutes, int updateIntervalMinutes, int maxDiscoveryPages,
+            String autoImportFormat, String status, long bookCount, RulePayload rule,
+            LocalDateTime lastScanAt, LocalDateTime lastUpdateAt, LocalDateTime createdAt) { }
 
     public record ManualCrawlRequest(@NotBlank String url) { }
     public record ExportRequest(@NotEmpty List<@Pattern(regexp = "(?i)TXT|EPUB") String> formats) { }
     public record ImportRequest(@Pattern(regexp = "(?i)TXT|EPUB") String format) { }
+    public record BatchBookRequest(@NotEmpty List<@NotNull Long> bookIds) { }
+    public record DiscoveryStatusRequest(@NotEmpty List<@NotNull Long> bookIds,
+            @NotBlank @Pattern(regexp = "ACTIVE|IGNORED|BLACKLISTED") String status) { }
 
     public record BookView(Long id, Long siteId, String siteName, String externalBookId,
             String bookUrl, String bookName, String author, String coverUrl, String description,
             String category, String bookStatus, String latestChapter, int chapterCount,
             int crawledChapterCount, int failedChapterCount, String crawlStatus,
-            String importStatus, Long libraryBookId, LocalDateTime discoverTime,
+            String discoveryStatus, String importStatus, Long libraryBookId, LocalDateTime discoverTime,
             LocalDateTime lastCrawlTime) { }
 
     public record ChapterView(Long id, int chapterIndex, String chapterName, String chapterUrl,

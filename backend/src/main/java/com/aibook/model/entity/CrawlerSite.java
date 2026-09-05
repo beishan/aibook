@@ -36,6 +36,8 @@ public class CrawlerSite {
     @Builder.Default private Boolean autoImportLibrary = false;
     @Builder.Default private Integer scanIntervalMinutes = 360;
     @Builder.Default private Integer updateIntervalMinutes = 30;
+    @Builder.Default private Integer maxDiscoveryPages = 3;
+    @Builder.Default private String autoImportFormat = "EPUB";
     @Builder.Default private Integer requestIntervalMillis = 1500;
     @Builder.Default private Integer randomDelayMillis = 1000;
     @Builder.Default private Integer maxConcurrency = 1;
@@ -49,6 +51,8 @@ public class CrawlerSite {
     @Enumerated(EnumType.STRING) @Builder.Default private ParserType parserType = ParserType.CONFIG;
     private String parserBean;
     @Enumerated(EnumType.STRING) @Builder.Default private SiteStatus status = SiteStatus.READY;
+    private LocalDateTime lastScanAt;
+    private LocalDateTime lastUpdateAt;
     @OneToOne(mappedBy = "site", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private CrawlerSiteRule rule;
     @CreationTimestamp private LocalDateTime createdAt;

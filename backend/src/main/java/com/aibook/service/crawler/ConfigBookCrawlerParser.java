@@ -18,6 +18,36 @@ public class ConfigBookCrawlerParser implements BookCrawlerParser {
     private final ObjectMapper objectMapper;
 
     @Override
+    public List<ParsedDiscovery> parseBookList(String html, String pageUrl, CrawlerSiteRule rule) {
+        Document doc = Jsoup.parse(html, pageUrl);
+        String itemSelector = required(rule.getDiscoveryItemSelector(), "书籍发现项");
+        List<ParsedDiscovery> result = new ArrayList<>();
+        for (Element item : doc.select(itemSelector)) {
+            Element link = select(item, rule.getDiscoveryUrlSelector());
+            if (link == null) continue;
+            String url = link.absUrl("href");
+            if (url.isBlank()) url = resolve(pageUrl, link.attr("href"));
+            if (url.isBlank()) continue;
+            String title = scopedText(item, rule.getDiscoveryTitleSelector());
+            if (title.isBlank()) title = link.text().trim();
+            if (title.isBlank()) continue;
+            result.add(new ParsedDiscovery(externalId(url), title,
+                    scopedText(item, rule.getDiscoveryAuthorSelector()),
+                    scopedAttr(item, rule.getDiscoveryCoverSelector(), "src", pageUrl),
+                    scopedText(item, rule.getDiscoveryCategorySelector()),
+                    scopedText(item, rule.getDiscoveryLatestChapterSelector()), url));
+        }
+        return result;
+    }
+
+    @Override
+    public String parseNextBookListPage(String html, String pageUrl, CrawlerSiteRule rule) {
+        if (rule.getDiscoveryNextPageSelector() == null || rule.getDiscoveryNextPageSelector().isBlank()) return "";
+        Document doc = Jsoup.parse(html, pageUrl);
+        return absoluteAttr(doc, rule.getDiscoveryNextPageSelector(), "href");
+    }
+
+    @Override
     public ParsedBook parseBookDetail(String html, String pageUrl, CrawlerSiteRule rule) {
         Document doc = Jsoup.parse(html, pageUrl);
         String title = text(doc, rule.getTitleSelector());
@@ -95,6 +125,16 @@ public class ConfigBookCrawlerParser implements BookCrawlerParser {
         String attr = parts.length == 2 ? parts[1].trim() : defaultAttr;
         String absolute = element.absUrl(attr);
         return absolute.isBlank() ? element.attr(attr).trim() : absolute;
+    }
+
+    private String scopedAttr(Element root, String selector, String defaultAttr, String pageUrl) {
+        if (selector == null || selector.isBlank()) return "";
+        String[] parts = selector.split("::", 2);
+        Element element = select(root, parts[0].trim());
+        if (element == null) return "";
+        String attr = parts.length == 2 ? parts[1].trim() : defaultAttr;
+        String value = element.absUrl(attr);
+        return value.isBlank() ? resolve(pageUrl, element.attr(attr)) : value;
     }
 
     private Element select(Element root, String selector) {

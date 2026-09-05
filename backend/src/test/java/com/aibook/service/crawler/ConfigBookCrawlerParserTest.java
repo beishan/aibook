@@ -13,7 +13,26 @@ class ConfigBookCrawlerParserTest {
             .descriptionSelector(".intro").chapterListUrlSelector("a.catalog")
             .chapterItemSelector("#chapters li").chapterTitleSelector(":scope").chapterUrlSelector("a")
             .contentTitleSelector("h1").contentSelector("#content").removeSelectors(".ad")
+            .discoveryItemSelector(".books .book").discoveryUrlSelector("a.title")
+            .discoveryTitleSelector("a.title").discoveryAuthorSelector(".writer")
+            .discoveryCoverSelector("img::data-src").discoveryCategorySelector(".category")
+            .discoveryLatestChapterSelector(".latest").discoveryNextPageSelector("a.next")
             .regexReplacementsJson("{\"example\\\\.com\":\"\"}").minChapterLength(10).build();
+
+    @Test
+    void parsesDiscoveryListAndNextPage() {
+        String html = "<div class='books'><article class='book'><a class='title' href='/book/42'>山海记</a>"
+                + "<span class='writer'>北山</span><span class='category'>奇幻</span>"
+                + "<span class='latest'>第十章</span><img data-src='/cover/42.jpg'></article></div>"
+                + "<a class='next' href='/books?page=2'>下一页</a>";
+        var books = parser.parseBookList(html, "https://books.example.com/books", rule);
+        assertEquals(1, books.size());
+        assertEquals("山海记", books.get(0).title());
+        assertEquals("https://books.example.com/book/42", books.get(0).url());
+        assertEquals("https://books.example.com/cover/42.jpg", books.get(0).coverUrl());
+        assertEquals("https://books.example.com/books?page=2",
+                parser.parseNextBookListPage(html, "https://books.example.com/books", rule));
+    }
 
     @Test
     void parsesBookMetadataAndResolvesUrls() {

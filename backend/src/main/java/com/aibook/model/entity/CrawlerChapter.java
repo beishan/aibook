@@ -22,6 +22,8 @@ public class CrawlerChapter {
     @Column(nullable = false, length = 1500) private String chapterUrl;
     @Column(columnDefinition = "TEXT") private String content;
     private String contentHash;
+    private String sourceEtag;
+    private String sourceLastModified;
     @Builder.Default private Integer wordCount = 0;
     @Enumerated(EnumType.STRING) @Builder.Default private CrawlStatus crawlStatus = CrawlStatus.NOT_CRAWLED;
     @Enumerated(EnumType.STRING) @Builder.Default private AccessStatus accessStatus = AccessStatus.UNKNOWN;

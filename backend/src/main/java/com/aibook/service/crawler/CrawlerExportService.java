@@ -72,8 +72,16 @@ public class CrawlerExportService {
     public Long importLibrary(User user, Long bookId, String preferredFormat) {
         CrawlerBook crawlerBook = managementService.ownedBook(user, bookId);
         validateComplete(crawlerBook);
+        String requestedFormat = preferredFormat == null ? "EPUB" : preferredFormat.toUpperCase(Locale.ROOT);
+        if ("BOTH".equals(requestedFormat)) {
+            Long libraryId = crawlerBook.getLibraryBook() == null
+                    ? importLibrary(user, bookId, "EPUB") : crawlerBook.getLibraryBook().getId();
+            CrawlerBook refreshed = managementService.ownedBook(user, bookId);
+            addSecondaryVersion(refreshed, "TXT");
+            return libraryId;
+        }
         if (crawlerBook.getLibraryBook() != null) return crawlerBook.getLibraryBook().getId();
-        String format = preferredFormat == null ? "EPUB" : preferredFormat.toUpperCase(Locale.ROOT);
+        String format = requestedFormat;
         CrawlerBookExport source = exportRepository.findByCrawlerBookAndFormat(crawlerBook, format)
                 .orElseGet(() -> { generate(user, bookId, List.of(format)); return exportRepository.findByCrawlerBookAndFormat(crawlerBook, format).orElseThrow(); });
         Path sourcePath = Path.of(source.getFilePath());
@@ -98,6 +106,34 @@ public class CrawlerExportService {
             return book.getId();
         } catch (ResponseStatusException exception) { throw exception; }
         catch (Exception exception) { try { Files.deleteIfExists(target); } catch (Exception ignored) { } throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "加入书库失败", exception); }
+    }
+
+    private void addSecondaryVersion(CrawlerBook crawlerBook, String format) {
+        Book book = crawlerBook.getLibraryBook();
+        boolean exists = versionRepository.findByBookOrderByPrimaryVersionDescCreatedAtAsc(book).stream()
+                .anyMatch(version -> format.equalsIgnoreCase(version.getFormat())
+                        && "CRAWLER".equals(version.getSourceType())
+                        && crawlerBook.getId().toString().equals(version.getSourceId()));
+        if (exists) return;
+        CrawlerBookExport source = exportRepository.findByCrawlerBookAndFormat(crawlerBook, format)
+                .orElseGet(() -> { generate(crawlerBook.getSite().getUser(), crawlerBook.getId(), List.of(format)); return exportRepository.findByCrawlerBookAndFormat(crawlerBook, format).orElseThrow(); });
+        Path sourcePath = Path.of(source.getFilePath());
+        Path target = Path.of(uploadPath).resolve(UUID.randomUUID() + "." + format.toLowerCase(Locale.ROOT));
+        try {
+            Files.createDirectories(target.getParent()); Files.copy(sourcePath, target);
+            String fileHash = hash(target);
+            Optional<BookVersion> duplicate = versionRepository.findByFileHash(fileHash);
+            if (duplicate.isPresent()) { Files.deleteIfExists(target); return; }
+            versionRepository.save(BookVersion.builder().book(book)
+                    .displayName(safe(crawlerBook.getBookName()) + "." + format.toLowerCase(Locale.ROOT))
+                    .format(format.toLowerCase(Locale.ROOT)).filePath(target.toString()).fileSize(Files.size(target))
+                    .fileHash(fileHash).primaryVersion(false).chapterCount(crawlerBook.getChapterCount())
+                    .sourceType("CRAWLER").sourceId(crawlerBook.getId().toString())
+                    .sourceSite(crawlerBook.getSite().getSiteCode()).sourceUrl(crawlerBook.getBookUrl()).build());
+        } catch (Exception exception) {
+            try { Files.deleteIfExists(target); } catch (Exception ignored) { }
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "添加 " + format + " 版本失败", exception);
+        }
     }
 
     private void validateComplete(CrawlerBook book) {

@@ -17,6 +17,14 @@ public class CrawlerSiteRule {
     @JoinColumn(name = "site_id", nullable = false, unique = true)
     private CrawlerSite site;
     @Builder.Default private Integer ruleVersion = 1;
+    private String discoveryItemSelector;
+    private String discoveryUrlSelector;
+    private String discoveryTitleSelector;
+    private String discoveryAuthorSelector;
+    private String discoveryCoverSelector;
+    private String discoveryCategorySelector;
+    private String discoveryLatestChapterSelector;
+    private String discoveryNextPageSelector;
     private String titleSelector;
     private String authorSelector;
     private String coverSelector;

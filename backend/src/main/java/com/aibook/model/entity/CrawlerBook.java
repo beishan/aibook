@@ -36,11 +36,20 @@ public class CrawlerBook {
     @Builder.Default private Integer crawledChapterCount = 0;
     @Builder.Default private Integer failedChapterCount = 0;
     @Enumerated(EnumType.STRING) @Builder.Default private CrawlStatus crawlStatus = CrawlStatus.DISCOVERED;
+    @Enumerated(EnumType.STRING) @Builder.Default private DiscoveryStatus discoveryStatus = DiscoveryStatus.ACTIVE;
     @Enumerated(EnumType.STRING) @Builder.Default private ImportStatus importStatus = ImportStatus.NOT_IMPORTED;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "library_book_id") private Book libraryBook;
     @CreationTimestamp private LocalDateTime createdAt;
     @UpdateTimestamp private LocalDateTime updatedAt;
 
+    @PostLoad
+    @PrePersist
+    @PreUpdate
+    private void normalizeDefaults() {
+        if (discoveryStatus == null) discoveryStatus = DiscoveryStatus.ACTIVE;
+    }
+
     public enum CrawlStatus { DISCOVERED, WAITING, CRAWLING_METADATA, CRAWLING_CHAPTER_LIST, CRAWLING_CONTENT, PARTIAL_SUCCESS, COMPLETED, FAILED, UPDATING, PAUSED }
+    public enum DiscoveryStatus { ACTIVE, IGNORED, BLACKLISTED }
     public enum ImportStatus { NOT_IMPORTED, READY, IMPORTED }
 }

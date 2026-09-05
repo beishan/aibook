@@ -25,16 +25,23 @@ public class CrawlerHttpClient {
     private final Map<Long, Semaphore> concurrencyGates = new ConcurrentHashMap<>();
 
     public FetchResult get(CrawlerSite site, String url) throws Exception {
+        return get(site, url, null, null);
+    }
+
+    public FetchResult get(CrawlerSite site, String url, String etag, String lastModified) throws Exception {
         URI uri = validateSiteUrl(site, url);
         int attempts = Math.max(1, value(site.getRetryCount(), 2) + 1);
         Exception last = null;
         for (int attempt = 0; attempt < attempts; attempt++) {
             try {
-                TimedResponse timed = sendFollowingSafeRedirects(site, uri);
+                TimedResponse timed = sendFollowingSafeRedirects(site, uri, etag, lastModified);
                 HttpResponse<byte[]> response = timed.response();
+                if (response.statusCode() == 304) return new FetchResult("", 304, timed.durationMillis(), etag, lastModified);
                 if (response.statusCode() >= 200 && response.statusCode() < 300) {
                     Charset charset = Charset.forName(defaultString(site.getEncoding(), "UTF-8"));
-                    return new FetchResult(new String(response.body(), charset), response.statusCode(), timed.durationMillis());
+                    return new FetchResult(new String(response.body(), charset), response.statusCode(), timed.durationMillis(),
+                            response.headers().firstValue("ETag").orElse(null),
+                            response.headers().firstValue("Last-Modified").orElse(null));
                 }
                 if (response.statusCode() == 403) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "源站拒绝访问（HTTP 403），系统不会尝试绕过访问控制");
                 if (response.statusCode() != 429 && response.statusCode() < 500) throw new IllegalStateException("源站返回 HTTP " + response.statusCode());
@@ -48,18 +55,18 @@ public class CrawlerHttpClient {
         throw last == null ? new IllegalStateException("请求失败") : last;
     }
 
-    private TimedResponse sendFollowingSafeRedirects(CrawlerSite site, URI original) throws Exception {
+    private TimedResponse sendFollowingSafeRedirects(CrawlerSite site, URI original, String etag, String lastModified) throws Exception {
         Semaphore gate = concurrencyGates.computeIfAbsent(site.getId(),
                 ignored -> new Semaphore(Math.max(1, value(site.getMaxConcurrency(), 1)), true));
         gate.acquire();
         try {
-            return sendFollowingSafeRedirectsWithinGate(site, original);
+            return sendFollowingSafeRedirectsWithinGate(site, original, etag, lastModified);
         } finally {
             gate.release();
         }
     }
 
-    private TimedResponse sendFollowingSafeRedirectsWithinGate(CrawlerSite site, URI original) throws Exception {
+    private TimedResponse sendFollowingSafeRedirectsWithinGate(CrawlerSite site, URI original, String etag, String lastModified) throws Exception {
         URI current = original;
         long duration = 0;
         for (int redirects = 0; redirects <= 5; redirects++) {
@@ -69,6 +76,8 @@ public class CrawlerHttpClient {
                     .GET().header("Accept", "text/html,application/xhtml+xml")
                     .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.6")
                     .header("User-Agent", defaultString(site.getUserAgent(), "AiBookCrawler/1.0 (+private library; authorized content only)"));
+            if (etag != null && !etag.isBlank()) request.header("If-None-Match", etag);
+            if (lastModified != null && !lastModified.isBlank()) request.header("If-Modified-Since", lastModified);
             if (site.getCookie() != null && !site.getCookie().isBlank()) request.header("Cookie", site.getCookie());
             applyHeaders(request, site.getHeadersJson());
             long started = System.nanoTime();
@@ -130,6 +139,6 @@ public class CrawlerHttpClient {
 
     private int value(Integer value, int fallback) { return value == null ? fallback : value; }
     private String defaultString(String value, String fallback) { return value == null || value.isBlank() ? fallback : value; }
-    public record FetchResult(String html, int statusCode, long durationMillis) { }
+    public record FetchResult(String html, int statusCode, long durationMillis, String etag, String lastModified) { }
     private record TimedResponse(HttpResponse<byte[]> response, long durationMillis) { }
 }

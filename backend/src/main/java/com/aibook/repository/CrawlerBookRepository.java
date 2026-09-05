@@ -13,6 +13,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
     long countBySiteUser(User user);
     long countBySite(CrawlerSite site);
     boolean existsBySite(CrawlerSite site);
+    List<CrawlerBook> findBySiteAndCrawlStatusIn(CrawlerSite site, Collection<CrawlerBook.CrawlStatus> statuses);
     long countBySiteUserAndCrawlStatus(User user, CrawlerBook.CrawlStatus status);
     long countBySiteUserAndImportStatus(User user, CrawlerBook.ImportStatus status);
     @Query("select count(b) from CrawlerBook b where b.site.user = :user and b.createdAt >= :start")
