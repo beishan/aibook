@@ -1,0 +1,29 @@
+{
+  "screen": "BookshelfList",
+  "route": "bookshelf/list",
+  "bottomTab": "书架",
+  "appBar": {
+    "title": "我的书架",
+    "actions": [
+      "search",
+      "more"
+    ]
+  },
+  "sourceTabs": [
+    "全部",
+    "本地",
+    "OPDS",
+    "云端"
+  ],
+  "sections": [
+    {
+      "type": "ContinueReadingCompact"
+    },
+    {
+      "type": "FolderRow"
+    },
+    {
+      "type": "BookList"
+    }
+  ]
+}

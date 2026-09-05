@@ -1,0 +1,20 @@
+{
+  "screen": "LocalScan",
+  "route": "bookstore/local/scan",
+  "appBar": {
+    "title": "扫描本地书籍"
+  },
+  "content": {
+    "progress": true,
+    "stats": [
+      "扫描目录",
+      "发现书籍",
+      "扫描进度"
+    ],
+    "currentPath": true,
+    "currentFile": true
+  },
+  "actions": [
+    "停止扫描"
+  ]
+}

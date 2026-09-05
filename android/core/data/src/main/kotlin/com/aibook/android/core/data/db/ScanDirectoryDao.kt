@@ -24,6 +24,9 @@ interface ScanDirectoryDao {
     @Query("UPDATE scan_directories SET enabled = :enabled WHERE id = :id")
     suspend fun setEnabled(id: String, enabled: Boolean)
 
+    @Query("UPDATE scan_directories SET includeSubdirectories = :included WHERE id = :id")
+    suspend fun setIncludeSubdirectories(id: String, included: Boolean)
+
     @Query("DELETE FROM scan_directories WHERE id = :id")
     suspend fun deleteById(id: String)
 }

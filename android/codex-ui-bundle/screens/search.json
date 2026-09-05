@@ -1,0 +1,14 @@
+{
+  "screen": "Search",
+  "route": "search",
+  "tabs": [
+    "全部",
+    "本地",
+    "OPDS",
+    "云端"
+  ],
+  "sections": [
+    "最近搜索",
+    "热门搜索"
+  ]
+}

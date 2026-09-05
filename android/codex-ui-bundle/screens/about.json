@@ -1,0 +1,13 @@
+{
+  "screen": "About",
+  "route": "settings/about",
+  "title": "阅读器",
+  "version": "1.0.0 (100)",
+  "items": [
+    "检查更新",
+    "用户协议",
+    "隐私政策",
+    "开源许可",
+    "致谢"
+  ]
+}

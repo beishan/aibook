@@ -1,0 +1,13 @@
+{
+  "name": "BooklistCard",
+  "props": [
+    "name",
+    "description",
+    "count",
+    "previewCovers",
+    "updatedAt"
+  ],
+  "interaction": {
+    "tap": "openBooklist"
+  }
+}

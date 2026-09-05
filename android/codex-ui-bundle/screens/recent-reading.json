@@ -1,0 +1,17 @@
+{
+  "screen": "RecentReading",
+  "route": "reading/recent",
+  "content": {
+    "type": "ReadingHistoryList",
+    "shows": [
+      "cover",
+      "title",
+      "chapter",
+      "progress",
+      "lastReadAt"
+    ]
+  },
+  "actions": [
+    "清除全部记录"
+  ]
+}

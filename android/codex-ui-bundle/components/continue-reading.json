@@ -1,0 +1,13 @@
+{
+  "name": "ContinueReadingCard",
+  "props": [
+    "cover",
+    "title",
+    "author",
+    "chapter",
+    "progress"
+  ],
+  "interaction": {
+    "primary": "continueReading"
+  }
+}

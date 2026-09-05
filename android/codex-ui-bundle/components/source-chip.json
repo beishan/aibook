@@ -1,0 +1,10 @@
+{
+  "name": "SourceChip",
+  "values": [
+    "全部",
+    "本地",
+    "OPDS",
+    "云端"
+  ],
+  "behavior": "singleSelect"
+}

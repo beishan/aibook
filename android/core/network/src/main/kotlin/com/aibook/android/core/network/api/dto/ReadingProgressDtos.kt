@@ -5,7 +5,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ReadingProgressDTO(
     val id: Long? = null,
+    val bookId: Long? = null,
+    val versionId: Long? = null,
     val currentChapter: String? = null,
+    val currentChapterTitle: String? = null,
     val chapterProgress: Int = 0,
     val totalProgress: Int = 0,
     val readingTimeSeconds: Long = 0,
@@ -15,6 +18,7 @@ data class ReadingProgressDTO(
 @Serializable
 data class SaveProgressRequest(
     val currentChapter: String? = null,
+    val currentChapterTitle: String? = null,
     val chapterProgress: Int = 0,
     val totalProgress: Int = 0
 )

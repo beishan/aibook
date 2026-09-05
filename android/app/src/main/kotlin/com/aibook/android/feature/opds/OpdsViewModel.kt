@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aibook.android.core.data.repository.OpdsCatalogCacheRepository
+import com.aibook.android.core.data.repository.OpdsCatalogEntry
 import com.aibook.android.core.data.repository.OpdsConnectionRepository
 import com.aibook.android.core.network.opds.OpdsCatalogService
 import com.aibook.android.core.network.opds.OpdsConnection
@@ -32,6 +33,7 @@ import kotlinx.coroutines.withContext
 
 data class OpdsUiState(
     val connections: List<OpdsConnection> = emptyList(),
+    val cachedEntries: List<OpdsCatalogEntry> = emptyList(),
     val activeConnection: OpdsConnection? = null,
     val currentFeed: OpdsFeed? = null,
     val navigationStack: List<String> = emptyList(),
@@ -62,8 +64,8 @@ class OpdsViewModel(
     private val _state = MutableStateFlow(OpdsUiState())
     val uiState: StateFlow<OpdsUiState> = connectionRepository.observeConnections()
         .let { connectionsFlow ->
-            combine(connectionsFlow, _state) { connections, state ->
-                state.copy(connections = connections)
+            combine(connectionsFlow, catalogCacheRepository.observeEntries(), _state) { connections, cachedEntries, state ->
+                state.copy(connections = connections, cachedEntries = cachedEntries)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OpdsUiState())
 

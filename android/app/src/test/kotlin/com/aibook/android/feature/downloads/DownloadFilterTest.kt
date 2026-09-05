@@ -7,10 +7,12 @@ import kotlin.test.assertTrue
 
 class DownloadFilterTest {
     @Test
-    fun activeIncludesQueuedAndRunningOnly() {
+    fun activeIncludesAllNonTerminalDownloads() {
         assertTrue(DownloadFilter.ACTIVE.matchesStatus(DownloadStatus.QUEUED))
         assertTrue(DownloadFilter.ACTIVE.matchesStatus(DownloadStatus.RUNNING))
-        assertFalse(DownloadFilter.ACTIVE.matchesStatus(DownloadStatus.PAUSED))
+        assertTrue(DownloadFilter.ACTIVE.matchesStatus(DownloadStatus.PAUSED))
+        assertTrue(DownloadFilter.ACTIVE.matchesStatus(DownloadStatus.FAILED))
+        assertFalse(DownloadFilter.ACTIVE.matchesStatus(DownloadStatus.COMPLETED))
     }
 
     @Test

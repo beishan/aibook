@@ -1,0 +1,14 @@
+{
+  "screen": "OpdsCategories",
+  "route": "bookstore/opds/{serviceId}/categories",
+  "appBar": {
+    "title": "分类",
+    "actions": [
+      "search"
+    ]
+  },
+  "content": {
+    "type": "CategoryList",
+    "showCount": true
+  }
+}

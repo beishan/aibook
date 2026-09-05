@@ -12,6 +12,7 @@ import com.aibook.android.core.data.repository.ServerRepository
 import com.aibook.android.core.model.AccentColor
 import com.aibook.android.core.model.AppThemeMode
 import com.aibook.android.core.model.ReaderTheme
+import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.di.ServiceLocator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,10 +32,12 @@ data class SettingsUiState(
     val readerTheme: ReaderTheme = ReaderTheme.PAPER,
     val appThemeMode: AppThemeMode = AppThemeMode.SYSTEM,
     val accentColor: AccentColor = AccentColor.ORANGE,
+    val pageTurnMode: PageTurnMode = PageTurnMode.SIMULATION,
     val loginFormUsername: String = "",
     val loginFormPassword: String = "",
     val isLoggingIn: Boolean = false,
     val loginMessage: String? = null,
+    val serverUrlMessage: String? = null,
     val serverUrlInput: String = ""
 )
 
@@ -103,16 +106,36 @@ class SettingsViewModel(
                 _state.update { it.copy(accentColor = color) }
             }
         }
+        viewModelScope.launch {
+            readerSettingsStore.pageTurnMode.collect { mode ->
+                _state.update { it.copy(pageTurnMode = mode) }
+            }
+        }
     }
 
     fun updateServerUrlInput(value: String) {
-        _state.update { it.copy(serverUrlInput = value) }
+        _state.update { it.copy(serverUrlInput = value, serverUrlMessage = null) }
     }
 
     fun saveServerUrl() {
         val url = _state.value.serverUrlInput.trim()
-        if (url.isNotBlank()) {
-            viewModelScope.launch { serverRepository.setServerUrl(url) }
+        if (url.isBlank()) {
+            _state.update { it.copy(serverUrlMessage = "请输入云端服务地址") }
+            return
+        }
+        viewModelScope.launch {
+            serverRepository.setServerUrl(url)
+                .onSuccess { normalized ->
+                    _state.update {
+                        it.copy(
+                            serverUrlInput = normalized,
+                            serverUrlMessage = "云端地址已保存；如地址发生变化，请重新登录"
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _state.update { it.copy(serverUrlMessage = error.message ?: "云端地址无效") }
+                }
         }
     }
 
@@ -125,6 +148,14 @@ class SettingsViewModel(
     }
 
     fun login() {
+        if (_state.value.serverUrl.isBlank()) {
+            _state.update { it.copy(loginMessage = "请先保存云端服务地址") }
+            return
+        }
+        if (_state.value.loginFormUsername.isBlank() || _state.value.loginFormPassword.isBlank()) {
+            _state.update { it.copy(loginMessage = "请输入用户名和密码") }
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(isLoggingIn = true, loginMessage = null) }
             val result = serverRepository.login(
@@ -179,6 +210,10 @@ class SettingsViewModel(
 
     fun setAccentColor(color: AccentColor) {
         viewModelScope.launch { readerSettingsStore.setAccentColor(color) }
+    }
+
+    fun setPageTurnMode(mode: PageTurnMode) {
+        viewModelScope.launch { readerSettingsStore.setPageTurnMode(mode) }
     }
 
     companion object {

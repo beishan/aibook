@@ -1,5 +1,7 @@
 package com.aibook.android.feature.shelf
 
+import android.content.Context
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -15,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -27,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.AddBusiness
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
@@ -36,6 +40,7 @@ import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,6 +50,9 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -61,6 +69,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -79,47 +88,115 @@ import com.aibook.android.ui.design.BookCover
 import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
+import com.aibook.android.ui.design.SectionHeader
+import com.aibook.android.ui.design.SlidingSegmentedControl
 import com.aibook.android.ui.design.WarmProgress
 
 @Composable
 fun ShelfScreen(
     onBookClick: (String) -> Unit,
     onReadClick: (String) -> Unit,
+    onRemoteReadClick: (Long) -> Unit = {},
+    onFoldersClick: () -> Unit = {},
+    onRecentReadingClick: () -> Unit = {},
+    onSortClick: () -> Unit = {},
+    initialViewMode: Int? = null,
+    initialManagementMode: Boolean = false,
     viewModel: ShelfViewModel = viewModel(factory = ShelfViewModel.Factory),
     importViewModel: LocalBookImportViewModel = viewModel(factory = LocalBookImportViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { viewModel.refreshRemoteShelf() }
     val importState by importViewModel.state.collectAsStateWithLifecycle()
     val picker = rememberLocalBookImportLauncher { uris ->
         importViewModel.importBooks(uris)
     }
-    val visibleBooks = state.filteredBooks
-    val featuredBooks = visibleBooks.take(3)
-    val hasBooks = state.books.isNotEmpty()
-    val allVisibleSelected = visibleBooks.isNotEmpty() && visibleBooks.all { it.id in state.selectedIds }
+    var onlyUnread by remember { mutableStateOf(false) }
+    var favoriteOnly by remember { mutableStateOf(false) }
+    var sourceFilter by remember { mutableIntStateOf(0) }
+    val visibleBooks = state.filteredBooks.filter { book ->
+        val sourceMatches = when (sourceFilter) {
+            1 -> book.isLocalSource()
+            2 -> book.isOpdsSource()
+            3 -> book.isServerBook()
+            else -> true
+        }
+        sourceMatches && (!onlyUnread || book.progress.percent <= 0f) && (!favoriteOnly || book.favorite)
+    }
+    val visibleLocalBooks = visibleBooks.filterNot { it.isServerBook() }
+    val featuredBook = visibleBooks.firstOrNull()
+    val hasBooks = state.books.isNotEmpty() || state.remoteBooks.isNotEmpty()
+    val allVisibleSelected = visibleLocalBooks.isNotEmpty() && visibleLocalBooks.all { it.id in state.selectedIds }
     val selectedFavorite = state.selectedBooks.isNotEmpty() && state.selectedBooks.all { it.favorite }
     var showMoveDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val prefs = remember(context) { ShelfPreferences.preferences(context) }
-    var viewMode by remember { mutableIntStateOf(prefs.getInt("reading_view_mode", 0)) }
+    var viewMode by remember { mutableIntStateOf(prefs.getInt("reading_view_mode", 0).coerceIn(0, 1)) }
     var showContinueReadingCards by remember {
         mutableStateOf(ShelfPreferences.showContinueReadingCards(prefs))
     }
-    var showViewModeDialog by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(state.query.isNotBlank()) }
+    var showTopMenu by remember { mutableStateOf(false) }
+
+    LaunchedEffect(initialViewMode, initialManagementMode) {
+        initialViewMode?.let { viewMode = it.coerceIn(0, 1) }
+        if (initialManagementMode) viewModel.setManagementMode(true)
+    }
+
+    LaunchedEffect(prefs) {
+        val savedSort = prefs.getString(ShelfPreferences.KEY_SORT_OPTION, null)
+            ?.let { value -> runCatching { com.aibook.android.core.model.ShelfSortOption.valueOf(value) }.getOrNull() }
+        if (savedSort != null) viewModel.setSortOption(savedSort)
+        onlyUnread = prefs.getBoolean(ShelfPreferences.KEY_FILTER_UNREAD, false)
+        favoriteOnly = prefs.getBoolean("filter_favorite", false)
+    }
 
     DisposableEffect(prefs) {
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
             if (key == ShelfPreferences.KEY_SHOW_CONTINUE_READING_CARDS) {
                 showContinueReadingCards = ShelfPreferences.showContinueReadingCards(preferences)
+            } else if (key == ShelfPreferences.KEY_SORT_OPTION) {
+                preferences.getString(key, null)
+                    ?.let { value -> runCatching { com.aibook.android.core.model.ShelfSortOption.valueOf(value) }.getOrNull() }
+                    ?.let(viewModel::setSortOption)
+            } else if (key == ShelfPreferences.KEY_FILTER_UNREAD) {
+                onlyUnread = preferences.getBoolean(key, false)
+            } else if (key == "filter_favorite") {
+                favoriteOnly = preferences.getBoolean(key, false)
             }
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
+    if (state.managementMode) {
+        ShelfBatchContent(
+            books = visibleLocalBooks,
+            selectedIds = state.selectedIds,
+            onToggle = { viewModel.toggleBookSelection(it) },
+            onSelectAll = {
+                if (allVisibleSelected) viewModel.clearSelection() else viewModel.selectAllVisible()
+            },
+            onDone = { viewModel.setManagementMode(false) },
+            onMove = { showMoveDialog = true },
+            onFavorite = { viewModel.setSelectedFavorite(!selectedFavorite) },
+            onRemove = viewModel::removeSelectedFromShelf
+        )
+        if (showMoveDialog) {
+            MoveToFolderDialog(
+                folders = state.folders,
+                selectedCount = state.selectedIds.size,
+                onDismiss = { showMoveDialog = false },
+                onMoveToUnfiled = { viewModel.moveSelectedToFolder(null); showMoveDialog = false },
+                onMoveToFolder = { viewModel.moveSelectedToFolder(it); showMoveDialog = false },
+                onCreateFolder = { viewModel.createFolderAndMoveSelected(it); showMoveDialog = false }
+            )
+        }
+        return
+    }
+
     DesignPage(
-        title = if (state.managementMode) "已选 ${state.selectedIds.size} 本" else "",
+        title = if (state.managementMode) "已选 ${state.selectedIds.size} 本" else "我的书架",
         modifier = Modifier.fillMaxSize(),
         actions = {
             Icon(
@@ -127,30 +204,43 @@ fun ShelfScreen(
                 contentDescription = if (showSearch) "关闭搜索" else "搜索书架",
                 modifier = Modifier.clickable { showSearch = !showSearch }
             )
-            Icon(
-                imageVector = when (viewMode) {
-                    0 -> Icons.Default.GridView
-                    1 -> Icons.AutoMirrored.Filled.FormatListBulleted
-                    else -> Icons.AutoMirrored.Filled.ViewList
-                },
-                contentDescription = "切换正在阅读视图",
-                modifier = Modifier.clickable { showViewModeDialog = true }
-            )
-            Row(
-                modifier = Modifier.clickable(onClick = viewModel::cycleSortOption),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "排序")
-                Text(state.sortOption.label)
+            if (state.managementMode) {
+                Text("完成", modifier = Modifier.clickable { viewModel.setManagementMode(false) })
+            } else {
+                Box {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "更多",
+                        modifier = Modifier.clickable { showTopMenu = true }
+                    )
+                    DropdownMenu(expanded = showTopMenu, onDismissRequest = { showTopMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("排序与筛选") },
+                            onClick = { showTopMenu = false; onSortClick() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("最近阅读") },
+                            onClick = { showTopMenu = false; onRecentReadingClick() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("批量管理") },
+                            onClick = { showTopMenu = false; viewModel.setManagementMode(true) }
+                        )
+                    }
+                }
             }
-            Text(
-                if (state.managementMode) "取消" else "管理",
-                modifier = Modifier.clickable { viewModel.setManagementMode(!state.managementMode) }
-            )
         }
     ) {
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
+            if (!state.managementMode) {
+                item {
+                    SlidingSegmentedControl(
+                        options = listOf("全部", "本地", "OPDS", "云端"),
+                        selectedIndex = sourceFilter,
+                        onSelected = { sourceFilter = it }
+                    )
+                }
+            }
             if (showSearch) {
                 item {
                     OutlinedTextField(
@@ -165,14 +255,25 @@ fun ShelfScreen(
                 }
             }
             if (hasBooks) {
+                if (showContinueReadingCards && featuredBook != null && !state.managementMode) {
+                    item {
+                        ContinueReadingHero(
+                            book = featuredBook,
+                            onReadClick = {
+                                featuredBook.serverBookId()?.let(onRemoteReadClick) ?: onReadClick(featuredBook.id)
+                            }
+                        )
+                    }
+                }
+                item { SectionHeader("文件夹", "查看全部 ›", onFoldersClick) }
                 item {
                     ShelfFolderFilterRow(
                         folders = state.folders,
                         folderCounts = state.folderCounts,
                         selection = state.folderSelection,
-                        favoriteCount = state.books.count { it.favorite },
+                        favoriteCount = state.books.count { it.favorite } + state.remoteBooks.count { it.favorite },
                         unfiledCount = state.books.count { it.folderId == null },
-                        totalCount = state.books.size,
+                        totalCount = state.books.size + state.remoteBooks.size,
                         onSelect = viewModel::selectFolder
                     )
                 }
@@ -200,20 +301,27 @@ fun ShelfScreen(
                     }
                 }
             }
-            if (showContinueReadingCards && featuredBooks.isNotEmpty() && !state.managementMode) {
-                item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        featuredBooks.forEach { book ->
-                            ContinueReadingCard(
-                                book = book,
-                                onReadClick = { onReadClick(book.id) },
-                                modifier = Modifier.weight(1f)
+            if (visibleBooks.isNotEmpty()) {
+                if (!state.managementMode) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("全部书籍", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            SlidingSegmentedControl(
+                                options = listOf("▦", "☷"),
+                                selectedIndex = viewMode.coerceIn(0, 1),
+                                onSelected = { mode ->
+                                    viewMode = mode
+                                    prefs.edit().putInt("reading_view_mode", mode).apply()
+                                },
+                                modifier = Modifier.width(112.dp)
                             )
                         }
                     }
                 }
-            }
-            if (visibleBooks.isNotEmpty()) {
                 item {
                     ReadingBooksView(
                         books = visibleBooks,
@@ -221,12 +329,24 @@ fun ShelfScreen(
                         managementMode = state.managementMode,
                         selectedIds = state.selectedIds,
                         onBookClick = { book ->
-                            if (state.managementMode) viewModel.toggleBookSelection(book.id) else onBookClick(book.id)
+                            if (state.managementMode) {
+                                if (!book.isServerBook()) viewModel.toggleBookSelection(book.id)
+                            } else {
+                                book.serverBookId()?.let(onRemoteReadClick) ?: onBookClick(book.id)
+                            }
                         },
-                        onReadClick = { onReadClick(it.id) },
-                        onSelect = { viewModel.toggleBookSelection(it.id) },
-                        onFavoriteClick = { viewModel.setFavorite(it.id, !it.favorite) },
-                        onRemoveClick = { viewModel.toggleShelved(it.id, false) },
+                        onReadClick = { book ->
+                            book.serverBookId()?.let(onRemoteReadClick) ?: onReadClick(book.id)
+                        },
+                        onSelect = { if (!it.isServerBook()) viewModel.toggleBookSelection(it.id) },
+                        onFavoriteClick = { book ->
+                            book.serverBookId()?.let(viewModel::toggleRemoteFavorite)
+                                ?: viewModel.setFavorite(book.id, !book.favorite)
+                        },
+                        onRemoveClick = { book ->
+                            book.serverBookId()?.let(viewModel::removeRemoteFromShelf)
+                                ?: viewModel.toggleShelved(book.id, false)
+                        },
                         onLoadMore = viewModel::loadNextPage
                     )
                 }
@@ -276,17 +396,6 @@ fun ShelfScreen(
         )
     }
 
-    if (showViewModeDialog) {
-        ShelfViewModeDialog(
-            currentMode = viewMode,
-            onDismiss = { showViewModeDialog = false },
-            onSelect = { mode ->
-                viewMode = mode
-                prefs.edit().putInt("reading_view_mode", mode).apply()
-                showViewModeDialog = false
-            }
-        )
-    }
 }
 
 @Composable
@@ -303,18 +412,18 @@ private fun ReadingBooksView(
     onLoadMore: () -> Unit
 ) {
     when (viewMode) {
-        0, 3 -> LazyVerticalGrid(
-            columns = GridCells.Fixed(if (viewMode == 0) 3 else 4),
+        0 -> LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
             contentPadding = PaddingValues(bottom = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (viewMode == 0) 12.dp else 10.dp),
-            verticalArrangement = Arrangement.spacedBy(if (viewMode == 0) 12.dp else 10.dp),
-            modifier = Modifier.fillMaxWidth().height(620.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16),
+            modifier = Modifier.fillMaxWidth().height((((books.size + 2) / 3).coerceAtLeast(1) * 244).dp)
         ) {
             gridItems(books, key = { it.id }) { book ->
                 if (book.id == books.lastOrNull()?.id) LaunchedEffect(book.id) { onLoadMore() }
                 ReadingBookCard(
                     book = book,
-                    managementMode = managementMode,
+                    managementMode = managementMode && !book.isServerBook(),
                     selected = book.id in selectedIds,
                     onCoverClick = { onBookClick(book) },
                     onReadClick = { onReadClick(book) },
@@ -326,15 +435,18 @@ private fun ReadingBooksView(
         }
 
         1 -> LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
             contentPadding = PaddingValues(bottom = 4.dp),
             modifier = Modifier.fillMaxWidth().height(620.dp)
+                .clip(RoundedCornerShape(DesignTokens.CardRadius))
+                .background(DesignTokens.CardBackground)
+                .border(1.dp, DesignTokens.Hairline, RoundedCornerShape(DesignTokens.CardRadius))
         ) {
             items(books, key = { it.id }) { book ->
                 if (book.id == books.lastOrNull()?.id) LaunchedEffect(book.id) { onLoadMore() }
                 ShelfCoverListItem(
                     book = book,
-                    managementMode = managementMode,
+                    managementMode = managementMode && !book.isServerBook(),
                     selected = book.id in selectedIds,
                     onClick = { onBookClick(book) },
                     onSelect = { onSelect(book) }
@@ -351,13 +463,129 @@ private fun ReadingBooksView(
                 if (book.id == books.lastOrNull()?.id) LaunchedEffect(book.id) { onLoadMore() }
                 ShelfCompactListItem(
                     book = book,
-                    managementMode = managementMode,
+                    managementMode = managementMode && !book.isServerBook(),
                     selected = book.id in selectedIds,
                     onClick = { onBookClick(book) },
                     onSelect = { onSelect(book) }
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ShelfBatchContent(
+    books: List<LocalBook>,
+    selectedIds: Set<String>,
+    onToggle: (String) -> Unit,
+    onSelectAll: () -> Unit,
+    onDone: () -> Unit,
+    onMove: () -> Unit,
+    onFavorite: () -> Unit,
+    onRemove: () -> Unit
+) {
+    var showMore by remember { mutableStateOf(false) }
+    val hasSelection = selectedIds.isNotEmpty()
+    val allSelected = books.isNotEmpty() && books.all { it.id in selectedIds }
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = DesignTokens.PagePadding).padding(bottom = 78.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(68.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (allSelected) "取消全选" else "全选",
+                    modifier = Modifier.clickable(onClick = onSelectAll),
+                    color = DesignTokens.Accent,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text("已选择 ${selectedIds.size} 本", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("完成", modifier = Modifier.clickable(onClick = onDone), color = DesignTokens.Accent, style = MaterialTheme.typography.titleMedium)
+            }
+            SoftCard(color = DesignTokens.WarmCard, contentPadding = 14.dp) {
+                Text("ⓘ  已选择 ${selectedIds.size} 本书，可进行批量管理操作", color = DesignTokens.SoftText)
+            }
+            Spacer(Modifier.height(DesignTokens.Space16))
+            if (books.isEmpty()) {
+                SoftCard { Text("书架中暂无可批量管理的本地书籍", color = DesignTokens.SoftText) }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
+                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16),
+                    contentPadding = PaddingValues(bottom = DesignTokens.Space16)
+                ) {
+                    gridItems(books, key = { it.id }) { book ->
+                        BatchBookCard(book, book.id in selectedIds) { onToggle(book.id) }
+                    }
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(76.dp)
+                .background(MaterialTheme.colorScheme.surface)
+                .border(0.5.dp, DesignTokens.Hairline, RoundedCornerShape(0.dp))
+                .padding(horizontal = DesignTokens.Space8),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BatchToolbarAction(Icons.Default.CreateNewFolder, "加入文件夹", hasSelection, onMove)
+            BatchToolbarAction(Icons.Default.FavoriteBorder, "收藏", hasSelection, onFavorite)
+            BatchToolbarAction(Icons.Default.Download, "下载", hasSelection) { }
+            BatchToolbarAction(Icons.Default.RemoveCircleOutline, "移出书架", hasSelection, onRemove)
+            Box {
+                BatchToolbarAction(Icons.Default.MoreVert, "更多", hasSelection) { showMore = true }
+                DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+                    DropdownMenuItem(text = { Text("取消选择") }, onClick = { showMore = false; onDone() })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BatchBookCard(book: LocalBook, selected: Boolean, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(DesignTokens.RadiusMedium),
+        colors = CardDefaults.cardColors(containerColor = DesignTokens.CardBackground),
+        elevation = CardDefaults.cardElevation(defaultElevation = DesignTokens.SoftShadow)
+    ) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Box {
+                BookCover(book.title, width = null, height = 112.dp, imageUri = book.coverUri)
+                Box(
+                    modifier = Modifier.align(Alignment.TopEnd).size(28.dp)
+                        .background(if (selected) DesignTokens.Accent else Color.White.copy(alpha = 0.94f), RoundedCornerShape(7.dp))
+                        .border(1.dp, DesignTokens.Accent.copy(alpha = 0.65f), RoundedCornerShape(7.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (selected) Icon(Icons.Default.CheckCircle, "已选择", tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+            }
+            Text(book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
+            Text(book.author ?: "未知作者", maxLines = 1, overflow = TextOverflow.Ellipsis, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+            Text(if (book.progress.percent > 0f) "已读 ${(book.progress.percent * 100).toInt()}%" else "未读", color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun BatchToolbarAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier.clickable(enabled = enabled, onClick = onClick).padding(horizontal = 4.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Icon(icon, contentDescription = label, tint = if (enabled) DesignTokens.AccentDark else DesignTokens.SoftText.copy(alpha = 0.45f))
+        Text(label, color = if (enabled) DesignTokens.TextPrimary else DesignTokens.SoftText.copy(alpha = 0.45f), style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -369,22 +597,27 @@ private fun ShelfCoverListItem(
     onClick: () -> Unit,
     onSelect: () -> Unit
 ) {
-    SoftCard(
-        modifier = Modifier.clickable { if (managementMode) onSelect() else onClick() },
-        contentPadding = 10.dp
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable { if (managementMode) onSelect() else onClick() }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             if (managementMode) ShelfSelectionMark(selected)
-            BookCover(book.title, width = 48.dp, height = 68.dp, imageUri = book.coverUri)
+            BookCover(book.title, width = 58.dp, height = 82.dp, imageUri = book.coverUri)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ShelfMetadataBadge("${shelfFormatLabel(book)}｜本")
-                    Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                }
-                Text("阅读进度 ${(book.progress.percent * 100).toInt()}%", color = DesignTokens.SoftText, style = MaterialTheme.typography.labelSmall)
+                Text(book.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                Text(book.progress.chapterTitle ?: book.progress.positionLabel ?: "尚未开始阅读", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ShelfMetadataBadge(when { book.isServerBook() -> "云端"; book.isOpdsSource() -> "OPDS"; else -> "本地" })
+                Text("${(book.progress.percent * 100).toInt()}%", color = DesignTokens.Accent, style = MaterialTheme.typography.titleMedium)
+                Icon(Icons.Default.MoreVert, contentDescription = "更多", tint = DesignTokens.SoftText, modifier = Modifier.size(20.dp))
             }
         }
+        HorizontalDivider(color = DesignTokens.Hairline)
     }
 }
 
@@ -409,7 +642,7 @@ private fun ShelfCompactListItem(
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                ShelfMetadataBadge("${shelfFormatLabel(book)}｜本")
+                ShelfMetadataBadge("${shelfFormatLabel(book)}｜${if (book.isServerBook()) "远" else "本"}")
                 Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -442,41 +675,15 @@ private fun ShelfSelectionMark(selected: Boolean) {
 private fun shelfFormatLabel(book: LocalBook): String =
     book.format.displayName.firstOrNull()?.uppercaseChar()?.toString().orEmpty()
 
-@Composable
-private fun ShelfViewModeDialog(
-    currentMode: Int,
-    onDismiss: () -> Unit,
-    onSelect: (Int) -> Unit
-) {
-    val viewModes = listOf(
-        Triple(0, Icons.Default.GridView, "网格视图"),
-        Triple(1, Icons.AutoMirrored.Filled.FormatListBulleted, "封面列表"),
-        Triple(2, Icons.AutoMirrored.Filled.ViewList, "紧凑列表"),
-        Triple(3, Icons.Default.GridView, "小网格视图")
-    )
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("选择视图模式", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                viewModes.forEach { (mode, icon, label) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(mode) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(icon, contentDescription = null, tint = if (mode == currentMode) DesignTokens.Accent else DesignTokens.SoftText)
-                        Text(label, fontWeight = if (mode == currentMode) FontWeight.Bold else FontWeight.Normal)
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
-    )
-}
+private fun LocalBook.isServerBook(): Boolean = id.startsWith("server:")
+
+private fun LocalBook.serverBookId(): Long? =
+    id.takeIf { isServerBook() }?.removePrefix("server:")?.toLongOrNull()
+
+private fun LocalBook.isOpdsSource(): Boolean =
+    source.equals("OPDS", ignoreCase = true) || uri.contains("/downloads/", ignoreCase = true)
+
+private fun LocalBook.isLocalSource(): Boolean = !isServerBook() && !isOpdsSource()
 
 @Composable
 private fun ShelfFolderFilterRow(
@@ -536,29 +743,43 @@ private fun ShelfFolderChip(
     Row(
         modifier = Modifier
             .background(
-                if (selected) DesignTokens.Accent.copy(alpha = 0.10f) else Color.White,
-                RoundedCornerShape(18.dp)
+                if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                RoundedCornerShape(DesignTokens.CardRadius)
+            )
+            .border(
+                1.dp,
+                if (selected) DesignTokens.Accent.copy(alpha = 0.35f) else DesignTokens.Hairline,
+                RoundedCornerShape(DesignTokens.CardRadius)
             )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 14.dp, vertical = 9.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .width(142.dp)
+            .height(76.dp)
+            .padding(DesignTokens.Space12),
+        horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            Icons.Default.Folder,
-            contentDescription = null,
-            tint = if (selected) DesignTokens.Accent else DesignTokens.SoftText,
-            modifier = Modifier.size(18.dp)
-        )
-        Text(
-            "$label $count",
-            color = if (selected) DesignTokens.Accent else Color(0xFF2F2B26),
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-        )
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .background(DesignTokens.Accent.copy(alpha = 0.12f), RoundedCornerShape(DesignTokens.RadiusMedium)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Folder, contentDescription = null, tint = DesignTokens.Accent)
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                label,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text("$count 本", color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
@@ -758,48 +979,45 @@ private fun ImportLocalBookCard(
 }
 
 @Composable
-private fun ContinueReadingCard(
+private fun ContinueReadingHero(
     book: LocalBook,
-    onReadClick: () -> Unit,
-    modifier: Modifier = Modifier
+    onReadClick: () -> Unit
 ) {
-    Card(
-        modifier = modifier
-            .shadow(
-                elevation = DesignTokens.SoftShadow,
-                shape = RoundedCornerShape(DesignTokens.CardRadius),
-                ambientColor = Color.Black.copy(alpha = 0.08f),
-                spotColor = Color.Black.copy(alpha = 0.08f)
-            )
-            .clickable(onClick = onReadClick),
-        shape = RoundedCornerShape(DesignTokens.CardRadius),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    SoftCard(
+        modifier = Modifier.clickable(onClick = onReadClick),
+        color = MaterialTheme.colorScheme.surface,
+        contentPadding = DesignTokens.Space12
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+            Text("◷", color = DesignTokens.Accent, style = MaterialTheme.typography.titleMedium)
+            Text("继续阅读", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(DesignTokens.Space8))
+        Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12), verticalAlignment = Alignment.CenterVertically) {
             BookCover(
                 title = book.title,
-                width = null,
-                height = 84.dp,
+                width = 62.dp,
+                height = 88.dp,
                 imageUri = book.coverUri,
-                placeholderTitleMaxLength = Int.MAX_VALUE,
-                placeholderMaxLines = 5,
-                placeholderTextStyle = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 12.sp,
-                    lineHeight = 14.sp
-                ),
-                modifier = Modifier.fillMaxWidth()
+                placeholderTitleMaxLength = 8,
+                placeholderMaxLines = 4
             )
-            Text(
-                text = "阅读进度 ${(book.progress.percent * 100).toInt()}%",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall
-            )
-            WarmProgress(book.progress.percent, Modifier.fillMaxWidth())
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space4)) {
+                Text(book.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+                    WarmProgress(book.progress.percent, Modifier.weight(1f))
+                    Text("${(book.progress.percent * 100).toInt()}%", color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+                }
+                Text(book.progress.chapterTitle ?: book.progress.positionLabel ?: "继续上次阅读", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                Button(
+                    onClick = onReadClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+                    elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
+                    modifier = Modifier.align(Alignment.End).height(36.dp),
+                    contentPadding = PaddingValues(horizontal = DesignTokens.Space16, vertical = 0.dp)
+                ) { Text("继续阅读") }
+            }
         }
     }
 }
@@ -815,6 +1033,9 @@ private fun ReadingBookCard(
     onFavoriteClick: () -> Unit,
     onRemoveClick: () -> Unit
 ) {
+    val compactMetadata = LocalContext.current
+        .getSharedPreferences("appearance_settings", Context.MODE_PRIVATE)
+        .getBoolean("compact_metadata", false)
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -856,10 +1077,23 @@ private fun ReadingBookCard(
                 }
             }
             Column(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 0.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Text(book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
+                if (!compactMetadata) {
+                    Text(
+                        book.author ?: "未知作者",
+                        color = DesignTokens.SoftText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        WarmProgress(book.progress.percent, Modifier.weight(1f))
+                        Text("${(book.progress.percent * 100).toInt()}%", color = DesignTokens.SoftText, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
                 if (managementMode) {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         IconButton(onClick = onFavoriteClick, modifier = Modifier.size(34.dp)) {
@@ -875,7 +1109,6 @@ private fun ReadingBookCard(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(2.dp))
         }
     }
 }

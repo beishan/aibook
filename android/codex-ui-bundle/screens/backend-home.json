@@ -1,0 +1,29 @@
+{
+  "screen": "BackendLibraryHome",
+  "route": "bookstore/backend",
+  "bottomTab": "书城",
+  "appBar": {
+    "title": "云端书库",
+    "actions": [
+      "search",
+      "more"
+    ]
+  },
+  "sections": [
+    {
+      "title": "最近加入",
+      "type": "HorizontalBooks",
+      "action": "查看更多"
+    },
+    {
+      "title": "收藏",
+      "type": "HorizontalBooks",
+      "action": "查看更多"
+    },
+    {
+      "title": "书单",
+      "type": "BooklistPreviewRows",
+      "limit": 2
+    }
+  ]
+}

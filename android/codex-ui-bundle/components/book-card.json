@@ -1,0 +1,21 @@
+{
+  "name": "BookCard",
+  "props": [
+    "cover",
+    "title",
+    "author",
+    "progress",
+    "source",
+    "inShelf",
+    "favorite"
+  ],
+  "layout": {
+    "type": "Column",
+    "gap": 8
+  },
+  "interaction": {
+    "tap": "openBookDetail",
+    "longPress": "enterBatchSelect",
+    "more": "showBookActions"
+  }
+}

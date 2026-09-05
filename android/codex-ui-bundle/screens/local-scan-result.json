@@ -1,0 +1,17 @@
+{
+  "screen": "ScanResult",
+  "route": "bookstore/local/scan-result",
+  "appBar": {
+    "title": "扫描完成"
+  },
+  "summary": [
+    "新增书籍",
+    "已存在书籍",
+    "无法识别"
+  ],
+  "directoryStats": true,
+  "actions": [
+    "查看新增书籍",
+    "完成"
+  ]
+}

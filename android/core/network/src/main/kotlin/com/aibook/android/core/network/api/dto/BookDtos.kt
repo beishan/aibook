@@ -56,3 +56,28 @@ data class ProcessedContentResponse(
     @SerialName("chapterInfo")
     val chapterInfo: String = "[]"
 )
+
+@Serializable
+data class ShelfOverviewDTO(
+    val ungroupedBooks: List<BookDTO> = emptyList(),
+    val groups: List<ShelfGroupDTO> = emptyList(),
+    val totalBooks: Int = 0
+)
+
+@Serializable
+data class ShelfGroupDTO(
+    val id: Long,
+    val name: String,
+    val description: String? = null,
+    val icon: String? = null,
+    val color: String? = null,
+    val books: List<BookDTO> = emptyList()
+)
+
+@Serializable
+data class BookListDTO(
+    val id: Long,
+    val name: String,
+    val description: String? = null,
+    val books: List<BookDTO> = emptyList()
+)

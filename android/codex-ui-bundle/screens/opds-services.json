@@ -1,0 +1,16 @@
+{
+  "screen": "OpdsServices",
+  "route": "bookstore/opds",
+  "bottomTab": "书城",
+  "appBar": {
+    "title": "OPDS",
+    "actions": [
+      "add",
+      "search"
+    ]
+  },
+  "content": {
+    "type": "OpdsServiceList",
+    "card": "OpdsServiceCard"
+  }
+}

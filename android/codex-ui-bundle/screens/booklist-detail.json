@@ -1,0 +1,19 @@
+{
+  "screen": "BooklistDetail",
+  "route": "bookstore/backend/booklist/{booklistId}",
+  "appBar": {
+    "title": "{booklist.name}",
+    "actions": [
+      "search",
+      "more"
+    ]
+  },
+  "viewModes": [
+    "grid",
+    "list"
+  ],
+  "content": {
+    "type": "BookGrid",
+    "columns": 2
+  }
+}

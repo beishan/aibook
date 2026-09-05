@@ -1,0 +1,19 @@
+{
+  "screen": "ShelfFolderDetail",
+  "route": "bookshelf/folder/{folderId}",
+  "appBar": {
+    "title": "{folder.name}",
+    "subtitle": "{folder.count} 本",
+    "actions": [
+      "search",
+      "more"
+    ]
+  },
+  "actions": [
+    "addBooks"
+  ],
+  "content": {
+    "type": "BookGrid",
+    "columns": 3
+  }
+}

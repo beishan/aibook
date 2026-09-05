@@ -1,6 +1,8 @@
 package com.aibook.android.feature.store
 
 import android.content.Context
+import android.content.Intent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,9 +32,11 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.AddCircleOutline
@@ -41,24 +45,40 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.ui.Alignment
@@ -72,33 +92,54 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aibook.android.ui.design.BookCover
+import com.aibook.android.ui.design.BookDetailTopBar
 import com.aibook.android.ui.design.CoverSourceBadge
+import com.aibook.android.ui.design.DetailActionButton
+import com.aibook.android.ui.design.DetailInfoCard
+import com.aibook.android.ui.design.DetailInfoItem
+import com.aibook.android.ui.design.DetailIntroduction
+import com.aibook.android.ui.design.DetailPrimaryButton
+import com.aibook.android.ui.design.DetailTag
 import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
 import com.aibook.android.ui.design.SourceBadge
+import com.aibook.android.ui.design.SlidingSegmentedControl
+import com.aibook.android.ui.design.SectionHeader
 import com.aibook.android.core.data.repository.DownloadStatus
 
 @Composable
 fun BookStoreScreen(
+    onServerLibraryClick: () -> Unit = {},
     onCategoryClick: () -> Unit = {},
     onSearchClick: () -> Unit = {},
     onDownloadsClick: () -> Unit = {},
     onBookClick: (String) -> Unit = {},
     onRemoteBookClick: (String) -> Unit = {},
+    initialSourceIndex: Int = 0,
     viewModel: StoreViewModel = viewModel(factory = StoreViewModel.Factory)
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val actionState by viewModel.actionState.collectAsState()
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("store_prefs", Context.MODE_PRIVATE) }
-    // 0=网格视图(3列), 1=带封面列表, 2=紧凑列表, 3=小网格视图(4列)
-    var viewMode by remember { mutableIntStateOf(prefs.getInt("view_mode", 0)) }
-    var showViewModeDialog by remember { mutableStateOf(false) }
+    // 新视觉稿仅保留卡片与列表两种模式，并兼容清理旧版本保存的 2/3 模式。
+    var viewMode by remember { mutableIntStateOf(prefs.getInt("view_mode", 0).coerceIn(0, 1)) }
+    var collectionFilter by remember { mutableIntStateOf(0) }
     var managementMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var shelfRemovalBook by remember { mutableStateOf<StoreBook?>(null) }
-    val filteredBooks = uiState.filteredBooks
+    var sourceIndex by remember { mutableIntStateOf(initialSourceIndex.coerceIn(0, 1)) }
+    val sourceBooks = uiState.filteredBooks.filter {
+        if (sourceIndex == 0) it.kind == StoreItemKind.LOCAL else it.kind == StoreItemKind.OPDS
+    }
+    val filteredBooks = sourceBooks.filter { book ->
+        when (collectionFilter) {
+            1 -> if (sourceIndex == 0) book.shelved else book.isDownloaded
+            2 -> if (sourceIndex == 0) !book.shelved else !book.isDownloaded
+            else -> true
+        }
+    }
     val localBooks = filteredBooks.filter { it.kind == StoreItemKind.LOCAL }
     val selectedLocalBooks = filteredBooks.filter { it.kind == StoreItemKind.LOCAL && it.id in selectedIds }
     val allLocalSelected = localBooks.isNotEmpty() && localBooks.all { it.id in selectedIds }
@@ -110,14 +151,14 @@ fun BookStoreScreen(
         }
     }
 
-    val viewModeIcon = when (viewMode) {
-        0 -> Icons.Default.GridView
-        1 -> Icons.AutoMirrored.Filled.FormatListBulleted
-        else -> Icons.AutoMirrored.Filled.ViewList
-    }
-
     DesignPage(
-        title = if (managementMode) "已选 ${selectedLocalBooks.size} 本" else "",
+        title = if (managementMode) {
+            "已选 ${selectedLocalBooks.size} 本"
+        } else if (sourceIndex == 0) {
+            "本地书籍"
+        } else {
+            "OPDS 书籍"
+        },
         modifier = Modifier.fillMaxSize(),
         actions = {
             Icon(
@@ -139,14 +180,6 @@ fun BookStoreScreen(
                 )
             )
             Icon(
-                viewModeIcon,
-                contentDescription = "切换视图",
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { showViewModeDialog = true }
-            )
-            Icon(
                 Icons.Default.FilterList,
                 contentDescription = "筛选",
                 modifier = Modifier.clickable(
@@ -155,30 +188,56 @@ fun BookStoreScreen(
                     onClick = onCategoryClick
                 )
             )
-            Text(
-                "筛选",
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onCategoryClick
+            if (sourceIndex == 0) {
+                Text(
+                    if (managementMode) "取消" else "管理",
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        managementMode = !managementMode
+                        selectedIds = emptySet()
+                    }
                 )
-            )
-            Text(
-                if (managementMode) "取消" else "管理",
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    managementMode = !managementMode
-                    selectedIds = emptySet()
-                }
-            )
+            }
         }
     ) {
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
         ) {
+            SlidingSegmentedControl(
+                options = listOf("本地书籍", "OPDS", "云端"),
+                selectedIndex = sourceIndex,
+                onSelected = {
+                    when (it) {
+                        0, 1 -> {
+                            sourceIndex = it
+                            collectionFilter = 0
+                            managementMode = false
+                            selectedIds = emptySet()
+                        }
+                        2 -> onServerLibraryClick()
+                    }
+                }
+            )
+            SlidingSegmentedControl(
+                options = if (sourceIndex == 0) {
+                    listOf(
+                        "全部 ${sourceBooks.size}",
+                        "已加入 ${sourceBooks.count { it.shelved }}",
+                        "未加入 ${sourceBooks.count { !it.shelved }}"
+                    )
+                } else {
+                    listOf(
+                        "全部 ${sourceBooks.size}",
+                        "已下载 ${sourceBooks.count { it.isDownloaded }}",
+                        "未下载 ${sourceBooks.count { !it.isDownloaded }}"
+                    )
+                },
+                selectedIndex = collectionFilter,
+                onSelected = { collectionFilter = it }
+            )
             actionState.message?.let { message ->
                 SoftCard(color = Color.White) {
                     Row(
@@ -220,8 +279,29 @@ fun BookStoreScreen(
                     }
                 )
             }
-//            StoreHeroCard(featuredBooks = featuredBooks, onExploreClick = onCategoryClick)
-//            SectionHeader("全部浏览", "全部书籍 ${filteredBooks.size} ›")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        if (sourceIndex == 0) "我的本地书库" else "可下载书籍",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text("共 ${filteredBooks.size} 本", color = DesignTokens.SoftText)
+                }
+                SlidingSegmentedControl(
+                    options = listOf("卡片", "列表"),
+                    selectedIndex = viewMode,
+                    onSelected = { mode ->
+                        viewMode = mode
+                        prefs.edit().putInt("view_mode", mode).apply()
+                    },
+                    modifier = Modifier.width(156.dp)
+                )
+            }
             when (viewMode) {
                 0 -> {
                     // 网格视图
@@ -279,62 +359,6 @@ fun BookStoreScreen(
                         }
                     }
                 }
-                2 -> {
-                    // 紧凑列表视图（无封面）
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        contentPadding = PaddingValues(bottom = 8.dp),
-                        modifier = Modifier.fillMaxWidth().weight(1f)
-                    ) {
-                        items(filteredBooks) { book ->
-                            StoreCompactListItem(
-                                book = book,
-                                downloading = actionState.downloadTasks[book.id]?.status in setOf(DownloadStatus.QUEUED, DownloadStatus.RUNNING),
-                                managementMode = managementMode,
-                                selected = book.id in selectedIds,
-                                onBookClick = {
-                                    if (managementMode && it.kind == StoreItemKind.LOCAL) {
-                                        selectedIds = toggleSelection(selectedIds, it.id)
-                                    } else {
-                                        openBook(it)
-                                    }
-                                },
-                                onDownloadClick = viewModel::downloadRemoteBook,
-                                onLocalShelfClick = viewModel::addLocalBookToShelf,
-                                onLocalShelfRemoveClick = { shelfRemovalBook = it }
-                            )
-                        }
-                    }
-                }
-                3 -> {
-                    // 小网格视图（4列）
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(4),
-                        contentPadding = PaddingValues(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxWidth().weight(1f)
-                    ) {
-                        gridItems(filteredBooks) { book ->
-                            StoreSmallBookCard(
-                                book = book,
-                                downloading = actionState.downloadTasks[book.id]?.status in setOf(DownloadStatus.QUEUED, DownloadStatus.RUNNING),
-                                managementMode = managementMode,
-                                selected = book.id in selectedIds,
-                                onBookClick = {
-                                    if (managementMode && it.kind == StoreItemKind.LOCAL) {
-                                        selectedIds = toggleSelection(selectedIds, it.id)
-                                    } else {
-                                        openBook(it)
-                                    }
-                                },
-                                onDownloadClick = viewModel::downloadRemoteBook,
-                                onLocalShelfClick = viewModel::addLocalBookToShelf,
-                                onLocalShelfRemoveClick = { shelfRemovalBook = it }
-                            )
-                        }
-                    }
-                }
             }
 //            SectionHeader("最近更新", "更多更新 ›")
 //            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -343,18 +367,6 @@ fun BookStoreScreen(
 //                }
 //            }
         }
-    }
-
-    if (showViewModeDialog) {
-        ViewModeDialog(
-            currentMode = viewMode,
-            onDismiss = { showViewModeDialog = false },
-            onSelect = { mode ->
-                viewMode = mode
-                prefs.edit().putInt("view_mode", mode).apply()
-                showViewModeDialog = false
-            }
-        )
     }
 
     shelfRemovalBook?.let { book ->
@@ -377,72 +389,6 @@ fun BookStoreScreen(
     }
 }
 
-@Composable
-private fun ViewModeDialog(
-    currentMode: Int,
-    onDismiss: () -> Unit,
-    onSelect: (Int) -> Unit
-) {
-    val viewModes = listOf(
-        Triple(0, Icons.Default.GridView, "网格视图"),
-        Triple(1, Icons.AutoMirrored.Filled.FormatListBulleted, "封面列表"),
-        Triple(2, Icons.AutoMirrored.Filled.ViewList, "紧凑列表"),
-        Triple(3, Icons.Default.GridView, "小网格视图")
-    )
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("选择视图模式", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                viewModes.forEach { (mode, icon, label) ->
-                    val isSelected = mode == currentMode
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                if (isSelected) DesignTokens.Accent.copy(alpha = 0.1f) else Color.Transparent,
-                                RoundedCornerShape(12.dp)
-                            )
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { onSelect(mode) }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            icon,
-                            contentDescription = null,
-                            tint = if (isSelected) DesignTokens.Accent else DesignTokens.SoftText
-                        )
-                        Text(
-                            label,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) DesignTokens.Accent else Color.Unspecified
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        if (isSelected) {
-                            Icon(
-                                Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = DesignTokens.Accent,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        }
-    )
-}
-
 private fun toggleSelection(selectedIds: Set<String>, id: String): Set<String> {
     return if (id in selectedIds) selectedIds - id else selectedIds + id
 }
@@ -456,6 +402,11 @@ fun StoreRemoteBookDetailScreen(
 ) {
     val books by viewModel.books.collectAsState()
     val actionState by viewModel.actionState.collectAsState()
+    val context = LocalContext.current
+    var favorite by rememberSaveable(bookId) { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(false) }
+    var selectedFormat by rememberSaveable(bookId) { mutableIntStateOf(0) }
+    var detailMessage by remember { mutableStateOf<String?>(null) }
     val book = remember(books, bookId) {
         books.firstOrNull { it.id == bookId && it.kind == StoreItemKind.OPDS }
     }
@@ -465,21 +416,32 @@ fun StoreRemoteBookDetailScreen(
             .fillMaxSize()
             .background(DesignTokens.AppBackground)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+            .padding(horizontal = DesignTokens.PagePadding),
+        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-            }
-            Text(
-                "书籍详情",
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.ExtraBold
+        BookDetailTopBar(
+            title = "书籍详情 · OPDS",
+            favorite = favorite,
+            onBack = onBack,
+            onShare = {
+                val current = book ?: return@BookDetailTopBar
+                val text = listOf(current.title, current.author, current.acquisitionHref).filterNotNull().joinToString("\n")
+                context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, text)
+                }, "分享书籍"))
+            },
+            onFavorite = { favorite = !favorite; detailMessage = if (favorite) "已收藏" else "已取消收藏" },
+            onMore = { showMore = true }
+        )
+        DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+            DropdownMenuItem(
+                text = { Text("来源：${book?.sourceName ?: "OPDS"}") },
+                onClick = { showMore = false }
+            )
+            DropdownMenuItem(
+                text = { Text("刷新书籍信息") },
+                onClick = { showMore = false; detailMessage = "书籍信息来自最近一次 OPDS 同步" }
             )
         }
 
@@ -490,7 +452,7 @@ fun StoreRemoteBookDetailScreen(
             return@Column
         }
 
-        actionState.message?.let { message ->
+        (detailMessage ?: actionState.message)?.let { message ->
             SoftCard(color = Color.White) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -506,58 +468,84 @@ fun StoreRemoteBookDetailScreen(
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
-                            ) { viewModel.clearMessage() }
+                            ) { detailMessage = null; viewModel.clearMessage() }
                             .padding(horizontal = 8.dp, vertical = 6.dp)
                     )
                 }
             }
         }
 
-        SoftCard(color = Color.White) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
-                BookCover(
-                    title = book.title,
-                    width = 92.dp,
-                    height = 132.dp,
-                    brush = Brush.verticalGradient(listOf(titleColor(book.title), Color(0xFF1C1B18)))
-                )
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(book.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
-                    Text(book.author, color = DesignTokens.SoftText)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SourceBadge(book.sourceName)
-                        SourceBadge(book.format)
-                    }
-                    Text(
-                        if (book.isDownloaded) "已下载到本地书架" else "来自 OPDS 书城缓存",
-                        color = DesignTokens.Accent,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        SoftCard(color = Color.White) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("简介", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    book.summary?.takeIf { it.isNotBlank() } ?: "暂无简介",
-                    color = DesignTokens.SoftText,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
-
-        SoftCard(color = Color.White) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("分类", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16), modifier = Modifier.fillMaxWidth()) {
+            BookCover(
+                title = book.title,
+                width = 132.dp,
+                height = 204.dp,
+                imageUri = book.coverUri,
+                brush = Brush.verticalGradient(listOf(titleColor(book.title), Color(0xFF1C1B18)))
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                Text(book.title, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(book.author, style = MaterialTheme.typography.titleMedium)
+                DetailTag(book.sourceName)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(book.categories) { category ->
-                        StoreChip(label = category, selected = false, onClick = {})
+                    items(book.categories.take(3).ifEmpty { listOf("未分类") }) { DetailTag(it) }
+                }
+                Text(book.format.uppercase(), color = DesignTokens.SoftText, style = MaterialTheme.typography.bodyLarge)
+                DetailPrimaryButton(
+                    label = if (book.downloadedLocalId != null) "开始阅读" else "下载后阅读",
+                    onClick = {
+                        book.downloadedLocalId?.let(onOpenLocalBook) ?: viewModel.downloadRemoteBook(book)
+                    }
+                )
+            }
+        }
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+            DetailActionButton(Icons.Default.Download, if (book.isDownloaded) "已下载" else "下载", book.isDownloaded) {
+                book.downloadedLocalId?.let(onOpenLocalBook) ?: viewModel.downloadRemoteBook(book)
+            }
+            DetailActionButton(Icons.AutoMirrored.Filled.MenuBook, if (book.isDownloaded) "已在书架" else "加入书架", book.isDownloaded) {
+                book.downloadedLocalId?.let(onOpenLocalBook) ?: viewModel.downloadRemoteBook(book)
+            }
+            DetailActionButton(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, if (favorite) "已收藏" else "收藏", favorite) {
+                favorite = !favorite
+                detailMessage = if (favorite) "已收藏" else "已取消收藏"
+            }
+        }
+
+        val formats = book.format.split('/', ',', '，', ';').map(String::trim).filter(String::isNotBlank).ifEmpty { listOf("EPUB") }
+        SoftCard(color = DesignTokens.CardBackground) {
+            Text("可用格式", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            LazyRow(Modifier.padding(top = DesignTokens.Space12), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                items(formats.indices.toList()) { index ->
+                    val format = formats[index].uppercase()
+                    Surface(
+                        modifier = Modifier.width(112.dp).height(116.dp),
+                        shape = RoundedCornerShape(DesignTokens.RadiusMedium),
+                        color = DesignTokens.CardBackground,
+                        border = BorderStroke(1.dp, if (selectedFormat == index) DesignTokens.Accent else DesignTokens.Hairline),
+                        onClick = { selectedFormat = index }
+                    ) {
+                        Column(Modifier.padding(DesignTokens.Space12), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+                            Text(if (selectedFormat == index) "●" else "○", color = if (selectedFormat == index) DesignTokens.Accent else DesignTokens.SoftText)
+                            Text(format, fontWeight = FontWeight.Bold)
+                            Text(formatDescription(format), color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }
         }
+
+        DetailIntroduction(book.summary?.takeIf(String::isNotBlank) ?: "暂无简介", card = true)
+
+        DetailInfoCard(
+            items = listOf(
+                DetailInfoItem("来源", book.sourceName, Icons.Default.Cloud),
+                DetailInfoItem("地址", book.acquisitionHref ?: "由 OPDS 服务提供", Icons.Default.Link),
+                DetailInfoItem("格式", formats.getOrElse(selectedFormat) { formats.first() }.uppercase(), Icons.Default.Description),
+                DetailInfoItem("语言", "未知", Icons.Default.Language)
+            )
+        )
 
         val task = actionState.downloadTasks[book.id]
         val downloading = task?.status in setOf(DownloadStatus.QUEUED, DownloadStatus.RUNNING)
@@ -581,38 +569,16 @@ fun StoreRemoteBookDetailScreen(
                 }
             }
         }
-        Text(
-            when {
-                book.downloadedLocalId != null -> "打开本地书籍"
-                task?.status == DownloadStatus.PAUSED -> "继续下载"
-                task?.status == DownloadStatus.FAILED -> "重新下载"
-                downloading -> "下载中 ${task?.progress ?: 0}%"
-                else -> "下载到书架"
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(DesignTokens.Accent, RoundedCornerShape(18.dp))
-                .clickable(
-                    enabled = !downloading,
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    val localId = book.downloadedLocalId
-                    if (localId != null) {
-                        onOpenLocalBook(localId)
-                    } else when (task?.status) {
-                        DownloadStatus.PAUSED -> viewModel.resumeDownload(book.id)
-                        DownloadStatus.FAILED -> viewModel.retryDownload(book.id)
-                        else -> viewModel.downloadRemoteBook(book)
-                    }
-                }
-                .padding(vertical = 15.dp),
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            style = MaterialTheme.typography.titleMedium
-        )
+        Spacer(Modifier.height(DesignTokens.Space24))
     }
+}
+
+private fun formatDescription(format: String): String = when (format.uppercase()) {
+    "EPUB" -> "电子书格式"
+    "MOBI", "AZW3" -> "Kindle 格式"
+    "PDF" -> "便携式文档"
+    "TXT" -> "纯文本格式"
+    else -> "可用电子书格式"
 }
 
 @Composable
@@ -910,18 +876,29 @@ fun StoreCategoryScreen(
 @Composable
 fun StoreSearchScreen(
     onBack: () -> Unit,
+    initialQuery: String? = null,
     onBookClick: (String) -> Unit = {},
     onRemoteBookClick: (String) -> Unit = {},
+    onBackendBookClick: (Long) -> Unit = {},
     viewModel: StoreViewModel = viewModel(factory = StoreViewModel.Factory)
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val backendState by viewModel.backendSearchState.collectAsState()
+    LaunchedEffect(initialQuery) {
+        if (!initialQuery.isNullOrBlank()) viewModel.setQuery(initialQuery)
+    }
     val query = uiState.filter.query
-    val results = if (query.isBlank()) emptyList() else uiState.filteredBooks
-    val authors = results.groupingBy { it.author }.eachCount().entries.sortedByDescending { it.value }.take(8)
-    val categories = results.flatMap { it.categories }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(8)
-    val sources = results.groupBy { it.sourceId }.mapNotNull { (id, books) ->
-        books.firstOrNull()?.let { Triple(id, it.sourceName, books.size) }
-    }.sortedByDescending { it.third }
+    LaunchedEffect(query) { viewModel.searchBackend(query) }
+    var sourceIndex by rememberSaveable { mutableIntStateOf(0) }
+    val results = if (query.isBlank()) emptyList() else uiState.filteredBooks.filter { book ->
+        when (sourceIndex) {
+            1 -> book.kind == StoreItemKind.LOCAL
+            2 -> book.kind == StoreItemKind.OPDS
+            3 -> false
+            else -> true
+        }
+    }
+    val backendBooks = if (sourceIndex == 0 || sourceIndex == 3) backendState.books else emptyList()
     val openBook: (StoreBook) -> Unit = { book ->
         when {
             book.kind == StoreItemKind.LOCAL -> onBookClick(book.id)
@@ -931,25 +908,61 @@ fun StoreSearchScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().background(DesignTokens.AppBackground).padding(horizontal = 24.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = Modifier.fillMaxSize().background(DesignTokens.AppBackground).padding(horizontal = DesignTokens.PagePadding, vertical = DesignTokens.Space16),
+        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
-            Text("全局搜索", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
+            OutlinedTextField(
+                value = query,
+                onValueChange = viewModel::setQuery,
+                modifier = Modifier.weight(1f),
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (query.isNotBlank()) Text("×", style = MaterialTheme.typography.headlineMedium, color = DesignTokens.SoftText,
+                        modifier = Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() }, indication = null
+                        ) { viewModel.setQuery("") }.padding(8.dp))
+                },
+                placeholder = { Text("搜索书籍、作者") },
+                singleLine = true,
+                shape = RoundedCornerShape(DesignTokens.RadiusLarge)
+            )
         }
-        OutlinedTextField(
-            value = query,
-            onValueChange = viewModel::setQuery,
-            modifier = Modifier.fillMaxWidth(),
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            placeholder = { Text("搜索书名、作者、分类或 OPDS 源") },
-            singleLine = true,
-            shape = RoundedCornerShape(18.dp)
+        SlidingSegmentedControl(
+            options = listOf("全部", "本地", "OPDS", "云端"),
+            selectedIndex = sourceIndex,
+            onSelected = { sourceIndex = it }
         )
         if (query.isBlank()) {
-            SoftCard(color = Color.White) { Text("输入关键词后，将按作者、分类、OPDS 源和书籍分组展示结果。", color = DesignTokens.SoftText) }
-        } else if (results.isEmpty()) {
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
+                item {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("最近搜索", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("清空", color = DesignTokens.Accent)
+                    }
+                }
+                item {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
+                        items(listOf("三体", "刘慈欣", "科幻", "小王子")) { keyword ->
+                            StoreChip(label = keyword, selected = false, onClick = { viewModel.setQuery(keyword) })
+                        }
+                    }
+                }
+                item { Text("🔥 热门搜索", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+                item {
+                    SoftCard(contentPadding = 0.dp) {
+                        listOf(
+                            "三体" to "科幻", "活着" to "文学", "百年孤独" to "魔幻现实主义", "小王子" to "童话",
+                            "围城" to "文学", "解忧杂货店" to "小说", "1984" to "科幻", "平凡的世界" to "文学",
+                            "追风筝的人" to "小说", "人类简史" to "历史"
+                        ).forEachIndexed { index, (title, category) ->
+                            PopularSearchRow(index + 1, title, category) { viewModel.setQuery(title) }
+                        }
+                    }
+                }
+            }
+        } else if (results.isEmpty() && backendBooks.isEmpty() && !backendState.isLoading) {
             SoftCard(color = Color.White) { Text("没有找到与“$query”相关的内容", color = DesignTokens.SoftText) }
         } else {
             LazyColumn(
@@ -957,42 +970,176 @@ fun StoreSearchScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(bottom = 20.dp)
             ) {
-                if (authors.isNotEmpty()) item {
-                    SearchGroup("作者", authors.map { it.key to it.value }) { author -> viewModel.setQuery(author) }
-                }
-                if (categories.isNotEmpty()) item {
-                    SearchGroup("分类", categories.map { it.key to it.value }) { category -> viewModel.setCategoryFilter(category) }
-                }
-                if (sources.isNotEmpty()) item {
-                    SearchGroup("OPDS 源", sources.map { it.second to it.third }) { sourceName ->
-                        sources.firstOrNull { it.second == sourceName }?.let { viewModel.setSourceFilter(it.first) }
+                results.groupBy { it.sourceId }.forEach { (_, sourceBooks) ->
+                    item(key = "source-${sourceBooks.first().sourceId}") {
+                        SearchSourceCard(sourceBooks, openBook, viewModel)
                     }
                 }
-                item {
-                    Text("书籍 · ${results.size}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                if (backendState.isLoading && (sourceIndex == 0 || sourceIndex == 3)) {
+                    item("backend-loading") {
+                        SoftCard { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { CircularProgressIndicator() } }
+                    }
                 }
-                items(results, key = { "${it.kind}-${it.id}" }) { book ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth().clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { openBook(book) },
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        shape = RoundedCornerShape(14.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
-                    ) {
-                        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            BookCover(title = book.title, imageUri = book.coverUri, width = 58.dp, height = 82.dp)
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(book.author, color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text("${book.sourceName} · ${book.format}", color = DesignTokens.Accent)
-                            }
-                        }
+                if (backendBooks.isNotEmpty()) {
+                    item("backend-results") {
+                        BackendSearchCard(
+                            books = backendBooks,
+                            shelfBookIds = backendState.shelfBookIds,
+                            coverUrl = { com.aibook.android.di.ServiceLocator.get(androidx.compose.ui.platform.LocalContext.current.applicationContext as android.app.Application).serverRepository.resolveCoverUrl(it.coverUrl) },
+                            onBookClick = { it.id?.let(onBackendBookClick) },
+                            onToggleShelf = viewModel::toggleBackendShelf
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BackendSearchCard(
+    books: List<com.aibook.android.core.network.api.dto.BookDTO>,
+    shelfBookIds: Set<Long>,
+    coverUrl: @Composable (com.aibook.android.core.network.api.dto.BookDTO) -> String?,
+    onBookClick: (com.aibook.android.core.network.api.dto.BookDTO) -> Unit,
+    onToggleShelf: (com.aibook.android.core.network.api.dto.BookDTO) -> Unit
+) {
+    SoftCard(contentPadding = DesignTokens.Space16) {
+        SearchSourceHeader("云端书库", "Mock 演示数据", books.size, Icons.Default.Cloud)
+        books.forEach { book ->
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { onBookClick(book) }.padding(top = DesignTokens.Space16),
+                horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                BookCover(book.title, imageUri = coverUrl(book), width = 78.dp, height = 108.dp)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space4)) {
+                    Text(book.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1)
+                    SourceBadge("云端 · ${book.format ?: "在线"}", source = "云端")
+                }
+                SearchShelfAction(
+                    added = book.id in shelfBookIds,
+                    onClick = { onToggleShelf(book) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PopularSearchRow(rank: Int, title: String, category: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(
+            interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick
+        ).padding(horizontal = DesignTokens.Space16, vertical = DesignTokens.Space12),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)
+    ) {
+        Box(
+            Modifier.size(32.dp).background(
+                if (rank <= 3) DesignTokens.Warning else MaterialTheme.colorScheme.surfaceVariant,
+                RoundedCornerShape(DesignTokens.RadiusSmall)
+            ), contentAlignment = Alignment.Center
+        ) { Text(rank.toString(), color = if (rank <= 3) Color.White else DesignTokens.Accent, fontWeight = FontWeight.Bold) }
+        Column(Modifier.weight(1f)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8), verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
+                SourceBadge(category)
+            }
+            Text(if (title == "三体") "刘慈欣" else "热门作者", color = DesignTokens.SoftText)
+        }
+        Text("›", color = DesignTokens.SoftText, style = MaterialTheme.typography.headlineMedium)
+    }
+}
+
+@Composable
+private fun SearchSourceCard(
+    books: List<StoreBook>,
+    onBookClick: (StoreBook) -> Unit,
+    viewModel: StoreViewModel
+) {
+    val first = books.first()
+    SoftCard(contentPadding = DesignTokens.Space16) {
+        SearchSourceHeader(
+            title = first.sourceName,
+            subtitle = null,
+            resultCount = books.size,
+            icon = if (first.kind == StoreItemKind.LOCAL) Icons.Default.FolderOpen else Icons.Default.Storage
+        )
+        books.forEach { book ->
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable(
+                    interactionSource = remember { MutableInteractionSource() }, indication = null
+                ) { onBookClick(book) }.padding(top = DesignTokens.Space16),
+                horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                BookCover(book.title, imageUri = book.coverUri, width = 78.dp, height = 108.dp)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space4)) {
+                    Text(book.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(book.author, color = DesignTokens.SoftText, maxLines = 1)
+                    SourceBadge("${book.sourceName} · ${book.format}", book.sourceName)
+                }
+                SearchShelfAction(
+                    added = book.shelved || book.isDownloaded,
+                    enabled = !book.shelved && !book.isDownloaded,
+                    onClick = {
+                        if (book.kind == StoreItemKind.LOCAL) viewModel.addLocalBookToShelf(book)
+                        else viewModel.downloadRemoteBook(book)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchSourceHeader(
+    title: String,
+    subtitle: String?,
+    resultCount: Int,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(42.dp).background(DesignTokens.Accent.copy(alpha = 0.72f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+            }
+            Column {
+                Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                subtitle?.let { Text(it, color = DesignTokens.Accent, style = MaterialTheme.typography.labelMedium) }
+            }
+        }
+        Text("$resultCount 个结果  ›", color = DesignTokens.SoftText)
+    }
+}
+
+@Composable
+private fun SearchShelfAction(
+    added: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    if (added) {
+        OutlinedButton(onClick = onClick, enabled = enabled) {
+            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text("已在书架", modifier = Modifier.padding(start = DesignTokens.Space4), maxLines = 1)
+        }
+    } else {
+        Button(
+            onClick = onClick,
+            enabled = enabled,
+            colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+            elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
+        ) { Text("+ 加入书架", maxLines = 1) }
     }
 }
 
@@ -1149,7 +1296,8 @@ private fun StoreBookCard(
                 indication = null
             ) { onBookClick(book) },
         shape = RoundedCornerShape(DesignTokens.CardRadius),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = DesignTokens.SoftShadow)
     ) {
         Column {
             Box {
@@ -1157,15 +1305,18 @@ private fun StoreBookCard(
                     title = book.title,
                     modifier = Modifier.fillMaxWidth(),
                     width = null,
-                    height = 180.dp,
+                    height = 168.dp,
                     imageUri = book.coverUri,
                     brush = Brush.verticalGradient(listOf(titleColor(book.title), Color(0xFF1C1B18)))
                 )
-                CoverSourceBadge(
-                    text = "${CompactStoreRowLabels.format(book.format)}｜${CompactStoreRowLabels.source(book.kind)}",
+                Text(
+                    text = "⋮",
                     modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(6.dp)
+                        .align(Alignment.TopEnd)
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(bottomStart = 14.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = DesignTokens.TextPrimary
                 )
                 if (managementMode && book.kind == StoreItemKind.LOCAL) {
                     StoreSelectionMark(
@@ -1177,29 +1328,58 @@ private fun StoreBookCard(
                 }
             }
             Column(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                modifier = Modifier.padding(DesignTokens.Space12),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Text(
+                    text = book.title,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = book.author,
+                    color = DesignTokens.SoftText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    text = "${book.format.uppercase()}  |  ${book.sourceName}",
+                    color = DesignTokens.SoftText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelSmall
+                )
+                val actionLabel = when {
+                    book.kind == StoreItemKind.LOCAL && book.shelved -> "✓  已在书架"
+                    book.kind == StoreItemKind.LOCAL -> "加入书架"
+                    book.isDownloaded -> "✓  已下载"
+                    downloading -> "下载中…"
+                    else -> "下载到书架"
+                }
+                Button(
+                    onClick = {
+                        when {
+                            book.kind == StoreItemKind.LOCAL && book.shelved -> onLocalShelfRemoveClick(book)
+                            book.kind == StoreItemKind.LOCAL -> onLocalShelfClick(book)
+                            !book.isDownloaded && !downloading -> onDownloadClick(book)
+                        }
+                    },
+                    enabled = !managementMode && !downloading,
+                    modifier = Modifier.fillMaxWidth().height(38.dp),
+                    shape = RoundedCornerShape(DesignTokens.RadiusSmall),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (book.shelved || book.isDownloaded) DesignTokens.WarmCard else DesignTokens.Accent,
+                        contentColor = if (book.shelved || book.isDownloaded) DesignTokens.AccentDark else Color.White,
+                        disabledContainerColor = DesignTokens.WarmCard,
+                        disabledContentColor = DesignTokens.SoftText
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp)
                 ) {
-                    Text(
-                        text = book.title,
-                        modifier = Modifier.weight(1f),
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    CompactStoreBookAction(
-                        book = book,
-                        downloading = downloading,
-                        managementMode = managementMode,
-                        onDownloadClick = onDownloadClick,
-                        onLocalShelfClick = onLocalShelfClick,
-                        onLocalShelfRemoveClick = onLocalShelfRemoveClick
-                    )
+                    Text(actionLabel, maxLines = 1, style = MaterialTheme.typography.labelMedium)
                 }
             }
         }

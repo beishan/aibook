@@ -20,7 +20,7 @@ import com.aibook.android.core.data.security.AndroidKeystoreSecretCipher
         ReaderHighlightEntity::class,
         DownloadTaskEntity::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = true
 )
 abstract class AiBookDatabase : RoomDatabase() {
@@ -45,7 +45,7 @@ abstract class AiBookDatabase : RoomDatabase() {
                     AiBookDatabase::class.java,
                     "aibook.db"
                 )
-                    .addMigrations(MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
+                    .addMigrations(MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance
@@ -137,6 +137,12 @@ abstract class AiBookDatabase : RoomDatabase() {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `download_tasks` (`id` TEXT NOT NULL, `remoteEntryId` TEXT NOT NULL, `connectionId` TEXT NOT NULL, `title` TEXT NOT NULL, `href` TEXT NOT NULL, `fileName` TEXT NOT NULL, `status` TEXT NOT NULL, `progress` INTEGER NOT NULL, `downloadedBytes` INTEGER NOT NULL, `totalBytes` INTEGER, `errorMessage` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_download_tasks_remoteEntryId` ON `download_tasks` (`remoteEntryId`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_download_tasks_status` ON `download_tasks` (`status`)")
+            }
+        }
+
+        internal val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE scan_directories ADD COLUMN includeSubdirectories INTEGER NOT NULL DEFAULT 1")
             }
         }
 

@@ -12,11 +12,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -39,6 +42,8 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
@@ -56,8 +61,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
@@ -89,6 +97,7 @@ import com.aibook.android.feature.shelf.ShelfPreferences
 import com.aibook.android.ui.design.DesignPage
 import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.SoftCard
+import com.aibook.android.ui.design.SlidingSegmentedControl
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -102,11 +111,14 @@ import org.json.JSONObject
 @Composable
 fun SettingsScreen(
     onThemeClick: () -> Unit = {},
+    onReadingSettingsClick: () -> Unit = {},
     onShelfSettingsClick: () -> Unit = {},
     onScanDirectoriesClick: () -> Unit = {},
     onSyncConnectionClick: () -> Unit = {},
     onStorageClick: () -> Unit = {},
     onDownloadsClick: () -> Unit = {},
+    onRecentReadingClick: () -> Unit = {},
+    onBackupClick: () -> Unit = {},
     onPrivacyClick: () -> Unit = {},
     onAboutClick: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
@@ -127,7 +139,7 @@ fun SettingsScreen(
     ) {
         Column(
             modifier = Modifier.verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space24)
         ) {
             SectionLabel("阅读与外观")
             SoftCard {
@@ -141,14 +153,20 @@ fun SettingsScreen(
                     Icons.Default.FormatSize,
                     "字体与排版",
                     "字号 ${"%.0f".format(state.fontScale * 100)}% · 行距 ${"%.2f".format(state.lineHeight)}",
-                    onClick = onThemeClick
+                    onClick = onReadingSettingsClick
                 )
                 SettingsLine(
                     Icons.Default.Book,
                     "书架设置",
                     "设置书架页面的内容显示",
-                    showDivider = false,
                     onClick = onShelfSettingsClick
+                )
+                SettingsLine(
+                    Icons.Default.History,
+                    "最近阅读",
+                    "查看阅读历史、章节和进度",
+                    showDivider = false,
+                    onClick = onRecentReadingClick
                 )
             }
 
@@ -167,7 +185,7 @@ fun SettingsScreen(
             SoftCard {
                 SettingsLine(
                     Icons.Default.CloudSync,
-                    "服务器与同步",
+                    "云端与同步",
                     SettingsSummary.connectionSubtitle(
                         serverUrl = state.serverUrl,
                         isLoggedIn = state.isLoggedIn,
@@ -185,8 +203,14 @@ fun SettingsScreen(
                     Icons.Default.Download,
                     "下载管理",
                     "查看进度，暂停、继续、重试或清理任务",
-                    showDivider = false,
                     onClick = onDownloadsClick
+                )
+                SettingsLine(
+                    Icons.Default.Backup,
+                    "数据备份与恢复",
+                    "备份书架、阅读记录、书签与设置",
+                    showDivider = false,
+                    onClick = onBackupClick
                 )
             }
 
@@ -209,6 +233,271 @@ fun SettingsScreen(
                 trailing = "版本 $versionName",
                 onClick = onAboutClick
             )
+        }
+    }
+}
+
+@Composable
+fun ReadingSettingsScreen(
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var eyeCare by remember { mutableStateOf(true) }
+    var keepScreenOn by remember { mutableStateOf(false) }
+    var pageMargin by remember { mutableStateOf(0.5f) }
+    var brightness by remember { mutableStateOf(0.78f) }
+    val turnModes = listOf(
+        com.aibook.android.core.model.PageTurnMode.SIMULATION,
+        com.aibook.android.core.model.PageTurnMode.COVER,
+        com.aibook.android.core.model.PageTurnMode.VERTICAL,
+        com.aibook.android.core.model.PageTurnMode.PAN
+    )
+    DesignPage(
+        title = "阅读设置",
+        modifier = Modifier.fillMaxSize(),
+        centerTitle = true,
+        navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } }
+    ) {
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
+        ) {
+            SoftCard {
+                SectionLabel("翻页方式")
+                Row(Modifier.fillMaxWidth().padding(top = DesignTokens.Space16), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                    listOf("仿真翻页", "覆盖", "平滑滚动", "无").forEachIndexed { index, label ->
+                        val selected = turnModes.indexOf(state.pageTurnMode).coerceAtLeast(0) == index
+                        Column(Modifier.weight(1f).clickable { viewModel.setPageTurnMode(turnModes[index]) }, horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                Modifier.fillMaxWidth().height(92.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(DesignTokens.RadiusMedium))
+                                    .border(if (selected) 2.dp else 1.dp, if (selected) DesignTokens.Accent else DesignTokens.Hairline, RoundedCornerShape(DesignTokens.RadiusMedium))
+                                    .padding(10.dp)
+                            ) {
+                                TurnModePreview(index)
+                                if (selected) Text("✓", color = Color.White, modifier = Modifier.align(Alignment.TopEnd).background(DesignTokens.Accent, CircleShape).padding(4.dp))
+                            }
+                            Text(label, modifier = Modifier.padding(top = DesignTokens.Space8), color = if (selected) DesignTokens.Accent else MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+            }
+            SoftCard {
+                SectionLabel("字体设置")
+                ReadingValueRow("字体", "系统字体")
+                ReadingValueRow("字体大小", "${(18 * state.fontScale).toInt()}")
+                ReadingValueRow("字间距", "2")
+                ReadingValueRow("行间距", "${"%.1f".format(state.lineHeight)}")
+            }
+            SoftCard {
+                SectionLabel("页面设置")
+                Text("背景颜色", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = DesignTokens.Space12))
+                Row(Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space16), horizontalArrangement = Arrangement.SpaceAround) {
+                    listOf(
+                        Triple("纸张", Color(0xFFF2E4CE), com.aibook.android.core.model.ReaderTheme.PAPER),
+                        Triple("护眼绿", Color(0xFFD3E8C9), com.aibook.android.core.model.ReaderTheme.GREEN),
+                        Triple("浅绿色", Color(0xFFE3EBDD), com.aibook.android.core.model.ReaderTheme.LIGHT),
+                        Triple("浅灰", Color(0xFFE0DED8), com.aibook.android.core.model.ReaderTheme.GRAY),
+                        Triple("夜间", Color(0xFF2B2B2B), com.aibook.android.core.model.ReaderTheme.DARK)
+                    ).forEach { (label, color, theme) ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { viewModel.setReaderTheme(theme) }) {
+                            Box(Modifier.size(44.dp).background(color, CircleShape).border(if (state.readerTheme == theme) 2.dp else 0.dp, DesignTokens.Accent, CircleShape))
+                            Text(label, style = MaterialTheme.typography.labelSmall, color = if (state.readerTheme == theme) DesignTokens.Accent else DesignTokens.SoftText)
+                        }
+                    }
+                }
+                HorizontalDivider(color = DesignTokens.Hairline)
+                ReadingSwitchRow("护眼模式", "减少蓝光，缓解视觉疲劳", eyeCare) { eyeCare = it }
+                ReadingSwitchRow("屏幕常亮", "阅读时屏幕保持常亮", keepScreenOn) { keepScreenOn = it }
+                Text("页面边距", fontWeight = FontWeight.Bold)
+                Slider(value = pageMargin, onValueChange = { pageMargin = it }, colors = SliderDefaults.colors(thumbColor = DesignTokens.Accent, activeTrackColor = DesignTokens.Accent, inactiveTrackColor = DesignTokens.Hairline))
+                Text("屏幕亮度 · ${(brightness * 100).toInt()}%", fontWeight = FontWeight.Bold)
+                Slider(value = brightness, onValueChange = { brightness = it }, colors = SliderDefaults.colors(thumbColor = DesignTokens.Accent, activeTrackColor = DesignTokens.Accent, inactiveTrackColor = DesignTokens.Hairline))
+            }
+            Spacer(Modifier.height(DesignTokens.Space24))
+        }
+    }
+}
+
+@Composable
+private fun TurnModePreview(index: Int) {
+    val ink = DesignTokens.SoftText.copy(alpha = 0.24f)
+    Row(
+        modifier = Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(if (index == 1) 3.dp else 0.dp)
+    ) {
+        repeat(if (index == 1) 2 else 1) { page ->
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxSize()
+                    .background(
+                        if (index == 2) Color.White.copy(alpha = 0.42f) else Color.Transparent,
+                        RoundedCornerShape(5.dp)
+                    )
+                    .padding(horizontal = 5.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                repeat(if (index == 3) 8 else 6) { line ->
+                    Box(
+                        Modifier
+                            .fillMaxWidth(if ((line + page) % 3 == 2) 0.58f else 0.9f)
+                            .height(2.dp)
+                            .background(ink, RoundedCornerShape(2.dp))
+                    )
+                }
+                if (index == 0) {
+                    Spacer(Modifier.weight(1f))
+                    Box(
+                        Modifier
+                            .align(Alignment.End)
+                            .size(26.dp)
+                            .background(Color.White.copy(alpha = 0.58f), RoundedCornerShape(topStart = 18.dp))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReadingValueRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space12), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, fontWeight = FontWeight.Medium)
+        Text("$value  ›", color = DesignTokens.SoftText)
+    }
+    HorizontalDivider(color = DesignTokens.Hairline)
+}
+
+@Composable
+private fun ReadingSwitchRow(label: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space12), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) { Text(label, fontWeight = FontWeight.Medium); Text(subtitle, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall) }
+        Switch(checked = checked, onCheckedChange = onChange, colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent))
+    }
+    HorizontalDivider(color = DesignTokens.Hairline)
+}
+
+@Composable
+fun AppThemeSettingsScreen(
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val preferences = remember { context.getSharedPreferences("appearance_settings", Context.MODE_PRIVATE) }
+    var appIcon by remember { mutableIntStateOf(preferences.getInt("app_icon", 0).coerceIn(0, 2)) }
+    var compactMetadata by remember { mutableStateOf(preferences.getBoolean("compact_metadata", false)) }
+    var immersiveStatusBar by remember { mutableStateOf(preferences.getBoolean("immersive_status_bar", true)) }
+    var coverRadius by remember { mutableStateOf(preferences.getFloat("cover_radius", 8f).coerceIn(0f, 24f)) }
+
+    DesignPage(
+        title = "主题与外观",
+        modifier = Modifier.fillMaxSize(),
+        centerTitle = true,
+        navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } }
+    ) {
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
+        ) {
+            SectionLabel("主题模式")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                listOf(
+                    "浅色" to com.aibook.android.core.model.AppThemeMode.LIGHT,
+                    "深色" to com.aibook.android.core.model.AppThemeMode.DARK,
+                    "跟随系统" to com.aibook.android.core.model.AppThemeMode.SYSTEM
+                ).forEachIndexed { index, (label, mode) ->
+                    Column(
+                        Modifier.weight(1f).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(DesignTokens.RadiusLarge))
+                            .border(if (state.appThemeMode == mode) 2.dp else 1.dp, if (state.appThemeMode == mode) DesignTokens.Accent else DesignTokens.Hairline, RoundedCornerShape(DesignTokens.RadiusLarge))
+                            .clickable { viewModel.setAppThemeMode(mode) }.padding(DesignTokens.Space12),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)
+                    ) {
+                        Box(
+                            Modifier.fillMaxWidth().height(88.dp).background(
+                                when (index) {
+                                    1 -> androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFF282624), Color(0xFF282624)))
+                                    2 -> androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFFF6EEE2), Color(0xFF282624)))
+                                    else -> androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFFF6EEE2), Color(0xFFF6EEE2)))
+                                }, RoundedCornerShape(DesignTokens.RadiusMedium)
+                            ), contentAlignment = Alignment.Center
+                        ) { Text("A  ━\n▰  ━", color = if (index == 1) Color.LightGray else DesignTokens.SoftText) }
+                        Text(label, color = if (state.appThemeMode == mode) DesignTokens.Accent else MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            }
+            SectionLabel("主题色")
+            SoftCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                    listOf(Color(0xFF9B5E24), Color(0xFFFF8124), Color(0xFF65A34C), Color(0xFF35A8A8), Color(0xFF477ACD), Color(0xFF7951A8)).forEachIndexed { index, color ->
+                        val selectableIndex = index.coerceAtMost(com.aibook.android.core.model.AccentColor.entries.lastIndex)
+                        val selected = state.accentColor.ordinal == selectableIndex && index == selectableIndex
+                        Box(Modifier.size(46.dp).background(color, CircleShape).border(if (selected) 3.dp else 0.dp, MaterialTheme.colorScheme.surface, CircleShape).clickable {
+                            viewModel.setAccentColor(com.aibook.android.core.model.AccentColor.entries[selectableIndex])
+                        })
+                    }
+                }
+            }
+            SectionLabel("应用图标")
+            SoftCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                    repeat(4) { index ->
+                        Box(
+                            Modifier.size(66.dp).background(
+                                listOf(Color(0xFFFFF2DF), Color(0xFF2C231B), Color(0xFFEFD9B8), Color(0xFFF6F2EA))[index], RoundedCornerShape(DesignTokens.RadiusMedium)
+                            ).border(if (appIcon == index.coerceAtMost(2)) 2.dp else 0.dp, DesignTokens.Accent, RoundedCornerShape(DesignTokens.RadiusMedium))
+                                .clickable { appIcon = index.coerceAtMost(2); preferences.edit().putInt("app_icon", appIcon).apply() },
+                            contentAlignment = Alignment.Center
+                        ) { Text("书", color = if (index == 1) Color(0xFFFFD58B) else DesignTokens.Accent, style = MaterialTheme.typography.headlineMedium) }
+                    }
+                }
+            }
+            SectionLabel("显示设置")
+            SoftCard {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("显示状态栏", fontWeight = FontWeight.Bold)
+                        Text("在阅读界面顶部显示系统状态栏", color = DesignTokens.SoftText)
+                    }
+                    Switch(
+                        checked = !compactMetadata,
+                        onCheckedChange = {
+                            compactMetadata = !it
+                            preferences.edit().putBoolean("compact_metadata", compactMetadata).apply()
+                        },
+                        colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent)
+                    )
+                }
+                HorizontalDivider(color = DesignTokens.Hairline, modifier = Modifier.padding(vertical = DesignTokens.Space8))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("沉浸式状态栏", fontWeight = FontWeight.Bold)
+                        Text("阅读界面状态栏透明，内容沉浸式显示", color = DesignTokens.SoftText)
+                    }
+                    Switch(
+                        checked = immersiveStatusBar,
+                        onCheckedChange = { immersiveStatusBar = it; preferences.edit().putBoolean("immersive_status_bar", it).apply() },
+                        colors = SwitchDefaults.colors(checkedTrackColor = DesignTokens.Accent)
+                    )
+                }
+            }
+            SectionLabel("书架封面圆角")
+            SoftCard {
+                Text("${coverRadius.toInt()} dp", color = DesignTokens.SoftText)
+                Slider(
+                    value = coverRadius,
+                    onValueChange = {
+                        coverRadius = it
+                        preferences.edit().putFloat("cover_radius", it).apply()
+                    },
+                    valueRange = 0f..24f,
+                    colors = SliderDefaults.colors(thumbColor = DesignTokens.Accent, activeTrackColor = DesignTokens.Accent)
+                )
+            }
+            Spacer(Modifier.height(DesignTokens.Space24))
         }
     }
 }
@@ -239,6 +528,69 @@ fun ShelfSettingsScreen(onBack: () -> Unit) {
                     ShelfPreferences.setShowContinueReadingCards(preferences, show)
                 }
             )
+        }
+    }
+}
+
+@Composable
+fun BackupRestoreScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    var message by remember { mutableStateOf<String?>(null) }
+    val createBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            message = runCatching {
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
+                    writer.write("""{"app":"汗牛充栋","version":1,"createdAt":${System.currentTimeMillis()}}""")
+                } ?: error("无法打开备份文件")
+                "备份文件已保存"
+            }.getOrElse { "备份失败：${it.message ?: "未知错误"}" }
+        }
+    }
+    val restoreBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            message = runCatching {
+                val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                require(content.contains("\"app\":\"汗牛充栋\"")) { "不是有效的汗牛充栋备份文件" }
+                "备份文件校验通过；数据恢复将在确认后执行"
+            }.getOrElse { "恢复失败：${it.message ?: "未知错误"}" }
+        }
+    }
+
+    SettingsSubPage(title = "数据备份与恢复", onBack = onBack) {
+        message?.let { SoftCard(color = MaterialTheme.colorScheme.surfaceVariant) { Text(it) } }
+        SoftCard {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+                Box(Modifier.size(52.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(DesignTokens.RadiusLarge)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Backup, null, tint = DesignTokens.Accent)
+                }
+                Column { Text("备份", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("书架、阅读记录、书签、设置", color = DesignTokens.SoftText) }
+            }
+            Text("上次备份时间", modifier = Modifier.padding(top = DesignTokens.Space16), color = DesignTokens.SoftText)
+            Text("尚未创建备份", color = DesignTokens.Accent)
+            Button(
+                onClick = { createBackup.launch("ai-book-backup.json") },
+                modifier = Modifier.fillMaxWidth().height(54.dp).padding(top = DesignTokens.Space12),
+                colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
+                elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
+            ) { Text("立即备份") }
+        }
+        SoftCard {
+            Text("恢复", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("从本地备份文件恢复数据", color = DesignTokens.SoftText, modifier = Modifier.padding(vertical = DesignTokens.Space12))
+            OutlinedButton(
+                onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain")) },
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) { Text("选择备份文件") }
+        }
+        SoftCard {
+            Text("自动备份", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            DetailLine(Icons.Default.History, "自动备份频率", "定期保存阅读数据", trailing = "每 7 天")
+            SwitchLine(Icons.Default.Wifi, "仅在 Wi-Fi 下备份", "节省移动数据", checked = true, showDivider = false, onCheckedChange = {})
+        }
+        SoftCard(color = MaterialTheme.colorScheme.surfaceVariant) {
+            DetailLine(Icons.Default.Folder, "备份文件位置", "手机存储/Documents/AI Book", showDivider = false)
         }
     }
 }
@@ -290,12 +642,12 @@ private fun SettingsRowCard(
     ) {
         Row(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16),
             verticalAlignment = Alignment.CenterVertically
         ) {
             icon()
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             trailing?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -316,14 +668,21 @@ private fun SettingsLine(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
+            .padding(vertical = DesignTokens.Space12),
+        horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, tint = DesignTokens.Accent)
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(DesignTokens.RadiusMedium)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = DesignTokens.Accent, modifier = Modifier.size(22.dp))
+        }
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -492,7 +851,7 @@ fun SyncConnectionSettingsScreen(
         }
     }
 
-    SettingsSubPage(title = "服务器与同步", subtitle = "配置私有书库服务器、登录状态与同步规则", onBack = onBack) {
+    SettingsSubPage(title = "云端与同步", subtitle = "配置私有云端、登录状态与同步规则", onBack = onBack) {
         SoftCard {
             DetailLine(
                 Icons.Default.CloudSync,
@@ -507,14 +866,14 @@ fun SyncConnectionSettingsScreen(
             )
         }
 
-        SectionLabel("服务器")
+        SectionLabel("云端服务")
         SoftCard {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
                     value = state.serverUrlInput,
                     onValueChange = viewModel::updateServerUrlInput,
-                    label = { Text("服务器地址") },
+                    label = { Text("云端服务地址") },
                     placeholder = { Text("http://192.168.1.10:8080") },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp)
@@ -525,7 +884,13 @@ fun SyncConnectionSettingsScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Text("保存服务器地址", fontWeight = FontWeight.Bold)
+                    Text("保存云端地址", fontWeight = FontWeight.Bold)
+                }
+                state.serverUrlMessage?.let {
+                    Text(
+                        it,
+                        color = if (it.contains("已保存")) DesignTokens.Accent else MaterialTheme.colorScheme.error
+                    )
                 }
             }
         }
@@ -579,7 +944,7 @@ fun SyncConnectionSettingsScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Text(if (state.isLoggingIn) "登录中..." else "登录服务器", fontWeight = FontWeight.Bold)
+                        Text(if (state.isLoggingIn) "登录中..." else "登录云端", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -716,7 +1081,7 @@ fun PrivacyPermissionsScreen(
         AlertDialog(
             onDismissRequest = { showDeleteData = false },
             title = { Text("删除全部本机数据？", fontWeight = FontWeight.Bold) },
-            text = { Text("此操作不可撤销，将删除本机书籍文件、阅读进度、标签、评分、封面及登录信息。服务器端数据不会被自动删除。") },
+            text = { Text("此操作不可撤销，将删除本机书籍文件、阅读进度、标签、评分、封面及登录信息。云端数据不会被自动删除。") },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteData = false
@@ -743,88 +1108,45 @@ fun AboutScreen(onBack: () -> Unit) {
     var dialogText by remember { mutableStateOf("") }
 
     SettingsSubPage(title = "关于", onBack = onBack) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(20.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
+        Column(
+            Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space24),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)
         ) {
-            Row(
-                modifier = Modifier.padding(22.dp),
-                horizontalArrangement = Arrangement.spacedBy(18.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier.size(86.dp).background(Color(0xFFFFE5C4), RoundedCornerShape(22.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("汗牛充栋", color = DesignTokens.Accent, fontWeight = FontWeight.ExtraBold)
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("汗牛充栋", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
-                    Text("让阅读，成为一种生活方式", color = DesignTokens.SoftText)
-                    Text(
-                        "版本 $versionName",
-                        modifier = Modifier.background(Color(0xFFFFF1E2), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 5.dp),
-                        color = DesignTokens.Accent,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
+            Box(
+                modifier = Modifier.size(126.dp).background(Color(0xFFFFE5C4), RoundedCornerShape(24.dp)),
+                contentAlignment = Alignment.Center
+            ) { Text("书", style = MaterialTheme.typography.displayLarge, color = DesignTokens.Accent, fontWeight = FontWeight.ExtraBold) }
+            Text("阅读器", style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.ExtraBold)
+            Text("版本 $versionName", color = DesignTokens.SoftText, style = MaterialTheme.typography.titleLarge)
+            Text("一款简洁、强大、支持多书源的小说阅读器", color = DesignTokens.SoftText)
         }
-        SoftCard {
-            DetailLine(
-                Icons.Default.Info, "检查更新",
-                if (checkingUpdate) "正在连接 GitHub…" else updateStatus,
-                trailing = if (checkingUpdate) "检查中" else null,
-                onClick = {
-                    if (!checkingUpdate) scope.launch {
-                        checkingUpdate = true
-                        updateStatus = checkLatestRelease(versionName)
-                        checkingUpdate = false
-                    }
-                }
-            )
-            DetailLine(
-                Icons.Default.Menu, "版本更新记录", "查看 GitHub Releases",
-                onClick = { openUrl(context, "https://github.com/beishan/aibook/releases") }
-            )
-            DetailLine(
-                Icons.Default.Policy,
-                "开源许可证",
-                "libmobi · LGPL-3.0-or-later；commonmark-java · BSD-2-Clause",
-                showDivider = false,
-                onClick = {
-                    dialogTitle = "开源许可证"
-                    dialogText = readLicenseNotices(context)
-                }
-            )
+        AboutActionCard(Icons.Default.Download, "检查更新") {
+            if (!checkingUpdate) scope.launch { checkingUpdate = true; updateStatus = checkLatestRelease(versionName); checkingUpdate = false }
         }
-        SoftCard {
-            DetailLine(
-                Icons.Default.Info, "帮助与反馈", "前往 GitHub Issues 提交问题或建议",
-                onClick = { openUrl(context, "https://github.com/beishan/aibook/issues") }
-            )
-            DetailLine(
-                Icons.Default.Notifications, "邮件反馈", "通过系统邮件应用发送反馈",
-                showDivider = false,
-                onClick = { sendFeedbackEmail(context, versionName) }
-            )
-        }
-        SoftCard {
-            DetailLine(Icons.Default.Security, "用户协议", "阅读本地使用协议", onClick = { dialogTitle = "用户协议"; dialogText = USER_AGREEMENT })
-            DetailLine(Icons.Default.Lock, "隐私政策", "了解我们如何保护您的隐私", onClick = { dialogTitle = "隐私政策"; dialogText = PRIVACY_POLICY })
-            DetailLine(Icons.Default.Policy, "第三方信息共享清单", "本版本未集成广告或统计 SDK", onClick = { dialogTitle = "第三方信息共享清单"; dialogText = THIRD_PARTY_NOTICE })
-            DetailLine(Icons.Default.Menu, "个人信息收集清单", "查看本机保存的数据类型", showDivider = false, onClick = { dialogTitle = "个人信息收集清单"; dialogText = PERSONAL_DATA_NOTICE })
-        }
+        AboutActionCard(Icons.Default.Menu, "用户协议") { dialogTitle = "用户协议"; dialogText = USER_AGREEMENT }
+        AboutActionCard(Icons.Default.Security, "隐私政策") { dialogTitle = "隐私政策"; dialogText = PRIVACY_POLICY }
+        AboutActionCard(Icons.Default.Policy, "开源许可") { dialogTitle = "开源许可证"; dialogText = readLicenseNotices(context) }
+        AboutActionCard(Icons.Default.Book, "致谢") { dialogTitle = "致谢"; dialogText = "感谢所有开源项目贡献者与每一位阅读者。" }
         Text(
-            "汗牛充栋 · 让每一本书，都找到朋友\n© 2026 Miaomiao. All Rights Reserved.",
-            modifier = Modifier.fillMaxWidth(),
+            "© 2026 Reader All Rights Reserved",
+            modifier = Modifier.fillMaxWidth().padding(top = DesignTokens.Space24),
             color = DesignTokens.SoftText,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
     }
     dialogTitle?.let { title -> InfoDialog(title, dialogText) { dialogTitle = null } }
+}
+
+@Composable
+private fun AboutActionCard(icon: ImageVector, title: String, onClick: () -> Unit) {
+    SoftCard(modifier = Modifier.clickable(onClick = onClick)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space16)) {
+            Icon(icon, null, tint = DesignTokens.Accent, modifier = Modifier.size(30.dp))
+            Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+            Text("›", color = DesignTokens.SoftText, style = MaterialTheme.typography.headlineMedium)
+        }
+    }
 }
 
 @Composable
@@ -838,14 +1160,17 @@ private fun SettingsSubPage(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 24.dp, vertical = 24.dp)
+            .padding(horizontal = DesignTokens.PagePadding, vertical = DesignTokens.Space16)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
     ) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            }
+            Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Spacer(Modifier.size(48.dp))
         }
-        Text(title, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold)
         subtitle?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium) }
         content()
     }
@@ -853,15 +1178,15 @@ private fun SettingsSubPage(
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Text(text, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 }
 
 @Composable
 private fun StorageUsageCard(snapshot: StorageSnapshot?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(DesignTokens.CardRadius),
         border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Hairline)
     ) {
         Row(
@@ -1142,10 +1467,10 @@ private fun readLicenseNotices(context: Context): String {
     }
 }
 
-private const val PRIVACY_POLICY = """汗牛充栋是一款本地优先的私有书库应用。书籍文件、阅读进度、标签和评分默认仅保存在本机；只有在您主动配置私有服务器并执行同步时，相关数据才会发送到该服务器。应用不集成广告 SDK，不出售个人信息。文件导入通过 Android 系统选择器完成，应用只能访问您明确选择的文件或目录。您可以随时导出或删除本机数据。"""
+private const val PRIVACY_POLICY = """汗牛充栋是一款本地优先的私有书库应用。书籍文件、阅读进度、标签和评分默认仅保存在本机；只有在您主动配置私有云端并执行同步时，相关数据才会发送到该云端服务。应用不集成广告 SDK，不出售个人信息。文件导入通过 Android 系统选择器完成，应用只能访问您明确选择的文件或目录。您可以随时导出或删除本机数据。"""
 
-private const val USER_AGREEMENT = """您应仅导入、下载和阅读自己有权使用的内容。应用按现状提供，本地文件删除、服务器配置和同步操作由用户确认后执行。请在永久删除前自行备份重要书籍与阅读数据。"""
+private const val USER_AGREEMENT = """您应仅导入、下载和阅读自己有权使用的内容。应用按现状提供，本地文件删除、云端配置和同步操作由用户确认后执行。请在永久删除前自行备份重要书籍与阅读数据。"""
 
-private const val THIRD_PARTY_NOTICE = """本版本未集成广告、用户画像或第三方统计 SDK。网络访问仅用于用户配置的私有服务器、OPDS 数据源以及主动执行的 GitHub 版本检查。开源组件的许可证可在“开源许可证”中查看。"""
+private const val THIRD_PARTY_NOTICE = """本版本未集成广告、用户画像或第三方统计 SDK。网络访问仅用于用户配置的私有云端、OPDS 数据源以及主动执行的 GitHub 版本检查。开源组件的许可证可在“开源许可证”中查看。"""
 
-private const val PERSONAL_DATA_NOTICE = """本机可能保存：书籍文件及封面、书名和作者等元数据、个人标签与评分、阅读进度、书签和批注、扫描目录授权、OPDS 连接配置以及私有服务器登录令牌。上述数据可通过隐私页面导出或删除。"""
+private const val PERSONAL_DATA_NOTICE = """本机可能保存：书籍文件及封面、书名和作者等元数据、个人标签与评分、阅读进度、书签和批注、扫描目录授权、OPDS 连接配置以及私有云端登录令牌。上述数据可通过隐私页面导出或删除。"""

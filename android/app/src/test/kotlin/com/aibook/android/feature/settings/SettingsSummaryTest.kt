@@ -8,7 +8,7 @@ class SettingsSummaryTest {
     @Test
     fun connectionSubtitleShowsMissingServer() {
         assertEquals(
-            "未配置服务器",
+            "未配置云端",
             SettingsSummary.connectionSubtitle(serverUrl = "", isLoggedIn = false, username = null)
         )
     }
@@ -16,7 +16,7 @@ class SettingsSummaryTest {
     @Test
     fun connectionSubtitleShowsConfiguredServerBeforeLogin() {
         assertEquals(
-            "已配置服务器，未登录",
+            "云端已配置，未登录",
             SettingsSummary.connectionSubtitle(
                 serverUrl = "http://192.168.1.10:8080",
                 isLoggedIn = false,

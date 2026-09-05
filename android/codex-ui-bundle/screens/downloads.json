@@ -1,0 +1,13 @@
+{
+  "screen": "Downloads",
+  "route": "downloads",
+  "tabs": [
+    "下载中",
+    "已完成"
+  ],
+  "supportsPause": true,
+  "supportsResume": true,
+  "actions": [
+    "全部暂停"
+  ]
+}

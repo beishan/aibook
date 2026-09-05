@@ -1,0 +1,18 @@
+{
+  "screen": "BackendRecent",
+  "route": "bookstore/backend/recent",
+  "appBar": {
+    "title": "最近加入",
+    "actions": [
+      "search",
+      "filter"
+    ]
+  },
+  "viewModes": [
+    "grid",
+    "list"
+  ],
+  "content": {
+    "type": "BookCollection"
+  }
+}

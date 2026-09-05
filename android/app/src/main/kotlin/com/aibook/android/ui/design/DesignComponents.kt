@@ -1,6 +1,7 @@
 package com.aibook.android.ui.design
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +24,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -32,33 +32,53 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
 
 @Composable
 fun DesignPage(
     title: String,
     modifier: Modifier = Modifier,
+    centerTitle: Boolean = false,
+    navigation: @Composable RowScope.() -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val topPadding = if (title.isNotEmpty()) 20.dp else 0.dp
+    val topPadding = if (title.isNotEmpty()) DesignTokens.Space16 else 0.dp
     Column(
         modifier = modifier
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = DesignTokens.PagePadding, vertical = topPadding)
     ) {
         if (title.isNotEmpty()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 18.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), content = actions)
+            if (centerTitle) {
+                Box(Modifier.fillMaxWidth().padding(top = DesignTokens.Space8, bottom = DesignTokens.Space16)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, content = navigation)
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), content = actions)
+                    }
+                    Text(
+                        text = title,
+                        modifier = Modifier.align(Alignment.Center),
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = DesignTokens.Space8, bottom = DesignTokens.Space16),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, content = navigation)
+                    Text(
+                        text = title,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), content = actions)
+                }
             }
         } else {
             Row(
@@ -77,35 +97,36 @@ fun DesignPage(
 fun SoftCard(
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
-    contentPadding: Dp = 18.dp,
+    contentPadding: Dp = DesignTokens.Space16,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val containerColor = if (color == Color.Unspecified) MaterialTheme.colorScheme.surface else color
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = DesignTokens.SoftShadow,
-                shape = RoundedCornerShape(DesignTokens.CardRadius),
-                ambientColor = Color.Black.copy(alpha = 0.08f),
-                spotColor = Color.Black.copy(alpha = 0.08f)
-            ),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(DesignTokens.CardRadius),
-        colors = CardDefaults.cardColors(containerColor = containerColor)
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = DesignTokens.SoftShadow)
     ) {
         Column(Modifier.padding(contentPadding), content = content)
     }
 }
 
 @Composable
-fun SectionHeader(title: String, trailing: String? = null) {
+fun SectionHeader(title: String, trailing: String? = null, onTrailingClick: (() -> Unit)? = null) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        trailing?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        trailing?.let {
+            Text(
+                it,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = if (onTrailingClick != null) Modifier.clickable(onClick = onTrailingClick) else Modifier
+            )
+        }
     }
 }
 
@@ -121,6 +142,11 @@ fun BookCover(
     placeholderMaxLines: Int = 3,
     placeholderTextStyle: TextStyle? = null
 ) {
+    val context = LocalContext.current
+    val configuredRadius = context.getSharedPreferences("appearance_settings", android.content.Context.MODE_PRIVATE)
+        .getFloat("cover_radius", DesignTokens.RadiusSmall.value)
+        .coerceIn(0f, DesignTokens.RadiusLarge.value)
+        .dp
     val sizeModifier = if (width != null) Modifier.size(width, height) else Modifier.fillMaxWidth().height(height)
 
     if (!imageUri.isNullOrBlank()) {
@@ -130,8 +156,8 @@ fun BookCover(
             contentScale = ContentScale.Crop,
             modifier = modifier
                 .then(sizeModifier)
-                .clip(RoundedCornerShape(8.dp))
-                .background(brush, RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(configuredRadius))
+                .background(brush, RoundedCornerShape(configuredRadius))
         )
         return
     }
@@ -139,7 +165,7 @@ fun BookCover(
     Box(
         modifier = modifier
             .then(sizeModifier)
-            .background(brush, RoundedCornerShape(8.dp))
+            .background(brush, RoundedCornerShape(configuredRadius))
             .padding(10.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -156,11 +182,15 @@ fun BookCover(
 
 @Composable
 fun SourceBadge(text: String, source: String = text) {
-    val color = if (source.equals("OPDS", ignoreCase = true)) DesignTokens.OpdsGreen else DesignTokens.Accent
+    val color = when {
+        source.equals("OPDS", ignoreCase = true) -> DesignTokens.OpdsGreen
+        source.equals("云端", ignoreCase = true) || source.equals("后端", ignoreCase = true) || source.equals("远程", ignoreCase = true) -> DesignTokens.Warning
+        else -> DesignTokens.Accent
+    }
     Surface(
         color = color.copy(alpha = 0.12f),
         contentColor = color,
-        shape = RoundedCornerShape(8.dp)
+        shape = RoundedCornerShape(DesignTokens.RadiusSmall)
     ) {
         Text(
             text = text,

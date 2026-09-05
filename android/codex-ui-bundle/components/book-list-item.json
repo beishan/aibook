@@ -1,0 +1,21 @@
+{
+  "name": "BookListItem",
+  "props": [
+    "cover",
+    "title",
+    "author",
+    "chapter",
+    "progress",
+    "source",
+    "inShelf"
+  ],
+  "layout": {
+    "height": 104,
+    "coverWidth": 64,
+    "gap": 12
+  },
+  "interaction": {
+    "tap": "openBookDetail",
+    "more": "showBookActions"
+  }
+}

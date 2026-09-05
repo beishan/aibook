@@ -2,6 +2,7 @@ package com.aibook.android
 
 import android.os.Build
 import android.os.Bundle
+import android.content.pm.ApplicationInfo
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -53,7 +54,11 @@ class MainActivity : ComponentActivity() {
                 appThemeMode = appThemeMode,
                 accentColor = accentColor
             ) {
-                AiBookApp()
+                AiBookApp(
+                    initialDebugRoute = if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+                        intent.getStringExtra("codex_preview_route")
+                    } else null
+                )
             }
         }
     }

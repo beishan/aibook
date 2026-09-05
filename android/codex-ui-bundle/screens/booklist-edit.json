@@ -1,0 +1,16 @@
+{
+  "screen": "BooklistEdit",
+  "route": "bookstore/backend/booklist/{booklistId}/edit",
+  "fields": [
+    "书单名称",
+    "封面",
+    "描述"
+  ],
+  "actions": [
+    "重命名",
+    "修改描述",
+    "删除书单",
+    "取消",
+    "保存"
+  ]
+}

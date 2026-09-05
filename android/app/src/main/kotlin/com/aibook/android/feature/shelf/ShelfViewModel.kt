@@ -10,7 +10,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aibook.android.core.data.repository.BookRepository
+import com.aibook.android.core.data.repository.ServerRepository
 import com.aibook.android.core.data.repository.ImportResult
+import com.aibook.android.core.model.BookFormat
 import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.model.ShelfFolder
 import com.aibook.android.core.model.ShelfFolderCatalog
@@ -24,13 +26,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
 
 data class ShelfUiState(
     val books: List<LocalBook> = emptyList(),
     val visibleBooks: List<LocalBook> = emptyList(),
+    val remoteBooks: List<LocalBook> = emptyList(),
     val folders: List<ShelfFolder> = emptyList(),
     val folderSelection: ShelfFolderSelection = ShelfFolderSelection.All,
     val folderCounts: Map<String, Int> = emptyMap(),
@@ -42,7 +47,17 @@ data class ShelfUiState(
     val selectedIds: Set<String> = emptySet()
 ) {
     val filteredBooks: List<LocalBook>
-        get() = ShelfBookSorter.sort(visibleBooks, sortOption)
+        get() {
+            val matchingRemote = when (folderSelection) {
+                ShelfFolderSelection.All -> remoteBooks
+                ShelfFolderSelection.Favorites -> remoteBooks.filter { it.favorite }
+                ShelfFolderSelection.Unfiled,
+                is ShelfFolderSelection.Folder -> emptyList()
+            }.filter {
+                query.isBlank() || it.title.contains(query, true) || it.author?.contains(query, true) == true
+            }
+            return ShelfBookSorter.sort(visibleBooks + matchingRemote, sortOption)
+        }
 
     val hasMore: Boolean
         get() = visibleBooks.size < ShelfFolderCatalog.filterBooks(books, folderSelection).count {
@@ -65,6 +80,7 @@ private data class ShelfControlState(
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ShelfViewModel(
     private val bookRepository: BookRepository,
+    private val serverRepository: ServerRepository,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -76,6 +92,7 @@ class ShelfViewModel(
     private val _selectedIds = MutableStateFlow<Set<String>>(emptySet())
     private val _folderSelection = MutableStateFlow<ShelfFolderSelection>(ShelfFolderSelection.All)
     private val _pageLimit = MutableStateFlow(40)
+    private val _remoteBooks = MutableStateFlow<List<LocalBook>>(emptyList())
 
     private val baseControls = combine(
         _query,
@@ -104,7 +121,7 @@ class ShelfViewModel(
         bookRepository.observeShelvedBookPage(query, folder, limit)
     }
 
-    val uiState: StateFlow<ShelfUiState> = combine(
+    private val localUiState = combine(
         bookRepository.observeShelvedBooks(),
         bookRepository.observeShelfFolders(),
         controls,
@@ -129,6 +146,10 @@ class ShelfViewModel(
             managementMode = controls.managementMode,
             selectedIds = selectedIds.intersect(visibleIds)
         )
+    }
+
+    val uiState: StateFlow<ShelfUiState> = combine(localUiState, _remoteBooks) { state, remoteBooks ->
+        state.copy(remoteBooks = remoteBooks)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ShelfUiState())
 
     fun setQuery(query: String) {
@@ -157,10 +178,18 @@ class ShelfViewModel(
         viewModelScope.launch { bookRepository.setFavorite(id, favorite) }
     }
 
+    fun clearReadingHistory() {
+        viewModelScope.launch { bookRepository.clearReadingHistory() }
+    }
+
     fun cycleSortOption() {
         val options = ShelfSortOption.entries
         val currentIndex = options.indexOf(_sortOption.value).takeIf { it >= 0 } ?: 0
         _sortOption.value = options[(currentIndex + 1) % options.size]
+    }
+
+    fun setSortOption(option: ShelfSortOption) {
+        _sortOption.value = option
     }
 
     fun setManagementMode(enabled: Boolean) {
@@ -177,7 +206,10 @@ class ShelfViewModel(
     }
 
     fun selectAllVisible() {
-        _selectedIds.value = uiState.value.filteredBooks.map { it.id }.toSet()
+        _selectedIds.value = uiState.value.filteredBooks
+            .filterNot { it.id.startsWith("server:") }
+            .map { it.id }
+            .toSet()
     }
 
     fun clearSelection() {
@@ -225,6 +257,12 @@ class ShelfViewModel(
         }
     }
 
+    fun createFolder(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch { bookRepository.createShelfFolder(trimmed) }
+    }
+
     fun moveSelectedToFolder(folderId: String?) {
         val ids = _selectedIds.value
         if (ids.isEmpty()) return
@@ -240,6 +278,53 @@ class ShelfViewModel(
         viewModelScope.launch { bookRepository.setShelved(id, shelved) }
     }
 
+    fun toggleRemoteFavorite(bookId: Long) {
+        viewModelScope.launch {
+            serverRepository.toggleFavorite(bookId).onSuccess { refreshRemoteShelf() }
+        }
+    }
+
+    fun removeRemoteFromShelf(bookId: Long) {
+        viewModelScope.launch {
+            serverRepository.removeFromShelf(bookId).onSuccess { refreshRemoteShelf() }
+        }
+    }
+
+    fun refreshRemoteShelf() {
+        viewModelScope.launch {
+            if (!serverRepository.isLoggedIn.first()) {
+                _remoteBooks.value = emptyList()
+                return@launch
+            }
+            serverRepository.getShelf().onSuccess { shelf ->
+                _remoteBooks.value = (shelf.ungroupedBooks + shelf.groups.flatMap { it.books })
+                    .distinctBy { it.id }
+                    .mapNotNull { book ->
+                        val remoteId = book.id ?: return@mapNotNull null
+                        val format = BookFormat.entries.firstOrNull {
+                            it.extension.equals(book.format, true) || it.displayName.equals(book.format, true)
+                        } ?: BookFormat.TXT
+                        LocalBook(
+                            id = "server:$remoteId",
+                            title = book.title,
+                            author = book.author,
+                            description = book.description,
+                            rating = book.rating?.toFloat(),
+                            tags = book.tagNames.orEmpty(),
+                            format = format,
+                            uri = "",
+                            coverUri = serverRepository.resolveCoverUrl(book.coverUrl),
+                            favorite = book.isFavorite == true,
+                            shelved = true,
+                            visibleInStore = false,
+                            source = "SERVER",
+                            importedAt = Instant.EPOCH
+                        )
+                    }
+            }
+        }
+    }
+
     fun deleteBook(id: String) {
         viewModelScope.launch { bookRepository.deleteBook(id) }
     }
@@ -248,7 +333,8 @@ class ShelfViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as Application
-                ShelfViewModel(ServiceLocator.get(app).bookRepository, createSavedStateHandle())
+                val locator = ServiceLocator.get(app)
+                ShelfViewModel(locator.bookRepository, locator.serverRepository, createSavedStateHandle())
             }
         }
     }

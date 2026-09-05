@@ -6,6 +6,8 @@ import android.content.SharedPreferences
 object ShelfPreferences {
     const val FILE_NAME = "shelf_prefs"
     const val KEY_SHOW_CONTINUE_READING_CARDS = "show_continue_reading_cards"
+    const val KEY_SORT_OPTION = "sort_option"
+    const val KEY_FILTER_UNREAD = "filter_unread"
 
     fun preferences(context: Context): SharedPreferences =
         context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)

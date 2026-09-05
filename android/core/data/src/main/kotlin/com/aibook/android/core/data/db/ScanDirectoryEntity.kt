@@ -10,6 +10,7 @@ data class ScanDirectoryEntity(
     val uri: String,
     val name: String,
     val enabled: Boolean = true,
+    val includeSubdirectories: Boolean = true,
     val lastScanAt: Long? = null,
     val discoveredCount: Int = 0,
     val addedCount: Int = 0,

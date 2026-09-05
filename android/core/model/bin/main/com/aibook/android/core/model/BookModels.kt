@@ -53,7 +53,8 @@ data class LocalBook(
     val importedAt: Instant = Instant.now(),
     val lastReadAt: Instant? = null,
     val readingDurationSeconds: Long = 0,
-    val progress: ReadingProgress = ReadingProgress()
+    val progress: ReadingProgress = ReadingProgress(),
+    val source: String = "LOCAL"
 )
 
 data class ShelfFolder(

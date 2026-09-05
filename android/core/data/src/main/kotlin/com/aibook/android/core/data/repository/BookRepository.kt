@@ -370,6 +370,7 @@ class BookRepository(
             uri = destFile.absolutePath,
             sha256 = sha256,
             coverUri = coverUri,
+            source = "OPDS",
             importedAt = Instant.now()
         )
 
@@ -402,6 +403,10 @@ class BookRepository(
             pdfZoom = pdfZoom?.coerceIn(1f, 4f),
             positionLabel = "${(clamped * 100).toInt()}%"
         )
+    }
+
+    suspend fun clearReadingHistory() {
+        bookDao.clearReadingHistory()
     }
 
     suspend fun setFavorite(id: String, favorite: Boolean) {
