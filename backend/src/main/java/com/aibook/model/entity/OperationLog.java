@@ -77,6 +77,7 @@ public class OperationLog {
         UPDATE_SITE_FAVICON,
         UPDATE_SITE_SETTINGS,
         UPDATE_SCAN_DIRECTORY_VISIBILITY,
+        CRAWLER_TASK,
         ADD_TO_SHELF,
         REMOVE_FROM_SHELF
     }

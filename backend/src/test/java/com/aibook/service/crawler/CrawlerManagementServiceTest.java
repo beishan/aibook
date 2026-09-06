@@ -3,6 +3,8 @@ package com.aibook.service.crawler;
 import com.aibook.dto.crawler.CrawlerDtos.RulePayload;
 import com.aibook.dto.crawler.CrawlerDtos.SitePayload;
 import com.aibook.dto.crawler.CrawlerDtos.ProxyPayload;
+import com.aibook.model.entity.CrawlerBook;
+import com.aibook.model.entity.CrawlerChapter;
 import com.aibook.model.entity.CrawlerSite;
 import com.aibook.model.entity.CrawlerSiteRuleVersion;
 import com.aibook.model.entity.User;
@@ -27,17 +29,23 @@ import static org.mockito.Mockito.when;
 class CrawlerManagementServiceTest {
     private CrawlerSiteRepository sites;
     private CrawlerSiteRuleVersionRepository rules;
+    private CrawlerBookRepository books;
+    private CrawlerChapterRepository chapters;
     private CrawlerManagementService service;
 
     @BeforeEach
     void setUp() {
         sites = mock(CrawlerSiteRepository.class);
         rules = mock(CrawlerSiteRuleVersionRepository.class);
-        service = new CrawlerManagementService(sites, mock(CrawlerBookRepository.class),
-                mock(CrawlerChapterRepository.class), mock(CrawlerTaskRepository.class), rules,
+        books = mock(CrawlerBookRepository.class);
+        chapters = mock(CrawlerChapterRepository.class);
+        service = new CrawlerManagementService(sites, books,
+                chapters, mock(CrawlerTaskRepository.class), rules,
                 new ObjectMapper());
         when(sites.save(any(CrawlerSite.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(rules.save(any(CrawlerSiteRuleVersion.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(books.save(any(CrawlerBook.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(chapters.save(any(CrawlerChapter.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -111,6 +119,34 @@ class CrawlerManagementServiceTest {
 
         assertThatThrownBy(() -> service.createSite(user, payload))
                 .hasMessageContaining("只能启用一组代理");
+    }
+
+    @Test
+    void treatsStoredChapterContentAsSuccessfullyParsed() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();
+        CrawlerBook book = CrawlerBook.builder().id(15L).site(site).bookName("示例书籍")
+                .externalBookId("book-1").bookUrl("https://example.com/book/1").build();
+        CrawlerChapter waiting = CrawlerChapter.builder().id(21L).crawlerBook(book).chapterIndex(0)
+                .externalChapterId("1").chapterName("第一章").chapterUrl("https://example.com/1")
+                .content("已经成功解析的第一章正文").crawlStatus(CrawlerChapter.CrawlStatus.WAITING).build();
+        CrawlerChapter failed = CrawlerChapter.builder().id(22L).crawlerBook(book).chapterIndex(1)
+                .externalChapterId("2").chapterName("第二章").chapterUrl("https://example.com/2")
+                .content("已经成功解析的第二章正文").crawlStatus(CrawlerChapter.CrawlStatus.FAILED).build();
+        when(books.findByIdAndSiteUser(15L, user)).thenReturn(Optional.of(book));
+        when(chapters.findByCrawlerBookOrderByChapterIndexAsc(book)).thenReturn(List.of(waiting, failed));
+        when(chapters.countByCrawlerBook(book)).thenReturn(2L);
+        when(chapters.countByCrawlerBookAndCrawlStatus(book, CrawlerChapter.CrawlStatus.COMPLETED)).thenReturn(2L);
+        when(chapters.countByCrawlerBookAndCrawlStatus(book, CrawlerChapter.CrawlStatus.FAILED)).thenReturn(0L);
+        when(chapters.countByCrawlerBookAndCrawlStatus(book, CrawlerChapter.CrawlStatus.CONTENT_SUSPECTED)).thenReturn(0L);
+
+        var result = service.chapters(user, 15L);
+
+        assertThat(result).extracting(item -> item.crawlStatus()).containsOnly("COMPLETED");
+        assertThat(book.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.COMPLETED);
+        assertThat(book.getCrawledChapterCount()).isEqualTo(2);
+        assertThat(book.getFailedChapterCount()).isZero();
+        assertThat(book.getImportStatus()).isEqualTo(CrawlerBook.ImportStatus.READY);
     }
 
     @Test

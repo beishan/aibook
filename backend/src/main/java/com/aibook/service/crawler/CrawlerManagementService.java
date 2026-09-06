@@ -144,9 +144,37 @@ public class CrawlerManagementService {
     @Transactional(readOnly = true)
     public BookView book(User user, Long id) { return bookView(ownedBook(user, id)); }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<ChapterView> chapters(User user, Long id) {
-        return chapterRepository.findByCrawlerBookOrderByChapterIndexAsc(ownedBook(user, id)).stream().map(this::chapterView).toList();
+        CrawlerBook book = ownedBook(user, id);
+        List<CrawlerChapter> chapters = chapterRepository.findByCrawlerBookOrderByChapterIndexAsc(book);
+        boolean normalized = false;
+        for (CrawlerChapter chapter : chapters) {
+            if (chapter.getContent() != null && !chapter.getContent().isBlank()
+                    && chapter.getCrawlStatus() != CrawlerChapter.CrawlStatus.COMPLETED) {
+                chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.COMPLETED);
+                chapter.setErrorMessage(null);
+                chapterRepository.save(chapter);
+                normalized = true;
+            }
+        }
+        if (normalized) refreshParsedBookStatus(book);
+        return chapters.stream().map(this::chapterView).toList();
+    }
+
+    private void refreshParsedBookStatus(CrawlerBook book) {
+        int total = (int) chapterRepository.countByCrawlerBook(book);
+        int completed = (int) chapterRepository.countByCrawlerBookAndCrawlStatus(
+                book, CrawlerChapter.CrawlStatus.COMPLETED);
+        int failed = (int) (chapterRepository.countByCrawlerBookAndCrawlStatus(
+                book, CrawlerChapter.CrawlStatus.FAILED) + chapterRepository.countByCrawlerBookAndCrawlStatus(
+                book, CrawlerChapter.CrawlStatus.CONTENT_SUSPECTED));
+        book.setChapterCount(total); book.setCrawledChapterCount(completed); book.setFailedChapterCount(failed);
+        if (total > 0 && completed == total) {
+            book.setCrawlStatus(CrawlerBook.CrawlStatus.COMPLETED);
+            book.setImportStatus(book.getLibraryBook() == null ? CrawlerBook.ImportStatus.READY : CrawlerBook.ImportStatus.IMPORTED);
+        } else if (failed > 0) book.setCrawlStatus(CrawlerBook.CrawlStatus.PARTIAL_SUCCESS);
+        bookRepository.save(book);
     }
 
     @Transactional(readOnly = true)

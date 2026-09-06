@@ -24,11 +24,28 @@ public class OperationLogService {
             Book book,
             String description,
             String details) {
+        recordEntry(
+                user,
+                action,
+                book == null ? null : book.getId(),
+                book == null ? null : book.getTitle(),
+                description,
+                details);
+    }
+
+    @Transactional
+    public void recordEntry(
+            User user,
+            OperationLog.Action action,
+            Long bookId,
+            String bookTitle,
+            String description,
+            String details) {
         operationLogRepository.save(OperationLog.builder()
                 .user(user)
                 .action(action)
-                .bookId(book == null ? null : book.getId())
-                .bookTitle(book == null ? null : book.getTitle())
+                .bookId(bookId)
+                .bookTitle(bookTitle)
                 .description(description)
                 .details(details)
                 .build());
