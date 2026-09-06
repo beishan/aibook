@@ -55,6 +55,36 @@ class CrawlerManagementServiceTest {
     }
 
     @Test
+    void generatesReadableUniqueSiteCodeWhenOmitted() {
+        User user = user();
+        CrawlerSite occupied = CrawlerSite.builder().id(99L).user(user).siteCode("example_com").build();
+        when(sites.findByUserAndSiteCode(user, "example_com")).thenReturn(Optional.of(occupied));
+        when(sites.findByUserAndSiteCode(user, "example_com_2")).thenReturn(Optional.empty());
+
+        var result = service.createSite(user, new SitePayload("示例站", " ", "https://www.example.com/books",
+                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
+                "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB"));
+
+        assertThat(result.siteCode()).isEqualTo("example_com_2");
+    }
+
+    @Test
+    void updatesExistingSiteWithoutTreatingItsCodeAsConflict() {
+        User user = user();
+        CrawlerSite existing = CrawlerSite.builder().id(7L).user(user).siteName("旧名称")
+                .siteCode("example_com").baseUrl("https://example.com").build();
+        when(sites.findByIdAndUser(7L, user)).thenReturn(Optional.of(existing));
+        when(sites.findByUserAndSiteCode(user, "example_com")).thenReturn(Optional.of(existing));
+
+        var result = service.updateSite(user, 7L, new SitePayload("新名称", "example_com", "https://example.com",
+                null, true, false, false, true, false, 1500, 1000, 1, 15000, 2,
+                "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB"));
+
+        assertThat(result.siteName()).isEqualTo("新名称");
+        assertThat(result.siteCode()).isEqualTo("example_com");
+    }
+
+    @Test
     void storesMultipleProxiesButActivatesOnlySelectedProxy() {
         User user = user();
         when(sites.findByUserAndSiteCode(user, "proxy-demo")).thenReturn(Optional.empty());

@@ -27,7 +27,7 @@ public final class CrawlerDtos {
             @NotBlank @Size(max = 1000) String url, Boolean enabled) { }
 
     public record SitePayload(
-            @NotBlank String siteName, @NotBlank @Pattern(regexp = "[a-zA-Z0-9_-]+") String siteCode,
+            @NotBlank String siteName, @Pattern(regexp = "\\s*|[a-zA-Z0-9_-]+") String siteCode,
             @NotBlank String baseUrl, String homeUrl, Boolean enabled,
             Boolean autoScan, Boolean autoCrawl, Boolean autoUpdate, Boolean autoImportLibrary,
             @Min(100) Integer requestIntervalMillis, @Min(0) Integer randomDelayMillis,

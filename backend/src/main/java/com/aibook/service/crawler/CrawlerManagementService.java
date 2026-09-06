@@ -32,10 +32,9 @@ public class CrawlerManagementService {
     @Transactional
     public SiteView createSite(User user, SitePayload payload) {
         validateBaseUrl(payload.baseUrl());
-        if (siteRepository.findByUserAndSiteCode(user, payload.siteCode()).isPresent())
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "网站编码已存在");
+        String siteCode = resolveSiteCode(user, payload.siteCode(), payload.baseUrl(), null);
         CrawlerSite site = CrawlerSite.builder().user(user).build();
-        apply(site, payload);
+        apply(site, payload, siteCode);
         site = siteRepository.save(site);
         return siteView(site);
     }
@@ -44,10 +43,8 @@ public class CrawlerManagementService {
     public SiteView updateSite(User user, Long id, SitePayload payload) {
         CrawlerSite site = ownedSite(user, id);
         validateBaseUrl(payload.baseUrl());
-        siteRepository.findByUserAndSiteCode(user, payload.siteCode())
-                .filter(other -> !other.getId().equals(id))
-                .ifPresent(other -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "网站编码已存在"); });
-        apply(site, payload);
+        String siteCode = resolveSiteCode(user, payload.siteCode(), payload.baseUrl(), id);
+        apply(site, payload, siteCode);
         site = siteRepository.save(site);
         return siteView(site);
     }
@@ -171,8 +168,8 @@ public class CrawlerManagementService {
                 bookRepository.countBySiteUserAndImportStatus(user, CrawlerBook.ImportStatus.IMPORTED), tasks(user, 8));
     }
 
-    private void apply(CrawlerSite site, SitePayload p) {
-        site.setSiteName(p.siteName().trim()); site.setSiteCode(p.siteCode().trim()); site.setBaseUrl(trimSlash(p.baseUrl()));
+    private void apply(CrawlerSite site, SitePayload p, String siteCode) {
+        site.setSiteName(p.siteName().trim()); site.setSiteCode(siteCode); site.setBaseUrl(trimSlash(p.baseUrl()));
         site.setHomeUrl(blank(p.homeUrl()) ? trimSlash(p.baseUrl()) : p.homeUrl().trim());
         site.setEnabled(bool(p.enabled(), false)); site.setAutoScan(bool(p.autoScan(), false));
         site.setAutoCrawl(bool(p.autoCrawl(), false)); site.setAutoUpdate(bool(p.autoUpdate(), true));
@@ -238,6 +235,27 @@ public class CrawlerManagementService {
     public TaskView taskView(CrawlerTask t) { return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(), t.getSite().getId(), t.getSite().getSiteName(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(), value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0), value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(), t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(), t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt()); }
 
     private void validateBaseUrl(String value) { try { URI uri = URI.create(value); if (!Set.of("http", "https").contains(uri.getScheme()) || uri.getHost() == null) throw new Exception(); } catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "网站根地址必须是有效的 HTTP(S) 地址"); } }
+    private String resolveSiteCode(User user, String requested, String baseUrl, Long currentId) {
+        if (!blank(requested)) {
+            String code = requested.trim();
+            if (!siteCodeAvailable(user, code, currentId))
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "网站编码已存在");
+            return code;
+        }
+        String host = Objects.toString(URI.create(baseUrl).getHost(), "site").toLowerCase(Locale.ROOT)
+                .replaceFirst("^www\\.", "");
+        String base = host.replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
+        if (base.isBlank()) base = "site";
+        base = base.substring(0, Math.min(base.length(), 70));
+        String candidate = base;
+        for (int suffix = 2; !siteCodeAvailable(user, candidate, currentId); suffix++)
+            candidate = base + "_" + suffix;
+        return candidate;
+    }
+    private boolean siteCodeAvailable(User user, String code, Long currentId) {
+        return siteRepository.findByUserAndSiteCode(user, code)
+                .map(site -> Objects.equals(site.getId(), currentId)).orElse(true);
+    }
     private void applyProxies(CrawlerSite site, List<ProxyPayload> values) {
         List<ProxyPayload> proxies = values == null ? List.of() : values.stream()
                 .map(value -> new ProxyPayload(value.name().trim(), value.url().trim(), bool(value.enabled(), false))).toList();
