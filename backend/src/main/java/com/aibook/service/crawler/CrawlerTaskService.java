@@ -11,6 +11,7 @@ import org.springframework.context.*;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
@@ -105,6 +106,35 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         }).toList();
     }
 
+    public com.aibook.dto.crawler.CrawlerDtos.BookView setBookStatus(
+            User user, Long bookId, CrawlerBook.CrawlStatus status) {
+        CrawlerBook book = managementService.ownedBook(user, bookId);
+        if (taskRepository.existsByCrawlerBookAndStatusIn(book, ACTIVE_STATUSES)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "该书籍仍有活动任务，请先暂停或取消任务");
+        }
+        CrawlerBook.CrawlStatus previous = book.getCrawlStatus();
+        book.setCrawlStatus(status);
+        boolean hasContent = chapterRepository.findByCrawlerBookOrderByChapterIndexAsc(book).stream()
+                .anyMatch(this::hasParsedContent);
+        if (book.getLibraryBook() == null) {
+            book.setImportStatus(hasContent ? CrawlerBook.ImportStatus.READY : CrawlerBook.ImportStatus.NOT_IMPORTED);
+        }
+        if (status == CrawlerBook.CrawlStatus.COMPLETED) book.setLastCrawlTime(LocalDateTime.now());
+        bookRepository.save(book);
+        try {
+            operationLogService.recordEntry(user, OperationLog.Action.CRAWLER_TASK,
+                    book.getLibraryBook() == null ? null : book.getLibraryBook().getId(), bookName(book),
+                    "人工修改采集状态：" + bookName(book),
+                    "书籍ID：" + book.getId() + "；网站：" + book.getSite().getSiteName()
+                            + "；原状态：" + previous + "；新状态：" + status);
+        } catch (Exception exception) {
+            log.warn("[采集任务] 写入人工状态修改日志失败: bookId={}", book.getId(), exception);
+        }
+        log.info("[采集任务] 人工修改书籍状态: bookId={}, book={}, previous={}, current={}",
+                book.getId(), bookName(book), previous, status);
+        return managementService.bookView(book);
+    }
+
     public boolean scheduleSiteScan(CrawlerSite site) {
         if (site.getRule() == null) return false;
         if (taskRepository.existsBySiteAndTypeAndStatusIn(site, CrawlerTask.TaskType.SITE_SCAN, ACTIVE_STATUSES)) return false;
@@ -144,6 +174,35 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         return managementService.taskView(task);
     }
 
+    @Transactional
+    public TaskView updateTask(User user, String taskId, CrawlerTask.Priority priority) {
+        CrawlerTask task = managementService.ownedTask(user, taskId);
+        if (task.getStatus() != CrawlerTask.TaskStatus.WAITING
+                && task.getStatus() != CrawlerTask.TaskStatus.PAUSED
+                && task.getStatus() != CrawlerTask.TaskStatus.FAILED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "只有等待中、已暂停或失败的任务可以修改优先级");
+        }
+        CrawlerTask.Priority previous = task.getPriority();
+        task.setPriority(priority);
+        taskRepository.save(task);
+        reprioritizeWaitingTask(task);
+        log.info("[采集任务] 修改任务优先级: taskId={}, previous={}, current={}", taskId, previous, priority);
+        recordCrawlerEvent(task, "任务配置已修改", "原优先级：" + previous + "；新优先级：" + priority);
+        return managementService.taskView(task);
+    }
+
+    @Transactional
+    public void deleteTask(User user, String taskId) {
+        CrawlerTask task = managementService.ownedTask(user, taskId);
+        if (ACTIVE_STATUSES.contains(task.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "运行中、等待中或暂停的任务需先取消后才能删除");
+        }
+        log.info("[采集任务] 删除任务记录: taskId={}, status={}, type={}, book={}",
+                taskId, task.getStatus(), task.getType(), bookName(task.getCrawlerBook()));
+        recordCrawlerEvent(task, "任务记录已删除", "状态：" + task.getStatus());
+        taskRepository.delete(task);
+    }
+
     private CrawlerTask createAndSubmit(User user, CrawlerSite site, CrawlerBook book, CrawlerTask.TaskType type) {
         return createAndSubmit(user, site, book, type, CrawlerTask.Priority.HIGH);
     }
@@ -173,6 +232,16 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         CrawlerTask.Priority priority = taskRepository.findById(id).map(CrawlerTask::getPriority).orElse(CrawlerTask.Priority.NORMAL);
         try { executor.execute(new CrawlerJob(id, priority, jobSequence.incrementAndGet())); }
         catch (RejectedExecutionException exception) { active.remove(id); throw exception; }
+    }
+
+    private void reprioritizeWaitingTask(CrawlerTask task) {
+        if (task.getStatus() != CrawlerTask.TaskStatus.WAITING) return;
+        for (Runnable queued : executor.getQueue()) {
+            if (queued instanceof CrawlerJob job && job.taskId.equals(task.getId()) && executor.remove(queued)) {
+                executor.execute(new CrawlerJob(task.getId(), task.getPriority(), jobSequence.incrementAndGet()));
+                return;
+            }
+        }
     }
 
     private final class CrawlerJob implements Runnable, Comparable<CrawlerJob> {

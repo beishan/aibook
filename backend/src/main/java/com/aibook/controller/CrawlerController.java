@@ -47,6 +47,12 @@ public class CrawlerController {
     @PostMapping("/sites/{id}/rules/import") @ResponseStatus(HttpStatus.CREATED) public RuleVersionView importRule(Authentication auth, @PathVariable Long id, @Valid @RequestBody RuleImportRequest request) { return managementService.importRule(user(auth), id, request); }
 
     @GetMapping("/books") public Page<BookView> books(Authentication auth, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return managementService.books(user(auth), page, size); }
+    @GetMapping("/books/discovered") public Page<BookView> discoveredBooks(Authentication auth,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String keyword, @RequestParam(required = false) Long siteId,
+            @RequestParam(defaultValue = "DISCOVER_TIME_DESC") String sort) {
+        return managementService.discoveredBooks(user(auth), page, size, keyword, siteId, sort);
+    }
     @GetMapping("/books/{id}") public BookView book(Authentication auth, @PathVariable Long id) { return managementService.book(user(auth), id); }
     @GetMapping("/books/{id}/chapters") public List<ChapterView> chapters(Authentication auth, @PathVariable Long id) { return managementService.chapters(user(auth), id); }
     @GetMapping("/books/{bookId}/chapters/{chapterId}") public Map<String, Object> chapter(Authentication auth, @PathVariable Long bookId, @PathVariable Long chapterId) {
@@ -58,6 +64,7 @@ public class CrawlerController {
     @PostMapping("/books/{id}/continue") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView continueBook(Authentication auth, @PathVariable Long id) { return taskService.continueBook(user(auth), id); }
     @PostMapping("/books/{id}/retry-failures") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView retryFailures(Authentication auth, @PathVariable Long id) { return taskService.retryFailures(user(auth), id); }
     @PostMapping("/books/{id}/check-updates") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView checkUpdates(Authentication auth, @PathVariable Long id) { return taskService.checkUpdates(user(auth), id); }
+    @PutMapping("/books/{id}/crawl-status") public BookView crawlStatus(Authentication auth, @PathVariable Long id, @Valid @RequestBody BookCrawlStatusRequest request) { return taskService.setBookStatus(user(auth), id, CrawlerBook.CrawlStatus.valueOf(request.status())); }
     @PostMapping("/books/batch/crawl") @ResponseStatus(HttpStatus.ACCEPTED) public List<TaskView> batchCrawl(Authentication auth, @Valid @RequestBody BatchBookRequest request) { return taskService.batchCrawl(user(auth), request.bookIds()); }
     @PutMapping("/books/batch/discovery-status") public List<BookView> discoveryStatus(Authentication auth, @Valid @RequestBody DiscoveryStatusRequest request) { return taskService.setDiscoveryStatus(user(auth), request.bookIds(), CrawlerBook.DiscoveryStatus.valueOf(request.status())); }
     @PostMapping("/books/{id}/exports") public List<ExportView> generate(Authentication auth, @PathVariable Long id, @Valid @RequestBody ExportRequest request) { return exportService.generate(user(auth), id, request.formats()); }
@@ -69,6 +76,8 @@ public class CrawlerController {
     }
 
     @GetMapping("/tasks") public List<TaskView> tasks(Authentication auth, @RequestParam(defaultValue = "50") int limit) { return managementService.tasks(user(auth), limit); }
+    @PutMapping("/tasks/{id}") public TaskView updateTask(Authentication auth, @PathVariable String id, @Valid @RequestBody TaskUpdateRequest request) { return taskService.updateTask(user(auth), id, request.priority()); }
+    @DeleteMapping("/tasks/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteTask(Authentication auth, @PathVariable String id) { taskService.deleteTask(user(auth), id); }
     @PostMapping("/tasks/{id}/{command}") public TaskView taskCommand(Authentication auth, @PathVariable String id, @PathVariable String command) { return taskService.command(user(auth), id, command); }
 
     private User user(Authentication auth) { return userService.findByUsername(auth.getName()); }

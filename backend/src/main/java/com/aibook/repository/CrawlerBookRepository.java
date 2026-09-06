@@ -11,6 +11,26 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
     Optional<CrawlerBook> findBySiteAndExternalBookId(CrawlerSite site, String externalBookId);
     Optional<CrawlerBook> findFirstBySiteOrderByLastCrawlTimeDesc(CrawlerSite site);
     Page<CrawlerBook> findBySiteUser(User user, Pageable pageable);
+    @Query("""
+            select b from CrawlerBook b
+            where b.site.user = :user
+              and b.discoveryStatus = :discoveryStatus
+              and b.crawlStatus = :crawlStatus
+              and (:siteId is null or b.site.id = :siteId)
+              and (:keyword is null
+                   or lower(b.bookName) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
+                   or lower(b.site.siteName) like lower(concat('%', :keyword, '%'))
+                   or lower(b.externalBookId) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.latestChapter, '')) like lower(concat('%', :keyword, '%')))
+            """)
+    Page<CrawlerBook> searchDiscoveredBooks(
+            @Param("user") User user,
+            @Param("discoveryStatus") CrawlerBook.DiscoveryStatus discoveryStatus,
+            @Param("crawlStatus") CrawlerBook.CrawlStatus crawlStatus,
+            @Param("keyword") String keyword,
+            @Param("siteId") Long siteId,
+            Pageable pageable);
     long countBySiteUser(User user);
     long countBySite(CrawlerSite site);
     boolean existsBySite(CrawlerSite site);

@@ -16,15 +16,18 @@ import com.aibook.repository.CrawlerTaskRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class CrawlerManagementServiceTest {
     private CrawlerSiteRepository sites;
@@ -127,9 +130,11 @@ class CrawlerManagementServiceTest {
         CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();
         CrawlerBook book = CrawlerBook.builder().id(15L).site(site).bookName("示例书籍")
                 .externalBookId("book-1").bookUrl("https://example.com/book/1").build();
+        LocalDateTime createdAt = LocalDateTime.of(2026, 9, 6, 10, 30);
         CrawlerChapter waiting = CrawlerChapter.builder().id(21L).crawlerBook(book).chapterIndex(0)
                 .externalChapterId("1").chapterName("第一章").chapterUrl("https://example.com/1")
-                .content("已经成功解析的第一章正文").crawlStatus(CrawlerChapter.CrawlStatus.WAITING).build();
+                .content("已经成功解析的第一章正文").crawlStatus(CrawlerChapter.CrawlStatus.WAITING)
+                .createdAt(createdAt).build();
         CrawlerChapter failed = CrawlerChapter.builder().id(22L).crawlerBook(book).chapterIndex(1)
                 .externalChapterId("2").chapterName("第二章").chapterUrl("https://example.com/2")
                 .content("已经成功解析的第二章正文").crawlStatus(CrawlerChapter.CrawlStatus.FAILED).build();
@@ -143,10 +148,34 @@ class CrawlerManagementServiceTest {
         var result = service.chapters(user, 15L);
 
         assertThat(result).extracting(item -> item.crawlStatus()).containsOnly("COMPLETED");
+        assertThat(result.getFirst().createdAt()).isEqualTo(createdAt);
         assertThat(book.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.COMPLETED);
         assertThat(book.getCrawledChapterCount()).isEqualTo(2);
         assertThat(book.getFailedChapterCount()).isZero();
         assertThat(book.getImportStatus()).isEqualTo(CrawlerBook.ImportStatus.READY);
+    }
+
+    @Test
+    void filtersSearchesAndSortsActiveDiscoveredBooks() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();
+        CrawlerBook book = CrawlerBook.builder().id(15L).site(site).bookName("新发现书籍")
+                .externalBookId("book-1").bookUrl("https://example.com/book/1")
+                .discoveryStatus(CrawlerBook.DiscoveryStatus.ACTIVE)
+                .crawlStatus(CrawlerBook.CrawlStatus.DISCOVERED).build();
+        when(books.searchDiscoveredBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(book)));
+
+        var result = service.discoveredBooks(user, 2, 50, "  三体  ", 7L, "BOOK_NAME_ASC");
+
+        assertThat(result.getContent()).hasSize(1);
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(books).searchDiscoveredBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L), pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(50);
+        assertThat(pageable.getValue().getSort().getOrderFor("bookName").isAscending()).isTrue();
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.aibook.dto.crawler;
 
+import com.aibook.model.entity.CrawlerTask;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.time.LocalDateTime;
@@ -53,6 +54,9 @@ public final class CrawlerDtos {
     public record ManualCrawlRequest(@NotBlank String url) { }
     public record ExportRequest(@NotEmpty List<@Pattern(regexp = "(?i)TXT|EPUB") String> formats) { }
     public record ImportRequest(@Pattern(regexp = "(?i)TXT|EPUB") String format) { }
+    public record BookCrawlStatusRequest(
+            @NotBlank @Pattern(regexp = "DISCOVERED|WAITING|PAUSED|PARTIAL_SUCCESS|COMPLETED|FAILED") String status) { }
+    public record TaskUpdateRequest(@NotNull CrawlerTask.Priority priority) { }
     public record BatchBookRequest(@NotEmpty List<@NotNull Long> bookIds) { }
     public record DiscoveryStatusRequest(@NotEmpty List<@NotNull Long> bookIds,
             @NotBlank @Pattern(regexp = "ACTIVE|IGNORED|BLACKLISTED") String status) { }
@@ -81,7 +85,7 @@ public final class CrawlerDtos {
 
     public record ChapterView(Long id, int chapterIndex, String chapterName, String chapterUrl,
             int wordCount, String crawlStatus, String accessStatus, int retryCount,
-            String errorMessage, LocalDateTime crawlTime) { }
+            String errorMessage, LocalDateTime crawlTime, LocalDateTime createdAt) { }
 
     public record TaskView(String id, String type, String status, String priority,
             Long siteId, String siteName, Long bookId, String bookName, int totalCount,

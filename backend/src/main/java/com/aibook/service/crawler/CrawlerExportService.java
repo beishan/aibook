@@ -3,7 +3,9 @@ package com.aibook.service.crawler;
 import com.aibook.dto.crawler.CrawlerDtos.ExportView;
 import com.aibook.model.entity.*;
 import com.aibook.repository.*;
+import com.aibook.service.OperationLogService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,7 @@ import java.util.zip.*;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CrawlerExportService {
     private final CrawlerManagementService managementService;
     private final CrawlerChapterRepository chapterRepository;
@@ -27,6 +30,7 @@ public class CrawlerExportService {
     private final CrawlerBookRepository crawlerBookRepository;
     private final BookRepository bookRepository;
     private final BookVersionRepository versionRepository;
+    private final OperationLogService operationLogService;
 
     @Value("${crawler.storage-path:./crawler-data}") private String storagePath;
     @Value("${upload.path:./uploads}") private String uploadPath;
@@ -34,8 +38,8 @@ public class CrawlerExportService {
     @Transactional
     public List<ExportView> generate(User user, Long bookId, List<String> formats) {
         CrawlerBook book = managementService.ownedBook(user, bookId);
-        validateComplete(book);
-        List<CrawlerChapter> chapters = chapterRepository.findByCrawlerBookOrderByChapterIndexAsc(book);
+        List<CrawlerChapter> chapters = availableChapters(book);
+        validateHasContent(chapters);
         List<ExportView> result = new ArrayList<>();
         for (String requested : new LinkedHashSet<>(formats)) {
             String format = requested.toUpperCase(Locale.ROOT);
@@ -49,6 +53,9 @@ public class CrawlerExportService {
                 result.add(view(exportRepository.save(export)));
             } catch (IOException exception) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "生成 " + format + " 失败", exception); }
         }
+        recordOperation(user, book, "生成采集书籍文件：" + book.getBookName(),
+                "格式：" + String.join(",", result.stream().map(ExportView::format).toList())
+                        + "；可用章节：" + chapters.size() + "/" + value(book.getChapterCount()));
         return result;
     }
 
@@ -71,7 +78,9 @@ public class CrawlerExportService {
     @Transactional
     public Long importLibrary(User user, Long bookId, String preferredFormat) {
         CrawlerBook crawlerBook = managementService.ownedBook(user, bookId);
-        validateComplete(crawlerBook);
+        int availableChapterCount = availableChapters(crawlerBook).size();
+        if (availableChapterCount == 0) throw new ResponseStatusException(
+                HttpStatus.CONFLICT, "书籍还没有可用正文，不能生成或加入书库");
         String requestedFormat = preferredFormat == null ? "EPUB" : preferredFormat.toUpperCase(Locale.ROOT);
         if ("BOTH".equals(requestedFormat)) {
             Long libraryId = crawlerBook.getLibraryBook() == null
@@ -97,12 +106,15 @@ public class CrawlerExportService {
                     .description(crawlerBook.getDescription()).coverUrl(crawlerBook.getCoverUrl())
                     .format(format.toLowerCase(Locale.ROOT)).filePath(target.toString()).fileSize(Files.size(target))
                     .fileHash(fileHash).sourceType(Book.SourceType.CRAWLER).user(user)
-                    .chapterCount(crawlerBook.getChapterCount()).build());
+                    .chapterCount(availableChapterCount).build());
             versionRepository.save(BookVersion.builder().book(book).displayName(safe(crawlerBook.getBookName()) + "." + format.toLowerCase(Locale.ROOT))
                     .format(format.toLowerCase(Locale.ROOT)).filePath(target.toString()).fileSize(Files.size(target)).fileHash(fileHash)
-                    .primaryVersion(true).chapterCount(crawlerBook.getChapterCount()).sourceType("CRAWLER")
+                    .primaryVersion(true).chapterCount(availableChapterCount).sourceType("CRAWLER")
                     .sourceId(crawlerBook.getId().toString()).sourceSite(crawlerBook.getSite().getSiteCode()).sourceUrl(crawlerBook.getBookUrl()).build());
             crawlerBook.setLibraryBook(book); crawlerBook.setImportStatus(CrawlerBook.ImportStatus.IMPORTED); crawlerBookRepository.save(crawlerBook);
+            recordOperation(user, crawlerBook, "采集书籍加入书库：" + crawlerBook.getBookName(),
+                    "格式：" + format + "；可用章节：" + availableChapterCount + "/"
+                            + value(crawlerBook.getChapterCount()) + "；书库ID：" + book.getId());
             return book.getId();
         } catch (ResponseStatusException exception) { throw exception; }
         catch (Exception exception) { try { Files.deleteIfExists(target); } catch (Exception ignored) { } throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "加入书库失败", exception); }
@@ -110,6 +122,7 @@ public class CrawlerExportService {
 
     private void addSecondaryVersion(CrawlerBook crawlerBook, String format) {
         Book book = crawlerBook.getLibraryBook();
+        int availableChapterCount = availableChapters(crawlerBook).size();
         boolean exists = versionRepository.findByBookOrderByPrimaryVersionDescCreatedAtAsc(book).stream()
                 .anyMatch(version -> format.equalsIgnoreCase(version.getFormat())
                         && "CRAWLER".equals(version.getSourceType())
@@ -127,7 +140,7 @@ public class CrawlerExportService {
             versionRepository.save(BookVersion.builder().book(book)
                     .displayName(safe(crawlerBook.getBookName()) + "." + format.toLowerCase(Locale.ROOT))
                     .format(format.toLowerCase(Locale.ROOT)).filePath(target.toString()).fileSize(Files.size(target))
-                    .fileHash(fileHash).primaryVersion(false).chapterCount(crawlerBook.getChapterCount())
+                    .fileHash(fileHash).primaryVersion(false).chapterCount(availableChapterCount)
                     .sourceType("CRAWLER").sourceId(crawlerBook.getId().toString())
                     .sourceSite(crawlerBook.getSite().getSiteCode()).sourceUrl(crawlerBook.getBookUrl()).build());
         } catch (Exception exception) {
@@ -136,9 +149,15 @@ public class CrawlerExportService {
         }
     }
 
-    private void validateComplete(CrawlerBook book) {
-        if (book.getCrawlStatus() != CrawlerBook.CrawlStatus.COMPLETED || value(book.getFailedChapterCount()) > 0 || value(book.getChapterCount()) == 0)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "书籍尚未完整采集，不能生成或加入书库");
+    private List<CrawlerChapter> availableChapters(CrawlerBook book) {
+        return chapterRepository.findByCrawlerBookOrderByChapterIndexAsc(book).stream()
+                .filter(chapter -> chapter.getContent() != null && !chapter.getContent().isBlank())
+                .toList();
+    }
+
+    private void validateHasContent(List<CrawlerChapter> chapters) {
+        if (chapters.isEmpty()) throw new ResponseStatusException(
+                HttpStatus.CONFLICT, "书籍还没有可用正文，不能生成或加入书库");
     }
 
     private void writeTxt(Path path, CrawlerBook book, List<CrawlerChapter> chapters) throws IOException {
@@ -176,5 +195,15 @@ public class CrawlerExportService {
     private String safe(String value) { return value.replaceAll("[\\\\/:*?\"<>|]", "_"); }
     private String defaultString(String value, String fallback) { return value == null || value.isBlank() ? fallback : value; }
     private int value(Integer value) { return value == null ? 0 : value; }
+    private void recordOperation(User user, CrawlerBook book, String description, String details) {
+        try {
+            operationLogService.recordEntry(user, OperationLog.Action.CRAWLER_TASK,
+                    book.getLibraryBook() == null ? null : book.getLibraryBook().getId(),
+                    book.getBookName(), description, "采集书籍ID：" + book.getId()
+                            + "；网站：" + book.getSite().getSiteName() + "；" + details);
+        } catch (Exception exception) {
+            log.warn("写入采集书籍发布操作日志失败: crawlerBookId={}", book.getId(), exception);
+        }
+    }
     private ExportView view(CrawlerBookExport e) { return new ExportView(e.getId(), e.getFormat(), e.getFileSize() == null ? 0 : e.getFileSize(), e.getFileHash(), e.getCreatedAt()); }
 }

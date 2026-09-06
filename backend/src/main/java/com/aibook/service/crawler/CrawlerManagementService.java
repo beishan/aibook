@@ -142,6 +142,29 @@ public class CrawlerManagementService {
     }
 
     @Transactional(readOnly = true)
+    public Page<BookView> discoveredBooks(User user, int page, int size, String keyword, Long siteId, String sort) {
+        String normalizedKeyword = blank(keyword) ? null : keyword.trim();
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+                discoverySort(sort));
+        return bookRepository.searchDiscoveredBooks(user, CrawlerBook.DiscoveryStatus.ACTIVE,
+                CrawlerBook.CrawlStatus.DISCOVERED, normalizedKeyword, siteId, pageable)
+                .map(this::bookView);
+    }
+
+    private Sort discoverySort(String value) {
+        String sort = blank(value) ? "DISCOVER_TIME_DESC" : value.trim().toUpperCase(Locale.ROOT);
+        Sort.Order primary = switch (sort) {
+            case "DISCOVER_TIME_ASC" -> Sort.Order.asc("discoverTime").nullsLast();
+            case "BOOK_NAME_ASC" -> Sort.Order.asc("bookName").ignoreCase();
+            case "BOOK_NAME_DESC" -> Sort.Order.desc("bookName").ignoreCase();
+            case "AUTHOR_ASC" -> Sort.Order.asc("author").ignoreCase().nullsLast();
+            case "AUTHOR_DESC" -> Sort.Order.desc("author").ignoreCase().nullsLast();
+            default -> Sort.Order.desc("discoverTime").nullsLast();
+        };
+        return Sort.by(primary, Sort.Order.desc("createdAt"));
+    }
+
+    @Transactional(readOnly = true)
     public BookView book(User user, Long id) { return bookView(ownedBook(user, id)); }
 
     @Transactional
@@ -259,7 +282,7 @@ public class CrawlerManagementService {
     }
 
     public BookView bookView(CrawlerBook b) { return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(), b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(), b.getCoverUrl(), b.getDescription(), b.getCategory(), b.getBookStatus(), b.getLatestChapter(), value(b.getChapterCount(), 0), value(b.getCrawledChapterCount(), 0), value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(), (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : b.getDiscoveryStatus()).name(), b.getImportStatus().name(), b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(), b.getLastCrawlTime()); }
-    public ChapterView chapterView(CrawlerChapter c) { return new ChapterView(c.getId(), c.getChapterIndex(), c.getChapterName(), c.getChapterUrl(), value(c.getWordCount(), 0), c.getCrawlStatus().name(), c.getAccessStatus().name(), value(c.getRetryCount(), 0), c.getErrorMessage(), c.getCrawlTime()); }
+    public ChapterView chapterView(CrawlerChapter c) { return new ChapterView(c.getId(), c.getChapterIndex(), c.getChapterName(), c.getChapterUrl(), value(c.getWordCount(), 0), c.getCrawlStatus().name(), c.getAccessStatus().name(), value(c.getRetryCount(), 0), c.getErrorMessage(), c.getCrawlTime(), c.getCreatedAt()); }
     public TaskView taskView(CrawlerTask t) { return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(), t.getSite().getId(), t.getSite().getSiteName(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(), value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0), value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(), t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(), t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt()); }
 
     private void validateBaseUrl(String value) { try { URI uri = URI.create(value); if (!Set.of("http", "https").contains(uri.getScheme()) || uri.getHost() == null) throw new Exception(); } catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "网站根地址必须是有效的 HTTP(S) 地址"); } }
