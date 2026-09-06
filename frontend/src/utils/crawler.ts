@@ -19,16 +19,18 @@ export interface CrawlerSitePayload {
   requestIntervalMillis: number; randomDelayMillis: number; maxConcurrency: number
   timeoutMillis: number; retryCount: number; encoding: string; userAgent?: string
   cookie?: string; headersJson?: string; proxy?: string; scanIntervalMinutes:number
-  updateIntervalMinutes:number; maxDiscoveryPages:number; autoImportFormat:'TXT'|'EPUB'|'BOTH'; rule: CrawlerRule
+  updateIntervalMinutes:number; maxDiscoveryPages:number; autoImportFormat:'TXT'|'EPUB'|'BOTH'
 }
-export interface CrawlerSite extends CrawlerSitePayload { id: number; status: string; bookCount: number; ruleVersion:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string }
+export interface CrawlerSite extends CrawlerSitePayload { id: number; status: string; bookCount: number; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string }
 export interface CrawlerBook { id:number; siteId:number; siteName:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; bookStatus?:string; latestChapter?:string; chapterCount:number; crawledChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; libraryBookId?:number; discoverTime:string; lastCrawlTime?:string }
 export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; bookId?:number; bookName?:string; totalCount:number; successCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
 export interface CrawlerChapter { id:number; chapterIndex:number; chapterName:string; chapterUrl:string; wordCount:number; crawlStatus:string; accessStatus:string; retryCount:number; errorMessage?:string; crawlTime?:string }
 export interface CrawlerExport { id:number; format:string; fileSize:number; fileHash:string; createdAt:string }
 export interface CrawlerDashboard { siteCount:number; enabledSiteCount:number; bookCount:number; completedBookCount:number; crawlingBookCount:number; failedBookCount:number; todayNewBooks:number; todayNewChapters:number; readyToImportCount:number; importedCount:number; recentTasks:CrawlerTask[] }
 export interface CrawlerRuleTest { success:boolean; title?:string; author?:string; description?:string; coverUrl?:string; bookStatus?:string; chapterListUrl?:string; chapterCount:number; sampleChapter?:string; contentLength:number; contentPreview?:string; durationMillis:number; errorMessage?:string }
-export interface CrawlerRuleVersion { id:number; version:number; changeSummary:string; rule:CrawlerRule; createdAt:string }
+export interface CrawlerRuleVersion { id:number; version:number; changeSummary:string; enabled:boolean; rule:CrawlerRule; createdAt:string; updatedAt?:string }
+export interface CrawlerRuleSave { version:number; changeSummary:string; rule:CrawlerRule; enabled:boolean }
+export interface CrawlerRuleExport { schemaVersion:number; siteCode:string; version:number; changeSummary:string; rule:CrawlerRule; enabled?:boolean }
 
 export const crawlerApi = {
   dashboard: () => api.get<CrawlerDashboard>('/api/crawler/dashboard').then(r => r.data),
@@ -40,8 +42,13 @@ export const crawlerApi = {
   scanSite: (siteId:number) => api.post<CrawlerTask>(`/api/crawler/sites/${siteId}/scan`).then(r => r.data),
   testRule: (siteId:number, url:string, rule?:CrawlerRule) => api.post<CrawlerRuleTest>(`/api/crawler/sites/${siteId}/rules/test`, {url,rule}).then(r => r.data),
   checkRule: (siteId:number) => api.post<CrawlerRuleTest>(`/api/crawler/sites/${siteId}/rules/health`).then(r => r.data),
-  ruleVersions: (siteId:number) => api.get<CrawlerRuleVersion[]>(`/api/crawler/sites/${siteId}/rules/versions`).then(r => r.data),
-  restoreRuleVersion: (siteId:number, versionId:number) => api.post<CrawlerSite>(`/api/crawler/sites/${siteId}/rules/versions/${versionId}/restore`).then(r => r.data),
+  rules: (siteId:number) => api.get<CrawlerRuleVersion[]>(`/api/crawler/sites/${siteId}/rules`).then(r => r.data),
+  createRule: (siteId:number, data:CrawlerRuleSave) => api.post<CrawlerRuleVersion>(`/api/crawler/sites/${siteId}/rules`,data).then(r => r.data),
+  updateRule: (siteId:number, ruleId:number, data:CrawlerRuleSave) => api.put<CrawlerRuleVersion>(`/api/crawler/sites/${siteId}/rules/${ruleId}`,data).then(r => r.data),
+  deleteRule: (siteId:number, ruleId:number) => api.delete(`/api/crawler/sites/${siteId}/rules/${ruleId}`),
+  setRuleStatus: (siteId:number, ruleId:number, enabled:boolean) => api.put<CrawlerRuleVersion>(`/api/crawler/sites/${siteId}/rules/${ruleId}/status`,{enabled}).then(r => r.data),
+  exportRule: (siteId:number, ruleId:number) => api.get<CrawlerRuleExport>(`/api/crawler/sites/${siteId}/rules/${ruleId}/export`).then(r => r.data),
+  importRule: (siteId:number, data:CrawlerRuleExport & {enabled:boolean}) => api.post<CrawlerRuleVersion>(`/api/crawler/sites/${siteId}/rules/import`,data).then(r => r.data),
   books: () => api.get<{content:CrawlerBook[]}>('/api/crawler/books', { params:{ size:100 } }).then(r => r.data.content),
   chapters: (bookId:number) => api.get<CrawlerChapter[]>(`/api/crawler/books/${bookId}/chapters`).then(r => r.data),
   chapter: (bookId:number, chapterId:number) => api.get<{title:string;url:string;content:string;errorMessage:string}>(`/api/crawler/books/${bookId}/chapters/${chapterId}`).then(r => r.data),

@@ -47,6 +47,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     public TaskView start(User user, Long siteId, String url) {
         CrawlerSite site = managementService.ownedSite(user, siteId);
         if (!Boolean.TRUE.equals(site.getEnabled())) throw new ResponseStatusException(HttpStatus.CONFLICT, "请先启用该采集网站");
+        requireRule(site);
         URI validated = httpClient.validateSiteUrl(site, url);
         String externalId = externalId(validated.toString());
         CrawlerBook book = bookRepository.findBySiteAndExternalBookId(site, externalId).orElseGet(() ->
@@ -72,6 +73,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     public TaskView scanSite(User user, Long siteId) {
         CrawlerSite site = managementService.ownedSite(user, siteId);
         requireEnabled(site);
+        requireRule(site);
         if (site.getRule().getDiscoveryItemSelector() == null || site.getRule().getDiscoveryItemSelector().isBlank())
             throw new ResponseStatusException(HttpStatus.CONFLICT, "请先配置书籍发现 Selector");
         if (taskRepository.existsBySiteAndTypeAndStatusIn(site, CrawlerTask.TaskType.SITE_SCAN, ACTIVE_STATUSES))
@@ -102,12 +104,14 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     }
 
     public boolean scheduleSiteScan(CrawlerSite site) {
+        if (site.getRule() == null) return false;
         if (taskRepository.existsBySiteAndTypeAndStatusIn(site, CrawlerTask.TaskType.SITE_SCAN, ACTIVE_STATUSES)) return false;
         createAndSubmit(site.getUser(), site, null, CrawlerTask.TaskType.SITE_SCAN, CrawlerTask.Priority.LOW);
         return true;
     }
 
     public int scheduleBookUpdates(CrawlerSite site) {
+        if (site.getRule() == null) return 0;
         int count = 0;
         List<CrawlerBook.CrawlStatus> eligible = List.of(CrawlerBook.CrawlStatus.COMPLETED, CrawlerBook.CrawlStatus.PARTIAL_SUCCESS);
         for (CrawlerBook book : bookRepository.findBySiteAndCrawlStatusIn(site, eligible)) {
@@ -148,6 +152,8 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     }
 
     private CrawlerTask createBookTask(User user, CrawlerBook book, CrawlerTask.TaskType type) {
+        requireEnabled(book.getSite());
+        requireRule(book.getSite());
         ensureNoActiveTask(book);
         book.setCrawlStatus(CrawlerTask.TaskType.BOOK_UPDATE_CHECK == type ? CrawlerBook.CrawlStatus.UPDATING : CrawlerBook.CrawlStatus.WAITING);
         bookRepository.save(book);
@@ -370,6 +376,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         return books;
     }
     private void requireEnabled(CrawlerSite site) { if (!Boolean.TRUE.equals(site.getEnabled())) throw new ResponseStatusException(HttpStatus.CONFLICT, "请先启用该采集网站"); }
+    private void requireRule(CrawlerSite site) { if (site.getRule() == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "请先在规则管理中启用一条采集规则"); }
     private void ensureNoActiveTask(CrawlerBook book) { if (taskRepository.existsByCrawlerBookAndStatusIn(book, ACTIVE_STATUSES)) throw new ResponseStatusException(HttpStatus.CONFLICT, "该书已有运行中或暂停的采集任务"); }
     private int priorityRank(CrawlerTask.Priority priority) { return switch (priority) { case HIGH -> 0; case NORMAL -> 1; case LOW -> 2; }; }
     private CrawlerBook.DiscoveryStatus discoveryStatus(CrawlerBook book) { return book.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : book.getDiscoveryStatus(); }

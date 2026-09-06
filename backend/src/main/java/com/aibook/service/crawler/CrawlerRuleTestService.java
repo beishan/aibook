@@ -22,6 +22,7 @@ public class CrawlerRuleTestService {
         long started = System.nanoTime();
         try {
             CrawlerSiteRule rule = request.rule() == null ? site.getRule() : detachedRule(request.rule());
+            if (rule == null) throw new IllegalStateException("当前没有生效的采集规则");
             String url = httpClient.validateSiteUrl(site, request.url()).toString();
             CrawlerHttpClient.FetchResult detailResponse = httpClient.get(site, url);
             BookCrawlerParser.ParsedBook book = parser.parseBookDetail(detailResponse.html(), url, rule);

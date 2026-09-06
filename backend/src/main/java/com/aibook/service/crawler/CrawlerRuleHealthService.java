@@ -31,6 +31,15 @@ public class CrawlerRuleHealthService {
     }
 
     private RuleTestView check(CrawlerSite site) {
+        if (site.getRule() == null) {
+            RuleTestView result = new RuleTestView(false, null, null, null, null, null, null, 0,
+                    null, 0, null, 0, "当前没有生效的采集规则");
+            site.setLastHealthCheckAt(LocalDateTime.now());
+            site.setStatus(CrawlerSite.SiteStatus.PAUSED);
+            site.setHealthMessage(result.errorMessage());
+            siteRepository.save(site);
+            return result;
+        }
         CrawlerBook sample = bookRepository.findFirstBySiteOrderByLastCrawlTimeDesc(site).orElse(null);
         RuleTestView result;
         if (sample == null) {

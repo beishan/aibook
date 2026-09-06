@@ -36,7 +36,6 @@ public class CrawlerManagementService {
         CrawlerSite site = CrawlerSite.builder().user(user).build();
         apply(site, payload);
         site = siteRepository.save(site);
-        snapshot(site, "创建规则");
         return siteView(site);
     }
 
@@ -47,15 +46,8 @@ public class CrawlerManagementService {
         siteRepository.findByUserAndSiteCode(user, payload.siteCode())
                 .filter(other -> !other.getId().equals(id))
                 .ifPresent(other -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "网站编码已存在"); });
-        if (!ruleVersionRepository.existsBySite(site)) snapshot(site, "历史规则回填");
-        String before = ruleJson(site.getRule());
         apply(site, payload);
         site = siteRepository.save(site);
-        if (!before.equals(ruleJson(site.getRule()))) {
-            site.getRule().setRuleVersion(value(site.getRule().getRuleVersion(), 1) + 1);
-            site = siteRepository.save(site);
-            snapshot(site, "更新规则");
-        }
         return siteView(site);
     }
 
@@ -83,26 +75,67 @@ public class CrawlerManagementService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集任务不存在"));
     }
 
-    @Transactional(readOnly = true)
-    public List<RuleVersionView> ruleVersions(User user, Long siteId) {
+    @Transactional
+    public List<RuleVersionView> rules(User user, Long siteId) {
         CrawlerSite site = ownedSite(user, siteId);
+        backfillActiveRule(site);
         return ruleVersionRepository.findBySiteOrderByVersionDesc(site).stream().map(this::ruleVersionView).toList();
     }
 
     @Transactional
-    public SiteView restoreRuleVersion(User user, Long siteId, Long versionId) {
+    public RuleVersionView createRule(User user, Long siteId, RuleSaveRequest request) {
+        CrawlerSite site = ownedSiteForUpdate(user, siteId);
+        requireUniqueVersion(site, request.version(), null);
+        CrawlerSiteRuleVersion rule = CrawlerSiteRuleVersion.builder().site(site).version(request.version())
+                .changeSummary(request.changeSummary().trim()).configJson(ruleJson(request.rule())).enabled(false).build();
+        rule = ruleVersionRepository.save(rule);
+        if (bool(request.enabled(), false)) enableRule(site, rule);
+        return ruleVersionView(rule);
+    }
+
+    @Transactional
+    public RuleVersionView updateRule(User user, Long siteId, Long ruleId, RuleSaveRequest request) {
+        CrawlerSite site = ownedSiteForUpdate(user, siteId);
+        CrawlerSiteRuleVersion rule = ownedRule(site, ruleId);
+        requireUniqueVersion(site, request.version(), ruleId);
+        rule.setVersion(request.version());
+        rule.setChangeSummary(request.changeSummary().trim());
+        rule.setConfigJson(ruleJson(request.rule()));
+        rule = ruleVersionRepository.save(rule);
+        if (bool(request.enabled(), Boolean.TRUE.equals(rule.getEnabled()))) enableRule(site, rule);
+        else if (Boolean.TRUE.equals(rule.getEnabled())) disableRule(site, rule);
+        return ruleVersionView(rule);
+    }
+
+    @Transactional
+    public RuleVersionView setRuleStatus(User user, Long siteId, Long ruleId, boolean enabled) {
+        CrawlerSite site = ownedSiteForUpdate(user, siteId);
+        CrawlerSiteRuleVersion rule = ownedRule(site, ruleId);
+        if (enabled) enableRule(site, rule); else disableRule(site, rule);
+        return ruleVersionView(rule);
+    }
+
+    @Transactional
+    public void deleteRule(User user, Long siteId, Long ruleId) {
+        CrawlerSite site = ownedSiteForUpdate(user, siteId);
+        CrawlerSiteRuleVersion rule = ownedRule(site, ruleId);
+        if (Boolean.TRUE.equals(rule.getEnabled())) disableRule(site, rule);
+        ruleVersionRepository.delete(rule);
+    }
+
+    @Transactional(readOnly = true)
+    public RuleExportView exportRule(User user, Long siteId, Long ruleId) {
         CrawlerSite site = ownedSite(user, siteId);
-        CrawlerSiteRuleVersion version = ruleVersionRepository.findByIdAndSite(versionId, site)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "规则版本不存在"));
-        try {
-            RulePayload payload = objectMapper.readValue(version.getConfigJson(), RulePayload.class);
-            applyRule(site, payload);
-            site.getRule().setRuleVersion(value(site.getRule().getRuleVersion(), 1) + 1);
-            site = siteRepository.save(site);
-            snapshot(site, "恢复自版本 " + version.getVersion());
-            return siteView(site);
-        } catch (ResponseStatusException exception) { throw exception; }
-        catch (Exception exception) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "恢复规则版本失败", exception); }
+        CrawlerSiteRuleVersion rule = ownedRule(site, ruleId);
+        return new RuleExportView(1, site.getSiteCode(), rule.getVersion(), rule.getChangeSummary(), readRule(rule));
+    }
+
+    @Transactional
+    public RuleVersionView importRule(User user, Long siteId, RuleImportRequest request) {
+        if (request.schemaVersion() != 1)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的规则 JSON 版本");
+        return createRule(user, siteId, new RuleSaveRequest(request.version(), request.changeSummary(),
+                request.rule(), request.enabled()));
     }
 
     @Transactional(readOnly = true)
@@ -151,7 +184,6 @@ public class CrawlerManagementService {
         site.setMaxConcurrency(value(p.maxConcurrency(), 1)); site.setTimeoutMillis(value(p.timeoutMillis(), 15000));
         site.setRetryCount(value(p.retryCount(), 2)); site.setEncoding(blank(p.encoding()) ? "UTF-8" : p.encoding());
         site.setUserAgent(p.userAgent()); site.setCookie(p.cookie()); site.setHeadersJson(p.headersJson()); site.setProxy(p.proxy());
-        applyRule(site, p.rule());
     }
 
     public void applyRule(CrawlerSite site, RulePayload r) {
@@ -174,7 +206,8 @@ public class CrawlerManagementService {
 
     public SiteView siteView(CrawlerSite s) {
         CrawlerSiteRule r = s.getRule();
-        RulePayload rv = rulePayload(r);
+        RulePayload rv = r == null ? null : rulePayload(r);
+        Optional<CrawlerSiteRuleVersion> active = ruleVersionRepository.findFirstBySiteAndEnabledTrue(s);
         return new SiteView(s.getId(), s.getSiteName(), s.getSiteCode(), s.getBaseUrl(), s.getHomeUrl(), bool(s.getEnabled(), false),
                 bool(s.getAutoScan(), false), bool(s.getAutoCrawl(), false), bool(s.getAutoUpdate(), true), bool(s.getAutoImportLibrary(), false),
                 value(s.getRequestIntervalMillis(), 1500), value(s.getRandomDelayMillis(), 1000), value(s.getMaxConcurrency(), 1),
@@ -182,7 +215,9 @@ public class CrawlerManagementService {
                 s.getCookie(), s.getHeadersJson(), s.getProxy(), value(s.getScanIntervalMinutes(), 360),
                 value(s.getUpdateIntervalMinutes(), 30), value(s.getMaxDiscoveryPages(), 3),
                 blank(s.getAutoImportFormat()) ? "EPUB" : s.getAutoImportFormat(), s.getStatus().name(),
-                bookRepository.countBySite(s), rv, value(r.getRuleVersion(), 1), s.getLastScanAt(), s.getLastUpdateAt(),
+                bookRepository.countBySite(s), rv, r == null ? null : r.getRuleVersion(),
+                active.map(CrawlerSiteRuleVersion::getId).orElse(null), ruleVersionRepository.countBySite(s),
+                s.getLastScanAt(), s.getLastUpdateAt(),
                 s.getLastHealthCheckAt(), s.getHealthMessage(), s.getCreatedAt());
     }
 
@@ -205,7 +240,58 @@ public class CrawlerManagementService {
     private boolean blank(String value) { return value == null || value.isBlank(); }
     private boolean bool(Boolean value, boolean fallback) { return value == null ? fallback : value; }
     private int value(Integer value, int fallback) { return value == null ? fallback : value; }
-    private String ruleJson(CrawlerSiteRule rule) { try { return objectMapper.writeValueAsString(rulePayload(rule)); } catch (Exception e) { throw new IllegalStateException(e); } }
-    private void snapshot(CrawlerSite site, String summary) { ruleVersionRepository.save(CrawlerSiteRuleVersion.builder().site(site).version(value(site.getRule().getRuleVersion(), 1)).configJson(ruleJson(site.getRule())).changeSummary(summary).build()); }
-    private RuleVersionView ruleVersionView(CrawlerSiteRuleVersion v) { try { return new RuleVersionView(v.getId(), v.getVersion(), v.getChangeSummary(), objectMapper.readValue(v.getConfigJson(), RulePayload.class), v.getCreatedAt()); } catch (Exception e) { throw new IllegalStateException("规则版本数据损坏", e); } }
+    private String ruleJson(RulePayload rule) { try { return objectMapper.writeValueAsString(rule); } catch (Exception e) { throw new IllegalStateException(e); } }
+    private String ruleJson(CrawlerSiteRule rule) { return ruleJson(rulePayload(rule)); }
+    private RulePayload readRule(CrawlerSiteRuleVersion version) { try { return objectMapper.readValue(version.getConfigJson(), RulePayload.class); } catch (Exception e) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "规则版本数据损坏", e); } }
+    private RuleVersionView ruleVersionView(CrawlerSiteRuleVersion v) { return new RuleVersionView(v.getId(), v.getVersion(), v.getChangeSummary(), Boolean.TRUE.equals(v.getEnabled()), readRule(v), v.getCreatedAt(), v.getUpdatedAt()); }
+
+    private CrawlerSiteRuleVersion ownedRule(CrawlerSite site, Long ruleId) {
+        return ruleVersionRepository.findByIdAndSite(ruleId, site)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "规则版本不存在"));
+    }
+
+    private CrawlerSite ownedSiteForUpdate(User user, Long id) {
+        return siteRepository.findLockedByIdAndUser(id, user)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集网站不存在"));
+    }
+
+    private void requireUniqueVersion(CrawlerSite site, int version, Long currentId) {
+        ruleVersionRepository.findBySiteAndVersion(site, version)
+                .filter(rule -> !Objects.equals(rule.getId(), currentId))
+                .ifPresent(rule -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "规则版本号已存在"); });
+    }
+
+    private void enableRule(CrawlerSite site, CrawlerSiteRuleVersion selected) {
+        ruleVersionRepository.findBySiteOrderByVersionDesc(site).forEach(rule -> {
+            boolean enabled = Objects.equals(rule.getId(), selected.getId());
+            if (!Objects.equals(rule.getEnabled(), enabled)) { rule.setEnabled(enabled); ruleVersionRepository.save(rule); }
+        });
+        selected.setEnabled(true);
+        applyRule(site, readRule(selected));
+        site.getRule().setRuleVersion(selected.getVersion());
+        site.setStatus(CrawlerSite.SiteStatus.READY);
+        site.setHealthMessage("规则 v" + selected.getVersion() + " 已启用，等待健康检查");
+        siteRepository.save(site);
+    }
+
+    private void disableRule(CrawlerSite site, CrawlerSiteRuleVersion selected) {
+        boolean wasEnabled = Boolean.TRUE.equals(selected.getEnabled());
+        selected.setEnabled(false);
+        ruleVersionRepository.save(selected);
+        if (wasEnabled && site.getRule() != null) {
+            site.attachRule(null);
+            site.setStatus(CrawlerSite.SiteStatus.PAUSED);
+            site.setHealthMessage("当前没有生效的采集规则");
+            siteRepository.save(site);
+        }
+    }
+
+    private void backfillActiveRule(CrawlerSite site) {
+        if (site.getRule() == null || ruleVersionRepository.findFirstBySiteAndEnabledTrue(site).isPresent()) return;
+        int version = value(site.getRule().getRuleVersion(), 1);
+        CrawlerSiteRuleVersion active = ruleVersionRepository.findBySiteAndVersion(site, version).orElseGet(() ->
+                ruleVersionRepository.save(CrawlerSiteRuleVersion.builder().site(site).version(version)
+                        .configJson(ruleJson(site.getRule())).changeSummary("历史生效规则").enabled(false).build()));
+        enableRule(site, active);
+    }
 }

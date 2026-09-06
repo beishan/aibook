@@ -38,8 +38,13 @@ public class CrawlerController {
     @PostMapping("/sites/{id}/scan") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView scan(Authentication auth, @PathVariable Long id) { return taskService.scanSite(user(auth), id); }
     @PostMapping("/sites/{id}/rules/test") public RuleTestView testRule(Authentication auth, @PathVariable Long id, @Valid @RequestBody RuleTestRequest request) { return ruleTestService.test(user(auth), id, request); }
     @PostMapping("/sites/{id}/rules/health") public RuleTestView checkRule(Authentication auth, @PathVariable Long id) { return ruleHealthService.check(user(auth), id); }
-    @GetMapping("/sites/{id}/rules/versions") public List<RuleVersionView> ruleVersions(Authentication auth, @PathVariable Long id) { return managementService.ruleVersions(user(auth), id); }
-    @PostMapping("/sites/{id}/rules/versions/{versionId}/restore") public SiteView restoreRule(Authentication auth, @PathVariable Long id, @PathVariable Long versionId) { return managementService.restoreRuleVersion(user(auth), id, versionId); }
+    @GetMapping("/sites/{id}/rules") public List<RuleVersionView> rules(Authentication auth, @PathVariable Long id) { return managementService.rules(user(auth), id); }
+    @PostMapping("/sites/{id}/rules") @ResponseStatus(HttpStatus.CREATED) public RuleVersionView createRule(Authentication auth, @PathVariable Long id, @Valid @RequestBody RuleSaveRequest request) { return managementService.createRule(user(auth), id, request); }
+    @PutMapping("/sites/{id}/rules/{ruleId}") public RuleVersionView updateRule(Authentication auth, @PathVariable Long id, @PathVariable Long ruleId, @Valid @RequestBody RuleSaveRequest request) { return managementService.updateRule(user(auth), id, ruleId, request); }
+    @DeleteMapping("/sites/{id}/rules/{ruleId}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteRule(Authentication auth, @PathVariable Long id, @PathVariable Long ruleId) { managementService.deleteRule(user(auth), id, ruleId); }
+    @PutMapping("/sites/{id}/rules/{ruleId}/status") public RuleVersionView setRuleStatus(Authentication auth, @PathVariable Long id, @PathVariable Long ruleId, @Valid @RequestBody RuleStatusRequest request) { return managementService.setRuleStatus(user(auth), id, ruleId, request.enabled()); }
+    @GetMapping("/sites/{id}/rules/{ruleId}/export") public RuleExportView exportRule(Authentication auth, @PathVariable Long id, @PathVariable Long ruleId) { return managementService.exportRule(user(auth), id, ruleId); }
+    @PostMapping("/sites/{id}/rules/import") @ResponseStatus(HttpStatus.CREATED) public RuleVersionView importRule(Authentication auth, @PathVariable Long id, @Valid @RequestBody RuleImportRequest request) { return managementService.importRule(user(auth), id, request); }
 
     @GetMapping("/books") public Page<BookView> books(Authentication auth, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return managementService.books(user(auth), page, size); }
     @GetMapping("/books/{id}") public BookView book(Authentication auth, @PathVariable Long id) { return managementService.book(user(auth), id); }

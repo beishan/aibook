@@ -9,7 +9,7 @@ public final class CrawlerDtos {
     private CrawlerDtos() { }
 
     public record RulePayload(
-            String titleSelector, String authorSelector, String coverSelector,
+            @NotBlank String titleSelector, String authorSelector, String coverSelector,
             String descriptionSelector, String categorySelector, String statusSelector,
             String latestChapterSelector, String chapterListUrlSelector,
             @NotBlank String chapterItemSelector, String chapterTitleSelector,
@@ -33,8 +33,7 @@ public final class CrawlerDtos {
             String cookie, String headersJson, String proxy,
             @Min(1) Integer scanIntervalMinutes, @Min(1) Integer updateIntervalMinutes,
             @Min(1) @Max(50) Integer maxDiscoveryPages,
-            @Pattern(regexp = "(?i)TXT|EPUB|BOTH") String autoImportFormat,
-            @Valid @NotNull RulePayload rule) { }
+            @Pattern(regexp = "(?i)TXT|EPUB|BOTH") String autoImportFormat) { }
 
     public record SiteView(Long id, String siteName, String siteCode, String baseUrl, String homeUrl,
             boolean enabled, boolean autoScan, boolean autoCrawl, boolean autoUpdate,
@@ -43,7 +42,8 @@ public final class CrawlerDtos {
             String userAgent, String cookie, String headersJson, String proxy,
             int scanIntervalMinutes, int updateIntervalMinutes, int maxDiscoveryPages,
             String autoImportFormat, String status, long bookCount, RulePayload rule,
-            int ruleVersion, LocalDateTime lastScanAt, LocalDateTime lastUpdateAt,
+            Integer ruleVersion, Long activeRuleId, long ruleCount,
+            LocalDateTime lastScanAt, LocalDateTime lastUpdateAt,
             LocalDateTime lastHealthCheckAt, String healthMessage, LocalDateTime createdAt) { }
 
     public record ManualCrawlRequest(@NotBlank String url) { }
@@ -57,8 +57,16 @@ public final class CrawlerDtos {
             String coverUrl, String bookStatus, String chapterListUrl, int chapterCount,
             String sampleChapter, int contentLength, String contentPreview,
             long durationMillis, String errorMessage) { }
-    public record RuleVersionView(Long id, int version, String changeSummary,
-            RulePayload rule, LocalDateTime createdAt) { }
+    public record RuleSaveRequest(@Min(1) int version, @NotBlank @Size(max = 300) String changeSummary,
+            @Valid @NotNull RulePayload rule, Boolean enabled) { }
+    public record RuleStatusRequest(@NotNull Boolean enabled) { }
+    public record RuleVersionView(Long id, int version, String changeSummary, boolean enabled,
+            RulePayload rule, LocalDateTime createdAt, LocalDateTime updatedAt) { }
+    public record RuleExportView(int schemaVersion, String siteCode, int version,
+            String changeSummary, RulePayload rule) { }
+    public record RuleImportRequest(@Min(1) int schemaVersion, @Min(1) int version,
+            @NotBlank @Size(max = 300) String changeSummary, @Valid @NotNull RulePayload rule,
+            Boolean enabled) { }
 
     public record BookView(Long id, Long siteId, String siteName, String externalBookId,
             String bookUrl, String bookName, String author, String coverUrl, String description,

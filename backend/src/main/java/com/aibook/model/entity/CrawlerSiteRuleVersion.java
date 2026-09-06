@@ -3,6 +3,7 @@ package com.aibook.model.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
@@ -17,5 +18,7 @@ public class CrawlerSiteRuleVersion {
     @Column(nullable = false) private Integer version;
     @Column(nullable = false, columnDefinition = "TEXT") private String configJson;
     @Column(length = 300) private String changeSummary;
+    @Builder.Default private Boolean enabled = false;
     @CreationTimestamp private LocalDateTime createdAt;
+    @UpdateTimestamp private LocalDateTime updatedAt;
 }
