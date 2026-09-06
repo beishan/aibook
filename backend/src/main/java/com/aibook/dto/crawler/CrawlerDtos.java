@@ -57,7 +57,8 @@ public final class CrawlerDtos {
     public record ExportRequest(@NotEmpty List<@Pattern(regexp = "(?i)TXT|EPUB") String> formats) { }
     public record ImportRequest(@Pattern(regexp = "(?i)TXT|EPUB") String format) { }
     public record BookCrawlStatusRequest(
-            @NotBlank @Pattern(regexp = "DISCOVERED|WAITING|PAUSED|PARTIAL_SUCCESS|COMPLETED|FAILED") String status) { }
+            @NotBlank @Pattern(regexp = "DISCOVERED|WAITING|PAUSED|PARTIAL_SUCCESS|COMPLETED|FAILED") String status,
+            Boolean autoUpdateEnabled) { }
     public record TaskUpdateRequest(@NotNull CrawlerTask.Priority priority) { }
     public record BatchBookRequest(@NotEmpty List<@NotNull Long> bookIds) { }
     public record DiscoveryStatusRequest(@NotEmpty List<@NotNull Long> bookIds,
@@ -82,7 +83,8 @@ public final class CrawlerDtos {
             String bookUrl, String bookName, String author, String coverUrl, String description,
             String category, String bookStatus, String latestChapter, int chapterCount,
             int crawledChapterCount, int failedChapterCount, String crawlStatus,
-            String discoveryStatus, String importStatus, Long libraryBookId, LocalDateTime discoverTime,
+            String discoveryStatus, String importStatus, boolean autoUpdateEnabled,
+            Long libraryBookId, LocalDateTime discoverTime,
             LocalDateTime lastCrawlTime) { }
 
     public record ChapterView(Long id, int chapterIndex, String chapterName, String chapterUrl,

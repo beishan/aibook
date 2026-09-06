@@ -91,6 +91,30 @@ class CrawlerTaskManagementTest {
     }
 
     @Test
+    void deletingUpdateCheckTaskStopsAutomaticUpdatesForBook() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站").build();
+        CrawlerBook book = CrawlerBook.builder().id(8L).site(site).bookName("已采集书籍")
+                .crawlStatus(CrawlerBook.CrawlStatus.COMPLETED).autoUpdateEnabled(true).build();
+        CrawlerTask update = CrawlerTask.builder().user(user).site(site).crawlerBook(book)
+                .type(CrawlerTask.TaskType.BOOK_UPDATE_CHECK).status(CrawlerTask.TaskStatus.SUCCESS).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        when(management.ownedTask(user, update.getId())).thenReturn(update);
+        CrawlerTaskService service = service(tasks, books, management);
+        try {
+            service.deleteTask(user, update.getId());
+
+            assertThat(book.getAutoUpdateEnabled()).isFalse();
+            verify(books).save(book);
+            verify(tasks).delete(update);
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void doesNotStartTaskThatWasPausedAfterItEnteredTheQueue() {
         User user = user();
         CrawlerTask paused = task(user, CrawlerTask.TaskStatus.PAUSED);

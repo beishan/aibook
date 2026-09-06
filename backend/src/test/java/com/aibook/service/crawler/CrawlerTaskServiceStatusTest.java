@@ -3,6 +3,7 @@ package com.aibook.service.crawler;
 import com.aibook.model.entity.CrawlerBook;
 import com.aibook.model.entity.CrawlerChapter;
 import com.aibook.model.entity.CrawlerSite;
+import com.aibook.model.entity.CrawlerSiteRule;
 import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.User;
 import com.aibook.repository.CrawlerBookRepository;
@@ -42,13 +43,43 @@ class CrawlerTaskServiceStatusTest {
                 mock(CrawlerHttpClient.class), List.of(), mock(ApplicationContext.class));
         try {
             when(management.bookView(book)).thenCallRealMethod();
-            var result = service.setBookStatus(user, 3L, CrawlerBook.CrawlStatus.COMPLETED);
+            var result = service.setBookStatus(user, 3L, CrawlerBook.CrawlStatus.COMPLETED, null);
 
             assertThat(result.crawlStatus()).isEqualTo("COMPLETED");
             assertThat(book.getImportStatus()).isEqualTo(CrawlerBook.ImportStatus.READY);
             assertThat(book.getLastCrawlTime()).isNotNull();
+            assertThat(book.getAutoUpdateEnabled()).isFalse();
+            site.setRule(new CrawlerSiteRule());
+            when(books.findBySiteAndCrawlStatusIn(eq(site), any())).thenReturn(List.of(book));
+            assertThat(service.scheduleBookUpdates(site)).isZero();
+            verify(tasks, never()).save(any());
             verify(operationLogs).recordEntry(eq(user), eq(OperationLog.Action.CRAWLER_TASK),
                     isNull(), eq("示例书"), contains("人工修改采集状态"), contains("新状态：COMPLETED"));
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void automaticUpdateSkipsBooksMarkedFinishedBySource() {
+        User user = User.builder().id(1L).username("owner").build();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站")
+                .rule(new com.aibook.model.entity.CrawlerSiteRule()).build();
+        CrawlerBook book = CrawlerBook.builder().id(3L).site(site).bookName("完结书")
+                .bookStatus("已完结").crawlStatus(CrawlerBook.CrawlStatus.COMPLETED)
+                .autoUpdateEnabled(true).build();
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        when(books.findBySiteAndCrawlStatusIn(eq(site), any())).thenReturn(List.of(book));
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
+                mock(CrawlerChapterRepository.class), tasks, mock(CrawlerManagementService.class),
+                mock(OperationLogService.class), mock(CrawlerExportService.class),
+                mock(CrawlerHttpClient.class), List.of(), mock(ApplicationContext.class));
+        try {
+            assertThat(service.scheduleBookUpdates(site)).isZero();
+            assertThat(book.getAutoUpdateEnabled()).isFalse();
+            verify(books).save(book);
+            verify(tasks, never()).save(any());
         } finally {
             service.shutdown();
         }

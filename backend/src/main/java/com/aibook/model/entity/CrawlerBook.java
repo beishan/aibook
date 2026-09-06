@@ -35,6 +35,8 @@ public class CrawlerBook {
     @Builder.Default private Integer chapterCount = 0;
     @Builder.Default private Integer crawledChapterCount = 0;
     @Builder.Default private Integer failedChapterCount = 0;
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    @Builder.Default private Boolean autoUpdateEnabled = true;
     @Enumerated(EnumType.STRING) @Builder.Default private CrawlStatus crawlStatus = CrawlStatus.DISCOVERED;
     @Enumerated(EnumType.STRING) @Builder.Default private DiscoveryStatus discoveryStatus = DiscoveryStatus.ACTIVE;
     @Enumerated(EnumType.STRING) @Builder.Default private ImportStatus importStatus = ImportStatus.NOT_IMPORTED;
@@ -47,6 +49,7 @@ public class CrawlerBook {
     @PreUpdate
     private void normalizeDefaults() {
         if (discoveryStatus == null) discoveryStatus = DiscoveryStatus.ACTIVE;
+        if (autoUpdateEnabled == null) autoUpdateEnabled = true;
     }
 
     public enum CrawlStatus { DISCOVERED, WAITING, CRAWLING_METADATA, CRAWLING_CHAPTER_LIST, CRAWLING_CONTENT, PARTIAL_SUCCESS, COMPLETED, FAILED, UPDATING, PAUSED }

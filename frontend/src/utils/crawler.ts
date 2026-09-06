@@ -23,7 +23,7 @@ export interface CrawlerSitePayload {
   updateIntervalMinutes:number; maxDiscoveryPages:number; autoImportFormat:'TXT'|'EPUB'|'BOTH'; contentFailureMarkers:string[]
 }
 export interface CrawlerSite extends CrawlerSitePayload { id: number; status: string; bookCount: number; proxy?:string; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string }
-export interface CrawlerBook { id:number; siteId:number; siteName:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; bookStatus?:string; latestChapter?:string; chapterCount:number; crawledChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; libraryBookId?:number; discoverTime:string; lastCrawlTime?:string }
+export interface CrawlerBook { id:number; siteId:number; siteName:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; bookStatus?:string; latestChapter?:string; chapterCount:number; crawledChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; autoUpdateEnabled:boolean; libraryBookId?:number; discoverTime:string; lastCrawlTime?:string }
 export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; bookId?:number; bookName?:string; totalCount:number; successCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
 export interface CrawlerChapter { id:number; chapterIndex:number; chapterName:string; chapterUrl:string; wordCount:number; crawlStatus:string; accessStatus:string; retryCount:number; errorMessage?:string; crawlTime?:string; createdAt?:string }
 export interface CrawlerExport { id:number; format:string; fileSize:number; fileHash:string; createdAt:string }
@@ -59,7 +59,7 @@ export const crawlerApi = {
   continueBook: (bookId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/continue`).then(r => r.data),
   retryFailures: (bookId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/retry-failures`).then(r => r.data),
   checkUpdates: (bookId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/check-updates`).then(r => r.data),
-  setBookStatus: (bookId:number, status:string) => api.put<CrawlerBook>(`/api/crawler/books/${bookId}/crawl-status`, {status}).then(r => r.data),
+  setBookStatus: (bookId:number, status:string, autoUpdateEnabled:boolean) => api.put<CrawlerBook>(`/api/crawler/books/${bookId}/crawl-status`, {status,autoUpdateEnabled}).then(r => r.data),
   batchCrawl: (bookIds:number[]) => api.post<CrawlerTask[]>('/api/crawler/books/batch/crawl', {bookIds}).then(r => r.data),
   setDiscoveryStatus: (bookIds:number[], status:'ACTIVE'|'IGNORED'|'BLACKLISTED') => api.put<CrawlerBook[]>('/api/crawler/books/batch/discovery-status', {bookIds,status}).then(r => r.data),
   generate: (bookId:number, formats:string[]) => api.post<CrawlerExport[]>(`/api/crawler/books/${bookId}/exports`, { formats }).then(r => r.data),
