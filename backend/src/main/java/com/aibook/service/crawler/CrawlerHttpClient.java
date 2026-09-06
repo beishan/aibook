@@ -1,6 +1,7 @@
 package com.aibook.service.crawler;
 
 import com.aibook.model.entity.CrawlerSite;
+import com.aibook.service.ProxySettingsService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @RequiredArgsConstructor
 public class CrawlerHttpClient {
     private final ObjectMapper objectMapper;
+    private final ProxySettingsService proxySettingsService;
     private final Map<Long, AtomicLong> nextRequests = new ConcurrentHashMap<>();
     private final Map<Long, Semaphore> concurrencyGates = new ConcurrentHashMap<>();
 
@@ -30,11 +32,13 @@ public class CrawlerHttpClient {
 
     public FetchResult get(CrawlerSite site, String url, String etag, String lastModified) throws Exception {
         URI uri = validateSiteUrl(site, url);
-        int attempts = Math.max(1, value(site.getRetryCount(), 2) + 1);
+        List<String> proxies = proxyUrls(site);
+        int attempts = Math.max(Math.max(1, value(site.getRetryCount(), 2) + 1), proxies.size());
         Exception last = null;
         for (int attempt = 0; attempt < attempts; attempt++) {
             try {
-                TimedResponse timed = sendFollowingSafeRedirects(site, uri, etag, lastModified);
+                String proxyUrl = proxies.isEmpty() ? null : proxies.get(attempt % proxies.size());
+                TimedResponse timed = sendFollowingSafeRedirects(site, uri, etag, lastModified, proxyUrl);
                 HttpResponse<byte[]> response = timed.response();
                 if (response.statusCode() == 304) return new FetchResult("", 304, timed.durationMillis(), etag, lastModified);
                 if (response.statusCode() >= 200 && response.statusCode() < 300) {
@@ -55,18 +59,20 @@ public class CrawlerHttpClient {
         throw last == null ? new IllegalStateException("请求失败") : last;
     }
 
-    private TimedResponse sendFollowingSafeRedirects(CrawlerSite site, URI original, String etag, String lastModified) throws Exception {
+    private TimedResponse sendFollowingSafeRedirects(CrawlerSite site, URI original, String etag,
+            String lastModified, String proxyUrl) throws Exception {
         Semaphore gate = concurrencyGates.computeIfAbsent(site.getId(),
                 ignored -> new Semaphore(Math.max(1, value(site.getMaxConcurrency(), 1)), true));
         gate.acquire();
         try {
-            return sendFollowingSafeRedirectsWithinGate(site, original, etag, lastModified);
+            return sendFollowingSafeRedirectsWithinGate(site, original, etag, lastModified, proxyUrl);
         } finally {
             gate.release();
         }
     }
 
-    private TimedResponse sendFollowingSafeRedirectsWithinGate(CrawlerSite site, URI original, String etag, String lastModified) throws Exception {
+    private TimedResponse sendFollowingSafeRedirectsWithinGate(CrawlerSite site, URI original, String etag,
+            String lastModified, String proxyUrl) throws Exception {
         URI current = original;
         long duration = 0;
         for (int redirects = 0; redirects <= 5; redirects++) {
@@ -81,7 +87,7 @@ public class CrawlerHttpClient {
             if (site.getCookie() != null && !site.getCookie().isBlank()) request.header("Cookie", site.getCookie());
             applyHeaders(request, site.getHeadersJson());
             long started = System.nanoTime();
-            HttpResponse<byte[]> response = client(site).send(request.build(), HttpResponse.BodyHandlers.ofByteArray());
+            HttpResponse<byte[]> response = client(site, proxyUrl).send(request.build(), HttpResponse.BodyHandlers.ofByteArray());
             duration += (System.nanoTime() - started) / 1_000_000;
             if (response.statusCode() < 300 || response.statusCode() >= 400) return new TimedResponse(response, duration);
             String location = response.headers().firstValue("Location")
@@ -106,14 +112,19 @@ public class CrawlerHttpClient {
         catch (Exception exception) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "网站地址或采集 URL 无效"); }
     }
 
-    private HttpClient client(CrawlerSite site) {
+    private HttpClient client(CrawlerSite site, String proxyUrl) {
         HttpClient.Builder builder = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER)
                 .connectTimeout(Duration.ofMillis(value(site.getTimeoutMillis(), 15000)));
-        if (site.getProxy() != null && !site.getProxy().isBlank()) {
-            URI proxy = URI.create(site.getProxy().contains("://") ? site.getProxy() : "http://" + site.getProxy());
+        if (proxyUrl != null && !proxyUrl.isBlank()) {
+            URI proxy = URI.create(proxyUrl.contains("://") ? proxyUrl : "http://" + proxyUrl);
             builder.proxy(ProxySelector.of(new InetSocketAddress(proxy.getHost(), proxy.getPort())));
         }
         return builder.build();
+    }
+
+    List<String> proxyUrls(CrawlerSite site) {
+        if (site.getProxy() != null && !site.getProxy().isBlank()) return List.of(site.getProxy());
+        return proxySettingsService.activeCrawlerProxyUrls();
     }
 
     private void throttle(CrawlerSite site) throws InterruptedException {

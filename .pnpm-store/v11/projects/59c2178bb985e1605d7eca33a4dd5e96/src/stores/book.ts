@@ -16,7 +16,7 @@ export interface Book {
   coverUrl?: string
   format: string
   filePath: string
-  sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN'
+  sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN' | 'CRAWLER'
   sourcePath?: string
   fileSize?: number
   language?: string

@@ -1646,9 +1646,10 @@ const formatFileSize = (bytes?: number) => {
   return `${size.toFixed(2)} ${units[unitIndex]}`
 }
 
-const formatSourceType = (sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN') => {
+const formatSourceType = (sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN' | 'CRAWLER') => {
   if (sourceType === 'UPLOAD') return '上传'
   if (sourceType === 'DIRECTORY_SCAN') return '目录扫描'
+  if (sourceType === 'CRAWLER') return '网站采集'
   return '未知'
 }
 
