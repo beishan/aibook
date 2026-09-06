@@ -43,7 +43,15 @@
 
     <footer class="proxy-footer"><span>优先级数字越小越先使用</span><span>{{ enabledCount }} 条当前有效</span></footer>
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑代理' : '新增代理'" width="min(520px, 92vw)" destroy-on-close>
+    <el-dialog
+      v-model="dialogVisible"
+      :title="editingId ? '编辑代理' : '新增代理'"
+      width="min(520px, 92vw)"
+      top="6vh"
+      class="proxy-config-dialog"
+      append-to-body
+      destroy-on-close
+    >
       <div v-if="crawler" class="source-segment" :class="form.sourceType.toLowerCase()">
         <span class="source-indicator"></span>
         <button type="button" :class="{ active: form.sourceType === 'CUSTOM' }" @click="form.sourceType = 'CUSTOM'">独立代理</button>
@@ -129,4 +137,7 @@ onMounted(load)
 <style scoped>
 .proxy-settings-shell{overflow:hidden;padding:0}.proxy-hero{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;padding:28px 30px;border-bottom:1px solid var(--border-color-light);background:radial-gradient(circle at 82% -30%,var(--primary-alpha-10),transparent 48%),var(--surface-card)}.proxy-hero-mark{display:grid;width:54px;height:54px;place-items:center;border:1px solid var(--primary-alpha-20);border-radius:18px;background:var(--primary-alpha-10);color:var(--primary);font-size:32px}.proxy-kicker{margin:0 0 3px;color:var(--primary);font-size:10px;font-weight:800;letter-spacing:.17em}.proxy-hero h2{margin:0;font-family:'Iowan Old Style','Songti SC',serif;font-size:25px}.proxy-hero p:last-child{margin:5px 0 0;color:var(--text-secondary);font-size:13px}.routing-note{display:flex;gap:12px;margin:18px 24px 0;padding:14px 16px;border:1px solid var(--primary-alpha-20);border-radius:14px;background:var(--primary-alpha-10)}.routing-note-icon{display:grid;flex:0 0 22px;height:22px;place-items:center;border-radius:50%;background:var(--primary);color:white;font-family:serif;font-weight:700}.routing-note p{margin:2px 0 0;color:var(--text-secondary);font-size:12px}.proxy-table{margin-top:14px}.priority-orb{display:inline-grid;min-width:38px;height:30px;padding:0 8px;place-items:center;border-radius:10px;background:var(--primary-alpha-10);color:var(--primary);font-weight:800}.proxy-identity{display:grid;gap:4px}.proxy-identity small{overflow:hidden;color:var(--text-secondary);font-family:'SFMono-Regular',Consolas,monospace;text-overflow:ellipsis}.source-chip,.health-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:var(--surface-elevated);font-size:12px}.source-chip.system{color:var(--primary)}.health-chip i{width:7px;height:7px;border-radius:50%;background:currentColor}.health-chip.online{color:var(--success-color,#2f9e68)}.health-chip.offline{color:var(--text-tertiary)}.proxy-footer{display:flex;justify-content:space-between;padding:14px 25px 20px;color:var(--text-secondary);font-size:12px}.source-segment{position:relative;display:grid;grid-template-columns:1fr 1fr;margin-bottom:20px;padding:4px;border:1px solid var(--border-color);border-radius:13px;background:var(--surface-elevated);isolation:isolate}.source-segment button{z-index:1;padding:9px;border:0;background:transparent;color:var(--text-secondary);cursor:pointer}.source-segment button.active{color:var(--primary);font-weight:700}.source-indicator{position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border:1px solid var(--border-color-light);border-radius:9px;background:var(--surface-card);box-shadow:var(--shadow-sm);transition:transform .24s ease}.source-segment.system .source-indicator{transform:translateX(100%)}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:18px}.option-url{float:right;margin-left:24px;color:var(--text-secondary);font-size:11px}@media(max-width:680px){.proxy-hero{grid-template-columns:auto 1fr;padding:22px}.proxy-hero .el-button{grid-column:1/-1}.form-pair{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.source-indicator{transition:none}}
+:global(.proxy-config-dialog){display:flex;max-height:88vh;flex-direction:column;margin-bottom:0}
+:global(.proxy-config-dialog .el-dialog__header),:global(.proxy-config-dialog .el-dialog__footer){flex:0 0 auto}
+:global(.proxy-config-dialog .el-dialog__body){min-height:0;overflow-y:auto;overscroll-behavior:contain}
 </style>
