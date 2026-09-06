@@ -48,6 +48,7 @@ public class CrawlerSite {
     @Column(columnDefinition = "TEXT") private String cookie;
     @Column(columnDefinition = "TEXT") private String headersJson;
     @Column(length = 1000) private String proxy;
+    @Column(columnDefinition = "TEXT") private String proxyConfigsJson;
     @Enumerated(EnumType.STRING) @Builder.Default private ParserType parserType = ParserType.CONFIG;
     private String parserBean;
     @Enumerated(EnumType.STRING) @Builder.Default private SiteStatus status = SiteStatus.READY;

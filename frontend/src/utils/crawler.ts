@@ -13,15 +13,16 @@ export interface CrawlerRule {
   xpathRemoveSelectors?:string; stringReplacementsJson?:string
   removeBlankLines?:boolean; saveOriginalHtml?:boolean
 }
+export interface CrawlerProxy { name:string; url:string; enabled:boolean }
 export interface CrawlerSitePayload {
   siteName: string; siteCode: string; baseUrl: string; homeUrl?: string; enabled: boolean
   autoScan: boolean; autoCrawl: boolean; autoUpdate: boolean; autoImportLibrary: boolean
   requestIntervalMillis: number; randomDelayMillis: number; maxConcurrency: number
   timeoutMillis: number; retryCount: number; encoding: string; userAgent?: string
-  cookie?: string; headersJson?: string; proxy?: string; scanIntervalMinutes:number
+  cookie?: string; headersJson?: string; proxies:CrawlerProxy[]; scanIntervalMinutes:number
   updateIntervalMinutes:number; maxDiscoveryPages:number; autoImportFormat:'TXT'|'EPUB'|'BOTH'
 }
-export interface CrawlerSite extends CrawlerSitePayload { id: number; status: string; bookCount: number; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string }
+export interface CrawlerSite extends CrawlerSitePayload { id: number; status: string; bookCount: number; proxy?:string; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string }
 export interface CrawlerBook { id:number; siteId:number; siteName:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; bookStatus?:string; latestChapter?:string; chapterCount:number; crawledChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; libraryBookId?:number; discoverTime:string; lastCrawlTime?:string }
 export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; bookId?:number; bookName?:string; totalCount:number; successCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
 export interface CrawlerChapter { id:number; chapterIndex:number; chapterName:string; chapterUrl:string; wordCount:number; crawlStatus:string; accessStatus:string; retryCount:number; errorMessage?:string; crawlTime?:string }

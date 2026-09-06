@@ -2,6 +2,7 @@ package com.aibook.service.crawler;
 
 import com.aibook.dto.crawler.CrawlerDtos.RulePayload;
 import com.aibook.dto.crawler.CrawlerDtos.SitePayload;
+import com.aibook.dto.crawler.CrawlerDtos.ProxyPayload;
 import com.aibook.model.entity.CrawlerSite;
 import com.aibook.model.entity.CrawlerSiteRuleVersion;
 import com.aibook.model.entity.User;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -45,11 +47,40 @@ class CrawlerManagementServiceTest {
 
         var result = service.createSite(user, new SitePayload("示例站", "demo", "https://example.com/",
                 null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
-                "UTF-8", null, null, null, null, 360, 30, 3, "EPUB"));
+                "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB"));
 
         assertThat(result.rule()).isNull();
         assertThat(result.ruleVersion()).isNull();
         assertThat(result.ruleCount()).isZero();
+    }
+
+    @Test
+    void storesMultipleProxiesButActivatesOnlySelectedProxy() {
+        User user = user();
+        when(sites.findByUserAndSiteCode(user, "proxy-demo")).thenReturn(Optional.empty());
+
+        var result = service.createSite(user, new SitePayload("代理站", "proxy-demo", "https://example.com",
+                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
+                "UTF-8", null, null, null, List.of(
+                        new ProxyPayload("备用", "http://127.0.0.1:7890", false),
+                        new ProxyPayload("当前", "http://192.168.1.2:8080", true)), 360, 30, 3, "EPUB"));
+
+        assertThat(result.proxies()).hasSize(2);
+        assertThat(result.proxy()).isEqualTo("http://192.168.1.2:8080");
+    }
+
+    @Test
+    void rejectsMoreThanOneActiveProxy() {
+        User user = user();
+        when(sites.findByUserAndSiteCode(user, "proxy-conflict")).thenReturn(Optional.empty());
+        SitePayload payload = new SitePayload("冲突站", "proxy-conflict", "https://example.com",
+                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
+                "UTF-8", null, null, null, List.of(
+                        new ProxyPayload("代理一", "http://127.0.0.1:7890", true),
+                        new ProxyPayload("代理二", "http://127.0.0.1:8080", true)), 360, 30, 3, "EPUB");
+
+        assertThatThrownBy(() -> service.createSite(user, payload))
+                .hasMessageContaining("只能启用一组代理");
     }
 
     @Test

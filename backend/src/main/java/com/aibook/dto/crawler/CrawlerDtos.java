@@ -23,6 +23,9 @@ public final class CrawlerDtos {
             String xpathRemoveSelectors, String stringReplacementsJson,
             Boolean removeBlankLines, Boolean saveOriginalHtml) { }
 
+    public record ProxyPayload(@NotBlank @Size(max = 100) String name,
+            @NotBlank @Size(max = 1000) String url, Boolean enabled) { }
+
     public record SitePayload(
             @NotBlank String siteName, @NotBlank @Pattern(regexp = "[a-zA-Z0-9_-]+") String siteCode,
             @NotBlank String baseUrl, String homeUrl, Boolean enabled,
@@ -30,7 +33,7 @@ public final class CrawlerDtos {
             @Min(100) Integer requestIntervalMillis, @Min(0) Integer randomDelayMillis,
             @Min(1) @Max(8) Integer maxConcurrency, @Min(1000) Integer timeoutMillis,
             @Min(0) @Max(8) Integer retryCount, String encoding, String userAgent,
-            String cookie, String headersJson, String proxy,
+            String cookie, String headersJson, @Valid List<ProxyPayload> proxies,
             @Min(1) Integer scanIntervalMinutes, @Min(1) Integer updateIntervalMinutes,
             @Min(1) @Max(50) Integer maxDiscoveryPages,
             @Pattern(regexp = "(?i)TXT|EPUB|BOTH") String autoImportFormat) { }
@@ -40,6 +43,7 @@ public final class CrawlerDtos {
             boolean autoImportLibrary, int requestIntervalMillis, int randomDelayMillis,
             int maxConcurrency, int timeoutMillis, int retryCount, String encoding,
             String userAgent, String cookie, String headersJson, String proxy,
+            List<ProxyPayload> proxies,
             int scanIntervalMinutes, int updateIntervalMinutes, int maxDiscoveryPages,
             String autoImportFormat, String status, long bookCount, RulePayload rule,
             Integer ruleVersion, Long activeRuleId, long ruleCount,

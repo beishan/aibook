@@ -4,6 +4,7 @@ import com.aibook.dto.crawler.CrawlerDtos.*;
 import com.aibook.model.entity.*;
 import com.aibook.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.http.*;
@@ -183,7 +184,8 @@ public class CrawlerManagementService {
         site.setRequestIntervalMillis(value(p.requestIntervalMillis(), 1500)); site.setRandomDelayMillis(value(p.randomDelayMillis(), 1000));
         site.setMaxConcurrency(value(p.maxConcurrency(), 1)); site.setTimeoutMillis(value(p.timeoutMillis(), 15000));
         site.setRetryCount(value(p.retryCount(), 2)); site.setEncoding(blank(p.encoding()) ? "UTF-8" : p.encoding());
-        site.setUserAgent(p.userAgent()); site.setCookie(p.cookie()); site.setHeadersJson(p.headersJson()); site.setProxy(p.proxy());
+        site.setUserAgent(p.userAgent()); site.setCookie(p.cookie()); site.setHeadersJson(p.headersJson());
+        applyProxies(site, p.proxies());
     }
 
     public void applyRule(CrawlerSite site, RulePayload r) {
@@ -212,7 +214,7 @@ public class CrawlerManagementService {
                 bool(s.getAutoScan(), false), bool(s.getAutoCrawl(), false), bool(s.getAutoUpdate(), true), bool(s.getAutoImportLibrary(), false),
                 value(s.getRequestIntervalMillis(), 1500), value(s.getRandomDelayMillis(), 1000), value(s.getMaxConcurrency(), 1),
                 value(s.getTimeoutMillis(), 15000), value(s.getRetryCount(), 2), s.getEncoding(), s.getUserAgent(),
-                s.getCookie(), s.getHeadersJson(), s.getProxy(), value(s.getScanIntervalMinutes(), 360),
+                s.getCookie(), s.getHeadersJson(), s.getProxy(), proxyPayloads(s), value(s.getScanIntervalMinutes(), 360),
                 value(s.getUpdateIntervalMinutes(), 30), value(s.getMaxDiscoveryPages(), 3),
                 blank(s.getAutoImportFormat()) ? "EPUB" : s.getAutoImportFormat(), s.getStatus().name(),
                 bookRepository.countBySite(s), rv, r == null ? null : r.getRuleVersion(),
@@ -236,6 +238,28 @@ public class CrawlerManagementService {
     public TaskView taskView(CrawlerTask t) { return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(), t.getSite().getId(), t.getSite().getSiteName(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(), value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0), value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(), t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(), t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt()); }
 
     private void validateBaseUrl(String value) { try { URI uri = URI.create(value); if (!Set.of("http", "https").contains(uri.getScheme()) || uri.getHost() == null) throw new Exception(); } catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "网站根地址必须是有效的 HTTP(S) 地址"); } }
+    private void applyProxies(CrawlerSite site, List<ProxyPayload> values) {
+        List<ProxyPayload> proxies = values == null ? List.of() : values.stream()
+                .map(value -> new ProxyPayload(value.name().trim(), value.url().trim(), bool(value.enabled(), false))).toList();
+        if (proxies.stream().filter(ProxyPayload::enabled).count() > 1)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "同一时间只能启用一组代理");
+        proxies.forEach(this::validateProxy);
+        try { site.setProxyConfigsJson(objectMapper.writeValueAsString(proxies)); }
+        catch (Exception exception) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "代理配置无法保存", exception); }
+        site.setProxy(proxies.stream().filter(ProxyPayload::enabled).map(ProxyPayload::url).findFirst().orElse(null));
+    }
+    private List<ProxyPayload> proxyPayloads(CrawlerSite site) {
+        if (blank(site.getProxyConfigsJson())) return blank(site.getProxy()) ? List.of() :
+                List.of(new ProxyPayload("默认代理", site.getProxy(), true));
+        try { return objectMapper.readValue(site.getProxyConfigsJson(), new TypeReference<List<ProxyPayload>>() { }); }
+        catch (Exception exception) { throw new IllegalStateException("代理配置数据损坏", exception); }
+    }
+    private void validateProxy(ProxyPayload proxy) {
+        try {
+            URI uri = URI.create(proxy.url().contains("://") ? proxy.url() : "http://" + proxy.url());
+            if (uri.getHost() == null || uri.getPort() < 1 || !Set.of("http", "https").contains(uri.getScheme())) throw new Exception();
+        } catch (Exception exception) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "代理地址必须包含有效的主机和端口"); }
+    }
     private String trimSlash(String value) { return value.trim().replaceAll("/+$", ""); }
     private boolean blank(String value) { return value == null || value.isBlank(); }
     private boolean bool(Boolean value, boolean fallback) { return value == null ? fallback : value; }
