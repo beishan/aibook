@@ -16,7 +16,7 @@ public interface BookCrawlerParser {
             String description, String category, String status, String latestChapter,
             String chapterListUrl) { }
     record ParsedChapter(String externalId, int index, String title, String url) { }
-    record ParsedContent(String title, String content) { }
+    record ParsedContent(String title, String content, String originalHtml) { }
     record ParsedDiscovery(String externalId, String title, String author, String coverUrl,
             String category, String latestChapter, String url) { }
 }

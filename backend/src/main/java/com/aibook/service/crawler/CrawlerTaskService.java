@@ -246,6 +246,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 BookCrawlerParser.ParsedContent parsed = parser.parseChapter(response.html(), chapter.getChapterUrl(), rule);
                 if (parsed.title() != null && !parsed.title().isBlank()) chapter.setChapterName(parsed.title());
                 chapter.setContent(parsed.content()); chapter.setContentHash(sha256(parsed.content()));
+                chapter.setOriginalHtml(Boolean.TRUE.equals(rule.getSaveOriginalHtml()) ? parsed.originalHtml() : null);
                 chapter.setSourceEtag(response.etag()); chapter.setSourceLastModified(response.lastModified());
                 chapter.setWordCount(parsed.content().replaceAll("\\s+", "").length()); chapter.setCrawlTime(LocalDateTime.now()); chapter.setErrorMessage(null);
                 boolean suspected = chapter.getWordCount() < value(rule.getMinChapterLength(), 100);

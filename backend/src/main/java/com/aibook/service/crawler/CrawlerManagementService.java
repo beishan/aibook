@@ -3,6 +3,7 @@ package com.aibook.service.crawler;
 import com.aibook.dto.crawler.CrawlerDtos.*;
 import com.aibook.model.entity.*;
 import com.aibook.repository.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.http.*;
@@ -21,6 +22,8 @@ public class CrawlerManagementService {
     private final CrawlerBookRepository bookRepository;
     private final CrawlerChapterRepository chapterRepository;
     private final CrawlerTaskRepository taskRepository;
+    private final CrawlerSiteRuleVersionRepository ruleVersionRepository;
+    private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
     public List<SiteView> sites(User user) { return siteRepository.findByUserOrderByCreatedAtDesc(user).stream().map(this::siteView).toList(); }
@@ -32,7 +35,9 @@ public class CrawlerManagementService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "网站编码已存在");
         CrawlerSite site = CrawlerSite.builder().user(user).build();
         apply(site, payload);
-        return siteView(siteRepository.save(site));
+        site = siteRepository.save(site);
+        snapshot(site, "创建规则");
+        return siteView(site);
     }
 
     @Transactional
@@ -42,8 +47,16 @@ public class CrawlerManagementService {
         siteRepository.findByUserAndSiteCode(user, payload.siteCode())
                 .filter(other -> !other.getId().equals(id))
                 .ifPresent(other -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "网站编码已存在"); });
+        if (!ruleVersionRepository.existsBySite(site)) snapshot(site, "历史规则回填");
+        String before = ruleJson(site.getRule());
         apply(site, payload);
-        return siteView(siteRepository.save(site));
+        site = siteRepository.save(site);
+        if (!before.equals(ruleJson(site.getRule()))) {
+            site.getRule().setRuleVersion(value(site.getRule().getRuleVersion(), 1) + 1);
+            site = siteRepository.save(site);
+            snapshot(site, "更新规则");
+        }
+        return siteView(site);
     }
 
     @Transactional
@@ -51,6 +64,7 @@ public class CrawlerManagementService {
         CrawlerSite site = ownedSite(user, id);
         if (bookRepository.existsBySite(site))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "该网站已有采集数据，不能删除；可先禁用网站");
+        ruleVersionRepository.deleteBySite(site);
         siteRepository.delete(site);
     }
 
@@ -67,6 +81,28 @@ public class CrawlerManagementService {
     public CrawlerTask ownedTask(User user, String id) {
         return taskRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集任务不存在"));
+    }
+
+    @Transactional(readOnly = true)
+    public List<RuleVersionView> ruleVersions(User user, Long siteId) {
+        CrawlerSite site = ownedSite(user, siteId);
+        return ruleVersionRepository.findBySiteOrderByVersionDesc(site).stream().map(this::ruleVersionView).toList();
+    }
+
+    @Transactional
+    public SiteView restoreRuleVersion(User user, Long siteId, Long versionId) {
+        CrawlerSite site = ownedSite(user, siteId);
+        CrawlerSiteRuleVersion version = ruleVersionRepository.findByIdAndSite(versionId, site)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "规则版本不存在"));
+        try {
+            RulePayload payload = objectMapper.readValue(version.getConfigJson(), RulePayload.class);
+            applyRule(site, payload);
+            site.getRule().setRuleVersion(value(site.getRule().getRuleVersion(), 1) + 1);
+            site = siteRepository.save(site);
+            snapshot(site, "恢复自版本 " + version.getVersion());
+            return siteView(site);
+        } catch (ResponseStatusException exception) { throw exception; }
+        catch (Exception exception) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "恢复规则版本失败", exception); }
     }
 
     @Transactional(readOnly = true)
@@ -115,7 +151,10 @@ public class CrawlerManagementService {
         site.setMaxConcurrency(value(p.maxConcurrency(), 1)); site.setTimeoutMillis(value(p.timeoutMillis(), 15000));
         site.setRetryCount(value(p.retryCount(), 2)); site.setEncoding(blank(p.encoding()) ? "UTF-8" : p.encoding());
         site.setUserAgent(p.userAgent()); site.setCookie(p.cookie()); site.setHeadersJson(p.headersJson()); site.setProxy(p.proxy());
-        RulePayload r = p.rule();
+        applyRule(site, p.rule());
+    }
+
+    public void applyRule(CrawlerSite site, RulePayload r) {
         CrawlerSiteRule rule = site.getRule() == null ? new CrawlerSiteRule() : site.getRule();
         rule.setTitleSelector(r.titleSelector()); rule.setAuthorSelector(r.authorSelector()); rule.setCoverSelector(r.coverSelector());
         rule.setDescriptionSelector(r.descriptionSelector()); rule.setCategorySelector(r.categorySelector()); rule.setStatusSelector(r.statusSelector());
@@ -128,17 +167,14 @@ public class CrawlerManagementService {
         rule.setDiscoveryTitleSelector(r.discoveryTitleSelector()); rule.setDiscoveryAuthorSelector(r.discoveryAuthorSelector());
         rule.setDiscoveryCoverSelector(r.discoveryCoverSelector()); rule.setDiscoveryCategorySelector(r.discoveryCategorySelector());
         rule.setDiscoveryLatestChapterSelector(r.discoveryLatestChapterSelector()); rule.setDiscoveryNextPageSelector(r.discoveryNextPageSelector());
+        rule.setXpathRemoveSelectors(r.xpathRemoveSelectors()); rule.setStringReplacementsJson(r.stringReplacementsJson());
+        rule.setRemoveBlankLines(bool(r.removeBlankLines(), true)); rule.setSaveOriginalHtml(bool(r.saveOriginalHtml(), false));
         site.attachRule(rule);
     }
 
     public SiteView siteView(CrawlerSite s) {
         CrawlerSiteRule r = s.getRule();
-        RulePayload rv = new RulePayload(r.getTitleSelector(), r.getAuthorSelector(), r.getCoverSelector(), r.getDescriptionSelector(),
-                r.getCategorySelector(), r.getStatusSelector(), r.getLatestChapterSelector(), r.getChapterListUrlSelector(),
-                r.getChapterItemSelector(), r.getChapterTitleSelector(), r.getChapterUrlSelector(), r.getContentTitleSelector(),
-                r.getContentSelector(), r.getRemoveSelectors(), r.getRegexReplacementsJson(), r.getMinChapterLength(),
-                r.getDiscoveryItemSelector(), r.getDiscoveryUrlSelector(), r.getDiscoveryTitleSelector(), r.getDiscoveryAuthorSelector(),
-                r.getDiscoveryCoverSelector(), r.getDiscoveryCategorySelector(), r.getDiscoveryLatestChapterSelector(), r.getDiscoveryNextPageSelector());
+        RulePayload rv = rulePayload(r);
         return new SiteView(s.getId(), s.getSiteName(), s.getSiteCode(), s.getBaseUrl(), s.getHomeUrl(), bool(s.getEnabled(), false),
                 bool(s.getAutoScan(), false), bool(s.getAutoCrawl(), false), bool(s.getAutoUpdate(), true), bool(s.getAutoImportLibrary(), false),
                 value(s.getRequestIntervalMillis(), 1500), value(s.getRandomDelayMillis(), 1000), value(s.getMaxConcurrency(), 1),
@@ -146,7 +182,18 @@ public class CrawlerManagementService {
                 s.getCookie(), s.getHeadersJson(), s.getProxy(), value(s.getScanIntervalMinutes(), 360),
                 value(s.getUpdateIntervalMinutes(), 30), value(s.getMaxDiscoveryPages(), 3),
                 blank(s.getAutoImportFormat()) ? "EPUB" : s.getAutoImportFormat(), s.getStatus().name(),
-                bookRepository.countBySite(s), rv, s.getLastScanAt(), s.getLastUpdateAt(), s.getCreatedAt());
+                bookRepository.countBySite(s), rv, value(r.getRuleVersion(), 1), s.getLastScanAt(), s.getLastUpdateAt(),
+                s.getLastHealthCheckAt(), s.getHealthMessage(), s.getCreatedAt());
+    }
+
+    public RulePayload rulePayload(CrawlerSiteRule r) {
+        return new RulePayload(r.getTitleSelector(), r.getAuthorSelector(), r.getCoverSelector(), r.getDescriptionSelector(),
+                r.getCategorySelector(), r.getStatusSelector(), r.getLatestChapterSelector(), r.getChapterListUrlSelector(),
+                r.getChapterItemSelector(), r.getChapterTitleSelector(), r.getChapterUrlSelector(), r.getContentTitleSelector(),
+                r.getContentSelector(), r.getRemoveSelectors(), r.getRegexReplacementsJson(), r.getMinChapterLength(),
+                r.getDiscoveryItemSelector(), r.getDiscoveryUrlSelector(), r.getDiscoveryTitleSelector(), r.getDiscoveryAuthorSelector(),
+                r.getDiscoveryCoverSelector(), r.getDiscoveryCategorySelector(), r.getDiscoveryLatestChapterSelector(), r.getDiscoveryNextPageSelector(),
+                r.getXpathRemoveSelectors(), r.getStringReplacementsJson(), bool(r.getRemoveBlankLines(), true), bool(r.getSaveOriginalHtml(), false));
     }
 
     public BookView bookView(CrawlerBook b) { return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(), b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(), b.getCoverUrl(), b.getDescription(), b.getCategory(), b.getBookStatus(), b.getLatestChapter(), value(b.getChapterCount(), 0), value(b.getCrawledChapterCount(), 0), value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(), (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : b.getDiscoveryStatus()).name(), b.getImportStatus().name(), b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(), b.getLastCrawlTime()); }
@@ -158,4 +205,7 @@ public class CrawlerManagementService {
     private boolean blank(String value) { return value == null || value.isBlank(); }
     private boolean bool(Boolean value, boolean fallback) { return value == null ? fallback : value; }
     private int value(Integer value, int fallback) { return value == null ? fallback : value; }
+    private String ruleJson(CrawlerSiteRule rule) { try { return objectMapper.writeValueAsString(rulePayload(rule)); } catch (Exception e) { throw new IllegalStateException(e); } }
+    private void snapshot(CrawlerSite site, String summary) { ruleVersionRepository.save(CrawlerSiteRuleVersion.builder().site(site).version(value(site.getRule().getRuleVersion(), 1)).configJson(ruleJson(site.getRule())).changeSummary(summary).build()); }
+    private RuleVersionView ruleVersionView(CrawlerSiteRuleVersion v) { try { return new RuleVersionView(v.getId(), v.getVersion(), v.getChangeSummary(), objectMapper.readValue(v.getConfigJson(), RulePayload.class), v.getCreatedAt()); } catch (Exception e) { throw new IllegalStateException("规则版本数据损坏", e); } }
 }

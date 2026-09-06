@@ -25,6 +25,8 @@ public class CrawlerController {
     private final CrawlerManagementService managementService;
     private final CrawlerTaskService taskService;
     private final CrawlerExportService exportService;
+    private final CrawlerRuleTestService ruleTestService;
+    private final CrawlerRuleHealthService ruleHealthService;
     private final CrawlerChapterRepository chapterRepository;
 
     @GetMapping("/dashboard") public DashboardView dashboard(Authentication auth) { return managementService.dashboard(user(auth)); }
@@ -34,6 +36,10 @@ public class CrawlerController {
     @DeleteMapping("/sites/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteSite(Authentication auth, @PathVariable Long id) { managementService.deleteSite(user(auth), id); }
     @PostMapping("/sites/{id}/crawl") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView crawl(Authentication auth, @PathVariable Long id, @Valid @RequestBody ManualCrawlRequest request) { return taskService.start(user(auth), id, request.url()); }
     @PostMapping("/sites/{id}/scan") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView scan(Authentication auth, @PathVariable Long id) { return taskService.scanSite(user(auth), id); }
+    @PostMapping("/sites/{id}/rules/test") public RuleTestView testRule(Authentication auth, @PathVariable Long id, @Valid @RequestBody RuleTestRequest request) { return ruleTestService.test(user(auth), id, request); }
+    @PostMapping("/sites/{id}/rules/health") public RuleTestView checkRule(Authentication auth, @PathVariable Long id) { return ruleHealthService.check(user(auth), id); }
+    @GetMapping("/sites/{id}/rules/versions") public List<RuleVersionView> ruleVersions(Authentication auth, @PathVariable Long id) { return managementService.ruleVersions(user(auth), id); }
+    @PostMapping("/sites/{id}/rules/versions/{versionId}/restore") public SiteView restoreRule(Authentication auth, @PathVariable Long id, @PathVariable Long versionId) { return managementService.restoreRuleVersion(user(auth), id, versionId); }
 
     @GetMapping("/books") public Page<BookView> books(Authentication auth, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return managementService.books(user(auth), page, size); }
     @GetMapping("/books/{id}") public BookView book(Authentication auth, @PathVariable Long id) { return managementService.book(user(auth), id); }

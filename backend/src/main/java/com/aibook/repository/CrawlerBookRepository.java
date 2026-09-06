@@ -9,6 +9,7 @@ import java.util.*;
 public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> {
     Optional<CrawlerBook> findByIdAndSiteUser(Long id, User user);
     Optional<CrawlerBook> findBySiteAndExternalBookId(CrawlerSite site, String externalBookId);
+    Optional<CrawlerBook> findFirstBySiteOrderByLastCrawlTimeDesc(CrawlerSite site);
     Page<CrawlerBook> findBySiteUser(User user, Pageable pageable);
     long countBySiteUser(User user);
     long countBySite(CrawlerSite site);

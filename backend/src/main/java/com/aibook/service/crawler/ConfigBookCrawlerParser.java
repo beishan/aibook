@@ -2,8 +2,6 @@ package com.aibook.service.crawler;
 
 import com.aibook.model.entity.CrawlerSite;
 import com.aibook.model.entity.CrawlerSiteRule;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.*;
@@ -15,7 +13,7 @@ import java.util.*;
 @Component("configBookCrawlerParser")
 @RequiredArgsConstructor
 public class ConfigBookCrawlerParser implements BookCrawlerParser {
-    private final ObjectMapper objectMapper;
+    private final BookContentCleaner contentCleaner;
 
     @Override
     public List<ParsedDiscovery> parseBookList(String html, String pageUrl, CrawlerSiteRule rule) {
@@ -84,23 +82,8 @@ public class ConfigBookCrawlerParser implements BookCrawlerParser {
         Document doc = Jsoup.parse(html, pageUrl);
         Element body = doc.selectFirst(required(rule.getContentSelector(), "正文"));
         if (body == null) throw new IllegalArgumentException("正文解析结果为空，请检查正文 Selector");
-        for (String selector : lines(rule.getRemoveSelectors())) body.select(selector).remove();
-        body.select("script,style,noscript,nav").remove();
-        body.select("br").after("\n");
-        body.select("p,div,li").append("\n");
-        String content = Jsoup.parse(body.html()).wholeText();
-        try {
-            if (rule.getRegexReplacementsJson() != null && !rule.getRegexReplacementsJson().isBlank()) {
-                Map<String, String> replacements = objectMapper.readValue(
-                        rule.getRegexReplacementsJson(), new TypeReference<LinkedHashMap<String, String>>() { });
-                for (var entry : replacements.entrySet()) content = content.replaceAll(entry.getKey(), entry.getValue());
-            }
-        } catch (Exception exception) {
-            throw new IllegalArgumentException("正文正则替换配置不是有效 JSON 或正则表达式", exception);
-        }
-        content = content.replace('\u00a0', ' ').replace("\r\n", "\n").replace('\r', '\n')
-                .replaceAll("(?m)^[ \\t]+|[ \\t]+$", "").replaceAll("\n{3,}", "\n\n").trim();
-        return new ParsedContent(text(doc, rule.getContentTitleSelector()), content);
+        String originalHtml = body.outerHtml();
+        return new ParsedContent(text(doc, rule.getContentTitleSelector()), contentCleaner.clean(body, rule), originalHtml);
     }
 
     @Override

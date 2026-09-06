@@ -21,6 +21,7 @@ public class CrawlerChapter {
     @Column(nullable = false) private String chapterName;
     @Column(nullable = false, length = 1500) private String chapterUrl;
     @Column(columnDefinition = "TEXT") private String content;
+    @Column(columnDefinition = "TEXT") private String originalHtml;
     private String contentHash;
     private String sourceEtag;
     private String sourceLastModified;

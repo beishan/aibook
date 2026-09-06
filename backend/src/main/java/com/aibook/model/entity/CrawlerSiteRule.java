@@ -39,7 +39,11 @@ public class CrawlerSiteRule {
     private String contentTitleSelector;
     @Column(nullable = false) private String contentSelector;
     @Column(columnDefinition = "TEXT") private String removeSelectors;
+    @Column(columnDefinition = "TEXT") private String xpathRemoveSelectors;
     @Column(columnDefinition = "TEXT") private String regexReplacementsJson;
+    @Column(columnDefinition = "TEXT") private String stringReplacementsJson;
+    @Builder.Default private Boolean removeBlankLines = true;
+    @Builder.Default private Boolean saveOriginalHtml = false;
     @Builder.Default private Integer minChapterLength = 100;
     @Builder.Default private Boolean enabled = true;
     @CreationTimestamp private LocalDateTime createdAt;

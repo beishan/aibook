@@ -53,6 +53,8 @@ public class CrawlerSite {
     @Enumerated(EnumType.STRING) @Builder.Default private SiteStatus status = SiteStatus.READY;
     private LocalDateTime lastScanAt;
     private LocalDateTime lastUpdateAt;
+    private LocalDateTime lastHealthCheckAt;
+    @Column(columnDefinition = "TEXT") private String healthMessage;
     @OneToOne(mappedBy = "site", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private CrawlerSiteRule rule;
     @CreationTimestamp private LocalDateTime createdAt;

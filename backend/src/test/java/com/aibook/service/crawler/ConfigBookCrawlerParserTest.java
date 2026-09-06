@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConfigBookCrawlerParserTest {
-    private final ConfigBookCrawlerParser parser = new ConfigBookCrawlerParser(new ObjectMapper());
+    private final ConfigBookCrawlerParser parser = new ConfigBookCrawlerParser(new BookContentCleaner(new ObjectMapper()));
     private final CrawlerSiteRule rule = CrawlerSiteRule.builder()
             .titleSelector("h1.title").authorSelector(".author").coverSelector("img.cover::data-src")
             .descriptionSelector(".intro").chapterListUrlSelector("a.catalog")
@@ -17,6 +17,8 @@ class ConfigBookCrawlerParserTest {
             .discoveryTitleSelector("a.title").discoveryAuthorSelector(".writer")
             .discoveryCoverSelector("img::data-src").discoveryCategorySelector(".category")
             .discoveryLatestChapterSelector(".latest").discoveryNextPageSelector("a.next")
+            .xpathRemoveSelectors("//span[@class='watermark']")
+            .stringReplacementsJson("{\"下载APP\":\"\"}").removeBlankLines(true).saveOriginalHtml(true)
             .regexReplacementsJson("{\"example\\\\.com\":\"\"}").minChapterLength(10).build();
 
     @Test
@@ -53,12 +55,15 @@ class ConfigBookCrawlerParserTest {
         assertEquals(2, chapters.size());
         assertEquals("https://books.example.com/c/1.html", chapters.get(0).url());
 
-        String page = "<h1>第一章 风起</h1><div id='content'><p>第一段 example.com</p><div class='ad'>广告</div><p>第二段</p></div>";
+        String page = "<h1>第一章 风起</h1><div id='content'><p>第一段 example.com 下载APP</p><div class='ad'>广告</div><span class='watermark'>水印</span><p>第二段</p></div>";
         var content = parser.parseChapter(page, chapters.get(0).url(), rule);
         assertFalse(content.content().contains("广告"));
         assertFalse(content.content().contains("example.com"));
+        assertFalse(content.content().contains("下载APP"));
+        assertFalse(content.content().contains("水印"));
         assertTrue(content.content().contains("第一段"));
         assertTrue(content.content().contains("第二段"));
+        assertTrue(content.originalHtml().contains("watermark"));
     }
 
     @Test

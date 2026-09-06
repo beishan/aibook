@@ -19,7 +19,9 @@ public final class CrawlerDtos {
             String discoveryItemSelector, String discoveryUrlSelector,
             String discoveryTitleSelector, String discoveryAuthorSelector,
             String discoveryCoverSelector, String discoveryCategorySelector,
-            String discoveryLatestChapterSelector, String discoveryNextPageSelector) { }
+            String discoveryLatestChapterSelector, String discoveryNextPageSelector,
+            String xpathRemoveSelectors, String stringReplacementsJson,
+            Boolean removeBlankLines, Boolean saveOriginalHtml) { }
 
     public record SitePayload(
             @NotBlank String siteName, @NotBlank @Pattern(regexp = "[a-zA-Z0-9_-]+") String siteCode,
@@ -41,7 +43,8 @@ public final class CrawlerDtos {
             String userAgent, String cookie, String headersJson, String proxy,
             int scanIntervalMinutes, int updateIntervalMinutes, int maxDiscoveryPages,
             String autoImportFormat, String status, long bookCount, RulePayload rule,
-            LocalDateTime lastScanAt, LocalDateTime lastUpdateAt, LocalDateTime createdAt) { }
+            int ruleVersion, LocalDateTime lastScanAt, LocalDateTime lastUpdateAt,
+            LocalDateTime lastHealthCheckAt, String healthMessage, LocalDateTime createdAt) { }
 
     public record ManualCrawlRequest(@NotBlank String url) { }
     public record ExportRequest(@NotEmpty List<@Pattern(regexp = "(?i)TXT|EPUB") String> formats) { }
@@ -49,6 +52,13 @@ public final class CrawlerDtos {
     public record BatchBookRequest(@NotEmpty List<@NotNull Long> bookIds) { }
     public record DiscoveryStatusRequest(@NotEmpty List<@NotNull Long> bookIds,
             @NotBlank @Pattern(regexp = "ACTIVE|IGNORED|BLACKLISTED") String status) { }
+    public record RuleTestRequest(@NotBlank String url, @Valid RulePayload rule) { }
+    public record RuleTestView(boolean success, String title, String author, String description,
+            String coverUrl, String bookStatus, String chapterListUrl, int chapterCount,
+            String sampleChapter, int contentLength, String contentPreview,
+            long durationMillis, String errorMessage) { }
+    public record RuleVersionView(Long id, int version, String changeSummary,
+            RulePayload rule, LocalDateTime createdAt) { }
 
     public record BookView(Long id, Long siteId, String siteName, String externalBookId,
             String bookUrl, String bookName, String author, String coverUrl, String description,
