@@ -233,6 +233,7 @@ public class CrawlerManagementService {
         site.setMaxConcurrency(value(p.maxConcurrency(), 1)); site.setTimeoutMillis(value(p.timeoutMillis(), 15000));
         site.setRetryCount(value(p.retryCount(), 2)); site.setEncoding(blank(p.encoding()) ? "UTF-8" : p.encoding());
         site.setUserAgent(p.userAgent()); site.setCookie(p.cookie()); site.setHeadersJson(p.headersJson());
+        applyContentFailureMarkers(site, p.contentFailureMarkers());
         applyProxies(site, p.proxies());
     }
 
@@ -268,7 +269,7 @@ public class CrawlerManagementService {
                 bookRepository.countBySite(s), rv, r == null ? null : r.getRuleVersion(),
                 active.map(CrawlerSiteRuleVersion::getId).orElse(null), ruleVersionRepository.countBySite(s),
                 s.getLastScanAt(), s.getLastUpdateAt(),
-                s.getLastHealthCheckAt(), s.getHealthMessage(), s.getCreatedAt());
+                s.getLastHealthCheckAt(), s.getHealthMessage(), s.getCreatedAt(), contentFailureMarkers(s));
     }
 
     public RulePayload rulePayload(CrawlerSiteRule r) {
@@ -316,6 +317,15 @@ public class CrawlerManagementService {
         try { site.setProxyConfigsJson(objectMapper.writeValueAsString(proxies)); }
         catch (Exception exception) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "代理配置无法保存", exception); }
         site.setProxy(proxies.stream().filter(ProxyPayload::enabled).map(ProxyPayload::url).findFirst().orElse(null));
+    }
+    private void applyContentFailureMarkers(CrawlerSite site, List<String> values) {
+        String markers = values == null ? "" : values.stream().filter(Objects::nonNull).map(String::trim)
+                .filter(value -> !value.isBlank()).distinct().collect(java.util.stream.Collectors.joining("\n"));
+        site.setContentFailureMarkers(markers.isBlank() ? null : markers);
+    }
+    private List<String> contentFailureMarkers(CrawlerSite site) {
+        if (blank(site.getContentFailureMarkers())) return List.of();
+        return site.getContentFailureMarkers().lines().map(String::trim).filter(value -> !value.isBlank()).toList();
     }
     private List<ProxyPayload> proxyPayloads(CrawlerSite site) {
         if (blank(site.getProxyConfigsJson())) return blank(site.getProxy()) ? List.of() :

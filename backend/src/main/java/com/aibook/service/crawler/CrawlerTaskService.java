@@ -37,6 +37,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     private final List<BookCrawlerParser> parsers;
     private final ApplicationContext applicationContext;
     private final AtomicLong jobSequence = new AtomicLong();
+    private final Object[] taskLocks = createTaskLocks();
     private final ThreadPoolExecutor executor = new ThreadPoolExecutor(4, 4, 0L, TimeUnit.MILLISECONDS,
             new PriorityBlockingQueue<>(), r -> {
         Thread thread = new Thread(r, "crawler-worker");
@@ -156,15 +157,37 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     }
 
     public TaskView command(User user, String taskId, String command) {
-        CrawlerTask task = managementService.ownedTask(user, taskId);
-        switch (command) {
-            case "pause" -> { if (task.getStatus() == CrawlerTask.TaskStatus.RUNNING || task.getStatus() == CrawlerTask.TaskStatus.WAITING) task.setStatus(CrawlerTask.TaskStatus.PAUSED); }
-            case "cancel" -> task.setStatus(CrawlerTask.TaskStatus.CANCELLED);
-            case "resume" -> { if (task.getStatus() != CrawlerTask.TaskStatus.PAUSED) throw new ResponseStatusException(HttpStatus.CONFLICT, "只有暂停任务可以继续"); task.setStatus(CrawlerTask.TaskStatus.WAITING); taskRepository.save(task); submit(task.getId()); }
+        CrawlerTask task;
+        synchronized (taskLock(taskId)) {
+            task = managementService.ownedTask(user, taskId);
+            switch (command) {
+            case "pause" -> {
+                if (task.getStatus() == CrawlerTask.TaskStatus.RUNNING
+                        || task.getStatus() == CrawlerTask.TaskStatus.WAITING) {
+                    task.setStatus(CrawlerTask.TaskStatus.PAUSED);
+                    taskRepository.save(task);
+                    removeQueuedTask(taskId);
+                }
+            }
+            case "cancel" -> {
+                task.setStatus(CrawlerTask.TaskStatus.CANCELLED);
+                taskRepository.save(task);
+                removeQueuedTask(taskId);
+            }
+            case "resume" -> {
+                if (task.getStatus() != CrawlerTask.TaskStatus.PAUSED)
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "只有暂停任务可以继续");
+                if (active.contains(taskId))
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "任务仍在停止中，请稍后再继续");
+                task.setStatus(CrawlerTask.TaskStatus.WAITING);
+                taskRepository.save(task);
+                submit(task.getId());
+            }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的任务操作");
+            }
         }
-        taskRepository.save(task);
-        if (task.getCrawlerBook() != null && task.getStatus() == CrawlerTask.TaskStatus.PAUSED) {
+        if (task.getCrawlerBook() != null && (task.getStatus() == CrawlerTask.TaskStatus.PAUSED
+                || task.getStatus() == CrawlerTask.TaskStatus.CANCELLED)) {
             task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.PAUSED);
             bookRepository.save(task.getCrawlerBook());
         }
@@ -193,14 +216,24 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
 
     @Transactional
     public void deleteTask(User user, String taskId) {
-        CrawlerTask task = managementService.ownedTask(user, taskId);
-        if (ACTIVE_STATUSES.contains(task.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "运行中、等待中或暂停的任务需先取消后才能删除");
+        synchronized (taskLock(taskId)) {
+            CrawlerTask task = managementService.ownedTask(user, taskId);
+            if (task.getStatus() == CrawlerTask.TaskStatus.WAITING
+                    || task.getStatus() == CrawlerTask.TaskStatus.PAUSED
+                    || task.getStatus() == CrawlerTask.TaskStatus.CANCELLED) {
+                removeQueuedTask(taskId);
+            }
+            if (active.contains(taskId)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "任务正在停止，请稍后再删除");
+            }
+            if (task.getStatus() == CrawlerTask.TaskStatus.RUNNING) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "运行中的任务需先暂停或取消后才能删除");
+            }
+            log.info("[采集任务] 删除任务记录: taskId={}, status={}, type={}, book={}",
+                    taskId, task.getStatus(), task.getType(), bookName(task.getCrawlerBook()));
+            recordCrawlerEvent(task, "任务记录已删除", "状态：" + task.getStatus());
+            taskRepository.delete(task);
         }
-        log.info("[采集任务] 删除任务记录: taskId={}, status={}, type={}, book={}",
-                taskId, task.getStatus(), task.getType(), bookName(task.getCrawlerBook()));
-        recordCrawlerEvent(task, "任务记录已删除", "状态：" + task.getStatus());
-        taskRepository.delete(task);
     }
 
     private CrawlerTask createAndSubmit(User user, CrawlerSite site, CrawlerBook book, CrawlerTask.TaskType type) {
@@ -244,6 +277,16 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         }
     }
 
+    private boolean removeQueuedTask(String taskId) {
+        for (Runnable queued : executor.getQueue()) {
+            if (queued instanceof CrawlerJob job && job.taskId.equals(taskId) && executor.remove(queued)) {
+                active.remove(taskId);
+                return true;
+            }
+        }
+        return false;
+    }
+
     private final class CrawlerJob implements Runnable, Comparable<CrawlerJob> {
         private final String taskId;
         private final CrawlerTask.Priority priority;
@@ -258,12 +301,17 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         }
     }
 
-    private void run(String taskId) {
-        CrawlerTask task = taskRepository.findById(taskId).orElse(null);
-        if (task == null || task.getStatus() == CrawlerTask.TaskStatus.CANCELLED) return;
+    void run(String taskId) {
+        CrawlerTask task;
+        synchronized (taskLock(taskId)) {
+            task = taskRepository.findById(taskId).orElse(null);
+            if (task == null || task.getStatus() != CrawlerTask.TaskStatus.WAITING) return;
+            task.setStatus(CrawlerTask.TaskStatus.RUNNING);
+            task.setStartedAt(task.getStartedAt() == null ? LocalDateTime.now() : task.getStartedAt());
+            task.setErrorMessage(null);
+            taskRepository.save(task);
+        }
         try {
-            task.setStatus(CrawlerTask.TaskStatus.RUNNING); task.setStartedAt(task.getStartedAt() == null ? LocalDateTime.now() : task.getStartedAt());
-            task.setErrorMessage(null); taskRepository.save(task);
             CrawlerBook book = task.getCrawlerBook();
             CrawlerSite site = task.getSite();
             CrawlerSiteRule rule = site.getRule();
@@ -282,6 +330,8 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 log.info("[采集任务] 开始解析书籍信息: taskId={}, book={}, url={}",
                         taskId, bookName(book), book.getBookUrl());
                 CrawlerHttpClient.FetchResult detailResponse = httpClient.get(site, book.getBookUrl());
+                task = runningTask(taskId);
+                if (task == null) return;
                 BookCrawlerParser.ParsedBook metadata = parser.parseBookDetail(detailResponse.html(), book.getBookUrl(), rule);
                 applyMetadata(book, metadata);
                 log.info("[采集任务] 书籍信息解析完毕: taskId={}, book={}, author={}, status={}, chapterListUrl={}",
@@ -292,6 +342,8 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 log.info("[采集任务] 开始解析章节目录: taskId={}, book={}, url={}",
                         taskId, bookName(book), metadata.chapterListUrl());
                 CrawlerHttpClient.FetchResult listResponse = metadata.chapterListUrl().equals(book.getBookUrl()) ? detailResponse : httpClient.get(site, metadata.chapterListUrl());
+                task = runningTask(taskId);
+                if (task == null) return;
                 List<BookCrawlerParser.ParsedChapter> parsedChapters = parser.parseChapterList(
                         listResponse.html(), metadata.chapterListUrl(), rule);
                 mergeChapters(book, parsedChapters);
@@ -302,11 +354,14 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 book.setLastUpdateCheckTime(LocalDateTime.now()); bookRepository.save(book);
             }
 
+            task = runningTask(taskId);
+            if (task == null) return;
             crawlContents(task, book, site, rule, parser, task.getType() == CrawlerTask.TaskType.BOOK_UPDATE_CHECK);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            fail(taskId, "任务被中断");
+            if (!isStopRequested(taskId)) fail(taskId, "任务被中断");
         } catch (Exception exception) {
+            if (isStopRequested(taskId)) return;
             log.warn("采集任务 {} 失败", taskId, exception);
             fail(taskId, userMessage(exception));
         }
@@ -314,6 +369,8 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
 
     private void crawlContents(CrawlerTask task, CrawlerBook book, CrawlerSite site, CrawlerSiteRule rule,
             BookCrawlerParser parser, boolean recheckCompleted) throws Exception {
+        task = runningTask(task.getId());
+        if (task == null) return;
         List<CrawlerChapter> pending = chapterRepository.findByCrawlerBookOrderByChapterIndexAsc(book).stream()
                 .filter(ch -> ch.getCrawlStatus() != CrawlerChapter.CrawlStatus.IGNORED
                         && (recheckCompleted || ch.getCrawlStatus() != CrawlerChapter.CrawlStatus.COMPLETED)).toList();
@@ -321,7 +378,9 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         task.setSuccessCount(recheckCompleted ? 0 : (int) chapterRepository.countByCrawlerBookAndCrawlStatus(
                 book, CrawlerChapter.CrawlStatus.COMPLETED));
         task.setFailedCount(0);
-        task.setWaitingCount(pending.size()); taskRepository.save(task);
+        task.setWaitingCount(pending.size());
+        task = saveProgressIfRunning(task);
+        if (task == null) return;
         book.setCrawlStatus(CrawlerBook.CrawlStatus.CRAWLING_CONTENT); bookRepository.save(book);
         log.info("[采集任务] 开始采集章节: taskId={}, book={}, total={}, completed={}, pending={}, updateCheck={}",
                 task.getId(), bookName(book), task.getTotalCount(), task.getSuccessCount(), pending.size(), recheckCompleted);
@@ -339,7 +398,9 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 return;
             }
             task = fresh;
-            task.setCurrentChapter(chapter.getChapterName()); taskRepository.save(task);
+            task.setCurrentChapter(chapter.getChapterName());
+            task = saveProgressIfRunning(task);
+            if (task == null) return;
             boolean hadParsedContent = hasParsedContent(chapter);
             if (!hadParsedContent) {
                 chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.CRAWLING);
@@ -355,6 +416,15 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 CrawlerHttpClient.FetchResult response = recheckCompleted
                         ? httpClient.get(site, chapter.getChapterUrl(), chapter.getSourceEtag(), chapter.getSourceLastModified())
                         : httpClient.get(site, chapter.getChapterUrl());
+                CrawlerTask afterFetch = runningTask(task.getId());
+                if (afterFetch == null) {
+                    if (!hadParsedContent) {
+                        chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
+                        chapterRepository.save(chapter);
+                    }
+                    return;
+                }
+                task = afterFetch;
                 durationTotal += response.durationMillis(); requests++;
                 if (response.statusCode() == 304) {
                     chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.COMPLETED);
@@ -368,6 +438,12 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                     continue;
                 }
                 BookCrawlerParser.ParsedContent parsed = parser.parseChapter(response.html(), chapter.getChapterUrl(), rule);
+                String failureMarker = matchedContentFailureMarker(site, parsed.content());
+                if (failureMarker != null) {
+                    chapter.setAccessStatus(CrawlerChapter.AccessStatus.LOCKED);
+                    throw new IllegalStateException("正文命中未拉取特征：" + shortText(failureMarker, 100));
+                }
+                chapter.setAccessStatus(CrawlerChapter.AccessStatus.FREE);
                 if (parsed.title() != null && !parsed.title().isBlank()) chapter.setChapterName(parsed.title());
                 chapter.setContent(parsed.content()); chapter.setContentHash(sha256(parsed.content()));
                 chapter.setOriginalHtml(Boolean.TRUE.equals(rule.getSaveOriginalHtml()) ? parsed.originalHtml() : null);
@@ -407,10 +483,14 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
             } else refreshCounts(book, task, durationTotal, requests);
         }
         if (!recheckCompleted) refreshCounts(book, task, durationTotal, requests);
+        task = runningTask(task.getId());
+        if (task == null) return;
         int contentFailed = book.getFailedChapterCount();
         int taskFailed = recheckCompleted ? task.getFailedCount() : contentFailed;
         task.setStatus(taskFailed == 0 ? CrawlerTask.TaskStatus.SUCCESS : CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
-        task.setFinishedAt(LocalDateTime.now()); task.setCurrentChapter(null); taskRepository.save(task);
+        task.setFinishedAt(LocalDateTime.now()); task.setCurrentChapter(null);
+        task = finishIfRunning(task);
+        if (task == null) return;
         book.setCrawlStatus(contentFailed == 0 ? CrawlerBook.CrawlStatus.COMPLETED : CrawlerBook.CrawlStatus.PARTIAL_SUCCESS);
         book.setImportStatus(contentFailed != 0 ? CrawlerBook.ImportStatus.NOT_IMPORTED
                 : book.getLibraryBook() == null ? CrawlerBook.ImportStatus.READY : CrawlerBook.ImportStatus.IMPORTED);
@@ -466,12 +546,16 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 task.getId(), site.getSiteName(), pageUrl, value(site.getMaxDiscoveryPages(), 3));
         recordCrawlerEvent(task, "开始扫描网站", "首页：" + pageUrl + "；最大页数：" + value(site.getMaxDiscoveryPages(), 3));
         while (pageUrl != null && !pageUrl.isBlank() && pages < value(site.getMaxDiscoveryPages(), 3) && visitedPages.add(pageUrl)) {
+            task = runningTask(task.getId());
+            if (task == null) return;
             pageUrl = httpClient.validateSiteUrl(site, pageUrl).toString();
             log.info("[采集任务] 正在扫描网站页面: taskId={}, site={}, page={}/{}, url={}",
                     task.getId(), site.getSiteName(), pages + 1, value(site.getMaxDiscoveryPages(), 3), pageUrl);
             recordCrawlerEvent(task, "正在扫描网站页面", "页码：" + (pages + 1) + "/"
                     + value(site.getMaxDiscoveryPages(), 3) + "；地址：" + pageUrl);
             CrawlerHttpClient.FetchResult response = httpClient.get(site, pageUrl);
+            task = runningTask(task.getId());
+            if (task == null) return;
             List<BookCrawlerParser.ParsedDiscovery> items = parser.parseBookList(response.html(), pageUrl, rule);
             task.setTotalCount(task.getTotalCount() + items.size());
             for (BookCrawlerParser.ParsedDiscovery item : items) {
@@ -493,15 +577,23 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 } catch (Exception exception) { log.debug("忽略无效发现链接 {}", item.url(), exception); }
             }
             pages++;
-            task.setSuccessCount(discovered); task.setWaitingCount(0); task.setCurrentChapter("扫描第 " + pages + " 页"); taskRepository.save(task);
+            task = runningTask(task.getId());
+            if (task == null) return;
+            task.setSuccessCount(discovered); task.setWaitingCount(0); task.setCurrentChapter("扫描第 " + pages + " 页");
+            task = saveProgressIfRunning(task);
+            if (task == null) return;
             log.info("[采集任务] 网站页面扫描完毕: taskId={}, site={}, page={}, pageItems={}, discoveredTotal={}",
                     task.getId(), site.getSiteName(), pages, items.size(), discovered);
             recordCrawlerEvent(task, "网站页面扫描完毕", "页码：" + pages + "；本页书籍："
                     + items.size() + "；累计发现：" + discovered);
             pageUrl = parser.parseNextBookListPage(response.html(), pageUrl, rule);
         }
+        task = runningTask(task.getId());
+        if (task == null) return;
         site.setLastScanAt(LocalDateTime.now()); siteRepository.save(site);
-        task.setStatus(CrawlerTask.TaskStatus.SUCCESS); task.setFinishedAt(LocalDateTime.now()); task.setCurrentChapter(null); taskRepository.save(task);
+        task.setStatus(CrawlerTask.TaskStatus.SUCCESS); task.setFinishedAt(LocalDateTime.now()); task.setCurrentChapter(null);
+        task = finishIfRunning(task);
+        if (task == null) return;
         log.info("[采集任务] 网站扫描完毕: taskId={}, site={}, pages={}, discovered={}, autoCrawlQueued={}",
                 task.getId(), site.getSiteName(), pages, discovered, autoCrawlIds.size());
         recordCrawlerEvent(task, "网站扫描完毕", "扫描页数：" + pages + "；发现书籍："
@@ -519,7 +611,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         task.setTotalCount(book.getChapterCount()); task.setSuccessCount(book.getCrawledChapterCount());
         task.setFailedCount(book.getFailedChapterCount());
         task.setWaitingCount(Math.max(0, book.getChapterCount() - book.getCrawledChapterCount() - book.getFailedChapterCount()));
-        task.setAverageRequestMillis(requests == 0 ? 0 : totalDuration / requests); taskRepository.save(task);
+        task.setAverageRequestMillis(requests == 0 ? 0 : totalDuration / requests); saveProgressIfRunning(task);
     }
 
     private void refreshUpdateCounts(CrawlerBook book, CrawlerTask task, int success, int failed,
@@ -527,7 +619,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         refreshBookCounts(book);
         task.setTotalCount(total); task.setSuccessCount(success); task.setFailedCount(failed);
         task.setWaitingCount(Math.max(0, total - success - failed));
-        task.setAverageRequestMillis(requests == 0 ? 0 : totalDuration / requests); taskRepository.save(task);
+        task.setAverageRequestMillis(requests == 0 ? 0 : totalDuration / requests); saveProgressIfRunning(task);
     }
 
     private void refreshBookCounts(CrawlerBook book) {
@@ -547,11 +639,88 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     }
 
     private void fail(String id, String message) {
-        taskRepository.findById(id).ifPresent(task -> { task.setStatus(CrawlerTask.TaskStatus.FAILED); task.setErrorMessage(message); task.setFinishedAt(LocalDateTime.now()); taskRepository.save(task); if (task.getCrawlerBook() != null) { task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.FAILED); bookRepository.save(task.getCrawlerBook()); } recordCrawlerEvent(task, "采集任务失败", "原因：" + message); });
+        synchronized (taskLock(id)) {
+            taskRepository.findById(id).filter(task -> task.getStatus() == CrawlerTask.TaskStatus.RUNNING
+                    || task.getStatus() == CrawlerTask.TaskStatus.WAITING).ifPresent(task -> {
+                task.setStatus(CrawlerTask.TaskStatus.FAILED); task.setErrorMessage(message);
+                task.setFinishedAt(LocalDateTime.now()); taskRepository.save(task);
+                if (task.getCrawlerBook() != null) {
+                    task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.FAILED);
+                    bookRepository.save(task.getCrawlerBook());
+                }
+                recordCrawlerEvent(task, "采集任务失败", "原因：" + message);
+            });
+        }
+    }
+
+    private CrawlerTask runningTask(String taskId) {
+        return taskRepository.findById(taskId)
+                .filter(task -> task.getStatus() == CrawlerTask.TaskStatus.RUNNING)
+                .orElse(null);
+    }
+
+    private CrawlerTask saveProgressIfRunning(CrawlerTask source) {
+        synchronized (taskLock(source.getId())) {
+            CrawlerTask current = runningTask(source.getId());
+            if (current == null) return null;
+            current.setTotalCount(source.getTotalCount());
+            current.setSuccessCount(source.getSuccessCount());
+            current.setFailedCount(source.getFailedCount());
+            current.setWaitingCount(source.getWaitingCount());
+            current.setCurrentChapter(source.getCurrentChapter());
+            current.setAverageRequestMillis(source.getAverageRequestMillis());
+            return taskRepository.save(current);
+        }
+    }
+
+    private CrawlerTask finishIfRunning(CrawlerTask source) {
+        synchronized (taskLock(source.getId())) {
+            CrawlerTask current = runningTask(source.getId());
+            if (current == null) return null;
+            current.setStatus(source.getStatus());
+            current.setTotalCount(source.getTotalCount());
+            current.setSuccessCount(source.getSuccessCount());
+            current.setFailedCount(source.getFailedCount());
+            current.setWaitingCount(source.getWaitingCount());
+            current.setCurrentChapter(source.getCurrentChapter());
+            current.setAverageRequestMillis(source.getAverageRequestMillis());
+            current.setFinishedAt(source.getFinishedAt());
+            current.setErrorMessage(source.getErrorMessage());
+            return taskRepository.save(current);
+        }
+    }
+
+    private boolean isStopRequested(String taskId) {
+        return taskRepository.findById(taskId)
+                .map(task -> task.getStatus() == CrawlerTask.TaskStatus.PAUSED
+                        || task.getStatus() == CrawlerTask.TaskStatus.CANCELLED)
+                .orElse(true);
+    }
+
+    private Object taskLock(String taskId) {
+        return taskLocks[Math.floorMod(taskId.hashCode(), taskLocks.length)];
+    }
+
+    private static Object[] createTaskLocks() {
+        Object[] locks = new Object[64];
+        Arrays.setAll(locks, ignored -> new Object());
+        return locks;
     }
 
     @Override public void onApplicationEvent(ContextRefreshedEvent event) {
-        taskRepository.findByStatusIn(List.of(CrawlerTask.TaskStatus.RUNNING, CrawlerTask.TaskStatus.WAITING)).forEach(task -> { task.setStatus(CrawlerTask.TaskStatus.WAITING); taskRepository.save(task); submit(task.getId()); });
+        taskRepository.findByStatusIn(List.of(CrawlerTask.TaskStatus.RUNNING, CrawlerTask.TaskStatus.WAITING)).forEach(task -> {
+            CrawlerTask.TaskStatus interruptedStatus = task.getStatus();
+            task.setStatus(CrawlerTask.TaskStatus.PAUSED);
+            task.setErrorMessage("服务重启后已自动暂停，请手动继续或删除任务");
+            taskRepository.save(task);
+            if (task.getCrawlerBook() != null) {
+                task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.PAUSED);
+                bookRepository.save(task.getCrawlerBook());
+            }
+            log.info("[采集任务] 服务启动时暂停遗留任务: taskId={}, previousStatus={}, book={}",
+                    task.getId(), interruptedStatus, bookName(task.getCrawlerBook()));
+            recordCrawlerEvent(task, "服务重启后任务已暂停", "重启前状态：" + interruptedStatus);
+        });
     }
     @PreDestroy public void shutdown() { executor.shutdownNow(); }
 
@@ -602,6 +771,14 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         int codePoints = normalized.codePointCount(0, normalized.length());
         if (codePoints <= 50) return normalized;
         return normalized.substring(0, normalized.offsetByCodePoints(0, 50)) + "…";
+    }
+    static String matchedContentFailureMarker(CrawlerSite site, String content) {
+        if (site == null || site.getContentFailureMarkers() == null || site.getContentFailureMarkers().isBlank()
+                || content == null || content.isBlank()) return null;
+        String normalizedContent = content.toLowerCase(Locale.ROOT);
+        return site.getContentFailureMarkers().lines().map(String::trim).filter(marker -> !marker.isBlank())
+                .filter(marker -> normalizedContent.contains(marker.toLowerCase(Locale.ROOT)))
+                .findFirst().orElse(null);
     }
     private String userMessage(Exception e) { if (e instanceof ResponseStatusException r && r.getReason() != null) return r.getReason(); return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(); }
 }

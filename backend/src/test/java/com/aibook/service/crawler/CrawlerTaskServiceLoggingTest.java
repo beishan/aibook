@@ -1,5 +1,6 @@
 package com.aibook.service.crawler;
 
+import com.aibook.model.entity.CrawlerSite;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,5 +24,18 @@ class CrawlerTaskServiceLoggingTest {
     @Test
     void contentPreviewHandlesEmptyContent() {
         assertThat(CrawlerTaskService.contentPreview(" \n\t ")).isEqualTo("(空)");
+    }
+
+    @Test
+    void matchesAnyConfiguredContentFailureMarkerIgnoringCase() {
+        CrawlerSite site = CrawlerSite.builder()
+                .contentFailureMarkers("以下内容为VIP专属，升级会员即可继续阅读\nAccess Denied").build();
+
+        assertThat(CrawlerTaskService.matchedContentFailureMarker(site,
+                "本章提示：以下内容为VIP专属，升级会员即可继续阅读"))
+                .isEqualTo("以下内容为VIP专属，升级会员即可继续阅读");
+        assertThat(CrawlerTaskService.matchedContentFailureMarker(site, "ACCESS DENIED"))
+                .isEqualTo("Access Denied");
+        assertThat(CrawlerTaskService.matchedContentFailureMarker(site, "正常章节正文")).isNull();
     }
 }

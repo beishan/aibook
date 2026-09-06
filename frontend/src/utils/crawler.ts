@@ -20,7 +20,7 @@ export interface CrawlerSitePayload {
   requestIntervalMillis: number; randomDelayMillis: number; maxConcurrency: number
   timeoutMillis: number; retryCount: number; encoding: string; userAgent?: string
   cookie?: string; headersJson?: string; proxies:CrawlerProxy[]; scanIntervalMinutes:number
-  updateIntervalMinutes:number; maxDiscoveryPages:number; autoImportFormat:'TXT'|'EPUB'|'BOTH'
+  updateIntervalMinutes:number; maxDiscoveryPages:number; autoImportFormat:'TXT'|'EPUB'|'BOTH'; contentFailureMarkers:string[]
 }
 export interface CrawlerSite extends CrawlerSitePayload { id: number; status: string; bookCount: number; proxy?:string; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string }
 export interface CrawlerBook { id:number; siteId:number; siteName:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; bookStatus?:string; latestChapter?:string; chapterCount:number; crawledChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; libraryBookId?:number; discoverTime:string; lastCrawlTime?:string }

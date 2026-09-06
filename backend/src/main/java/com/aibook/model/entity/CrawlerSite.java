@@ -47,6 +47,7 @@ public class CrawlerSite {
     @Column(length = 500) private String userAgent;
     @Column(columnDefinition = "TEXT") private String cookie;
     @Column(columnDefinition = "TEXT") private String headersJson;
+    @Column(columnDefinition = "TEXT") private String contentFailureMarkers;
     @Column(length = 1000) private String proxy;
     @Column(columnDefinition = "TEXT") private String proxyConfigsJson;
     @Enumerated(EnumType.STRING) @Builder.Default private ParserType parserType = ParserType.CONFIG;

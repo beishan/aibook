@@ -58,7 +58,7 @@ class CrawlerManagementServiceTest {
 
         var result = service.createSite(user, new SitePayload("示例站", "demo", "https://example.com/",
                 null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
-                "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB"));
+                "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB", List.of()));
 
         assertThat(result.rule()).isNull();
         assertThat(result.ruleVersion()).isNull();
@@ -74,7 +74,7 @@ class CrawlerManagementServiceTest {
 
         var result = service.createSite(user, new SitePayload("示例站", " ", "https://www.example.com/books",
                 null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
-                "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB"));
+                "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB", List.of()));
 
         assertThat(result.siteCode()).isEqualTo("example_com_2");
     }
@@ -89,7 +89,7 @@ class CrawlerManagementServiceTest {
 
         var result = service.updateSite(user, 7L, new SitePayload("新名称", "example_com", "https://example.com",
                 null, true, false, false, true, false, 1500, 1000, 1, 15000, 2,
-                "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB"));
+                "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB", List.of()));
 
         assertThat(result.siteName()).isEqualTo("新名称");
         assertThat(result.siteCode()).isEqualTo("example_com");
@@ -104,7 +104,7 @@ class CrawlerManagementServiceTest {
                 null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
                 "UTF-8", null, null, null, List.of(
                         new ProxyPayload("备用", "http://127.0.0.1:7890", false),
-                        new ProxyPayload("当前", "http://192.168.1.2:8080", true)), 360, 30, 3, "EPUB"));
+                        new ProxyPayload("当前", "http://192.168.1.2:8080", true)), 360, 30, 3, "EPUB", List.of()));
 
         assertThat(result.proxies()).hasSize(2);
         assertThat(result.proxy()).isEqualTo("http://192.168.1.2:8080");
@@ -118,10 +118,23 @@ class CrawlerManagementServiceTest {
                 null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
                 "UTF-8", null, null, null, List.of(
                         new ProxyPayload("代理一", "http://127.0.0.1:7890", true),
-                        new ProxyPayload("代理二", "http://127.0.0.1:8080", true)), 360, 30, 3, "EPUB");
+                        new ProxyPayload("代理二", "http://127.0.0.1:8080", true)), 360, 30, 3, "EPUB", List.of());
 
         assertThatThrownBy(() -> service.createSite(user, payload))
                 .hasMessageContaining("只能启用一组代理");
+    }
+
+    @Test
+    void storesNormalizedDistinctContentFailureMarkers() {
+        User user = user();
+        when(sites.findByUserAndSiteCode(user, "marker-demo")).thenReturn(Optional.empty());
+
+        var result = service.createSite(user, new SitePayload("特征站", "marker-demo", "https://example.com",
+                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
+                "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB",
+                List.of(" VIP 专属 ", "VIP 专属", "请登录后阅读")));
+
+        assertThat(result.contentFailureMarkers()).containsExactly("VIP 专属", "请登录后阅读");
     }
 
     @Test

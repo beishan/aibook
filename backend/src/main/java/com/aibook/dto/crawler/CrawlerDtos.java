@@ -37,7 +37,8 @@ public final class CrawlerDtos {
             String cookie, String headersJson, @Valid List<ProxyPayload> proxies,
             @Min(1) Integer scanIntervalMinutes, @Min(1) Integer updateIntervalMinutes,
             @Min(1) @Max(50) Integer maxDiscoveryPages,
-            @Pattern(regexp = "(?i)TXT|EPUB|BOTH") String autoImportFormat) { }
+            @Pattern(regexp = "(?i)TXT|EPUB|BOTH") String autoImportFormat,
+            @Size(max = 50) List<@NotBlank @Size(max = 500) String> contentFailureMarkers) { }
 
     public record SiteView(Long id, String siteName, String siteCode, String baseUrl, String homeUrl,
             boolean enabled, boolean autoScan, boolean autoCrawl, boolean autoUpdate,
@@ -49,7 +50,8 @@ public final class CrawlerDtos {
             String autoImportFormat, String status, long bookCount, RulePayload rule,
             Integer ruleVersion, Long activeRuleId, long ruleCount,
             LocalDateTime lastScanAt, LocalDateTime lastUpdateAt,
-            LocalDateTime lastHealthCheckAt, String healthMessage, LocalDateTime createdAt) { }
+            LocalDateTime lastHealthCheckAt, String healthMessage, LocalDateTime createdAt,
+            List<String> contentFailureMarkers) { }
 
     public record ManualCrawlRequest(@NotBlank String url) { }
     public record ExportRequest(@NotEmpty List<@Pattern(regexp = "(?i)TXT|EPUB") String> formats) { }
