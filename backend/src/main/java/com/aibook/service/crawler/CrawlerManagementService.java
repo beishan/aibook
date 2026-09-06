@@ -143,7 +143,7 @@ public class CrawlerManagementService {
 
     @Transactional(readOnly = true)
     public Page<BookView> discoveredBooks(User user, int page, int size, String keyword, Long siteId, String sort) {
-        String normalizedKeyword = blank(keyword) ? null : keyword.trim();
+        String normalizedKeyword = blank(keyword) ? "" : keyword.trim();
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
                 discoverySort(sort));
         return bookRepository.searchDiscoveredBooks(user, CrawlerBook.DiscoveryStatus.ACTIVE,

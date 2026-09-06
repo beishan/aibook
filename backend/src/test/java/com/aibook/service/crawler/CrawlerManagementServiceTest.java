@@ -179,6 +179,20 @@ class CrawlerManagementServiceTest {
     }
 
     @Test
+    void bindsBlankDiscoveryKeywordAsTextInsteadOfNull() {
+        User user = user();
+        when(books.searchDiscoveredBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq(""), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        var result = service.discoveredBooks(user, 0, 20, null, null, "DISCOVER_TIME_DESC");
+
+        assertThat(result).isEmpty();
+        verify(books).searchDiscoveredBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq(""), isNull(), any(Pageable.class));
+    }
+
+    @Test
     void enablingVersionDisablesEveryOtherVersionAndReplacesRuntimeRule() throws Exception {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").siteCode("demo")

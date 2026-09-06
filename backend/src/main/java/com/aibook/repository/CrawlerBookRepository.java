@@ -17,7 +17,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
               and b.discoveryStatus = :discoveryStatus
               and b.crawlStatus = :crawlStatus
               and (:siteId is null or b.site.id = :siteId)
-              and (:keyword is null
+              and (:keyword = ''
                    or lower(b.bookName) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
                    or lower(b.site.siteName) like lower(concat('%', :keyword, '%'))
