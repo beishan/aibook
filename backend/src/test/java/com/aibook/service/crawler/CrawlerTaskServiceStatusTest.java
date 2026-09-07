@@ -1,5 +1,6 @@
 package com.aibook.service.crawler;
 
+import com.aibook.model.entity.Book;
 import com.aibook.model.entity.CrawlerBook;
 import com.aibook.model.entity.CrawlerChapter;
 import com.aibook.model.entity.CrawlerSite;
@@ -40,6 +41,7 @@ class CrawlerTaskServiceStatusTest {
 
         CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
                 chapters, tasks, mock(CrawlerTaskLogRepository.class), management, operationLogs,
+                mock(CrawlerExportService.class),
                 mock(CrawlerHttpClient.class),
                 List.of(), mock(ApplicationContext.class));
         try {
@@ -53,6 +55,35 @@ class CrawlerTaskServiceStatusTest {
             verify(tasks, never()).save(any());
             verify(operationLogs).recordEntry(eq(user), eq(OperationLog.Action.CRAWLER_TASK),
                     isNull(), eq("示例书"), contains("人工修改采集状态"), contains("新状态：COMPLETED"));
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void changesAutomaticLibrarySyncForImportedBook() {
+        User user = User.builder().id(1L).username("owner").build();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站").build();
+        CrawlerBook book = CrawlerBook.builder().id(3L).site(site).bookName("示例书")
+                .libraryBook(Book.builder().id(9L).user(user).title("示例书").format("epub")
+                        .filePath("book.epub").build())
+                .autoSyncLibrary(true).build();
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        when(management.ownedBook(user, 3L)).thenReturn(book);
+        when(management.bookView(book)).thenCallRealMethod();
+        when(books.save(any(CrawlerBook.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
+                mock(CrawlerChapterRepository.class), mock(CrawlerTaskRepository.class),
+                mock(CrawlerTaskLogRepository.class), management, mock(OperationLogService.class),
+                mock(CrawlerExportService.class), mock(CrawlerHttpClient.class), List.of(),
+                mock(ApplicationContext.class));
+        try {
+            var result = service.setLibrarySync(user, 3L, false);
+
+            assertThat(result.autoSyncLibrary()).isFalse();
+            assertThat(book.getAutoSyncLibrary()).isFalse();
+            verify(books).save(book);
         } finally {
             service.shutdown();
         }

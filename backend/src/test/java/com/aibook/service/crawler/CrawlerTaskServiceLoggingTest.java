@@ -99,6 +99,7 @@ class CrawlerTaskServiceLoggingTest {
                 crawlerLogs,
                 mock(CrawlerManagementService.class),
                 operationLogs,
+                mock(CrawlerExportService.class),
                 mock(CrawlerHttpClient.class),
                 List.of(),
                 mock(ApplicationContext.class));

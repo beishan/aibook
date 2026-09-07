@@ -57,6 +57,7 @@ public final class CrawlerDtos {
     public record BookCrawlStatusRequest(
             @NotBlank @Pattern(regexp = "DISCOVERED|WAITING|PAUSED|PARTIAL_SUCCESS|COMPLETED|FAILED") String status,
             Boolean autoUpdateEnabled) { }
+    public record LibrarySyncRequest(@NotNull Boolean enabled) { }
     public record TaskUpdateRequest(@NotNull CrawlerTask.Priority priority) { }
     public record BatchBookRequest(@NotEmpty List<@NotNull Long> bookIds) { }
     public record DiscoveryStatusRequest(@NotEmpty List<@NotNull Long> bookIds,
@@ -82,6 +83,7 @@ public final class CrawlerDtos {
             String category, String bookStatus, String latestChapter, int chapterCount,
             int crawledChapterCount, int failedChapterCount, String crawlStatus,
             String discoveryStatus, String importStatus, boolean autoUpdateEnabled,
+            boolean autoSyncLibrary,
             Long libraryBookId, LocalDateTime discoverTime,
             LocalDateTime lastCrawlTime) { }
 

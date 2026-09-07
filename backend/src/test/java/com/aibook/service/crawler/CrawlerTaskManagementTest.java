@@ -113,7 +113,7 @@ class CrawlerTaskManagementTest {
         });
         CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
                 chapters, tasks, mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
-                mock(OperationLogService.class), httpClient, List.of(parser), mock(ApplicationContext.class));
+                mock(OperationLogService.class), mock(CrawlerExportService.class), httpClient, List.of(parser), mock(ApplicationContext.class));
         try {
             service.run(task.getId());
 
@@ -154,7 +154,7 @@ class CrawlerTaskManagementTest {
         when(httpClient.get(eq(site), anyString())).thenThrow(new IOException("代理连接失败"));
         CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
                 chapters, tasks, mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
-                mock(OperationLogService.class), httpClient, List.of(parser), mock(ApplicationContext.class));
+                mock(OperationLogService.class), mock(CrawlerExportService.class), httpClient, List.of(parser), mock(ApplicationContext.class));
         try {
             service.run(task.getId());
 
@@ -314,6 +314,7 @@ class CrawlerTaskManagementTest {
         return new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
                 mock(CrawlerChapterRepository.class), tasks, mock(CrawlerTaskLogRepository.class),
                 management, mock(OperationLogService.class),
+                mock(CrawlerExportService.class),
                 mock(CrawlerHttpClient.class), List.of(),
                 mock(ApplicationContext.class));
     }

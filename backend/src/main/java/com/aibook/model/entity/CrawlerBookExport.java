@@ -17,5 +17,6 @@ public class CrawlerBookExport {
     @Column(nullable = false, length = 1500) private String filePath;
     private Long fileSize;
     private String fileHash;
+    private String sourceHash;
     @CreationTimestamp private LocalDateTime createdAt;
 }

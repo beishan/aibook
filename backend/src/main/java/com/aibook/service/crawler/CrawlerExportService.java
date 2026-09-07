@@ -30,6 +30,7 @@ public class CrawlerExportService {
     private final CrawlerBookRepository crawlerBookRepository;
     private final BookRepository bookRepository;
     private final BookVersionRepository versionRepository;
+    private final VersionReadingProgressRepository versionProgressRepository;
     private final OperationLogService operationLogService;
 
     @Value("${crawler.storage-path:./crawler-data}") private String storagePath;
@@ -45,13 +46,25 @@ public class CrawlerExportService {
             String format = requested.toUpperCase(Locale.ROOT);
             if (!Set.of("TXT", "EPUB").contains(format)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "仅支持生成 TXT 或 EPUB");
             Path output = Path.of(storagePath).resolve("exports").resolve(book.getId() + "." + format.toLowerCase(Locale.ROOT));
+            String sourceHash = sourceHash(book, chapters, format);
+            Optional<CrawlerBookExport> existing = exportRepository.findByCrawlerBookAndFormat(book, format);
+            if (existing.filter(item -> sourceHash.equals(item.getSourceHash()))
+                    .map(CrawlerBookExport::getFilePath).map(Path::of).filter(Files::isRegularFile).isPresent()) {
+                result.add(view(existing.orElseThrow()));
+                continue;
+            }
+            Path temporary = null;
             try {
                 Files.createDirectories(output.getParent());
-                if ("TXT".equals(format)) writeTxt(output, book, chapters); else writeEpub(output, book, chapters);
-                CrawlerBookExport export = exportRepository.findByCrawlerBookAndFormat(book, format).orElseGet(CrawlerBookExport::new);
-                export.setCrawlerBook(book); export.setFormat(format); export.setFilePath(output.toString()); export.setFileSize(Files.size(output)); export.setFileHash(hash(output));
+                temporary = Files.createTempFile(output.getParent(), book.getId() + "-", ".tmp");
+                if ("TXT".equals(format)) writeTxt(temporary, book, chapters); else writeEpub(temporary, book, chapters);
+                replaceFile(temporary, output);
+                temporary = null;
+                CrawlerBookExport export = existing.orElseGet(CrawlerBookExport::new);
+                export.setCrawlerBook(book); export.setFormat(format); export.setFilePath(output.toString()); export.setFileSize(Files.size(output)); export.setFileHash(hash(output)); export.setSourceHash(sourceHash);
                 result.add(view(exportRepository.save(export)));
             } catch (IOException exception) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "生成 " + format + " 失败", exception); }
+            finally { if (temporary != null) try { Files.deleteIfExists(temporary); } catch (IOException ignored) { } }
         }
         recordOperation(user, book, "生成采集书籍文件：" + book.getBookName(),
                 "格式：" + String.join(",", result.stream().map(ExportView::format).toList())
@@ -89,10 +102,13 @@ public class CrawlerExportService {
             addSecondaryVersion(refreshed, "TXT");
             return libraryId;
         }
-        if (crawlerBook.getLibraryBook() != null) return crawlerBook.getLibraryBook().getId();
+        if (crawlerBook.getLibraryBook() != null) {
+            syncImportedBook(user, bookId);
+            return crawlerBook.getLibraryBook().getId();
+        }
         String format = requestedFormat;
-        CrawlerBookExport source = exportRepository.findByCrawlerBookAndFormat(crawlerBook, format)
-                .orElseGet(() -> { generate(user, bookId, List.of(format)); return exportRepository.findByCrawlerBookAndFormat(crawlerBook, format).orElseThrow(); });
+        generate(user, bookId, List.of(format));
+        CrawlerBookExport source = exportRepository.findByCrawlerBookAndFormat(crawlerBook, format).orElseThrow();
         Path sourcePath = Path.of(source.getFilePath());
         Path target = Path.of(uploadPath).resolve(UUID.randomUUID() + "." + format.toLowerCase(Locale.ROOT));
         try {
@@ -111,7 +127,8 @@ public class CrawlerExportService {
                     .format(format.toLowerCase(Locale.ROOT)).filePath(target.toString()).fileSize(Files.size(target)).fileHash(fileHash)
                     .primaryVersion(true).chapterCount(availableChapterCount).sourceType("CRAWLER")
                     .sourceId(crawlerBook.getId().toString()).sourceSite(crawlerBook.getSite().getSiteCode()).sourceUrl(crawlerBook.getBookUrl()).build());
-            crawlerBook.setLibraryBook(book); crawlerBook.setImportStatus(CrawlerBook.ImportStatus.IMPORTED); crawlerBookRepository.save(crawlerBook);
+            crawlerBook.setLibraryBook(book); crawlerBook.setImportStatus(CrawlerBook.ImportStatus.IMPORTED);
+            crawlerBook.setAutoSyncLibrary(true); crawlerBookRepository.save(crawlerBook);
             recordOperation(user, crawlerBook, "采集书籍加入书库：" + crawlerBook.getBookName(),
                     "格式：" + format + "；可用章节：" + availableChapterCount + "/"
                             + value(crawlerBook.getChapterCount()) + "；书库ID：" + book.getId());
@@ -128,8 +145,8 @@ public class CrawlerExportService {
                         && "CRAWLER".equals(version.getSourceType())
                         && crawlerBook.getId().toString().equals(version.getSourceId()));
         if (exists) return;
-        CrawlerBookExport source = exportRepository.findByCrawlerBookAndFormat(crawlerBook, format)
-                .orElseGet(() -> { generate(crawlerBook.getSite().getUser(), crawlerBook.getId(), List.of(format)); return exportRepository.findByCrawlerBookAndFormat(crawlerBook, format).orElseThrow(); });
+        generate(crawlerBook.getSite().getUser(), crawlerBook.getId(), List.of(format));
+        CrawlerBookExport source = exportRepository.findByCrawlerBookAndFormat(crawlerBook, format).orElseThrow();
         Path sourcePath = Path.of(source.getFilePath());
         Path target = Path.of(uploadPath).resolve(UUID.randomUUID() + "." + format.toLowerCase(Locale.ROOT));
         try {
@@ -147,6 +164,90 @@ public class CrawlerExportService {
             try { Files.deleteIfExists(target); } catch (Exception ignored) { }
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "添加 " + format + " 版本失败", exception);
         }
+    }
+
+    /** 将已入库采集书籍的最新内容发布为同一本书的新版本；内容未变化时不重复创建。 */
+    @Transactional
+    public int syncImportedBook(User user, Long bookId) {
+        CrawlerBook crawlerBook = managementService.ownedBook(user, bookId);
+        Book libraryBook = crawlerBook.getLibraryBook();
+        if (libraryBook == null) return 0;
+        libraryBook.setTitle(crawlerBook.getBookName()); libraryBook.setAuthor(crawlerBook.getAuthor());
+        libraryBook.setDescription(crawlerBook.getDescription()); libraryBook.setCoverUrl(crawlerBook.getCoverUrl());
+        bookRepository.save(libraryBook);
+        List<BookVersion> versions = versionRepository.findByBookOrderByPrimaryVersionDescCreatedAtAsc(libraryBook);
+        LinkedHashSet<String> formats = new LinkedHashSet<>();
+        formats.add(libraryBook.getFormat().toUpperCase(Locale.ROOT));
+        versions.stream()
+                .filter(version -> "CRAWLER".equals(version.getSourceType()))
+                .filter(version -> crawlerBook.getId().toString().equals(version.getSourceId()))
+                .map(BookVersion::getFormat).map(value -> value.toUpperCase(Locale.ROOT))
+                .filter(value -> Set.of("EPUB", "TXT").contains(value)).forEach(formats::add);
+        int published = 0;
+        for (String format : formats) {
+            generate(crawlerBook.getSite().getUser(), crawlerBook.getId(), List.of(format));
+            CrawlerBookExport export = exportRepository.findByCrawlerBookAndFormat(crawlerBook, format).orElseThrow();
+            Optional<BookVersion> current = versions.stream()
+                    .filter(version -> format.equalsIgnoreCase(version.getFormat()))
+                    .filter(version -> "CRAWLER".equals(version.getSourceType()))
+                    .filter(version -> crawlerBook.getId().toString().equals(version.getSourceId()))
+                    .max(Comparator.comparing(BookVersion::getId));
+            if (current.filter(version -> Objects.equals(version.getFileHash(), export.getFileHash())).isPresent()) continue;
+            Optional<BookVersion> duplicate = versionRepository.findByFileHash(export.getFileHash());
+            if (duplicate.isPresent()) continue;
+            publishVersion(crawlerBook, libraryBook, versions, export, format);
+            versions = versionRepository.findByBookOrderByPrimaryVersionDescCreatedAtAsc(libraryBook);
+            published++;
+        }
+        return published;
+    }
+
+    private void publishVersion(CrawlerBook crawlerBook, Book libraryBook, List<BookVersion> versions,
+            CrawlerBookExport export, String format) {
+        Path source = Path.of(export.getFilePath());
+        Path target = Path.of(uploadPath).resolve(UUID.randomUUID() + "." + format.toLowerCase(Locale.ROOT));
+        boolean primary = format.equalsIgnoreCase(libraryBook.getFormat());
+        BookVersion previousPrimary = versions.stream().filter(version -> Boolean.TRUE.equals(version.getPrimaryVersion()))
+                .findFirst().orElse(null);
+        try {
+            Files.createDirectories(target.getParent());
+            Files.copy(source, target);
+            if (primary) {
+                versions.stream().filter(version -> Boolean.TRUE.equals(version.getPrimaryVersion())).forEach(version -> {
+                    version.setPrimaryVersion(false);
+                    versionRepository.save(version);
+                });
+            }
+            BookVersion version = versionRepository.save(BookVersion.builder().book(libraryBook)
+                    .displayName(safe(crawlerBook.getBookName()) + "-" + availableChapters(crawlerBook).size()
+                            + "章." + format.toLowerCase(Locale.ROOT))
+                    .format(format.toLowerCase(Locale.ROOT)).filePath(target.toString())
+                    .fileSize(Files.size(target)).fileHash(export.getFileHash()).primaryVersion(primary)
+                    .chapterCount(availableChapters(crawlerBook).size()).sourceType("CRAWLER")
+                    .sourceId(crawlerBook.getId().toString()).sourceSite(crawlerBook.getSite().getSiteCode())
+                    .sourceUrl(crawlerBook.getBookUrl()).build());
+            if (primary) {
+                libraryBook.setTitle(crawlerBook.getBookName()); libraryBook.setAuthor(crawlerBook.getAuthor());
+                libraryBook.setDescription(crawlerBook.getDescription()); libraryBook.setCoverUrl(crawlerBook.getCoverUrl());
+                libraryBook.setFilePath(target.toString()); libraryBook.setFileSize(Files.size(target));
+                libraryBook.setFileHash(export.getFileHash()); libraryBook.setChapterCount(version.getChapterCount());
+                bookRepository.save(libraryBook);
+                migrateProgress(previousPrimary, version);
+            }
+        } catch (Exception exception) {
+            try { Files.deleteIfExists(target); } catch (Exception ignored) { }
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "同步书库版本失败", exception);
+        }
+    }
+
+    private void migrateProgress(BookVersion previous, BookVersion current) {
+        if (previous == null) return;
+        versionProgressRepository.findByUserAndVersion(previous.getBook().getUser(), previous).ifPresent(progress ->
+                versionProgressRepository.save(VersionReadingProgress.builder().version(current)
+                        .user(progress.getUser()).currentChapter(progress.getCurrentChapter())
+                        .currentChapterTitle(progress.getCurrentChapterTitle())
+                        .chapterProgress(progress.getChapterProgress()).totalProgress(progress.getTotalProgress())
+                        .readingTimeSeconds(progress.getReadingTimeSeconds()).lastReadAt(progress.getLastReadAt()).build()));
     }
 
     private List<CrawlerChapter> availableChapters(CrawlerBook book) {
@@ -175,22 +276,47 @@ public class CrawlerExportService {
             write(zip, "META-INF/container.xml", "<?xml version=\"1.0\"?><container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OEBPS/content.opf\" media-type=\"application/oebps-package+xml\"/></rootfiles></container>");
             StringBuilder nav = new StringBuilder(); StringBuilder manifest = new StringBuilder("<item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>"); StringBuilder spine = new StringBuilder();
             for (int i = 0; i < chapters.size(); i++) {
-                String file = String.format(Locale.ROOT, "chapter-%04d.xhtml", i + 1); CrawlerChapter chapter = chapters.get(i);
+                CrawlerChapter chapter = chapters.get(i); String token = chapterToken(chapter); String file = "chapter-" + token + ".xhtml";
                 nav.append("<li><a href=\"").append(file).append("\">").append(xml(chapter.getChapterName())).append("</a></li>");
-                manifest.append("<item id=\"c").append(i).append("\" href=\"").append(file).append("\" media-type=\"application/xhtml+xml\"/>"); spine.append("<itemref idref=\"c").append(i).append("\"/>");
+                manifest.append("<item id=\"c").append(token).append("\" href=\"").append(file).append("\" media-type=\"application/xhtml+xml\"/>"); spine.append("<itemref idref=\"c").append(token).append("\"/>");
                 StringBuilder body = new StringBuilder(); for (String p : chapter.getContent().split("\\n+")) if (!p.isBlank()) body.append("<p>").append(xml(p.trim())).append("</p>");
                 write(zip, "OEBPS/" + file, xhtml(chapter.getChapterName(), "<h1>" + xml(chapter.getChapterName()) + "</h1>" + body));
             }
             write(zip, "OEBPS/nav.xhtml", xhtml("目录", "<nav epub:type=\"toc\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><h1>目录</h1><ol>" + nav + "</ol></nav>"));
             String modified = java.time.format.DateTimeFormatter.ISO_INSTANT.format(
                     java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS));
-            write(zip, "OEBPS/content.opf", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"id\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:identifier id=\"id\">urn:uuid:" + UUID.randomUUID() + "</dc:identifier><dc:title>" + xml(book.getBookName()) + "</dc:title><dc:creator>" + xml(defaultString(book.getAuthor(), "未知作者")) + "</dc:creator><dc:language>zh-CN</dc:language><meta property=\"dcterms:modified\">" + modified + "</meta></metadata><manifest>" + manifest + "</manifest><spine>" + spine + "</spine></package>");
+            String identifier = UUID.nameUUIDFromBytes((book.getSite().getSiteCode() + ":" + book.getExternalBookId()).getBytes(StandardCharsets.UTF_8)).toString();
+            write(zip, "OEBPS/content.opf", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"id\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:identifier id=\"id\">urn:uuid:" + identifier + "</dc:identifier><dc:title>" + xml(book.getBookName()) + "</dc:title><dc:creator>" + xml(defaultString(book.getAuthor(), "未知作者")) + "</dc:creator><dc:language>zh-CN</dc:language><meta property=\"dcterms:modified\">" + modified + "</meta></metadata><manifest>" + manifest + "</manifest><spine>" + spine + "</spine></package>");
         }
+    }
+
+    private String chapterToken(CrawlerChapter chapter) {
+        String identity = defaultString(chapter.getExternalChapterId(),
+                defaultString(chapter.getChapterUrl(), "chapter-" + Objects.toString(
+                        chapter.getId(), Objects.toString(chapter.getChapterIndex(), "unknown"))));
+        return sha256(identity).substring(0, 20);
+    }
+
+    private String sourceHash(CrawlerBook book, List<CrawlerChapter> chapters, String format) {
+        StringBuilder source = new StringBuilder(format).append('\n').append(book.getBookName()).append('\n')
+                .append(defaultString(book.getAuthor(), "")).append('\n').append(defaultString(book.getDescription(), ""))
+                .append('\n').append(defaultString(book.getCoverUrl(), ""));
+        for (CrawlerChapter chapter : chapters) source.append('\n').append(chapter.getChapterIndex()).append('|')
+                .append(defaultString(chapter.getExternalChapterId(), chapter.getChapterUrl())).append('|')
+                .append(chapter.getChapterName()).append('|')
+                .append(defaultString(chapter.getContentHash(), sha256(defaultString(chapter.getContent(), ""))));
+        return sha256(source.toString());
+    }
+
+    private void replaceFile(Path source, Path target) throws IOException {
+        try { Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
+        catch (AtomicMoveNotSupportedException ignored) { Files.move(source, target, StandardCopyOption.REPLACE_EXISTING); }
     }
 
     private String xhtml(String title, String body) { return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>" + xml(title) + "</title><style>body{font-family:serif;line-height:1.7;padding:1em}h1{text-align:center}p{text-indent:2em}</style></head><body>" + body + "</body></html>"; }
     private void write(ZipOutputStream zip, String name, String value) throws IOException { zip.putNextEntry(new ZipEntry(name)); zip.write(value.getBytes(StandardCharsets.UTF_8)); zip.closeEntry(); }
     private String hash(Path path) throws IOException { try (InputStream in = Files.newInputStream(path)) { MessageDigest digest = MessageDigest.getInstance("SHA-256"); byte[] buffer = new byte[8192]; int read; while ((read = in.read(buffer)) >= 0) digest.update(buffer, 0, read); return HexFormat.of().formatHex(digest.digest()); } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); } }
+    private String sha256(String value) { try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); } }
     private String xml(String value) { return Objects.toString(value, "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;"); }
     private String safe(String value) { return value.replaceAll("[\\\\/:*?\"<>|]", "_"); }
     private String defaultString(String value, String fallback) { return value == null || value.isBlank() ? fallback : value; }

@@ -33,6 +33,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     private final CrawlerTaskLogRepository taskLogRepository;
     private final CrawlerManagementService managementService;
     private final OperationLogService operationLogService;
+    private final CrawlerExportService exportService;
     private final CrawlerHttpClient httpClient;
     private final List<BookCrawlerParser> parsers;
     private final ApplicationContext applicationContext;
@@ -135,6 +136,18 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         }
         log.info("[采集任务] 人工修改书籍状态: bookId={}, book={}, previous={}, current={}",
                 book.getId(), bookName(book), previous, status);
+        return managementService.bookView(book);
+    }
+
+    @Transactional
+    public com.aibook.dto.crawler.CrawlerDtos.BookView setLibrarySync(
+            User user, Long bookId, boolean enabled) {
+        CrawlerBook book = managementService.ownedBook(user, bookId);
+        if (book.getLibraryBook() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "书籍尚未加入书库，不能设置自动同步");
+        }
+        book.setAutoSyncLibrary(enabled);
+        bookRepository.save(book);
         return managementService.bookView(book);
     }
 
@@ -495,6 +508,20 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         book.setImportStatus(contentFailed != 0 ? CrawlerBook.ImportStatus.NOT_IMPORTED
                 : book.getLibraryBook() == null ? CrawlerBook.ImportStatus.READY : CrawlerBook.ImportStatus.IMPORTED);
         book.setLastCrawlTime(LocalDateTime.now()); bookRepository.save(book);
+        if (contentFailed == 0 && book.getLibraryBook() != null && !Boolean.FALSE.equals(book.getAutoSyncLibrary())) {
+            try {
+                int publishedVersions = exportService.syncImportedBook(task.getUser(), book.getId());
+                recordCrawlerEvent(task, publishedVersions == 0 ? "书库版本无需更新" : "书库版本同步完成",
+                        publishedVersions == 0 ? "采集内容与当前书库版本一致"
+                                : "已发布新版本：" + publishedVersions + " 个；书库ID：" + book.getLibraryBook().getId());
+            } catch (Exception exception) {
+                task.setStatus(CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
+                task.setErrorMessage("正文更新成功，但同步书库失败：" + userMessage(exception));
+                taskRepository.save(task);
+                recordCrawlerEvent(task, "书库版本同步失败", task.getErrorMessage());
+                log.warn("[采集任务] 书库版本同步失败: taskId={}, bookId={}", task.getId(), book.getId(), exception);
+            }
+        }
         log.info("[采集任务] 采集完毕: taskId={}, book={}, status={}, progress={}/{} ({}%), failed={}, averageRequestMs={}",
                 task.getId(), bookName(book), task.getStatus(), task.getSuccessCount(), task.getTotalCount(),
                 progress(task), task.getFailedCount(), task.getAverageRequestMillis());
