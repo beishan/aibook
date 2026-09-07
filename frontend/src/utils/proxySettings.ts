@@ -40,6 +40,15 @@ export interface CrawlerProxyPayload {
   priority: number
 }
 
+export interface CrawlerRequestSettings {
+  timeoutMillis: number
+  retryCount: number
+  maxConsecutiveFailures: number
+  userAgent: string
+  cookie: string
+  headersJson: string
+}
+
 export const proxySettingsApi = {
   systemList: () => api.get<SystemProxyConfig[]>('/api/proxy-settings/system').then(response => response.data),
   createSystem: (payload: SystemProxyPayload) => api.post<SystemProxyConfig>('/api/proxy-settings/system', payload).then(response => response.data),
@@ -49,4 +58,6 @@ export const proxySettingsApi = {
   createCrawler: (payload: CrawlerProxyPayload) => api.post<CrawlerProxyConfig>('/api/proxy-settings/crawler', payload).then(response => response.data),
   updateCrawler: (id: number, payload: CrawlerProxyPayload) => api.put<CrawlerProxyConfig>(`/api/proxy-settings/crawler/${id}`, payload).then(response => response.data),
   deleteCrawler: (id: number) => api.delete(`/api/proxy-settings/crawler/${id}`),
+  crawlerSettings: () => api.get<CrawlerRequestSettings>('/api/crawler-settings').then(response => response.data),
+  updateCrawlerSettings: (payload: CrawlerRequestSettings) => api.put<CrawlerRequestSettings>('/api/crawler-settings', payload).then(response => response.data),
 }

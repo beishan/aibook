@@ -367,7 +367,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         long durationTotal = 0; int requests = 0;
         int updateSuccess = 0; int updateFailed = 0;
         RequestFailureGuard requestFailureGuard = new RequestFailureGuard(
-                value(site.getMaxConsecutiveFailures(), 5));
+                httpClient.maxConsecutiveFailures());
         for (CrawlerChapter chapter : pending) {
             CrawlerTask fresh = taskRepository.findById(task.getId()).orElseThrow();
             if (fresh.getStatus() == CrawlerTask.TaskStatus.PAUSED || fresh.getStatus() == CrawlerTask.TaskStatus.CANCELLED) {

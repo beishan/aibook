@@ -170,11 +170,25 @@ request_interval
 max_concurrency
 最大并发数
 
-timeout
-请求超时时间
+proxy
+
+status
+
+create_time
+
+update_time
+```
+
+## 4.2 crawler_request_settings
+
+全局爬虫请求配置，在系统设置中统一维护并对全部采集网站生效：
+
+```text
+timeout_millis
+单次请求超时时间
 
 retry_count
-失败重试次数
+单次请求失败重试次数
 
 max_consecutive_failures
 任务连续请求失败停止上限
@@ -183,15 +197,8 @@ user_agent
 
 cookie
 
-headers
-
-proxy
-
-status
-
-create_time
-
-update_time
+headers_json
+自定义请求头 JSON
 ```
 
 ---

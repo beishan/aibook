@@ -29,8 +29,7 @@ class CrawlerTaskManagementTest {
     @Test
     void stopsBookTaskAfterConfiguredConsecutiveRequestFailures() throws Exception {
         User user = user();
-        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站")
-                .maxConsecutiveFailures(5).build();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站").build();
         site.attachRule(new com.aibook.model.entity.CrawlerSiteRule());
         CrawlerBook book = CrawlerBook.builder().id(8L).site(site).bookName("代理失败书籍").build();
         List<CrawlerChapter> chaptersToCrawl = java.util.stream.IntStream.rangeClosed(1, 8)
@@ -51,6 +50,7 @@ class CrawlerTaskManagementTest {
         when(chapters.findByCrawlerBookOrderByChapterIndexAsc(book)).thenReturn(chaptersToCrawl);
         when(chapters.countByCrawlerBook(book)).thenReturn(8L);
         when(parser.supports(site)).thenReturn(true);
+        when(httpClient.maxConsecutiveFailures()).thenReturn(5);
         when(httpClient.get(eq(site), anyString())).thenThrow(new IOException("代理连接失败"));
         CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
                 chapters, tasks, mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),

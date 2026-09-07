@@ -4,8 +4,8 @@
       <div class="proxy-hero-mark" aria-hidden="true">⌁</div>
       <div>
         <p class="proxy-kicker">{{ crawler ? 'CRAWLER ROUTING' : 'NETWORK ROUTING' }}</p>
-        <h2>{{ crawler ? '爬虫代理配置' : '系统代理配置' }}</h2>
-        <p>{{ crawler ? '组合独立代理与系统代理引用，按较小的优先级数字依次尝试。' : '维护可被系统功能复用的代理资源；允许多条配置同时启用。' }}</p>
+        <h2>{{ crawler ? '爬虫设置' : '系统代理配置' }}</h2>
+        <p>{{ crawler ? '集中管理爬取请求策略、请求身份与代理路由。' : '维护可被系统功能复用的代理资源；允许多条配置同时启用。' }}</p>
       </div>
       <el-button type="primary" @click="openCreate">＋ 新增代理</el-button>
     </header>
@@ -14,6 +14,25 @@
       <span class="routing-note-icon">i</span>
       <div><strong>引用状态实时联动</strong><p>引用的系统代理被停用或删除后，此处会立即变为不可用且不会参与请求。</p></div>
     </div>
+
+    <section v-if="crawler" v-loading="settingsLoading" class="crawler-request-card">
+      <header class="request-card-header">
+        <div><p class="proxy-kicker">REQUEST POLICY</p><h3>请求与失败策略</h3><span>以下配置对全部书籍爬虫任务生效。</span></div>
+        <el-button type="primary" :loading="settingsSaving" @click="saveCrawlerSettings">保存请求设置</el-button>
+      </header>
+      <el-form label-position="top" class="crawler-request-form">
+        <div class="request-number-grid">
+          <el-form-item label="单次请求超时（ms）"><el-input-number v-model="requestSettings.timeoutMillis" :min="1000" :max="120000" :step="1000" controls-position="right" /></el-form-item>
+          <el-form-item label="单次请求失败重试"><el-input-number v-model="requestSettings.retryCount" :min="0" :max="8" controls-position="right" /></el-form-item>
+          <el-form-item label="任务连续请求失败上限"><el-input-number v-model="requestSettings.maxConsecutiveFailures" :min="1" :max="100" controls-position="right" /><small>达到上限后停止整项任务；任一请求成功后重新计数。</small></el-form-item>
+        </div>
+        <el-form-item label="User-Agent"><el-input v-model="requestSettings.userAgent" maxlength="500" placeholder="留空时使用合规的 AiBookCrawler 标识" /></el-form-item>
+        <el-form-item label="Cookie"><el-input v-model="requestSettings.cookie" type="password" show-password autocomplete="off" maxlength="20000" placeholder="选填，对所有采集网站发送" /></el-form-item>
+        <el-form-item label="自定义 Header JSON"><el-input v-model="requestSettings.headersJson" type="textarea" :rows="4" maxlength="20000" placeholder='{"Referer":"https://example.com/"}' /><small>必须是字符串键值对 JSON；Host、Content-Length、Connection、Authorization 和 Cookie 不会从这里覆盖。</small></el-form-item>
+      </el-form>
+    </section>
+
+    <div v-if="crawler" class="proxy-section-title"><div><p class="proxy-kicker">PROXY ROUTING</p><h3>代理路由</h3></div><span>优先级数字越小越先使用</span></div>
 
     <el-table v-loading="loading" :data="rows" class="proxy-table" empty-text="暂无代理配置">
       <el-table-column label="优先级" width="92" sortable prop="priority">
@@ -79,18 +98,21 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { confirm, message } from '@/utils/message'
-import { proxySettingsApi, type CrawlerProxyConfig, type SystemProxyConfig } from '@/utils/proxySettings'
+import { proxySettingsApi, type CrawlerProxyConfig, type CrawlerRequestSettings, type SystemProxyConfig } from '@/utils/proxySettings'
 
 const props = defineProps<{ scope: 'system' | 'crawler' }>()
 const crawler = computed(() => props.scope === 'crawler')
 const loading = ref(false)
 const saving = ref(false)
+const settingsLoading = ref(false)
+const settingsSaving = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref<number>()
 const rows = ref<Array<SystemProxyConfig | CrawlerProxyConfig>>([])
 const systemOptions = ref<SystemProxyConfig[]>([])
 const formRef = ref<FormInstance>()
 const form = reactive({ sourceType: 'CUSTOM' as 'CUSTOM' | 'SYSTEM', name: '', url: '', systemProxyId: undefined as number | undefined, enabled: true, priority: 100 })
+const requestSettings = reactive<CrawlerRequestSettings>({timeoutMillis:15000,retryCount:2,maxConsecutiveFailures:5,userAgent:'',cookie:'',headersJson:'{}'})
 const rules: FormRules = {
   name: [{ required: true, whitespace: true, message: '请输入代理名称', trigger: ['blur', 'change'] }],
   url: [{ required: true, whitespace: true, message: '请输入代理地址', trigger: ['blur', 'change'] }],
@@ -103,14 +125,23 @@ const statusText = (row: any) => crawler.value && row.sourceType === 'SYSTEM' &&
 
 async function load() {
   loading.value = true
+  if (crawler.value) settingsLoading.value = true
   try {
     if (crawler.value) {
-      const [crawlerRows, systems] = await Promise.all([proxySettingsApi.crawlerList(), proxySettingsApi.systemList()])
+      const [crawlerRows, systems, settings] = await Promise.all([proxySettingsApi.crawlerList(), proxySettingsApi.systemList(), proxySettingsApi.crawlerSettings()])
       rows.value = crawlerRows
       systemOptions.value = systems
+      Object.assign(requestSettings,settings)
     } else rows.value = await proxySettingsApi.systemList()
   } catch (error: any) { message.error(error.response?.data?.message || '代理配置加载失败') }
-  finally { loading.value = false }
+  finally { loading.value = false; settingsLoading.value = false }
+}
+async function saveCrawlerSettings(){
+  try{JSON.parse(requestSettings.headersJson||'{}')}catch{message.error('自定义 Header 必须是有效 JSON');return}
+  settingsSaving.value=true
+  try{Object.assign(requestSettings,await proxySettingsApi.updateCrawlerSettings({...requestSettings}));message.success('爬虫请求设置已保存')}
+  catch(error:any){message.error(error.response?.data?.message||'爬虫请求设置保存失败')}
+  finally{settingsSaving.value=false}
 }
 function reset() { editingId.value=undefined; Object.assign(form,{sourceType:'CUSTOM',name:'',url:'',systemProxyId:undefined,enabled:true,priority:100}) }
 function openCreate() { reset(); dialogVisible.value=true }
@@ -135,7 +166,7 @@ onMounted(load)
 </script>
 
 <style scoped>
-.proxy-settings-shell{overflow:hidden;padding:0}.proxy-hero{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;padding:28px 30px;border-bottom:1px solid var(--border-color-light);background:radial-gradient(circle at 82% -30%,var(--primary-alpha-10),transparent 48%),var(--surface-card)}.proxy-hero-mark{display:grid;width:54px;height:54px;place-items:center;border:1px solid var(--primary-alpha-20);border-radius:18px;background:var(--primary-alpha-10);color:var(--primary);font-size:32px}.proxy-kicker{margin:0 0 3px;color:var(--primary);font-size:10px;font-weight:800;letter-spacing:.17em}.proxy-hero h2{margin:0;font-family:'Iowan Old Style','Songti SC',serif;font-size:25px}.proxy-hero p:last-child{margin:5px 0 0;color:var(--text-secondary);font-size:13px}.routing-note{display:flex;gap:12px;margin:18px 24px 0;padding:14px 16px;border:1px solid var(--primary-alpha-20);border-radius:14px;background:var(--primary-alpha-10)}.routing-note-icon{display:grid;flex:0 0 22px;height:22px;place-items:center;border-radius:50%;background:var(--primary);color:white;font-family:serif;font-weight:700}.routing-note p{margin:2px 0 0;color:var(--text-secondary);font-size:12px}.proxy-table{margin-top:14px}.priority-orb{display:inline-grid;min-width:38px;height:30px;padding:0 8px;place-items:center;border-radius:10px;background:var(--primary-alpha-10);color:var(--primary);font-weight:800}.proxy-identity{display:grid;gap:4px}.proxy-identity small{overflow:hidden;color:var(--text-secondary);font-family:'SFMono-Regular',Consolas,monospace;text-overflow:ellipsis}.source-chip,.health-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:var(--surface-elevated);font-size:12px}.source-chip.system{color:var(--primary)}.health-chip i{width:7px;height:7px;border-radius:50%;background:currentColor}.health-chip.online{color:var(--success-color,#2f9e68)}.health-chip.offline{color:var(--text-tertiary)}.proxy-footer{display:flex;justify-content:space-between;padding:14px 25px 20px;color:var(--text-secondary);font-size:12px}.source-segment{position:relative;display:grid;grid-template-columns:1fr 1fr;margin-bottom:20px;padding:4px;border:1px solid var(--border-color);border-radius:13px;background:var(--surface-elevated);isolation:isolate}.source-segment button{z-index:1;padding:9px;border:0;background:transparent;color:var(--text-secondary);cursor:pointer}.source-segment button.active{color:var(--primary);font-weight:700}.source-indicator{position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border:1px solid var(--border-color-light);border-radius:9px;background:var(--surface-card);box-shadow:var(--shadow-sm);transition:transform .24s ease}.source-segment.system .source-indicator{transform:translateX(100%)}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:18px}.option-url{float:right;margin-left:24px;color:var(--text-secondary);font-size:11px}@media(max-width:680px){.proxy-hero{grid-template-columns:auto 1fr;padding:22px}.proxy-hero .el-button{grid-column:1/-1}.form-pair{grid-template-columns:1fr}}
+.proxy-settings-shell{overflow:hidden;padding:0}.proxy-hero{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;padding:28px 30px;border-bottom:1px solid var(--border-color-light);background:radial-gradient(circle at 82% -30%,var(--primary-alpha-10),transparent 48%),var(--surface-card)}.proxy-hero-mark{display:grid;width:54px;height:54px;place-items:center;border:1px solid var(--primary-alpha-20);border-radius:18px;background:var(--primary-alpha-10);color:var(--primary);font-size:32px}.proxy-kicker{margin:0 0 3px;color:var(--primary);font-size:10px;font-weight:800;letter-spacing:.17em}.proxy-hero h2{margin:0;font-family:'Iowan Old Style','Songti SC',serif;font-size:25px}.proxy-hero p:last-child{margin:5px 0 0;color:var(--text-secondary);font-size:13px}.routing-note{display:flex;gap:12px;margin:18px 24px 0;padding:14px 16px;border:1px solid var(--primary-alpha-20);border-radius:14px;background:var(--primary-alpha-10)}.routing-note-icon{display:grid;flex:0 0 22px;height:22px;place-items:center;border-radius:50%;background:var(--primary);color:white;font-family:serif;font-weight:700}.routing-note p{margin:2px 0 0;color:var(--text-secondary);font-size:12px}.crawler-request-card{margin:18px 24px;padding:20px;border:1px solid var(--border-color-light);border-radius:18px;background:var(--surface-elevated)}.request-card-header,.proxy-section-title{display:flex;align-items:center;justify-content:space-between;gap:18px}.request-card-header h3,.proxy-section-title h3{margin:2px 0;font-size:18px}.request-card-header span,.proxy-section-title span,.crawler-request-form small{color:var(--text-secondary);font-size:12px}.crawler-request-form{margin-top:18px}.request-number-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.request-number-grid .el-input-number{width:100%}.proxy-section-title{margin:24px 25px 0}.proxy-table{margin-top:14px}.priority-orb{display:inline-grid;min-width:38px;height:30px;padding:0 8px;place-items:center;border-radius:10px;background:var(--primary-alpha-10);color:var(--primary);font-weight:800}.proxy-identity{display:grid;gap:4px}.proxy-identity small{overflow:hidden;color:var(--text-secondary);font-family:'SFMono-Regular',Consolas,monospace;text-overflow:ellipsis}.source-chip,.health-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:var(--surface-elevated);font-size:12px}.source-chip.system{color:var(--primary)}.health-chip i{width:7px;height:7px;border-radius:50%;background:currentColor}.health-chip.online{color:var(--success-color,#2f9e68)}.health-chip.offline{color:var(--text-tertiary)}.proxy-footer{display:flex;justify-content:space-between;padding:14px 25px 20px;color:var(--text-secondary);font-size:12px}.source-segment{position:relative;display:grid;grid-template-columns:1fr 1fr;margin-bottom:20px;padding:4px;border:1px solid var(--border-color);border-radius:13px;background:var(--surface-elevated);isolation:isolate}.source-segment button{z-index:1;padding:9px;border:0;background:transparent;color:var(--text-secondary);cursor:pointer}.source-segment button.active{color:var(--primary);font-weight:700}.source-indicator{position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border:1px solid var(--border-color-light);border-radius:9px;background:var(--surface-card);box-shadow:var(--shadow-sm);transition:transform .24s ease}.source-segment.system .source-indicator{transform:translateX(100%)}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:18px}.option-url{float:right;margin-left:24px;color:var(--text-secondary);font-size:11px}@media(max-width:680px){.proxy-hero{grid-template-columns:auto 1fr;padding:22px}.proxy-hero .el-button{grid-column:1/-1}.form-pair,.request-number-grid{grid-template-columns:1fr}.request-card-header{align-items:flex-start;flex-direction:column}}
 @media(prefers-reduced-motion:reduce){.source-indicator{transition:none}}
 :global(.proxy-config-dialog){display:flex;max-height:88vh;flex-direction:column;margin-bottom:0}
 :global(.proxy-config-dialog .el-dialog__header),:global(.proxy-config-dialog .el-dialog__footer){flex:0 0 auto}

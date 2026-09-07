@@ -1,6 +1,8 @@
 package com.aibook.service.crawler;
 
 import com.aibook.model.entity.CrawlerSite;
+import com.aibook.dto.CrawlerSettingsDtos.CrawlerRequestSettings;
+import com.aibook.service.CrawlerSettingsService;
 import com.aibook.service.ProxySettingsService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -12,7 +14,9 @@ import static org.mockito.Mockito.when;
 
 class CrawlerHttpClientTest {
     private final ProxySettingsService proxySettings = mock(ProxySettingsService.class);
-    private final CrawlerHttpClient client = new CrawlerHttpClient(new ObjectMapper(), proxySettings);
+    private final CrawlerSettingsService crawlerSettings = mock(CrawlerSettingsService.class);
+    private final CrawlerHttpClient client = new CrawlerHttpClient(
+            new ObjectMapper(), proxySettings, crawlerSettings);
     private final CrawlerSite site = CrawlerSite.builder().id(1L).baseUrl("https://novel.example.com").build();
 
     @Test void acceptsSameDomainAndSubdomain() {
@@ -33,5 +37,12 @@ class CrawlerHttpClientTest {
 
         site.setProxy("http://site-proxy:7890");
         assertEquals(java.util.List.of("http://site-proxy:7890"), client.proxyUrls(site));
+    }
+
+    @Test void usesGlobalConsecutiveFailureLimit() {
+        when(crawlerSettings.settings()).thenReturn(
+                new CrawlerRequestSettings(30000, 4, 7, "CrawlerBot/2.0", "", "{}"));
+
+        assertEquals(7, client.maxConsecutiveFailures());
     }
 }

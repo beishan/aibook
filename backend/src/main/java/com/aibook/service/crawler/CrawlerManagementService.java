@@ -242,11 +242,8 @@ public class CrawlerManagementService {
         site.setMaxDiscoveryPages(value(p.maxDiscoveryPages(), 3));
         site.setAutoImportFormat(blank(p.autoImportFormat()) ? "EPUB" : p.autoImportFormat().toUpperCase(Locale.ROOT));
         site.setRequestIntervalMillis(value(p.requestIntervalMillis(), 1500)); site.setRandomDelayMillis(value(p.randomDelayMillis(), 1000));
-        site.setMaxConcurrency(value(p.maxConcurrency(), 1)); site.setTimeoutMillis(value(p.timeoutMillis(), 15000));
-        site.setRetryCount(value(p.retryCount(), 2));
-        site.setMaxConsecutiveFailures(value(p.maxConsecutiveFailures(), 5));
+        site.setMaxConcurrency(value(p.maxConcurrency(), 1));
         site.setEncoding(blank(p.encoding()) ? "UTF-8" : p.encoding());
-        site.setUserAgent(p.userAgent()); site.setCookie(p.cookie()); site.setHeadersJson(p.headersJson());
         applyContentFailureMarkers(site, p.contentFailureMarkers());
         applyProxies(site, p.proxies());
     }
@@ -276,9 +273,7 @@ public class CrawlerManagementService {
         return new SiteView(s.getId(), s.getSiteName(), s.getSiteCode(), s.getBaseUrl(), s.getHomeUrl(), bool(s.getEnabled(), false),
                 bool(s.getAutoScan(), false), bool(s.getAutoCrawl(), false), bool(s.getAutoUpdate(), false), bool(s.getAutoImportLibrary(), false),
                 value(s.getRequestIntervalMillis(), 1500), value(s.getRandomDelayMillis(), 1000), value(s.getMaxConcurrency(), 1),
-                value(s.getTimeoutMillis(), 15000), value(s.getRetryCount(), 2), value(s.getMaxConsecutiveFailures(), 5),
-                s.getEncoding(), s.getUserAgent(),
-                s.getCookie(), s.getHeadersJson(), s.getProxy(), proxyPayloads(s), value(s.getScanIntervalMinutes(), 360),
+                s.getEncoding(), s.getProxy(), proxyPayloads(s), value(s.getScanIntervalMinutes(), 360),
                 value(s.getUpdateIntervalMinutes(), 30), value(s.getMaxDiscoveryPages(), 3),
                 blank(s.getAutoImportFormat()) ? "EPUB" : s.getAutoImportFormat(), s.getStatus().name(),
                 bookRepository.countBySite(s), rv, r == null ? null : r.getRuleVersion(),
