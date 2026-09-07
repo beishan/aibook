@@ -91,6 +91,9 @@ public final class CrawlerDtos {
             int wordCount, String crawlStatus, String accessStatus, int retryCount,
             String errorMessage, LocalDateTime crawlTime, LocalDateTime createdAt) { }
 
+    public record CrawlerLogView(
+            Long id, String description, String details, LocalDateTime createdAt) { }
+
     public record TaskView(String id, String type, String status, String priority,
             Long siteId, String siteName, Long bookId, String bookName, int totalCount,
             int successCount, int failedCount, int waitingCount, String currentChapter,

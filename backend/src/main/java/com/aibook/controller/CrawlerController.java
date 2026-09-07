@@ -1,10 +1,8 @@
 package com.aibook.controller;
 
-import com.aibook.dto.OperationLogDTO;
 import com.aibook.dto.crawler.CrawlerDtos.*;
 import com.aibook.model.entity.*;
 import com.aibook.repository.CrawlerChapterRepository;
-import com.aibook.service.OperationLogService;
 import com.aibook.service.UserService;
 import com.aibook.service.crawler.*;
 import jakarta.validation.Valid;
@@ -30,7 +28,6 @@ public class CrawlerController {
     private final CrawlerRuleTestService ruleTestService;
     private final CrawlerRuleHealthService ruleHealthService;
     private final CrawlerChapterRepository chapterRepository;
-    private final OperationLogService operationLogService;
 
     @GetMapping("/dashboard") public DashboardView dashboard(Authentication auth) { return managementService.dashboard(user(auth)); }
     @GetMapping("/sites") public List<SiteView> sites(Authentication auth) { return managementService.sites(user(auth)); }
@@ -58,12 +55,9 @@ public class CrawlerController {
     }
     @GetMapping("/books/{id}") public BookView book(Authentication auth, @PathVariable Long id) { return managementService.book(user(auth), id); }
     @GetMapping("/books/{id}/chapters") public List<ChapterView> chapters(Authentication auth, @PathVariable Long id) { return managementService.chapters(user(auth), id); }
-    @GetMapping("/books/{id}/logs") public List<OperationLogDTO> bookLogs(
+    @GetMapping("/books/{id}/logs") public List<CrawlerLogView> bookLogs(
             Authentication auth, @PathVariable Long id, @RequestParam(defaultValue = "100") int limit) {
-        User currentUser = user(auth);
-        CrawlerBook book = managementService.ownedBook(currentUser, id);
-        return operationLogService.getCrawlerLogs(
-                currentUser, book.getBookName(), book.getSite().getSiteName(), limit);
+        return managementService.logs(user(auth), id, limit);
     }
     @GetMapping("/books/{bookId}/chapters/{chapterId}") public Map<String, Object> chapter(Authentication auth, @PathVariable Long bookId, @PathVariable Long chapterId) {
         CrawlerBook book = managementService.ownedBook(user(auth), bookId);

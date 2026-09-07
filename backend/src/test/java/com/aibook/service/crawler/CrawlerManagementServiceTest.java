@@ -7,12 +7,14 @@ import com.aibook.model.entity.CrawlerBook;
 import com.aibook.model.entity.CrawlerChapter;
 import com.aibook.model.entity.CrawlerSite;
 import com.aibook.model.entity.CrawlerSiteRuleVersion;
+import com.aibook.model.entity.CrawlerTaskLog;
 import com.aibook.model.entity.User;
 import com.aibook.repository.CrawlerBookRepository;
 import com.aibook.repository.CrawlerChapterRepository;
 import com.aibook.repository.CrawlerSiteRepository;
 import com.aibook.repository.CrawlerSiteRuleVersionRepository;
 import com.aibook.repository.CrawlerTaskRepository;
+import com.aibook.repository.CrawlerTaskLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +36,7 @@ class CrawlerManagementServiceTest {
     private CrawlerSiteRuleVersionRepository rules;
     private CrawlerBookRepository books;
     private CrawlerChapterRepository chapters;
+    private CrawlerTaskLogRepository crawlerLogs;
     private CrawlerManagementService service;
 
     @BeforeEach
@@ -42,8 +45,9 @@ class CrawlerManagementServiceTest {
         rules = mock(CrawlerSiteRuleVersionRepository.class);
         books = mock(CrawlerBookRepository.class);
         chapters = mock(CrawlerChapterRepository.class);
+        crawlerLogs = mock(CrawlerTaskLogRepository.class);
         service = new CrawlerManagementService(sites, books,
-                chapters, mock(CrawlerTaskRepository.class), rules,
+                chapters, mock(CrawlerTaskRepository.class), crawlerLogs, rules,
                 new ObjectMapper());
         when(sites.save(any(CrawlerSite.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(rules.save(any(CrawlerSiteRuleVersion.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -67,6 +71,25 @@ class CrawlerManagementServiceTest {
         assertThat(result.autoCrawl()).isFalse();
         assertThat(result.autoUpdate()).isFalse();
         assertThat(result.autoImportLibrary()).isFalse();
+    }
+
+    @Test
+    void returnsCrawlerSpecificLogsForTheOwnedBook() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站").build();
+        CrawlerBook book = CrawlerBook.builder().id(3L).site(site).bookName("示例书").build();
+        CrawlerTaskLog log = CrawlerTaskLog.builder().id(9L).user(user).crawlerBookId(3L)
+                .taskId("task-1").description("章节采集完毕：示例书")
+                .details("章节：第一章；预览：正文").createdAt(LocalDateTime.now()).build();
+        when(books.findByIdAndSiteUser(3L, user)).thenReturn(Optional.of(book));
+        when(crawlerLogs.findByUserAndCrawlerBookIdOrderByCreatedAtDescIdDesc(
+                eq(user), eq(3L), any(Pageable.class))).thenReturn(List.of(log));
+
+        var result = service.logs(user, 3L, 100);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().description()).contains("章节采集完毕");
+        assertThat(result.getFirst().details()).contains("第一章");
     }
 
     @Test

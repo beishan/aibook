@@ -8,6 +8,7 @@ import com.aibook.repository.CrawlerBookRepository;
 import com.aibook.repository.CrawlerChapterRepository;
 import com.aibook.repository.CrawlerSiteRepository;
 import com.aibook.repository.CrawlerTaskRepository;
+import com.aibook.repository.CrawlerTaskLogRepository;
 import com.aibook.service.OperationLogService;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationContext;
@@ -164,7 +165,8 @@ class CrawlerTaskManagementTest {
     private CrawlerTaskService service(CrawlerTaskRepository tasks, CrawlerBookRepository books,
             CrawlerManagementService management) {
         return new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
-                mock(CrawlerChapterRepository.class), tasks, management, mock(OperationLogService.class),
+                mock(CrawlerChapterRepository.class), tasks, mock(CrawlerTaskLogRepository.class),
+                management, mock(OperationLogService.class),
                 mock(CrawlerHttpClient.class), List.of(),
                 mock(ApplicationContext.class));
     }

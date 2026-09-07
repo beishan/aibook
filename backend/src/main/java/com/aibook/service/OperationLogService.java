@@ -5,12 +5,9 @@ import com.aibook.model.entity.Book;
 import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.User;
 import com.aibook.repository.OperationLogRepository;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,24 +54,6 @@ public class OperationLogService {
     @Transactional(readOnly = true)
     public Page<OperationLogDTO> getLogs(User user, Pageable pageable) {
         return operationLogRepository.findByUser(user, pageable).map(this::toDTO);
-    }
-
-    @Transactional(readOnly = true)
-    public List<OperationLogDTO> getCrawlerLogs(
-            User user, String bookTitle, String siteName, int limit) {
-        int safeLimit = Math.min(200, Math.max(1, limit));
-        Pageable pageable = PageRequest.of(
-                0,
-                safeLimit,
-                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
-        return operationLogRepository.findByUserAndActionAndBookTitleAndDetailsContaining(
-                        user,
-                        OperationLog.Action.CRAWLER_TASK,
-                        bookTitle,
-                        "网站：" + siteName,
-                        pageable)
-                .map(this::toDTO)
-                .getContent();
     }
 
     private OperationLogDTO toDTO(OperationLog log) {

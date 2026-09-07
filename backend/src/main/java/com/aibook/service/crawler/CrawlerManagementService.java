@@ -23,6 +23,7 @@ public class CrawlerManagementService {
     private final CrawlerBookRepository bookRepository;
     private final CrawlerChapterRepository chapterRepository;
     private final CrawlerTaskRepository taskRepository;
+    private final CrawlerTaskLogRepository taskLogRepository;
     private final CrawlerSiteRuleVersionRepository ruleVersionRepository;
     private final ObjectMapper objectMapper;
 
@@ -185,6 +186,17 @@ public class CrawlerManagementService {
         return chapters.stream().map(this::chapterView).toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<CrawlerLogView> logs(User user, Long id, int limit) {
+        CrawlerBook book = ownedBook(user, id);
+        return taskLogRepository.findByUserAndCrawlerBookIdOrderByCreatedAtDescIdDesc(
+                        user, book.getId(), PageRequest.of(0, Math.min(200, Math.max(1, limit))))
+                .stream()
+                .map(log -> new CrawlerLogView(
+                        log.getId(), log.getDescription(), log.getDetails(), log.getCreatedAt()))
+                .toList();
+    }
+
     private void refreshParsedBookStatus(CrawlerBook book) {
         int total = (int) chapterRepository.countByCrawlerBook(book);
         int completed = (int) chapterRepository.countByCrawlerBookAndCrawlStatus(
@@ -260,7 +272,7 @@ public class CrawlerManagementService {
         RulePayload rv = r == null ? null : rulePayload(r);
         Optional<CrawlerSiteRuleVersion> active = ruleVersionRepository.findFirstBySiteAndEnabledTrue(s);
         return new SiteView(s.getId(), s.getSiteName(), s.getSiteCode(), s.getBaseUrl(), s.getHomeUrl(), bool(s.getEnabled(), false),
-                bool(s.getAutoScan(), false), bool(s.getAutoCrawl(), false), bool(s.getAutoUpdate(), true), bool(s.getAutoImportLibrary(), false),
+                bool(s.getAutoScan(), false), bool(s.getAutoCrawl(), false), bool(s.getAutoUpdate(), false), bool(s.getAutoImportLibrary(), false),
                 value(s.getRequestIntervalMillis(), 1500), value(s.getRandomDelayMillis(), 1000), value(s.getMaxConcurrency(), 1),
                 value(s.getTimeoutMillis(), 15000), value(s.getRetryCount(), 2), s.getEncoding(), s.getUserAgent(),
                 s.getCookie(), s.getHeadersJson(), s.getProxy(), proxyPayloads(s), value(s.getScanIntervalMinutes(), 360),

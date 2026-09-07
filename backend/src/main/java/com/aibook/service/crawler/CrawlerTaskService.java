@@ -30,6 +30,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     private final CrawlerBookRepository bookRepository;
     private final CrawlerChapterRepository chapterRepository;
     private final CrawlerTaskRepository taskRepository;
+    private final CrawlerTaskLogRepository taskLogRepository;
     private final CrawlerManagementService managementService;
     private final OperationLogService operationLogService;
     private final CrawlerHttpClient httpClient;
@@ -387,7 +388,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
             log.info("[采集任务] 正在采集章节: taskId={}, book={}, progress={}/{} ({}%), chapter={}, url={}",
                     task.getId(), bookName(book), current, task.getTotalCount(),
                     percentage(Math.max(0, current - 1), task.getTotalCount()), chapter.getChapterName(), chapter.getChapterUrl());
-            recordCrawlerEvent(task, "正在采集章节", "进度：" + current + "/" + task.getTotalCount()
+            recordCrawlerDetail(task, "正在采集章节", "进度：" + current + "/" + task.getTotalCount()
                     + "；章节：" + chapter.getChapterName() + "；地址：" + chapter.getChapterUrl());
             try {
                 CrawlerHttpClient.FetchResult response = recheckCompleted
@@ -410,7 +411,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                     else refreshCounts(book, task, durationTotal, requests);
                     log.info("[采集任务] 章节未变化: taskId={}, book={}, progress={}/{} ({}%), chapter={}, httpStatus=304",
                             task.getId(), bookName(book), finishedCount(task), task.getTotalCount(), progress(task), chapter.getChapterName());
-                    recordCrawlerEvent(task, "章节未变化", progressDetails(task)
+                    recordCrawlerDetail(task, "章节未变化", progressDetails(task)
                             + "；章节：" + chapter.getChapterName() + "；HTTP：304");
                     continue;
                 }
@@ -432,14 +433,14 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                     log.warn("[采集任务] 章节内容疑似异常: taskId={}, book={}, progress={}/{} ({}%), chapter={}, chars={}, durationMs={}, preview=\"{}\"",
                             task.getId(), bookName(book), current, task.getTotalCount(), percentage(current, task.getTotalCount()),
                             chapter.getChapterName(), chapter.getWordCount(), response.durationMillis(), contentPreview(parsed.content()));
-                    recordCrawlerEvent(task, "章节解析成功（内容较短）", "进度：" + current + "/" + task.getTotalCount()
+                    recordCrawlerDetail(task, "章节解析成功（内容较短）", "进度：" + current + "/" + task.getTotalCount()
                             + "；章节：" + chapter.getChapterName() + "；字数：" + chapter.getWordCount()
                             + "；耗时：" + response.durationMillis() + "ms；预览：" + contentPreview(parsed.content()));
                 } else {
                     log.info("[采集任务] 章节采集完毕: taskId={}, book={}, progress={}/{} ({}%), chapter={}, chars={}, durationMs={}, preview=\"{}\"",
                             task.getId(), bookName(book), current, task.getTotalCount(), percentage(current, task.getTotalCount()),
                             chapter.getChapterName(), chapter.getWordCount(), response.durationMillis(), contentPreview(parsed.content()));
-                    recordCrawlerEvent(task, "章节采集完毕", "进度：" + current + "/" + task.getTotalCount()
+                    recordCrawlerDetail(task, "章节采集完毕", "进度：" + current + "/" + task.getTotalCount()
                             + "；章节：" + chapter.getChapterName() + "；字数：" + chapter.getWordCount()
                             + "；耗时：" + response.durationMillis() + "ms；预览：" + contentPreview(parsed.content()));
                 }
@@ -449,7 +450,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 log.warn("[采集任务] 章节采集失败: taskId={}, book={}, progress={}/{} ({}%), chapter={}, reason={}",
                         task.getId(), bookName(book), current, task.getTotalCount(), percentage(current, task.getTotalCount()),
                         chapter.getChapterName(), chapter.getErrorMessage());
-                recordCrawlerEvent(task, hadParsedContent ? "章节更新失败（已保留原内容）" : "章节采集失败",
+                recordCrawlerDetail(task, hadParsedContent ? "章节更新失败（已保留原内容）" : "章节采集失败",
                         "进度：" + current + "/" + task.getTotalCount() + "；章节：" + chapter.getChapterName()
                                 + "；原因：" + chapter.getErrorMessage());
             }
@@ -698,6 +699,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     private int percentage(int finished, int total) { return total <= 0 ? 0 : Math.min(100, Math.max(0, (int) Math.round(finished * 100.0 / total))); }
     private String bookName(CrawlerBook book) { return book == null || book.getBookName() == null || book.getBookName().isBlank() ? "-" : book.getBookName(); }
     private void recordCrawlerEvent(CrawlerTask task, String event, String details) {
+        recordCrawlerLog(task, event, details);
         try {
             CrawlerBook crawlerBook = task.getCrawlerBook();
             String subject = crawlerBook == null ? task.getSite().getSiteName() : bookName(crawlerBook);
@@ -711,6 +713,26 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                     details == null || details.isBlank() ? common : common + "；" + details);
         } catch (Exception exception) {
             log.warn("[采集任务] 写入系统操作日志失败: taskId={}, event={}", task.getId(), event, exception);
+        }
+    }
+    void recordCrawlerDetail(CrawlerTask task, String event, String details) {
+        recordCrawlerLog(task, event, details);
+    }
+    private void recordCrawlerLog(CrawlerTask task, String event, String details) {
+        try {
+            CrawlerBook crawlerBook = task.getCrawlerBook();
+            String subject = crawlerBook == null ? task.getSite().getSiteName() : bookName(crawlerBook);
+            String common = "任务ID：" + task.getId() + "；任务类型：" + task.getType()
+                    + "；网站：" + task.getSite().getSiteName();
+            taskLogRepository.save(CrawlerTaskLog.builder()
+                    .user(task.getUser())
+                    .crawlerBookId(crawlerBook == null ? null : crawlerBook.getId())
+                    .taskId(task.getId())
+                    .description(shortText(event + "：" + subject, 500))
+                    .details(details == null || details.isBlank() ? common : common + "；" + details)
+                    .build());
+        } catch (Exception exception) {
+            log.warn("[采集任务] 写入爬虫专用日志失败: taskId={}, event={}", task.getId(), event, exception);
         }
     }
     private String shortText(String value, int maxCodePoints) {

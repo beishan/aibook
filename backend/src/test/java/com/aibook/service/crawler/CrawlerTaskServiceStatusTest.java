@@ -9,6 +9,7 @@ import com.aibook.repository.CrawlerBookRepository;
 import com.aibook.repository.CrawlerChapterRepository;
 import com.aibook.repository.CrawlerSiteRepository;
 import com.aibook.repository.CrawlerTaskRepository;
+import com.aibook.repository.CrawlerTaskLogRepository;
 import com.aibook.service.OperationLogService;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationContext;
@@ -38,7 +39,8 @@ class CrawlerTaskServiceStatusTest {
         when(books.save(any(CrawlerBook.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
-                chapters, tasks, management, operationLogs, mock(CrawlerHttpClient.class),
+                chapters, tasks, mock(CrawlerTaskLogRepository.class), management, operationLogs,
+                mock(CrawlerHttpClient.class),
                 List.of(), mock(ApplicationContext.class));
         try {
             when(management.bookView(book)).thenCallRealMethod();
