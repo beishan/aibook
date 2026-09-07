@@ -37,6 +37,27 @@ public class ProxySettingsService {
     }
 
     @Transactional
+    public List<SystemProxyView> reorderSystemProxies(SystemProxyOrderRequest request) {
+        List<SystemProxyConfig> existing = systemRepository.findAllByOrderByPriorityAscIdAsc();
+        List<Long> ids = request == null ? null : request.ids();
+        Set<Long> existingIds = existing.stream().map(SystemProxyConfig::getId).collect(java.util.stream.Collectors.toSet());
+        if (ids == null || ids.size() != existing.size() || ids.stream().anyMatch(Objects::isNull)
+                || new HashSet<>(ids).size() != ids.size() || !existingIds.equals(new HashSet<>(ids))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "代理排序数据与当前配置不一致，请刷新后重试");
+        }
+        Map<Long, SystemProxyConfig> byId = existing.stream()
+                .collect(java.util.stream.Collectors.toMap(SystemProxyConfig::getId, config -> config));
+        List<SystemProxyConfig> ordered = new ArrayList<>();
+        for (int index = 0; index < ids.size(); index++) {
+            SystemProxyConfig config = byId.get(ids.get(index));
+            config.setPriority(index + 1);
+            ordered.add(config);
+        }
+        systemRepository.saveAll(ordered);
+        return ordered.stream().map(this::systemView).toList();
+    }
+
+    @Transactional
     public void deleteSystemProxy(Long id) {
         if (!systemRepository.existsById(id))
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "系统代理配置不存在");
@@ -62,6 +83,30 @@ public class ProxySettingsService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "爬虫代理配置不存在"));
         config = crawlerRepository.save(apply(config, request));
         return crawlerView(config, referencedSystem(config));
+    }
+
+    @Transactional
+    public List<CrawlerProxyView> reorderCrawlerProxies(CrawlerProxyOrderRequest request) {
+        List<CrawlerProxyConfig> existing = crawlerRepository.findAllByOrderByPriorityAscIdAsc();
+        List<Long> ids = request == null ? null : request.ids();
+        Set<Long> existingIds = existing.stream().map(CrawlerProxyConfig::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        if (ids == null || ids.size() != existing.size() || ids.stream().anyMatch(Objects::isNull)
+                || new HashSet<>(ids).size() != ids.size() || !existingIds.equals(new HashSet<>(ids))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "代理排序数据与当前配置不一致，请刷新后重试");
+        }
+        Map<Long, CrawlerProxyConfig> byId = existing.stream()
+                .collect(java.util.stream.Collectors.toMap(CrawlerProxyConfig::getId, config -> config));
+        List<CrawlerProxyConfig> ordered = new ArrayList<>();
+        for (int index = 0; index < ids.size(); index++) {
+            CrawlerProxyConfig config = byId.get(ids.get(index));
+            config.setPriority(index + 1);
+            ordered.add(config);
+        }
+        crawlerRepository.saveAll(ordered);
+        Map<Long, SystemProxyConfig> systems = systemMap();
+        return ordered.stream()
+                .map(config -> crawlerView(config, systems.get(config.getSystemProxyId()))).toList();
     }
 
     @Transactional

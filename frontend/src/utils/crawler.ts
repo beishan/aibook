@@ -34,6 +34,8 @@ export interface CrawlerRuleSave { version:number; changeSummary:string; rule:Cr
 export interface CrawlerRuleExport { schemaVersion:number; siteCode:string; version:number; changeSummary:string; rule:CrawlerRule; enabled?:boolean }
 export interface PageResult<T> { content:T[]; totalElements:number; totalPages:number; number:number; size:number; first:boolean; last:boolean }
 export interface CrawlerDiscoveryQuery { page:number; size:number; keyword?:string; siteId?:number; sort:string }
+export interface CrawlerBookQuery { page:number; size:number; keyword?:string }
+export interface CrawlerTaskQuery { page:number; size:number; failedOnly?:boolean }
 
 export const crawlerApi = {
   dashboard: () => api.get<CrawlerDashboard>('/api/crawler/dashboard').then(r => r.data),
@@ -52,7 +54,7 @@ export const crawlerApi = {
   setRuleStatus: (siteId:number, ruleId:number, enabled:boolean) => api.put<CrawlerRuleVersion>(`/api/crawler/sites/${siteId}/rules/${ruleId}/status`,{enabled}).then(r => r.data),
   exportRule: (siteId:number, ruleId:number) => api.get<CrawlerRuleExport>(`/api/crawler/sites/${siteId}/rules/${ruleId}/export`).then(r => r.data),
   importRule: (siteId:number, data:CrawlerRuleExport & {enabled:boolean}) => api.post<CrawlerRuleVersion>(`/api/crawler/sites/${siteId}/rules/import`,data).then(r => r.data),
-  books: () => api.get<{content:CrawlerBook[]}>('/api/crawler/books', { params:{ size:100 } }).then(r => r.data.content),
+  books: (params:CrawlerBookQuery) => api.get<PageResult<CrawlerBook>>('/api/crawler/books', { params }).then(r => r.data),
   book: (bookId:number) => api.get<CrawlerBook>(`/api/crawler/books/${bookId}`).then(r => r.data),
   discoveredBooks: (params:CrawlerDiscoveryQuery) => api.get<PageResult<CrawlerBook>>('/api/crawler/books/discovered', {params}).then(r => r.data),
   chapters: (bookId:number) => api.get<CrawlerChapter[]>(`/api/crawler/books/${bookId}/chapters`).then(r => r.data),
@@ -67,7 +69,7 @@ export const crawlerApi = {
   generate: (bookId:number, formats:string[]) => api.post<CrawlerExport[]>(`/api/crawler/books/${bookId}/exports`, { formats }).then(r => r.data),
   exports: (bookId:number) => api.get<CrawlerExport[]>(`/api/crawler/books/${bookId}/exports`).then(r => r.data),
   importBook: (bookId:number, format:string) => api.post<{bookId:number}>(`/api/crawler/books/${bookId}/import`, { format }).then(r => r.data),
-  tasks: () => api.get<CrawlerTask[]>('/api/crawler/tasks').then(r => r.data),
+  tasks: (params:CrawlerTaskQuery) => api.get<PageResult<CrawlerTask>>('/api/crawler/tasks', { params }).then(r => r.data),
   updateTask: (id:string, priority:'LOW'|'NORMAL'|'HIGH') => api.put<CrawlerTask>(`/api/crawler/tasks/${id}`, {priority}).then(r => r.data),
   deleteTask: (id:string) => api.delete(`/api/crawler/tasks/${id}`),
   taskCommand: (id:string, command:'pause'|'resume'|'cancel') => api.post<CrawlerTask>(`/api/crawler/tasks/${id}/${command}`).then(r => r.data),

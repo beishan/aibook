@@ -17,11 +17,13 @@ public class ProxySettingsController {
 
     @GetMapping("/system") public List<SystemProxyView> systemProxies() { return service.systemProxies(); }
     @PostMapping("/system") public SystemProxyView createSystem(@RequestBody SystemProxyRequest request) { return service.createSystemProxy(request); }
+    @PutMapping("/system/order") public List<SystemProxyView> reorderSystem(@RequestBody SystemProxyOrderRequest request) { return service.reorderSystemProxies(request); }
     @PutMapping("/system/{id}") public SystemProxyView updateSystem(@PathVariable Long id, @RequestBody SystemProxyRequest request) { return service.updateSystemProxy(id, request); }
     @DeleteMapping("/system/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteSystem(@PathVariable Long id) { service.deleteSystemProxy(id); }
 
     @GetMapping("/crawler") public List<CrawlerProxyView> crawlerProxies() { return service.crawlerProxies(); }
     @PostMapping("/crawler") public CrawlerProxyView createCrawler(@RequestBody CrawlerProxyRequest request) { return service.createCrawlerProxy(request); }
+    @PutMapping("/crawler/order") public List<CrawlerProxyView> reorderCrawler(@RequestBody CrawlerProxyOrderRequest request) { return service.reorderCrawlerProxies(request); }
     @PutMapping("/crawler/{id}") public CrawlerProxyView updateCrawler(@PathVariable Long id, @RequestBody CrawlerProxyRequest request) { return service.updateCrawlerProxy(id, request); }
     @DeleteMapping("/crawler/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteCrawler(@PathVariable Long id) { service.deleteCrawlerProxy(id); }
 }

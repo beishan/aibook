@@ -46,7 +46,11 @@ public class CrawlerController {
     @GetMapping("/sites/{id}/rules/{ruleId}/export") public RuleExportView exportRule(Authentication auth, @PathVariable Long id, @PathVariable Long ruleId) { return managementService.exportRule(user(auth), id, ruleId); }
     @PostMapping("/sites/{id}/rules/import") @ResponseStatus(HttpStatus.CREATED) public RuleVersionView importRule(Authentication auth, @PathVariable Long id, @Valid @RequestBody RuleImportRequest request) { return managementService.importRule(user(auth), id, request); }
 
-    @GetMapping("/books") public Page<BookView> books(Authentication auth, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return managementService.books(user(auth), page, size); }
+    @GetMapping("/books") public Page<BookView> books(Authentication auth,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String keyword) {
+        return managementService.books(user(auth), page, size, keyword);
+    }
     @GetMapping("/books/discovered") public Page<BookView> discoveredBooks(Authentication auth,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String keyword, @RequestParam(required = false) Long siteId,
@@ -79,7 +83,11 @@ public class CrawlerController {
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + path.getFileName() + "\"").contentType(MediaType.APPLICATION_OCTET_STREAM).body(new FileSystemResource(path));
     }
 
-    @GetMapping("/tasks") public List<TaskView> tasks(Authentication auth, @RequestParam(defaultValue = "50") int limit) { return managementService.tasks(user(auth), limit); }
+    @GetMapping("/tasks") public Page<TaskView> tasks(Authentication auth,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "false") boolean failedOnly) {
+        return managementService.tasks(user(auth), page, size, failedOnly);
+    }
     @PutMapping("/tasks/{id}") public TaskView updateTask(Authentication auth, @PathVariable String id, @Valid @RequestBody TaskUpdateRequest request) { return taskService.updateTask(user(auth), id, request.priority()); }
     @DeleteMapping("/tasks/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteTask(Authentication auth, @PathVariable String id) { taskService.deleteTask(user(auth), id); }
     @PostMapping("/tasks/{id}/{command}") public TaskView taskCommand(Authentication auth, @PathVariable String id, @PathVariable String command) { return taskService.command(user(auth), id, command); }

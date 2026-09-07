@@ -138,8 +138,12 @@ public class CrawlerManagementService {
     }
 
     @Transactional(readOnly = true)
-    public Page<BookView> books(User user, int page, int size) {
-        return bookRepository.findBySiteUser(user, PageRequest.of(page, Math.min(Math.max(size, 1), 100), Sort.by("createdAt").descending())).map(this::bookView);
+    public Page<BookView> books(User user, int page, int size, String keyword) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+                Sort.by("createdAt").descending());
+        return bookRepository.searchManagedBooks(user, CrawlerBook.DiscoveryStatus.ACTIVE,
+                CrawlerBook.CrawlStatus.DISCOVERED, blank(keyword) ? "" : keyword.trim(), pageable)
+                .map(this::bookView);
     }
 
     @Transactional(readOnly = true)
@@ -213,8 +217,19 @@ public class CrawlerManagementService {
     }
 
     @Transactional(readOnly = true)
-    public List<TaskView> tasks(User user, int limit) {
-        return taskRepository.findByUserOrderByCreatedAtDesc(user, PageRequest.of(0, Math.min(Math.max(limit, 1), 100))).stream().map(this::taskView).toList();
+    public Page<TaskView> tasks(User user, int page, int size, boolean failedOnly) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        Page<CrawlerTask> tasks = failedOnly
+                ? taskRepository.findByUserAndStatusInOrderByCreatedAtDesc(user,
+                        List.of(CrawlerTask.TaskStatus.FAILED, CrawlerTask.TaskStatus.PARTIAL_SUCCESS), pageable)
+                : taskRepository.findByUserOrderByCreatedAtDesc(user, pageable);
+        return tasks.map(this::taskView);
+    }
+
+    private List<TaskView> recentTasks(User user, int limit) {
+        return taskRepository.findByUserOrderByCreatedAtDesc(
+                user, PageRequest.of(0, Math.min(Math.max(limit, 1), 100))).stream()
+                .map(this::taskView).toList();
     }
 
     @Transactional(readOnly = true)
@@ -228,7 +243,7 @@ public class CrawlerManagementService {
                 bookRepository.countBySiteUserAndCrawlStatus(user, CrawlerBook.CrawlStatus.FAILED),
                 bookRepository.countCreatedSince(user, today), chapterRepository.countByCrawlerBookSiteUserAndCreatedAtAfter(user, today),
                 bookRepository.countBySiteUserAndImportStatus(user, CrawlerBook.ImportStatus.READY),
-                bookRepository.countBySiteUserAndImportStatus(user, CrawlerBook.ImportStatus.IMPORTED), tasks(user, 8));
+                bookRepository.countBySiteUserAndImportStatus(user, CrawlerBook.ImportStatus.IMPORTED), recentTasks(user, 8));
     }
 
     private void apply(CrawlerSite site, SitePayload p, String siteCode) {

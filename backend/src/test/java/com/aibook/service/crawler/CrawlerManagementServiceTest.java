@@ -8,6 +8,7 @@ import com.aibook.model.entity.CrawlerChapter;
 import com.aibook.model.entity.CrawlerSite;
 import com.aibook.model.entity.CrawlerSiteRuleVersion;
 import com.aibook.model.entity.CrawlerTaskLog;
+import com.aibook.model.entity.CrawlerTask;
 import com.aibook.model.entity.User;
 import com.aibook.repository.CrawlerBookRepository;
 import com.aibook.repository.CrawlerChapterRepository;
@@ -37,6 +38,7 @@ class CrawlerManagementServiceTest {
     private CrawlerBookRepository books;
     private CrawlerChapterRepository chapters;
     private CrawlerTaskLogRepository crawlerLogs;
+    private CrawlerTaskRepository tasks;
     private CrawlerManagementService service;
 
     @BeforeEach
@@ -46,8 +48,9 @@ class CrawlerManagementServiceTest {
         books = mock(CrawlerBookRepository.class);
         chapters = mock(CrawlerChapterRepository.class);
         crawlerLogs = mock(CrawlerTaskLogRepository.class);
+        tasks = mock(CrawlerTaskRepository.class);
         service = new CrawlerManagementService(sites, books,
-                chapters, mock(CrawlerTaskRepository.class), crawlerLogs, rules,
+                chapters, tasks, crawlerLogs, rules,
                 new ObjectMapper());
         when(sites.save(any(CrawlerSite.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(rules.save(any(CrawlerSiteRuleVersion.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -230,6 +233,50 @@ class CrawlerManagementServiceTest {
         assertThat(result).isEmpty();
         verify(books).searchDiscoveredBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
                 eq(CrawlerBook.CrawlStatus.DISCOVERED), eq(""), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    void paginatesAndSearchesManagedBooksOnly() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();
+        CrawlerBook book = CrawlerBook.builder().id(15L).site(site).bookName("三体")
+                .externalBookId("book-1").bookUrl("https://example.com/book/1")
+                .discoveryStatus(CrawlerBook.DiscoveryStatus.ACTIVE)
+                .crawlStatus(CrawlerBook.CrawlStatus.COMPLETED)
+                .importStatus(CrawlerBook.ImportStatus.READY).build();
+        when(books.searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(book)));
+
+        var result = service.books(user, 2, 50, "  三体  ");
+
+        assertThat(result.getContent()).hasSize(1);
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(books).searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(50);
+    }
+
+    @Test
+    void paginatesFailedTasksWithServerSideStatusFilter() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();
+        CrawlerTask task = CrawlerTask.builder().id("task-1").user(user).site(site)
+                .type(CrawlerTask.TaskType.BOOK_CONTENT).status(CrawlerTask.TaskStatus.FAILED)
+                .priority(CrawlerTask.Priority.NORMAL).build();
+        when(tasks.findByUserAndStatusInOrderByCreatedAtDesc(eq(user), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(task)));
+
+        var result = service.tasks(user, 1, 25, true);
+
+        assertThat(result.getContent()).extracting(item -> item.id()).containsExactly("task-1");
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(tasks).findByUserAndStatusInOrderByCreatedAtDesc(eq(user),
+                eq(List.of(CrawlerTask.TaskStatus.FAILED, CrawlerTask.TaskStatus.PARTIAL_SUCCESS)),
+                pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isEqualTo(1);
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(25);
     }
 
     @Test

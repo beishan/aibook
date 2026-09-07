@@ -1,11 +1,14 @@
 package com.aibook.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.aibook.dto.ProxySettingsDtos.CrawlerProxyRequest;
+import com.aibook.dto.ProxySettingsDtos.CrawlerProxyOrderRequest;
+import com.aibook.dto.ProxySettingsDtos.SystemProxyOrderRequest;
 import com.aibook.model.entity.CrawlerProxyConfig;
 import com.aibook.model.entity.SystemProxyConfig;
 import com.aibook.repository.CrawlerProxyConfigRepository;
@@ -13,8 +16,65 @@ import com.aibook.repository.SystemProxyConfigRepository;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 class ProxySettingsServiceTest {
+
+    @Test
+    void reordersSystemProxiesAndAssignsTopEntryHighestPriority() {
+        SystemProxyConfigRepository systems = mock(SystemProxyConfigRepository.class);
+        CrawlerProxyConfigRepository crawlers = mock(CrawlerProxyConfigRepository.class);
+        SystemProxyConfig first = SystemProxyConfig.builder().id(1L).name("原第二项")
+                .url("http://second:8080").enabled(true).priority(20).build();
+        SystemProxyConfig second = SystemProxyConfig.builder().id(2L).name("原第一项")
+                .url("http://first:8080").enabled(true).priority(10).build();
+        when(systems.findAllByOrderByPriorityAscIdAsc()).thenReturn(List.of(second, first));
+        ProxySettingsService service = new ProxySettingsService(systems, crawlers);
+
+        var result = service.reorderSystemProxies(new SystemProxyOrderRequest(List.of(1L, 2L)));
+
+        assertThat(result).extracting(view -> view.id()).containsExactly(1L, 2L);
+        assertThat(result).extracting(view -> view.priority()).containsExactly(1, 2);
+        assertThat(first.getPriority()).isEqualTo(1);
+        assertThat(second.getPriority()).isEqualTo(2);
+    }
+
+    @Test
+    void rejectsIncompleteSystemProxyOrder() {
+        SystemProxyConfigRepository systems = mock(SystemProxyConfigRepository.class);
+        CrawlerProxyConfigRepository crawlers = mock(CrawlerProxyConfigRepository.class);
+        when(systems.findAllByOrderByPriorityAscIdAsc()).thenReturn(List.of(
+                SystemProxyConfig.builder().id(1L).priority(1).build(),
+                SystemProxyConfig.builder().id(2L).priority(2).build()));
+        ProxySettingsService service = new ProxySettingsService(systems, crawlers);
+
+        assertThatThrownBy(() -> service.reorderSystemProxies(
+                new SystemProxyOrderRequest(List.of(1L))))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
+    @Test
+    void reordersCrawlerProxiesAndMakesTopEntryFirstChoice() {
+        SystemProxyConfigRepository systems = mock(SystemProxyConfigRepository.class);
+        CrawlerProxyConfigRepository crawlers = mock(CrawlerProxyConfigRepository.class);
+        CrawlerProxyConfig first = CrawlerProxyConfig.builder().id(11L).name("原第二项")
+                .url("http://second:8080").enabled(true).priority(20).build();
+        CrawlerProxyConfig second = CrawlerProxyConfig.builder().id(12L).name("原第一项")
+                .url("http://first:8080").enabled(true).priority(10).build();
+        when(crawlers.findAllByOrderByPriorityAscIdAsc()).thenReturn(List.of(second, first));
+        when(systems.findAll()).thenReturn(List.of());
+        ProxySettingsService service = new ProxySettingsService(systems, crawlers);
+
+        var result = service.reorderCrawlerProxies(
+                new CrawlerProxyOrderRequest(List.of(11L, 12L)));
+
+        assertThat(result).extracting(view -> view.id()).containsExactly(11L, 12L);
+        assertThat(result).extracting(view -> view.priority()).containsExactly(1, 2);
+        assertThat(first.getPriority()).isEqualTo(1);
+        assertThat(second.getPriority()).isEqualTo(2);
+    }
 
     @Test
     void returnsEffectiveCrawlerProxiesInPriorityOrderAndSkipsDisabledReferences() {
