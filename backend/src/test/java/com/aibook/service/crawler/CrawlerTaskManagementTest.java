@@ -2,6 +2,7 @@ package com.aibook.service.crawler;
 
 import com.aibook.model.entity.CrawlerSite;
 import com.aibook.model.entity.CrawlerBook;
+import com.aibook.model.entity.CrawlerChapter;
 import com.aibook.model.entity.CrawlerTask;
 import com.aibook.model.entity.User;
 import com.aibook.repository.CrawlerBookRepository;
@@ -14,7 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationContext;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,6 +25,50 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class CrawlerTaskManagementTest {
+
+    @Test
+    void stopsBookTaskAfterConfiguredConsecutiveRequestFailures() throws Exception {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站")
+                .maxConsecutiveFailures(5).build();
+        site.attachRule(new com.aibook.model.entity.CrawlerSiteRule());
+        CrawlerBook book = CrawlerBook.builder().id(8L).site(site).bookName("代理失败书籍").build();
+        List<CrawlerChapter> chaptersToCrawl = java.util.stream.IntStream.rangeClosed(1, 8)
+                .mapToObj(index -> CrawlerChapter.builder().id((long) index).crawlerBook(book)
+                        .chapterIndex(index).chapterName("第" + index + "章")
+                        .chapterUrl("https://example.com/chapter/" + index).build())
+                .toList();
+        CrawlerTask task = CrawlerTask.builder().user(user).site(site).crawlerBook(book)
+                .type(CrawlerTask.TaskType.BOOK_CONTENT).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerChapterRepository chapters = mock(CrawlerChapterRepository.class);
+        CrawlerHttpClient httpClient = mock(CrawlerHttpClient.class);
+        BookCrawlerParser parser = mock(BookCrawlerParser.class);
+        when(tasks.findById(task.getId())).thenReturn(Optional.of(task));
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(books.save(any(CrawlerBook.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(chapters.findByCrawlerBookOrderByChapterIndexAsc(book)).thenReturn(chaptersToCrawl);
+        when(chapters.countByCrawlerBook(book)).thenReturn(8L);
+        when(parser.supports(site)).thenReturn(true);
+        when(httpClient.get(eq(site), anyString())).thenThrow(new IOException("代理连接失败"));
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
+                chapters, tasks, mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
+                mock(OperationLogService.class), httpClient, List.of(parser), mock(ApplicationContext.class));
+        try {
+            service.run(task.getId());
+
+            assertThat(task.getStatus()).isEqualTo(CrawlerTask.TaskStatus.FAILED);
+            assertThat(task.getErrorMessage()).contains("连续请求失败 5 次", "代理连接失败");
+            verify(httpClient, times(5)).get(eq(site), anyString());
+            assertThat(chaptersToCrawl.subList(0, 5))
+                    .allMatch(chapter -> chapter.getCrawlStatus() == CrawlerChapter.CrawlStatus.FAILED);
+            assertThat(chaptersToCrawl.subList(5, 8))
+                    .allMatch(chapter -> chapter.getCrawlStatus() != CrawlerChapter.CrawlStatus.FAILED);
+        } finally {
+            service.shutdown();
+        }
+    }
 
     @Test
     void updatesPausedTaskPriority() {

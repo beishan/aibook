@@ -61,7 +61,7 @@ class CrawlerManagementServiceTest {
         when(sites.findByUserAndSiteCode(user, "demo")).thenReturn(Optional.empty());
 
         var result = service.createSite(user, new SitePayload("示例站", "demo", "https://example.com/",
-                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
+                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2, 5,
                 "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB", List.of()));
 
         assertThat(result.rule()).isNull();
@@ -71,6 +71,7 @@ class CrawlerManagementServiceTest {
         assertThat(result.autoCrawl()).isFalse();
         assertThat(result.autoUpdate()).isFalse();
         assertThat(result.autoImportLibrary()).isFalse();
+        assertThat(result.maxConsecutiveFailures()).isEqualTo(5);
     }
 
     @Test
@@ -100,7 +101,7 @@ class CrawlerManagementServiceTest {
         when(sites.findByUserAndSiteCode(user, "example_com_2")).thenReturn(Optional.empty());
 
         var result = service.createSite(user, new SitePayload("示例站", " ", "https://www.example.com/books",
-                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
+                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2, 5,
                 "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB", List.of()));
 
         assertThat(result.siteCode()).isEqualTo("example_com_2");
@@ -115,7 +116,7 @@ class CrawlerManagementServiceTest {
         when(sites.findByUserAndSiteCode(user, "example_com")).thenReturn(Optional.of(existing));
 
         var result = service.updateSite(user, 7L, new SitePayload("新名称", "example_com", "https://example.com",
-                null, true, false, false, true, false, 1500, 1000, 1, 15000, 2,
+                null, true, false, false, true, false, 1500, 1000, 1, 15000, 2, 5,
                 "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB", List.of()));
 
         assertThat(result.siteName()).isEqualTo("新名称");
@@ -128,7 +129,7 @@ class CrawlerManagementServiceTest {
         when(sites.findByUserAndSiteCode(user, "proxy-demo")).thenReturn(Optional.empty());
 
         var result = service.createSite(user, new SitePayload("代理站", "proxy-demo", "https://example.com",
-                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
+                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2, 5,
                 "UTF-8", null, null, null, List.of(
                         new ProxyPayload("备用", "http://127.0.0.1:7890", false),
                         new ProxyPayload("当前", "http://192.168.1.2:8080", true)), 360, 30, 3, "EPUB", List.of()));
@@ -142,7 +143,7 @@ class CrawlerManagementServiceTest {
         User user = user();
         when(sites.findByUserAndSiteCode(user, "proxy-conflict")).thenReturn(Optional.empty());
         SitePayload payload = new SitePayload("冲突站", "proxy-conflict", "https://example.com",
-                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
+                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2, 5,
                 "UTF-8", null, null, null, List.of(
                         new ProxyPayload("代理一", "http://127.0.0.1:7890", true),
                         new ProxyPayload("代理二", "http://127.0.0.1:8080", true)), 360, 30, 3, "EPUB", List.of());
@@ -157,7 +158,7 @@ class CrawlerManagementServiceTest {
         when(sites.findByUserAndSiteCode(user, "marker-demo")).thenReturn(Optional.empty());
 
         var result = service.createSite(user, new SitePayload("特征站", "marker-demo", "https://example.com",
-                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2,
+                null, false, false, false, true, false, 1500, 1000, 1, 15000, 2, 5,
                 "UTF-8", null, null, null, List.of(), 360, 30, 3, "EPUB",
                 List.of(" VIP 专属 ", "VIP 专属", "请登录后阅读")));
 

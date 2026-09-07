@@ -43,6 +43,7 @@ public class CrawlerSite {
     @Builder.Default private Integer maxConcurrency = 1;
     @Builder.Default private Integer timeoutMillis = 15000;
     @Builder.Default private Integer retryCount = 2;
+    @Builder.Default private Integer maxConsecutiveFailures = 5;
     @Builder.Default private String encoding = "UTF-8";
     @Column(length = 500) private String userAgent;
     @Column(columnDefinition = "TEXT") private String cookie;

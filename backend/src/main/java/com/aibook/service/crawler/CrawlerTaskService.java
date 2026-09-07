@@ -366,6 +366,8 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 + task.getSuccessCount() + "；待处理：" + pending.size() + "；更新检查：" + recheckCompleted);
         long durationTotal = 0; int requests = 0;
         int updateSuccess = 0; int updateFailed = 0;
+        RequestFailureGuard requestFailureGuard = new RequestFailureGuard(
+                value(site.getMaxConsecutiveFailures(), 5));
         for (CrawlerChapter chapter : pending) {
             CrawlerTask fresh = taskRepository.findById(task.getId()).orElseThrow();
             if (fresh.getStatus() == CrawlerTask.TaskStatus.PAUSED || fresh.getStatus() == CrawlerTask.TaskStatus.CANCELLED) {
@@ -390,10 +392,14 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                     percentage(Math.max(0, current - 1), task.getTotalCount()), chapter.getChapterName(), chapter.getChapterUrl());
             recordCrawlerDetail(task, "正在采集章节", "进度：" + current + "/" + task.getTotalCount()
                     + "；章节：" + chapter.getChapterName() + "；地址：" + chapter.getChapterUrl());
+            Exception requestFailure = null;
+            boolean requestSucceeded = false;
             try {
                 CrawlerHttpClient.FetchResult response = recheckCompleted
                         ? httpClient.get(site, chapter.getChapterUrl(), chapter.getSourceEtag(), chapter.getSourceLastModified())
                         : httpClient.get(site, chapter.getChapterUrl());
+                requestSucceeded = true;
+                requestFailureGuard.success();
                 CrawlerTask afterFetch = runningTask(task.getId());
                 if (afterFetch == null) {
                     if (!hadParsedContent) {
@@ -445,6 +451,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                             + "；耗时：" + response.durationMillis() + "ms；预览：" + contentPreview(parsed.content()));
                 }
             } catch (Exception exception) {
+                if (!requestSucceeded) requestFailure = exception;
                 chapter.setRetryCount(value(chapter.getRetryCount(), 0) + 1); chapter.setErrorMessage(userMessage(exception));
                 chapter.setCrawlStatus(hadParsedContent ? CrawlerChapter.CrawlStatus.COMPLETED : CrawlerChapter.CrawlStatus.FAILED);
                 log.warn("[采集任务] 章节采集失败: taskId={}, book={}, progress={}/{} ({}%), chapter={}, reason={}",
@@ -459,6 +466,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 if (chapter.getErrorMessage() == null) updateSuccess++; else updateFailed++;
                 refreshUpdateCounts(book, task, updateSuccess, updateFailed, pending.size(), durationTotal, requests);
             } else refreshCounts(book, task, durationTotal, requests);
+            if (requestFailure != null) requestFailureGuard.failure(requestFailure);
         }
         if (!recheckCompleted) refreshCounts(book, task, durationTotal, requests);
         task = runningTask(task.getId());
@@ -691,6 +699,25 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     private int priorityRank(CrawlerTask.Priority priority) { return switch (priority) { case HIGH -> 0; case NORMAL -> 1; case LOW -> 2; }; }
     private CrawlerBook.DiscoveryStatus discoveryStatus(CrawlerBook book) { return book.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : book.getDiscoveryStatus(); }
     private int value(Integer value, int fallback) { return value == null ? fallback : value; }
+
+    static final class RequestFailureGuard {
+        private final int limit;
+        private int consecutiveFailures;
+
+        RequestFailureGuard(int limit) { this.limit = Math.max(1, limit); }
+
+        void success() { consecutiveFailures = 0; }
+
+        void failure(Exception exception) {
+            consecutiveFailures++;
+            if (consecutiveFailures >= limit) {
+                throw new IllegalStateException("连续请求失败 " + consecutiveFailures
+                        + " 次，已达到任务停止上限；最后错误：" + userMessage(exception), exception);
+            }
+        }
+
+        int consecutiveFailures() { return consecutiveFailures; }
+    }
     private boolean hasParsedContent(CrawlerChapter chapter) { return chapter.getContent() != null && !chapter.getContent().isBlank(); }
     private int finishedCount(CrawlerTask task) { return value(task.getSuccessCount(), 0) + value(task.getFailedCount(), 0); }
     private int progress(CrawlerTask task) { return percentage(finishedCount(task), value(task.getTotalCount(), 0)); }
@@ -754,5 +781,5 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 .filter(marker -> normalizedContent.contains(marker.toLowerCase(Locale.ROOT)))
                 .findFirst().orElse(null);
     }
-    private String userMessage(Exception e) { if (e instanceof ResponseStatusException r && r.getReason() != null) return r.getReason(); return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(); }
+    private static String userMessage(Exception e) { if (e instanceof ResponseStatusException r && r.getReason() != null) return r.getReason(); return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(); }
 }

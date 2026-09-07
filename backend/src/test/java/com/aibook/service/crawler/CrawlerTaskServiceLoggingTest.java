@@ -17,11 +17,38 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationContext;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 class CrawlerTaskServiceLoggingTest {
+    @Test
+    void stopsAfterConfiguredConsecutiveRequestFailures() {
+        CrawlerTaskService.RequestFailureGuard guard = new CrawlerTaskService.RequestFailureGuard(5);
+
+        for (int attempt = 1; attempt < 5; attempt++) {
+            guard.failure(new IllegalStateException("代理连接失败"));
+            assertThat(guard.consecutiveFailures()).isEqualTo(attempt);
+        }
+
+        assertThatThrownBy(() -> guard.failure(new IllegalStateException("代理连接失败")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("连续请求失败 5 次")
+                .hasMessageContaining("代理连接失败");
+    }
+
+    @Test
+    void successfulRequestResetsConsecutiveFailureCount() {
+        CrawlerTaskService.RequestFailureGuard guard = new CrawlerTaskService.RequestFailureGuard(2);
+        guard.failure(new IllegalStateException("第一次失败"));
+
+        guard.success();
+
+        guard.failure(new IllegalStateException("重新计数后的第一次失败"));
+        assertThat(guard.consecutiveFailures()).isEqualTo(1);
+    }
+
     @Test
     void contentPreviewFlattensWhitespaceAndLimitsToFiftyCharacters() {
         String preview = CrawlerTaskService.contentPreview("  第一行\n\t第二行  " + "字".repeat(50));

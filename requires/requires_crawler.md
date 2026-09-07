@@ -176,6 +176,9 @@ timeout
 retry_count
 失败重试次数
 
+max_consecutive_failures
+任务连续请求失败停止上限
+
 user_agent
 
 cookie
