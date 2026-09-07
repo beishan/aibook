@@ -10,4 +10,11 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface OperationLogRepository extends JpaRepository<OperationLog, Long> {
     Page<OperationLog> findByUser(User user, Pageable pageable);
+
+    Page<OperationLog> findByUserAndActionAndBookTitleAndDetailsContaining(
+            User user,
+            OperationLog.Action action,
+            String bookTitle,
+            String details,
+            Pageable pageable);
 }
