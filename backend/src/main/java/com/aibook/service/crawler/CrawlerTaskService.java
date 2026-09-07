@@ -32,7 +32,6 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     private final CrawlerTaskRepository taskRepository;
     private final CrawlerManagementService managementService;
     private final OperationLogService operationLogService;
-    private final CrawlerExportService exportService;
     private final CrawlerHttpClient httpClient;
     private final List<BookCrawlerParser> parsers;
     private final ApplicationContext applicationContext;
@@ -115,8 +114,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         }
         CrawlerBook.CrawlStatus previous = book.getCrawlStatus();
         book.setCrawlStatus(status);
-        book.setAutoUpdateEnabled(autoUpdateEnabled == null
-                ? status != CrawlerBook.CrawlStatus.COMPLETED : autoUpdateEnabled);
+        book.setAutoUpdateEnabled(false);
         boolean hasContent = chapterRepository.findByCrawlerBookOrderByChapterIndexAsc(book).stream()
                 .anyMatch(this::hasParsedContent);
         if (book.getLibraryBook() == null) {
@@ -130,40 +128,13 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                     "人工修改采集状态：" + bookName(book),
                     "书籍ID：" + book.getId() + "；网站：" + book.getSite().getSiteName()
                             + "；原状态：" + previous + "；新状态：" + status
-                            + "；自动追更：" + Boolean.TRUE.equals(book.getAutoUpdateEnabled()));
+                            + "；任务模式：仅手动触发");
         } catch (Exception exception) {
             log.warn("[采集任务] 写入人工状态修改日志失败: bookId={}", book.getId(), exception);
         }
         log.info("[采集任务] 人工修改书籍状态: bookId={}, book={}, previous={}, current={}",
                 book.getId(), bookName(book), previous, status);
         return managementService.bookView(book);
-    }
-
-    public boolean scheduleSiteScan(CrawlerSite site) {
-        if (site.getRule() == null) return false;
-        if (taskRepository.existsBySiteAndTypeAndStatusIn(site, CrawlerTask.TaskType.SITE_SCAN, ACTIVE_STATUSES)) return false;
-        createAndSubmit(site.getUser(), site, null, CrawlerTask.TaskType.SITE_SCAN, CrawlerTask.Priority.LOW);
-        return true;
-    }
-
-    public int scheduleBookUpdates(CrawlerSite site) {
-        if (site.getRule() == null) return 0;
-        int count = 0;
-        List<CrawlerBook.CrawlStatus> eligible = List.of(CrawlerBook.CrawlStatus.COMPLETED, CrawlerBook.CrawlStatus.PARTIAL_SUCCESS);
-        for (CrawlerBook book : bookRepository.findBySiteAndCrawlStatusIn(site, eligible)) {
-            if (!Boolean.TRUE.equals(book.getAutoUpdateEnabled()) || sourceIsCompleted(book.getBookStatus())) {
-                if (sourceIsCompleted(book.getBookStatus()) && !Boolean.FALSE.equals(book.getAutoUpdateEnabled())) {
-                    book.setAutoUpdateEnabled(false);
-                    bookRepository.save(book);
-                }
-                continue;
-            }
-            if (discoveryStatus(book) != CrawlerBook.DiscoveryStatus.ACTIVE || taskRepository.existsByCrawlerBookAndStatusIn(book, ACTIVE_STATUSES)) continue;
-            book.setCrawlStatus(CrawlerBook.CrawlStatus.UPDATING); bookRepository.save(book);
-            createAndSubmit(site.getUser(), site, book, CrawlerTask.TaskType.BOOK_UPDATE_CHECK, CrawlerTask.Priority.LOW);
-            count++;
-        }
-        return count;
     }
 
     public TaskView command(User user, String taskId, String command) {
@@ -242,26 +213,17 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
             log.info("[采集任务] 删除任务记录: taskId={}, status={}, type={}, book={}",
                     taskId, task.getStatus(), task.getType(), bookName(task.getCrawlerBook()));
             recordCrawlerEvent(task, "任务记录已删除", "状态：" + task.getStatus());
-            if (task.getType() == CrawlerTask.TaskType.BOOK_UPDATE_CHECK && task.getCrawlerBook() != null) {
-                task.getCrawlerBook().setAutoUpdateEnabled(false);
-                bookRepository.save(task.getCrawlerBook());
-                recordCrawlerEvent(task, "已停止书籍自动追更", "删除更新检查任务后不再自动重建");
-            }
             taskRepository.delete(task);
         }
     }
 
-    private CrawlerTask createAndSubmit(User user, CrawlerSite site, CrawlerBook book, CrawlerTask.TaskType type) {
-        return createAndSubmit(user, site, book, type, CrawlerTask.Priority.HIGH);
-    }
-
-    private CrawlerTask createAndSubmit(User user, CrawlerSite site, CrawlerBook book,
-            CrawlerTask.TaskType type, CrawlerTask.Priority priority) {
+    private CrawlerTask createAndSubmit(
+            User user, CrawlerSite site, CrawlerBook book, CrawlerTask.TaskType type) {
         CrawlerTask task = taskRepository.save(CrawlerTask.builder().user(user).site(site).crawlerBook(book)
-                .type(type).priority(priority).build());
+                .type(type).priority(CrawlerTask.Priority.HIGH).build());
         log.info("[采集任务] 已创建: taskId={}, type={}, priority={}, site={}, book={}",
-                task.getId(), type, priority, site.getSiteName(), bookName(book));
-        recordCrawlerEvent(task, "任务已创建", "优先级：" + priority);
+                task.getId(), type, CrawlerTask.Priority.HIGH, site.getSiteName(), bookName(book));
+        recordCrawlerEvent(task, "任务已创建", "触发方式：人工操作；优先级：" + CrawlerTask.Priority.HIGH);
         submit(task.getId());
         return task;
     }
@@ -510,22 +472,6 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         book.setImportStatus(contentFailed != 0 ? CrawlerBook.ImportStatus.NOT_IMPORTED
                 : book.getLibraryBook() == null ? CrawlerBook.ImportStatus.READY : CrawlerBook.ImportStatus.IMPORTED);
         book.setLastCrawlTime(LocalDateTime.now()); bookRepository.save(book);
-        if (taskFailed == 0 && Boolean.TRUE.equals(site.getAutoImportLibrary()) && book.getLibraryBook() == null) {
-            try {
-                log.info("[采集任务] 开始自动入库: taskId={}, book={}, format={}",
-                        task.getId(), bookName(book), site.getAutoImportFormat());
-                exportService.importLibrary(task.getUser(), book.getId(), site.getAutoImportFormat());
-                log.info("[采集任务] 自动入库完毕: taskId={}, book={}", task.getId(), bookName(book));
-                recordCrawlerEvent(task, "自动入库完毕", "格式：" + site.getAutoImportFormat());
-            } catch (Exception exception) {
-                task.setStatus(CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
-                task.setErrorMessage("采集完成，但自动入库失败：" + userMessage(exception));
-                taskRepository.save(task);
-                log.warn("[采集任务] 自动入库失败: taskId={}, book={}, reason={}",
-                        task.getId(), bookName(book), task.getErrorMessage());
-                recordCrawlerEvent(task, "自动入库失败", "原因：" + task.getErrorMessage());
-            }
-        }
         log.info("[采集任务] 采集完毕: taskId={}, book={}, status={}, progress={}/{} ({}%), failed={}, averageRequestMs={}",
                 task.getId(), bookName(book), task.getStatus(), task.getSuccessCount(), task.getTotalCount(),
                 progress(task), task.getFailedCount(), task.getAverageRequestMillis());
@@ -554,7 +500,6 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     private void runSiteScan(CrawlerTask task, CrawlerSite site, CrawlerSiteRule rule, BookCrawlerParser parser) throws Exception {
         String pageUrl = site.getHomeUrl() == null || site.getHomeUrl().isBlank() ? site.getBaseUrl() : site.getHomeUrl();
         Set<String> visitedPages = new HashSet<>();
-        Set<Long> autoCrawlIds = new LinkedHashSet<>();
         int discovered = 0;
         int pages = 0;
         log.info("[采集任务] 开始扫描网站: taskId={}, site={}, homeUrl={}, maxPages={}",
@@ -587,8 +532,6 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                             task.getId(), site.getSiteName(), pages + 1, bookName(book), validatedUrl);
                     recordCrawlerEvent(task, "发现书籍", "页码：" + (pages + 1) + "；书籍："
                             + bookName(book) + "；地址：" + validatedUrl);
-                    if (Boolean.TRUE.equals(site.getAutoCrawl()) && discoveryStatus(book) == CrawlerBook.DiscoveryStatus.ACTIVE
-                            && book.getCrawlStatus() == CrawlerBook.CrawlStatus.DISCOVERED) autoCrawlIds.add(book.getId());
                 } catch (Exception exception) { log.debug("忽略无效发现链接 {}", item.url(), exception); }
             }
             pages++;
@@ -609,16 +552,10 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         task.setStatus(CrawlerTask.TaskStatus.SUCCESS); task.setFinishedAt(LocalDateTime.now()); task.setCurrentChapter(null);
         task = finishIfRunning(task);
         if (task == null) return;
-        log.info("[采集任务] 网站扫描完毕: taskId={}, site={}, pages={}, discovered={}, autoCrawlQueued={}",
-                task.getId(), site.getSiteName(), pages, discovered, autoCrawlIds.size());
-        recordCrawlerEvent(task, "网站扫描完毕", "扫描页数：" + pages + "；发现书籍："
-                + discovered + "；自动采集排队：" + autoCrawlIds.size());
-        for (Long bookId : autoCrawlIds) bookRepository.findById(bookId).ifPresent(book -> {
-            if (!taskRepository.existsByCrawlerBookAndStatusIn(book, ACTIVE_STATUSES)) {
-                book.setCrawlStatus(CrawlerBook.CrawlStatus.WAITING); bookRepository.save(book);
-                createAndSubmit(site.getUser(), site, book, CrawlerTask.TaskType.BOOK_FULL_CRAWL, CrawlerTask.Priority.NORMAL);
-            }
-        });
+        log.info("[采集任务] 网站扫描完毕: taskId={}, site={}, pages={}, discovered={}",
+                task.getId(), site.getSiteName(), pages, discovered);
+        recordCrawlerEvent(task, "网站扫描完毕", "扫描页数：" + pages + "；发现书籍：" + discovered
+                + "；后续采集需人工触发");
     }
 
     private void refreshCounts(CrawlerBook book, CrawlerTask task, long totalDuration, int requests) {
@@ -741,12 +678,6 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
 
     private String sha256(String value) throws Exception { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
     private String externalId(String url) { String path = URI.create(url).getPath().replaceAll("/+$", ""); String id = path.substring(path.lastIndexOf('/') + 1).replaceFirst("\\.[^.]+$", ""); return id.isBlank() ? Integer.toHexString(url.hashCode()) : id; }
-    private boolean sourceIsCompleted(String status) {
-        if (status == null || status.isBlank()) return false;
-        String normalized = status.trim().toLowerCase(Locale.ROOT);
-        return normalized.contains("完结") || normalized.contains("已完本") || normalized.contains("全文完")
-                || normalized.contains("completed") || normalized.contains("finished");
-    }
     private List<CrawlerBook> ownedBooks(User user, List<Long> ids) {
         LinkedHashSet<Long> unique = new LinkedHashSet<>(ids);
         List<CrawlerBook> books = unique.stream().map(id -> managementService.ownedBook(user, id)).toList();

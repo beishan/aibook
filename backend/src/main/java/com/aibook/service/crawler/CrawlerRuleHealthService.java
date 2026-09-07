@@ -4,15 +4,12 @@ import com.aibook.dto.crawler.CrawlerDtos.*;
 import com.aibook.model.entity.*;
 import com.aibook.repository.*;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class CrawlerRuleHealthService {
     private final CrawlerSiteRepository siteRepository;
     private final CrawlerBookRepository bookRepository;
@@ -21,13 +18,6 @@ public class CrawlerRuleHealthService {
 
     public RuleTestView check(User user, Long siteId) {
         return check(managementService.ownedSite(user, siteId));
-    }
-
-    @Scheduled(cron = "${crawler.health-check-cron:0 15 4 * * ?}")
-    public void checkAll() {
-        for (CrawlerSite site : siteRepository.findByEnabledTrue()) {
-            try { check(site); } catch (Exception exception) { log.warn("网站 {} 规则健康检查失败", site.getSiteCode(), exception); }
-        }
     }
 
     private RuleTestView check(CrawlerSite site) {

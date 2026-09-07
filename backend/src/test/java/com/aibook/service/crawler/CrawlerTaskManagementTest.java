@@ -91,7 +91,7 @@ class CrawlerTaskManagementTest {
     }
 
     @Test
-    void deletingUpdateCheckTaskStopsAutomaticUpdatesForBook() {
+    void deletingFinishedUpdateCheckTaskOnlyRemovesTheRequestedRecord() {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站").build();
         CrawlerBook book = CrawlerBook.builder().id(8L).site(site).bookName("已采集书籍")
@@ -106,9 +106,8 @@ class CrawlerTaskManagementTest {
         try {
             service.deleteTask(user, update.getId());
 
-            assertThat(book.getAutoUpdateEnabled()).isFalse();
-            verify(books).save(book);
             verify(tasks).delete(update);
+            verify(books, never()).save(any());
         } finally {
             service.shutdown();
         }
@@ -166,7 +165,7 @@ class CrawlerTaskManagementTest {
             CrawlerManagementService management) {
         return new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
                 mock(CrawlerChapterRepository.class), tasks, management, mock(OperationLogService.class),
-                mock(CrawlerExportService.class), mock(CrawlerHttpClient.class), List.of(),
+                mock(CrawlerHttpClient.class), List.of(),
                 mock(ApplicationContext.class));
     }
 

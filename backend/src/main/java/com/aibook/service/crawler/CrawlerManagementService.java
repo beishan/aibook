@@ -222,9 +222,9 @@ public class CrawlerManagementService {
     private void apply(CrawlerSite site, SitePayload p, String siteCode) {
         site.setSiteName(p.siteName().trim()); site.setSiteCode(siteCode); site.setBaseUrl(trimSlash(p.baseUrl()));
         site.setHomeUrl(blank(p.homeUrl()) ? trimSlash(p.baseUrl()) : p.homeUrl().trim());
-        site.setEnabled(bool(p.enabled(), false)); site.setAutoScan(bool(p.autoScan(), false));
-        site.setAutoCrawl(bool(p.autoCrawl(), false)); site.setAutoUpdate(bool(p.autoUpdate(), true));
-        site.setAutoImportLibrary(bool(p.autoImportLibrary(), false));
+        site.setEnabled(bool(p.enabled(), false));
+        site.setAutoScan(false); site.setAutoCrawl(false); site.setAutoUpdate(false);
+        site.setAutoImportLibrary(false);
         site.setScanIntervalMinutes(value(p.scanIntervalMinutes(), 360));
         site.setUpdateIntervalMinutes(value(p.updateIntervalMinutes(), 30));
         site.setMaxDiscoveryPages(value(p.maxDiscoveryPages(), 3));

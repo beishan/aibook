@@ -63,6 +63,10 @@ class CrawlerManagementServiceTest {
         assertThat(result.rule()).isNull();
         assertThat(result.ruleVersion()).isNull();
         assertThat(result.ruleCount()).isZero();
+        assertThat(result.autoScan()).isFalse();
+        assertThat(result.autoCrawl()).isFalse();
+        assertThat(result.autoUpdate()).isFalse();
+        assertThat(result.autoImportLibrary()).isFalse();
     }
 
     @Test
