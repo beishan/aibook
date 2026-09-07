@@ -75,6 +75,17 @@
         <path d="M12 23h40" stroke="#fff0ce" stroke-width="1.4" opacity=".36" />
       </g>
 
+      <g v-else-if="name === 'crawler'" :filter="`url(#${gradientPrefix}-shadow)`">
+        <circle cx="32" cy="32" r="21" :fill="`url(#${gradientPrefix}-green)`" stroke="#174d39" stroke-width="1.6" />
+        <path d="M18 22.5 32 15l14 7.5v17L32 49l-14-9.5Z" fill="#fffbea" stroke="#765a2e" stroke-width="1.5" stroke-linejoin="round" />
+        <path d="m18 22.5 14 9.2 14-9.2M32 31.7V49" fill="none" stroke="#a6864b" stroke-width="1.4" />
+        <circle cx="18" cy="22.5" r="4.2" fill="#d68b3c" stroke="#71451f" stroke-width="1.2" />
+        <circle cx="46" cy="22.5" r="4.2" fill="#d68b3c" stroke="#71451f" stroke-width="1.2" />
+        <circle cx="32" cy="49" r="4.2" fill="#d68b3c" stroke="#71451f" stroke-width="1.2" />
+        <circle cx="32" cy="31.7" r="5" :fill="`url(#${gradientPrefix}-metal)`" stroke="#684e25" stroke-width="1.3" />
+        <path d="M22 18.7A18 18 0 0 1 42 18" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" opacity=".48" />
+      </g>
+
       <g v-else-if="name === 'trashEmpty' || name === 'trashFull'" :filter="`url(#${gradientPrefix}-shadow)`">
         <path d="M18 20h28l-2.8 34H20.8Z" fill="#c9d2d8" stroke="#4d5d67" stroke-width="1.8" stroke-linejoin="round" />
         <path d="M15 18h34M25 18v-5h14v5" fill="none" stroke="#4d5d67" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
@@ -112,10 +123,10 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance } from 'vue'
-import { Collection, Delete, DeleteFilled, HomeFilled, Reading, Setting, Tools, Switch } from '@element-plus/icons-vue'
+import { Collection, Connection, Delete, DeleteFilled, HomeFilled, Reading, Setting, Tools, Switch } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
 
-export type DockIconName = 'home' | 'library' | 'shelf' | 'repair' | 'conversion' | 'settings' | 'trashEmpty' | 'trashFull'
+export type DockIconName = 'home' | 'library' | 'shelf' | 'repair' | 'conversion' | 'crawler' | 'settings' | 'trashEmpty' | 'trashFull'
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 
 const props = defineProps<{
@@ -130,6 +141,7 @@ const minimalIcons: Record<DockIconName, Component> = {
   shelf: Reading,
   repair: Tools,
   conversion: Switch,
+  crawler: Connection,
   settings: Setting,
   trashEmpty: Delete,
   trashFull: DeleteFilled,
@@ -203,6 +215,10 @@ const gradientPrefix = computed(() => `dock-${instanceId}-${props.name}`)
 
 .dock-glyph-macos--conversion {
   background: linear-gradient(145deg, #9c8cff, #6557d8 58%, #3f319d);
+}
+
+.dock-glyph-macos--crawler {
+  background: linear-gradient(145deg, #5de0d2, #159f9d 56%, #08616e);
 }
 
 .dock-glyph-macos--settings {

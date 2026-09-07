@@ -27,6 +27,106 @@ import static org.mockito.Mockito.*;
 class CrawlerTaskManagementTest {
 
     @Test
+    void pausesRunningTaskWithoutChangingItToFailed() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站").build();
+        CrawlerBook book = CrawlerBook.builder().id(8L).site(site).bookName("暂停测试")
+                .crawlStatus(CrawlerBook.CrawlStatus.CRAWLING_CONTENT).build();
+        CrawlerTask task = CrawlerTask.builder().user(user).site(site).crawlerBook(book)
+                .type(CrawlerTask.TaskType.BOOK_CONTENT).status(CrawlerTask.TaskStatus.RUNNING).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        when(management.ownedTask(user, task.getId())).thenReturn(task);
+        when(management.taskView(task)).thenCallRealMethod();
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        CrawlerTaskService service = service(tasks, books, management);
+        try {
+            var result = service.command(user, task.getId(), "pause");
+
+            assertThat(result.status()).isEqualTo("PAUSED");
+            assertThat(task.getStatus()).isEqualTo(CrawlerTask.TaskStatus.PAUSED);
+            assertThat(book.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.PAUSED);
+            verify(tasks).save(task);
+            verify(books).save(book);
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void continuesFailedTaskFromItsExistingProgress() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站").build();
+        CrawlerBook book = CrawlerBook.builder().id(8L).site(site).bookName("续采测试")
+                .crawlStatus(CrawlerBook.CrawlStatus.FAILED).build();
+        CrawlerTask task = CrawlerTask.builder().user(user).site(site).crawlerBook(book)
+                .type(CrawlerTask.TaskType.BOOK_CONTENT).status(CrawlerTask.TaskStatus.FAILED)
+                .errorMessage("代理连接失败").finishedAt(java.time.LocalDateTime.now()).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        when(management.ownedTask(user, task.getId())).thenReturn(task);
+        when(management.taskView(task)).thenCallRealMethod();
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tasks.findById(task.getId())).thenReturn(Optional.empty());
+        CrawlerTaskService service = service(tasks, books, management);
+        try {
+            var result = service.command(user, task.getId(), "resume");
+
+            assertThat(result.status()).isEqualTo("WAITING");
+            assertThat(task.getErrorMessage()).isNull();
+            assertThat(task.getFinishedAt()).isNull();
+            assertThat(book.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.WAITING);
+            verify(tasks).save(task);
+            verify(books).save(book);
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void pauseDuringFailedRequestLeavesCurrentChapterReadyToContinue() throws Exception {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站").build();
+        site.attachRule(new com.aibook.model.entity.CrawlerSiteRule());
+        CrawlerBook book = CrawlerBook.builder().id(8L).site(site).bookName("暂停中的书").build();
+        CrawlerChapter chapter = CrawlerChapter.builder().id(10L).crawlerBook(book)
+                .chapterIndex(1).chapterName("第一章")
+                .chapterUrl("https://example.com/chapter/1").build();
+        CrawlerTask task = CrawlerTask.builder().user(user).site(site).crawlerBook(book)
+                .type(CrawlerTask.TaskType.BOOK_CONTENT).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerChapterRepository chapters = mock(CrawlerChapterRepository.class);
+        CrawlerHttpClient httpClient = mock(CrawlerHttpClient.class);
+        BookCrawlerParser parser = mock(BookCrawlerParser.class);
+        when(tasks.findById(task.getId())).thenReturn(Optional.of(task));
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(books.save(any(CrawlerBook.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(chapters.findByCrawlerBookOrderByChapterIndexAsc(book)).thenReturn(List.of(chapter));
+        when(chapters.countByCrawlerBook(book)).thenReturn(1L);
+        when(parser.supports(site)).thenReturn(true);
+        when(httpClient.get(site, chapter.getChapterUrl())).thenAnswer(invocation -> {
+            task.setStatus(CrawlerTask.TaskStatus.PAUSED);
+            throw new IOException("暂停时请求中断");
+        });
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
+                chapters, tasks, mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
+                mock(OperationLogService.class), httpClient, List.of(parser), mock(ApplicationContext.class));
+        try {
+            service.run(task.getId());
+
+            assertThat(task.getStatus()).isEqualTo(CrawlerTask.TaskStatus.PAUSED);
+            assertThat(task.getErrorMessage()).isNull();
+            assertThat(chapter.getCrawlStatus()).isEqualTo(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
+            assertThat(chapter.getErrorMessage()).isNull();
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void stopsBookTaskAfterConfiguredConsecutiveRequestFailures() throws Exception {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站").build();

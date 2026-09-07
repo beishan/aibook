@@ -90,6 +90,19 @@ class DockIconServiceTest {
     }
 
     @Test
+    void storesCrawlerIcon() {
+        byte[] png = new byte[] {
+            (byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A
+        };
+
+        DockIconStatusDTO status = service.upload(user, "crawler", new MockMultipartFile(
+                "file", "crawler.png", "image/png", png));
+
+        assertThat(status.icons()).containsExactly("crawler");
+        assertThat(service.getIcon(user, "crawler").path()).hasBinaryContent(png);
+    }
+
+    @Test
     void rejectsInvalidNameAndFakeImage() {
         MockMultipartFile fake = new MockMultipartFile(
                 "file", "fake.png", "image/png", "not-an-image".getBytes());

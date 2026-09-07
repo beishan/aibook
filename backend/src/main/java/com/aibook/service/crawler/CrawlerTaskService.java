@@ -157,11 +157,14 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 removeQueuedTask(taskId);
             }
             case "resume" -> {
-                if (task.getStatus() != CrawlerTask.TaskStatus.PAUSED)
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "只有暂停任务可以继续");
+                if (task.getStatus() != CrawlerTask.TaskStatus.PAUSED
+                        && task.getStatus() != CrawlerTask.TaskStatus.FAILED)
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "只有暂停或失败任务可以继续");
                 if (active.contains(taskId))
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "任务仍在停止中，请稍后再继续");
                 task.setStatus(CrawlerTask.TaskStatus.WAITING);
+                task.setErrorMessage(null);
+                task.setFinishedAt(null);
                 taskRepository.save(task);
                 submit(task.getId());
             }
@@ -171,6 +174,9 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         if (task.getCrawlerBook() != null && (task.getStatus() == CrawlerTask.TaskStatus.PAUSED
                 || task.getStatus() == CrawlerTask.TaskStatus.CANCELLED)) {
             task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.PAUSED);
+            bookRepository.save(task.getCrawlerBook());
+        } else if (task.getCrawlerBook() != null && "resume".equals(command)) {
+            task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.WAITING);
             bookRepository.save(task.getCrawlerBook());
         }
         log.info("[采集任务] 收到控制指令: taskId={}, command={}, status={}, book={}",
@@ -451,6 +457,14 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                             + "；耗时：" + response.durationMillis() + "ms；预览：" + contentPreview(parsed.content()));
                 }
             } catch (Exception exception) {
+                if (isStopRequested(task.getId())) {
+                    if (!hadParsedContent) {
+                        chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
+                        chapter.setErrorMessage(null);
+                        chapterRepository.save(chapter);
+                    }
+                    return;
+                }
                 if (!requestSucceeded) requestFailure = exception;
                 chapter.setRetryCount(value(chapter.getRetryCount(), 0) + 1); chapter.setErrorMessage(userMessage(exception));
                 chapter.setCrawlStatus(hadParsedContent ? CrawlerChapter.CrawlStatus.COMPLETED : CrawlerChapter.CrawlStatus.FAILED);
