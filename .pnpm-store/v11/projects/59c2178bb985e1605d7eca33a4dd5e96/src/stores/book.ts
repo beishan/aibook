@@ -7,6 +7,8 @@ export interface Book {
   id: number
   title: string
   author?: string
+  seriesName?: string | null
+  seriesIndex?: number | null
   isbn?: string
   publisher?: string
   publishDate?: string
@@ -14,7 +16,7 @@ export interface Book {
   coverUrl?: string
   format: string
   filePath: string
-  sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN'
+  sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN' | 'CRAWLER'
   sourcePath?: string
   fileSize?: number
   language?: string

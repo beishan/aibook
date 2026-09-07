@@ -25,6 +25,18 @@ public interface BookRepository extends JpaRepository<Book, Long> {
             + "WHERE source.book = b AND (source.scanDirectory.libraryVisible = true "
             + "OR source.scanDirectory.libraryVisible IS NULL))) ";
 
+    @Query("SELECT b.seriesName AS name, COUNT(b) AS bookCount, "
+            + "SUM(CASE WHEN b.readingStatus = :finished THEN 1 ELSE 0 END) AS finishedCount "
+            + "FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL "
+            + "AND b.seriesName IS NOT NULL AND b.seriesName <> '' AND " + LIBRARY_VISIBLE
+            + " GROUP BY b.seriesName ORDER BY b.seriesName")
+    List<BookSeriesSummary> findSeriesSummaries(@Param("user") User user,
+            @Param("finished") Book.ReadingStatus finished);
+
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL "
+            + "AND b.seriesName = :name AND " + LIBRARY_VISIBLE)
+    List<Book> findSeriesBooks(@Param("user") User user, @Param("name") String name);
+
     /**
      * 根据文件哈希查找书籍
      */

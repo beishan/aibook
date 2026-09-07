@@ -37,13 +37,26 @@
           </button>
         </div>
         <!-- 卡片大小（仅网格模式显示） -->
-        <div v-if="viewMode === 'grid'" class="card-size-selector">
+        <div
+          v-if="viewMode === 'grid'"
+          class="card-size-selector"
+          role="radiogroup"
+          aria-label="卡片大小"
+          :style="{ '--card-size-index': cardSizeIndex }"
+        >
+          <span class="card-size-slider" aria-hidden="true"></span>
           <button
-            v-for="size in cardSizes"
+            v-for="(size, index) in cardSizes"
             :key="size.value"
+            type="button"
+            role="radio"
             class="size-btn"
             :class="{ active: cardSize === size.value }"
+            :aria-checked="cardSize === size.value"
+            :aria-label="`${size.label}卡片`"
+            :tabindex="cardSize === size.value ? 0 : -1"
             @click="cardSize = size.value"
+            @keydown="handleCardSizeKeydown($event, index)"
             :title="size.label"
           >
             {{ size.icon }}
@@ -620,7 +633,9 @@ const tabs = [
   { key: 'lists', label: '我的书单', icon: '📚' },
 ]
 
-const cardSizes = [
+type CardSize = 'small' | 'medium' | 'large'
+
+const cardSizes: Array<{ value: CardSize; label: string; icon: string }> = [
   { value: 'small', label: '小', icon: '▪' },
   { value: 'medium', label: '中', icon: '▫' },
   { value: 'large', label: '大', icon: '◻' },
@@ -663,7 +678,8 @@ const editingShelfGroup = ref<ShelfGroup | null>(null)
 const shelfGroupIcons = ['📁', '📚', '⭐', '❤️', '🎯', '💡', '🌙', '☕', '🧠', '🚀']
 const shelfGroupForm = ref({ name: '', description: '', icon: '📁', color: '#4f8cff' })
 const viewMode = ref<'grid' | 'list'>('grid')
-const cardSize = ref<'small' | 'medium' | 'large'>('medium')
+const cardSize = ref<CardSize>('medium')
+const cardSizeIndex = computed(() => Math.max(0, cardSizes.findIndex(size => size.value === cardSize.value)))
 
 const newListForm = ref({
   name: '',
@@ -997,6 +1013,21 @@ const handleTabKeydown = (event: KeyboardEvent, index: number) => {
   tabButtons?.[nextIndex]?.focus()
 }
 
+const handleCardSizeKeydown = (event: KeyboardEvent, index: number) => {
+  let nextIndex: number | null = null
+  if (event.key === 'ArrowRight') nextIndex = (index + 1) % cardSizes.length
+  if (event.key === 'ArrowLeft') nextIndex = (index - 1 + cardSizes.length) % cardSizes.length
+  if (event.key === 'Home') nextIndex = 0
+  if (event.key === 'End') nextIndex = cardSizes.length - 1
+  if (nextIndex === null) return
+
+  event.preventDefault()
+  cardSize.value = cardSizes[nextIndex].value
+  const sizeButtons = (event.currentTarget as HTMLButtonElement)
+    .parentElement?.querySelectorAll<HTMLButtonElement>('.size-btn')
+  sizeButtons?.[nextIndex]?.focus()
+}
+
 const handleCreateList = async () => {
   if (!newListForm.value.name.trim()) {
     message.warning('请输入书单名称')
@@ -1267,34 +1298,81 @@ onMounted(() => {
 
 /* 卡片大小选择器 */
 .card-size-selector {
+  --card-size-index: 1;
+  position: relative;
+  isolation: isolate;
   display: flex;
-  background: var(--surface-card);
-  border: var(--glass-border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, white 66%, var(--border-color));
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.5), rgba(229, 239, 251, 0.26));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(70, 92, 126, 0.1),
+    0 7px 18px rgba(45, 63, 94, 0.1);
+  backdrop-filter: blur(18px) saturate(175%);
+  -webkit-backdrop-filter: blur(18px) saturate(175%);
+}
+
+.card-size-slider {
+  position: absolute;
+  z-index: -1;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 12px) / 3);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(225, 239, 255, 0.72));
+  box-shadow:
+    0 5px 14px rgba(45, 65, 98, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(90, 116, 153, 0.12);
+  transform: translateX(calc(var(--card-size-index) * (100% + 2px)));
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .size-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
   font-size: 12px;
 }
 
-.size-btn:hover {
-  background: var(--bg-secondary);
+.size-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary);
 }
 
 .size-btn.active {
-  background: var(--primary);
-  color: white;
+  color: var(--text-primary);
+}
+
+.size-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+:global(html[data-theme="macos26"]) .card-size-selector {
+  border-color: rgba(255, 255, 255, 0.74);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.6), rgba(221, 237, 255, 0.3));
+}
+
+:global(html[data-theme="macos26"]) .card-size-slider {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(220, 238, 255, 0.74));
+  box-shadow:
+    0 6px 17px rgba(48, 66, 100, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(83, 113, 153, 0.14);
 }
 
 .shelf-tab-content {
@@ -2081,7 +2159,8 @@ button.shelf-folder-card {
   .book-list-cover img,
   .list-book-cover img,
   .shelf-tab-slider,
-  .view-toggle-slider {
+  .view-toggle-slider,
+  .card-size-slider {
     transition: none;
   }
 }

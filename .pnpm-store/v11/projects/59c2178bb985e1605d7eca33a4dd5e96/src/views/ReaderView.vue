@@ -376,6 +376,34 @@
                     <span class="theme-name">{{ theme.label }}</span>
                   </button>
                 </div>
+                <div class="form-group reader-background-group">
+                  <label class="form-label">背景壁纸</label>
+                  <div class="reader-background-options">
+                    <button
+                      class="reader-background-btn"
+                      :class="{ active: settings.backgroundImageId === 'none' }"
+                      type="button"
+                      @click="settings.backgroundImageId = 'none'"
+                    >
+                      <span class="reader-background-none">无</span>
+                      <span>无背景</span>
+                    </button>
+                    <button
+                      v-for="background in readerBackgrounds"
+                      :key="background.id"
+                      class="reader-background-btn"
+                      :class="{ active: settings.backgroundImageId === background.id }"
+                      type="button"
+                      :title="background.name"
+                      @click="settings.backgroundImageId = background.id"
+                    >
+                      <img :src="background.imageUrl" :alt="background.name" />
+                      <span>{{ background.name }}</span>
+                    </button>
+                  </div>
+                  <p v-if="readerBackgroundsLoading" class="reader-background-hint">正在加载自定义背景...</p>
+                  <p v-else class="reader-background-hint">可在“设置 → 阅读背景”中上传或删除自定义壁纸。</p>
+                </div>
               </div>
 
               <!-- 阅读设置 -->
@@ -452,6 +480,12 @@ import { useFontStore } from '@/stores/font'
 import api from '@/utils/api'
 import { message, confirm } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'
+import {
+  BUILT_IN_READER_BACKGROUNDS,
+  toReaderBackgroundOption,
+  type ReaderBackgroundDto,
+  type ReaderBackgroundOption,
+} from '@/utils/readerBackground'
 
 const route = useRoute()
 const router = useRouter()
@@ -459,6 +493,12 @@ const bookStore = useBookStore()
 const themeStore = useThemeStore()
 const preferencesStore = usePreferencesStore()
 const fontStore = useFontStore()
+const customReaderBackgrounds = ref<ReaderBackgroundOption[]>([])
+const readerBackgroundsLoading = ref(false)
+const readerBackgrounds = computed(() => [
+  ...BUILT_IN_READER_BACKGROUNDS,
+  ...customReaderBackgrounds.value,
+])
 
 // 章节接口定义
 interface Chapter {
@@ -646,6 +686,7 @@ const settings = ref({
   lineHeight: 1.8,
   paragraphSpacing: 16,
   backgroundColor: 'auto',
+  backgroundImageId: 'none',
   textIndent: true,
   showProgress: true,
   paginationMode: false, // 翻页模式
@@ -694,6 +735,25 @@ const getResolvedColors = (bg: string) => {
   return { bg, text: ['#2d2d2d', '#1a1a2e'].includes(bg) ? '#eee' : '#333' }
 }
 
+const selectedReaderBackground = computed(() =>
+  readerBackgrounds.value.find(background => background.id === settings.value.backgroundImageId)
+)
+
+const loadReaderBackgrounds = async () => {
+  readerBackgroundsLoading.value = true
+  try {
+    const { data } = await api.get<ReaderBackgroundDto[]>('/api/reader-backgrounds')
+    customReaderBackgrounds.value = data.map(toReaderBackgroundOption)
+    if (settings.value.backgroundImageId !== 'none' && !selectedReaderBackground.value) {
+      settings.value.backgroundImageId = 'none'
+    }
+  } catch (error) {
+    console.error('Failed to load reader backgrounds:', error)
+  } finally {
+    readerBackgroundsLoading.value = false
+  }
+}
+
 const readerStyle = computed(() => {
   const colors = getResolvedColors(settings.value.backgroundColor)
   const widthOption = widthOptions.find(w => w.value === settings.value.contentWidth) || widthOptions[1]
@@ -703,6 +763,12 @@ const readerStyle = computed(() => {
     fontSize: `${settings.value.fontSize}px`,
     lineHeight: settings.value.lineHeight,
     backgroundColor: colors.bg,
+    backgroundImage: selectedReaderBackground.value
+      ? `url(${JSON.stringify(selectedReaderBackground.value.imageUrl)})`
+      : 'none',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    backgroundSize: 'cover',
     color: colors.text,
     // 两屏模式下不限制宽度，让两栏均匀分布
     maxWidth: isDoubleScreen ? '100%' : widthOption.maxWidth,
@@ -1843,7 +1909,16 @@ const applyThemeToContent = (contents: any) => {
   contents.css('font-size', `${settings.value.fontSize}px`, true)
   contents.css('line-height', `${settings.value.lineHeight}`, true)
   contents.css('color', colors.text, true)
-  contents.css('background', colors.bg, true)
+  const backgroundUrl = selectedReaderBackground.value
+    ? new URL(selectedReaderBackground.value.imageUrl, window.location.origin).href
+    : ''
+  const backgroundImage = backgroundUrl ? `url(${JSON.stringify(backgroundUrl)})` : 'none'
+
+  contents.css('background-color', colors.bg, true)
+  contents.css('background-image', backgroundImage, true)
+  contents.css('background-position', 'center', true)
+  contents.css('background-repeat', 'no-repeat', true)
+  contents.css('background-size', 'cover', true)
 
   try {
     const doc = contents.document
@@ -1865,7 +1940,12 @@ const applyThemeToContent = (contents: any) => {
           color: ${colors.text} !important;
         }
         body {
-          background: ${colors.bg} !important;
+          min-height: 100vh !important;
+          background-color: ${colors.bg} !important;
+          background-image: ${backgroundImage} !important;
+          background-position: center !important;
+          background-repeat: no-repeat !important;
+          background-size: cover !important;
         }
         img,
         svg {
@@ -1957,7 +2037,7 @@ const initializeReader = async () => {
   loadReaderSettings()
   try {
     await preferencesStore.hydrate()
-    await fontStore.fetchFonts()
+    await Promise.all([fontStore.fetchFonts(), loadReaderBackgrounds()])
     const preferredFontId = preferencesStore.readerFontId
     if (preferredFontId != null) {
       await fontStore.loadFont(preferredFontId)
@@ -2611,7 +2691,7 @@ onBeforeUnmount(() => {
   text-indent: v-bind('settings.textIndent ? "2em" : "0"');
   line-height: 1.9;
   font-size: 1.05em;
-  color: var(--text-primary);
+  color: inherit;
 }
 
 .reader-text p::first-letter {
@@ -2624,7 +2704,7 @@ onBeforeUnmount(() => {
   text-align: center;
   margin: 2.5em 0 1.5em 0;
   padding: 0.8em 0;
-  color: var(--text-primary);
+  color: inherit;
   border-bottom: 2px solid var(--border-color);
   letter-spacing: 0.1em;
 }
@@ -3112,6 +3192,72 @@ onBeforeUnmount(() => {
 .theme-name {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
+}
+
+.reader-background-group {
+  margin-top: var(--spacing-lg);
+}
+
+.reader-background-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.reader-background-btn {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  padding: 6px;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  text-align: center;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.reader-background-btn:hover,
+.reader-background-btn.active {
+  border-color: var(--primary);
+}
+
+.reader-background-btn.active {
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+}
+
+.reader-background-btn img,
+.reader-background-none {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  place-items: center;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.reader-background-none {
+  background:
+    linear-gradient(135deg, transparent 47%, var(--danger) 48%, var(--danger) 52%, transparent 53%),
+    var(--bg-secondary);
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.reader-background-btn > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-background-hint {
+  margin: 8px 0 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 /* 动画 */

@@ -113,21 +113,6 @@
             :disabled="uploadingCover"
             @change="handleCoverUpload"
           />
-          <div class="book-rating">
-            <span class="rating-label">我的评分</span>
-            <div class="rating-stars" aria-label="书籍评分">
-              <button
-                v-for="i in 5"
-                :key="i"
-                class="star"
-                :class="{ active: i <= book.rating }"
-                :aria-label="`${i} 星`"
-                @click="setRating(i)"
-              >
-                ★
-              </button>
-            </div>
-          </div>
         </aside>
 
         <div class="book-summary">
@@ -177,6 +162,22 @@
             <span v-if="book.isbn" class="detail-badge">ISBN {{ book.isbn }}</span>
           </div>
 
+          <div class="book-rating">
+            <span class="rating-label">我的评分</span>
+            <div class="rating-stars" aria-label="书籍评分">
+              <button
+                v-for="i in 5"
+                :key="i"
+                class="star"
+                :class="{ active: i <= book.rating }"
+                :aria-label="`${i} 星`"
+                @click="setRating(i)"
+              >
+                ★
+              </button>
+            </div>
+          </div>
+
           <div v-if="hasReadingProgress" class="current-reading-card">
             <div class="current-reading-content">
               <div class="current-reading-heading">
@@ -214,6 +215,8 @@
               <span>{{ book.isWanted ? '想读中' : '想读' }}</span>
             </button>
           </div>
+
+          <BookSeriesPanel :book="book" @updated="loadBook" />
 
           <div class="organization-panel">
             <div class="organization-row">
@@ -338,49 +341,48 @@
 
       <!-- 内容区 -->
       <div class="book-body">
-        <!-- 选项卡 -->
-        <div class="tabs">
+        <!-- macOS 26 风格滑块选项卡 -->
+        <div class="detail-tabs-scroll">
           <div
-            class="tab-item"
-            :class="{ active: activeTab === 'description' }"
-            @click="activeTab = 'description'"
+            class="detail-segmented-tabs"
+            role="tablist"
+            aria-label="书籍信息"
+            :style="{
+              '--detail-tab-count': detailTabs.length,
+              '--detail-tab-index': activeTabIndex,
+            }"
           >
-            简介
-          </div>
-          <div
-            class="tab-item"
-            :class="{ active: activeTab === 'toc' }"
-            @click="activeTab = 'toc'"
-          >
-            目录
-            <span v-if="tocItems.length" class="tab-count">{{ tocItems.length }}</span>
-          </div>
-          <div
-            class="tab-item"
-            :class="{ active: activeTab === 'bookmarks' }"
-            @click="activeTab = 'bookmarks'"
-          >
-            书签
-            <span v-if="bookmarks.length" class="tab-count">{{ bookmarks.length }}</span>
-          </div>
-          <div
-            class="tab-item"
-            :class="{ active: activeTab === 'info' }"
-            @click="activeTab = 'info'"
-          >
-            详细信息
-          </div>
-          <div
-            class="tab-item"
-            :class="{ active: activeTab === 'notes' }"
-            @click="activeTab = 'notes'"
-          >
-            笔记
+            <span class="detail-tab-slider" aria-hidden="true"></span>
+            <button
+              v-for="(tab, index) in detailTabs"
+              :id="`detail-tab-${tab.key}`"
+              :key="tab.key"
+              type="button"
+              role="tab"
+              class="detail-tab-button"
+              :class="{ active: activeTab === tab.key }"
+              :aria-selected="activeTab === tab.key"
+              :aria-controls="`detail-panel-${tab.key}`"
+              :tabindex="activeTab === tab.key ? 0 : -1"
+              @click="activeTab = tab.key"
+              @keydown="handleDetailTabKeydown($event, index)"
+            >
+              <span>{{ tab.label }}</span>
+              <span v-if="getDetailTabCount(tab.key)" class="tab-count">
+                {{ getDetailTabCount(tab.key) }}
+              </span>
+            </button>
           </div>
         </div>
 
         <!-- 简介 -->
-        <div v-show="activeTab === 'description'" class="tab-content">
+        <div
+          id="detail-panel-description"
+          v-show="activeTab === 'description'"
+          class="tab-content"
+          role="tabpanel"
+          aria-labelledby="detail-tab-description"
+        >
           <div class="book-description">
             <div class="description-panel-header">
               <div>
@@ -449,7 +451,13 @@
         </div>
 
         <!-- 目录 -->
-        <div v-show="activeTab === 'toc'" class="tab-content">
+        <div
+          id="detail-panel-toc"
+          v-show="activeTab === 'toc'"
+          class="tab-content"
+          role="tabpanel"
+          aria-labelledby="detail-tab-toc"
+        >
           <div v-if="tocLoading" class="toc-loading">
             <div class="loading-spinner-small"></div>
             <span>正在读取书籍目录...</span>
@@ -503,7 +511,13 @@
         </div>
 
         <!-- 书签 -->
-        <div v-show="activeTab === 'bookmarks'" class="tab-content">
+        <div
+          id="detail-panel-bookmarks"
+          v-show="activeTab === 'bookmarks'"
+          class="tab-content"
+          role="tabpanel"
+          aria-labelledby="detail-tab-bookmarks"
+        >
           <div v-if="bookmarksLoading" class="bookmarks-state">
             <div class="loading-spinner-small"></div>
             <span>正在读取书签...</span>
@@ -550,7 +564,13 @@
         </div>
 
         <!-- 详细信息 -->
-        <div v-show="activeTab === 'info'" class="tab-content">
+        <div
+          id="detail-panel-info"
+          v-show="activeTab === 'info'"
+          class="tab-content"
+          role="tabpanel"
+          aria-labelledby="detail-tab-info"
+        >
           <div class="info-panel-header">
             <div>
               <h2>书籍详细信息</h2>
@@ -684,7 +704,13 @@
         </div>
 
         <!-- 笔记 -->
-        <div v-show="activeTab === 'notes'" class="tab-content">
+        <div
+          id="detail-panel-notes"
+          v-show="activeTab === 'notes'"
+          class="tab-content"
+          role="tabpanel"
+          aria-labelledby="detail-tab-notes"
+        >
           <div class="book-notes">
             <div class="notes-header">
               <h3>📝 读书笔记</h3>
@@ -809,6 +835,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted, nextTick } from 'vue'
+import BookSeriesPanel from '@/components/BookSeriesPanel.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { message, confirm } from '@/utils/message'
@@ -833,7 +860,20 @@ const tagStore = useTagStore()
 const book = ref<any>(null)
 const loading = ref(true)
 const notes = ref('')
-const activeTab = ref('description')
+type DetailTabKey = 'description' | 'toc' | 'bookmarks' | 'info' | 'notes'
+
+const detailTabs: Array<{ key: DetailTabKey; label: string }> = [
+  { key: 'description', label: '简介' },
+  { key: 'toc', label: '目录' },
+  { key: 'bookmarks', label: '书签' },
+  { key: 'info', label: '详细信息' },
+  { key: 'notes', label: '笔记' },
+]
+const activeTab = ref<DetailTabKey>('description')
+const activeTabIndex = computed(() => Math.max(
+  0,
+  detailTabs.findIndex(tab => tab.key === activeTab.value),
+))
 const scraping = ref(false)
 const reparsing = ref(false)
 const downloadingCover = ref(false)
@@ -879,6 +919,31 @@ interface BookVersion {
   primaryVersion: boolean
   chapterCount?: number
   createdAt?: string
+}
+
+const getDetailTabCount = (tab: DetailTabKey) => {
+  if (tab === 'toc') return tocItems.value.length
+  if (tab === 'bookmarks') return bookmarks.value.length
+  return 0
+}
+
+const handleDetailTabKeydown = (event: KeyboardEvent, index: number) => {
+  let nextIndex: number | null = null
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+    nextIndex = (index + 1) % detailTabs.length
+  }
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    nextIndex = (index - 1 + detailTabs.length) % detailTabs.length
+  }
+  if (event.key === 'Home') nextIndex = 0
+  if (event.key === 'End') nextIndex = detailTabs.length - 1
+  if (nextIndex === null) return
+
+  event.preventDefault()
+  activeTab.value = detailTabs[nextIndex].key
+  const tabButtons = (event.currentTarget as HTMLButtonElement)
+    .parentElement?.querySelectorAll<HTMLButtonElement>('.detail-tab-button')
+  tabButtons?.[nextIndex]?.focus()
 }
 
 const tocItems = ref<TocItem[]>([])
@@ -1581,9 +1646,10 @@ const formatFileSize = (bytes?: number) => {
   return `${size.toFixed(2)} ${units[unitIndex]}`
 }
 
-const formatSourceType = (sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN') => {
+const formatSourceType = (sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN' | 'CRAWLER') => {
   if (sourceType === 'UPLOAD') return '上传'
   if (sourceType === 'DIRECTORY_SCAN') return '目录扫描'
+  if (sourceType === 'CRAWLER') return '网站采集'
   return '未知'
 }
 
@@ -1610,9 +1676,122 @@ onMounted(() => {
   min-width: 180px;
 }
 
+.detail-tabs-scroll {
+  margin-bottom: var(--spacing-xl);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.detail-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.detail-segmented-tabs {
+  --detail-tab-count: 5;
+  --detail-tab-index: 0;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(var(--detail-tab-count), minmax(0, 1fr));
+  min-width: 540px;
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, white 66%, var(--border-color));
+  border-radius: 17px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.48), rgba(229, 239, 251, 0.24));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    inset 0 -1px 0 rgba(70, 92, 126, 0.1),
+    0 10px 28px rgba(45, 63, 94, 0.1);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+}
+
+.detail-tab-slider {
+  position: absolute;
+  z-index: -1;
+  top: 5px;
+  bottom: 5px;
+  left: 5px;
+  width: calc((100% - 10px) / var(--detail-tab-count));
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: 13px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(225, 239, 255, 0.7));
+  box-shadow:
+    0 7px 18px rgba(45, 65, 98, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(90, 116, 153, 0.12);
+  transform: translateX(calc(var(--detail-tab-index) * 100%));
+  transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.detail-tab-slider::after {
+  position: absolute;
+  inset: 1px 12% auto;
+  height: 45%;
+  border-radius: inherit;
+  background: linear-gradient(rgba(255, 255, 255, 0.5), transparent);
+  content: '';
+  pointer-events: none;
+}
+
+.detail-tab-button {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: 560;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 180ms ease, background-color 180ms ease;
+}
+
+.detail-tab-button:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary);
+}
+
+.detail-tab-button.active {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.detail-tab-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+:global(html[data-theme="macos26"]) .detail-segmented-tabs {
+  border-color: rgba(255, 255, 255, 0.74);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.58), rgba(221, 237, 255, 0.28));
+  box-shadow:
+    0 18px 38px rgba(48, 66, 100, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -1px 0 rgba(88, 112, 148, 0.11);
+}
+
+:global(html[data-theme="macos26"]) .detail-tab-slider {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(222, 239, 255, 0.72));
+  box-shadow:
+    0 8px 22px rgba(48, 66, 100, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(83, 113, 153, 0.14);
+}
+
 .tab-count {
   min-width: 20px;
-  margin-left: 5px;
   padding: 1px 6px;
   border-radius: 999px;
   color: var(--primary);
@@ -2408,10 +2587,11 @@ onMounted(() => {
 }
 
 .book-rating {
-  display: grid;
-  justify-items: center;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  width: fit-content;
+  margin-bottom: 20px;
   padding: 10px 8px;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
@@ -2904,10 +3084,6 @@ onMounted(() => {
     display: none;
   }
 
-  .tabs {
-    overflow-x: auto;
-  }
-
   .toc-pagination {
     justify-content: flex-start;
     padding: 14px 12px;
@@ -3086,7 +3262,8 @@ onMounted(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cover-image {
+  .cover-image,
+  .detail-tab-slider {
     transition: none;
   }
 }

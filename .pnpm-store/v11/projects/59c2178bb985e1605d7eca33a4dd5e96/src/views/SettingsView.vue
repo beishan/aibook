@@ -260,6 +260,11 @@
       <RandomCoverLibraryPanel />
     </div>
 
+    <!-- 阅读背景图片 -->
+    <div v-if="activeTab === 'reader-backgrounds'" class="tab-content">
+      <ReaderBackgroundManagementPanel />
+    </div>
+
     <!-- 分类管理 -->
     <div v-if="activeTab === 'categories'" class="tab-content">
       <CategoryManagementView />
@@ -361,6 +366,14 @@
     <!-- 操作日志 -->
     <div v-show="activeTab === 'logs'" class="tab-content">
       <OperationLogPanel />
+    </div>
+
+    <div v-if="isAdmin && activeTab === 'proxies'" class="tab-content">
+      <ProxySettingsPanel scope="system" />
+    </div>
+
+    <div v-if="isAdmin && activeTab === 'crawler-settings'" class="tab-content">
+      <ProxySettingsPanel scope="crawler" />
     </div>
 
     <!-- 用户管理（仅管理员） -->
@@ -550,6 +563,8 @@ import ThemeColorSettingsPanel from '@/components/ThemeColorSettingsPanel.vue'
 import ThemeBackgroundSettingsPanel from '@/components/ThemeBackgroundSettingsPanel.vue'
 import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
 import RandomCoverLibraryPanel from '@/components/RandomCoverLibraryPanel.vue'
+import ReaderBackgroundManagementPanel from '@/components/ReaderBackgroundManagementPanel.vue'
+import ProxySettingsPanel from '@/components/ProxySettingsPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
@@ -748,6 +763,7 @@ const tabGroups = computed(() => [
     items: [
       { key: 'theme', label: '主题风格', icon: '🎨' },
       { key: 'fonts', label: '字体管理', icon: '🔤' },
+      { key: 'reader-backgrounds', label: '阅读背景', icon: '🌄' },
     ],
   },
   {
@@ -764,7 +780,11 @@ const tabGroups = computed(() => [
   },
   {
     label: '连接',
-    items: [{ key: 'connections', label: 'OPDS 连接', icon: '🔗' }],
+    items: [
+      { key: 'connections', label: 'OPDS 连接', icon: '🔗' },
+      ...(isAdmin.value ? [{ key: 'proxies', label: '系统代理', icon: '⇄' }] : []),
+      ...(isAdmin.value ? [{ key: 'crawler-settings', label: '爬虫设置', icon: '🕷️' }] : []),
+    ],
   },
   {
     label: '管理',

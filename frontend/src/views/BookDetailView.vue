@@ -216,6 +216,8 @@
             </button>
           </div>
 
+          <BookSeriesPanel :book="book" @updated="loadBook" />
+
           <div class="organization-panel">
             <div class="organization-row">
               <span class="organization-label">分类</span>
@@ -833,6 +835,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted, nextTick } from 'vue'
+import BookSeriesPanel from '@/components/BookSeriesPanel.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { message, confirm } from '@/utils/message'
@@ -1643,9 +1646,10 @@ const formatFileSize = (bytes?: number) => {
   return `${size.toFixed(2)} ${units[unitIndex]}`
 }
 
-const formatSourceType = (sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN') => {
+const formatSourceType = (sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN' | 'CRAWLER') => {
   if (sourceType === 'UPLOAD') return '上传'
   if (sourceType === 'DIRECTORY_SCAN') return '目录扫描'
+  if (sourceType === 'CRAWLER') return '网站采集'
   return '未知'
 }
 

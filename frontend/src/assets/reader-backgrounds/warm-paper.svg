@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+  <defs>
+    <filter id="paper"><feTurbulence baseFrequency=".72" numOctaves="4" seed="7"/><feColorMatrix values=".12 0 0 0 .84  0 .1 0 0 .77  0 0 .08 0 .62  0 0 0 .1 0"/></filter>
+    <radialGradient id="light" cx="48%" cy="42%" r="72%"><stop stop-color="#fffdf5"/><stop offset="1" stop-color="#ead8b7"/></radialGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#light)"/>
+  <rect width="1200" height="800" filter="url(#paper)" opacity=".34"/>
+  <g fill="none" stroke="#b79a6b" stroke-opacity=".08"><path d="M0 112c280 42 416-48 705-5s354 18 495-8"/><path d="M0 612c250-54 432 57 708 10s350-33 492 1"/></g>
+</svg>

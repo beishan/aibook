@@ -37,6 +37,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/BookDetailView.vue'),
       },
       {
+        path: 'series',
+        name: 'Series',
+        component: () => import('@/views/SeriesView.vue'),
+      },
+      {
         path: 'books/:id/repair',
         name: 'TextRepair',
         component: () => import('@/views/TextRepairView.vue'),
@@ -50,6 +55,11 @@ const routes: RouteRecordRaw[] = [
         path: 'format-conversion',
         name: 'FormatConversion',
         component: () => import('@/views/FormatConversionView.vue'),
+      },
+      {
+        path: 'crawler',
+        name: 'Crawler',
+        component: () => import('@/views/CrawlerView.vue'),
       },
       {
         path: 'reader/:id',
