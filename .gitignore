@@ -64,3 +64,4 @@ android/.gradle/
 .pnpm-store/v11/projects/*
 .pnpm-store/v11/projects/59c2178bb985e1605d7eca33a4dd5e96/src/stores/repair.ts
 .pnpm-store/v11/projects/59c2178bb985e1605d7eca33a4dd5e96/src/utils/api.ts
+.codegraph/daemon.pid
