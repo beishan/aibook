@@ -2,6 +2,10 @@
   <div class="reader-view" :class="{ 'fullscreen-mode': isFullscreen }">
     <!-- 阅读器内容 -->
     <div v-if="book" class="reader-content">
+      <div v-if="loading" class="reader-loading-overlay loading glass" role="status">
+        <span class="loading-spinner" aria-hidden="true"></span>
+        <p>正在打开书籍…</p>
+      </div>
       <!-- 阅读器头部 -->
       <header
         v-show="!isFullscreen"
@@ -35,12 +39,20 @@
               <span class="reader-current-chapter" :title="headerChapterName">
                 {{ headerChapterName }}
               </span>
-              <span class="reader-title-separator">·</span>
-              <span class="reader-header-progress">{{ headerProgress }}%</span>
+              <span v-if="settings.showProgress" class="reader-title-separator">·</span>
+              <span v-if="settings.showProgress" class="reader-header-progress">{{ headerProgress }}%</span>
             </div>
           </div>
         </div>
         <div class="reader-actions glass" aria-label="阅读工具">
+          <button
+            class="btn btn-icon"
+            :class="{ active: showSearch }"
+            @click="togglePanel('search')"
+            title="书内搜索（⌘/Ctrl + F）"
+          >
+            <span>⌕</span>
+          </button>
           <button
             v-if="book.format === 'epub' || tocItems.length > 0"
             class="btn btn-icon"
@@ -81,27 +93,27 @@
           <div v-if="showSidePanel" class="side-panel glass">
             <!-- 面板标签页 -->
             <div class="panel-tabs">
-              <button
-                class="tab-btn"
-                :class="{ active: activeTab === 'toc' }"
-                @click="activeTab = 'toc'"
+              <div
+                class="panel-tabs-nav"
+                :style="panelTabStyle"
+                role="tablist"
+                aria-label="阅读辅助面板"
+                @keydown="handlePanelTabKeydown"
               >
-                目录
-              </button>
-              <button
-                class="tab-btn"
-                :class="{ active: activeTab === 'bookmarks' }"
-                @click="activeTab = 'bookmarks'"
-              >
-                书签
-              </button>
-              <button
-                class="tab-btn"
-                :class="{ active: activeTab === 'highlights' }"
-                @click="activeTab = 'highlights'"
-              >
-                高亮
-              </button>
+                <span class="panel-tab-indicator" aria-hidden="true"></span>
+                <button
+                  v-for="tab in panelTabs"
+                  :key="tab.value"
+                  class="tab-btn"
+                  :class="{ active: activeTab === tab.value }"
+                  type="button"
+                  role="tab"
+                  :aria-selected="activeTab === tab.value"
+                  @click="activatePanelTab(tab.value)"
+                >
+                  {{ tab.label }}
+                </button>
+              </div>
               <button
                 class="btn btn-icon btn-small close-panel"
                 type="button"
@@ -113,11 +125,54 @@
               </button>
             </div>
 
+            <!-- 书内搜索 -->
+            <div v-if="activeTab === 'search'" class="panel-content search-panel">
+              <form class="reader-search-form" role="search" @submit.prevent="runSearchNow">
+                <label class="sr-only" for="reader-search-input">搜索书内内容</label>
+                <input
+                  id="reader-search-input"
+                  ref="searchInput"
+                  v-model="searchQuery"
+                  type="search"
+                  autocomplete="off"
+                  placeholder="搜索书内内容"
+                  @input="scheduleSearch"
+                />
+                <button type="submit" :disabled="searching || !searchQuery.trim()">搜索</button>
+              </form>
+              <div class="search-summary" aria-live="polite">
+                <span v-if="searching">正在搜索…</span>
+                <span v-else-if="searchQuery.trim() && searchCompleted">
+                  {{ searchResults.length >= SEARCH_RESULT_LIMIT ? `显示前 ${SEARCH_RESULT_LIMIT} 条结果` : `${searchResults.length} 条结果` }}
+                </span>
+                <span v-else>输入关键词搜索当前书籍</span>
+              </div>
+              <div v-if="searchError" class="search-error" role="alert">{{ searchError }}</div>
+              <div v-else-if="!searching && searchCompleted && searchResults.length === 0" class="empty-panel">
+                <div class="empty-icon">⌕</div>
+                <p>没有找到相关内容</p>
+                <p class="empty-hint">试试更短或不同的关键词</p>
+              </div>
+              <div v-else class="search-results">
+                <button
+                  v-for="result in searchResults"
+                  :key="result.id"
+                  type="button"
+                  class="search-result-item"
+                  :class="{ active: activeSearchResultId === result.id }"
+                  @click="goToSearchResult(result)"
+                >
+                  <span class="search-result-location">{{ result.locationLabel }}</span>
+                  <span class="search-result-excerpt">{{ result.excerpt }}</span>
+                </button>
+              </div>
+            </div>
+
             <!-- 目录内容 -->
             <div v-if="activeTab === 'toc'" class="panel-content">
               <div class="toc-header">
                 <span>📑 章节目录</span>
-                <span class="tag">{{ tocItems.length }} 章</span>
+                <span class="tag">{{ tocItems.length }} {{ book.format === 'pdf' ? '项' : '章' }}</span>
               </div>
               <div class="toc-list">
                 <div
@@ -125,6 +180,7 @@
                   :key="index"
                   class="toc-item"
                   :class="{ active: isCurrentTocItem(item) }"
+                  :style="item.level ? { paddingLeft: `${14 + item.level * 16}px` } : undefined"
                   @click="goToTocItem(item)"
                 >
                   <span class="toc-index">{{ index + 1 }}</span>
@@ -206,6 +262,7 @@
                   </div>
                   <div class="highlight-actions">
                     <button class="btn btn-text" @click="handleGotoHighlight(highlight)">定位</button>
+                    <button class="btn btn-text" @click="editHighlight(highlight)">批注</button>
                     <button class="btn btn-text btn-danger" @click="handleDeleteHighlight(highlight)">删除</button>
                   </div>
                 </div>
@@ -215,17 +272,24 @@
         </Transition>
 
         <!-- 阅读器内容 -->
-        <div class="reader-body" :class="{ 'pagination-mode': isPaginationMode }" :style="readerStyle" @scroll="handleScroll">
+        <div
+          class="reader-body"
+          :class="{ 'pagination-mode': isPaginationMode }"
+          :style="readerStyle"
+          @scroll="handleScroll"
+          @mouseup="captureDocumentSelection"
+          @touchend="captureDocumentSelection"
+        >
           <!-- EPUB 阅读器 -->
           <div v-if="book.format === 'epub'" ref="epubContainer" class="epub-container"></div>
 
           <!-- TXT / MD 阅读器 -->
           <div v-else-if="book.format === 'txt' || book.format === 'md'" class="reader-text" :style="contentStyle">
             <template v-for="(paragraph, localIndex) in currentPageContent" :key="localIndex">
-              <div v-if="isChapterTitle(paragraph)" class="chapter-title" :id="'chapter-' + getOriginalIndex(localIndex)">
+              <div v-if="isChapterTitle(paragraph)" class="chapter-title" :id="'chapter-' + getOriginalIndex(localIndex)" :data-reader-index="getOriginalIndex(localIndex)">
                 {{ paragraph }}
               </div>
-              <p v-else :id="'para-' + getOriginalIndex(localIndex)">{{ paragraph }}</p>
+              <p v-else :id="'para-' + getOriginalIndex(localIndex)" :data-reader-index="getOriginalIndex(localIndex)">{{ paragraph }}</p>
             </template>
           </div>
 
@@ -234,7 +298,15 @@
 
           <!-- PDF 阅读器 -->
           <div v-else-if="book.format === 'pdf'" class="reader-pdf">
-            <iframe :src="pdfUrl" class="pdf-frame"></iframe>
+            <PdfReader
+              ref="pdfReader"
+              :source="pdfSource"
+              :initial-page="pdfInitialPage"
+              :display-mode="settings.screenMode === 'double' ? 'double' : 'single'"
+              @page-change="handlePdfPageChange"
+              @outline="handlePdfOutline"
+              @error="handlePdfError"
+            />
           </div>
 
           <!-- 不支持的格式 -->
@@ -273,7 +345,7 @@
       </button>
 
       <!-- 仅保留页码的迷你阅读 Dock -->
-      <div class="reader-progress-dock glass" role="status" aria-label="阅读进度">
+      <div v-if="settings.showProgress" class="reader-progress-dock glass" role="status" aria-label="阅读进度">
         {{ pageProgressLabel }}
       </div>
 
@@ -459,13 +531,50 @@
           </div>
         </div>
       </Transition>
+
+      <div v-if="highlightEditor" class="highlight-editor-backdrop" @click.self="closeHighlightEditor">
+        <section class="highlight-editor glass" role="dialog" aria-modal="true" aria-labelledby="highlight-editor-title">
+          <header>
+            <div>
+              <strong id="highlight-editor-title">{{ highlightEditor.id ? '编辑高亮与批注' : '添加高亮与批注' }}</strong>
+              <p>“{{ highlightEditor.text }}”</p>
+            </div>
+            <button class="dialog-close" type="button" aria-label="关闭" @click="closeHighlightEditor">✕</button>
+          </header>
+          <div class="highlight-color-options" aria-label="高亮颜色">
+            <button
+              v-for="color in highlightColors"
+              :key="color"
+              type="button"
+              :class="{ active: highlightEditor.color === color }"
+              :style="{ backgroundColor: color }"
+              :aria-label="`选择高亮颜色 ${color}`"
+              @click="highlightEditor.color = color"
+            />
+          </div>
+          <textarea v-model="highlightEditor.note" rows="4" maxlength="2000" placeholder="添加批注（选填）" />
+          <footer>
+            <button class="btn btn-text" type="button" @click="closeHighlightEditor">取消</button>
+            <button class="btn btn-primary" type="button" :disabled="savingHighlight" @click="saveHighlight">
+              {{ savingHighlight ? '保存中…' : '保存' }}
+            </button>
+          </footer>
+        </section>
+      </div>
     </div>
 
-    <!-- 空状态 -->
+    <div v-else-if="loading" class="loading glass" role="status">
+      <span class="loading-spinner" aria-hidden="true"></span>
+      <p>正在打开书籍…</p>
+    </div>
+
     <div v-else class="empty glass">
-      <div class="empty-icon">📚</div>
-      <p>书籍不存在</p>
-      <button class="btn btn-primary" @click="$router.back()">返回书库</button>
+      <div class="empty-icon">{{ loadError ? '⚠️' : '📚' }}</div>
+      <p>{{ loadError || '书籍不存在' }}</p>
+      <div class="empty-actions">
+        <button v-if="loadError" class="btn btn-primary" type="button" @click="retryLoadBook">重新加载</button>
+        <button class="btn btn-text" type="button" @click="$router.back()">返回书库</button>
+      </div>
     </div>
   </div>
 </template>
@@ -477,6 +586,7 @@ import { useBookStore } from '@/stores/book'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useFontStore } from '@/stores/font'
+import PdfReader from '@/components/reader/PdfReader.vue'
 import api from '@/utils/api'
 import { message, confirm } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'
@@ -508,6 +618,8 @@ interface Chapter {
   endIndex?: number
   label?: string
   href?: string
+  page?: number
+  level?: number
 }
 
 interface Bookmark {
@@ -524,13 +636,50 @@ interface Bookmark {
 
 interface Highlight {
   id: number
+  cfiRange: string
   text: string
   note?: string
   color: string
   chapter: string
-  startOffset: number
-  endOffset: number
   createdAt: string
+}
+
+interface ReaderLocator {
+  format: string
+  cfi?: string
+  href?: string
+  textIndex?: number
+  htmlOffset?: number
+  pdfPage?: number
+  pdfTotalPages?: number
+  chapterTitle?: string
+  chapterProgress: number
+  totalProgress: number
+  excerpt?: string
+}
+
+interface HighlightEditorState {
+  id?: number
+  cfiRange: string
+  text: string
+  chapter: string
+  color: string
+  note: string
+}
+
+type PanelTab = 'search' | 'toc' | 'bookmarks' | 'highlights'
+
+interface ReaderSearchResult {
+  id: string
+  excerpt: string
+  locationLabel: string
+  paragraphIndex?: number
+  startOffset?: number
+  endOffset?: number
+  htmlStart?: number
+  htmlEnd?: number
+  cfi?: string
+  page?: number
 }
 
 interface BookVersion {
@@ -549,14 +698,26 @@ const selectedVersion = computed(() =>
   versions.value.find(version => version.id === selectedVersionId.value) || null,
 )
 const loading = ref(true)
+const loadError = ref('')
 const content = ref<string[]>([])
 const htmlContent = ref('')
 const progress = ref(0)
 const showSettings = ref(false)
+const showSearch = ref(false)
 const showToc = ref(false)
 const showBookmarks = ref(false)
 const showHighlights = ref(false)
-const activeTab = ref('toc')
+const activeTab = ref<PanelTab>('toc')
+const panelTabs: Array<{ value: PanelTab; label: string }> = [
+  { value: 'search', label: '搜索' },
+  { value: 'toc', label: '目录' },
+  { value: 'bookmarks', label: '书签' },
+  { value: 'highlights', label: '高亮' },
+]
+const panelTabStyle = computed(() => ({
+  '--panel-tab-index': String(Math.max(0, panelTabs.findIndex(tab => tab.value === activeTab.value))),
+  '--panel-tab-count': String(panelTabs.length),
+}))
 const tocItems = ref<Chapter[]>([])
 const currentTocHref = ref('')
 const currentLocation = ref('')
@@ -579,6 +740,21 @@ const performancePaginationMode = ref(false)
 // 书签和高亮数据
 const bookmarks = ref<Bookmark[]>([])
 const highlights = ref<Highlight[]>([])
+const highlightEditor = ref<HighlightEditorState | null>(null)
+const savingHighlight = ref(false)
+const highlightColors = ['#ffe066', '#a9e8b3', '#9ed0ff', '#ffb3c6', '#d0bfff']
+const savedLocator = ref<ReaderLocator | null>(null)
+
+const SEARCH_RESULT_LIMIT = 200
+const searchInput = ref<HTMLInputElement>()
+const searchQuery = ref('')
+const searchResults = ref<ReaderSearchResult[]>([])
+const searching = ref(false)
+const searchCompleted = ref(false)
+const searchError = ref('')
+const activeSearchResultId = ref('')
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+let searchSequence = 0
 
 // EPUB 相关
 const epubContainer = ref<HTMLElement>()
@@ -586,15 +762,13 @@ let bookInstance: any = null
 let rendition: any = null
 const epubKeyboardDocuments = new Set<Document>()
 
-const pdfUrl = computed(() => {
-  if (!book.value) return ''
-  const token = localStorage.getItem('token')
-  const params = new URLSearchParams({ token: token || '' })
-  if (selectedVersionId.value) {
-    params.set('versionId', String(selectedVersionId.value))
-  }
-  return `/api/books/${book.value.id}/content?${params.toString()}`
-})
+const pdfReader = ref<InstanceType<typeof PdfReader>>()
+const pdfSource = ref<{ url: string; httpHeaders: Record<string, string> } | null>(null)
+const pdfCurrentPage = ref(1)
+const pdfTotalPages = ref(0)
+const pdfInitialPage = computed(() => savedLocator.value?.format === 'pdf'
+  ? Math.max(1, savedLocator.value.pdfPage || 1)
+  : 1)
 
 const withVersion = (url: string) => {
   if (!selectedVersionId.value) return url
@@ -705,6 +879,9 @@ const epubPageNumbers = computed(() => {
 })
 
 const pageProgressLabel = computed(() => {
+  if (book.value?.format === 'pdf') {
+    return `${pdfCurrentPage.value}/${Math.max(pdfTotalPages.value, 1)}`
+  }
   if ((book.value?.format === 'txt' || book.value?.format === 'md') && isPaginationMode.value) {
     return `${Math.min(currentPage.value + 1, Math.max(totalPages.value, 1))}/${Math.max(totalPages.value, 1)}`
   }
@@ -914,6 +1091,17 @@ const handleKeydown = (e: KeyboardEvent) => {
   // 如果设置面板打开，不处理按键
   if (showSettings.value) return
 
+  if ((e.metaKey || e.ctrlKey) && e.key.toLocaleLowerCase() === 'f') {
+    e.preventDefault()
+    openSearchPanel()
+    return
+  }
+
+  if (e.key === 'Escape' && showSidePanel.value) {
+    closeAllPanels()
+    return
+  }
+
   const target = e.target as HTMLElement | null
   if (
     target?.closest('input, textarea, select, button, [contenteditable="true"]')
@@ -929,6 +1117,23 @@ const handleKeydown = (e: KeyboardEvent) => {
     } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
       e.preventDefault()
       nextPage()
+    }
+    return
+  }
+
+  if (book.value?.format === 'pdf') {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+      e.preventDefault()
+      pdfReader.value?.previous()
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+      e.preventDefault()
+      pdfReader.value?.next()
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      void pdfReader.value?.goToPage(1)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      void pdfReader.value?.goToPage(pdfTotalPages.value)
     }
     return
   }
@@ -997,15 +1202,18 @@ const clearEpubKeyboardBindings = () => {
 }
 
 // 面板显示状态
-const showSidePanel = computed(() => showToc.value || showBookmarks.value || showHighlights.value)
+const showSidePanel = computed(() =>
+  showSearch.value || showToc.value || showBookmarks.value || showHighlights.value,
+)
 const supportsPageTurning = computed(() =>
-  ['epub', 'txt', 'md', 'html'].includes(book.value?.format || '')
+  ['epub', 'txt', 'md', 'html', 'pdf'].includes(book.value?.format || '')
 )
 const showPageNavigation = computed(() =>
   supportsPageTurning.value && !showSidePanel.value && !showSettings.value
 )
 const canGoPrevious = computed(() => {
   if (book.value?.format === 'epub') return true
+  if (book.value?.format === 'pdf') return pdfCurrentPage.value > 1
   if ((book.value?.format === 'txt' || book.value?.format === 'md') && isPaginationMode.value) {
     return currentPage.value > 0
   }
@@ -1013,6 +1221,7 @@ const canGoPrevious = computed(() => {
 })
 const canGoNext = computed(() => {
   if (book.value?.format === 'epub') return true
+  if (book.value?.format === 'pdf') return pdfCurrentPage.value < pdfTotalPages.value
   if ((book.value?.format === 'txt' || book.value?.format === 'md') && isPaginationMode.value) {
     return currentPage.value < totalPages.value - 1
   }
@@ -1021,9 +1230,13 @@ const canGoNext = computed(() => {
 
 // 阅读进度保存相关
 let saveTimer: ReturnType<typeof setTimeout> | null = null
-let readingStartTime = 0
+let readingHeartbeatTimer: ReturnType<typeof setInterval> | null = null
+let activeReadingStartedAt = 0
+let accumulatedReadingMillis = 0
+const readingSessionId = typeof crypto.randomUUID === 'function'
+  ? crypto.randomUUID()
+  : `reader-${Date.now()}-${Math.random().toString(16).slice(2)}`
 const savedCfi = ref<string | null>(null)
-const savedScrollPosition = ref<number | null>(null)
 
 const loadBook = async () => {
   const id = Number(route.params.id)
@@ -1033,6 +1246,7 @@ const loadBook = async () => {
   }
 
   try {
+    loadError.value = ''
     // 先获取书籍信息
     book.value = await bookStore.fetchBookById(id)
     const versionsResponse = await api.get(`/api/books/${id}/versions`)
@@ -1068,29 +1282,60 @@ const loadBook = async () => {
       accessoryPromises.push(loadTextContent())
     } else if (book.value.format === 'html') {
       accessoryPromises.push(loadHtmlContent())
+    } else if (book.value.format === 'pdf') {
+      accessoryPromises.push(progressPromise.then(loadPdfContent))
     }
 
     // EPUB 文件、解析模块和附属数据并行加载，减少进入阅读页后的空白等待。
     if (book.value.format === 'epub') {
       await nextTick()
       await initEpub(progressPromise)
-      void Promise.all(accessoryPromises)
+      await Promise.all(accessoryPromises)
     } else {
       await Promise.all(accessoryPromises)
     }
+    await nextTick()
+    renderAllHighlights()
 
-    // 记录开始阅读时间
-    readingStartTime = Date.now()
+    resumeReadingClock()
+    if (!readingHeartbeatTimer) {
+      readingHeartbeatTimer = window.setInterval(() => void saveReadingTime(), 30_000)
+    }
     void api.post(withVersion(`/api/books/${id}/open`)).catch(error => {
       console.error('Failed to record book open:', error)
     })
   } catch (error) {
     console.error('Failed to load book:', error)
+    loadError.value = error instanceof Error ? error.message : '书籍加载失败，请稍后重试'
+    book.value = null
   } finally {
     loading.value = false
     await nextTick()
     await applyRequestedChapter()
   }
+}
+
+const retryLoadBook = async () => {
+  loading.value = true
+  loadError.value = ''
+  content.value = []
+  htmlContent.value = ''
+  pdfSource.value = null
+  pdfCurrentPage.value = 1
+  pdfTotalPages.value = 0
+  tocItems.value = []
+  searchSequence += 1
+  searchResults.value = []
+  searchCompleted.value = false
+  searchError.value = ''
+  clearCurrentSearchHighlight()
+  if (bookInstance) {
+    clearEpubKeyboardBindings()
+    bookInstance.destroy()
+    bookInstance = null
+    rendition = null
+  }
+  await loadBook()
 }
 
 const applyRequestedChapter = async () => {
@@ -1128,6 +1373,13 @@ const loadSavedProgress = async (bookId: number) => {
       } else if (data.currentChapter && !data.currentChapter.startsWith('epubcfi(')) {
         currentChapterName.value = data.currentChapter
       }
+      if (data.locator) {
+        try {
+          savedLocator.value = JSON.parse(data.locator) as ReaderLocator
+        } catch {
+          savedLocator.value = null
+        }
+      }
       if (book.value?.format === 'epub' && data.currentChapter) {
         savedCfi.value = data.currentChapter
         console.log('[Reader] Saved CFI:', savedCfi.value)
@@ -1157,9 +1409,208 @@ const loadHighlights = async (bookId: number) => {
   try {
     const response = await api.get(`/api/books/${bookId}/highlights`)
     highlights.value = response.data || []
+    await nextTick()
+    renderAllHighlights()
   } catch (error) {
     console.error('Failed to load highlights:', error)
   }
+}
+
+const closeHighlightEditor = () => {
+  highlightEditor.value = null
+  window.getSelection()?.removeAllRanges()
+}
+
+const openHighlightEditor = (value: Omit<HighlightEditorState, 'note' | 'color'>) => {
+  if (!value.text.trim()) return
+  highlightEditor.value = { ...value, color: '#ffe066', note: '' }
+}
+
+const editHighlight = (highlight: Highlight) => {
+  highlightEditor.value = {
+    id: highlight.id,
+    cfiRange: highlight.cfiRange,
+    text: highlight.text,
+    chapter: highlight.chapter || '',
+    color: highlight.color || '#ffe066',
+    note: highlight.note || '',
+  }
+}
+
+const saveHighlight = async () => {
+  if (!book.value || !highlightEditor.value) return
+  savingHighlight.value = true
+  try {
+    const editor = highlightEditor.value
+    const payload = {
+      cfiRange: editor.cfiRange,
+      text: editor.text,
+      color: editor.color,
+      chapter: editor.chapter,
+      note: editor.note,
+    }
+    const response = editor.id
+      ? await api.put(`/api/books/${book.value.id}/highlights/${editor.id}`, payload)
+      : await api.post(`/api/books/${book.value.id}/highlights`, payload)
+    const saved = response.data as Highlight
+    const existingIndex = highlights.value.findIndex(item => item.id === saved.id)
+    if (existingIndex >= 0) highlights.value.splice(existingIndex, 1, saved)
+    else highlights.value.unshift(saved)
+    highlightEditor.value = null
+    await nextTick()
+    renderAllHighlights()
+    message.success(editor.id ? '批注已更新' : '高亮已保存')
+  } catch {
+    message.error('高亮保存失败')
+  } finally {
+    savingHighlight.value = false
+  }
+}
+
+const closestReaderBlock = (node: Node | null) => {
+  const element = node?.nodeType === Node.ELEMENT_NODE
+    ? node as Element
+    : node?.parentElement
+  return element?.closest<HTMLElement>('[data-reader-index]') || null
+}
+
+const captureDocumentSelection = () => {
+  if (highlightEditor.value || book.value?.format === 'epub') return
+  window.setTimeout(() => {
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed || !selection.rangeCount) return
+    const text = selection.toString().replace(/\s+/g, ' ').trim().slice(0, 4000)
+    if (!text) return
+    const range = selection.getRangeAt(0)
+    const reader = document.querySelector<HTMLElement>('.reader-body')
+    if (!reader || !reader.contains(range.commonAncestorContainer)) return
+    if (book.value?.format === 'txt' || book.value?.format === 'md') {
+      const startBlock = closestReaderBlock(range.startContainer)
+      const endBlock = closestReaderBlock(range.endContainer)
+      if (!startBlock || !endBlock) return
+      const startIndex = Number(startBlock.dataset.readerIndex)
+      const endIndex = Number(endBlock.dataset.readerIndex)
+      openHighlightEditor({
+        cfiRange: `text:${startIndex}:${range.startOffset}:${endIndex}:${range.endOffset}`,
+        text,
+        chapter: currentChapterName.value,
+      })
+      return
+    }
+    if (book.value?.format === 'html') {
+      const htmlRoot = document.querySelector<HTMLElement>('.reader-html')
+      if (!htmlRoot || !htmlRoot.contains(range.commonAncestorContainer)) return
+      const beforeStart = document.createRange()
+      beforeStart.selectNodeContents(htmlRoot)
+      beforeStart.setEnd(range.startContainer, range.startOffset)
+      const beforeEnd = document.createRange()
+      beforeEnd.selectNodeContents(htmlRoot)
+      beforeEnd.setEnd(range.endContainer, range.endOffset)
+      openHighlightEditor({
+        cfiRange: `html:${beforeStart.toString().length}:${beforeEnd.toString().length}`,
+        text,
+        chapter: currentChapterName.value || '正文',
+      })
+    }
+  }, 0)
+}
+
+const textRangeFromLocation = (location: string): Range | null => {
+  const match = /^text:(\d+):(\d+):(\d+):(\d+)$/.exec(location)
+  if (!match) return null
+  const start = document.querySelector<HTMLElement>(`[data-reader-index="${match[1]}"]`)
+  const end = document.querySelector<HTMLElement>(`[data-reader-index="${match[3]}"]`)
+  const startNode = start?.firstChild
+  const endNode = end?.firstChild
+  if (!startNode || !endNode) return null
+  const range = document.createRange()
+  range.setStart(startNode, Math.min(Number(match[2]), startNode.textContent?.length || 0))
+  range.setEnd(endNode, Math.min(Number(match[4]), endNode.textContent?.length || 0))
+  return range
+}
+
+const htmlRangeFromLocation = (location: string): Range | null => {
+  const match = /^html:(\d+):(\d+)$/.exec(location)
+  const root = document.querySelector<HTMLElement>('.reader-html')
+  if (!match || !root) return null
+  const offsets = [Number(match[1]), Number(match[2])]
+  const points: Array<{ node: Node; offset: number } | null> = [null, null]
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let consumed = 0
+  let node: Node | null
+  while ((node = walker.nextNode())) {
+    const length = node.textContent?.length || 0
+    offsets.forEach((offset, index) => {
+      if (!points[index] && offset <= consumed + length) {
+        points[index] = { node: node!, offset: Math.max(0, offset - consumed) }
+      }
+    })
+    consumed += length
+  }
+  if (!points[0] || !points[1]) return null
+  const range = document.createRange()
+  range.setStart(points[0].node, points[0].offset)
+  range.setEnd(points[1].node, points[1].offset)
+  return range
+}
+
+const highlightStyleId = 'reader-highlight-rules'
+const textHighlightNames = new Set<string>()
+
+const clearDocumentHighlights = () => {
+  const registry = (CSS as any).highlights
+  textHighlightNames.forEach(name => registry?.delete(name))
+  textHighlightNames.clear()
+  document.getElementById(highlightStyleId)?.remove()
+}
+
+const renderDocumentHighlights = () => {
+  clearDocumentHighlights()
+  const registry = (CSS as any).highlights
+  const HighlightConstructor = (window as any).Highlight
+  if (!registry || !HighlightConstructor) return
+  const rules: string[] = []
+  highlights.value.forEach(highlight => {
+    const range = highlight.cfiRange.startsWith('text:')
+      ? textRangeFromLocation(highlight.cfiRange)
+      : highlight.cfiRange.startsWith('html:')
+        ? htmlRangeFromLocation(highlight.cfiRange)
+        : null
+    if (!range) return
+    const name = `reader-highlight-${highlight.id}`
+    registry.set(name, new HighlightConstructor(range))
+    textHighlightNames.add(name)
+    rules.push(`::highlight(${name}){background-color:${highlight.color || '#ffe066'};color:inherit}`)
+  })
+  if (rules.length) {
+    const style = document.createElement('style')
+    style.id = highlightStyleId
+    style.textContent = rules.join('\n')
+    document.head.appendChild(style)
+  }
+}
+
+const renderEpubHighlights = () => {
+  if (!rendition?.annotations) return
+  highlights.value.filter(item => item.cfiRange?.startsWith('epubcfi(')).forEach(highlight => {
+    try {
+      rendition.annotations.remove(highlight.cfiRange, 'highlight')
+      rendition.annotations.highlight(
+        highlight.cfiRange,
+        { highlightId: highlight.id },
+        () => editHighlight(highlight),
+        `reader-epub-highlight-${highlight.id}`,
+        { fill: highlight.color || '#ffe066', 'fill-opacity': '0.42', 'mix-blend-mode': 'multiply' },
+      )
+    } catch (error) {
+      console.warn('[Reader] Failed to render highlight:', highlight.id, error)
+    }
+  })
+}
+
+const renderAllHighlights = () => {
+  if (book.value?.format === 'epub') renderEpubHighlights()
+  else renderDocumentHighlights()
 }
 
 const normalizeBookmarkExcerpt = (value?: string | null) =>
@@ -1172,6 +1623,7 @@ const getCurrentBookmarkExcerpt = () => {
       .find((text: string) => text.trim())
     return normalizeBookmarkExcerpt(epubText)
   }
+  if (book.value?.format === 'pdf') return `PDF 第 ${pdfCurrentPage.value} 页`
 
   const readerBody = document.querySelector<HTMLElement>('.reader-body')
   if (!readerBody) return ''
@@ -1216,6 +1668,8 @@ const handleAddBookmark = async () => {
       if (location?.start?.cfi) {
         bookmarkData.cfi = location.start.cfi
       }
+    } else if (book.value.format === 'pdf') {
+      bookmarkData.page = pdfCurrentPage.value
     } else {
       const readerBody = document.querySelector('.reader-body')
       if (readerBody) {
@@ -1237,6 +1691,8 @@ const handleAddBookmark = async () => {
 const handleGotoBookmark = async (bookmark: Bookmark) => {
   if (book.value?.format === 'epub' && bookmark.cfi && rendition) {
     await rendition.display(bookmark.cfi)
+  } else if (book.value?.format === 'pdf' && bookmark.page) {
+    await pdfReader.value?.goToPage(bookmark.page)
   } else if (bookmark.scrollPosition !== undefined) {
     const readerBody = document.querySelector('.reader-body')
     if (readerBody) {
@@ -1264,9 +1720,27 @@ const handleDeleteBookmark = async (bookmark: Bookmark) => {
 /**
  * 跳转到高亮位置
  */
-const handleGotoHighlight = (highlight: Highlight) => {
-  // TODO: 实现高亮定位
-  message.info('高亮定位功能开发中')
+const handleGotoHighlight = async (highlight: Highlight) => {
+  closeAllPanels()
+  if (book.value?.format === 'epub' && rendition && highlight.cfiRange.startsWith('epubcfi(')) {
+    await rendition.display(highlight.cfiRange)
+    return
+  }
+  const textMatch = /^text:(\d+):/.exec(highlight.cfiRange)
+  if (textMatch) {
+    const textIndex = Number(textMatch[1])
+    if (isPaginationMode.value) {
+      currentPage.value = Math.floor(textIndex / calculatePageSize())
+      await nextTick()
+      renderDocumentHighlights()
+    }
+    document.querySelector<HTMLElement>(`[data-reader-index="${textIndex}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    return
+  }
+  const range = htmlRangeFromLocation(highlight.cfiRange)
+  const element = range?.startContainer.parentElement
+  element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
 /**
@@ -1277,7 +1751,11 @@ const handleDeleteHighlight = async (highlight: Highlight) => {
   if (result) {
     try {
       await api.delete(`/api/books/${book.value.id}/highlights/${highlight.id}`)
+      if (book.value?.format === 'epub' && rendition?.annotations) {
+        rendition.annotations.remove(highlight.cfiRange, 'highlight')
+      }
       highlights.value = highlights.value.filter(h => h.id !== highlight.id)
+      renderAllHighlights()
       message.success('高亮已删除')
     } catch (error) {
       message.error('删除失败')
@@ -1288,7 +1766,11 @@ const handleDeleteHighlight = async (highlight: Highlight) => {
 /**
  * 保存阅读进度（防抖）
  */
-const saveProgress = (totalProgress: number, currentChapter?: string) => {
+const saveProgress = (
+  totalProgress: number,
+  currentChapter?: string,
+  locator: ReaderLocator | null = createCurrentLocator(totalProgress),
+) => {
   if (!book.value) return
 
   if (saveTimer) clearTimeout(saveTimer)
@@ -1304,8 +1786,9 @@ const saveProgress = (totalProgress: number, currentChapter?: string) => {
         body: JSON.stringify({
           currentChapter: currentChapter || '',
           currentChapterTitle: currentChapterName.value || '',
-          chapterProgress: 0,
-          totalProgress: Math.round(totalProgress)
+          chapterProgress: locator?.chapterProgress || 0,
+          totalProgress: Math.round(totalProgress),
+          locator: locator ? JSON.stringify(locator) : null,
         })
       })
     } catch (error) {
@@ -1314,27 +1797,147 @@ const saveProgress = (totalProgress: number, currentChapter?: string) => {
   }, 1000)
 }
 
+const chapterAtTextIndex = (textIndex: number) => {
+  const ordered = tocItems.value.filter(item => Number.isFinite(item.index))
+  let chapterIndex = -1
+  for (let index = 0; index < ordered.length; index += 1) {
+    if (ordered[index].index <= textIndex) chapterIndex = index
+    else break
+  }
+  const chapter = chapterIndex >= 0 ? ordered[chapterIndex] : undefined
+  const next = chapterIndex >= 0 ? ordered[chapterIndex + 1] : undefined
+  return { chapter, next }
+}
+
+const textChapterProgress = (textIndex: number) => {
+  const { chapter, next } = chapterAtTextIndex(textIndex)
+  if (!chapter) return 0
+  const end = next?.index ?? content.value.length
+  if (end <= chapter.index) return 0
+  return Math.max(0, Math.min(100, Math.round(
+    ((textIndex - chapter.index) / (end - chapter.index)) * 100,
+  )))
+}
+
+const visibleTextIndex = () => {
+  if (isPaginationMode.value) return currentPage.value * calculatePageSize()
+  const readerBody = document.querySelector<HTMLElement>('.reader-body')
+  if (!readerBody) return 0
+  const bodyRect = readerBody.getBoundingClientRect()
+  const visible = Array.from(readerBody.querySelectorAll<HTMLElement>('[data-reader-index]'))
+    .find(element => element.getBoundingClientRect().bottom > bodyRect.top + 12)
+  return Number(visible?.dataset.readerIndex || 0)
+}
+
+const createCurrentLocator = (totalProgress = progress.value): ReaderLocator | null => {
+  if (!book.value) return null
+  if (book.value.format === 'epub') {
+    const location = rendition?.currentLocation?.()
+    const displayed = location?.start?.displayed
+    const chapterProgress = displayed?.total > 0
+      ? Math.round(((displayed.page - 1) / Math.max(1, displayed.total - 1)) * 100)
+      : 0
+    return {
+      format: 'epub',
+      cfi: location?.start?.cfi || savedCfi.value || undefined,
+      href: location?.start?.href || currentTocHref.value || undefined,
+      chapterTitle: currentChapterName.value || undefined,
+      chapterProgress,
+      totalProgress: Math.round(totalProgress),
+    }
+  }
+  if (book.value.format === 'html') {
+    const readerBody = document.querySelector<HTMLElement>('.reader-body')
+    const htmlRoot = document.querySelector<HTMLElement>('.reader-html')
+    const bodyRect = readerBody?.getBoundingClientRect()
+    const visibleElement = bodyRect
+      ? Array.from(htmlRoot?.querySelectorAll<HTMLElement>('*') || [])
+        .find(element => element.children.length === 0
+          && element.getBoundingClientRect().bottom > bodyRect.top + 12)
+      : undefined
+    let htmlOffset = 0
+    if (htmlRoot && visibleElement) {
+      const before = document.createRange()
+      before.selectNodeContents(htmlRoot)
+      before.setEndBefore(visibleElement)
+      htmlOffset = before.toString().length
+    }
+    return {
+      format: 'html',
+      htmlOffset,
+      chapterTitle: currentChapterName.value || '正文',
+      chapterProgress: Math.round(totalProgress),
+      totalProgress: Math.round(totalProgress),
+      excerpt: normalizeBookmarkExcerpt(visibleElement?.textContent),
+    }
+  }
+  if (book.value.format === 'pdf') {
+    return {
+      format: 'pdf',
+      pdfPage: pdfCurrentPage.value,
+      pdfTotalPages: pdfTotalPages.value,
+      chapterTitle: `第 ${pdfCurrentPage.value} 页`,
+      chapterProgress: Math.round(totalProgress),
+      totalProgress: Math.round(totalProgress),
+    }
+  }
+  const textIndex = visibleTextIndex()
+  const paragraph = content.value[textIndex] || ''
+  return {
+    format: book.value.format,
+    textIndex,
+    chapterTitle: currentChapterName.value || chapterAtTextIndex(textIndex).chapter?.title,
+    chapterProgress: textChapterProgress(textIndex),
+    totalProgress: Math.round(totalProgress),
+    excerpt: paragraph.replace(/\s+/g, ' ').trim().slice(0, 160) || undefined,
+  }
+}
+
 /**
  * 保存阅读时长
  */
-const saveReadingTime = async () => {
-  if (!book.value || readingStartTime === 0) return
+const resumeReadingClock = () => {
+  if (!activeReadingStartedAt && !document.hidden) activeReadingStartedAt = Date.now()
+}
 
-  const elapsedSeconds = Math.floor((Date.now() - readingStartTime) / 1000)
-  if (elapsedSeconds < 5) return // 少于5秒不记录
+const pauseReadingClock = () => {
+  if (!activeReadingStartedAt) return
+  accumulatedReadingMillis += Date.now() - activeReadingStartedAt
+  activeReadingStartedAt = 0
+}
 
+const currentReadingSeconds = () => Math.floor((accumulatedReadingMillis
+  + (activeReadingStartedAt ? Date.now() - activeReadingStartedAt : 0)) / 1000)
+
+const saveReadingTime = async (keepalive = false) => {
+  if (!book.value) return
+  const elapsedSeconds = currentReadingSeconds()
+  if (elapsedSeconds < 5) return
   try {
     const token = localStorage.getItem('token')
     await fetch(withVersion(`/api/reading-progress/book/${book.value.id}/time`), {
       method: 'PUT',
+      keepalive,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({ seconds: elapsedSeconds })
+      body: JSON.stringify({
+        seconds: elapsedSeconds,
+        sessionId: readingSessionId,
+      })
     })
   } catch (error) {
     console.error('Failed to save reading time:', error)
+  }
+}
+
+const handleVisibilityChange = () => {
+  if (document.hidden) {
+    pauseReadingClock()
+    void saveReadingTime(true)
+  } else {
+    resumeReadingClock()
   }
 }
 
@@ -1419,6 +2022,7 @@ const isCurrentTocItem = (item: Chapter): boolean => {
   if (book.value?.format === 'epub') {
     return item.href === currentTocHref.value
   }
+  if (book.value?.format === 'pdf') return item.page === pdfCurrentPage.value
   return item.title === currentChapterName.value
 }
 
@@ -1469,7 +2073,7 @@ const loadTextContent = async () => {
     restoreScrollPosition()
   } catch (error) {
     console.error('Failed to load text content:', error)
-    content.value = ['加载内容失败']
+    throw new Error('文本内容加载失败')
   }
 }
 
@@ -1502,6 +2106,20 @@ const togglePaginationMode = () => {
  * 恢复滚动位置
  */
 const restoreScrollPosition = () => {
+  const locator = savedLocator.value
+  const locatorIndex = locator && locator.format === book.value?.format
+    ? locator.textIndex
+    : undefined
+  if (locatorIndex !== undefined) {
+    const safeIndex = Math.max(0, Math.min(locatorIndex, Math.max(0, content.value.length - 1)))
+    if (isPaginationMode.value && totalPages.value > 0) {
+      currentPage.value = Math.min(totalPages.value - 1, Math.floor(safeIndex / calculatePageSize()))
+    } else {
+      nextTick(() => document.querySelector<HTMLElement>(`[data-reader-index="${safeIndex}"]`)
+        ?.scrollIntoView({ block: 'start' }))
+    }
+    return
+  }
   if (progress.value > 0) {
     if (isPaginationMode.value && totalPages.value > 0) {
       // 翻页模式下恢复到对应页码
@@ -1567,18 +2185,60 @@ const findCurrentChapter = (): string => {
 
 const loadHtmlContent = async () => {
   try {
-    const token = localStorage.getItem('token')
-    const response = await fetch(
-      withVersion(`/api/books/${book.value.id}/content`),
-      {
-      headers: { Authorization: `Bearer ${token}` }
-      },
-    )
-    htmlContent.value = await response.text()
+    const response = await api.get(withVersion(`/api/books/${book.value.id}/content-sanitized`))
+    htmlContent.value = response.data?.html || ''
+    await nextTick()
+    if (savedLocator.value?.format === 'html'
+        && savedLocator.value.htmlOffset !== undefined) {
+      const range = htmlRangeFromLocation(
+        `html:${savedLocator.value.htmlOffset}:${savedLocator.value.htmlOffset}`,
+      )
+      range?.startContainer.parentElement?.scrollIntoView({ block: 'start' })
+    } else {
+      restoreScrollPosition()
+    }
   } catch (error) {
     console.error('Failed to load HTML content:', error)
-    htmlContent.value = '<p>加载内容失败</p>'
+    throw new Error('HTML 内容加载失败')
   }
+}
+
+const loadPdfContent = async () => {
+  if (!book.value) return
+  const token = localStorage.getItem('token')
+  pdfSource.value = {
+    url: withVersion(`/api/books/${book.value.id}/content`),
+    httpHeaders: token ? { Authorization: `Bearer ${token}` } : {},
+  }
+}
+
+const handlePdfPageChange = (value: { page: number; total: number; progress: number }) => {
+  pdfCurrentPage.value = value.page
+  pdfTotalPages.value = value.total
+  progress.value = value.progress
+  currentChapterName.value = `第 ${value.page} 页`
+  saveProgress(value.progress, currentChapterName.value, {
+    format: 'pdf',
+    pdfPage: value.page,
+    pdfTotalPages: value.total,
+    chapterTitle: currentChapterName.value,
+    chapterProgress: value.progress,
+    totalProgress: value.progress,
+  })
+}
+
+const handlePdfOutline = (items: Array<{ title: string; page: number; level: number }>) => {
+  tocItems.value = items.map(item => ({
+    title: item.title,
+    label: item.title,
+    index: item.page - 1,
+    page: item.page,
+    level: item.level,
+  }))
+}
+
+const handlePdfError = (error: string) => {
+  console.error('[Reader] PDF reader error:', error)
 }
 
 const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
@@ -1625,7 +2285,7 @@ const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
       width: '100%',
       height: '100%',
       spread: spreadMode,
-      allowScriptedContent: true,
+      allowScriptedContent: false,
     })
 
     rendition.on('relocated', (location: any) => {
@@ -1642,9 +2302,21 @@ const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
         if (bookInstance.locations && bookInstance.locations.length()) {
           const percentage = bookInstance.locations.percentageFromCfi(location.start.cfi)
           progress.value = Math.round(percentage * 100)
-          saveProgress(progress.value, location.start.cfi)
+          saveProgress(progress.value, location.start.cfi, createCurrentLocator(progress.value))
         }
       }
+    })
+
+    rendition.on('selected', (cfiRange: string, contents: any) => {
+      const text = contents?.window?.getSelection?.()?.toString?.()
+        ?.replace(/\s+/g, ' ').trim().slice(0, 4000) || ''
+      if (!text) return
+      openHighlightEditor({
+        cfiRange,
+        text,
+        chapter: currentChapterName.value,
+      })
+      contents?.window?.getSelection?.()?.removeAllRanges?.()
     })
 
     rendition.hooks.content.register((contents: any) => {
@@ -1662,6 +2334,13 @@ const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
     if (requestedChapterHref) {
       await rendition.display(requestedChapterHref)
       currentTocHref.value = requestedChapterHref
+    } else if (savedLocator.value?.format === 'epub' && savedLocator.value.cfi) {
+      try {
+        await rendition.display(savedLocator.value.cfi)
+      } catch (e) {
+        console.error('[Reader] Failed to restore locator CFI, falling back:', e)
+        await rendition.display(savedCfi.value || undefined)
+      }
     } else if (savedCfi.value) {
       try {
         await rendition.display(savedCfi.value)
@@ -1672,6 +2351,7 @@ const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
     } else {
       await rendition.display()
     }
+    renderEpubHighlights()
 
     // 后台生成位置数据（不阻塞显示）
     bookInstance.locations.generate(1024).then(() => {
@@ -1688,6 +2368,7 @@ const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
 
   } catch (error) {
     console.error('Failed to init EPUB:', error)
+    throw new Error('EPUB 解析或渲染失败')
   }
 }
 
@@ -1776,29 +2457,243 @@ const findEpubTocItem = (href?: string): Chapter | undefined => {
   })
 }
 
-const togglePanel = (panel: 'toc' | 'bookmarks' | 'highlights') => {
-  if (panel === 'toc') {
-    showToc.value = !showToc.value
-    showBookmarks.value = false
-    showHighlights.value = false
-    activeTab.value = 'toc'
-  } else if (panel === 'bookmarks') {
-    showBookmarks.value = !showBookmarks.value
-    showToc.value = false
-    showHighlights.value = false
-    activeTab.value = 'bookmarks'
-  } else if (panel === 'highlights') {
-    showHighlights.value = !showHighlights.value
-    showToc.value = false
-    showBookmarks.value = false
-    activeTab.value = 'highlights'
+const excerptAround = (text: string, index: number, length: number) => {
+  const start = Math.max(0, index - 36)
+  const end = Math.min(text.length, index + length + 56)
+  return `${start > 0 ? '…' : ''}${text.slice(start, end).replace(/\s+/g, ' ')}${end < text.length ? '…' : ''}`
+}
+
+const chapterForParagraph = (paragraphIndex: number) => [...tocItems.value]
+  .reverse()
+  .find(item => item.index <= paragraphIndex)?.title || '正文'
+
+const searchPlainText = (query: string) => {
+  const normalizedQuery = query.toLocaleLowerCase()
+  const results: ReaderSearchResult[] = []
+  content.value.some((paragraph, paragraphIndex) => {
+    const normalizedText = paragraph.toLocaleLowerCase()
+    let fromIndex = 0
+    while (results.length < SEARCH_RESULT_LIMIT) {
+      const index = normalizedText.indexOf(normalizedQuery, fromIndex)
+      if (index < 0) break
+      results.push({
+        id: `text-${paragraphIndex}-${index}`,
+        excerpt: excerptAround(paragraph, index, query.length),
+        locationLabel: chapterForParagraph(paragraphIndex),
+        paragraphIndex,
+        startOffset: index,
+        endOffset: index + query.length,
+      })
+      fromIndex = index + Math.max(1, normalizedQuery.length)
+    }
+    return results.length >= SEARCH_RESULT_LIMIT
+  })
+  return results
+}
+
+const searchHtml = (query: string) => {
+  const text = document.querySelector<HTMLElement>('.reader-html')?.textContent || ''
+  const normalizedText = text.toLocaleLowerCase()
+  const normalizedQuery = query.toLocaleLowerCase()
+  const results: ReaderSearchResult[] = []
+  let fromIndex = 0
+  while (results.length < SEARCH_RESULT_LIMIT) {
+    const index = normalizedText.indexOf(normalizedQuery, fromIndex)
+    if (index < 0) break
+    results.push({
+      id: `html-${index}`,
+      excerpt: excerptAround(text, index, query.length),
+      locationLabel: '正文',
+      htmlStart: index,
+      htmlEnd: index + query.length,
+    })
+    fromIndex = index + Math.max(1, normalizedQuery.length)
+  }
+  return results
+}
+
+const searchEpub = async (query: string, sequence: number) => {
+  if (!bookInstance?.spine) return []
+  const results: ReaderSearchResult[] = []
+  const sections = bookInstance.spine.spineItems || []
+  for (const section of sections) {
+    if (results.length >= SEARCH_RESULT_LIMIT || sequence !== searchSequence) break
+    try {
+      await section.load(bookInstance.load.bind(bookInstance))
+      const matches = section.find(query) || []
+      const chapter = findEpubTocItem(section.href)?.title || section.href || '正文'
+      for (const match of matches) {
+        if (results.length >= SEARCH_RESULT_LIMIT) break
+        results.push({
+          id: `epub-${results.length}-${match.cfi}`,
+          excerpt: match.excerpt || query,
+          locationLabel: chapter,
+          cfi: match.cfi,
+        })
+      }
+    } finally {
+      section.unload?.()
+    }
+  }
+  return results
+}
+
+const runSearchNow = async () => {
+  const query = searchQuery.value.trim()
+  const sequence = ++searchSequence
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+    searchTimer = null
+  }
+  searchError.value = ''
+  activeSearchResultId.value = ''
+  clearCurrentSearchHighlight()
+  pdfReader.value?.cancelSearch()
+  if (!query || !book.value) {
+    searchResults.value = []
+    searchCompleted.value = false
+    searching.value = false
+    return
+  }
+  searching.value = true
+  searchCompleted.value = false
+  try {
+    let results: ReaderSearchResult[] = []
+    if (book.value.format === 'txt' || book.value.format === 'md') {
+      results = searchPlainText(query)
+    } else if (book.value.format === 'html') {
+      results = searchHtml(query)
+    } else if (book.value.format === 'epub') {
+      results = await searchEpub(query, sequence)
+    } else if (book.value.format === 'pdf') {
+      const pdfResults = await pdfReader.value?.search(query, SEARCH_RESULT_LIMIT) || []
+      results = pdfResults.map((result, index) => ({
+        id: `pdf-${result.page}-${index}`,
+        excerpt: result.excerpt,
+        locationLabel: `第 ${result.page} 页`,
+        page: result.page,
+      }))
+    }
+    if (sequence === searchSequence) searchResults.value = results
+  } catch (error) {
+    console.error('[Reader] In-book search failed:', error)
+    if (sequence === searchSequence) searchError.value = '书内搜索失败，请稍后重试'
+  } finally {
+    if (sequence === searchSequence) {
+      searching.value = false
+      searchCompleted.value = true
+    }
+  }
+}
+
+const scheduleSearch = () => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => void runSearchNow(), 280)
+}
+
+const searchHighlightName = 'reader-search-current'
+const searchHighlightStyleId = 'reader-search-current-style'
+let activeEpubSearchCfi = ''
+
+const clearCurrentSearchHighlight = () => {
+  ;(CSS as any).highlights?.delete(searchHighlightName)
+  document.getElementById(searchHighlightStyleId)?.remove()
+  if (activeEpubSearchCfi && rendition?.annotations) {
+    try {
+      rendition.annotations.remove(activeEpubSearchCfi, 'underline')
+    } catch { /* EPUB 章节卸载后无需处理 */ }
+  }
+  activeEpubSearchCfi = ''
+}
+
+const revealDocumentSearchRange = (range: Range | null) => {
+  if (!range) return
+  range.startContainer.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  const registry = (CSS as any).highlights
+  const HighlightConstructor = (window as any).Highlight
+  if (!registry || !HighlightConstructor) return
+  registry.set(searchHighlightName, new HighlightConstructor(range))
+  const style = document.createElement('style')
+  style.id = searchHighlightStyleId
+  style.textContent = `::highlight(${searchHighlightName}){background:#ff9f43;color:inherit}`
+  document.head.appendChild(style)
+}
+
+const goToSearchResult = async (result: ReaderSearchResult) => {
+  activeSearchResultId.value = result.id
+  clearCurrentSearchHighlight()
+  if ((book.value?.format === 'txt' || book.value?.format === 'md')
+      && result.paragraphIndex !== undefined) {
+    if (isPaginationMode.value) {
+      goToPage(Math.floor(result.paragraphIndex / calculatePageSize()))
+      await nextTick()
+    }
+    const range = textRangeFromLocation(
+      `text:${result.paragraphIndex}:${result.startOffset || 0}:${result.paragraphIndex}:${result.endOffset || 0}`,
+    )
+    revealDocumentSearchRange(range)
+  } else if (book.value?.format === 'html'
+      && result.htmlStart !== undefined && result.htmlEnd !== undefined) {
+    revealDocumentSearchRange(htmlRangeFromLocation(`html:${result.htmlStart}:${result.htmlEnd}`))
+  } else if (book.value?.format === 'epub' && result.cfi && rendition) {
+    await rendition.display(result.cfi)
+    activeEpubSearchCfi = result.cfi
+    rendition.annotations.underline(
+      result.cfi,
+      {},
+      undefined,
+      'reader-epub-search-result',
+      { stroke: '#ff9f43', 'stroke-width': '2px' },
+    )
+  } else if (book.value?.format === 'pdf' && result.page) {
+    await pdfReader.value?.goToPage(result.page)
+  }
+}
+
+const activatePanelTab = (panel: PanelTab) => {
+  activeTab.value = panel
+  showSearch.value = panel === 'search'
+  showToc.value = panel === 'toc'
+  showBookmarks.value = panel === 'bookmarks'
+  showHighlights.value = panel === 'highlights'
+  if (panel === 'search') nextTick(() => searchInput.value?.focus())
+}
+
+const handlePanelTabKeydown = (event: KeyboardEvent) => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  const currentIndex = panelTabs.findIndex(tab => tab.value === activeTab.value)
+  const targetIndex = event.key === 'Home'
+    ? 0
+    : event.key === 'End'
+      ? panelTabs.length - 1
+      : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + panelTabs.length) % panelTabs.length
+  activatePanelTab(panelTabs[targetIndex].value)
+  nextTick(() => {
+    document.querySelectorAll<HTMLButtonElement>('.panel-tabs-nav .tab-btn')[targetIndex]?.focus()
+  })
+}
+
+const openSearchPanel = () => activatePanelTab('search')
+
+const togglePanel = (panel: PanelTab) => {
+  const isOpen = (panel === 'search' && showSearch.value)
+    || (panel === 'toc' && showToc.value)
+    || (panel === 'bookmarks' && showBookmarks.value)
+    || (panel === 'highlights' && showHighlights.value)
+  if (isOpen) {
+    closeAllPanels()
+  } else {
+    activatePanelTab(panel)
   }
 }
 
 const closeAllPanels = () => {
+  showSearch.value = false
   showToc.value = false
   showBookmarks.value = false
   showHighlights.value = false
+  clearCurrentSearchHighlight()
 }
 
 const jumpToTextChapter = async (
@@ -1828,6 +2723,8 @@ const goToTocItem = async (item: Chapter | any) => {
     await rendition.display(item.href)
   } else if (book.value?.format === 'txt' || book.value?.format === 'md') {
     await jumpToTextChapter(item)
+  } else if (book.value?.format === 'pdf' && item.page) {
+    await pdfReader.value?.goToPage(item.page)
   }
 }
 
@@ -1849,6 +2746,10 @@ const turnPrevious = () => {
     prevPage()
     return
   }
+  if (book.value?.format === 'pdf') {
+    pdfReader.value?.previous()
+    return
+  }
   if ((book.value?.format === 'txt' || book.value?.format === 'md') && isPaginationMode.value) {
     prevTextPage()
     return
@@ -1863,6 +2764,10 @@ const turnNext = () => {
     nextPage()
     return
   }
+  if (book.value?.format === 'pdf') {
+    pdfReader.value?.next()
+    return
+  }
   if ((book.value?.format === 'txt' || book.value?.format === 'md') && isPaginationMode.value) {
     nextTextPage()
     return
@@ -1875,9 +2780,24 @@ const goBack = () => {
   router.back()
 }
 
-const handleDownload = () => {
+const handleDownload = async () => {
   if (!book.value) return
-  window.open(withVersion(`/api/books/${book.value.id}/content`), '_blank')
+  try {
+    const response = await api.get(withVersion(`/api/books/${book.value.id}/content`), {
+      responseType: 'blob',
+    })
+    const downloadUrl = URL.createObjectURL(response.data)
+    const anchor = document.createElement('a')
+    anchor.href = downloadUrl
+    anchor.download = `${book.value.title || 'book'}.${book.value.format || 'bin'}`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0)
+  } catch (error) {
+    console.error('Failed to download book:', error)
+    message.error('下载失败，请稍后重试')
+  }
 }
 
 const toggleFullscreen = () => {
@@ -2018,9 +2938,12 @@ watch(currentPageContent, () => {
   if (isPaginationMode.value) {
     nextTick(() => {
       checkAndAdjustPageSize()
+      renderDocumentHighlights()
     })
   }
 })
+
+watch(htmlContent, () => nextTick(renderDocumentHighlights))
 
 // 监听窗口大小变化
 const handleResize = () => {
@@ -2030,7 +2953,10 @@ const handleResize = () => {
       currentPage.value = Math.max(0, totalPages.value - 1)
     }
   }
-  nextTick(handleScroll)
+  nextTick(() => {
+    handleScroll()
+    renderAllHighlights()
+  })
 }
 
 const initializeReader = async () => {
@@ -2062,10 +2988,11 @@ const initializeReader = async () => {
 onMounted(() => {
   void initializeReader()
   document.addEventListener('keydown', handleKeydown)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('resize', handleResize)
 
   // 禁用父容器的滚动，让 reader-body 自己处理滚动
-  const layoutMain = document.querySelector('.layout-main')
+  const layoutMain = document.querySelector<HTMLElement>('.layout-main')
   if (layoutMain) {
     layoutMain.style.overflow = 'hidden'
   }
@@ -2076,10 +3003,20 @@ onBeforeUnmount(() => {
     clearTimeout(saveTimer)
     saveTimer = null
   }
+  if (readingHeartbeatTimer) {
+    clearInterval(readingHeartbeatTimer)
+    readingHeartbeatTimer = null
+  }
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+    searchTimer = null
+  }
+  searchSequence += 1
 
   const token = localStorage.getItem('token')
 
-  if (book.value && progress.value > 0 && token) {
+  const finalLocator = createCurrentLocator(progress.value)
+  if (book.value && token) {
     fetch(withVersion(`/api/reading-progress/book/${book.value.id}`), {
       method: 'POST',
       keepalive: true,
@@ -2092,26 +3029,15 @@ onBeforeUnmount(() => {
           ? savedCfi.value || ''
           : currentChapterName.value || '',
         currentChapterTitle: currentChapterName.value || '',
-        chapterProgress: 0,
-        totalProgress: Math.round(progress.value)
+        chapterProgress: finalLocator?.chapterProgress || 0,
+        totalProgress: Math.round(progress.value),
+        locator: finalLocator ? JSON.stringify(finalLocator) : null,
       })
     })
   }
 
-  if (book.value && readingStartTime > 0 && token) {
-    const elapsedSeconds = Math.floor((Date.now() - readingStartTime) / 1000)
-    if (elapsedSeconds >= 5) {
-      fetch(withVersion(`/api/reading-progress/book/${book.value.id}/time`), {
-        method: 'PUT',
-        keepalive: true,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ seconds: elapsedSeconds })
-      })
-    }
-  }
+  pauseReadingClock()
+  void saveReadingTime(true)
 
   if (bookInstance) {
     clearEpubKeyboardBindings()
@@ -2121,10 +3047,14 @@ onBeforeUnmount(() => {
   }
 
   document.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('resize', handleResize)
+  clearDocumentHighlights()
+  clearCurrentSearchHighlight()
+  pdfSource.value = null
 
   // 恢复父容器的滚动
-  const layoutMain = document.querySelector('.layout-main')
+  const layoutMain = document.querySelector<HTMLElement>('.layout-main')
   if (layoutMain) {
     layoutMain.style.overflow = ''
   }
@@ -2157,7 +3087,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--text-primary);
   gap: var(--spacing-md);
 }
 
@@ -2165,10 +3095,17 @@ onBeforeUnmount(() => {
   display: inline-block;
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
+  border: 3px solid var(--primary-alpha-20);
+  border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+
+.reader-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2300;
+  background: var(--surface-elevated);
 }
 
 @keyframes spin {
@@ -2180,6 +3117,94 @@ onBeforeUnmount(() => {
 .empty-icon {
   font-size: 64px;
   opacity: 0.5;
+}
+
+.empty-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.highlight-editor-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2400;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.3);
+  backdrop-filter: blur(8px);
+}
+
+.highlight-editor {
+  width: min(460px, 100%);
+  padding: 20px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 22px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+}
+
+.highlight-editor header,
+.highlight-editor footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.highlight-editor header p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.highlight-color-options {
+  display: flex;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.highlight-color-options button {
+  width: 34px;
+  height: 34px;
+  border: 3px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.highlight-color-options button.active {
+  border-color: var(--primary);
+  outline: 2px solid var(--surface-elevated);
+  box-shadow: 0 0 0 4px var(--primary-alpha-20);
+}
+
+.highlight-editor textarea {
+  width: 100%;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  resize: vertical;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  outline: none;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.6;
+}
+
+.highlight-editor textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-alpha-10);
+}
+
+.highlight-editor footer {
+  justify-content: flex-end;
 }
 
 /* 阅读器内容 */
@@ -2399,21 +3424,51 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   border-bottom: 1px solid var(--border-color-light);
-  padding: 0 var(--spacing-sm);
+  gap: 6px;
+  padding: 8px;
   background: var(--surface-card);
 }
 
-.tab-btn {
+.panel-tabs-nav {
+  position: relative;
+  display: grid;
   flex: 1;
-  padding: var(--spacing-md) var(--spacing-sm);
+  grid-template-columns: repeat(var(--panel-tab-count), minmax(0, 1fr));
+  padding: 3px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+}
+
+.panel-tab-indicator {
+  position: absolute;
+  z-index: 0;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / var(--panel-tab-count));
+  border: 1px solid var(--border-color-light);
+  border-radius: 9px;
+  background: var(--surface-elevated);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
+  transform: translateX(calc(var(--panel-tab-index) * 100%));
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.tab-btn {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  padding: 7px 4px;
   border: none;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  border-bottom: 2px solid transparent;
+  transition: color var(--transition-fast);
 }
 
 .tab-btn:hover {
@@ -2422,7 +3477,11 @@ onBeforeUnmount(() => {
 
 .tab-btn.active {
   color: var(--primary);
-  border-bottom-color: var(--primary);
+}
+
+.tab-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
 }
 
 .close-panel {
@@ -2440,6 +3499,102 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow-y: auto;
   padding: var(--spacing-md);
+}
+
+.reader-search-form {
+  display: flex;
+  gap: 8px;
+}
+
+.reader-search-form input {
+  min-width: 0;
+  flex: 1;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  outline: none;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.reader-search-form input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-alpha-10);
+}
+
+.reader-search-form button {
+  min-width: 58px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--primary);
+  color: white;
+  cursor: pointer;
+}
+
+.reader-search-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.search-summary,
+.search-error {
+  padding: 10px 2px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.search-error {
+  color: var(--danger);
+}
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-result-item:hover,
+.search-result-item.active {
+  border-color: var(--primary-alpha-30);
+  background: var(--primary-alpha-10);
+}
+
+.search-result-location {
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.search-result-excerpt {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-tab-indicator {
+    transition: none;
+  }
 }
 
 /* 目录样式 */
@@ -2716,12 +3871,7 @@ onBeforeUnmount(() => {
 .reader-pdf {
   width: 100%;
   height: 100%;
-}
-
-.pdf-frame {
-  width: 100%;
-  height: 100%;
-  border: none;
+  min-height: 0;
 }
 
 .reader-placeholder {

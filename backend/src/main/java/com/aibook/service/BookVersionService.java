@@ -246,6 +246,7 @@ public class BookVersionService {
                     .user(legacy.getUser())
                     .currentChapter(legacy.getCurrentChapter())
                     .currentChapterTitle(legacy.getCurrentChapterTitle())
+                    .locator(legacy.getLocator())
                     .chapterProgress(legacy.getChapterProgress())
                     .totalProgress(legacy.getTotalProgress())
                     .readingTimeSeconds(legacy.getReadingTimeSeconds())

@@ -14,6 +14,7 @@ import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
 import com.aibook.service.BookCoverService;
+import com.aibook.service.BookHtmlSanitizer;
 import com.aibook.service.BookParsingService;
 import com.aibook.service.BookService;
 import com.aibook.service.BookVersionRebuildTaskService;
@@ -78,6 +79,7 @@ public class BookController {
     private final BookVersionService bookVersionService;
     private final BookVersionRebuildTaskService bookVersionRebuildTaskService;
     private final OperationLogService operationLogService;
+    private final BookHtmlSanitizer bookHtmlSanitizer;
 
     /**
      * 获取书籍列表
@@ -513,6 +515,24 @@ public class BookController {
             log.error("处理TXT内容失败: {}", filePath, e);
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    /** 返回移除脚本、事件属性、表单和远程资源后的 HTML 阅读内容。 */
+    @GetMapping("/{id}/content-sanitized")
+    public ResponseEntity<Map<String, String>> getSanitizedContent(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestParam(required = false) Long versionId) throws IOException {
+        User user = userService.findByUsername(authentication.getName());
+        Book book = bookService.getBookEntity(id, user);
+        BookVersion version = bookVersionService.resolveVersion(book, versionId);
+        if (!"html".equalsIgnoreCase(version.getFormat())
+                && !"htm".equalsIgnoreCase(version.getFormat())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "仅 HTML 版本支持安全内容接口"));
+        }
+        Path filePath = Paths.get(version.getFilePath());
+        if (!Files.isRegularFile(filePath)) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(Map.of("html", bookHtmlSanitizer.sanitize(Files.readString(filePath))));
     }
 
     /**

@@ -439,6 +439,7 @@ public class BookVersionAggregationService {
         if (isLater(duplicateProgress.getLastReadAt(), primaryProgress.getLastReadAt())) {
             primaryProgress.setCurrentChapter(duplicateProgress.getCurrentChapter());
             primaryProgress.setCurrentChapterTitle(duplicateProgress.getCurrentChapterTitle());
+            primaryProgress.setLocator(duplicateProgress.getLocator());
             primaryProgress.setChapterProgress(duplicateProgress.getChapterProgress());
             primaryProgress.setTotalProgress(duplicateProgress.getTotalProgress());
             primaryProgress.setReadingTimeSeconds(duplicateProgress.getReadingTimeSeconds());

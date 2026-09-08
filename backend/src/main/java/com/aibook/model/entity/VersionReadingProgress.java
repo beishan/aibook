@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Column;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
@@ -46,6 +47,10 @@ public class VersionReadingProgress {
 
     private String currentChapterTitle;
 
+    /** 跨格式阅读定位 JSON，保留 CFI、章节地址、文本段落及正文摘要。 */
+    @Column(columnDefinition = "TEXT")
+    private String locator;
+
     @Builder.Default
     private Integer chapterProgress = 0;
 
@@ -54,6 +59,12 @@ public class VersionReadingProgress {
 
     @Builder.Default
     private Long readingTimeSeconds = 0L;
+
+    /** 当前阅读会话及其已累计秒数，用于心跳请求幂等去重。 */
+    private String readingSessionId;
+
+    @Builder.Default
+    private Long readingSessionElapsedSeconds = 0L;
 
     private LocalDateTime lastReadAt;
 

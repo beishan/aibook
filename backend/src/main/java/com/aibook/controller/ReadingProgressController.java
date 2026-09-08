@@ -53,11 +53,12 @@ public class ReadingProgressController {
             Integer.valueOf(body.get("chapterProgress").toString()) : 0;
         Integer totalProgress = body.get("totalProgress") != null ?
             Integer.valueOf(body.get("totalProgress").toString()) : 0;
+        String locator = body.get("locator") == null ? null : body.get("locator").toString();
 
         com.aibook.dto.ReadingProgressDTO progress =
                 readingProgressService.saveProgress(
                         bookId, versionId, user, currentChapter,
-                        currentChapterTitle, chapterProgress, totalProgress);
+                        currentChapterTitle, chapterProgress, totalProgress, locator);
         return ResponseEntity.ok(progress);
     }
 
@@ -69,13 +70,17 @@ public class ReadingProgressController {
             Authentication authentication,
             @PathVariable Long bookId,
             @RequestParam(required = false) Long versionId,
-            @RequestBody Map<String, Long> body) {
+            @RequestBody Map<String, Object> body) {
         User user = userService.findByUsername(authentication.getName());
-        Long additionalSeconds = body.get("seconds");
+        Object secondsValue = body.get("seconds");
+        long seconds = secondsValue instanceof Number number
+                ? number.longValue() : 0L;
+        String sessionId = body.get("sessionId") == null
+                ? null : body.get("sessionId").toString();
 
         com.aibook.dto.ReadingProgressDTO progress =
                 readingProgressService.updateReadingTime(
-                        bookId, versionId, user, additionalSeconds);
+                        bookId, versionId, user, seconds, sessionId);
         return ResponseEntity.ok(progress);
     }
 }

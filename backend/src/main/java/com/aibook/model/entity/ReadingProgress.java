@@ -52,6 +52,10 @@ public class ReadingProgress {
      */
     private String currentChapterTitle;
 
+    /** 当前主聚合进度对应的跨格式阅读定位 JSON。 */
+    @Column(columnDefinition = "TEXT")
+    private String locator;
+
     /**
      * 章节内进度百分比 (0-100)
      */

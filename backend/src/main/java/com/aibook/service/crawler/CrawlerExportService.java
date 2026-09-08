@@ -246,6 +246,7 @@ public class CrawlerExportService {
                 versionProgressRepository.save(VersionReadingProgress.builder().version(current)
                         .user(progress.getUser()).currentChapter(progress.getCurrentChapter())
                         .currentChapterTitle(progress.getCurrentChapterTitle())
+                        .locator(progress.getLocator())
                         .chapterProgress(progress.getChapterProgress()).totalProgress(progress.getTotalProgress())
                         .readingTimeSeconds(progress.getReadingTimeSeconds()).lastReadAt(progress.getLastReadAt()).build()));
     }

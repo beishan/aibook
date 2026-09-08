@@ -54,6 +54,20 @@ public class ReadingProgressService {
             String currentChapterTitle,
             Integer chapterProgress,
             Integer totalProgress) {
+        return saveProgress(bookId, versionId, user, currentChapter,
+                currentChapterTitle, chapterProgress, totalProgress, null);
+    }
+
+    @Transactional
+    public com.aibook.dto.ReadingProgressDTO saveProgress(
+            Long bookId,
+            Long versionId,
+            User user,
+            String currentChapter,
+            String currentChapterTitle,
+            Integer chapterProgress,
+            Integer totalProgress,
+            String locator) {
         Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElseThrow(() -> new RuntimeException("书籍不存在"));
         BookVersion version = bookVersionService.resolveVersion(book, versionId);
@@ -74,12 +88,13 @@ public class ReadingProgressService {
             // 兼容尚未传递独立章节标题的文本阅读客户端。
             progress.setCurrentChapterTitle(currentChapter);
         }
-        progress.setChapterProgress(chapterProgress);
-        progress.setTotalProgress(totalProgress);
+        progress.setLocator(locator);
+        progress.setChapterProgress(percent(chapterProgress));
+        progress.setTotalProgress(percent(totalProgress));
         progress.setLastReadAt(LocalDateTime.now());
 
         // 保存进度即表示用户已经开始阅读；即使首屏进度仍为 0，也应进入“正在阅读”。
-        if (totalProgress != null && totalProgress >= 100) {
+        if (percent(totalProgress) >= 100) {
             book.setReadingStatus(Book.ReadingStatus.FINISHED);
         } else {
             book.setReadingStatus(Book.ReadingStatus.READING);
@@ -97,6 +112,12 @@ public class ReadingProgressService {
     @Transactional
     public com.aibook.dto.ReadingProgressDTO updateReadingTime(
             Long bookId, Long versionId, User user, long additionalSeconds) {
+        return updateReadingTime(bookId, versionId, user, additionalSeconds, null);
+    }
+
+    @Transactional
+    public com.aibook.dto.ReadingProgressDTO updateReadingTime(
+            Long bookId, Long versionId, User user, long seconds, String sessionId) {
         Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElseThrow(() -> new RuntimeException("书籍不存在"));
         BookVersion version = bookVersionService.resolveVersion(book, versionId);
@@ -108,9 +129,21 @@ public class ReadingProgressService {
                         .user(user)
                         .build());
 
-        long currentSeconds = progress.getReadingTimeSeconds() == null
-                ? 0L : progress.getReadingTimeSeconds();
-        progress.setReadingTimeSeconds(currentSeconds + additionalSeconds);
+        long currentSeconds = progress.getReadingTimeSeconds() == null ? 0L : progress.getReadingTimeSeconds();
+        long safeSeconds = Math.max(0L, Math.min(seconds, 86_400L));
+        if (sessionId != null && !sessionId.isBlank()) {
+            String normalizedSessionId = sessionId.length() > 100
+                    ? sessionId.substring(0, 100) : sessionId;
+            long previousElapsed = normalizedSessionId.equals(progress.getReadingSessionId())
+                    && progress.getReadingSessionElapsedSeconds() != null
+                    ? progress.getReadingSessionElapsedSeconds() : 0L;
+            progress.setReadingTimeSeconds(currentSeconds + Math.max(0L, safeSeconds - previousElapsed));
+            progress.setReadingSessionId(normalizedSessionId);
+            progress.setReadingSessionElapsedSeconds(Math.max(previousElapsed, safeSeconds));
+        } else {
+            // 保持 KOReader 等旧客户端按增量秒数上报的兼容行为。
+            progress.setReadingTimeSeconds(currentSeconds + safeSeconds);
+        }
         progress.setLastReadAt(LocalDateTime.now());
 
         // 某些阅读器会先上报阅读时长再上报页面进度，同样应出现在“正在阅读”中。
@@ -141,6 +174,7 @@ public class ReadingProgressService {
                         .build());
         aggregate.setCurrentChapter(versionProgress.getCurrentChapter());
         aggregate.setCurrentChapterTitle(versionProgress.getCurrentChapterTitle());
+        aggregate.setLocator(versionProgress.getLocator());
         aggregate.setChapterProgress(versionProgress.getChapterProgress());
         aggregate.setTotalProgress(versionProgress.getTotalProgress());
         aggregate.setReadingTimeSeconds(versionProgress.getReadingTimeSeconds());
@@ -155,6 +189,7 @@ public class ReadingProgressService {
                 .versionId(version.getId())
                 .currentChapter("")
                 .currentChapterTitle("")
+                .locator(null)
                 .chapterProgress(0)
                 .totalProgress(0)
                 .readingTimeSeconds(0L)
@@ -169,6 +204,7 @@ public class ReadingProgressService {
                 .versionId(progress.getVersion().getId())
                 .currentChapter(progress.getCurrentChapter())
                 .currentChapterTitle(progress.getCurrentChapterTitle())
+                .locator(progress.getLocator())
                 .chapterProgress(progress.getChapterProgress())
                 .totalProgress(progress.getTotalProgress())
                 .readingTimeSeconds(progress.getReadingTimeSeconds())
@@ -176,5 +212,9 @@ public class ReadingProgressService {
                 .createdAt(progress.getCreatedAt())
                 .updatedAt(progress.getUpdatedAt())
                 .build();
+    }
+
+    private int percent(Integer value) {
+        return value == null ? 0 : Math.max(0, Math.min(100, value));
     }
 }

@@ -13,6 +13,7 @@ public class ReadingProgressDTO {
     private Long versionId;
     private String currentChapter;
     private String currentChapterTitle;
+    private String locator;
     private Integer chapterProgress;
     private Integer totalProgress;
     private Long readingTimeSeconds;

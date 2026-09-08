@@ -41,7 +41,14 @@ public class SecurityConfig {
                                            JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
-            .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()))
+            .headers(headers -> headers
+                .frameOptions(frameOptions -> frameOptions.sameOrigin())
+                .contentSecurityPolicy(csp -> csp.policyDirectives(
+                    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; "
+                    + "style-src 'self' 'unsafe-inline'; "
+                    + "img-src 'self' data: blob:; font-src 'self' data: blob:; "
+                    + "connect-src 'self'; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; "
+                    + "base-uri 'self'; frame-ancestors 'self'")))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(new ApiAuthenticationEntryPoint())
