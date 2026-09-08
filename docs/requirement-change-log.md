@@ -22,6 +22,18 @@
 
 ## 变更记录
 
+### REQ-20260908-005 EPUB 双阅读引擎与 Readium 实验支持
+
+- 需求时间：2026-09-08
+- 完成时间：2026-09-08
+- 状态：已完成
+- 应用版本：`1.22.0`
+- 需求内容：建立统一 `ReaderEngine` 接口，保留现有 epub.js 阅读能力，同时引入 Readium 作为可切换的 EPUB 阅读引擎。
+- 完成情况：EPUB 默认继续使用功能完整的 epub.js 稳定引擎；阅读设置新增 macOS 26 风格的引擎分段选择，可切换 Readium 实验引擎。两种引擎统一接入打开、销毁、前后翻页、目录定位、当前位置、显示设置和能力声明；切换时保留当前位置，Readium 初始化失败会自动回退 epub.js。Readium 已支持章节阅读、资源加载、单双页、字体/字号/行距/段距/缩进/主题、目录、阅读进度和 Readium 原生书签；搜索与高亮明确保留在 epub.js，界面会给出切换提示。
+- 开源调研：引入 Readium TypeScript Toolkit 官方 `@readium/navigator 2.8.2`、`@readium/shared 2.4.0` 与 `@readium/navigator-html-injectables 2.6.3`，均为 BSD-3-Clause 许可证、Node.js 18+，按需动态加载，不增加独立服务。Readium Web 工具链仍处于持续演进期，因此作为实验引擎而非替换默认引擎。
+- 主要改动：新增 `ReaderEngine` 契约、epub.js 兼容适配器和 Readium 实现；后端从 EPUB container/OPF/spine 生成 Readium Web Publication Manifest；新增沙箱 iframe 资源通道，以四小时滑动过期的随机不透明令牌替代 JWT URL，并限制令牌数量、文件路径越界、XML 外部实体和单资源解压大小；新增 Readium Manifest/资源测试与双引擎依赖兼容检查；应用次版本升级至 1.22.0。
+- 验证结果：前端 Vite 生产构建通过（2211 个模块），Readium 独立延迟加载；双引擎兼容检查通过；`npm audit --omit=dev` 为 0 项生产漏洞；后端 Readium Manifest、spine 顺序、资源 MIME/ETag 与路径越界专项测试通过，后端跳过测试打包通过。完整后端测试在既有 `CoverControllerTest` 的 Java 26 原生 `SIGABRT` 处终止，终止前未出现断言失败；`vue-tsc` 仍因项目现有版本与 Node 24/TypeScript 不兼容而在启动阶段退出。
+
 ### REQ-20260908-004 epub.js 传递依赖安全修复与兼容验证
 
 - 需求时间：2026-09-08

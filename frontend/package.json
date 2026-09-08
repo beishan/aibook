@@ -1,6 +1,6 @@
 {
   "name": "aibook-frontend",
-  "version": "1.21.1",
+  "version": "1.22.0",
   "description": "汗牛充栋 - 阅读书籍管理系统前端",
   "type": "module",
   "scripts": {
@@ -8,10 +8,14 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:epub-compat": "node scripts/check-epubjs-compat.mjs",
+    "test:reader-engines": "npm run test:epub-compat && node scripts/check-reader-engines.mjs",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
+    "@readium/navigator": "^2.8.2",
+    "@readium/navigator-html-injectables": "^2.6.3",
+    "@readium/shared": "^2.4.0",
     "axios": "^1.6.0",
     "element-plus": "^2.4.0",
     "epubjs": "^0.3.93",

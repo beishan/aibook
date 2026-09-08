@@ -481,6 +481,41 @@
               <!-- 阅读设置 -->
               <div class="setting-section">
                 <h4 class="section-title">阅读偏好</h4>
+                <div v-if="book?.format === 'epub'" class="form-group">
+                  <label class="form-label">EPUB 阅读引擎</label>
+                  <div
+                    class="engine-segmented"
+                    :class="`engine-segmented--${settings.epubEngine}`"
+                    role="radiogroup"
+                    aria-label="EPUB 阅读引擎"
+                    @keydown="handleEngineKeydown"
+                  >
+                    <span class="engine-segmented-indicator" aria-hidden="true"></span>
+                    <button
+                      type="button"
+                      role="radio"
+                      :aria-checked="settings.epubEngine === 'epubjs'"
+                      :tabindex="settings.epubEngine === 'epubjs' ? 0 : -1"
+                      :class="{ active: settings.epubEngine === 'epubjs' }"
+                      @click="settings.epubEngine = 'epubjs'"
+                    >
+                      epub.js（稳定）
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      :aria-checked="settings.epubEngine === 'readium'"
+                      :tabindex="settings.epubEngine === 'readium' ? 0 : -1"
+                      :class="{ active: settings.epubEngine === 'readium' }"
+                      @click="settings.epubEngine = 'readium'"
+                    >
+                      Readium（实验）
+                    </button>
+                  </div>
+                  <p class="engine-setting-hint">
+                    Readium 已支持阅读、目录、进度与主题；书内搜索和高亮请暂时使用稳定引擎。
+                  </p>
+                </div>
                 <div class="form-group">
                   <label class="form-label">屏幕模式</label>
                   <div class="screen-mode-options">
@@ -587,6 +622,13 @@ import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useFontStore } from '@/stores/font'
 import PdfReader from '@/components/reader/PdfReader.vue'
+import { EpubJsReaderEngine } from '@/reader/EpubJsReaderEngine'
+import { ReadiumReaderEngine } from '@/reader/ReadiumReaderEngine'
+import type {
+  ReaderEngine,
+  ReaderEngineLocator,
+  ReaderEngineSettings,
+} from '@/reader/ReaderEngine'
 import api from '@/utils/api'
 import { message, confirm } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'
@@ -646,6 +688,8 @@ interface Highlight {
 
 interface ReaderLocator {
   format: string
+  engine?: 'epubjs' | 'readium'
+  engineLocator?: unknown
   cfi?: string
   href?: string
   textIndex?: number
@@ -760,6 +804,7 @@ let searchSequence = 0
 const epubContainer = ref<HTMLElement>()
 let bookInstance: any = null
 let rendition: any = null
+let activeEpubEngine: ReaderEngine | null = null
 const epubKeyboardDocuments = new Set<Document>()
 
 const pdfReader = ref<InstanceType<typeof PdfReader>>()
@@ -855,6 +900,7 @@ const getThemePreviewStyle = (theme: any) => {
 const SETTINGS_STORAGE_KEY = 'ai-book-reader-settings'
 
 const settings = ref({
+  epubEngine: 'epubjs' as 'epubjs' | 'readium',
   fontFamily: 'default',
   fontSize: 16,
   lineHeight: 1.8,
@@ -989,6 +1035,17 @@ const saveReaderSettings = () => {
   try {
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings.value))
   } catch (e) { /* ignore */ }
+}
+
+const handleEngineKeydown = (event: KeyboardEvent) => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  const group = event.currentTarget as HTMLElement | null
+  const nextEngine = event.key === 'ArrowLeft' || event.key === 'Home' ? 'epubjs' : 'readium'
+  settings.value.epubEngine = nextEngine
+  nextTick(() => {
+    group?.querySelector<HTMLElement>(`button[aria-checked="true"]`)?.focus()
+  })
 }
 
 // 翻页模式相关计算
@@ -1329,12 +1386,7 @@ const retryLoadBook = async () => {
   searchCompleted.value = false
   searchError.value = ''
   clearCurrentSearchHighlight()
-  if (bookInstance) {
-    clearEpubKeyboardBindings()
-    bookInstance.destroy()
-    bookInstance = null
-    rendition = null
-  }
+  await destroyEpubEngine()
   await loadBook()
 }
 
@@ -1663,10 +1715,13 @@ const handleAddBookmark = async () => {
       chapterIndex: getCurrentBookmarkChapterIndex(),
     }
 
-    if (book.value.format === 'epub' && rendition) {
-      const location = rendition.currentLocation()
-      if (location?.start?.cfi) {
-        bookmarkData.cfi = location.start.cfi
+    if (book.value.format === 'epub') {
+      const engineLocation = activeEpubEngine?.getCurrentLocator()
+      if (activeEpubEngine?.kind === 'readium' && engineLocation?.raw) {
+        bookmarkData.cfi = `readium:${JSON.stringify(engineLocation.raw)}`
+      } else if (rendition) {
+        const location = rendition.currentLocation()
+        if (location?.start?.cfi) bookmarkData.cfi = location.start.cfi
       }
     } else if (book.value.format === 'pdf') {
       bookmarkData.page = pdfCurrentPage.value
@@ -1689,8 +1744,18 @@ const handleAddBookmark = async () => {
  * 跳转到书签位置
  */
 const handleGotoBookmark = async (bookmark: Bookmark) => {
-  if (book.value?.format === 'epub' && bookmark.cfi && rendition) {
-    await rendition.display(bookmark.cfi)
+  if (book.value?.format === 'epub' && bookmark.cfi) {
+    if (bookmark.cfi.startsWith('readium:') && activeEpubEngine?.kind === 'readium') {
+      try {
+        await activeEpubEngine.goTo({ raw: JSON.parse(bookmark.cfi.slice(8)) })
+      } catch {
+        message.error('该 Readium 书签已损坏')
+      }
+    } else if (rendition) {
+      await rendition.display(bookmark.cfi)
+    } else {
+      message.warning('此书签由 epub.js 创建，请先切换到稳定引擎')
+    }
   } else if (book.value?.format === 'pdf' && bookmark.page) {
     await pdfReader.value?.goToPage(bookmark.page)
   } else if (bookmark.scrollPosition !== undefined) {
@@ -1832,6 +1897,20 @@ const visibleTextIndex = () => {
 const createCurrentLocator = (totalProgress = progress.value): ReaderLocator | null => {
   if (!book.value) return null
   if (book.value.format === 'epub') {
+    const engineLocation = activeEpubEngine?.getCurrentLocator()
+    if (activeEpubEngine?.kind === 'readium' && engineLocation) {
+      return {
+        format: 'epub',
+        engine: 'readium',
+        engineLocator: engineLocation.raw,
+        href: engineLocation.href,
+        chapterTitle: engineLocation.title || currentChapterName.value || undefined,
+        chapterProgress: Math.round((engineLocation.progression || 0) * 100),
+        totalProgress: Math.round(
+          (engineLocation.totalProgression ?? totalProgress / 100) * 100,
+        ),
+      }
+    }
     const location = rendition?.currentLocation?.()
     const displayed = location?.start?.displayed
     const chapterProgress = displayed?.total > 0
@@ -1839,6 +1918,7 @@ const createCurrentLocator = (totalProgress = progress.value): ReaderLocator | n
       : 0
     return {
       format: 'epub',
+      engine: 'epubjs',
       cfi: location?.start?.cfi || savedCfi.value || undefined,
       href: location?.start?.href || currentTocHref.value || undefined,
       chapterTitle: currentChapterName.value || undefined,
@@ -2241,7 +2321,107 @@ const handlePdfError = (error: string) => {
   console.error('[Reader] PDF reader error:', error)
 }
 
+const toEngineSettings = (): ReaderEngineSettings => {
+  const colors = getResolvedColors(settings.value.backgroundColor)
+  return {
+    fontFamily: resolveReaderFontFamily(settings.value.fontFamily),
+    fontSize: Number(settings.value.fontSize),
+    lineHeight: Number(settings.value.lineHeight),
+    paragraphSpacing: Number(settings.value.paragraphSpacing),
+    backgroundColor: colors.bg,
+    textColor: colors.text,
+    paragraphIndent: settings.value.textIndent,
+    columnCount: settings.value.screenMode === 'double' ? 2 : 1,
+  }
+}
+
+const destroyEpubEngine = async () => {
+  clearEpubKeyboardBindings()
+  const engine = activeEpubEngine
+  activeEpubEngine = null
+  if (engine) {
+    try {
+      await engine.destroy()
+    } catch (error) {
+      console.warn('[Reader] Failed to destroy EPUB engine:', error)
+    }
+  } else if (bookInstance) {
+    bookInstance.destroy()
+  }
+  bookInstance = null
+  rendition = null
+  if (epubContainer.value) epubContainer.value.replaceChildren()
+}
+
+const loadReadiumToc = async () => {
+  const response = await api.get(withVersion(`/api/books/${book.value.id}/toc`))
+  tocItems.value = (response.data || []).map((item: any, index: number) => ({
+    title: item.title || `章节 ${index + 1}`,
+    label: item.title || `章节 ${index + 1}`,
+    index,
+    href: item.href,
+    level: item.depth || 0,
+  }))
+}
+
+const handleReadiumPosition = (locator: ReaderEngineLocator) => {
+  const tocItem = locator.href ? findEpubTocItem(locator.href) : undefined
+  if (tocItem) {
+    currentChapterName.value = tocItem.title
+    currentTocHref.value = tocItem.href || ''
+  }
+  const total = locator.totalProgression != null
+    ? Math.round(locator.totalProgression * 100)
+    : progress.value
+  progress.value = Math.max(0, Math.min(100, total))
+  currentLocation.value = locator.position ? `位置 ${locator.position}` : ''
+  saveProgress(progress.value, currentChapterName.value, createCurrentLocator(progress.value))
+}
+
+const initReadium = async (progressReady: Promise<void>) => {
+  await progressReady
+  await loadReadiumToc()
+  if (!epubContainer.value || !selectedVersionId.value) {
+    throw new Error('Readium 阅读容器或书籍版本不可用')
+  }
+  const initial = savedLocator.value?.format === 'epub'
+    ? {
+        href: savedLocator.value.href,
+        totalProgression: savedLocator.value.totalProgress / 100,
+        raw: savedLocator.value.engine === 'readium'
+          ? savedLocator.value.engineLocator
+          : undefined,
+      }
+    : null
+  activeEpubEngine = await ReadiumReaderEngine.create({
+    manifestUrl: `/api/books/${book.value.id}/readium/${selectedVersionId.value}/manifest.json`,
+    token: localStorage.getItem('token'),
+    container: epubContainer.value,
+    initialLocator: initial,
+    settings: toEngineSettings(),
+  }, {
+    onPositionChanged: handleReadiumPosition,
+    onError: error => console.error('[Reader] Readium error:', error),
+  })
+}
+
 const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
+  if (settings.value.epubEngine === 'readium') {
+    try {
+      await initReadium(progressReady)
+      return
+    } catch (error) {
+      console.error('[Reader] Readium initialization failed, falling back to epub.js:', error)
+      settings.value.epubEngine = 'epubjs'
+      saveReaderSettings()
+      message.warning('Readium 无法打开此书，已自动切换到 epub.js')
+      if (epubContainer.value) epubContainer.value.replaceChildren()
+    }
+  }
+  await initEpubJs(progressReady)
+}
+
+const initEpubJs = async (progressReady: Promise<void> = Promise.resolve()) => {
   try {
     const token = localStorage.getItem('token')
     const contentVersion = encodeURIComponent(
@@ -2287,6 +2467,7 @@ const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
       spread: spreadMode,
       allowScriptedContent: false,
     })
+    activeEpubEngine = new EpubJsReaderEngine(bookInstance, rendition, applyEpubTheme)
 
     rendition.on('relocated', (location: any) => {
       if (location && location.start) {
@@ -2339,6 +2520,14 @@ const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
         await rendition.display(savedLocator.value.cfi)
       } catch (e) {
         console.error('[Reader] Failed to restore locator CFI, falling back:', e)
+        await rendition.display(savedCfi.value || undefined)
+      }
+    } else if (savedLocator.value?.engine === 'readium' && savedLocator.value.href) {
+      const legacyHref = savedLocator.value.href.replace(/^resources\//, '')
+      try {
+        await rendition.display(legacyHref)
+      } catch (e) {
+        console.error('[Reader] Failed to restore Readium href in epub.js:', e)
         await rendition.display(savedCfi.value || undefined)
       }
     } else if (savedCfi.value) {
@@ -2564,6 +2753,10 @@ const runSearchNow = async () => {
     } else if (book.value.format === 'html') {
       results = searchHtml(query)
     } else if (book.value.format === 'epub') {
+      if (activeEpubEngine?.kind === 'readium') {
+        searchError.value = 'Readium 实验引擎暂不支持书内搜索，可在阅读设置中切回 epub.js'
+        return
+      }
       results = await searchEpub(query, sequence)
     } else if (book.value.format === 'pdf') {
       const pdfResults = await pdfReader.value?.search(query, SEARCH_RESULT_LIMIT) || []
@@ -2717,10 +2910,10 @@ const jumpToTextChapter = async (
 }
 
 const goToTocItem = async (item: Chapter | any) => {
-  if (book.value?.format === 'epub' && rendition) {
+  if (book.value?.format === 'epub' && activeEpubEngine) {
     currentChapterName.value = item.title
     currentTocHref.value = item.href
-    await rendition.display(item.href)
+    await activeEpubEngine.goTo({ href: item.href, title: item.title })
   } else if (book.value?.format === 'txt' || book.value?.format === 'md') {
     await jumpToTextChapter(item)
   } else if (book.value?.format === 'pdf' && item.page) {
@@ -2729,15 +2922,11 @@ const goToTocItem = async (item: Chapter | any) => {
 }
 
 const prevPage = () => {
-  if (rendition) {
-    rendition.prev()
-  }
+  void activeEpubEngine?.previous()
 }
 
 const nextPage = () => {
-  if (rendition) {
-    rendition.next()
-  }
+  void activeEpubEngine?.next()
 }
 
 const turnPrevious = () => {
@@ -2904,7 +3093,11 @@ const formatTime = (timeStr: string) => {
 }
 
 watch(() => settings.value, () => {
-  applyEpubTheme()
+  if (activeEpubEngine) {
+    void activeEpubEngine.applySettings(toEngineSettings()).catch(error => {
+      console.warn('[Reader] Failed to apply EPUB settings:', error)
+    })
+  }
   saveReaderSettings()
   updateTotalPages()
 }, { deep: true })
@@ -2921,10 +3114,24 @@ watch(isPaginationMode, (newVal) => {
 })
 
 // 监听屏幕模式变化（EPUB）
-watch(() => settings.value.screenMode, (newVal) => {
-  if (book.value?.format === 'epub' && rendition) {
-    const spreadMode = newVal === 'double' ? 'always' : 'none'
-    rendition.spread(spreadMode)
+let switchingEpubEngine = false
+watch(() => settings.value.epubEngine, async (nextEngine, previousEngine) => {
+  if (nextEngine === previousEngine || loading.value || switchingEpubEngine
+      || book.value?.format !== 'epub' || !selectedVersionId.value) return
+  switchingEpubEngine = true
+  loading.value = true
+  savedLocator.value = createCurrentLocator(progress.value)
+  try {
+    await destroyEpubEngine()
+    await nextTick()
+    await initEpub(Promise.resolve())
+    if (activeEpubEngine?.kind === 'epubjs') renderAllHighlights()
+  } catch (error) {
+    console.error('[Reader] Failed to switch EPUB engine:', error)
+    message.error('阅读引擎切换失败')
+  } finally {
+    switchingEpubEngine = false
+    loading.value = false
   }
 })
 
@@ -3039,12 +3246,7 @@ onBeforeUnmount(() => {
   pauseReadingClock()
   void saveReadingTime(true)
 
-  if (bookInstance) {
-    clearEpubKeyboardBindings()
-    bookInstance.destroy()
-    bookInstance = null
-    rendition = null
-  }
+  void destroyEpubEngine()
 
   document.removeEventListener('keydown', handleKeydown)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -3828,6 +4030,13 @@ onBeforeUnmount(() => {
 .epub-container {
   width: 100%;
   height: 100%;
+  position: relative;
+}
+
+.epub-container :deep(.readium-navigator-iframe) {
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 
 .reader-text {
@@ -4167,6 +4376,69 @@ onBeforeUnmount(() => {
 .width-btn.active {
   border-color: var(--primary);
   background: var(--primary-alpha-10);
+}
+
+.engine-segmented {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 4px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.engine-segmented-indicator {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  border: 1px solid var(--border-color-light);
+  border-radius: 10px;
+  background: var(--surface-card);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: transform 220ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.engine-segmented--readium .engine-segmented-indicator {
+  transform: translateX(100%);
+}
+
+.engine-segmented button {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.engine-segmented button.active {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.engine-segmented button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-radius: 10px;
+}
+
+.engine-setting-hint {
+  margin: 8px 2px 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .engine-segmented-indicator {
+    transition: none;
+  }
 }
 
 /* 屏幕模式选项 */
