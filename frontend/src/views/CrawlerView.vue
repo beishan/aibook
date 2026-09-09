@@ -71,7 +71,7 @@
         </div>
       </div>
       <el-empty v-if="!discoveryLoading&&!discoveredBooks.length" description="扫描站点首页后，新发现的书籍会出现在这里" />
-      <div v-if="discoveredTotal" class="discovery-pagination"><span>当前显示 {{ discoveredBooks.length }} 本</span><el-pagination v-model:current-page="discoveryPage" v-model:page-size="discoveryPageSize" :page-sizes="[20,50,100]" :total="discoveredTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadDiscoveredBooks" @size-change="handleDiscoverySizeChange" /></div>
+      <div v-if="discoveredTotal" class="discovery-pagination"><span>当前显示 {{ discoveredBooks.length }} 本</span><el-pagination v-model:current-page="discoveryPage" v-model:page-size="discoveryPageSize" :page-sizes="[20,50,100]" :total="discoveredTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadDiscoveredBooks()" @size-change="handleDiscoverySizeChange" /></div>
     </section>
 
     <section v-else-if="activeTab === 'books'" class="panel" role="tabpanel">
@@ -84,7 +84,7 @@
         <el-table-column label="操作" width="330"><template #default="{row}"><el-button text @click.stop="checkUpdates(row)">检查更新</el-button><el-button text @click.stop="continueCrawl(row)">继续</el-button><el-button text type="primary" :disabled="!row.crawledChapterCount" @click.stop="startTrial(row)">试读</el-button><el-button text @click.stop="generate(row)">生成</el-button><el-button text type="primary" @click.stop="importBook(row)">{{ row.importStatus==='IMPORTED'?'同步入库':'入库' }}</el-button></template></el-table-column>
       </el-table>
       <el-empty v-if="!bookLoading&&!books.length" description="暂无符合条件的采集书籍" />
-      <div v-if="bookTotal" class="list-pagination"><span>当前显示 {{ books.length }} 本</span><el-pagination v-model:current-page="bookPage" v-model:page-size="bookPageSize" :page-sizes="[20,50,100]" :total="bookTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadBooks" @size-change="handleBookSizeChange" /></div>
+      <div v-if="bookTotal" class="list-pagination"><span>当前显示 {{ books.length }} 本</span><el-pagination v-model:current-page="bookPage" v-model:page-size="bookPageSize" :page-sizes="[20,50,100]" :total="bookTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadBooks()" @size-change="handleBookSizeChange" /></div>
     </section>
 
     <section v-else class="panel" role="tabpanel">
@@ -94,8 +94,8 @@
       </div>
       <el-empty v-if="activeTab === 'tasks'&&!taskLoading&&!tasks.length" description="暂无采集任务" />
       <el-empty v-if="activeTab === 'failed'&&!failedTaskLoading&&!failedTasks.length" description="暂无失败任务" />
-      <div v-if="activeTab === 'tasks'&&taskTotal" class="list-pagination"><span>当前显示 {{ tasks.length }} 项</span><el-pagination v-model:current-page="taskPage" v-model:page-size="taskPageSize" :page-sizes="[20,50,100]" :total="taskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadTasks" @size-change="handleTaskSizeChange" /></div>
-      <div v-if="activeTab === 'failed'&&failedTaskTotal" class="list-pagination"><span>当前显示 {{ failedTasks.length }} 项</span><el-pagination v-model:current-page="failedTaskPage" v-model:page-size="failedTaskPageSize" :page-sizes="[20,50,100]" :total="failedTaskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadFailedTasks" @size-change="handleFailedTaskSizeChange" /></div>
+      <div v-if="activeTab === 'tasks'&&taskTotal" class="list-pagination"><span>当前显示 {{ tasks.length }} 项</span><el-pagination v-model:current-page="taskPage" v-model:page-size="taskPageSize" :page-sizes="[20,50,100]" :total="taskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadTasks()" @size-change="handleTaskSizeChange" /></div>
+      <div v-if="activeTab === 'failed'&&failedTaskTotal" class="list-pagination"><span>当前显示 {{ failedTasks.length }} 项</span><el-pagination v-model:current-page="failedTaskPage" v-model:page-size="failedTaskPageSize" :page-sizes="[20,50,100]" :total="failedTaskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadFailedTasks()" @size-change="handleFailedTaskSizeChange" /></div>
     </section>
 
     <el-dialog v-model="siteDialog" :title="editingSite ? '编辑采集网站' : '新增采集网站'" width="min(860px, 96vw)" top="5vh" class="site-editor-dialog" append-to-body destroy-on-close>
@@ -264,6 +264,7 @@ type ChapterSort='indexAsc'|'indexDesc'|'createdDesc'
 type BookDetailTab='chapters'|'logs'
 type SiteEditorTab='basic'|'request'|'validation'|'proxy'|'automation'
 type DiscoveryViewMode='table'|'card'
+type LoadOptions={silent?:boolean;preserveSelection?:boolean}
 const router=useRouter()
 const DISCOVERY_VIEW_MODE_KEY='aibook.crawler.discoveryViewMode'
 const POLLING_INTERVAL_KEY='aibook.crawler.pollingIntervalSeconds'
@@ -326,27 +327,34 @@ async function pollCrawlerProgress(){
   if(!hasActiveTask&&!bookDrawer.value)return
   progressPolling=true
   try{
-    await Promise.all([
-      hasActiveTask?refresh():Promise.resolve(),
-      bookDrawer.value?syncOpenBookProgress():Promise.resolve(),
-    ])
+    const requests:Promise<unknown>[]=[]
+    if(hasActiveTask){
+      requests.push(crawlerApi.dashboard().then(data=>{dashboard.value=data}))
+      requests.push(loadTasks({silent:true}))
+      if(activeTab.value==='sites')requests.push(crawlerApi.sites().then(data=>{sites.value=data}))
+      if(activeTab.value==='discovered')requests.push(loadDiscoveredBooks({silent:true,preserveSelection:true}))
+      if(activeTab.value==='books')requests.push(loadBooks({silent:true}))
+      if(activeTab.value==='failed')requests.push(loadFailedTasks({silent:true}))
+    }
+    if(bookDrawer.value)requests.push(syncOpenBookProgress({silent:true}))
+    await Promise.all(requests)
   }catch{
     // 后台轮询失败不打断当前页面交互，下一轮会自动重试。
   }finally{progressPolling=false}
 }
-async function syncOpenBookProgress(){
+async function syncOpenBookProgress(options:LoadOptions={}){
   const bookId=selectedBook.value?.id
   if(!bookDrawer.value||!bookId)return
   const requestSequence=++chapterRequestSequence
-  chapterLoading.value=true
+  if(!options.silent)chapterLoading.value=true
   try{
     const [latestBook,latestChapters,latestLogs,latestFocus]=await Promise.all([crawlerApi.book(bookId),crawlerApi.chapters(bookId,{page:chapterPage.value-1,size:chapterPageSize.value,sort:chapterSortApiValue(chapterSort.value)}),crawlerApi.logs(bookId),followCurrentChapter.value?crawlerApi.currentChapter(bookId,chapterPageSize.value):Promise.resolve(undefined)])
     if(!bookDrawer.value||selectedBook.value?.id!==bookId||requestSequence!==chapterRequestSequence)return
     currentCrawlingChapter.value=followCurrentChapter.value?latestFocus?.chapter:undefined
     const focusedPage=latestFocus?latestFocus.page+1:undefined
-    if(followCurrentChapter.value&&focusedPage&&focusedPage!==chapterPage.value){chapterPage.value=focusedPage;return await syncOpenBookProgress()}
+    if(followCurrentChapter.value&&focusedPage&&focusedPage!==chapterPage.value){chapterPage.value=focusedPage;return await syncOpenBookProgress(options)}
     const lastPage=Math.max(1,latestChapters.totalPages)
-    if(chapterPage.value>lastPage){chapterPage.value=lastPage;return await syncOpenBookProgress()}
+    if(chapterPage.value>lastPage){chapterPage.value=lastPage;return await syncOpenBookProgress(options)}
     selectedBook.value=latestBook
     chapters.value=latestChapters.content
     chapterTotal.value=latestChapters.totalElements
@@ -354,7 +362,7 @@ async function syncOpenBookProgress(){
     books.value=books.value.map(book=>book.id===bookId?latestBook:book)
     if(followCurrentChapter.value&&currentCrawlingChapter.value)await scrollToCurrentCrawlingChapter()
   }finally{
-    if(requestSequence===chapterRequestSequence)chapterLoading.value=false
+    if(!options.silent&&requestSequence===chapterRequestSequence)chapterLoading.value=false
   }
 }
 function chapterSortApiValue(value:ChapterSort){return value==='indexDesc'?'INDEX_DESC':value==='createdDesc'?'CREATED_DESC':'INDEX_ASC'}
@@ -364,14 +372,14 @@ async function changeChapterSort(value:ChapterSort){if(followCurrentChapter.valu
 async function setFollowCurrentChapter(enabled:boolean){followCurrentChapter.value=enabled;currentCrawlingChapter.value=undefined;if(enabled){chapterSort.value='indexAsc';chapterPage.value=1}await syncOpenBookProgress()}
 function chapterRowClassName({row}:{row:CrawlerChapter}){return row.id===currentCrawlingChapter.value?.id?'current-crawling-row':''}
 async function scrollToCurrentCrawlingChapter(){await nextTick();document.querySelector<HTMLElement>('.book-detail-drawer .current-crawling-row')?.scrollIntoView({block:'center',behavior:'smooth'})}
-async function loadBooks(){bookLoading.value=true;try{const result=await crawlerApi.books({page:bookPage.value-1,size:bookPageSize.value,keyword:bookKeyword.value.trim()||undefined});const lastPage=Math.max(1,Math.ceil(result.totalElements/bookPageSize.value));if(bookPage.value>lastPage){bookPage.value=lastPage;return await loadBooks()}books.value=result.content;bookTotal.value=result.totalElements}finally{bookLoading.value=false}}
+async function loadBooks(options:LoadOptions={}){if(!options.silent)bookLoading.value=true;try{const result=await crawlerApi.books({page:bookPage.value-1,size:bookPageSize.value,keyword:bookKeyword.value.trim()||undefined});const lastPage=Math.max(1,Math.ceil(result.totalElements/bookPageSize.value));if(bookPage.value>lastPage){bookPage.value=lastPage;return await loadBooks(options)}books.value=result.content;bookTotal.value=result.totalElements}finally{if(!options.silent)bookLoading.value=false}}
 async function handleBookSizeChange(){bookPage.value=1;await loadBooks()}
 async function applyBookFilters(){bookPage.value=1;await loadBooks()}
-async function loadTasks(){taskLoading.value=true;try{const result=await crawlerApi.tasks({page:taskPage.value-1,size:taskPageSize.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/taskPageSize.value));if(taskPage.value>lastPage){taskPage.value=lastPage;return await loadTasks()}tasks.value=result.content;taskTotal.value=result.totalElements}finally{taskLoading.value=false}}
+async function loadTasks(options:LoadOptions={}){if(!options.silent)taskLoading.value=true;try{const result=await crawlerApi.tasks({page:taskPage.value-1,size:taskPageSize.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/taskPageSize.value));if(taskPage.value>lastPage){taskPage.value=lastPage;return await loadTasks(options)}tasks.value=result.content;taskTotal.value=result.totalElements}finally{if(!options.silent)taskLoading.value=false}}
 async function handleTaskSizeChange(){taskPage.value=1;await loadTasks()}
-async function loadFailedTasks(){failedTaskLoading.value=true;try{const result=await crawlerApi.tasks({page:failedTaskPage.value-1,size:failedTaskPageSize.value,failedOnly:true});const lastPage=Math.max(1,Math.ceil(result.totalElements/failedTaskPageSize.value));if(failedTaskPage.value>lastPage){failedTaskPage.value=lastPage;return await loadFailedTasks()}failedTasks.value=result.content;failedTaskTotal.value=result.totalElements}finally{failedTaskLoading.value=false}}
+async function loadFailedTasks(options:LoadOptions={}){if(!options.silent)failedTaskLoading.value=true;try{const result=await crawlerApi.tasks({page:failedTaskPage.value-1,size:failedTaskPageSize.value,failedOnly:true});const lastPage=Math.max(1,Math.ceil(result.totalElements/failedTaskPageSize.value));if(failedTaskPage.value>lastPage){failedTaskPage.value=lastPage;return await loadFailedTasks(options)}failedTasks.value=result.content;failedTaskTotal.value=result.totalElements}finally{if(!options.silent)failedTaskLoading.value=false}}
 async function handleFailedTaskSizeChange(){failedTaskPage.value=1;await loadFailedTasks()}
-async function loadDiscoveredBooks(){discoveryLoading.value=true;selectedDiscoveries.value=[];try{const result=await crawlerApi.discoveredBooks({page:discoveryPage.value-1,size:discoveryPageSize.value,keyword:discoveryKeyword.value.trim()||undefined,siteId:discoverySiteId.value,sort:discoverySort.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/discoveryPageSize.value));if(discoveryPage.value>lastPage){discoveryPage.value=lastPage;return await loadDiscoveredBooks()}discoveredBooks.value=result.content;discoveredTotal.value=result.totalElements}finally{discoveryLoading.value=false}}
+async function loadDiscoveredBooks(options:LoadOptions={}){if(!options.silent)discoveryLoading.value=true;if(!options.preserveSelection)selectedDiscoveries.value=[];try{const result=await crawlerApi.discoveredBooks({page:discoveryPage.value-1,size:discoveryPageSize.value,keyword:discoveryKeyword.value.trim()||undefined,siteId:discoverySiteId.value,sort:discoverySort.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/discoveryPageSize.value));if(discoveryPage.value>lastPage){discoveryPage.value=lastPage;return await loadDiscoveredBooks(options)}discoveredBooks.value=result.content;discoveredTotal.value=result.totalElements}finally{if(!options.silent)discoveryLoading.value=false}}
 function setDiscoveryViewMode(mode:DiscoveryViewMode){if(discoveryViewMode.value===mode)return;discoveryViewMode.value=mode;selectedDiscoveries.value=[];localStorage.setItem(DISCOVERY_VIEW_MODE_KEY,mode)}
 function handleDiscoveryViewKey(event:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();setDiscoveryViewMode(event.key==='ArrowLeft'||event.key==='Home'?'table':'card');requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>(`.discovery-view-switch button:nth-of-type(${discoveryViewMode.value==='table'?1:2})`)?.focus())}
 function isDiscoverySelected(book:CrawlerBook){return selectedDiscoveryIds.value.has(book.id)}
@@ -492,6 +500,6 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 .site-editor-tabs{position:relative;display:grid;width:max(100%,650px);grid-template-columns:repeat(5,minmax(130px,1fr));padding:4px;border:1px solid var(--border-color);border-radius:15px;background:var(--bg-page);isolation:isolate}.site-editor-tab-indicator{position:absolute;top:4px;bottom:4px;left:4px;z-index:0;width:calc((100% - 8px)/5);border:1px solid var(--border-color-light);border-radius:11px;background:var(--surface-elevated);box-shadow:var(--shadow-sm);transition:transform .28s cubic-bezier(.2,.8,.2,1)}.site-editor-tabs button{position:relative;z-index:1;display:grid;gap:2px;padding:9px 12px;border:0;background:transparent;color:var(--text-secondary);text-align:center;cursor:pointer}.site-editor-tabs button strong{font-size:13px}.site-editor-tabs button small{color:var(--text-tertiary);font-size:10px}.site-editor-tabs button.active,.site-editor-tabs button.active small{color:var(--primary)}.site-editor-tabs button:focus-visible{outline:2px solid var(--primary);outline-offset:-2px;border-radius:11px}.site-tab-panel{display:grid;gap:14px}
 @media(max-width:640px){:global(.site-editor-dialog){width:calc(100vw - 20px)!important;max-height:calc(100dvh - 20px);margin-top:10px!important;margin-bottom:10px}:global(.site-editor-dialog .el-dialog__body){padding-right:14px;padding-left:14px}.site-editor-form{padding-right:0}}
 @media(prefers-reduced-motion:reduce){.site-editor-tab-indicator{transition:none}}
-.chapter-heading-tools{display:flex;align-items:center;gap:10px}.chapter-follow{display:flex;min-width:132px;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--border-color);border-radius:12px;background:var(--bg-page);cursor:pointer;transition:border-color .2s ease,background .2s ease}.chapter-follow strong{color:var(--text-secondary);font-size:11px}.chapter-follow.active{border-color:color-mix(in srgb,var(--primary) 38%,var(--border-color));background:var(--primary-alpha-10)}.chapter-follow.active strong{color:var(--primary)}.chapter-sort.disabled{opacity:.5}.chapter-sort button:disabled{cursor:not-allowed}.chapter-name-cell{display:flex;min-width:0;align-items:center;gap:8px}.chapter-name-cell>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chapter-name-cell em{display:inline-flex;flex:0 0 auto;align-items:center;gap:5px;padding:3px 7px;border-radius:99px;background:var(--primary-alpha-10);color:var(--primary);font-size:9px;font-style:normal;font-weight:800}.chapter-name-cell em i{width:6px;height:6px;border-radius:50%;background:var(--primary);box-shadow:0 0 0 4px var(--primary-alpha-10);animation:chapter-follow-pulse 1.5s ease-out infinite}.chapters-table :deep(.current-crawling-row>td.el-table__cell){background:color-mix(in srgb,var(--primary) 11%,var(--surface-elevated))!important}.chapters-table :deep(.current-crawling-row:hover>td.el-table__cell){background:color-mix(in srgb,var(--primary) 15%,var(--surface-elevated))!important}@keyframes chapter-follow-pulse{70%,100%{box-shadow:0 0 0 8px transparent}}@media(max-width:720px){.chapter-heading-tools{align-items:stretch;flex-direction:column}.chapter-follow{box-sizing:border-box;width:100%}}@media(prefers-reduced-motion:reduce){.chapter-follow{transition:none}.chapter-name-cell em i{animation:none}}
+.chapter-heading-tools{display:flex;align-items:center;gap:10px}.chapter-follow{box-sizing:border-box;display:flex;min-width:132px;height:38px;align-items:center;justify-content:space-between;gap:10px;padding:2px 10px;border:1px solid var(--border-color);border-radius:12px;background:var(--bg-page);cursor:pointer;transition:border-color .2s ease,background .2s ease}.chapter-follow strong{color:var(--text-secondary);font-size:11px}.chapter-follow.active{border-color:color-mix(in srgb,var(--primary) 38%,var(--border-color));background:var(--primary-alpha-10)}.chapter-follow.active strong{color:var(--primary)}.chapter-sort.disabled{opacity:.5}.chapter-sort button:disabled{cursor:not-allowed}.chapter-name-cell{display:flex;min-width:0;align-items:center;gap:8px}.chapter-name-cell>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chapter-name-cell em{display:inline-flex;flex:0 0 auto;align-items:center;gap:5px;padding:3px 7px;border-radius:99px;background:var(--primary-alpha-10);color:var(--primary);font-size:9px;font-style:normal;font-weight:800}.chapter-name-cell em i{width:6px;height:6px;border-radius:50%;background:var(--primary);box-shadow:0 0 0 4px var(--primary-alpha-10);animation:chapter-follow-pulse 1.5s ease-out infinite}.chapters-table :deep(.current-crawling-row>td.el-table__cell){background:color-mix(in srgb,var(--primary) 11%,var(--surface-elevated))!important}.chapters-table :deep(.current-crawling-row:hover>td.el-table__cell){background:color-mix(in srgb,var(--primary) 15%,var(--surface-elevated))!important}@keyframes chapter-follow-pulse{70%,100%{box-shadow:0 0 0 8px transparent}}@media(max-width:720px){.chapter-heading-tools{align-items:stretch;flex-direction:column}.chapter-follow{width:100%}}@media(prefers-reduced-motion:reduce){.chapter-follow{transition:none}.chapter-name-cell em i{animation:none}}
 .hero-actions{display:flex;align-items:center;gap:10px}.polling-setting{display:flex;align-items:center;gap:10px;padding:7px 9px 7px 12px;border:1px solid var(--border-color);border-radius:13px;background:color-mix(in srgb,var(--surface-elevated) 88%,transparent);box-shadow:var(--shadow-sm);backdrop-filter:blur(14px)}.polling-setting>span{display:flex;align-items:center;gap:7px;color:var(--text-secondary);font-size:11px;font-weight:700;white-space:nowrap}.polling-setting>span i{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 0 4px var(--success-alpha-15);animation:live-pulse 1.8s ease-out infinite}.polling-setting :deep(.el-select){width:84px}.polling-setting :deep(.el-select__wrapper){border-radius:9px;background:var(--surface-card);box-shadow:none}@media(max-width:640px){.hero-actions{width:100%;align-items:stretch;flex-direction:column}.polling-setting{justify-content:space-between}.polling-setting :deep(.el-select){width:100px}.hero-actions>.el-button{width:100%;margin-left:0}}@media(prefers-reduced-motion:reduce){.polling-setting>span i{animation:none}}
 </style>
