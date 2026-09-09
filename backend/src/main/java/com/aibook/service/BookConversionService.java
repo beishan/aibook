@@ -5,6 +5,7 @@ import com.aibook.model.entity.*;
 import com.aibook.repository.*;
 import com.aibook.service.conversion.BookConverter;
 import com.aibook.service.conversion.ChapterTitleFormatter;
+import com.aibook.service.conversion.EpubTextExtractor;
 import com.aibook.service.repair.EncodingDetectService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,13 +27,14 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class BookConversionService {
-    private static final long MAX_TXT_SIZE = 500L * 1024 * 1024;
+    private static final long MAX_SOURCE_SIZE = 500L * 1024 * 1024;
     private final BookConversionTaskRepository taskRepository;
     private final BookRepository bookRepository;
     private final BookVersionRepository versionRepository;
     private final BookVersionService bookVersionService;
     private final EncodingDetectService encodingDetectService;
     private final TxtParserService txtParserService;
+    private final EpubTextExtractor epubTextExtractor;
     private final ObjectMapper objectMapper;
     private final List<BookConverter> converters;
     private final TagRepository tagRepository;
@@ -47,16 +49,17 @@ public class BookConversionService {
 
     @Transactional
     public BookConversionTaskDTO createFromUpload(User user, MultipartFile file) {
-        validateTxt(file);
+        String sourceFormat = validateSource(file);
         Path source = null;
         try {
             Path sourceDir = taskRoot().resolve("sources");
             Files.createDirectories(sourceDir);
-            source = sourceDir.resolve(UUID.randomUUID() + ".txt");
+            source = sourceDir.resolve(UUID.randomUUID() + "." + sourceFormat);
             file.transferTo(source);
-            String filename = safeFilename(file.getOriginalFilename(), "未命名.txt");
+            String filename = safeFilename(file.getOriginalFilename(), "未命名." + sourceFormat);
             BookConversionTask task = BookConversionTask.builder()
-                    .user(user).sourceFilename(filename).sourceFormat("txt").targetFormat("epub")
+                    .user(user).sourceFilename(filename).sourceFormat(sourceFormat)
+                    .targetFormat(targetFormat(sourceFormat))
                     .sourcePath(source.toString()).uploadedSource(true)
                     .status(BookConversionTask.Status.CREATED).stage("等待分析").progress(0)
                     .title(stripExtension(filename)).language("zh-CN")
@@ -68,7 +71,7 @@ public class BookConversionService {
         }
         catch (Exception exception) {
             if (source != null) deleteQuietly(source.toString());
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "TXT 上传分析失败", exception);
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "书籍上传分析失败", exception);
         }
     }
 
@@ -76,12 +79,14 @@ public class BookConversionService {
     public BookConversionTaskDTO createFromBook(User user, Long bookId, Long versionId) {
         Book book = ownedBook(user, bookId);
         BookVersion version = bookVersionService.resolveVersion(book, versionId);
-        if (!"txt".equalsIgnoreCase(version.getFormat())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "第一期仅支持 TXT 转 EPUB");
+        String sourceFormat = Objects.toString(version.getFormat(), "").toLowerCase(Locale.ROOT);
+        if (!Set.of("txt", "epub").contains(sourceFormat)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "仅支持 TXT 与 EPUB 互转");
         }
         BookConversionTask task = BookConversionTask.builder()
                 .user(user).sourceBookId(book.getId()).sourceVersionId(version.getId())
-                .sourceFilename(version.getDisplayName()).sourceFormat("txt").targetFormat("epub")
+                .sourceFilename(version.getDisplayName()).sourceFormat(sourceFormat)
+                .targetFormat(targetFormat(sourceFormat))
                 .sourcePath(version.getFilePath()).uploadedSource(false)
                 .status(BookConversionTask.Status.CREATED).stage("等待分析").progress(0)
                 .title(book.getTitle()).author(book.getAuthor()).description(book.getDescription())
@@ -97,27 +102,44 @@ public class BookConversionService {
             return toDTO(analyze(taskRepository.save(task)));
         } catch (Exception exception) {
             throw new ResponseStatusException(
-                    HttpStatus.UNPROCESSABLE_ENTITY, "书库 TXT 分析失败", exception);
+                    HttpStatus.UNPROCESSABLE_ENTITY, "书库文件分析失败", exception);
         }
     }
 
     private BookConversionTask analyze(BookConversionTask task) throws Exception {
         task.setStatus(BookConversionTask.Status.ANALYZING);
-        task.setStage("正在解析编码与章节"); task.setProgress(10); taskRepository.save(task);
+        task.setStage("正在解析内容与章节"); task.setProgress(10); taskRepository.save(task);
         Path source = Paths.get(task.getSourcePath());
-        EncodingDetectResult detection = encodingDetectService.detectEncoding(source);
-        String text = encodingDetectService.decodeWithEncoding(source, detection.getEncoding());
-        List<ConversionChapterDTO> chapters = parseChapters(source);
-        task.setEncoding(detection.getEncoding());
-        task.setNewlineFormat(detectNewline(Files.readString(source, java.nio.charset.StandardCharsets.ISO_8859_1)));
+        String text;
+        List<ConversionChapterDTO> chapters;
+        int encodingAnomalies = 0;
+        if ("epub".equalsIgnoreCase(task.getSourceFormat())) {
+            EpubTextExtractor.ExtractedBook extracted = epubTextExtractor.extract(source);
+            text = extracted.text();
+            chapters = extracted.chapters();
+            task.setEncoding("UTF-8");
+            task.setNewlineFormat("LF");
+            task.setTitle(defaultString(extracted.title(), task.getTitle()));
+            task.setAuthor(defaultString(extracted.author(), task.getAuthor()));
+            task.setLanguage(defaultString(extracted.language(), task.getLanguage()));
+        } else {
+            EncodingDetectResult detection = encodingDetectService.detectEncoding(source);
+            text = encodingDetectService.decodeWithEncoding(source, detection.getEncoding());
+            chapters = parseChapters(source);
+            task.setEncoding(detection.getEncoding());
+            task.setNewlineFormat(detectNewline(
+                    Files.readString(source, java.nio.charset.StandardCharsets.ISO_8859_1)));
+            encodingAnomalies = value(detection.getAnomalyCount());
+        }
         task.setCharacterCount((long) text.length());
         int duplicateCount = (int) chapters.stream().collect(java.util.stream.Collectors.groupingBy(
                 chapter -> chapter.getTitle().trim(), java.util.stream.Collectors.counting()))
                 .values().stream().filter(count -> count > 1).count();
-        task.setAnomalyCount(value(detection.getAnomalyCount()) + duplicateCount);
+        task.setAnomalyCount(encodingAnomalies + duplicateCount);
         task.setChaptersJson(json(chapters));
         BookConversionUpdateRequest defaults = new BookConversionUpdateRequest();
-        defaults.setOutputFilename(safeEpubFilename(task.getTitle() + ".epub"));
+        defaults.setOutputFilename(safeOutputFilename(
+                task.getTitle() + "." + task.getTargetFormat(), task.getTargetFormat()));
         defaults.setEpubVersion("3"); defaults.setFirstLineIndent("2em");
         defaults.setParagraphSpacing("small"); defaults.setLineHeight(1.6);
         defaults.setRemoveExtraBlankLines(true); defaults.setTrimLineEnd(true);
@@ -171,7 +193,9 @@ public class BookConversionService {
             }
             task.setChaptersJson(json(request.getChapters()));
         }
-        request.setOutputFilename(safeEpubFilename(defaultString(request.getOutputFilename(), task.getTitle() + ".epub")));
+        request.setOutputFilename(safeOutputFilename(
+                defaultString(request.getOutputFilename(), task.getTitle() + "." + task.getTargetFormat()),
+                task.getTargetFormat()));
         task.setOutputFilename(request.getOutputFilename()); task.setSettingsJson(json(request));
         if (task.getStatus() == BookConversionTask.Status.SUCCESS || task.getStatus() == BookConversionTask.Status.FAILED) {
             task.setStatus(BookConversionTask.Status.READY); task.setStage("配置已更新，可重新转换"); task.setProgress(25);
@@ -216,7 +240,9 @@ public class BookConversionService {
         BookConversionTask task = ownedTask(user, id);
         try {
             if (chapterPattern == null || chapterPattern.isBlank()) {
-                List<ConversionChapterDTO> chapters = parseChapters(Paths.get(task.getSourcePath()));
+                List<ConversionChapterDTO> chapters = "epub".equalsIgnoreCase(task.getSourceFormat())
+                        ? epubTextExtractor.extract(Paths.get(task.getSourcePath())).chapters()
+                        : parseChapters(Paths.get(task.getSourcePath()));
                 BookConversionUpdateRequest settings = settings(task);
                 settings.setChapterPattern(null);
                 applyChapterTitleRules(chapters, settings);
@@ -226,8 +252,7 @@ public class BookConversionService {
                 return toDTO(taskRepository.save(task));
             }
             java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(chapterPattern);
-            String text = encodingDetectService.decodeWithEncoding(
-                    Paths.get(task.getSourcePath()), task.getEncoding());
+            String text = sourceText(task);
             List<ConversionChapterDTO> chapters = new ArrayList<>();
             int offset = 0;
             for (String line : text.split("\\n", -1)) {
@@ -327,22 +352,27 @@ public class BookConversionService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "任务正在转换");
         }
         long started = System.currentTimeMillis();
-        task.setStatus(BookConversionTask.Status.CONVERTING); task.setStage("正在生成 EPUB 内容"); task.setProgress(55);
+        String targetLabel = task.getTargetFormat().toUpperCase(Locale.ROOT);
+        task.setStatus(BookConversionTask.Status.CONVERTING);
+        task.setStage("正在生成 " + targetLabel + " 内容"); task.setProgress(55);
         task.setErrorMessage(null); taskRepository.save(task);
         try {
             BookConverter converter = converters.stream().filter(item -> item.supports(task.getSourceFormat(), task.getTargetFormat()))
                     .findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持该转换格式"));
             Path directory = taskRoot().resolve("results"); Files.createDirectories(directory);
-            Path output = directory.resolve(task.getId() + "-" + UUID.randomUUID() + ".epub");
+            Path output = directory.resolve(task.getId() + "-" + UUID.randomUUID()
+                    + "." + task.getTargetFormat().toLowerCase(Locale.ROOT));
             converter.convert(task, output);
-            validateEpub(output);
+            validateOutput(output, task.getTargetFormat());
             deleteQuietly(task.getOutputPath());
             task.setOutputPath(output.toString()); task.setOutputSize(Files.size(output));
             task.setElapsedMillis(System.currentTimeMillis() - started);
-            task.setStatus(BookConversionTask.Status.SUCCESS); task.setStage("EPUB 校验完成"); task.setProgress(100);
+            task.setStatus(BookConversionTask.Status.SUCCESS);
+            task.setStage(targetLabel + " 校验完成"); task.setProgress(100);
         } catch (Exception exception) {
             task.setElapsedMillis(System.currentTimeMillis() - started);
-            task.setStatus(BookConversionTask.Status.FAILED); task.setStage("生成 EPUB 失败"); task.setProgress(55);
+            task.setStatus(BookConversionTask.Status.FAILED);
+            task.setStage("生成 " + targetLabel + " 失败"); task.setProgress(55);
             task.setErrorMessage(exception.getMessage());
         }
         return toDTO(taskRepository.save(task));
@@ -371,7 +401,7 @@ public class BookConversionService {
             }
             int selected = Math.max(0, Math.min(chapters.size() - 1, chapterIndex));
             ConversionChapterDTO chapter = chapters.get(selected);
-            String text = encodingDetectService.decodeWithEncoding(Paths.get(task.getSourcePath()), task.getEncoding());
+            String text = sourceText(task);
             int start = Math.max(0, Math.min(text.length(), chapter.getStartIndex()));
             int end = Math.max(start, Math.min(text.length(), chapter.getEndIndex()));
             String content = ChapterTitleFormatter.stripSourceTitle(
@@ -386,7 +416,9 @@ public class BookConversionService {
     @Transactional
     public BookVersionDTO attach(User user, Long id, Long bookId) {
         BookConversionTask task = successTask(user, id);
-        return bookVersionService.addGeneratedVersion(ownedBook(user, bookId), result(user, id), task.getOutputFilename());
+        return bookVersionService.addGeneratedVersion(
+                ownedBook(user, bookId), result(user, id),
+                task.getOutputFilename(), task.getTargetFormat());
     }
 
     @Transactional
@@ -395,17 +427,26 @@ public class BookConversionService {
         Book seriesMetadata = new Book();
         com.aibook.util.BookSeriesMetadata.apply(seriesMetadata, task.getSeriesName(),
                 com.aibook.util.BookSeriesMetadata.parseIndex(task.getSeriesIndex()));
-        Path target = Paths.get(uploadPath).resolve(UUID.randomUUID() + ".epub");
+        String targetFormat = task.getTargetFormat().toLowerCase(Locale.ROOT);
+        Path target = Paths.get(uploadPath).resolve(UUID.randomUUID() + "." + targetFormat);
         try {
             Files.createDirectories(target.getParent()); Files.copy(result(user, id), target);
             String hash = hash(target);
             if (bookRepository.findByFileHash(hash).isPresent() || versionRepository.findByFileHash(hash).isPresent()) {
-                Files.deleteIfExists(target); throw new ResponseStatusException(HttpStatus.CONFLICT, "该 EPUB 已存在于书库");
+                Files.deleteIfExists(target); throw new ResponseStatusException(
+                        HttpStatus.CONFLICT, "该转换版本已存在于书库");
             }
             Book book = Book.builder().title(task.getTitle()).author(task.getAuthor()).description(task.getDescription())
                     .isbn(task.getIsbn()).publisher(task.getPublisher()).publishDate(task.getPublishDate())
-                    .language(task.getLanguage()).format("epub").filePath(target.toString()).fileSize(Files.size(target))
+                    .language(task.getLanguage()).format(targetFormat)
+                    .filePath(target.toString()).fileSize(Files.size(target))
                     .fileHash(hash).sourceType(Book.SourceType.UPLOAD).user(user).coverUrl(copyCoverToLibrary(task)).build();
+            if ("txt".equals(targetFormat)) {
+                String chapterInfo = txtParserService.parseChapters(target);
+                book.setChapterInfo(chapterInfo);
+                book.setChapterCount(objectMapper.readValue(
+                        chapterInfo, new TypeReference<List<Object>>() {}).size());
+            }
             book.setSeriesName(seriesMetadata.getSeriesName());
             book.setSeriesIndex(seriesMetadata.getSeriesIndex());
             if (task.getCategoryName() != null && !task.getCategoryName().isBlank()) {
@@ -453,8 +494,32 @@ public class BookConversionService {
         return Paths.get(uploadPath, coverDir, cover.getStoredFilename()).toAbsolutePath().normalize();
     }
     private Path taskRoot() { return Paths.get(conversionPath).toAbsolutePath().normalize(); }
-    private void validateTxt(MultipartFile file) { if (file == null || file.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请选择 TXT 文件"); String name = Objects.toString(file.getOriginalFilename(), "").toLowerCase(Locale.ROOT); if (!name.endsWith(".txt")) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "第一期仅支持 TXT 文件"); if (file.getSize() > MAX_TXT_SIZE) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "TXT 文件不能超过 500MB"); }
+    private String validateSource(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请选择 TXT 或 EPUB 文件");
+        }
+        String name = Objects.toString(file.getOriginalFilename(), "").toLowerCase(Locale.ROOT);
+        String format = name.endsWith(".epub") ? "epub" : name.endsWith(".txt") ? "txt" : null;
+        if (format == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "仅支持 TXT 与 EPUB 文件");
+        }
+        if (file.getSize() > MAX_SOURCE_SIZE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "文件不能超过 500MB");
+        }
+        return format;
+    }
     private void validateEpub(Path output) throws Exception { try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(output.toFile())) { if (zip.getEntry("mimetype") == null || zip.getEntry("META-INF/container.xml") == null || zip.getEntry("OEBPS/content.opf") == null) throw new IllegalStateException("EPUB 结构校验失败"); } }
+    private void validateOutput(Path output, String targetFormat) throws Exception {
+        if (!Files.isRegularFile(output) || Files.size(output) == 0) {
+            throw new IllegalStateException("转换结果为空");
+        }
+        if ("epub".equalsIgnoreCase(targetFormat)) {
+            validateEpub(output);
+        } else if ("txt".equalsIgnoreCase(targetFormat)
+                && Files.readString(output, java.nio.charset.StandardCharsets.UTF_8).isBlank()) {
+            throw new IllegalStateException("TXT 正文为空");
+        }
+    }
     private List<ConversionChapterDTO> chapters(BookConversionTask task) { try { return objectMapper.readValue(task.getChaptersJson(), new TypeReference<>() {}); } catch (Exception e) { return List.of(); } }
     private List<String> tags(BookConversionTask task) { try { return task.getTagsJson() == null ? List.of() : objectMapper.readValue(task.getTagsJson(), new TypeReference<>() {}); } catch (Exception e) { return List.of(); } }
     private BookConversionUpdateRequest settings(BookConversionTask task) { try { return objectMapper.readValue(task.getSettingsJson(), BookConversionUpdateRequest.class); } catch (Exception e) { return new BookConversionUpdateRequest(); } }
@@ -465,12 +530,23 @@ public class BookConversionService {
     private String hash(Path path) throws Exception { MessageDigest digest = MessageDigest.getInstance("SHA-256"); try (InputStream input = Files.newInputStream(path)) { byte[] buffer = new byte[8192]; int read; while ((read = input.read(buffer)) >= 0) digest.update(buffer, 0, read); } return HexFormat.of().formatHex(digest.digest()); }
     private String json(Object value) { try { return objectMapper.writeValueAsString(value == null ? List.of() : value); } catch (Exception e) { throw new IllegalArgumentException("配置序列化失败", e); } }
     private String safeFilename(String value, String fallback) { String name = defaultString(value, fallback).replace('\\', '/'); return name.substring(name.lastIndexOf('/') + 1); }
-    private String safeEpubFilename(String value) { String name = safeFilename(value, "未命名.epub").replaceAll("[\\r\\n]", "").trim(); return name.toLowerCase(Locale.ROOT).endsWith(".epub") ? name : name + ".epub"; }
+    private String safeOutputFilename(String value, String targetFormat) {
+        String suffix = "." + targetFormat.toLowerCase(Locale.ROOT);
+        String name = safeFilename(value, "未命名" + suffix).replaceAll("[\\r\\n]", "").trim();
+        return name.replaceFirst("(?i)\\.(txt|epub)$", "") + suffix;
+    }
     private String stripExtension(String name) { int dot = name.lastIndexOf('.'); return dot > 0 ? name.substring(0, dot) : name; }
     private String defaultString(String value, String fallback) { return value == null || value.isBlank() ? fallback : value; }
     private String trim(String value) { return value == null ? null : value.trim(); }
     private int value(Integer value) { return value == null ? 0 : value; }
     private String detectNewline(String text) { if (text.contains("\r\n")) return "CRLF"; if (text.contains("\r")) return "CR"; return "LF"; }
+    private String targetFormat(String sourceFormat) { return "epub".equalsIgnoreCase(sourceFormat) ? "txt" : "epub"; }
+    private String sourceText(BookConversionTask task) throws Exception {
+        if ("epub".equalsIgnoreCase(task.getSourceFormat())) {
+            return epubTextExtractor.extract(Paths.get(task.getSourcePath())).text();
+        }
+        return encodingDetectService.decodeWithEncoding(Paths.get(task.getSourcePath()), task.getEncoding());
+    }
     private String extension(String value) { int dot = value.lastIndexOf('.'); return dot < 0 ? "jpg" : value.substring(dot + 1).toLowerCase(Locale.ROOT); }
     private void deleteQuietly(String value) { if (value == null) return; try { Files.deleteIfExists(Paths.get(value)); } catch (Exception ignored) { } }
     private void deleteTaskCover(BookConversionTask task) { if (task.getCoverPath() == null) return; Path path = Paths.get(task.getCoverPath()).toAbsolutePath().normalize(); if (path.startsWith(taskRoot().resolve("covers"))) deleteQuietly(path.toString()); }

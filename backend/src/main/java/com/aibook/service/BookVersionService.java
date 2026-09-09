@@ -167,9 +167,19 @@ public class BookVersionService {
     @Transactional
     public com.aibook.dto.BookVersionDTO addGeneratedVersion(
             Book book, Path generatedFile, String displayName) {
+        return addGeneratedVersion(book, generatedFile, displayName, "epub");
+    }
+
+    @Transactional
+    public com.aibook.dto.BookVersionDTO addGeneratedVersion(
+            Book book, Path generatedFile, String displayName, String format) {
         ensurePrimaryVersion(book);
+        String normalizedFormat = format == null ? "epub" : format.toLowerCase(Locale.ROOT);
+        if (!Set.of("epub", "txt").contains(normalizedFormat)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持该生成版本格式");
+        }
         Path uploadDirectory = Paths.get(uploadPath);
-        Path target = uploadDirectory.resolve(UUID.randomUUID() + ".epub");
+        Path target = uploadDirectory.resolve(UUID.randomUUID() + "." + normalizedFormat);
         try {
             Files.createDirectories(uploadDirectory);
             Files.copy(generatedFile, target);
@@ -177,16 +187,25 @@ public class BookVersionService {
             if (bookRepository.findByFileHash(hash).isPresent()
                     || bookVersionRepository.findByFileHash(hash).isPresent()) {
                 Files.deleteIfExists(target);
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "该 EPUB 版本已存在");
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "该生成版本已存在");
+            }
+            String chapterInfo = null;
+            Integer chapterCount = null;
+            if ("txt".equals(normalizedFormat)) {
+                chapterInfo = txtParserService.parseChapters(target);
+                chapterCount = objectMapper.readValue(
+                        chapterInfo, new TypeReference<List<Object>>() {}).size();
             }
             BookVersion version = bookVersionRepository.save(BookVersion.builder()
                     .book(book)
                     .displayName(safeFilename(displayName))
-                    .format("epub")
+                    .format(normalizedFormat)
                     .filePath(target.toString())
                     .fileSize(Files.size(target))
                     .fileHash(hash)
                     .primaryVersion(false)
+                    .chapterInfo(chapterInfo)
+                    .chapterCount(chapterCount)
                     .build());
             return toDTO(version);
         } catch (ResponseStatusException exception) {

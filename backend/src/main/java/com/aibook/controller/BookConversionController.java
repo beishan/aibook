@@ -103,7 +103,10 @@ public class BookConversionController {
         Path path = conversionService.result(user, id);
         String ascii = task.getOutputFilename().replaceAll("[^\\x20-\\x7E]", "_");
         String encoded = java.net.URLEncoder.encode(task.getOutputFilename(), StandardCharsets.UTF_8).replace("+", "%20");
-        return ResponseEntity.ok().contentType(MediaType.parseMediaType("application/epub+zip"))
+        String contentType = "txt".equalsIgnoreCase(task.getTargetFormat())
+                ? "text/plain;charset=UTF-8"
+                : "application/epub+zip";
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(contentType))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encoded)
                 .contentLength(task.getOutputSize()).body(new FileSystemResource(path));
     }
