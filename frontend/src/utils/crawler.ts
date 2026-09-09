@@ -35,6 +35,7 @@ export interface CrawlerRuleExport { schemaVersion:number; siteCode:string; vers
 export interface PageResult<T> { content:T[]; totalElements:number; totalPages:number; number:number; size:number; first:boolean; last:boolean }
 export interface CrawlerDiscoveryQuery { page:number; size:number; keyword?:string; siteId?:number; sort:string }
 export interface CrawlerBookQuery { page:number; size:number; keyword?:string }
+export interface CrawlerChapterQuery { page:number; size:number; sort:'INDEX_ASC'|'INDEX_DESC'|'CREATED_DESC' }
 export interface CrawlerTaskQuery { page:number; size:number; failedOnly?:boolean }
 
 export const crawlerApi = {
@@ -57,7 +58,7 @@ export const crawlerApi = {
   books: (params:CrawlerBookQuery) => api.get<PageResult<CrawlerBook>>('/api/crawler/books', { params }).then(r => r.data),
   book: (bookId:number) => api.get<CrawlerBook>(`/api/crawler/books/${bookId}`).then(r => r.data),
   discoveredBooks: (params:CrawlerDiscoveryQuery) => api.get<PageResult<CrawlerBook>>('/api/crawler/books/discovered', {params}).then(r => r.data),
-  chapters: (bookId:number) => api.get<CrawlerChapter[]>(`/api/crawler/books/${bookId}/chapters`).then(r => r.data),
+  chapters: (bookId:number, params:CrawlerChapterQuery) => api.get<PageResult<CrawlerChapter>>(`/api/crawler/books/${bookId}/chapters`, {params}).then(r => r.data),
   logs: (bookId:number) => api.get<CrawlerLog[]>(`/api/crawler/books/${bookId}/logs`, {params:{limit:100}}).then(r => r.data),
   chapter: (bookId:number, chapterId:number) => api.get<{title:string;url:string;content:string;errorMessage:string}>(`/api/crawler/books/${bookId}/chapters/${chapterId}`).then(r => r.data),
   continueBook: (bookId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/continue`).then(r => r.data),

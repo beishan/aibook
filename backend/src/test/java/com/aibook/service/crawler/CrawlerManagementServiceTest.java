@@ -199,6 +199,30 @@ class CrawlerManagementServiceTest {
     }
 
     @Test
+    void pagesAndSortsBookChapters() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();
+        CrawlerBook book = CrawlerBook.builder().id(15L).site(site).bookName("示例书籍")
+                .externalBookId("book-1").bookUrl("https://example.com/book/1").build();
+        CrawlerChapter chapter = CrawlerChapter.builder().id(22L).crawlerBook(book).chapterIndex(8)
+                .externalChapterId("9").chapterName("第九章").chapterUrl("https://example.com/9")
+                .crawlStatus(CrawlerChapter.CrawlStatus.COMPLETED).build();
+        when(books.findByIdAndSiteUser(15L, user)).thenReturn(Optional.of(book));
+        when(chapters.findByCrawlerBook(eq(book), any(Pageable.class)))
+                .thenAnswer(invocation -> new PageImpl<>(List.of(chapter), invocation.getArgument(1), 61));
+
+        var result = service.chapters(user, 15L, 2, 20, "INDEX_DESC");
+
+        assertThat(result.getTotalElements()).isEqualTo(61);
+        assertThat(result.getContent()).extracting(item -> item.chapterName()).containsExactly("第九章");
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(chapters).findByCrawlerBook(eq(book), pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(20);
+        assertThat(pageable.getValue().getSort().getOrderFor("chapterIndex").isDescending()).isTrue();
+    }
+
+    @Test
     void filtersSearchesAndSortsActiveDiscoveredBooks() {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();

@@ -172,7 +172,7 @@ const preferencesStore = usePreferencesStore()
 const dockIconStore = useDockIconStore()
 const bookStore = useBookStore()
 
-const isReaderRoute = computed(() => route.name === 'Reader')
+const isReaderRoute = computed(() => ['Reader', 'CrawlerTrialReader'].includes(String(route.name)))
 
 const showUserMenu = ref(false)
 const showTrashMenu = ref(false)

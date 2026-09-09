@@ -176,6 +176,29 @@ public class CrawlerManagementService {
     public List<ChapterView> chapters(User user, Long id) {
         CrawlerBook book = ownedBook(user, id);
         List<CrawlerChapter> chapters = chapterRepository.findByCrawlerBookOrderByChapterIndexAsc(book);
+        normalizeParsedChapters(book, chapters);
+        return chapters.stream().map(this::chapterView).toList();
+    }
+
+    @Transactional
+    public Page<ChapterView> chapters(User user, Long id, int page, int size, String sort) {
+        CrawlerBook book = ownedBook(user, id);
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+                chapterSort(sort));
+        Page<CrawlerChapter> chapters = chapterRepository.findByCrawlerBook(book, pageable);
+        normalizeParsedChapters(book, chapters.getContent());
+        return chapters.map(this::chapterView);
+    }
+
+    private Sort chapterSort(String value) {
+        return switch (blank(value) ? "INDEX_ASC" : value.trim().toUpperCase(Locale.ROOT)) {
+            case "INDEX_DESC" -> Sort.by(Sort.Order.desc("chapterIndex"), Sort.Order.desc("id"));
+            case "CREATED_DESC" -> Sort.by(Sort.Order.desc("createdAt").nullsLast(), Sort.Order.desc("id"));
+            default -> Sort.by(Sort.Order.asc("chapterIndex"), Sort.Order.asc("id"));
+        };
+    }
+
+    private void normalizeParsedChapters(CrawlerBook book, List<CrawlerChapter> chapters) {
         boolean normalized = false;
         for (CrawlerChapter chapter : chapters) {
             if (chapter.getContent() != null && !chapter.getContent().isBlank()
@@ -187,7 +210,6 @@ public class CrawlerManagementService {
             }
         }
         if (normalized) refreshParsedBookStatus(book);
-        return chapters.stream().map(this::chapterView).toList();
     }
 
     @Transactional(readOnly = true)

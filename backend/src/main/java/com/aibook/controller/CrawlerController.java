@@ -58,7 +58,12 @@ public class CrawlerController {
         return managementService.discoveredBooks(user(auth), page, size, keyword, siteId, sort);
     }
     @GetMapping("/books/{id}") public BookView book(Authentication auth, @PathVariable Long id) { return managementService.book(user(auth), id); }
-    @GetMapping("/books/{id}/chapters") public List<ChapterView> chapters(Authentication auth, @PathVariable Long id) { return managementService.chapters(user(auth), id); }
+    @GetMapping("/books/{id}/chapters") public Page<ChapterView> chapters(
+            Authentication auth, @PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "INDEX_ASC") String sort) {
+        return managementService.chapters(user(auth), id, page, size, sort);
+    }
     @GetMapping("/books/{id}/logs") public List<CrawlerLogView> bookLogs(
             Authentication auth, @PathVariable Long id, @RequestParam(defaultValue = "100") int limit) {
         return managementService.logs(user(auth), id, limit);
