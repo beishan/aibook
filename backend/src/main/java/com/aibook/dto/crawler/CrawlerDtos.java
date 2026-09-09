@@ -91,6 +91,8 @@ public final class CrawlerDtos {
             int wordCount, String crawlStatus, String accessStatus, int retryCount,
             String errorMessage, LocalDateTime crawlTime, LocalDateTime createdAt) { }
 
+    public record ChapterFocusView(ChapterView chapter, int page) { }
+
     public record CrawlerLogView(
             Long id, String description, String details, LocalDateTime createdAt) { }
 

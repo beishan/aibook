@@ -25,6 +25,7 @@ export interface CrawlerSite extends CrawlerSitePayload { id: number; status: st
 export interface CrawlerBook { id:number; siteId:number; siteName:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; bookStatus?:string; latestChapter?:string; chapterCount:number; crawledChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; autoUpdateEnabled:boolean; autoSyncLibrary:boolean; libraryBookId?:number; discoverTime:string; lastCrawlTime?:string }
 export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; bookId?:number; bookName?:string; totalCount:number; successCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
 export interface CrawlerChapter { id:number; chapterIndex:number; chapterName:string; chapterUrl:string; wordCount:number; crawlStatus:string; accessStatus:string; retryCount:number; errorMessage?:string; crawlTime?:string; createdAt?:string }
+export interface CrawlerChapterFocus { chapter:CrawlerChapter; page:number }
 export interface CrawlerLog { id:number; description:string; details?:string; createdAt:string }
 export interface CrawlerExport { id:number; format:string; fileSize:number; fileHash:string; createdAt:string }
 export interface CrawlerDashboard { siteCount:number; enabledSiteCount:number; bookCount:number; completedBookCount:number; crawlingBookCount:number; failedBookCount:number; todayNewBooks:number; todayNewChapters:number; readyToImportCount:number; importedCount:number; recentTasks:CrawlerTask[] }
@@ -59,6 +60,7 @@ export const crawlerApi = {
   book: (bookId:number) => api.get<CrawlerBook>(`/api/crawler/books/${bookId}`).then(r => r.data),
   discoveredBooks: (params:CrawlerDiscoveryQuery) => api.get<PageResult<CrawlerBook>>('/api/crawler/books/discovered', {params}).then(r => r.data),
   chapters: (bookId:number, params:CrawlerChapterQuery) => api.get<PageResult<CrawlerChapter>>(`/api/crawler/books/${bookId}/chapters`, {params}).then(r => r.data),
+  currentChapter: (bookId:number, size:number) => api.get<CrawlerChapterFocus|undefined>(`/api/crawler/books/${bookId}/chapters/current`, {params:{size}}).then(r => r.data||undefined),
   logs: (bookId:number) => api.get<CrawlerLog[]>(`/api/crawler/books/${bookId}/logs`, {params:{limit:100}}).then(r => r.data),
   chapter: (bookId:number, chapterId:number) => api.get<{title:string;url:string;content:string;errorMessage:string}>(`/api/crawler/books/${bookId}/chapters/${chapterId}`).then(r => r.data),
   continueBook: (bookId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/continue`).then(r => r.data),

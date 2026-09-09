@@ -213,6 +213,27 @@ public class CrawlerManagementService {
     }
 
     @Transactional(readOnly = true)
+    public Optional<ChapterFocusView> currentChapter(User user, Long id, int size) {
+        CrawlerBook book = ownedBook(user, id);
+        Optional<CrawlerChapter> chapter = chapterRepository
+                .findFirstByCrawlerBookAndCrawlStatusOrderByUpdatedAtDesc(
+                        book, CrawlerChapter.CrawlStatus.CRAWLING);
+        if (chapter.isEmpty()) {
+            chapter = taskRepository.findFirstByCrawlerBookAndStatusOrderByUpdatedAtDesc(
+                            book, CrawlerTask.TaskStatus.RUNNING)
+                    .map(CrawlerTask::getCurrentChapter)
+                    .filter(name -> !blank(name))
+                    .flatMap(name -> chapterRepository
+                            .findFirstByCrawlerBookAndChapterNameOrderByChapterIndexAsc(book, name));
+        }
+        int pageSize = Math.min(Math.max(size, 1), 100);
+        return chapter.map(value -> new ChapterFocusView(
+                chapterView(value),
+                (int) (chapterRepository.countByCrawlerBookAndChapterIndexLessThan(
+                        book, value.getChapterIndex()) / pageSize)));
+    }
+
+    @Transactional(readOnly = true)
     public List<CrawlerLogView> logs(User user, Long id, int limit) {
         CrawlerBook book = ownedBook(user, id);
         return taskLogRepository.findByUserAndCrawlerBookIdOrderByCreatedAtDescIdDesc(

@@ -223,6 +223,54 @@ class CrawlerManagementServiceTest {
     }
 
     @Test
+    void locatesCurrentCrawlingChapterAndItsPage() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();
+        CrawlerBook book = CrawlerBook.builder().id(15L).site(site).bookName("示例书籍")
+                .externalBookId("book-1").bookUrl("https://example.com/book/1").build();
+        CrawlerChapter chapter = CrawlerChapter.builder().id(88L).crawlerBook(book).chapterIndex(43)
+                .externalChapterId("44").chapterName("第四十四章").chapterUrl("https://example.com/44")
+                .crawlStatus(CrawlerChapter.CrawlStatus.CRAWLING).build();
+        when(books.findByIdAndSiteUser(15L, user)).thenReturn(Optional.of(book));
+        when(chapters.findFirstByCrawlerBookAndCrawlStatusOrderByUpdatedAtDesc(
+                book, CrawlerChapter.CrawlStatus.CRAWLING)).thenReturn(Optional.of(chapter));
+        when(chapters.countByCrawlerBookAndChapterIndexLessThan(book, 43)).thenReturn(43L);
+
+        var result = service.currentChapter(user, 15L, 20);
+
+        assertThat(result).isPresent();
+        assertThat(result.orElseThrow().page()).isEqualTo(2);
+        assertThat(result.orElseThrow().chapter().chapterName()).isEqualTo("第四十四章");
+    }
+
+    @Test
+    void fallsBackToRunningTaskWhenCrawlingStatusChangesBetweenPolls() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();
+        CrawlerBook book = CrawlerBook.builder().id(15L).site(site).bookName("示例书籍")
+                .externalBookId("book-1").bookUrl("https://example.com/book/1").build();
+        CrawlerChapter chapter = CrawlerChapter.builder().id(25L).crawlerBook(book).chapterIndex(24)
+                .externalChapterId("25").chapterName("第二十五章").chapterUrl("https://example.com/25")
+                .crawlStatus(CrawlerChapter.CrawlStatus.COMPLETED).build();
+        CrawlerTask task = CrawlerTask.builder().id("task-1").user(user).site(site).crawlerBook(book)
+                .status(CrawlerTask.TaskStatus.RUNNING).currentChapter("第二十五章").build();
+        when(books.findByIdAndSiteUser(15L, user)).thenReturn(Optional.of(book));
+        when(chapters.findFirstByCrawlerBookAndCrawlStatusOrderByUpdatedAtDesc(
+                book, CrawlerChapter.CrawlStatus.CRAWLING)).thenReturn(Optional.empty());
+        when(tasks.findFirstByCrawlerBookAndStatusOrderByUpdatedAtDesc(
+                book, CrawlerTask.TaskStatus.RUNNING)).thenReturn(Optional.of(task));
+        when(chapters.findFirstByCrawlerBookAndChapterNameOrderByChapterIndexAsc(
+                book, "第二十五章")).thenReturn(Optional.of(chapter));
+        when(chapters.countByCrawlerBookAndChapterIndexLessThan(book, 24)).thenReturn(24L);
+
+        var result = service.currentChapter(user, 15L, 20);
+
+        assertThat(result).isPresent();
+        assertThat(result.orElseThrow().page()).isEqualTo(1);
+        assertThat(result.orElseThrow().chapter().id()).isEqualTo(25L);
+    }
+
+    @Test
     void filtersSearchesAndSortsActiveDiscoveredBooks() {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();

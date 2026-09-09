@@ -64,6 +64,13 @@ public class CrawlerController {
             @RequestParam(defaultValue = "INDEX_ASC") String sort) {
         return managementService.chapters(user(auth), id, page, size, sort);
     }
+    @GetMapping("/books/{id}/chapters/current") public ResponseEntity<ChapterFocusView> currentChapter(
+            Authentication auth, @PathVariable Long id,
+            @RequestParam(defaultValue = "20") int size) {
+        return managementService.currentChapter(user(auth), id, size)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
     @GetMapping("/books/{id}/logs") public List<CrawlerLogView> bookLogs(
             Authentication auth, @PathVariable Long id, @RequestParam(defaultValue = "100") int limit) {
         return managementService.logs(user(auth), id, limit);
