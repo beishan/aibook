@@ -268,6 +268,7 @@ type LoadOptions={silent?:boolean;preserveSelection?:boolean}
 const router=useRouter()
 const DISCOVERY_VIEW_MODE_KEY='aibook.crawler.discoveryViewMode'
 const POLLING_INTERVAL_KEY='aibook.crawler.pollingIntervalSeconds'
+const FOLLOW_CURRENT_CHAPTER_KEY='aibook.crawler.followCurrentChapter'
 const pollingIntervalOptions=[1,3,5,10,30] as const
 type PollingIntervalSeconds=typeof pollingIntervalOptions[number]
 const storedPollingInterval=Number(localStorage.getItem(POLLING_INTERVAL_KEY))
@@ -276,7 +277,7 @@ const activeTab=ref<TabKey>('overview'), dashboard=ref<CrawlerDashboard>(), site
 const siteDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), editingSite=ref<CrawlerSite>(), selectedBook=ref<CrawlerBook>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), chapterDetail=ref<{title:string;url:string;content:string;errorMessage:string}>(), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
 const bookLoading=ref(false), bookPage=ref(1), bookPageSize=ref(20), bookTotal=ref(0)
 const chapterLoading=ref(false), chapterPage=ref(1), chapterPageSize=ref(20), chapterTotal=ref(0)
-const followCurrentChapter=ref(false), currentCrawlingChapter=ref<CrawlerChapter>()
+const followCurrentChapter=ref(localStorage.getItem(FOLLOW_CURRENT_CHAPTER_KEY)==='true'), currentCrawlingChapter=ref<CrawlerChapter>()
 const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=ref(0)
 const failedTaskLoading=ref(false), failedTaskPage=ref(1), failedTaskPageSize=ref(20), failedTaskTotal=ref(0)
 const discoveryViewMode=ref<DiscoveryViewMode>(localStorage.getItem(DISCOVERY_VIEW_MODE_KEY)==='card'?'card':'table')
@@ -369,7 +370,7 @@ function chapterSortApiValue(value:ChapterSort){return value==='indexDesc'?'INDE
 async function loadChapterPage(){await syncOpenBookProgress()}
 async function handleChapterSizeChange(){chapterPage.value=1;await syncOpenBookProgress()}
 async function changeChapterSort(value:ChapterSort){if(followCurrentChapter.value||chapterSort.value===value)return;chapterSort.value=value;chapterPage.value=1;await syncOpenBookProgress()}
-async function setFollowCurrentChapter(enabled:boolean){followCurrentChapter.value=enabled;currentCrawlingChapter.value=undefined;if(enabled){chapterSort.value='indexAsc';chapterPage.value=1}await syncOpenBookProgress()}
+async function setFollowCurrentChapter(enabled:boolean){followCurrentChapter.value=enabled;localStorage.setItem(FOLLOW_CURRENT_CHAPTER_KEY,String(enabled));currentCrawlingChapter.value=undefined;if(enabled){chapterSort.value='indexAsc';chapterPage.value=1}await syncOpenBookProgress()}
 function chapterRowClassName({row}:{row:CrawlerChapter}){return row.id===currentCrawlingChapter.value?.id?'current-crawling-row':''}
 async function scrollToCurrentCrawlingChapter(){await nextTick();document.querySelector<HTMLElement>('.book-detail-drawer .current-crawling-row')?.scrollIntoView({block:'center',behavior:'smooth'})}
 async function loadBooks(options:LoadOptions={}){if(!options.silent)bookLoading.value=true;try{const result=await crawlerApi.books({page:bookPage.value-1,size:bookPageSize.value,keyword:bookKeyword.value.trim()||undefined});const lastPage=Math.max(1,Math.ceil(result.totalElements/bookPageSize.value));if(bookPage.value>lastPage){bookPage.value=lastPage;return await loadBooks(options)}books.value=result.content;bookTotal.value=result.totalElements}finally{if(!options.silent)bookLoading.value=false}}
@@ -449,7 +450,7 @@ async function submitRuleImport(){if(!ruleSite.value||!importJsonText.value.trim
 async function crawlDiscovered(book:CrawlerBook){await crawlerApi.batchCrawl([book.id]);activeTab.value='tasks';message.success('采集任务已创建');await refresh()}
 async function batchCrawl(){await crawlerApi.batchCrawl(selectedDiscoveries.value.map(b=>b.id));activeTab.value='tasks';message.success(`已创建 ${selectedDiscoveries.value.length} 个采集任务`);await refresh()}
 async function batchDiscovery(status:'IGNORED'|'BLACKLISTED',ids=selectedDiscoveries.value.map(b=>b.id)){if(!ids.length)return;await crawlerApi.setDiscoveryStatus(ids,status);message.success(status==='IGNORED'?'已忽略所选书籍':'已加入黑名单，后续扫描不会重新收录');await refresh()}
-async function openBook(book:CrawlerBook){selectedBook.value=book;chapters.value=[];chapterTotal.value=book.chapterCount;chapterPage.value=1;followCurrentChapter.value=false;currentCrawlingChapter.value=undefined;crawlerLogs.value=[];bookDetailTab.value='chapters';bookDrawer.value=true;await syncOpenBookProgress()}
+async function openBook(book:CrawlerBook){selectedBook.value=book;chapters.value=[];chapterTotal.value=book.chapterCount;chapterPage.value=1;if(followCurrentChapter.value)chapterSort.value='indexAsc';currentCrawlingChapter.value=undefined;crawlerLogs.value=[];bookDetailTab.value='chapters';bookDrawer.value=true;await syncOpenBookProgress()}
 function startTrial(book:CrawlerBook){if(!book.crawledChapterCount)return;void router.push({name:'CrawlerTrialReader',params:{id:book.id}})}
 async function continueCrawl(book:CrawlerBook){await crawlerApi.continueBook(book.id);message.success('续采任务已创建');await refresh()}
 async function retryFailures(book:CrawlerBook){await crawlerApi.retryFailures(book.id);message.success('失败章节已进入重试队列');await refresh()}
