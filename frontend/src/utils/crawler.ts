@@ -26,6 +26,7 @@ export interface CrawlerDiscoveryPagePayload { pageName:string; pageUrl:string; 
 export interface CrawlerDiscoveryPage extends CrawlerDiscoveryPagePayload { id:number; siteId:number; lastScanAt?:string; createdAt:string }
 export interface CrawlerBook { id:number; siteId:number; siteName:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; tags:string[]; bookStatus?:string; latestChapter?:string; discoveryPageId?:number; discoveryPageName?:string; chapterCount:number; crawledChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; autoUpdateEnabled:boolean; autoSyncLibrary:boolean; libraryBookId?:number; discoverTime:string; lastCrawlStartedAt?:string; lastCrawlTime?:string; createdAt?:string }
 export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; discoveryPageId?:number; discoveryPageName?:string; scanMaxPages?:number; scannedPageCount:number; progressPercent:number; bookId?:number; bookName?:string; totalCount:number; successCount:number; newBookCount:number; duplicateCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
+export interface CrawlerTaskQueueSettings { maxConcurrentTasks:number; runningCount:number; queuedCount:number }
 export interface CrawlerScanResult { id:number; bookId?:number; bookName:string; bookUrl:string; resultStatus:'NEW'|'DUPLICATE'|'BLACKLISTED'|'FAILED'; errorMessage?:string; createdAt:string }
 export interface CrawlerChapter { id:number; chapterIndex:number; chapterName:string; chapterUrl:string; wordCount:number; crawlStatus:string; accessStatus:string; retryCount:number; errorMessage?:string; crawlTime?:string; createdAt?:string }
 export interface CrawlerChapterFocus { chapter:CrawlerChapter; page:number }
@@ -82,6 +83,9 @@ export const crawlerApi = {
   exports: (bookId:number) => api.get<CrawlerExport[]>(`/api/crawler/books/${bookId}/exports`).then(r => r.data),
   importBook: (bookId:number, formats:string[]) => api.post<{bookId:number}>(`/api/crawler/books/${bookId}/import`, { formats }).then(r => r.data),
   tasks: (params:CrawlerTaskQuery) => api.get<PageResult<CrawlerTask>>('/api/crawler/tasks', { params }).then(r => r.data),
+  task: (id:string) => api.get<CrawlerTask>(`/api/crawler/tasks/${id}`).then(r => r.data),
+  taskQueueSettings: () => api.get<CrawlerTaskQueueSettings>('/api/crawler/tasks/queue-settings').then(r => r.data),
+  updateTaskQueueSettings: (maxConcurrentTasks:number) => api.put<CrawlerTaskQueueSettings>('/api/crawler/tasks/queue-settings',{maxConcurrentTasks}).then(r => r.data),
   scanResults: (id:string,page:number,size:number) => api.get<PageResult<CrawlerScanResult>>(`/api/crawler/tasks/${id}/scan-results`,{params:{page,size}}).then(r=>r.data),
   updateTask: (id:string, priority:'LOW'|'NORMAL'|'HIGH') => api.put<CrawlerTask>(`/api/crawler/tasks/${id}`, {priority}).then(r => r.data),
   deleteTask: (id:string) => api.delete(`/api/crawler/tasks/${id}`),

@@ -11,6 +11,7 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.data.domain.Page;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -112,6 +113,16 @@ public class CrawlerController {
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "false") boolean failedOnly) {
         return managementService.tasks(user(auth), page, size, failedOnly);
+    }
+    @GetMapping("/tasks/{id}") public TaskView task(Authentication auth, @PathVariable String id) {
+        return managementService.task(user(auth), id);
+    }
+    @GetMapping("/tasks/queue-settings") public TaskQueueSettingsView queueSettings() {
+        return taskService.queueSettings();
+    }
+    @PutMapping("/tasks/queue-settings") @PreAuthorize("hasRole('ADMIN')")
+    public TaskQueueSettingsView updateQueueSettings(@Valid @RequestBody TaskQueueSettingsRequest request) {
+        return taskService.updateQueueSettings(request.maxConcurrentTasks());
     }
     @GetMapping("/tasks/{id}/scan-results") public Page<ScanBookResultView> scanResults(
             Authentication auth, @PathVariable String id,

@@ -1,8 +1,10 @@
 package com.aibook.service.crawler;
 
+import com.aibook.dto.crawler.CrawlerDtos.TaskQueueSettingsView;
 import com.aibook.dto.crawler.CrawlerDtos.TaskView;
 import com.aibook.model.entity.*;
 import com.aibook.repository.*;
+import com.aibook.service.CrawlerSettingsService;
 import com.aibook.service.OperationLogService;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +41,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     private final CrawlerHttpClient httpClient;
     private final List<BookCrawlerParser> parsers;
     private final ApplicationContext applicationContext;
+    private final CrawlerSettingsService crawlerSettingsService;
     private final AtomicLong jobSequence = new AtomicLong();
     private final Object[] taskLocks = createTaskLocks();
     private final ThreadPoolExecutor executor = new ThreadPoolExecutor(4, 4, 0L, TimeUnit.MILLISECONDS,
@@ -50,6 +53,17 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     private final Set<String> active = ConcurrentHashMap.newKeySet();
     private static final List<CrawlerTask.TaskStatus> ACTIVE_STATUSES = List.of(
             CrawlerTask.TaskStatus.WAITING, CrawlerTask.TaskStatus.RUNNING, CrawlerTask.TaskStatus.PAUSED);
+
+    public TaskQueueSettingsView queueSettings() {
+        applyConcurrencyLimit(configuredConcurrency());
+        return new TaskQueueSettingsView(
+                executor.getMaximumPoolSize(), executor.getActiveCount(), executor.getQueue().size());
+    }
+
+    public TaskQueueSettingsView updateQueueSettings(Integer limit) {
+        applyConcurrencyLimit(crawlerSettingsService.updateMaxConcurrentTasks(limit));
+        return queueSettings();
+    }
 
     public TaskView start(User user, Long siteId, String url) {
         CrawlerSite site = managementService.ownedSite(user, siteId);
@@ -296,10 +310,33 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     }
 
     private void submit(String id) {
+        applyConcurrencyLimit(configuredConcurrency());
         if (!active.add(id)) return;
         CrawlerTask.Priority priority = taskRepository.findById(id).map(CrawlerTask::getPriority).orElse(CrawlerTask.Priority.NORMAL);
         try { executor.execute(new CrawlerJob(id, priority, jobSequence.incrementAndGet())); }
         catch (RejectedExecutionException exception) { active.remove(id); throw exception; }
+    }
+
+    private int configuredConcurrency() {
+        try { return crawlerSettingsService.maxConcurrentTasks(); }
+        catch (Exception exception) {
+            log.warn("读取采集任务并行配置失败，使用当前值", exception);
+            return executor.getMaximumPoolSize();
+        }
+    }
+
+    private synchronized void applyConcurrencyLimit(int requested) {
+        int limit = Math.max(1, Math.min(16, requested));
+        if (executor.getCorePoolSize() == limit && executor.getMaximumPoolSize() == limit) return;
+        if (limit < executor.getCorePoolSize()) {
+            executor.setCorePoolSize(limit);
+            executor.setMaximumPoolSize(limit);
+        } else {
+            executor.setMaximumPoolSize(limit);
+            executor.setCorePoolSize(limit);
+        }
+        log.info("[采集任务] 并行上限已更新: limit={}, running={}, queued={}",
+                limit, executor.getActiveCount(), executor.getQueue().size());
     }
 
     private void reprioritizeWaitingTask(CrawlerTask task) {

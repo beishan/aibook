@@ -19,6 +19,7 @@ class CrawlerSettingsServiceTest {
     void returnsSafeDefaultsWhenNoCrawlerSettingsExist() {
         SystemConfigService configs = mock(SystemConfigService.class);
         when(configs.getConfigsByPrefix(CrawlerSettingsService.PREFIX)).thenReturn(Map.of());
+        when(configs.getIntConfig("crawler.task.maxConcurrentTasks", 4)).thenReturn(4);
         CrawlerSettingsService service = new CrawlerSettingsService(configs, new ObjectMapper());
 
         CrawlerRequestSettings settings = service.settings();
@@ -27,6 +28,7 @@ class CrawlerSettingsServiceTest {
         assertThat(settings.retryCount()).isEqualTo(2);
         assertThat(settings.maxConsecutiveFailures()).isEqualTo(5);
         assertThat(settings.headersJson()).isEqualTo("{}");
+        assertThat(service.maxConcurrentTasks()).isEqualTo(4);
     }
 
     @Test
@@ -57,5 +59,18 @@ class CrawlerSettingsServiceTest {
                 15000, 2, 5, "", "", "not-json")))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("字符串键值对 JSON");
+    }
+
+    @Test
+    void savesAndValidatesGlobalTaskConcurrency() {
+        SystemConfigService configs = mock(SystemConfigService.class);
+        CrawlerSettingsService service = new CrawlerSettingsService(configs, new ObjectMapper());
+
+        assertThat(service.updateMaxConcurrentTasks(6)).isEqualTo(6);
+        verify(configs).saveConfig("crawler.task.maxConcurrentTasks", "6",
+                "采集任务全局最大并行数量");
+        assertThatThrownBy(() -> service.updateMaxConcurrentTasks(17))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("1 到 16");
     }
 }

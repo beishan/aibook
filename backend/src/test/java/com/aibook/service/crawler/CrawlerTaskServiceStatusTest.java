@@ -45,7 +45,7 @@ class CrawlerTaskServiceStatusTest {
                 mock(CrawlerTaskLogRepository.class), management, operationLogs,
                 mock(CrawlerExportService.class),
                 mock(CrawlerHttpClient.class),
-                List.of(), mock(ApplicationContext.class));
+                List.of(), mock(ApplicationContext.class), mock(com.aibook.service.CrawlerSettingsService.class));
         try {
             when(management.bookView(book)).thenCallRealMethod();
             var result = service.setBookStatus(user, 3L, CrawlerBook.CrawlStatus.COMPLETED, true);
@@ -81,7 +81,7 @@ class CrawlerTaskServiceStatusTest {
                 mock(com.aibook.repository.CrawlerScanResultRepository.class),
                 mock(CrawlerTaskLogRepository.class), management, mock(OperationLogService.class),
                 mock(CrawlerExportService.class), mock(CrawlerHttpClient.class), List.of(),
-                mock(ApplicationContext.class));
+                mock(ApplicationContext.class), mock(com.aibook.service.CrawlerSettingsService.class));
         try {
             var result = service.setLibrarySync(user, 3L, false);
 

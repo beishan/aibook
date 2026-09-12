@@ -104,7 +104,7 @@ class CrawlerTaskServiceLoggingTest {
                 mock(CrawlerExportService.class),
                 mock(CrawlerHttpClient.class),
                 List.of(),
-                mock(ApplicationContext.class));
+                mock(ApplicationContext.class), mock(com.aibook.service.CrawlerSettingsService.class));
         try {
             service.recordCrawlerDetail(task, "章节采集完毕", "章节：第一章；预览：正文");
 

@@ -20,6 +20,7 @@ public class CrawlerSettingsService {
     private static final String USER_AGENT = PREFIX + "userAgent";
     private static final String COOKIE = PREFIX + "cookie";
     private static final String HEADERS = PREFIX + "headersJson";
+    private static final String MAX_CONCURRENT_TASKS = "crawler.task.maxConcurrentTasks";
 
     private final SystemConfigService systemConfigService;
     private final ObjectMapper objectMapper;
@@ -45,6 +46,18 @@ public class CrawlerSettingsService {
         values.put(HEADERS, normalized.headersJson());
         systemConfigService.saveConfigs(values);
         cached = normalized;
+        return normalized;
+    }
+
+    public int maxConcurrentTasks() {
+        return range(systemConfigService.getIntConfig(MAX_CONCURRENT_TASKS, 4), 4, 1, 16,
+                "采集任务并行数量");
+    }
+
+    public int updateMaxConcurrentTasks(Integer value) {
+        int normalized = range(value, 4, 1, 16, "采集任务并行数量");
+        systemConfigService.saveConfig(MAX_CONCURRENT_TASKS, Integer.toString(normalized),
+                "采集任务全局最大并行数量");
         return normalized;
     }
 

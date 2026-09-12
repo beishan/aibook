@@ -368,6 +368,36 @@ class CrawlerManagementServiceTest {
     }
 
     @Test
+    void returnsOwnedTaskDetailWithProcessedProgress() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();
+        CrawlerTask task = CrawlerTask.builder().id("task-detail").user(user).site(site)
+                .type(CrawlerTask.TaskType.BOOK_CONTENT).status(CrawlerTask.TaskStatus.RUNNING)
+                .priority(CrawlerTask.Priority.HIGH).totalCount(10).successCount(4)
+                .failedCount(2).waitingCount(4).currentChapter("第七章").build();
+        when(tasks.findByIdAndUser("task-detail", user)).thenReturn(Optional.of(task));
+
+        var result = service.task(user, "task-detail");
+
+        assertThat(result.id()).isEqualTo("task-detail");
+        assertThat(result.progressPercent()).isEqualTo(60);
+        assertThat(result.currentChapter()).isEqualTo("第七章");
+    }
+
+    @Test
+    void completedTaskDetailAlwaysReportsOneHundredPercent() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();
+        CrawlerTask task = CrawlerTask.builder().id("task-complete").user(user).site(site)
+                .type(CrawlerTask.TaskType.BOOK_CONTENT).status(CrawlerTask.TaskStatus.PARTIAL_SUCCESS)
+                .priority(CrawlerTask.Priority.NORMAL).totalCount(10).successCount(8)
+                .failedCount(2).build();
+        when(tasks.findByIdAndUser("task-complete", user)).thenReturn(Optional.of(task));
+
+        assertThat(service.task(user, "task-complete").progressPercent()).isEqualTo(100);
+    }
+
+    @Test
     void enablingVersionDisablesEveryOtherVersionAndReplacesRuntimeRule() throws Exception {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").siteCode("demo")

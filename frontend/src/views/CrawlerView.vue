@@ -27,7 +27,7 @@
         </article>
       </div>
       <div class="section-heading"><div><p class="eyebrow">LIVE QUEUE</p><h2>最近任务</h2></div><el-button text :icon="Refresh" @click="refresh">刷新</el-button></div>
-      <TaskTable :tasks="dashboard?.recentTasks || []" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" @scan-results="openScanResults" />
+      <TaskTable :tasks="dashboard?.recentTasks || []" @open="openTask" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" @scan-results="openScanResults" />
     </section>
 
     <section v-else-if="activeTab === 'sites'" class="panel" role="tabpanel">
@@ -99,9 +99,9 @@
     </section>
 
     <section v-else class="panel" role="tabpanel">
-      <div class="section-heading"><div><p class="eyebrow">{{ activeTab === 'failed' ? 'NEEDS ATTENTION' : 'PERSISTENT QUEUE' }}</p><h2>{{ activeTab === 'failed' ? '失败任务' : '采集任务' }}</h2></div><el-button text :icon="Refresh" @click="refresh">刷新</el-button></div>
+      <div class="section-heading"><div><p class="eyebrow">{{ activeTab === 'failed' ? 'NEEDS ATTENTION' : 'PERSISTENT QUEUE' }}</p><h2>{{ activeTab === 'failed' ? '失败任务' : '采集任务' }}</h2></div><div class="queue-heading-actions"><div v-if="taskQueueSettings" class="queue-runtime"><span><i class="running-dot"/>运行 {{ taskQueueSettings.runningCount }} / {{ taskQueueSettings.maxConcurrentTasks }}</span><span>排队 {{ taskQueueSettings.queuedCount }}</span></div><el-button v-if="activeTab==='tasks'" @click="openQueueSettings">并行设置</el-button><el-button text :icon="Refresh" @click="refresh">刷新</el-button></div></div>
       <div v-loading="activeTab === 'failed' ? failedTaskLoading : taskLoading">
-        <TaskTable :tasks="activeTab === 'failed' ? failedTasks : tasks" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" @scan-results="openScanResults" />
+        <TaskTable :tasks="activeTab === 'failed' ? failedTasks : tasks" @open="openTask" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" @scan-results="openScanResults" />
       </div>
       <el-empty v-if="activeTab === 'tasks'&&!taskLoading&&!tasks.length" description="暂无采集任务" />
       <el-empty v-if="activeTab === 'failed'&&!failedTaskLoading&&!failedTasks.length" description="暂无失败任务" />
@@ -264,6 +264,59 @@
       <template #footer><el-button @click="taskEditDialog=false">取消</el-button><el-button type="primary" :loading="savingTask" @click="saveTask">保存修改</el-button></template>
     </el-dialog>
 
+    <el-drawer v-model="taskDrawer" size="min(720px, 96vw)" :title="selectedTask ? `${taskTypeLabel(selectedTask.type)}详情` : '采集任务详情'" class="task-detail-drawer">
+      <div v-if="selectedTask" v-loading="taskDetailLoading" class="task-detail-content">
+        <header class="task-detail-hero">
+          <div class="task-detail-mark"><span :class="`state-${selectedTask.status.toLowerCase()}`"/><b>{{ taskProgress(selectedTask) }}%</b></div>
+          <div><p class="eyebrow">{{ selectedTask.id }}</p><h2>{{ selectedTask.bookName || selectedTask.discoveryPageName || selectedTask.siteName }}</h2><p>{{ selectedTask.siteName }} · {{ taskTypeLabel(selectedTask.type) }}</p></div>
+          <el-tag :type="statusType(selectedTask.status)" effect="light">{{ statusLabel(selectedTask.status) }}</el-tag>
+        </header>
+
+        <section class="task-progress-card">
+          <div><strong>任务进度</strong><span v-if="['RUNNING','WAITING'].includes(selectedTask.status)" class="live-state"><i/>每 {{ pollingIntervalSeconds }} 秒更新</span></div>
+          <el-progress :percentage="taskProgress(selectedTask)" :status="selectedTask.status==='FAILED'?'exception':selectedTask.status==='SUCCESS'?'success':undefined" :stroke-width="12" />
+          <p>{{ taskProgressDescription(selectedTask) }}</p>
+        </section>
+
+        <section class="task-stat-grid">
+          <span><small>总数</small><strong>{{ selectedTask.totalCount }}</strong></span>
+          <span><small>成功</small><strong>{{ selectedTask.successCount }}</strong></span>
+          <span v-if="selectedTask.type==='SITE_SCAN'"><small>新增</small><strong>{{ selectedTask.newBookCount }}</strong></span>
+          <span v-if="selectedTask.type==='SITE_SCAN'"><small>重复</small><strong>{{ selectedTask.duplicateCount }}</strong></span>
+          <span><small>失败</small><strong>{{ selectedTask.failedCount }}</strong></span>
+          <span><small>等待</small><strong>{{ selectedTask.waitingCount }}</strong></span>
+        </section>
+
+        <section class="task-detail-list">
+          <div><span>当前处理</span><strong>{{ selectedTask.currentChapter || (['SUCCESS','PARTIAL_SUCCESS'].includes(selectedTask.status) ? '任务已完成' : '暂无') }}</strong></div>
+          <div v-if="selectedTask.type==='SITE_SCAN'"><span>分页进度</span><strong>{{ selectedTask.scannedPageCount }} / {{ selectedTask.scanMaxPages || '—' }} 页</strong></div>
+          <div><span>优先级</span><strong>{{ priorityLabel(selectedTask.priority) }}</strong></div>
+          <div><span>平均请求耗时</span><strong>{{ selectedTask.averageRequestMillis ? `${selectedTask.averageRequestMillis} ms` : '暂无' }}</strong></div>
+          <div><span>创建时间</span><strong>{{ formatTime(selectedTask.createdAt) }}</strong></div>
+          <div><span>开始时间</span><strong>{{ formatTime(selectedTask.startedAt) }}</strong></div>
+          <div><span>完成时间</span><strong>{{ formatTime(selectedTask.finishedAt) }}</strong></div>
+        </section>
+
+        <el-alert v-if="selectedTask.errorMessage" type="error" :closable="false" title="任务错误" :description="selectedTask.errorMessage" show-icon />
+        <div class="task-detail-actions">
+          <el-button v-if="selectedTask.bookId" @click="openTaskBook(selectedTask)">查看采集书籍</el-button>
+          <el-button v-if="selectedTask.type==='SITE_SCAN'" @click="openScanResults(selectedTask)">查看扫描结果</el-button>
+          <el-button v-if="['WAITING','PAUSED','FAILED'].includes(selectedTask.status)" @click="openTaskEditor(selectedTask)">修改优先级</el-button>
+          <el-button v-if="selectedTask.status==='RUNNING'" @click="runTaskCommand(selectedTask,'pause')">暂停</el-button>
+          <el-button v-if="['PAUSED','FAILED'].includes(selectedTask.status)" type="primary" @click="runTaskCommand(selectedTask,'resume')">继续</el-button>
+          <el-button v-if="['RUNNING','WAITING','PAUSED'].includes(selectedTask.status)" type="danger" plain @click="runTaskCommand(selectedTask,'cancel')">取消</el-button>
+        </div>
+      </div>
+    </el-drawer>
+
+    <el-dialog v-model="queueSettingsDialog" title="采集任务并行设置" width="min(520px, 94vw)" append-to-body>
+      <div class="queue-settings-content">
+        <div class="queue-settings-summary"><span><small>正在运行</small><strong>{{ taskQueueSettings?.runningCount || 0 }}</strong></span><span><small>等待队列</small><strong>{{ taskQueueSettings?.queuedCount || 0 }}</strong></span></div>
+        <el-form label-position="top"><el-form-item label="最多同时运行任务数"><el-input-number v-model="queueLimit" :min="1" :max="16" controls-position="right" /><small class="field-hint">新任务超过上限后保持等待状态；有任务结束时，按高、中、低优先级及入队顺序自动开始。调低上限不会强制中断已运行任务。</small></el-form-item></el-form>
+      </div>
+      <template #footer><el-button @click="queueSettingsDialog=false">取消</el-button><el-button type="primary" :loading="savingQueueSettings" @click="saveQueueSettings">保存设置</el-button></template>
+    </el-dialog>
+
     <el-dialog v-model="scanResultsDialog" :title="`${scanResultsTask?.discoveryPageName || '发现页'} · 扫描结果`" width="min(920px, 96vw)" append-to-body>
       <div v-if="scanResultsTask" class="scan-result-summary"><span><small>扫描到</small><strong>{{ scanResultsTask.totalCount }}</strong></span><span><small>成功</small><strong>{{ scanResultsTask.successCount }}</strong></span><span><small>新增</small><strong>{{ scanResultsTask.newBookCount }}</strong></span><span><small>重复</small><strong>{{ scanResultsTask.duplicateCount }}</strong></span><span><small>失败</small><strong>{{ scanResultsTask.failedCount }}</strong></span></div>
       <el-table v-loading="scanResultsLoading" :data="scanResults" max-height="52vh" class="scan-results-table">
@@ -308,19 +361,19 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, Plus, Refresh, Search, Tickets, Upload, Warning } from '@element-plus/icons-vue'
 import { ElButton, ElProgress, ElTable, ElTableColumn, ElTag, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
-import { crawlerApi, type CrawlerBook, type CrawlerChapter, type CrawlerDashboard, type CrawlerDiscoveryPage, type CrawlerDiscoveryPagePayload, type CrawlerLog, type CrawlerRule, type CrawlerRuleExport, type CrawlerRuleTest, type CrawlerRuleVersion, type CrawlerScanResult, type CrawlerSite, type CrawlerSitePayload, type CrawlerTask } from '@/utils/crawler'
+import { crawlerApi, type CrawlerBook, type CrawlerChapter, type CrawlerDashboard, type CrawlerDiscoveryPage, type CrawlerDiscoveryPagePayload, type CrawlerLog, type CrawlerRule, type CrawlerRuleExport, type CrawlerRuleTest, type CrawlerRuleVersion, type CrawlerScanResult, type CrawlerSite, type CrawlerSitePayload, type CrawlerTask, type CrawlerTaskQueueSettings } from '@/utils/crawler'
 import { usePreferencesStore } from '@/stores/preferences'
 import { getCoverUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { confirm, message } from '@/utils/message'
 
-const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true}}, emits:['command','edit','delete','scan-results'], setup(props,{emit}) { return () => h(ElTable,{data:props.tasks,class:'data-table'},()=>[
-  h(ElTableColumn,{label:'任务',minWidth:240},{default:({row}:{row:CrawlerTask})=>h('div',{class:'task-name'},[h('strong',row.bookName||row.discoveryPageName||row.type),h('p',`${row.siteName} · ${row.type}`)])}),
+const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true}}, emits:['open','command','edit','delete','scan-results'], setup(props,{emit}) { return () => h(ElTable,{data:props.tasks,class:'data-table'},()=>[
+  h(ElTableColumn,{label:'任务',minWidth:240},{default:({row}:{row:CrawlerTask})=>h('button',{class:'task-open',type:'button',onClick:()=>emit('open',row)},[h('strong',row.bookName||row.discoveryPageName||taskTypeLabel(row.type)),h('p',`${row.siteName} · ${taskTypeLabel(row.type)}`)])}),
   h(ElTableColumn,{label:'进度 / 扫描结果',minWidth:300},{default:({row}:{row:CrawlerTask})=>row.type==='SITE_SCAN'?h('div',{class:'task-scan-progress'},[h(ElProgress,{percentage:scanTaskPercentage(row),strokeWidth:7}),h('small',scanTaskProgressText(row)),h('div',{class:'task-scan-summary'},[`扫描到 ${row.totalCount}`,h('b',`成功 ${row.successCount}`),h('i',`新增 ${row.newBookCount}`),h('em',`重复 ${row.duplicateCount}`),row.failedCount?h('strong',`失败 ${row.failedCount}`):null])]):h(ElProgress,{percentage:row.totalCount?Math.round(row.successCount/row.totalCount*100):0,strokeWidth:7})}),
   h(ElTableColumn,{label:'状态',width:130},{default:({row}:{row:CrawlerTask})=>h(ElTag,{type:statusType(row.status)},()=>statusLabel(row.status))}),
   h(ElTableColumn,{label:'优先级',width:90},{default:({row}:{row:CrawlerTask})=>h(ElTag,{type:priorityType(row.priority),effect:'plain'},()=>priorityLabel(row.priority))}),
   h(ElTableColumn,{label:'当前章节',prop:'currentChapter',minWidth:150}),
-  h(ElTableColumn,{label:'操作',width:340},{default:({row}:{row:CrawlerTask})=>[row.type==='SITE_SCAN'?h(ElButton,{text:true,type:'primary',onClick:()=>emit('scan-results',row)},()=> '查看结果'):null,['WAITING','PAUSED','FAILED'].includes(row.status)?h(ElButton,{text:true,onClick:()=>emit('edit',row)},()=> '修改'):null,row.status==='RUNNING'?h(ElButton,{text:true,onClick:()=>emit('command',row,'pause')},()=> '暂停'):null,['PAUSED','FAILED'].includes(row.status)?h(ElButton,{text:true,type:'primary',onClick:()=>emit('command',row,'resume')},()=> '继续'):null,['RUNNING','WAITING','PAUSED'].includes(row.status)?h(ElButton,{text:true,type:'danger',onClick:()=>emit('command',row,'cancel')},()=> '取消'):null,row.status!=='RUNNING'?h(ElButton,{text:true,type:'danger',onClick:()=>emit('delete',row)},()=> '删除'):null]})
+  h(ElTableColumn,{label:'操作',width:390},{default:({row}:{row:CrawlerTask})=>[h(ElButton,{text:true,type:'primary',onClick:()=>emit('open',row)},()=> '详情'),row.type==='SITE_SCAN'?h(ElButton,{text:true,onClick:()=>emit('scan-results',row)},()=> '扫描结果'):null,['WAITING','PAUSED','FAILED'].includes(row.status)?h(ElButton,{text:true,onClick:()=>emit('edit',row)},()=> '修改'):null,row.status==='RUNNING'?h(ElButton,{text:true,onClick:()=>emit('command',row,'pause')},()=> '暂停'):null,['PAUSED','FAILED'].includes(row.status)?h(ElButton,{text:true,type:'primary',onClick:()=>emit('command',row,'resume')},()=> '继续'):null,['RUNNING','WAITING','PAUSED'].includes(row.status)?h(ElButton,{text:true,type:'danger',onClick:()=>emit('command',row,'cancel')},()=> '取消'):null,row.status!=='RUNNING'?h(ElButton,{text:true,type:'danger',onClick:()=>emit('delete',row)},()=> '删除'):null]})
 ]) }})
 
 type TabKey='overview'|'sites'|'discovered'|'books'|'tasks'|'failed'
@@ -339,7 +392,7 @@ type PollingIntervalSeconds=typeof pollingIntervalOptions[number]
 const storedPollingInterval=Number(localStorage.getItem(POLLING_INTERVAL_KEY))
 const pollingIntervalSeconds=ref<PollingIntervalSeconds>(pollingIntervalOptions.includes(storedPollingInterval as PollingIntervalSeconds)?storedPollingInterval as PollingIntervalSeconds:3)
 const activeTab=ref<TabKey>('overview'), dashboard=ref<CrawlerDashboard>(), sites=ref<CrawlerSite[]>([]), books=ref<CrawlerBook[]>([]), discoveredBooks=ref<CrawlerBook[]>([]), tasks=ref<CrawlerTask[]>([]), failedTasks=ref<CrawlerTask[]>([])
-const siteDialog=ref(false), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), chapterDetail=ref<{title:string;url:string;content:string;errorMessage:string}>(), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
+const siteDialog=ref(false), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), chapterDetail=ref<{title:string;url:string;content:string;errorMessage:string}>(), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
 const discoveryPagesBySite=ref<Record<number,CrawlerDiscoveryPage[]>>({})
 const bookLoading=ref(false), bookPage=ref(1), bookPageSize=ref(20), bookTotal=ref(0)
 const bookSiteId=ref<number>(), bookCrawlStatus=ref(''), bookImportStatus=ref(''), bookSort=ref('CREATED_DESC')
@@ -347,6 +400,7 @@ const chapterLoading=ref(false), chapterPage=ref(1), chapterTotal=ref(0)
 const currentCrawlingChapter=ref<CrawlerChapter>()
 const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=ref(0)
 const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
+const queueSettingsDialog=ref(false), savingQueueSettings=ref(false), taskQueueSettings=ref<CrawlerTaskQueueSettings>(), queueLimit=ref(4)
 const failedTaskLoading=ref(false), failedTaskPage=ref(1), failedTaskPageSize=ref(20), failedTaskTotal=ref(0)
 const discoveryViewMode=ref<DiscoveryViewMode>(localStorage.getItem(DISCOVERY_VIEW_MODE_KEY)==='card'?'card':'table')
 const ruleTestSite=ref<CrawlerSite>(), ruleTestDraft=ref<CrawlerRule>(), ruleSite=ref<CrawlerSite>(), editingRule=ref<CrawlerRuleVersion>(), ruleTestUrl=ref(''), ruleTestResult=ref<CrawlerRuleTest>(), ruleVersions=ref<CrawlerRuleVersion[]>([]), importInput=ref<HTMLInputElement>(), importMode=ref<'text'|'file'>('text'), importJsonText=ref(''), importFileName=ref('')
@@ -396,24 +450,26 @@ onMounted(async()=>{await preferencesStore.hydrate();await refresh();restartPoll
 onUnmounted(()=>{if(timer)window.clearInterval(timer)})
 function restartPolling(){if(timer)window.clearInterval(timer);timer=window.setInterval(()=>{void pollCrawlerProgress()},pollingIntervalSeconds.value*1000)}
 function setPollingInterval(value:number){if(!pollingIntervalOptions.includes(value as PollingIntervalSeconds))return;pollingIntervalSeconds.value=value as PollingIntervalSeconds;localStorage.setItem(POLLING_INTERVAL_KEY,String(value));restartPolling();void pollCrawlerProgress()}
-async function refresh(){const [dashboardData,siteData]=await Promise.all([crawlerApi.dashboard(),crawlerApi.sites(),loadBooks(),loadTasks(),loadFailedTasks(),loadDiscoveredBooks()]);dashboard.value=dashboardData;sites.value=siteData;await loadDiscoveryPages()}
+async function refresh(){const [dashboardData,siteData]=await Promise.all([crawlerApi.dashboard(),crawlerApi.sites(),loadBooks(),loadTasks(),loadFailedTasks(),loadDiscoveredBooks(),loadTaskQueueSettings()]);dashboard.value=dashboardData;sites.value=siteData;await loadDiscoveryPages()}
 async function loadDiscoveryPages(){const pages=await crawlerApi.discoveryPages();discoveryPagesBySite.value=pages.reduce<Record<number,CrawlerDiscoveryPage[]>>((groups,page)=>{(groups[page.siteId]??=[]).push(page);return groups},{})}
 async function pollCrawlerProgress(){
   if(progressPolling)return
   const hasActiveTask=[...tasks.value,...(dashboard.value?.recentTasks||[])].some(task=>['RUNNING','WAITING'].includes(task.status))
-  if(!hasActiveTask&&!bookDrawer.value)return
+  if(!hasActiveTask&&!bookDrawer.value&&!taskDrawer.value)return
   progressPolling=true
   try{
     const requests:Promise<unknown>[]=[]
     if(hasActiveTask){
       requests.push(crawlerApi.dashboard().then(data=>{dashboard.value=data}))
       requests.push(loadTasks({silent:true}))
+      requests.push(loadTaskQueueSettings())
       if(activeTab.value==='sites')requests.push(crawlerApi.sites().then(data=>{sites.value=data}))
       if(activeTab.value==='discovered')requests.push(loadDiscoveredBooks({silent:true,preserveSelection:true}))
       if(activeTab.value==='books')requests.push(loadBooks({silent:true}))
       if(activeTab.value==='failed')requests.push(loadFailedTasks({silent:true}))
     }
     if(bookDrawer.value)requests.push(syncOpenBookProgress({silent:true}))
+    if(taskDrawer.value&&selectedTask.value)requests.push(syncOpenTask({silent:true}))
     await Promise.all(requests)
   }catch{
     // 后台轮询失败不打断当前页面交互，下一轮会自动重试。
@@ -442,6 +498,22 @@ async function syncOpenBookProgress(options:LoadOptions={}){
     if(!options.silent&&requestSequence===chapterRequestSequence)chapterLoading.value=false
   }
 }
+async function syncOpenTask(options:LoadOptions={}){
+  const taskId=selectedTask.value?.id
+  if(!taskDrawer.value||!taskId)return
+  if(!options.silent)taskDetailLoading.value=true
+  try{
+    const latest=await crawlerApi.task(taskId)
+    if(!taskDrawer.value||selectedTask.value?.id!==taskId)return
+    selectedTask.value=latest
+    tasks.value=tasks.value.map(task=>task.id===taskId?latest:task)
+    failedTasks.value=failedTasks.value.map(task=>task.id===taskId?latest:task)
+    if(dashboard.value)dashboard.value.recentTasks=dashboard.value.recentTasks.map(task=>task.id===taskId?latest:task)
+  }finally{if(!options.silent)taskDetailLoading.value=false}
+}
+async function loadTaskQueueSettings(){taskQueueSettings.value=await crawlerApi.taskQueueSettings();queueLimit.value=taskQueueSettings.value.maxConcurrentTasks}
+function openQueueSettings(){if(taskQueueSettings.value)queueLimit.value=taskQueueSettings.value.maxConcurrentTasks;queueSettingsDialog.value=true}
+async function saveQueueSettings(){savingQueueSettings.value=true;try{taskQueueSettings.value=await crawlerApi.updateTaskQueueSettings(queueLimit.value);queueLimit.value=taskQueueSettings.value.maxConcurrentTasks;queueSettingsDialog.value=false;message.success(`最多同时运行 ${queueLimit.value} 个采集任务`);await loadTasks({silent:true})}finally{savingQueueSettings.value=false}}
 function chapterSortApiValue(value:ChapterSort){return value==='indexDesc'?'INDEX_DESC':value==='createdDesc'?'CREATED_DESC':'INDEX_ASC'}
 async function loadChapterPage(){await syncOpenBookProgress()}
 async function handleChapterSizeChange(size:number){preferencesStore.setCrawlerChapterPageSize(size);chapterPage.value=1;await syncOpenBookProgress()}
@@ -546,10 +618,12 @@ async function toggleLibrarySync(book:CrawlerBook,enabled:boolean){const updated
 async function generate(book:CrawlerBook){if(book.crawlStatus!=='COMPLETED'&&!await confirm(`“${book.bookName}”当前为${statusLabel(book.crawlStatus)}，生成文件将只包含已有正文，是否继续？`))return;await crawlerApi.generate(book.id,['TXT','EPUB']);message.success('已有正文已生成 TXT 与 EPUB，并保留在采集中心')}
 function importBook(book:CrawlerBook){importTarget.value=book;importFormats.value=['EPUB','TXT'];importDialog.value=true}
 async function submitImport(){if(!importTarget.value||!importFormats.value.length)return;const book=importTarget.value,syncing=book.importStatus==='IMPORTED';importing.value=true;try{const result=await crawlerApi.importBook(book.id,importFormats.value);importDialog.value=false;message.success(syncing?`所选格式已同步到书库（书籍 ID：${result.bookId}）`:`${importFormats.value.join(' + ')} 已加入书库（书籍 ID：${result.bookId}）`);await refresh()}finally{importing.value=false}}
-async function runTaskCommand(task:CrawlerTask,command:'pause'|'resume'|'cancel'){await crawlerApi.taskCommand(task.id,command);await refresh()}
+async function openTask(task:CrawlerTask){selectedTask.value=task;taskDrawer.value=true;await syncOpenTask()}
+async function openTaskBook(task:CrawlerTask){if(!task.bookId)return;const book=await crawlerApi.book(task.bookId);taskDrawer.value=false;await openBook(book)}
+async function runTaskCommand(task:CrawlerTask,command:'pause'|'resume'|'cancel'){const updated=await crawlerApi.taskCommand(task.id,command);if(selectedTask.value?.id===updated.id)selectedTask.value=updated;await refresh();if(taskDrawer.value&&selectedTask.value?.id===updated.id)await syncOpenTask({silent:true})}
 function openTaskEditor(task:CrawlerTask){editingTask.value=task;taskPriority.value=(task.priority as 'LOW'|'NORMAL'|'HIGH')||'NORMAL';taskEditDialog.value=true}
-async function saveTask(){if(!editingTask.value)return;savingTask.value=true;try{await crawlerApi.updateTask(editingTask.value.id,taskPriority.value);taskEditDialog.value=false;message.success('任务优先级已更新');await refresh()}finally{savingTask.value=false}}
-async function removeTask(task:CrawlerTask){if(!await confirm(`确定删除“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”的任务记录吗？关联书籍和章节不会被删除。`))return;await crawlerApi.deleteTask(task.id);message.success('任务记录已删除');await refresh()}
+async function saveTask(){if(!editingTask.value)return;savingTask.value=true;try{const updated=await crawlerApi.updateTask(editingTask.value.id,taskPriority.value);if(selectedTask.value?.id===updated.id)selectedTask.value=updated;taskEditDialog.value=false;message.success('任务优先级已更新');await refresh()}finally{savingTask.value=false}}
+async function removeTask(task:CrawlerTask){if(!await confirm(`确定删除“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”的任务记录吗？关联书籍和章节不会被删除。`))return;await crawlerApi.deleteTask(task.id);if(selectedTask.value?.id===task.id){taskDrawer.value=false;selectedTask.value=undefined}message.success('任务记录已删除');await refresh()}
 async function openChapter(chapter:CrawlerChapter){if(!selectedBook.value)return;chapterDetail.value=await crawlerApi.chapter(selectedBook.value.id,chapter.id);chapterDialog.value=true}
 function progress(book:CrawlerBook){return book.chapterCount?Math.round(book.crawledChapterCount/book.chapterCount*100):0}
 function statusLabel(status:string){return ({WAITING:'等待中',RUNNING:'运行中',PAUSED:'已暂停',SUCCESS:'成功',PARTIAL_SUCCESS:'部分成功',FAILED:'失败',CANCELLED:'已取消',DISCOVERED:'已发现',CRAWLING_METADATA:'解析元信息',CRAWLING_CHAPTER_LIST:'解析目录',CRAWLING_CONTENT:'采集正文',COMPLETED:'已完成',NOT_CRAWLED:'未采集',CRAWLING:'采集中',CONTENT_SUSPECTED:'内容异常'} as Record<string,string>)[status]||status}
@@ -557,6 +631,8 @@ function statusType(status:string):''|'success'|'warning'|'info'|'danger'{if(['S
 function priorityLabel(priority:string){return({LOW:'低',NORMAL:'普通',HIGH:'高'} as Record<string,string>)[priority]||priority}
 function priorityType(priority:string):''|'success'|'warning'|'info'|'danger'{return priority==='HIGH'?'warning':priority==='LOW'?'info':''}
 function scanTaskPercentage(task:CrawlerTask){return Math.max(0,Math.min(100,task.progressPercent??(['SUCCESS','PARTIAL_SUCCESS'].includes(task.status)?100:0)))}
+function taskProgress(task:CrawlerTask){return scanTaskPercentage(task)}
+function taskProgressDescription(task:CrawlerTask){if(task.type==='SITE_SCAN')return scanTaskProgressText(task);if(task.currentChapter)return task.currentChapter;if(task.status==='WAITING')return '任务正在队列中等待执行';if(task.status==='SUCCESS')return `处理完成 · 成功 ${task.successCount} 项`;if(task.status==='PARTIAL_SUCCESS')return `处理完成 · 成功 ${task.successCount} 项，失败 ${task.failedCount} 项`;if(task.status==='FAILED')return task.errorMessage||'任务执行失败';if(task.status==='PAUSED')return '任务已暂停，可从下方继续执行';if(task.status==='CANCELLED')return '任务已取消';return `已处理 ${task.successCount+task.failedCount} / ${task.totalCount} 项`}
 function scanTaskProgressText(task:CrawlerTask){if(task.status==='WAITING')return `等待扫描 · 分页上限 ${task.scanMaxPages||'—'} 页`;if(['SUCCESS','PARTIAL_SUCCESS'].includes(task.status))return task.scannedPageCount>0?`扫描完成 · 共扫描 ${task.scannedPageCount} 页`:'扫描完成';return task.currentChapter||`已扫描 ${task.scannedPageCount||0} / ${task.scanMaxPages||'—'} 页`}
 function scanResultLabel(status:CrawlerScanResult['resultStatus']){return({NEW:'新增',DUPLICATE:'重复',BLACKLISTED:'黑名单',FAILED:'失败'} as const)[status]}
 function scanResultType(status:CrawlerScanResult['resultStatus']):'success'|'warning'|'info'|'danger'{return status==='NEW'?'success':status==='DUPLICATE'?'warning':status==='BLACKLISTED'?'info':'danger'}
@@ -616,5 +692,7 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 .discovery-manager-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;margin-bottom:14px;border-radius:14px;background:var(--primary-alpha-10)}.discovery-manager-toolbar>div{display:grid;gap:3px}.discovery-manager-toolbar p{color:var(--text-secondary);font-size:12px}.discovery-pages{display:grid;gap:8px}.discovery-pages-dialog-list{max-height:58vh;overflow-y:auto;padding-right:4px}.discovery-page-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center;padding:12px 14px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-card)}.discovery-page-row>div:first-child{display:grid;min-width:0;gap:3px}.discovery-page-row a{overflow:hidden;color:var(--text-secondary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.discovery-page-row small{color:var(--text-tertiary);font-size:10px}.discovery-page-actions{grid-column:1/-1;display:flex;justify-content:flex-end}.discovery-page-actions .el-button{margin-left:0}.discovery-page-form{display:grid;gap:14px}.discovery-page-form .el-form-item{margin-bottom:0}@media(max-width:520px){.discovery-manager-toolbar{align-items:stretch;flex-direction:column}.discovery-page-row{grid-template-columns:minmax(0,1fr)}.discovery-page-row>.el-switch{justify-self:start}.discovery-page-actions{justify-content:flex-start}}
 .task-scan-progress{display:grid;gap:5px}.task-scan-progress>small{color:var(--text-tertiary);font-size:10px}.task-scan-summary{display:flex;flex-wrap:wrap;gap:5px;color:var(--text-secondary);font-size:11px}.task-scan-summary>*{padding:2px 6px;border-radius:99px;font-style:normal;font-weight:700}.task-scan-summary b{background:var(--success-alpha-15);color:var(--success)}.task-scan-summary i{background:var(--primary-alpha-10);color:var(--primary)}.task-scan-summary em{background:color-mix(in srgb,var(--warning) 15%,transparent);color:var(--warning)}.task-scan-summary strong{background:color-mix(in srgb,var(--danger) 10%,transparent);color:var(--danger)}.scan-result-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:16px}.scan-result-summary span{display:grid;gap:3px;padding:12px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-elevated)}.scan-result-summary small{color:var(--text-tertiary);font-size:10px}.scan-result-summary strong{font-size:20px}.scan-results-table a{color:var(--primary)}.scan-results-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;color:var(--text-tertiary);font-size:12px}@media(max-width:640px){.scan-result-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.scan-results-pagination{align-items:flex-start;flex-direction:column}}
 .crawler-book-metadata{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}.crawler-book-metadata>span{display:grid;gap:4px;padding:11px 13px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-elevated)}.crawler-book-metadata small{color:var(--text-tertiary);font-size:10px}.crawler-book-metadata .metadata-tag-row{grid-column:1/-1}.metadata-tags{display:flex;flex-wrap:wrap;gap:6px}.test-result>.metadata-tags{margin-top:14px}@media(max-width:520px){.crawler-book-metadata{grid-template-columns:minmax(0,1fr)}.crawler-book-metadata .metadata-tag-row{grid-column:auto}}
+.task-open{display:grid;width:100%;gap:3px;padding:5px 0;border:0;background:transparent;color:var(--text-primary);text-align:left;cursor:pointer}.task-open:hover strong{color:var(--primary)}.task-open:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:6px}.task-detail-content{display:grid;gap:16px}.task-detail-hero{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:18px;border-radius:18px;background:var(--primary-alpha-10)}.task-detail-hero h2{overflow:hidden;margin-bottom:4px;text-overflow:ellipsis;white-space:nowrap}.task-detail-hero>div:nth-child(2)>p:last-child{color:var(--text-secondary);font-size:12px}.task-detail-mark{position:relative;display:grid;width:72px;height:72px;place-items:center;border:7px solid var(--surface-card);border-radius:50%;background:var(--surface-elevated);box-shadow:var(--shadow-sm)}.task-detail-mark>span{position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:var(--text-tertiary)}.task-detail-mark>span.state-running{background:var(--success);box-shadow:0 0 0 5px var(--success-alpha-15);animation:live-pulse 1.8s ease-out infinite}.task-detail-mark>span.state-failed{background:var(--danger)}.task-detail-mark>span.state-paused,.task-detail-mark>span.state-partial_success{background:var(--warning)}.task-progress-card{display:grid;gap:11px;padding:16px;border:1px solid var(--border-color-light);border-radius:15px;background:var(--surface-elevated)}.task-progress-card>div{display:flex;align-items:center;justify-content:space-between}.task-progress-card>p{color:var(--text-secondary);font-size:12px}.task-stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.task-stat-grid>span{display:grid;gap:3px;padding:12px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-card)}.task-stat-grid small,.task-detail-list span{color:var(--text-tertiary);font-size:10px}.task-stat-grid strong{font-size:20px}.task-detail-list{overflow:hidden;border:1px solid var(--border-color-light);border-radius:14px}.task-detail-list>div{display:grid;grid-template-columns:130px minmax(0,1fr);gap:12px;padding:11px 14px;border-bottom:1px solid var(--border-color-light)}.task-detail-list>div:last-child{border-bottom:0}.task-detail-list strong{overflow-wrap:anywhere;font-size:12px}.task-detail-actions{display:flex;flex-wrap:wrap;gap:8px;padding-top:4px}.task-detail-actions .el-button{margin-left:0}@media(max-width:520px){.task-detail-hero{grid-template-columns:auto minmax(0,1fr)}.task-detail-hero>.el-tag{grid-column:1/-1;justify-self:start}.task-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.task-detail-list>div{grid-template-columns:90px minmax(0,1fr)}}@media(prefers-reduced-motion:reduce){.task-detail-mark>span.state-running{animation:none}}
+.queue-heading-actions{display:flex;align-items:center;gap:8px}.queue-runtime{display:flex;gap:5px}.queue-runtime span{display:flex;align-items:center;gap:6px;padding:6px 9px;border-radius:99px;background:var(--surface-elevated);color:var(--text-secondary);font-size:10px;font-weight:700}.running-dot{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 0 3px var(--success-alpha-15)}.queue-settings-content{display:grid;gap:18px}.queue-settings-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.queue-settings-summary span{display:grid;gap:4px;padding:14px;border:1px solid var(--border-color-light);border-radius:13px;background:var(--surface-elevated)}.queue-settings-summary small{color:var(--text-tertiary);font-size:10px}.queue-settings-summary strong{font-size:24px}@media(max-width:720px){.queue-heading-actions{align-items:flex-end;flex-direction:column}.queue-runtime{order:2}}@media(max-width:520px){.queue-runtime{display:none}}
 .muted-text{color:var(--text-tertiary);font-size:11px}
 </style>

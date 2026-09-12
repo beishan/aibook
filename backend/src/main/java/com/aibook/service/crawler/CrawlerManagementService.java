@@ -294,6 +294,11 @@ public class CrawlerManagementService {
     }
 
     @Transactional(readOnly = true)
+    public TaskView task(User user, String taskId) {
+        return taskView(ownedTask(user, taskId));
+    }
+
+    @Transactional(readOnly = true)
     public Page<ScanBookResultView> scanResults(User user, String taskId, int page, int size) {
         CrawlerTask task = ownedTask(user, taskId);
         if (task.getType() != CrawlerTask.TaskType.SITE_SCAN) {
@@ -407,7 +412,10 @@ public class CrawlerManagementService {
             return Math.min(99, value(task.getScannedPageCount(), 0) * 100 / maximum);
         }
         int total = value(task.getTotalCount(), 0);
-        return total == 0 ? 0 : Math.min(100, value(task.getSuccessCount(), 0) * 100 / total);
+        if (task.getStatus() == CrawlerTask.TaskStatus.SUCCESS
+                || task.getStatus() == CrawlerTask.TaskStatus.PARTIAL_SUCCESS) return 100;
+        int processed = value(task.getSuccessCount(), 0) + value(task.getFailedCount(), 0);
+        return total == 0 ? 0 : Math.min(99, processed * 100 / total);
     }
 
     private void validateBaseUrl(String value) { try { URI uri = URI.create(value); if (!Set.of("http", "https").contains(uri.getScheme()) || uri.getHost() == null) throw new Exception(); } catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "网站根地址必须是有效的 HTTP(S) 地址"); } }
