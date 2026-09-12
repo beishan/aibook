@@ -9,8 +9,9 @@ import com.aibook.service.OperationLogService;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.*;
-import org.springframework.context.event.ContextRefreshedEvent;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.event.EventListener;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +28,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class CrawlerTaskService implements ApplicationListener<ContextRefreshedEvent> {
+public class CrawlerTaskService {
     private final CrawlerSiteRepository siteRepository;
     private final CrawlerDiscoveryPageRepository discoveryPageRepository;
     private final CrawlerBookRepository bookRepository;
@@ -51,6 +52,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         return thread;
     });
     private final Set<String> active = ConcurrentHashMap.newKeySet();
+    private volatile boolean shuttingDown;
     private static final List<CrawlerTask.TaskStatus> ACTIVE_STATUSES = List.of(
             CrawlerTask.TaskStatus.WAITING, CrawlerTask.TaskStatus.RUNNING, CrawlerTask.TaskStatus.PAUSED);
 
@@ -449,9 +451,9 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
             crawlContents(task, book, site, rule, parser, task.getType() == CrawlerTask.TaskType.BOOK_UPDATE_CHECK);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            if (!isStopRequested(taskId)) fail(taskId, "任务被中断");
+            if (!shuttingDown && !isStopRequested(taskId)) fail(taskId, "任务被中断");
         } catch (Exception exception) {
-            if (isStopRequested(taskId)) return;
+            if (shuttingDown || isStopRequested(taskId)) return;
             log.warn("采集任务 {} 失败", taskId, exception);
             fail(taskId, userMessage(exception));
         }
@@ -563,7 +565,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                             + "；耗时：" + response.durationMillis() + "ms；预览：" + contentPreview(parsed.content()));
                 }
             } catch (Exception exception) {
-                if (isStopRequested(task.getId())) {
+                if (shuttingDown || isStopRequested(task.getId())) {
                     if (!hadParsedContent) {
                         chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
                         chapter.setErrorMessage(null);
@@ -875,22 +877,71 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         return locks;
     }
 
-    @Override public void onApplicationEvent(ContextRefreshedEvent event) {
-        taskRepository.findByStatusIn(List.of(CrawlerTask.TaskStatus.RUNNING, CrawlerTask.TaskStatus.WAITING)).forEach(task -> {
+    @EventListener(ApplicationReadyEvent.class)
+    public void recoverInterruptedTasks() {
+        List<CrawlerTask> interruptedTasks = new ArrayList<>(taskRepository.findByStatusIn(
+                List.of(CrawlerTask.TaskStatus.RUNNING, CrawlerTask.TaskStatus.WAITING)));
+        interruptedTasks.sort(Comparator.comparingInt((CrawlerTask task) -> priorityRank(task.getPriority()))
+                .thenComparing(CrawlerTask::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())));
+
+        List<CrawlerTask> recoveredTasks = new ArrayList<>();
+        for (CrawlerTask task : interruptedTasks) {
             CrawlerTask.TaskStatus interruptedStatus = task.getStatus();
+            try {
+                task.setStatus(CrawlerTask.TaskStatus.WAITING);
+                task.setErrorMessage(null);
+                task.setFinishedAt(null);
+                task.setCurrentChapter(null);
+                taskRepository.save(task);
+                if (task.getCrawlerBook() != null) {
+                    CrawlerBook book = task.getCrawlerBook();
+                    List<CrawlerChapter> interruptedChapters = chapterRepository
+                            .findByCrawlerBookAndCrawlStatus(book, CrawlerChapter.CrawlStatus.CRAWLING);
+                    interruptedChapters.forEach(chapter -> chapter.setCrawlStatus(
+                            CrawlerChapter.CrawlStatus.NOT_CRAWLED));
+                    if (!interruptedChapters.isEmpty()) chapterRepository.saveAll(interruptedChapters);
+                    book.setCrawlStatus(CrawlerBook.CrawlStatus.WAITING);
+                    bookRepository.save(book);
+                }
+                recoveredTasks.add(task);
+                log.info("[采集任务] 服务启动时恢复遗留任务: taskId={}, previousStatus={}, priority={}, book={}",
+                        task.getId(), interruptedStatus, task.getPriority(), bookName(task.getCrawlerBook()));
+                recordCrawlerEvent(task, "服务重启后任务已自动恢复",
+                        "重启前状态：" + interruptedStatus + "；已重新进入等待队列");
+            } catch (Exception exception) {
+                log.error("[采集任务] 恢复遗留任务失败: taskId={}", task.getId(), exception);
+                pauseAfterRecoveryFailure(task, "服务重启后恢复任务状态失败：" + userMessage(exception));
+            }
+        }
+        recoveredTasks.forEach(task -> {
+            try {
+                submit(task.getId());
+            } catch (Exception exception) {
+                log.error("[采集任务] 恢复任务重新入队失败: taskId={}", task.getId(), exception);
+                pauseAfterRecoveryFailure(task, "服务重启后重新入队失败：" + userMessage(exception));
+            }
+        });
+    }
+
+    private void pauseAfterRecoveryFailure(CrawlerTask task, String message) {
+        try {
             task.setStatus(CrawlerTask.TaskStatus.PAUSED);
-            task.setErrorMessage("服务重启后已自动暂停，请手动继续或删除任务");
+            task.setErrorMessage(message);
             taskRepository.save(task);
             if (task.getCrawlerBook() != null) {
                 task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.PAUSED);
                 bookRepository.save(task.getCrawlerBook());
             }
-            log.info("[采集任务] 服务启动时暂停遗留任务: taskId={}, previousStatus={}, book={}",
-                    task.getId(), interruptedStatus, bookName(task.getCrawlerBook()));
-            recordCrawlerEvent(task, "服务重启后任务已暂停", "重启前状态：" + interruptedStatus);
-        });
+            recordCrawlerEvent(task, "服务重启后任务恢复失败", message);
+        } catch (Exception exception) {
+            log.error("[采集任务] 保存任务恢复失败状态异常: taskId={}", task.getId(), exception);
+        }
     }
-    @PreDestroy public void shutdown() { executor.shutdownNow(); }
+
+    @PreDestroy public void shutdown() {
+        shuttingDown = true;
+        executor.shutdownNow();
+    }
 
     private String sha256(String value) throws Exception { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
     private String externalId(String url) { String path = URI.create(url).getPath().replaceAll("/+$", ""); String id = path.substring(path.lastIndexOf('/') + 1).replaceFirst("\\.[^.]+$", ""); return id.isBlank() ? Integer.toHexString(url.hashCode()) : id; }

@@ -361,27 +361,45 @@ class CrawlerTaskManagementTest {
     }
 
     @Test
-    void pausesInterruptedTasksOnStartupInsteadOfSubmittingThemAgain() {
+    void restoresInterruptedTasksAndSubmitsThemAgainOnStartup() {
         User user = user();
         CrawlerBook book = CrawlerBook.builder().id(8L).bookName("未完成的书").build();
         CrawlerTask interrupted = CrawlerTask.builder().user(user)
                 .site(CrawlerSite.builder().id(2L).user(user).siteName("示例站").build())
                 .crawlerBook(book).type(CrawlerTask.TaskType.BOOK_FULL_CRAWL)
                 .status(CrawlerTask.TaskStatus.RUNNING).build();
+        CrawlerTask waiting = CrawlerTask.builder().user(user).site(interrupted.getSite())
+                .type(CrawlerTask.TaskType.SITE_SCAN).status(CrawlerTask.TaskStatus.WAITING).build();
+        CrawlerChapter chapter = CrawlerChapter.builder().crawlerBook(book).chapterIndex(1)
+                .chapterName("中断章节").chapterUrl("https://example.com/chapter/1")
+                .externalChapterId("1").crawlStatus(CrawlerChapter.CrawlStatus.CRAWLING).build();
         CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
         CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerChapterRepository chapters = mock(CrawlerChapterRepository.class);
         CrawlerManagementService management = mock(CrawlerManagementService.class);
-        when(tasks.findByStatusIn(any())).thenReturn(List.of(interrupted));
-        CrawlerTaskService service = service(tasks, books, management);
+        when(tasks.findByStatusIn(any())).thenReturn(List.of(interrupted, waiting));
+        when(tasks.findById(anyString())).thenReturn(Optional.empty());
+        when(chapters.findByCrawlerBookAndCrawlStatus(book, CrawlerChapter.CrawlStatus.CRAWLING))
+                .thenReturn(List.of(chapter));
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books, chapters, tasks,
+                mock(CrawlerScanResultRepository.class), mock(CrawlerTaskLogRepository.class), management,
+                mock(OperationLogService.class), mock(CrawlerExportService.class), mock(CrawlerHttpClient.class),
+                List.of(), mock(ApplicationContext.class), mock(CrawlerSettingsService.class));
         try {
-            service.onApplicationEvent(null);
+            service.recoverInterruptedTasks();
 
-            assertThat(interrupted.getStatus()).isEqualTo(CrawlerTask.TaskStatus.PAUSED);
-            assertThat(interrupted.getErrorMessage()).contains("服务重启后已自动暂停");
-            assertThat(book.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.PAUSED);
+            assertThat(interrupted.getStatus()).isEqualTo(CrawlerTask.TaskStatus.WAITING);
+            assertThat(waiting.getStatus()).isEqualTo(CrawlerTask.TaskStatus.WAITING);
+            assertThat(interrupted.getErrorMessage()).isNull();
+            assertThat(book.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.WAITING);
+            assertThat(chapter.getCrawlStatus()).isEqualTo(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
             verify(tasks).save(interrupted);
+            verify(tasks).save(waiting);
             verify(books).save(book);
-            verify(tasks, never()).findById(interrupted.getId());
+            verify(chapters).saveAll(List.of(chapter));
+            verify(tasks, timeout(1000).atLeastOnce()).findById(interrupted.getId());
+            verify(tasks, timeout(1000).atLeastOnce()).findById(waiting.getId());
         } finally {
             service.shutdown();
         }

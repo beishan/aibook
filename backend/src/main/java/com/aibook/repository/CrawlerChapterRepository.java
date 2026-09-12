@@ -9,6 +9,8 @@ import java.util.*;
 
 public interface CrawlerChapterRepository extends JpaRepository<CrawlerChapter, Long> {
     List<CrawlerChapter> findByCrawlerBookOrderByChapterIndexAsc(CrawlerBook book);
+    List<CrawlerChapter> findByCrawlerBookAndCrawlStatus(
+            CrawlerBook book, CrawlerChapter.CrawlStatus status);
     Page<CrawlerChapter> findByCrawlerBook(CrawlerBook book, Pageable pageable);
     Optional<CrawlerChapter> findFirstByCrawlerBookAndCrawlStatusOrderByUpdatedAtDesc(
             CrawlerBook book, CrawlerChapter.CrawlStatus status);
