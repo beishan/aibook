@@ -1,5 +1,12 @@
 <template>
-  <div class="reader-view" :class="{ 'fullscreen-mode': isFullscreen }">
+  <div
+    class="reader-view"
+    :class="{
+      'fullscreen-mode': isFullscreen,
+      'reading-room-mode': settings.appearance === 'readingRoom',
+    }"
+    :style="readerShellStyle"
+  >
     <!-- 阅读器内容 -->
     <div v-if="book" class="reader-content">
       <div v-if="loading" class="reader-loading-overlay loading glass" role="status">
@@ -274,7 +281,10 @@
         <!-- 阅读器内容 -->
         <div
           class="reader-body"
-          :class="{ 'pagination-mode': isPaginationMode }"
+          :class="[
+            { 'pagination-mode': isPaginationMode },
+            `reader-body--${book.format}`,
+          ]"
           :style="readerStyle"
           @scroll="handleScroll"
           @mouseup="captureDocumentSelection"
@@ -379,6 +389,32 @@
               <button class="dialog-close" @click="showSettings = false">✕</button>
             </div>
             <div class="settings-body">
+              <div class="setting-section appearance-setting-section">
+                <h4 class="section-title">界面样式</h4>
+                <div
+                  class="appearance-segmented"
+                  :class="`appearance-segmented--${settings.appearance}`"
+                  role="radiogroup"
+                  aria-label="正式阅读器界面样式"
+                  @keydown="handleAppearanceKeydown"
+                >
+                  <span class="appearance-segmented-indicator" aria-hidden="true"></span>
+                  <button
+                    v-for="appearance in appearanceOptions"
+                    :key="appearance.value"
+                    type="button"
+                    class="appearance-segmented-option"
+                    role="radio"
+                    :aria-checked="settings.appearance === appearance.value"
+                    :tabindex="settings.appearance === appearance.value ? 0 : -1"
+                    @click="settings.appearance = appearance.value"
+                  >
+                    <strong>{{ appearance.label }}</strong>
+                    <small>{{ appearance.description }}</small>
+                  </button>
+                </div>
+              </div>
+
               <!-- 字体设置 -->
               <div class="setting-section">
                 <h4 class="section-title">字体设置</h4>
@@ -899,7 +935,19 @@ const getThemePreviewStyle = (theme: any) => {
 
 const SETTINGS_STORAGE_KEY = 'ai-book-reader-settings'
 
+type ReaderAppearance = 'classic' | 'readingRoom'
+
+const appearanceOptions: Array<{
+  value: ReaderAppearance
+  label: string
+  description: string
+}> = [
+  { value: 'classic', label: '经典', description: '保留原有布局' },
+  { value: 'readingRoom', label: '书房', description: '沉浸纸书风格' },
+]
+
 const settings = ref({
+  appearance: 'classic' as ReaderAppearance,
   epubEngine: 'epubjs' as 'epubjs' | 'readium',
   fontFamily: 'default',
   fontSize: 16,
@@ -998,6 +1046,26 @@ const readerStyle = computed(() => {
   }
 })
 
+const readerShellStyle = computed(() => {
+  const colors = getResolvedColors(settings.value.backgroundColor)
+  return {
+    '--reader-room-background': colors.bg,
+    '--reader-room-text': colors.text,
+  }
+})
+
+const handleAppearanceKeydown = (event: KeyboardEvent) => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  const group = event.currentTarget as HTMLElement | null
+  settings.value.appearance = event.key === 'ArrowLeft' || event.key === 'Home'
+    ? 'classic'
+    : 'readingRoom'
+  nextTick(() => {
+    group?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus()
+  })
+}
+
 const pageTurnZoneStyle = computed(() => ({
   '--reader-content-width': readerStyle.value.maxWidth,
 }))
@@ -1026,6 +1094,9 @@ const loadReaderSettings = () => {
     if (saved) {
       const parsed = JSON.parse(saved)
       Object.assign(settings.value, parsed)
+      if (!appearanceOptions.some(option => option.value === settings.value.appearance)) {
+        settings.value.appearance = 'classic'
+      }
     }
   } catch (e) { /* ignore */ }
 }
@@ -4682,6 +4753,299 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 
+/* 正式阅读器界面样式选择 */
+.appearance-segmented {
+  --appearance-index: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border-color-light);
+  border-radius: 16px;
+  background: var(--bg-secondary);
+}
+
+.appearance-segmented--readingRoom {
+  --appearance-index: 1;
+}
+
+.appearance-segmented-indicator {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 2);
+  border: 1px solid var(--border-color-light);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.09);
+  transform: translateX(calc(var(--appearance-index) * 100%));
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.appearance-segmented-option {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 12px;
+  outline: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: center;
+}
+
+.appearance-segmented-option strong {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.appearance-segmented-option small {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appearance-segmented-option[aria-checked="true"] {
+  color: var(--primary);
+}
+
+.appearance-segmented-option:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+/* 书房：复用同一个 ReaderView，仅重塑界面，不分叉阅读逻辑 */
+.reading-room-mode {
+  --room-border: color-mix(in srgb, var(--reader-room-text) 14%, transparent);
+  --room-subtle-border: color-mix(in srgb, var(--reader-room-text) 8%, transparent);
+  --room-surface: color-mix(in srgb, var(--reader-room-background) 91%, transparent);
+  --room-elevated: color-mix(in srgb, var(--reader-room-background) 97%, var(--reader-room-text) 3%);
+  --room-muted: color-mix(in srgb, var(--reader-room-text) 62%, transparent);
+  background:
+    radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 34%),
+    linear-gradient(90deg, color-mix(in srgb, var(--reader-room-text) 2%, transparent) 1px, transparent 1px),
+    var(--reader-room-background);
+  background-size: auto, 32px 32px, auto;
+  color: var(--reader-room-text);
+}
+
+.reading-room-mode .reader-content {
+  background: transparent;
+}
+
+.reading-room-mode .reader-header {
+  position: relative;
+  inset: auto;
+  flex: 0 0 auto;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  min-height: 64px;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--room-border);
+  background: var(--room-surface);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--reader-room-text) 6%, transparent);
+  backdrop-filter: blur(22px) saturate(130%);
+  -webkit-backdrop-filter: blur(22px) saturate(130%);
+  pointer-events: auto;
+}
+
+.reading-room-mode .back-btn {
+  min-height: 42px;
+  padding: 8px 13px;
+  border-color: var(--room-border);
+  border-radius: 13px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--reader-room-text);
+}
+
+.reading-room-mode .back-btn:hover {
+  background: color-mix(in srgb, var(--reader-room-text) 7%, transparent);
+}
+
+.reading-room-mode .reader-title {
+  justify-content: flex-start;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--reader-room-text);
+}
+
+.reading-room-mode .reader-title-main {
+  display: grid;
+  gap: 3px;
+}
+
+.reading-room-mode .reader-book-identity,
+.reading-room-mode .reader-title-meta {
+  flex: none;
+  justify-content: flex-start;
+  max-width: 100%;
+  margin: 0;
+}
+
+.reading-room-mode .reader-book-name {
+  font-family: "Iowan Old Style", "Baskerville", "Songti SC", "STSong", serif;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.reading-room-mode .reader-title-meta {
+  color: var(--room-muted);
+  font-size: 11px;
+}
+
+.reading-room-mode .reader-version-badge,
+.reading-room-mode .performance-mode-badge {
+  border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.reading-room-mode .reader-actions {
+  gap: 1px;
+  padding: 3px;
+  border-color: var(--room-border);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--room-elevated) 92%, transparent);
+  box-shadow: none;
+}
+
+.reading-room-mode .btn-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  color: var(--reader-room-text);
+}
+
+.reading-room-mode .btn-icon:hover {
+  background: color-mix(in srgb, var(--reader-room-text) 7%, transparent);
+}
+
+.reading-room-mode .btn-icon.active {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+}
+
+.reading-room-mode .reader-body-wrapper {
+  background: transparent;
+}
+
+.reading-room-mode .side-panel {
+  width: 340px;
+  border-right-color: var(--room-border);
+  background: var(--room-surface);
+  box-shadow: 14px 0 34px color-mix(in srgb, var(--reader-room-text) 7%, transparent);
+  color: var(--reader-room-text);
+}
+
+.reading-room-mode .panel-tabs {
+  border-bottom-color: var(--room-border);
+  background: transparent;
+}
+
+.reading-room-mode .reader-body {
+  padding: 44px 64px 78px;
+  border-inline: 1px solid var(--room-subtle-border);
+  box-shadow: 0 22px 70px color-mix(in srgb, var(--reader-room-text) 5%, transparent);
+}
+
+.reading-room-mode .reader-body--epub,
+.reading-room-mode .reader-body--pdf {
+  padding: 18px 24px 52px;
+}
+
+.reading-room-mode .reader-text {
+  letter-spacing: 0.012em;
+}
+
+.reading-room-mode .reader-text p {
+  text-align: justify;
+  text-wrap: pretty;
+}
+
+.reading-room-mode .chapter-title {
+  margin: 2.8em 0 1.8em;
+  padding: 0;
+  border: 0;
+  font-family: "Iowan Old Style", "Baskerville", "Songti SC", "STSong", serif;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+}
+
+.reading-room-mode .chapter-title::after {
+  content: "◆";
+  display: block;
+  margin-top: 1.2em;
+  color: var(--primary);
+  font-size: 8px;
+  line-height: 1;
+}
+
+.reading-room-mode .page-turn-button {
+  width: 40px;
+  height: 52px;
+  border-color: var(--room-border);
+  border-radius: 13px;
+  background: var(--room-surface);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--reader-room-text) 8%, transparent);
+  color: var(--reader-room-text);
+}
+
+.reading-room-mode .page-turn-zone:hover:not(:disabled) .page-turn-button,
+.reading-room-mode .page-turn-zone:focus-visible .page-turn-button {
+  background: var(--room-elevated);
+}
+
+.reading-room-mode .reader-progress-dock {
+  padding: 7px 14px;
+  border-color: var(--room-border);
+  border-radius: 12px;
+  background: var(--room-surface);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--reader-room-text) 8%, transparent);
+  color: var(--room-muted);
+}
+
+.reading-room-mode .settings-overlay {
+  background: color-mix(in srgb, var(--reader-room-text) 13%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.reading-room-mode .settings-panel {
+  width: min(390px, 100%);
+  border-left: 1px solid var(--room-border);
+  background: var(--room-elevated);
+  color: var(--reader-room-text);
+  box-shadow: -18px 0 50px color-mix(in srgb, var(--reader-room-text) 12%, transparent);
+}
+
+.reading-room-mode .settings-header {
+  border-bottom-color: var(--room-border);
+  font-family: "Iowan Old Style", "Baskerville", "Songti SC", "STSong", serif;
+  font-size: 19px;
+}
+
+.reading-room-mode .section-title {
+  color: var(--room-muted);
+  letter-spacing: 0.1em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .appearance-segmented-indicator {
+    transition: none;
+  }
+}
+
 /* 动画 */
 .slide-left-enter-active,
 .slide-left-leave-active {
@@ -4778,6 +5142,60 @@ onBeforeUnmount(() => {
   .btn-icon {
     width: 36px;
     height: 36px;
+  }
+
+  .reading-room-mode .reader-header {
+    inset: auto;
+    grid-template-columns: 40px minmax(0, 1fr);
+    min-height: 0;
+    gap: 7px;
+    padding: 8px 10px 9px;
+  }
+
+  .reading-room-mode .back-btn {
+    grid-column: 1;
+    grid-row: 1;
+    width: 40px;
+    min-height: 38px;
+    padding: 0;
+  }
+
+  .reading-room-mode .back-btn span:last-child {
+    display: none;
+  }
+
+  .reading-room-mode .reader-actions {
+    grid-column: 2;
+    grid-row: 1;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .reading-room-mode .reader-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .reading-room-mode .reader-title {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: stretch;
+    width: 100%;
+    padding: 1px 3px 0;
+  }
+
+  .reading-room-mode .reader-body {
+    padding: 36px 48px 72px;
+  }
+
+  .reading-room-mode .reader-body--epub,
+  .reading-room-mode .reader-body--pdf {
+    padding: 12px 8px 48px;
+  }
+
+  .reading-room-mode .side-panel {
+    width: 88%;
+    max-width: 340px;
   }
 }
 </style>

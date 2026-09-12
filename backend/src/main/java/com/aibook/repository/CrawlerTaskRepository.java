@@ -15,4 +15,6 @@ public interface CrawlerTaskRepository extends JpaRepository<CrawlerTask, String
     long countByUserAndStatus(User user, CrawlerTask.TaskStatus status);
     boolean existsBySiteAndTypeAndStatusIn(CrawlerSite site, CrawlerTask.TaskType type, Collection<CrawlerTask.TaskStatus> statuses);
     boolean existsByCrawlerBookAndStatusIn(CrawlerBook book, Collection<CrawlerTask.TaskStatus> statuses);
+    Optional<CrawlerTask> findFirstByCrawlerBookAndStatusOrderByUpdatedAtDesc(
+            CrawlerBook book, CrawlerTask.TaskStatus status);
 }

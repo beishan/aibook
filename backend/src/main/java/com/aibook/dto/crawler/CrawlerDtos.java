@@ -53,7 +53,8 @@ public final class CrawlerDtos {
 
     public record ManualCrawlRequest(@NotBlank String url) { }
     public record ExportRequest(@NotEmpty List<@Pattern(regexp = "(?i)TXT|EPUB") String> formats) { }
-    public record ImportRequest(@Pattern(regexp = "(?i)TXT|EPUB") String format) { }
+    public record ImportRequest(
+            @NotEmpty List<@Pattern(regexp = "(?i)TXT|EPUB") String> formats) { }
     public record BookCrawlStatusRequest(
             @NotBlank @Pattern(regexp = "DISCOVERED|WAITING|PAUSED|PARTIAL_SUCCESS|COMPLETED|FAILED") String status,
             Boolean autoUpdateEnabled) { }
@@ -90,6 +91,8 @@ public final class CrawlerDtos {
     public record ChapterView(Long id, int chapterIndex, String chapterName, String chapterUrl,
             int wordCount, String crawlStatus, String accessStatus, int retryCount,
             String errorMessage, LocalDateTime crawlTime, LocalDateTime createdAt) { }
+
+    public record ChapterFocusView(ChapterView chapter, int page) { }
 
     public record CrawlerLogView(
             Long id, String description, String details, LocalDateTime createdAt) { }

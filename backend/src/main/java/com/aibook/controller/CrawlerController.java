@@ -58,7 +58,19 @@ public class CrawlerController {
         return managementService.discoveredBooks(user(auth), page, size, keyword, siteId, sort);
     }
     @GetMapping("/books/{id}") public BookView book(Authentication auth, @PathVariable Long id) { return managementService.book(user(auth), id); }
-    @GetMapping("/books/{id}/chapters") public List<ChapterView> chapters(Authentication auth, @PathVariable Long id) { return managementService.chapters(user(auth), id); }
+    @GetMapping("/books/{id}/chapters") public Page<ChapterView> chapters(
+            Authentication auth, @PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "INDEX_ASC") String sort) {
+        return managementService.chapters(user(auth), id, page, size, sort);
+    }
+    @GetMapping("/books/{id}/chapters/current") public ResponseEntity<ChapterFocusView> currentChapter(
+            Authentication auth, @PathVariable Long id,
+            @RequestParam(defaultValue = "20") int size) {
+        return managementService.currentChapter(user(auth), id, size)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
     @GetMapping("/books/{id}/logs") public List<CrawlerLogView> bookLogs(
             Authentication auth, @PathVariable Long id, @RequestParam(defaultValue = "100") int limit) {
         return managementService.logs(user(auth), id, limit);
@@ -78,7 +90,7 @@ public class CrawlerController {
     @PutMapping("/books/batch/discovery-status") public List<BookView> discoveryStatus(Authentication auth, @Valid @RequestBody DiscoveryStatusRequest request) { return taskService.setDiscoveryStatus(user(auth), request.bookIds(), CrawlerBook.DiscoveryStatus.valueOf(request.status())); }
     @PostMapping("/books/{id}/exports") public List<ExportView> generate(Authentication auth, @PathVariable Long id, @Valid @RequestBody ExportRequest request) { return exportService.generate(user(auth), id, request.formats()); }
     @GetMapping("/books/{id}/exports") public List<ExportView> exports(Authentication auth, @PathVariable Long id) { return exportService.list(user(auth), id); }
-    @PostMapping("/books/{id}/import") public Map<String, Long> importLibrary(Authentication auth, @PathVariable Long id, @Valid @RequestBody ImportRequest request) { return Map.of("bookId", exportService.importLibrary(user(auth), id, request.format())); }
+    @PostMapping("/books/{id}/import") public Map<String, Long> importLibrary(Authentication auth, @PathVariable Long id, @Valid @RequestBody ImportRequest request) { return Map.of("bookId", exportService.importLibrary(user(auth), id, request.formats())); }
     @GetMapping("/books/{bookId}/exports/{exportId}/download") public ResponseEntity<FileSystemResource> download(Authentication auth, @PathVariable Long bookId, @PathVariable Long exportId) {
         Path path = exportService.exportPath(user(auth), bookId, exportId);
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + path.getFileName() + "\"").contentType(MediaType.APPLICATION_OCTET_STREAM).body(new FileSystemResource(path));

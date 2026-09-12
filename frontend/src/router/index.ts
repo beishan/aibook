@@ -62,6 +62,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/CrawlerView.vue'),
       },
       {
+        path: 'crawler/books/:id/trial',
+        name: 'CrawlerTrialReader',
+        component: () => import('@/views/CrawlerTrialReaderView.vue'),
+      },
+      {
         path: 'reader/:id',
         name: 'Reader',
         component: () => import('@/views/ReaderView.vue'),

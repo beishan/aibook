@@ -22,8 +22,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipFile;
 
@@ -172,6 +171,59 @@ class CrawlerExportServiceTest {
         assertThat(libraryBook.getChapterCount()).isEqualTo(1);
         verify(progresses).save(argThat(progress -> progress.getVersion() == newVersion.get()
                 && progress.getTotalProgress() == 42 && "第一章".equals(progress.getCurrentChapterTitle())));
+    }
+
+    @Test
+    void importsSelectedFormatsAsVersionsOfOneLibraryBook() {
+        User user = User.builder().id(1L).username("owner").build();
+        CrawlerBook crawlerBook = book(user);
+        CrawlerChapter chapter = CrawlerChapter.builder().crawlerBook(crawlerBook).chapterIndex(0)
+                .chapterName("第一章").content("正文").contentHash("content-1").build();
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        CrawlerChapterRepository chapters = mock(CrawlerChapterRepository.class);
+        CrawlerBookExportRepository exports = mock(CrawlerBookExportRepository.class);
+        CrawlerBookRepository crawlerBooks = mock(CrawlerBookRepository.class);
+        BookRepository books = mock(BookRepository.class);
+        BookVersionRepository versions = mock(BookVersionRepository.class);
+        Map<String, CrawlerBookExport> savedExports = new HashMap<>();
+        List<BookVersion> savedVersions = new ArrayList<>();
+        when(management.ownedBook(user, 3L)).thenReturn(crawlerBook);
+        when(chapters.findByCrawlerBookOrderByChapterIndexAsc(crawlerBook)).thenReturn(List.of(chapter));
+        when(exports.findByCrawlerBookAndFormat(eq(crawlerBook), anyString()))
+                .thenAnswer(invocation -> Optional.ofNullable(savedExports.get(invocation.getArgument(1))));
+        when(exports.save(any(CrawlerBookExport.class))).thenAnswer(invocation -> {
+            CrawlerBookExport saved = invocation.getArgument(0);
+            saved.setId((long) savedExports.size() + 1);
+            savedExports.put(saved.getFormat(), saved);
+            return saved;
+        });
+        when(books.save(any(Book.class))).thenAnswer(invocation -> {
+            Book saved = invocation.getArgument(0); saved.setId(20L); return saved;
+        });
+        when(books.findByFileHash(anyString())).thenReturn(Optional.empty());
+        when(versions.findByFileHash(anyString())).thenReturn(Optional.empty());
+        when(versions.findByBookOrderByPrimaryVersionDescCreatedAtAsc(any(Book.class)))
+                .thenAnswer(invocation -> List.copyOf(savedVersions));
+        when(versions.save(any(BookVersion.class))).thenAnswer(invocation -> {
+            BookVersion saved = invocation.getArgument(0);
+            if (saved.getId() == null) saved.setId(30L + savedVersions.size());
+            if (!savedVersions.contains(saved)) savedVersions.add(saved);
+            return saved;
+        });
+        CrawlerExportService service = new CrawlerExportService(management, chapters, exports,
+                crawlerBooks, books, versions, mock(VersionReadingProgressRepository.class),
+                mock(OperationLogService.class));
+        ReflectionTestUtils.setField(service, "storagePath", temporaryDirectory.toString());
+        ReflectionTestUtils.setField(service, "uploadPath", temporaryDirectory.resolve("uploads").toString());
+
+        Long libraryBookId = service.importLibrary(user, crawlerBook.getId(), List.of("txt", "EPUB", "TXT"));
+
+        assertThat(libraryBookId).isEqualTo(20L);
+        assertThat(savedVersions).extracting(BookVersion::getFormat).containsExactlyInAnyOrder("epub", "txt");
+        assertThat(savedVersions).filteredOn(BookVersion::getPrimaryVersion).singleElement()
+                .extracting(BookVersion::getFormat).isEqualTo("epub");
+        assertThat(crawlerBook.getLibraryBook()).isNotNull();
+        verify(crawlerBooks).save(crawlerBook);
     }
 
     private CrawlerExportService service(CrawlerManagementService management,
