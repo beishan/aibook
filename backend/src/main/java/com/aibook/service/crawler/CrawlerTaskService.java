@@ -65,6 +65,20 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         return queueSettings();
     }
 
+    public List<TaskView> queuedTasks(User user) {
+        return executor.getQueue().stream()
+                .filter(CrawlerJob.class::isInstance)
+                .map(CrawlerJob.class::cast)
+                .sorted()
+                .map(job -> taskRepository.findById(job.taskId))
+                .flatMap(Optional::stream)
+                .filter(task -> task.getStatus() == CrawlerTask.TaskStatus.WAITING)
+                .filter(task -> task.getUser() == user || (user.getId() != null
+                        && Objects.equals(task.getUser().getId(), user.getId())))
+                .map(managementService::taskView)
+                .toList();
+    }
+
     public TaskView start(User user, Long siteId, String url) {
         CrawlerSite site = managementService.ownedSite(user, siteId);
         if (!Boolean.TRUE.equals(site.getEnabled())) throw new ResponseStatusException(HttpStatus.CONFLICT, "请先启用该采集网站");

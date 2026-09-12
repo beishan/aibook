@@ -83,6 +83,7 @@ export const crawlerApi = {
   exports: (bookId:number) => api.get<CrawlerExport[]>(`/api/crawler/books/${bookId}/exports`).then(r => r.data),
   importBook: (bookId:number, formats:string[]) => api.post<{bookId:number}>(`/api/crawler/books/${bookId}/import`, { formats }).then(r => r.data),
   tasks: (params:CrawlerTaskQuery) => api.get<PageResult<CrawlerTask>>('/api/crawler/tasks', { params }).then(r => r.data),
+  queuedTasks: () => api.get<CrawlerTask[]>('/api/crawler/tasks/queued').then(r => r.data),
   task: (id:string) => api.get<CrawlerTask>(`/api/crawler/tasks/${id}`).then(r => r.data),
   taskQueueSettings: () => api.get<CrawlerTaskQueueSettings>('/api/crawler/tasks/queue-settings').then(r => r.data),
   updateTaskQueueSettings: (maxConcurrentTasks:number) => api.put<CrawlerTaskQueueSettings>('/api/crawler/tasks/queue-settings',{maxConcurrentTasks}).then(r => r.data),

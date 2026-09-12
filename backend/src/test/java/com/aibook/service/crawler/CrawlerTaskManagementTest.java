@@ -89,6 +89,10 @@ class CrawlerTaskManagementTest {
             assertThat(queued.status()).isEqualTo("WAITING");
             assertThat(service.queueSettings().runningCount()).isEqualTo(1);
             assertThat(service.queueSettings().queuedCount()).isEqualTo(1);
+            assertThat(service.queuedTasks(user)).extracting(task -> task.id())
+                    .containsExactly(queued.id());
+            assertThat(service.queuedTasks(User.builder().id(99L).username("other").build()))
+                    .isEmpty();
 
             releaseFirst.countDown();
             assertThat(secondStarted.await(2, TimeUnit.SECONDS)).isTrue();
