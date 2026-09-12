@@ -111,8 +111,9 @@ public class CrawlerController {
 
     @GetMapping("/tasks") public Page<TaskView> tasks(Authentication auth,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "false") boolean failedOnly) {
-        return managementService.tasks(user(auth), page, size, failedOnly);
+            @RequestParam(defaultValue = "false") boolean failedOnly,
+            @RequestParam(required = false) String status) {
+        return managementService.tasks(user(auth), page, size, failedOnly, status);
     }
     @GetMapping("/tasks/queued") public List<TaskView> queuedTasks(Authentication auth) {
         return taskService.queuedTasks(user(auth));

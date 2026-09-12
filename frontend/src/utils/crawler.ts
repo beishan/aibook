@@ -41,7 +41,7 @@ export interface PageResult<T> { content:T[]; totalElements:number; totalPages:n
 export interface CrawlerDiscoveryQuery { page:number; size:number; keyword?:string; siteId?:number; sort:string }
 export interface CrawlerBookQuery { page:number; size:number; keyword?:string; siteId?:number; crawlStatus?:string; importStatus?:string; sort:string }
 export interface CrawlerChapterQuery { page:number; size:number; sort:'INDEX_ASC'|'INDEX_DESC'|'CREATED_DESC' }
-export interface CrawlerTaskQuery { page:number; size:number; failedOnly?:boolean }
+export interface CrawlerTaskQuery { page:number; size:number; failedOnly?:boolean; status?:string }
 
 export const crawlerApi = {
   dashboard: () => api.get<CrawlerDashboard>('/api/crawler/dashboard').then(r => r.data),

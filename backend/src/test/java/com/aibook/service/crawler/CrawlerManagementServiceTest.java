@@ -20,8 +20,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -365,6 +367,27 @@ class CrawlerManagementServiceTest {
                 pageable.capture());
         assertThat(pageable.getValue().getPageNumber()).isEqualTo(1);
         assertThat(pageable.getValue().getPageSize()).isEqualTo(25);
+    }
+
+    @Test
+    void filtersTasksByRequestedStatus() {
+        User user = user();
+        when(tasks.findByUserAndStatusInOrderByCreatedAtDesc(eq(user),
+                eq(List.of(CrawlerTask.TaskStatus.RUNNING)), any(Pageable.class)))
+                .thenReturn(Page.empty());
+
+        service.tasks(user, 0, 20, false, "running");
+
+        verify(tasks).findByUserAndStatusInOrderByCreatedAtDesc(eq(user),
+                eq(List.of(CrawlerTask.TaskStatus.RUNNING)), any(Pageable.class));
+        verify(tasks, never()).findByUserOrderByCreatedAtDesc(any(), any());
+    }
+
+    @Test
+    void rejectsInvalidTaskStatusFilter() {
+        assertThatThrownBy(() -> service.tasks(user(), 0, 20, false, "processing"))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("任务状态无效");
     }
 
     @Test

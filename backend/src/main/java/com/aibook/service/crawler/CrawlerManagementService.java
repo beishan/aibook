@@ -285,11 +285,29 @@ public class CrawlerManagementService {
 
     @Transactional(readOnly = true)
     public Page<TaskView> tasks(User user, int page, int size, boolean failedOnly) {
+        return tasks(user, page, size, failedOnly, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TaskView> tasks(User user, int page, int size, boolean failedOnly, String status) {
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
-        Page<CrawlerTask> tasks = failedOnly
-                ? taskRepository.findByUserAndStatusInOrderByCreatedAtDesc(user,
-                        List.of(CrawlerTask.TaskStatus.FAILED, CrawlerTask.TaskStatus.PARTIAL_SUCCESS), pageable)
-                : taskRepository.findByUserOrderByCreatedAtDesc(user, pageable);
+        Page<CrawlerTask> tasks;
+        if (failedOnly) {
+            tasks = taskRepository.findByUserAndStatusInOrderByCreatedAtDesc(user,
+                    List.of(CrawlerTask.TaskStatus.FAILED,
+                            CrawlerTask.TaskStatus.PARTIAL_SUCCESS), pageable);
+        } else if (status != null && !status.isBlank()) {
+            CrawlerTask.TaskStatus taskStatus;
+            try {
+                taskStatus = CrawlerTask.TaskStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException exception) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "任务状态无效");
+            }
+            tasks = taskRepository.findByUserAndStatusInOrderByCreatedAtDesc(
+                    user, List.of(taskStatus), pageable);
+        } else {
+            tasks = taskRepository.findByUserOrderByCreatedAtDesc(user, pageable);
+        }
         return tasks.map(this::taskView);
     }
 
