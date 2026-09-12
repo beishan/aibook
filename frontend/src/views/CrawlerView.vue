@@ -64,7 +64,7 @@
         <div v-if="discoveredBooks.length" class="discovery-card-selection"><el-checkbox :model-value="allDiscoveredSelected" :indeterminate="someDiscoveredSelected&&!allDiscoveredSelected" @change="toggleCurrentDiscoveryPage(Boolean($event))">选择当前页</el-checkbox><span>已选择 {{ selectedDiscoveries.length }} 本</span></div>
         <div class="discovery-card-grid">
           <article v-for="book in discoveredBooks" :key="book.id" class="discovery-card" :class="{selected:isDiscoverySelected(book)}">
-            <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><el-checkbox class="discovery-card-check" :model-value="isDiscoverySelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleDiscoverySelection(book,Boolean($event))"/></div>
+            <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><el-checkbox class="discovery-card-check" :model-value="isDiscoverySelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleDiscoverySelection(book,Boolean($event))"/></div>
             <div class="discovery-card-body"><div class="discovery-card-title"><div><strong :title="book.bookName">{{ book.bookName }}</strong><p>{{ book.author || '未知作者' }}</p></div><el-tag v-if="book.category" size="small" effect="plain">{{ book.category }}</el-tag></div><dl><div><dt>来源</dt><dd>{{ book.siteName }}</dd></div><div><dt>最新章节</dt><dd :title="book.latestChapter">{{ book.latestChapter || '暂未识别' }}</dd></div><div><dt>发现时间</dt><dd>{{ formatTime(book.discoverTime) }}</dd></div></dl></div>
             <footer class="discovery-card-actions"><el-button text type="primary" @click="crawlDiscovered(book)">开始采集</el-button><a class="source-link" :href="book.bookUrl" target="_blank" rel="noopener noreferrer">查看网站</a><el-button text @click="batchDiscovery('IGNORED',[book.id])">忽略</el-button><el-button text type="danger" @click="batchDiscovery('BLACKLISTED',[book.id])">黑名单</el-button></footer>
           </article>
@@ -246,6 +246,7 @@ import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, L
 import { ElButton, ElProgress, ElTable, ElTableColumn, ElTag, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
 import { crawlerApi, type CrawlerBook, type CrawlerChapter, type CrawlerDashboard, type CrawlerLog, type CrawlerRule, type CrawlerRuleExport, type CrawlerRuleTest, type CrawlerRuleVersion, type CrawlerSite, type CrawlerSitePayload, type CrawlerTask } from '@/utils/crawler'
 import { getCoverUrl } from '@/utils/cover'
+import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { confirm, message } from '@/utils/message'
 
 const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true}}, emits:['command','edit','delete'], setup(props,{emit}) { return () => h(ElTable,{data:props.tasks,class:'data-table'},()=>[

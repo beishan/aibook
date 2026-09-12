@@ -70,17 +70,16 @@
         <aside class="cover-column">
           <div class="book-cover">
             <img
-              v-if="book.coverUrl"
+              v-if="book.coverUrl && shouldLoadBookCover(book.id)"
               :src="getCoverUrl(book.coverUrl)"
               alt="封面"
               class="cover-image"
-              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
             />
             <div v-else class="no-cover">
               <span>{{ book.title.charAt(0) }}</span>
             </div>
             <BookCoverPrivacyButton
-              v-if="book.coverUrl"
+              v-if="book.coverUrl && !allBookCoversHidden"
               :book-id="book.id"
               :book-title="book.title"
             />
@@ -849,7 +848,7 @@ import { formatChinaDateTime } from '@/utils/dateTime'
 import ScraperDialog from '@/components/ScraperDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
-import { isBookCoverHidden } from '@/utils/imagePrivacy'
+import { allBookCoversHidden, shouldLoadBookCover } from '@/utils/imagePrivacy'
 
 const route = useRoute()
 const router = useRouter()

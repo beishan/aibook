@@ -198,14 +198,13 @@
           >
             <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
               <img
-                v-if="book.coverUrl"
+                v-if="book.coverUrl && shouldLoadBookCover(book.id)"
                 :src="getCoverUrl(book.coverUrl)"
-                :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
                 alt="封面"
               />
               <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
               <BookCoverPrivacyButton
-                v-if="book.coverUrl"
+                v-if="book.coverUrl && !allBookCoversHidden"
                 :book-id="book.id"
                 :book-title="book.title"
                 :compact="viewMode === 'list'"
@@ -304,14 +303,13 @@
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
             <img
-              v-if="book.coverUrl"
+              v-if="book.coverUrl && shouldLoadBookCover(book.id)"
               :src="getCoverUrl(book.coverUrl)"
-              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
               alt="封面"
             />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
             <BookCoverPrivacyButton
-              v-if="book.coverUrl"
+              v-if="book.coverUrl && !allBookCoversHidden"
               :book-id="book.id"
               :book-title="book.title"
               :compact="viewMode === 'list'"
@@ -355,14 +353,13 @@
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
             <img
-              v-if="book.coverUrl"
+              v-if="book.coverUrl && shouldLoadBookCover(book.id)"
               :src="getCoverUrl(book.coverUrl)"
-              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
               alt="封面"
             />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
             <BookCoverPrivacyButton
-              v-if="book.coverUrl"
+              v-if="book.coverUrl && !allBookCoversHidden"
               :book-id="book.id"
               :book-title="book.title"
               :compact="viewMode === 'list'"
@@ -420,14 +417,13 @@
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
             <img
-              v-if="book.coverUrl"
+              v-if="book.coverUrl && shouldLoadBookCover(book.id)"
               :src="getCoverUrl(book.coverUrl)"
-              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
               alt="封面"
             />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
             <BookCoverPrivacyButton
-              v-if="book.coverUrl"
+              v-if="book.coverUrl && !allBookCoversHidden"
               :book-id="book.id"
               :book-title="book.title"
               :compact="viewMode === 'list'"
@@ -471,14 +467,13 @@
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
             <img
-              v-if="book.coverUrl"
+              v-if="book.coverUrl && shouldLoadBookCover(book.id)"
               :src="getCoverUrl(book.coverUrl)"
-              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
               alt="封面"
             />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
             <BookCoverPrivacyButton
-              v-if="book.coverUrl"
+              v-if="book.coverUrl && !allBookCoversHidden"
               :book-id="book.id"
               :book-title="book.title"
               :compact="viewMode === 'list'"
@@ -528,14 +523,13 @@
               class="list-book-cover"
             >
               <img
-                v-if="book.coverUrl"
+                v-if="book.coverUrl && shouldLoadBookCover(book.id)"
                 :src="getCoverUrl(book.coverUrl)"
-                :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
                 alt="封面"
               />
               <div v-else class="no-cover-small">{{ book.title.charAt(0) }}</div>
               <BookCoverPrivacyButton
-                v-if="book.coverUrl"
+                v-if="book.coverUrl && !allBookCoversHidden"
                 :book-id="book.id"
                 :book-title="book.title"
                 compact
@@ -615,7 +609,7 @@ import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
-import { isBookCoverHidden } from '@/utils/imagePrivacy'
+import { allBookCoversHidden, shouldLoadBookCover } from '@/utils/imagePrivacy'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import type { Book } from '@/stores/book'
 

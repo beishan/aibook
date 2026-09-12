@@ -87,7 +87,7 @@
                   </div>
                 </div>
 
-                <div v-if="searchResult.coverUrl" class="cover-preview">
+                <div v-if="searchResult.coverUrl && shouldLoadBookCover()" class="cover-preview">
                   <img :src="searchResult.coverUrl" alt="封面预览" />
                 </div>
               </div>
@@ -119,6 +119,7 @@
 import { ref, reactive } from 'vue'
 import api from '@/utils/api'
 import { message } from '@/utils/message'
+import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 
 const props = defineProps<{
   modelValue: boolean

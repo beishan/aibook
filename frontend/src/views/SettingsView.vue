@@ -107,6 +107,11 @@
       <FontManagementPanel />
     </div>
 
+    <!-- 书籍封面显示 -->
+    <div v-show="activeTab === 'cover-display'" class="tab-content">
+      <BookCoverDisplaySettingsPanel />
+    </div>
+
     <!-- 扫描目录 -->
     <div v-show="activeTab === 'directories'" class="tab-content">
       <div class="card glass">
@@ -561,6 +566,7 @@ import WebsiteSettingsPanel from '@/components/WebsiteSettingsPanel.vue'
 import DockSettingsPanel from '@/components/DockSettingsPanel.vue'
 import ThemeColorSettingsPanel from '@/components/ThemeColorSettingsPanel.vue'
 import ThemeBackgroundSettingsPanel from '@/components/ThemeBackgroundSettingsPanel.vue'
+import BookCoverDisplaySettingsPanel from '@/components/BookCoverDisplaySettingsPanel.vue'
 import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
 import RandomCoverLibraryPanel from '@/components/RandomCoverLibraryPanel.vue'
 import ReaderBackgroundManagementPanel from '@/components/ReaderBackgroundManagementPanel.vue'
@@ -763,6 +769,7 @@ const tabGroups = computed(() => [
     items: [
       { key: 'theme', label: '主题风格', icon: '🎨' },
       { key: 'fonts', label: '字体管理', icon: '🔤' },
+      { key: 'cover-display', label: '封面显示', icon: '🖼️' },
       { key: 'reader-backgrounds', label: '阅读背景', icon: '🌄' },
     ],
   },

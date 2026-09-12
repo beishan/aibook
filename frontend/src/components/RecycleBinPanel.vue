@@ -83,9 +83,8 @@
           <div class="book-cell">
             <div class="trash-cover">
               <img
-                v-if="row.coverUrl"
+                v-if="row.coverUrl && shouldLoadBookCover(row.id)"
                 :src="getCoverUrl(row.coverUrl)"
-                :class="{ 'is-hidden': isBookCoverHidden(row.id) }"
                 alt=""
               />
               <span v-else>{{ row.title?.charAt(0) || '书' }}</span>
@@ -132,7 +131,7 @@ import { onMounted, ref } from 'vue'
 import { Delete, DeleteFilled, RefreshRight, Search } from '@element-plus/icons-vue'
 import { useBookStore, type Book } from '@/stores/book'
 import { getCoverUrl } from '@/utils/cover'
-import { isBookCoverHidden } from '@/utils/imagePrivacy'
+import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { confirm, message } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import api from '@/utils/api'

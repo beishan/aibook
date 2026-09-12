@@ -81,17 +81,33 @@ const persistRemote = () => {
 }
 
 export const isBookCoverHidden = (bookId: number) =>
-  bookCoverOverrides.value[String(bookId)] ?? allBookCoversHidden.value
+  allBookCoversHidden.value || (bookCoverOverrides.value[String(bookId)] ?? false)
 
-export const toggleAllBookCovers = () => {
-  allBookCoversHidden.value = !allBookCoversHidden.value
+/**
+ * 模板必须在创建 img/src 或主动预加载前调用此方法。
+ * 全局关闭时返回 false，确保浏览器不会发起任何书籍封面请求。
+ */
+export const shouldLoadBookCover = (bookId?: number | null) =>
+  !allBookCoversHidden.value
+  && (bookId == null || !isBookCoverHidden(bookId))
+
+export const setAllBookCoversHidden = (hidden: boolean) => {
+  if (allBookCoversHidden.value === hidden && Object.keys(bookCoverOverrides.value).length === 0) {
+    return
+  }
+  allBookCoversHidden.value = hidden
   bookCoverOverrides.value = {}
-  persistLocal(ALL_BOOK_COVERS_HIDDEN_STORAGE_KEY, String(allBookCoversHidden.value))
+  persistLocal(ALL_BOOK_COVERS_HIDDEN_STORAGE_KEY, String(hidden))
   persistLocal(BOOK_COVER_OVERRIDES_STORAGE_KEY, '{}')
   persistRemote()
 }
 
+export const toggleAllBookCovers = () => {
+  setAllBookCoversHidden(!allBookCoversHidden.value)
+}
+
 export const toggleBookCover = (bookId: number) => {
+  if (allBookCoversHidden.value) return
   const nextHidden = !isBookCoverHidden(bookId)
   const nextOverrides = { ...bookCoverOverrides.value }
 

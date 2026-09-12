@@ -28,14 +28,13 @@
       >
         <div class="book-cover">
           <img
-            v-if="book.coverUrl"
+            v-if="book.coverUrl && shouldLoadBookCover(book.id)"
             :src="getCoverUrl(book.coverUrl)"
-            :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
             alt="封面"
           />
           <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
           <BookCoverPrivacyButton
-            v-if="book.coverUrl"
+            v-if="book.coverUrl && !allBookCoversHidden"
             :book-id="book.id"
             :book-title="book.title"
           />
@@ -61,7 +60,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
-import { isBookCoverHidden } from '@/utils/imagePrivacy'
+import { allBookCoversHidden, shouldLoadBookCover } from '@/utils/imagePrivacy'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 
 const route = useRoute()

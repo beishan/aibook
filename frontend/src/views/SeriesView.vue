@@ -41,7 +41,7 @@
             <li v-for="book in books" :key="book.id" class="volume-row">
               <span class="volume-number">{{ book.seriesIndex ?? '—' }}</span>
               <router-link :to="`/books/${book.id}`" class="cover" :aria-label="`查看${book.title}`">
-                <img v-if="book.coverUrl && !isBookCoverHidden(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 96)" alt="" loading="lazy" decoding="async" />
+                <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 96)" alt="" loading="lazy" decoding="async" />
                 <span v-else aria-hidden="true">{{ book.title.charAt(0) }}</span>
               </router-link>
               <div class="volume-info"><span class="volume-label">{{ volumeLabel(book.seriesIndex) }}</span>
@@ -67,7 +67,7 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '@/utils/api'
 import { message } from '@/utils/message'
 import { getCoverThumbnailUrl } from '@/utils/cover'
-import { isBookCoverHidden } from '@/utils/imagePrivacy'
+import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { missingVolumeRanges, volumeLabel, type SeriesBook, type SeriesSummary } from '@/utils/series'
 import { useBookStore, type Book } from '@/stores/book'
 import BookEditDialog from '@/components/BookEditDialog.vue'

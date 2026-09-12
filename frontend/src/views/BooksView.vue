@@ -11,7 +11,7 @@
           class="btn image-privacy-button"
           :class="{ active: allBookCoversHidden }"
           :aria-pressed="allBookCoversHidden"
-          :title="allBookCoversHidden ? '显示书库和书架中的所有封面' : '隐藏书库和书架中的所有封面'"
+          :title="allBookCoversHidden ? '恢复显示所有页面的书籍封面' : '停止加载所有页面的书籍封面'"
           @click="toggleAllBookCovers"
         >
           <el-icon aria-hidden="true"><View v-if="allBookCoversHidden" /><Hide v-else /></el-icon>
@@ -263,11 +263,10 @@
 
         <div class="book-cover">
           <img
-            v-if="book.coverUrl"
+            v-if="book.coverUrl && shouldLoadBookCover(book.id)"
             :src="getCoverThumbnailUrl(book.coverUrl)"
             alt="封面"
             class="cover-image"
-            :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
             :loading="index < PRIORITY_COVER_COUNT ? 'eager' : 'lazy'"
             decoding="async"
           />
@@ -275,7 +274,7 @@
             <span>{{ book.title.charAt(0) }}</span>
           </div>
           <BookCoverPrivacyButton
-            v-if="book.coverUrl"
+            v-if="book.coverUrl && !allBookCoversHidden"
             :book-id="book.id"
             :book-title="book.title"
           />
@@ -381,16 +380,15 @@
 
         <div class="book-cover-small">
           <img
-            v-if="row.coverUrl"
+            v-if="row.coverUrl && shouldLoadBookCover(row.id)"
             :src="getCoverThumbnailUrl(row.coverUrl, 96)"
             alt="封面"
-            :class="{ 'is-hidden': isBookCoverHidden(row.id) }"
             :loading="index < PRIORITY_COVER_COUNT ? 'eager' : 'lazy'"
             decoding="async"
           />
           <div v-else class="no-cover-small">{{ row.title.charAt(0) }}</div>
           <BookCoverPrivacyButton
-            v-if="row.coverUrl"
+            v-if="row.coverUrl && !allBookCoversHidden"
             :book-id="row.id"
             :book-title="row.title"
             compact
@@ -598,7 +596,7 @@ import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import {
   allBookCoversHidden,
-  isBookCoverHidden,
+  shouldLoadBookCover,
   toggleAllBookCovers,
 } from '@/utils/imagePrivacy'
 import { scrapeBook } from '@/utils/scraper'
@@ -803,9 +801,11 @@ const preloadCoverImage = (url: string) => {
 }
 
 const prepareBookCovers = async (books: Book[]) => {
+  if (allBookCoversHidden.value) return
   const coverUrls = Array.from(new Set(
     books
       .slice(0, PRIORITY_COVER_COUNT)
+      .filter(book => shouldLoadBookCover(book.id))
       .map(book => getCoverThumbnailUrl(book.coverUrl, viewMode.value === 'list' ? 96 : 320))
       .filter((url): url is string => Boolean(url)),
   ))

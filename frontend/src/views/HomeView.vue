@@ -59,9 +59,8 @@
         >
           <div class="added-cover">
             <img
-              v-if="book.coverUrl"
+              v-if="book.coverUrl && shouldLoadBookCover(book.id)"
               :src="getCoverUrl(book.coverUrl)"
-              :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
               :alt="`${book.title}封面`"
             />
             <div v-else class="added-no-cover">
@@ -102,9 +101,8 @@
           >
             <div class="book-cover">
               <img
-                v-if="book.coverUrl"
+                v-if="book.coverUrl && shouldLoadBookCover(book.id)"
                 :src="getCoverUrl(book.coverUrl)"
-                :class="{ 'is-hidden': isBookCoverHidden(book.id) }"
                 alt="封面"
               />
               <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
@@ -153,7 +151,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useBookStore } from '@/stores/book'
 import type { Book } from '@/stores/book'
 import { getCoverUrl } from '@/utils/cover'
-import { isBookCoverHidden } from '@/utils/imagePrivacy'
+import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 
 const bookStore = useBookStore()
 

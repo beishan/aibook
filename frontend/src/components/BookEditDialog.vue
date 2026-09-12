@@ -123,6 +123,7 @@ import { useBookStore, type Book } from '@/stores/book'
 import { useCategoryStore } from '@/stores/category'
 import { useTagStore } from '@/stores/tag'
 import { getCoverUrl } from '@/utils/cover'
+import { allBookCoversHidden } from '@/utils/imagePrivacy'
 import api from '@/utils/api'
 
 const props = defineProps<{
@@ -165,7 +166,7 @@ const dialogVisible = computed({
 })
 
 const previewUrl = computed(() =>
-  localPreviewUrl.value || getCoverUrl(props.book?.coverUrl)
+  localPreviewUrl.value || (allBookCoversHidden.value ? '' : getCoverUrl(props.book?.coverUrl))
 )
 
 const hydrateForm = () => {
