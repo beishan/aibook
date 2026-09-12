@@ -22,8 +22,10 @@ export interface CrawlerSitePayload {
   updateIntervalMinutes:number; maxDiscoveryPages:number; autoImportFormat:'TXT'|'EPUB'|'BOTH'; contentFailureMarkers:string[]
 }
 export interface CrawlerSite extends CrawlerSitePayload { id: number; status: string; bookCount: number; proxy?:string; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string }
+export interface CrawlerDiscoveryPagePayload { pageName:string; pageUrl:string; autoScanEnabled:boolean; scanIntervalMinutes:number; maxPages:number }
+export interface CrawlerDiscoveryPage extends CrawlerDiscoveryPagePayload { id:number; siteId:number; lastScanAt?:string; createdAt:string }
 export interface CrawlerBook { id:number; siteId:number; siteName:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; bookStatus?:string; latestChapter?:string; chapterCount:number; crawledChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; autoUpdateEnabled:boolean; autoSyncLibrary:boolean; libraryBookId?:number; discoverTime:string; lastCrawlStartedAt?:string; lastCrawlTime?:string; createdAt?:string }
-export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; bookId?:number; bookName?:string; totalCount:number; successCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
+export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; discoveryPageId?:number; discoveryPageName?:string; bookId?:number; bookName?:string; totalCount:number; successCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
 export interface CrawlerChapter { id:number; chapterIndex:number; chapterName:string; chapterUrl:string; wordCount:number; crawlStatus:string; accessStatus:string; retryCount:number; errorMessage?:string; crawlTime?:string; createdAt?:string }
 export interface CrawlerChapterFocus { chapter:CrawlerChapter; page:number }
 export interface CrawlerLog { id:number; description:string; details?:string; createdAt:string }
@@ -47,6 +49,11 @@ export const crawlerApi = {
   deleteSite: (id:number) => api.delete(`/api/crawler/sites/${id}`),
   crawlUrl: (siteId:number, url:string) => api.post<CrawlerTask>(`/api/crawler/sites/${siteId}/crawl`, { url }).then(r => r.data),
   scanSite: (siteId:number) => api.post<CrawlerTask>(`/api/crawler/sites/${siteId}/scan`).then(r => r.data),
+  discoveryPages: () => api.get<CrawlerDiscoveryPage[]>('/api/crawler/discovery-pages').then(r => r.data),
+  createDiscoveryPage: (siteId:number,data:CrawlerDiscoveryPagePayload) => api.post<CrawlerDiscoveryPage>(`/api/crawler/sites/${siteId}/discovery-pages`,data).then(r => r.data),
+  updateDiscoveryPage: (id:number,data:CrawlerDiscoveryPagePayload) => api.put<CrawlerDiscoveryPage>(`/api/crawler/discovery-pages/${id}`,data).then(r => r.data),
+  deleteDiscoveryPage: (id:number) => api.delete(`/api/crawler/discovery-pages/${id}`),
+  scanDiscoveryPage: (id:number) => api.post<CrawlerTask>(`/api/crawler/discovery-pages/${id}/scan`).then(r => r.data),
   testRule: (siteId:number, url:string, rule?:CrawlerRule) => api.post<CrawlerRuleTest>(`/api/crawler/sites/${siteId}/rules/test`, {url,rule}).then(r => r.data),
   checkRule: (siteId:number) => api.post<CrawlerRuleTest>(`/api/crawler/sites/${siteId}/rules/health`).then(r => r.data),
   rules: (siteId:number) => api.get<CrawlerRuleVersion[]>(`/api/crawler/sites/${siteId}/rules`).then(r => r.data),

@@ -27,6 +27,7 @@ public class CrawlerController {
     private final CrawlerExportService exportService;
     private final CrawlerRuleTestService ruleTestService;
     private final CrawlerRuleHealthService ruleHealthService;
+    private final CrawlerDiscoveryPageService discoveryPageService;
     private final CrawlerChapterRepository chapterRepository;
 
     @GetMapping("/dashboard") public DashboardView dashboard(Authentication auth) { return managementService.dashboard(user(auth)); }
@@ -36,6 +37,12 @@ public class CrawlerController {
     @DeleteMapping("/sites/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteSite(Authentication auth, @PathVariable Long id) { managementService.deleteSite(user(auth), id); }
     @PostMapping("/sites/{id}/crawl") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView crawl(Authentication auth, @PathVariable Long id, @Valid @RequestBody ManualCrawlRequest request) { return taskService.start(user(auth), id, request.url()); }
     @PostMapping("/sites/{id}/scan") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView scan(Authentication auth, @PathVariable Long id) { return taskService.scanSite(user(auth), id); }
+    @GetMapping("/discovery-pages") public List<DiscoveryPageView> discoveryPages(Authentication auth) { return discoveryPageService.pages(user(auth)); }
+    @GetMapping("/sites/{id}/discovery-pages") public List<DiscoveryPageView> discoveryPages(Authentication auth, @PathVariable Long id) { return discoveryPageService.pages(user(auth), id); }
+    @PostMapping("/sites/{id}/discovery-pages") @ResponseStatus(HttpStatus.CREATED) public DiscoveryPageView createDiscoveryPage(Authentication auth, @PathVariable Long id, @Valid @RequestBody DiscoveryPagePayload payload) { return discoveryPageService.create(user(auth), id, payload); }
+    @PutMapping("/discovery-pages/{id}") public DiscoveryPageView updateDiscoveryPage(Authentication auth, @PathVariable Long id, @Valid @RequestBody DiscoveryPagePayload payload) { return discoveryPageService.update(user(auth), id, payload); }
+    @DeleteMapping("/discovery-pages/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteDiscoveryPage(Authentication auth, @PathVariable Long id) { discoveryPageService.delete(user(auth), id); }
+    @PostMapping("/discovery-pages/{id}/scan") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView scanDiscoveryPage(Authentication auth, @PathVariable Long id) { return taskService.scanDiscoveryPage(user(auth), discoveryPageService.owned(user(auth), id), false); }
     @PostMapping("/sites/{id}/rules/test") public RuleTestView testRule(Authentication auth, @PathVariable Long id, @Valid @RequestBody RuleTestRequest request) { return ruleTestService.test(user(auth), id, request); }
     @PostMapping("/sites/{id}/rules/health") public RuleTestView checkRule(Authentication auth, @PathVariable Long id) { return ruleHealthService.check(user(auth), id); }
     @GetMapping("/sites/{id}/rules") public List<RuleVersionView> rules(Authentication auth, @PathVariable Long id) { return managementService.rules(user(auth), id); }

@@ -12,6 +12,7 @@ import com.aibook.repository.CrawlerTaskRepository;
 import com.aibook.repository.CrawlerTaskLogRepository;
 import com.aibook.service.OperationLogService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationContext;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -111,7 +112,8 @@ class CrawlerTaskManagementTest {
             task.setStatus(CrawlerTask.TaskStatus.PAUSED);
             throw new IOException("暂停时请求中断");
         });
-        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 chapters, tasks, mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
                 mock(OperationLogService.class), mock(CrawlerExportService.class), httpClient, List.of(parser), mock(ApplicationContext.class));
         try {
@@ -152,7 +154,8 @@ class CrawlerTaskManagementTest {
         when(parser.supports(site)).thenReturn(true);
         when(httpClient.maxConsecutiveFailures()).thenReturn(5);
         when(httpClient.get(eq(site), anyString())).thenThrow(new IOException("代理连接失败"));
-        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 chapters, tasks, mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
                 mock(OperationLogService.class), mock(CrawlerExportService.class), httpClient, List.of(parser), mock(ApplicationContext.class));
         try {
@@ -309,9 +312,50 @@ class CrawlerTaskManagementTest {
         return service(tasks, mock(CrawlerBookRepository.class), management);
     }
 
+    @Test
+    void createsIndependentDiscoveryPageTaskSnapshot() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站")
+                .enabled(true).build();
+        com.aibook.model.entity.CrawlerSiteRule rule = new com.aibook.model.entity.CrawlerSiteRule();
+        rule.setDiscoveryItemSelector(".book");
+        site.attachRule(rule);
+        com.aibook.model.entity.CrawlerDiscoveryPage page =
+                com.aibook.model.entity.CrawlerDiscoveryPage.builder().id(7L).site(site)
+                        .pageName("热门").pageUrl("https://example.com/rank/hot/")
+                        .maxPages(80).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        com.aibook.repository.CrawlerDiscoveryPageRepository pages =
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class);
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tasks.findById(anyString())).thenReturn(Optional.empty());
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        when(management.taskView(any(CrawlerTask.class))).thenCallRealMethod();
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), pages,
+                mock(CrawlerBookRepository.class), mock(CrawlerChapterRepository.class), tasks,
+                mock(CrawlerTaskLogRepository.class), management, mock(OperationLogService.class),
+                mock(CrawlerExportService.class), mock(CrawlerHttpClient.class), List.of(),
+                mock(ApplicationContext.class));
+        try {
+            var result = service.scanDiscoveryPage(user, page, true);
+
+            assertThat(result.discoveryPageId()).isEqualTo(7L);
+            assertThat(result.discoveryPageName()).isEqualTo("热门");
+            assertThat(result.priority()).isEqualTo("LOW");
+            ArgumentCaptor<CrawlerTask> saved = ArgumentCaptor.forClass(CrawlerTask.class);
+            verify(tasks).save(saved.capture());
+            assertThat(saved.getValue().getScanStartUrl()).isEqualTo("https://example.com/rank/hot/");
+            assertThat(saved.getValue().getScanMaxPages()).isEqualTo(80);
+            verify(pages).save(page);
+        } finally {
+            service.shutdown();
+        }
+    }
+
     private CrawlerTaskService service(CrawlerTaskRepository tasks, CrawlerBookRepository books,
             CrawlerManagementService management) {
-        return new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
+        return new CrawlerTaskService(mock(CrawlerSiteRepository.class),
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 mock(CrawlerChapterRepository.class), tasks, mock(CrawlerTaskLogRepository.class),
                 management, mock(OperationLogService.class),
                 mock(CrawlerExportService.class),

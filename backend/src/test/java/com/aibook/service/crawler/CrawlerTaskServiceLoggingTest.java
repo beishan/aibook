@@ -93,6 +93,7 @@ class CrawlerTaskServiceLoggingTest {
         OperationLogService operationLogs = mock(OperationLogService.class);
         CrawlerTaskService service = new CrawlerTaskService(
                 mock(CrawlerSiteRepository.class),
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class),
                 mock(CrawlerBookRepository.class),
                 mock(CrawlerChapterRepository.class),
                 mock(CrawlerTaskRepository.class),

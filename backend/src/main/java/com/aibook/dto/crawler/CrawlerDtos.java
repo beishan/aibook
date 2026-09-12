@@ -52,6 +52,15 @@ public final class CrawlerDtos {
             List<String> contentFailureMarkers) { }
 
     public record ManualCrawlRequest(@NotBlank String url) { }
+    public record DiscoveryPagePayload(
+            @NotBlank @Size(max = 100) String pageName,
+            @NotBlank @Size(max = 1000) String pageUrl,
+            Boolean autoScanEnabled,
+            @Min(5) @Max(10080) Integer scanIntervalMinutes,
+            @Min(1) @Max(500) Integer maxPages) { }
+    public record DiscoveryPageView(Long id, Long siteId, String pageName, String pageUrl,
+            boolean autoScanEnabled, int scanIntervalMinutes, int maxPages,
+            LocalDateTime lastScanAt, LocalDateTime createdAt) { }
     public record ExportRequest(@NotEmpty List<@Pattern(regexp = "(?i)TXT|EPUB") String> formats) { }
     public record ImportRequest(
             @NotEmpty List<@Pattern(regexp = "(?i)TXT|EPUB") String> formats) { }
@@ -99,7 +108,8 @@ public final class CrawlerDtos {
             Long id, String description, String details, LocalDateTime createdAt) { }
 
     public record TaskView(String id, String type, String status, String priority,
-            Long siteId, String siteName, Long bookId, String bookName, int totalCount,
+            Long siteId, String siteName, Long discoveryPageId, String discoveryPageName,
+            Long bookId, String bookName, int totalCount,
             int successCount, int failedCount, int waitingCount, String currentChapter,
             long averageRequestMillis, String errorMessage, LocalDateTime startedAt,
             LocalDateTime finishedAt, LocalDateTime createdAt) { }

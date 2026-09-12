@@ -39,7 +39,8 @@ class CrawlerTaskServiceStatusTest {
         when(chapters.findByCrawlerBookOrderByChapterIndexAsc(book)).thenReturn(List.of(chapter));
         when(books.save(any(CrawlerBook.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 chapters, tasks, mock(CrawlerTaskLogRepository.class), management, operationLogs,
                 mock(CrawlerExportService.class),
                 mock(CrawlerHttpClient.class),
@@ -73,7 +74,8 @@ class CrawlerTaskServiceStatusTest {
         when(management.ownedBook(user, 3L)).thenReturn(book);
         when(management.bookView(book)).thenCallRealMethod();
         when(books.save(any(CrawlerBook.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), books,
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 mock(CrawlerChapterRepository.class), mock(CrawlerTaskRepository.class),
                 mock(CrawlerTaskLogRepository.class), management, mock(OperationLogService.class),
                 mock(CrawlerExportService.class), mock(CrawlerHttpClient.class), List.of(),

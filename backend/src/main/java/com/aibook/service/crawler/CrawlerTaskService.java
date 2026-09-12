@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @Slf4j
 public class CrawlerTaskService implements ApplicationListener<ContextRefreshedEvent> {
     private final CrawlerSiteRepository siteRepository;
+    private final CrawlerDiscoveryPageRepository discoveryPageRepository;
     private final CrawlerBookRepository bookRepository;
     private final CrawlerChapterRepository chapterRepository;
     private final CrawlerTaskRepository taskRepository;
@@ -84,6 +85,36 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         if (taskRepository.existsBySiteAndTypeAndStatusIn(site, CrawlerTask.TaskType.SITE_SCAN, ACTIVE_STATUSES))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "该网站已有扫描任务");
         return managementService.taskView(createAndSubmit(user, site, null, CrawlerTask.TaskType.SITE_SCAN));
+    }
+
+    public TaskView scanDiscoveryPage(User user, CrawlerDiscoveryPage page, boolean automated) {
+        if (page == null || page.getSite() == null || page.getSite().getUser() == null
+                || !Objects.equals(page.getSite().getUser().getId(), user.getId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "发现页不存在");
+        }
+        CrawlerSite site = page.getSite();
+        requireEnabled(site);
+        requireRule(site);
+        if (site.getRule().getDiscoveryItemSelector() == null || site.getRule().getDiscoveryItemSelector().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "请先配置书籍发现 Selector");
+        }
+        if (taskRepository.existsByDiscoveryPageIdAndStatusIn(page.getId(), ACTIVE_STATUSES)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "该发现页已有扫描任务");
+        }
+        CrawlerTask task = CrawlerTask.builder().user(user).site(site)
+                .type(CrawlerTask.TaskType.SITE_SCAN)
+                .priority(automated ? CrawlerTask.Priority.LOW : CrawlerTask.Priority.HIGH)
+                .discoveryPageId(page.getId()).discoveryPageName(page.getPageName())
+                .scanStartUrl(page.getPageUrl()).scanMaxPages(page.getMaxPages()).build();
+        task = taskRepository.save(task);
+        page.setLastScanAt(LocalDateTime.now());
+        discoveryPageRepository.save(page);
+        log.info("[采集任务] 已创建发现页扫描: taskId={}, trigger={}, page={}, url={}",
+                task.getId(), automated ? "自动" : "人工", page.getPageName(), page.getPageUrl());
+        recordCrawlerEvent(task, "发现页扫描任务已创建", "触发方式：" + (automated ? "自动调度" : "人工操作")
+                + "；发现页：" + page.getPageName() + "；优先级：" + task.getPriority());
+        submit(task.getId());
+        return managementService.taskView(task);
     }
 
     public TaskView checkUpdates(User user, Long bookId) {
@@ -552,21 +583,26 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     }
 
     private void runSiteScan(CrawlerTask task, CrawlerSite site, CrawlerSiteRule rule, BookCrawlerParser parser) throws Exception {
-        String pageUrl = site.getHomeUrl() == null || site.getHomeUrl().isBlank() ? site.getBaseUrl() : site.getHomeUrl();
+        String pageUrl = task.getScanStartUrl() == null || task.getScanStartUrl().isBlank()
+                ? (site.getHomeUrl() == null || site.getHomeUrl().isBlank() ? site.getBaseUrl() : site.getHomeUrl())
+                : task.getScanStartUrl();
+        int maxPages = task.getScanMaxPages() == null
+                ? value(site.getMaxDiscoveryPages(), 3) : Math.max(1, task.getScanMaxPages());
         Set<String> visitedPages = new HashSet<>();
         int discovered = 0;
         int pages = 0;
         log.info("[采集任务] 开始扫描网站: taskId={}, site={}, homeUrl={}, maxPages={}",
-                task.getId(), site.getSiteName(), pageUrl, value(site.getMaxDiscoveryPages(), 3));
-        recordCrawlerEvent(task, "开始扫描网站", "首页：" + pageUrl + "；最大页数：" + value(site.getMaxDiscoveryPages(), 3));
-        while (pageUrl != null && !pageUrl.isBlank() && pages < value(site.getMaxDiscoveryPages(), 3) && visitedPages.add(pageUrl)) {
+                task.getId(), site.getSiteName(), pageUrl, maxPages);
+        recordCrawlerEvent(task, "开始扫描" + (task.getDiscoveryPageName() == null ? "网站" : "发现页"),
+                "起始页：" + pageUrl + "；最大页数：" + maxPages);
+        while (pageUrl != null && !pageUrl.isBlank() && pages < maxPages && visitedPages.add(pageUrl)) {
             task = runningTask(task.getId());
             if (task == null) return;
             pageUrl = httpClient.validateSiteUrl(site, pageUrl).toString();
             log.info("[采集任务] 正在扫描网站页面: taskId={}, site={}, page={}/{}, url={}",
-                    task.getId(), site.getSiteName(), pages + 1, value(site.getMaxDiscoveryPages(), 3), pageUrl);
+                    task.getId(), site.getSiteName(), pages + 1, maxPages, pageUrl);
             recordCrawlerEvent(task, "正在扫描网站页面", "页码：" + (pages + 1) + "/"
-                    + value(site.getMaxDiscoveryPages(), 3) + "；地址：" + pageUrl);
+                    + maxPages + "；地址：" + pageUrl);
             CrawlerHttpClient.FetchResult response = httpClient.get(site, pageUrl);
             task = runningTask(task.getId());
             if (task == null) return;
@@ -603,12 +639,19 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         task = runningTask(task.getId());
         if (task == null) return;
         site.setLastScanAt(LocalDateTime.now()); siteRepository.save(site);
+        if (task.getDiscoveryPageId() != null) {
+            discoveryPageRepository.findById(task.getDiscoveryPageId()).ifPresent(discoveryPage -> {
+                discoveryPage.setLastScanAt(LocalDateTime.now());
+                discoveryPageRepository.save(discoveryPage);
+            });
+        }
         task.setStatus(CrawlerTask.TaskStatus.SUCCESS); task.setFinishedAt(LocalDateTime.now()); task.setCurrentChapter(null);
         task = finishIfRunning(task);
         if (task == null) return;
         log.info("[采集任务] 网站扫描完毕: taskId={}, site={}, pages={}, discovered={}",
                 task.getId(), site.getSiteName(), pages, discovered);
-        recordCrawlerEvent(task, "网站扫描完毕", "扫描页数：" + pages + "；发现书籍：" + discovered
+        recordCrawlerEvent(task, task.getDiscoveryPageName() == null ? "网站扫描完毕" : "发现页扫描完毕",
+                "扫描页数：" + pages + "；发现书籍：" + discovered
                 + "；后续采集需人工触发");
     }
 
