@@ -205,6 +205,22 @@ public class User implements UserDetails {
         preference().setScanThreadCount(value);
     }
 
+    public Boolean getCrawlerFollowCurrentChapter() {
+        return preference().getCrawlerFollowCurrentChapter();
+    }
+
+    public void setCrawlerFollowCurrentChapter(Boolean value) {
+        preference().setCrawlerFollowCurrentChapter(value);
+    }
+
+    public Integer getCrawlerChapterPageSize() {
+        return preference().getCrawlerChapterPageSize();
+    }
+
+    public void setCrawlerChapterPageSize(Integer value) {
+        preference().setCrawlerChapterPageSize(value);
+    }
+
     public Boolean getScheduledScanEnabled() {
         return preference().getScheduledScanEnabled();
     }

@@ -52,6 +52,7 @@ class CrawlerManagementServiceTest {
         service = new CrawlerManagementService(sites, books,
                 chapters, tasks, crawlerLogs, rules,
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class),
+                mock(com.aibook.repository.CrawlerScanResultRepository.class),
                 new ObjectMapper());
         when(sites.save(any(CrawlerSite.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(rules.save(any(CrawlerSiteRuleVersion.class))).thenAnswer(invocation -> invocation.getArgument(0));

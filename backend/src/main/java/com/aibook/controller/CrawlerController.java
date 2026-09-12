@@ -113,6 +113,11 @@ public class CrawlerController {
             @RequestParam(defaultValue = "false") boolean failedOnly) {
         return managementService.tasks(user(auth), page, size, failedOnly);
     }
+    @GetMapping("/tasks/{id}/scan-results") public Page<ScanBookResultView> scanResults(
+            Authentication auth, @PathVariable String id,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
+        return managementService.scanResults(user(auth), id, page, size);
+    }
     @PutMapping("/tasks/{id}") public TaskView updateTask(Authentication auth, @PathVariable String id, @Valid @RequestBody TaskUpdateRequest request) { return taskService.updateTask(user(auth), id, request.priority()); }
     @DeleteMapping("/tasks/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteTask(Authentication auth, @PathVariable String id) { taskService.deleteTask(user(auth), id); }
     @PostMapping("/tasks/{id}/{command}") public TaskView taskCommand(Authentication auth, @PathVariable String id, @PathVariable String command) { return taskService.command(user(auth), id, command); }

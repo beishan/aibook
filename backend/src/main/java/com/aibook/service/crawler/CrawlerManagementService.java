@@ -26,6 +26,7 @@ public class CrawlerManagementService {
     private final CrawlerTaskLogRepository taskLogRepository;
     private final CrawlerSiteRuleVersionRepository ruleVersionRepository;
     private final CrawlerDiscoveryPageRepository discoveryPageRepository;
+    private final CrawlerScanResultRepository scanResultRepository;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
@@ -292,6 +293,19 @@ public class CrawlerManagementService {
         return tasks.map(this::taskView);
     }
 
+    @Transactional(readOnly = true)
+    public Page<ScanBookResultView> scanResults(User user, String taskId, int page, int size) {
+        CrawlerTask task = ownedTask(user, taskId);
+        if (task.getType() != CrawlerTask.TaskType.SITE_SCAN) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "该任务没有发现页扫描结果");
+        }
+        return scanResultRepository.findByTaskOrderByIdAsc(task,
+                        PageRequest.of(Math.max(0, page), Math.min(100, Math.max(1, size))))
+                .map(result -> new ScanBookResultView(result.getId(), result.getCrawlerBookId(),
+                        result.getBookName(), result.getBookUrl(), result.getResultStatus().name(),
+                        result.getErrorMessage(), result.getCreatedAt()));
+    }
+
     private List<TaskView> recentTasks(User user, int limit) {
         return taskRepository.findByUserOrderByCreatedAtDesc(
                 user, PageRequest.of(0, Math.min(Math.max(limit, 1), 100))).stream()
@@ -373,9 +387,21 @@ public class CrawlerManagementService {
                 r.getXpathRemoveSelectors(), r.getStringReplacementsJson(), bool(r.getRemoveBlankLines(), true), bool(r.getSaveOriginalHtml(), false));
     }
 
-    public BookView bookView(CrawlerBook b) { return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(), b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(), b.getCoverUrl(), b.getDescription(), b.getCategory(), b.getBookStatus(), b.getLatestChapter(), value(b.getChapterCount(), 0), value(b.getCrawledChapterCount(), 0), value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(), (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : b.getDiscoveryStatus()).name(), b.getImportStatus().name(), !Boolean.FALSE.equals(b.getAutoUpdateEnabled()), !Boolean.FALSE.equals(b.getAutoSyncLibrary()), b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(), b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt()); }
+    public BookView bookView(CrawlerBook b) { return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(), b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(), b.getCoverUrl(), b.getDescription(), b.getCategory(), b.getBookStatus(), b.getLatestChapter(), b.getDiscoveryPageId(), b.getDiscoveryPageName(), value(b.getChapterCount(), 0), value(b.getCrawledChapterCount(), 0), value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(), (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : b.getDiscoveryStatus()).name(), b.getImportStatus().name(), !Boolean.FALSE.equals(b.getAutoUpdateEnabled()), !Boolean.FALSE.equals(b.getAutoSyncLibrary()), b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(), b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt()); }
     public ChapterView chapterView(CrawlerChapter c) { return new ChapterView(c.getId(), c.getChapterIndex(), c.getChapterName(), c.getChapterUrl(), value(c.getWordCount(), 0), c.getCrawlStatus().name(), c.getAccessStatus().name(), value(c.getRetryCount(), 0), c.getErrorMessage(), c.getCrawlTime(), c.getCreatedAt()); }
-    public TaskView taskView(CrawlerTask t) { return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(), t.getSite().getId(), t.getSite().getSiteName(), t.getDiscoveryPageId(), t.getDiscoveryPageName(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(), value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0), value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(), t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(), t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt()); }
+    public TaskView taskView(CrawlerTask t) { return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(), t.getSite().getId(), t.getSite().getSiteName(), t.getDiscoveryPageId(), t.getDiscoveryPageName(), t.getScanMaxPages(), value(t.getScannedPageCount(), 0), taskProgressPercent(t), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(), value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0), value(t.getNewBookCount(), 0), value(t.getDuplicateCount(), 0), value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(), t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(), t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt()); }
+
+    private int taskProgressPercent(CrawlerTask task) {
+        if (task.getType() == CrawlerTask.TaskType.SITE_SCAN) {
+            if (task.getStatus() == CrawlerTask.TaskStatus.SUCCESS
+                    || task.getStatus() == CrawlerTask.TaskStatus.PARTIAL_SUCCESS) return 100;
+            int maximum = Math.max(1, value(task.getScanMaxPages(),
+                    value(task.getSite().getMaxDiscoveryPages(), 3)));
+            return Math.min(99, value(task.getScannedPageCount(), 0) * 100 / maximum);
+        }
+        int total = value(task.getTotalCount(), 0);
+        return total == 0 ? 0 : Math.min(100, value(task.getSuccessCount(), 0) * 100 / total);
+    }
 
     private void validateBaseUrl(String value) { try { URI uri = URI.create(value); if (!Set.of("http", "https").contains(uri.getScheme()) || uri.getHost() == null) throw new Exception(); } catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "网站根地址必须是有效的 HTTP(S) 地址"); } }
     private String resolveSiteCode(User user, String requested, String baseUrl, Long currentId) {

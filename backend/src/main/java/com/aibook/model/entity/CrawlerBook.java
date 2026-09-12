@@ -30,6 +30,8 @@ public class CrawlerBook {
     @Column(length = 1500) private String latestChapterUrl;
     private LocalDateTime sourceUpdateTime;
     private LocalDateTime discoverTime;
+    private Long discoveryPageId;
+    @Column(length = 100) private String discoveryPageName;
     private LocalDateTime lastCrawlStartedAt;
     private LocalDateTime lastCrawlTime;
     private LocalDateTime lastUpdateCheckTime;

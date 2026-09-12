@@ -22,6 +22,8 @@ public class UserPreferencesDTO {
     private Integer libraryCardPageSize;
     private Integer libraryListPageSize;
     private Integer scanThreadCount;
+    private Boolean crawlerFollowCurrentChapter;
+    private Integer crawlerChapterPageSize;
     private Integer dockSize;
     private Integer dockOpacity;
     private Integer dockMagnification;
@@ -130,6 +132,22 @@ public class UserPreferencesDTO {
         this.scanThreadCount = scanThreadCount;
     }
 
+    public Boolean getCrawlerFollowCurrentChapter() {
+        return crawlerFollowCurrentChapter;
+    }
+
+    public void setCrawlerFollowCurrentChapter(Boolean crawlerFollowCurrentChapter) {
+        this.crawlerFollowCurrentChapter = crawlerFollowCurrentChapter;
+    }
+
+    public Integer getCrawlerChapterPageSize() {
+        return crawlerChapterPageSize;
+    }
+
+    public void setCrawlerChapterPageSize(Integer crawlerChapterPageSize) {
+        this.crawlerChapterPageSize = crawlerChapterPageSize;
+    }
+
     public Integer getDockSize() {
         return dockSize;
     }
@@ -230,6 +248,16 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder scanThreadCount(Integer scanThreadCount) {
             value.setScanThreadCount(scanThreadCount);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder crawlerFollowCurrentChapter(Boolean value) {
+            this.value.setCrawlerFollowCurrentChapter(value);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder crawlerChapterPageSize(Integer value) {
+            this.value.setCrawlerChapterPageSize(value);
             return this;
         }
 

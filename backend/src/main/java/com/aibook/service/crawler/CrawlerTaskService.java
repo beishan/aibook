@@ -31,6 +31,7 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
     private final CrawlerBookRepository bookRepository;
     private final CrawlerChapterRepository chapterRepository;
     private final CrawlerTaskRepository taskRepository;
+    private final CrawlerScanResultRepository scanResultRepository;
     private final CrawlerTaskLogRepository taskLogRepository;
     private final CrawlerManagementService managementService;
     private final OperationLogService operationLogService;
@@ -270,8 +271,14 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
 
     private CrawlerTask createAndSubmit(
             User user, CrawlerSite site, CrawlerBook book, CrawlerTask.TaskType type) {
-        CrawlerTask task = taskRepository.save(CrawlerTask.builder().user(user).site(site).crawlerBook(book)
-                .type(type).priority(CrawlerTask.Priority.HIGH).build());
+        CrawlerTask.CrawlerTaskBuilder builder = CrawlerTask.builder().user(user).site(site).crawlerBook(book)
+                .type(type).priority(CrawlerTask.Priority.HIGH);
+        if (type == CrawlerTask.TaskType.SITE_SCAN) {
+            builder.scanStartUrl(site.getHomeUrl() == null || site.getHomeUrl().isBlank()
+                            ? site.getBaseUrl() : site.getHomeUrl())
+                    .scanMaxPages(value(site.getMaxDiscoveryPages(), 3));
+        }
+        CrawlerTask task = taskRepository.save(builder.build());
         log.info("[采集任务] 已创建: taskId={}, type={}, priority={}, site={}, book={}",
                 task.getId(), type, CrawlerTask.Priority.HIGH, site.getSiteName(), bookName(book));
         recordCrawlerEvent(task, "任务已创建", "触发方式：人工操作；优先级：" + CrawlerTask.Priority.HIGH);
@@ -589,14 +596,32 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
         int maxPages = task.getScanMaxPages() == null
                 ? value(site.getMaxDiscoveryPages(), 3) : Math.max(1, task.getScanMaxPages());
         Set<String> visitedPages = new HashSet<>();
-        int discovered = 0;
+        int succeeded = 0;
+        int newBooks = 0;
+        int duplicates = 0;
+        int failed = 0;
+        int scanned = 0;
         int pages = 0;
+        scanResultRepository.deleteByTask(task);
+        task.setTotalCount(0);
+        task.setSuccessCount(0);
+        task.setNewBookCount(0);
+        task.setDuplicateCount(0);
+        task.setFailedCount(0);
+        task.setScannedPageCount(0);
+        task.setCurrentChapter("准备扫描");
+        task = saveProgressIfRunning(task);
+        if (task == null) return;
         log.info("[采集任务] 开始扫描网站: taskId={}, site={}, homeUrl={}, maxPages={}",
                 task.getId(), site.getSiteName(), pageUrl, maxPages);
         recordCrawlerEvent(task, "开始扫描" + (task.getDiscoveryPageName() == null ? "网站" : "发现页"),
                 "起始页：" + pageUrl + "；最大页数：" + maxPages);
         while (pageUrl != null && !pageUrl.isBlank() && pages < maxPages && visitedPages.add(pageUrl)) {
             task = runningTask(task.getId());
+            if (task == null) return;
+            task.setScannedPageCount(pages);
+            task.setCurrentChapter("正在扫描第 " + (pages + 1) + " / " + maxPages + " 页");
+            task = saveProgressIfRunning(task);
             if (task == null) return;
             pageUrl = httpClient.validateSiteUrl(site, pageUrl).toString();
             log.info("[采集任务] 正在扫描网站页面: taskId={}, site={}, page={}/{}, url={}",
@@ -607,33 +632,59 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
             task = runningTask(task.getId());
             if (task == null) return;
             List<BookCrawlerParser.ParsedDiscovery> items = parser.parseBookList(response.html(), pageUrl, rule);
-            task.setTotalCount(task.getTotalCount() + items.size());
+            scanned += items.size();
             for (BookCrawlerParser.ParsedDiscovery item : items) {
                 try {
                     String validatedUrl = httpClient.validateSiteUrl(site, item.url()).toString();
-                    CrawlerBook book = bookRepository.findBySiteAndExternalBookId(site, item.externalId()).orElseGet(() ->
-                            CrawlerBook.builder().site(site).externalBookId(item.externalId()).bookUrl(validatedUrl)
-                                    .bookName(item.title()).discoverTime(LocalDateTime.now()).build());
-                    if (discoveryStatus(book) == CrawlerBook.DiscoveryStatus.BLACKLISTED) continue;
+                    Optional<CrawlerBook> existing = bookRepository.findBySiteAndExternalBookId(site, item.externalId());
+                    CrawlerBook book = existing.orElseGet(() -> CrawlerBook.builder().site(site)
+                            .externalBookId(item.externalId()).bookUrl(validatedUrl)
+                            .bookName(item.title()).discoverTime(LocalDateTime.now()).build());
+                    if (discoveryStatus(book) == CrawlerBook.DiscoveryStatus.BLACKLISTED) {
+                        failed++;
+                        saveScanResult(task, book.getId(), item.title(), validatedUrl,
+                                CrawlerScanResult.ResultStatus.BLACKLISTED, "书籍已在黑名单中");
+                        continue;
+                    }
                     book.setBookUrl(validatedUrl); book.setBookName(item.title()); book.setAuthor(item.author());
                     book.setCoverUrl(item.coverUrl()); book.setCategory(item.category()); book.setLatestChapter(item.latestChapter());
-                    book = bookRepository.save(book); discovered++;
+                    if ((book.getDiscoveryPageId() == null && (book.getDiscoveryPageName() == null
+                            || book.getDiscoveryPageName().isBlank()))
+                            && (task.getDiscoveryPageId() != null || task.getDiscoveryPageName() != null)) {
+                        book.setDiscoveryPageId(task.getDiscoveryPageId());
+                        book.setDiscoveryPageName(task.getDiscoveryPageName());
+                    }
+                    book = bookRepository.save(book);
+                    CrawlerScanResult.ResultStatus resultStatus = existing.isPresent()
+                            ? CrawlerScanResult.ResultStatus.DUPLICATE : CrawlerScanResult.ResultStatus.NEW;
+                    if (existing.isPresent()) duplicates++; else newBooks++;
+                    succeeded++;
+                    saveScanResult(task, book.getId(), bookName(book), validatedUrl, resultStatus, null);
                     log.info("[采集任务] 发现书籍: taskId={}, site={}, page={}, book={}, url={}",
                             task.getId(), site.getSiteName(), pages + 1, bookName(book), validatedUrl);
                     recordCrawlerEvent(task, "发现书籍", "页码：" + (pages + 1) + "；书籍："
                             + bookName(book) + "；地址：" + validatedUrl);
-                } catch (Exception exception) { log.debug("忽略无效发现链接 {}", item.url(), exception); }
+                } catch (Exception exception) {
+                    failed++;
+                    saveScanResult(task, null, item.title(), item.url(),
+                            CrawlerScanResult.ResultStatus.FAILED, userMessage(exception));
+                    log.debug("忽略无效发现链接 {}", item.url(), exception);
+                }
             }
             pages++;
             task = runningTask(task.getId());
             if (task == null) return;
-            task.setSuccessCount(discovered); task.setWaitingCount(0); task.setCurrentChapter("扫描第 " + pages + " 页");
+            task.setTotalCount(scanned); task.setSuccessCount(succeeded); task.setNewBookCount(newBooks);
+            task.setDuplicateCount(duplicates); task.setFailedCount(failed);
+            task.setScannedPageCount(pages);
+            task.setWaitingCount(0); task.setCurrentChapter("已扫描 " + pages + " / " + maxPages + " 页");
             task = saveProgressIfRunning(task);
             if (task == null) return;
             log.info("[采集任务] 网站页面扫描完毕: taskId={}, site={}, page={}, pageItems={}, discoveredTotal={}",
-                    task.getId(), site.getSiteName(), pages, items.size(), discovered);
+                    task.getId(), site.getSiteName(), pages, items.size(), succeeded);
             recordCrawlerEvent(task, "网站页面扫描完毕", "页码：" + pages + "；本页书籍："
-                    + items.size() + "；累计发现：" + discovered);
+                    + items.size() + "；成功：" + succeeded + "；新增：" + newBooks
+                    + "；重复：" + duplicates + "；失败：" + failed);
             pageUrl = parser.parseNextBookListPage(response.html(), pageUrl, rule);
         }
         task = runningTask(task.getId());
@@ -645,14 +696,24 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
                 discoveryPageRepository.save(discoveryPage);
             });
         }
-        task.setStatus(CrawlerTask.TaskStatus.SUCCESS); task.setFinishedAt(LocalDateTime.now()); task.setCurrentChapter(null);
+        task.setStatus(failed == 0 ? CrawlerTask.TaskStatus.SUCCESS : CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
+        task.setFinishedAt(LocalDateTime.now()); task.setCurrentChapter(null);
         task = finishIfRunning(task);
         if (task == null) return;
-        log.info("[采集任务] 网站扫描完毕: taskId={}, site={}, pages={}, discovered={}",
-                task.getId(), site.getSiteName(), pages, discovered);
+        log.info("[采集任务] 网站扫描完毕: taskId={}, site={}, pages={}, succeeded={}, new={}, duplicate={}, failed={}",
+                task.getId(), site.getSiteName(), pages, succeeded, newBooks, duplicates, failed);
         recordCrawlerEvent(task, task.getDiscoveryPageName() == null ? "网站扫描完毕" : "发现页扫描完毕",
-                "扫描页数：" + pages + "；发现书籍：" + discovered
+                "扫描页数：" + pages + "；扫描到：" + task.getTotalCount() + "；成功：" + succeeded
+                        + "；新增：" + newBooks + "；重复：" + duplicates + "；失败：" + failed
                 + "；后续采集需人工触发");
+    }
+
+    private void saveScanResult(CrawlerTask task, Long bookId, String bookName, String bookUrl,
+            CrawlerScanResult.ResultStatus status, String errorMessage) {
+        scanResultRepository.save(CrawlerScanResult.builder().task(task).crawlerBookId(bookId)
+                .bookName(shortText(Objects.toString(bookName, "未知书籍"), 500))
+                .bookUrl(shortText(Objects.toString(bookUrl, ""), 1000))
+                .resultStatus(status).errorMessage(errorMessage).build());
     }
 
     private void refreshCounts(CrawlerBook book, CrawlerTask task, long totalDuration, int requests) {
@@ -714,6 +775,9 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
             if (current == null) return null;
             current.setTotalCount(source.getTotalCount());
             current.setSuccessCount(source.getSuccessCount());
+            current.setNewBookCount(source.getNewBookCount());
+            current.setDuplicateCount(source.getDuplicateCount());
+            current.setScannedPageCount(source.getScannedPageCount());
             current.setFailedCount(source.getFailedCount());
             current.setWaitingCount(source.getWaitingCount());
             current.setCurrentChapter(source.getCurrentChapter());
@@ -729,6 +793,9 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
             current.setStatus(source.getStatus());
             current.setTotalCount(source.getTotalCount());
             current.setSuccessCount(source.getSuccessCount());
+            current.setNewBookCount(source.getNewBookCount());
+            current.setDuplicateCount(source.getDuplicateCount());
+            current.setScannedPageCount(source.getScannedPageCount());
             current.setFailedCount(source.getFailedCount());
             current.setWaitingCount(source.getWaitingCount());
             current.setCurrentChapter(source.getCurrentChapter());

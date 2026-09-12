@@ -34,6 +34,7 @@ public class UserService implements UserDetailsService {
             Set.of("card", "compact-card", "list");
     private static final Set<Integer> LIBRARY_PAGE_SIZES =
             Set.of(10, 30, 50, 100, 200);
+    private static final Set<Integer> CRAWLER_CHAPTER_PAGE_SIZES = Set.of(20, 50, 100);
     private static final int DEFAULT_LIBRARY_PAGE_SIZE = 10;
     private static final Set<String> DOCK_ICON_STYLES =
             Set.of("minimal", "skeuomorphic", "macos26", "custom");
@@ -135,6 +136,14 @@ public class UserService implements UserDetailsService {
             }
             user.setScanThreadCount(request.getScanThreadCount());
         }
+        if (request.getCrawlerFollowCurrentChapter() != null) {
+            user.setCrawlerFollowCurrentChapter(request.getCrawlerFollowCurrentChapter());
+        }
+        if (request.getCrawlerChapterPageSize() != null) {
+            requireAllowed("采集章节分页大小", request.getCrawlerChapterPageSize(),
+                    CRAWLER_CHAPTER_PAGE_SIZES);
+            user.setCrawlerChapterPageSize(request.getCrawlerChapterPageSize());
+        }
         if (request.getModernThemeColor() != null) {
             user.setModernThemeColor(normalizeThemeColor(request.getModernThemeColor()));
         }
@@ -204,6 +213,8 @@ public class UserService implements UserDetailsService {
                 .libraryListPageSize(listPageSize)
                 .scanThreadCount(
                         ScanSettings.normalizeThreadCount(user.getScanThreadCount()))
+                .crawlerFollowCurrentChapter(user.getCrawlerFollowCurrentChapter())
+                .crawlerChapterPageSize(user.getCrawlerChapterPageSize())
                 .dockSize(defaultIfNull(user.getDockSize(), DEFAULT_DOCK_SIZE))
                 .dockOpacity(defaultIfNull(user.getDockOpacity(), DEFAULT_DOCK_OPACITY))
                 .dockMagnification(defaultIfNull(

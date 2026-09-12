@@ -61,6 +61,10 @@ public class UserPreference {
     private Integer libraryListPageSize;
     @Column(name = "scan_thread_count")
     private Integer scanThreadCount;
+    @Column(name = "crawler_follow_current_chapter")
+    private Boolean crawlerFollowCurrentChapter;
+    @Column(name = "crawler_chapter_page_size")
+    private Integer crawlerChapterPageSize;
 
     @Column(name = "scheduled_scan_enabled")
     private Boolean scheduledScanEnabled;

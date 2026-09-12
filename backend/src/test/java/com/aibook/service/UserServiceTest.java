@@ -354,6 +354,47 @@ class UserServiceTest {
     }
 
     @Test
+    void storesCrawlerChapterPreferencesForTheAccount() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .preferences(UserPreference.builder().build())
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        when(repository.save(user)).thenReturn(user);
+        UserService service = new UserService(repository);
+
+        UserPreferencesDTO result = service.updatePreferences(
+                "reader",
+                UserPreferencesDTO.builder()
+                        .crawlerFollowCurrentChapter(true)
+                        .crawlerChapterPageSize(50)
+                        .build());
+
+        assertEquals(true, user.getCrawlerFollowCurrentChapter());
+        assertEquals(50, user.getCrawlerChapterPageSize());
+        assertEquals(true, result.getCrawlerFollowCurrentChapter());
+        assertEquals(50, result.getCrawlerChapterPageSize());
+    }
+
+    @Test
+    void rejectsInvalidCrawlerChapterPageSize() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        UserService service = new UserService(repository);
+
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences(
+                "reader", UserPreferencesDTO.builder().crawlerChapterPageSize(30).build()));
+    }
+
+    @Test
     void distinguishesOmittedFontFromExplicitNull() throws Exception {
         UserRepository repository = mock(UserRepository.class);
         FontAssetRepository fonts = mock(FontAssetRepository.class);

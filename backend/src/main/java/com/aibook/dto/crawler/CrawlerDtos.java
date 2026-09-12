@@ -90,7 +90,8 @@ public final class CrawlerDtos {
 
     public record BookView(Long id, Long siteId, String siteName, String externalBookId,
             String bookUrl, String bookName, String author, String coverUrl, String description,
-            String category, String bookStatus, String latestChapter, int chapterCount,
+            String category, String bookStatus, String latestChapter,
+            Long discoveryPageId, String discoveryPageName, int chapterCount,
             int crawledChapterCount, int failedChapterCount, String crawlStatus,
             String discoveryStatus, String importStatus, boolean autoUpdateEnabled,
             boolean autoSyncLibrary,
@@ -107,10 +108,14 @@ public final class CrawlerDtos {
     public record CrawlerLogView(
             Long id, String description, String details, LocalDateTime createdAt) { }
 
+    public record ScanBookResultView(Long id, Long bookId, String bookName, String bookUrl,
+            String resultStatus, String errorMessage, LocalDateTime createdAt) { }
+
     public record TaskView(String id, String type, String status, String priority,
             Long siteId, String siteName, Long discoveryPageId, String discoveryPageName,
-            Long bookId, String bookName, int totalCount,
-            int successCount, int failedCount, int waitingCount, String currentChapter,
+            Integer scanMaxPages, int scannedPageCount, int progressPercent, Long bookId, String bookName,
+            int totalCount, int successCount, int newBookCount,
+            int duplicateCount, int failedCount, int waitingCount, String currentChapter,
             long averageRequestMillis, String errorMessage, LocalDateTime startedAt,
             LocalDateTime finishedAt, LocalDateTime createdAt) { }
 

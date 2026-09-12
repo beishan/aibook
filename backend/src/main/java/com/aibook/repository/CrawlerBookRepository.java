@@ -44,6 +44,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
                    or lower(b.bookName) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
                    or lower(b.site.siteName) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.discoveryPageName, '')) like lower(concat('%', :keyword, '%'))
                    or lower(b.externalBookId) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.latestChapter, '')) like lower(concat('%', :keyword, '%')))
             """)

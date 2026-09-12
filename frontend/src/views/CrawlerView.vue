@@ -27,7 +27,7 @@
         </article>
       </div>
       <div class="section-heading"><div><p class="eyebrow">LIVE QUEUE</p><h2>最近任务</h2></div><el-button text :icon="Refresh" @click="refresh">刷新</el-button></div>
-      <TaskTable :tasks="dashboard?.recentTasks || []" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" />
+      <TaskTable :tasks="dashboard?.recentTasks || []" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" @scan-results="openScanResults" />
     </section>
 
     <section v-else-if="activeTab === 'sites'" class="panel" role="tabpanel">
@@ -36,17 +36,8 @@
         <article v-for="site in sites" :key="site.id" class="site-card">
           <div class="site-top"><span class="site-mark">{{ site.siteName.slice(0, 1) }}</span><div><h3>{{ site.siteName }}</h3><a :href="site.homeUrl || site.baseUrl" target="_blank">{{ site.baseUrl }}</a></div><el-tag :type="site.status==='RULE_ERROR'?'danger':!site.ruleVersion?'warning':site.enabled?'success':'info'">{{ site.status==='RULE_ERROR'?'规则异常':!site.ruleVersion?'待配置规则':site.enabled?'启用':'停用' }}</el-tag></div>
           <div class="site-stats"><span><b>{{ site.bookCount }}</b> 本书</span><span><b>{{ site.requestIntervalMillis }}</b> ms 间隔</span><span><b>{{ site.maxConcurrency }}</b> 并发</span></div>
-          <div class="discovery-pages-heading"><strong>发现页</strong><el-button text size="small" :icon="Plus" @click="openDiscoveryPage(site)">新增发现页</el-button></div>
-          <div v-if="discoveryPagesBySite[site.id]?.length" class="discovery-pages">
-            <article v-for="page in discoveryPagesBySite[site.id]" :key="page.id" class="discovery-page-row">
-              <div><strong>{{ page.pageName }}</strong><a :href="page.pageUrl" target="_blank">{{ page.pageUrl }}</a><small>最多 {{ page.maxPages }} 页 · {{ page.lastScanAt ? `上次 ${formatTime(page.lastScanAt)}` : '尚未扫描' }}</small></div>
-              <el-switch :model-value="page.autoScanEnabled" :disabled="!site.enabled" inline-prompt active-text="自动" inactive-text="手动" aria-label="自动扫描发现页" @change="toggleDiscoveryPageAuto(page,Boolean($event))" />
-              <div class="discovery-page-actions"><el-button text size="small" :disabled="!site.enabled || !site.rule?.discoveryItemSelector" @click="scanDiscoveryPage(page)">扫描</el-button><el-button text size="small" @click="openDiscoveryPage(site,page)">编辑</el-button><el-button text size="small" type="danger" @click="removeDiscoveryPage(page)">删除</el-button></div>
-            </article>
-          </div>
-          <el-empty v-else :image-size="42" description="尚未添加发现页" />
           <p class="health-line" :class="{error:site.status==='RULE_ERROR'}">{{ site.ruleVersion ? `生效规则 v${site.ruleVersion}` : '暂无生效规则' }} · 共 {{ site.ruleCount }} 个版本</p>
-          <footer><el-button type="primary" plain @click="openRuleManager(site)">规则管理</el-button><el-button text @click="openSite(site)">编辑网站</el-button><el-button text @click="openCrawl(site.id)">采集 URL</el-button><el-button text type="danger" @click="removeSite(site)">删除</el-button></footer>
+          <footer><el-button type="primary" plain @click="openDiscoveryPages(site)">发现页管理（{{ discoveryPagesBySite[site.id]?.length || 0 }}）</el-button><el-button type="primary" plain @click="openRuleManager(site)">规则管理</el-button><el-button text @click="openSite(site)">编辑网站</el-button><el-button text @click="openCrawl(site.id)">采集 URL</el-button><el-button text type="danger" @click="removeSite(site)">删除</el-button></footer>
         </article>
       </div>
       <el-empty v-else description="尚未配置采集网站" />
@@ -55,7 +46,7 @@
     <section v-else-if="activeTab === 'discovered'" class="panel" role="tabpanel">
       <div class="section-heading discovery-heading"><div><p class="eyebrow">DISCOVERY INBOX</p><h2>发现书籍</h2></div><div class="discovery-heading-actions"><div class="discovery-view-switch" role="tablist" aria-label="发现书籍视图" @keydown="handleDiscoveryViewKey"><span class="discovery-view-indicator" :style="{transform:`translateX(${discoveryViewMode==='card'?100:0}%)`}" aria-hidden="true"/><button type="button" role="tab" :aria-selected="discoveryViewMode==='table'" :tabindex="discoveryViewMode==='table'?0:-1" :class="{active:discoveryViewMode==='table'}" @click="setDiscoveryViewMode('table')">☰ 表格</button><button type="button" role="tab" :aria-selected="discoveryViewMode==='card'" :tabindex="discoveryViewMode==='card'?0:-1" :class="{active:discoveryViewMode==='card'}" @click="setDiscoveryViewMode('card')">▦ 卡片</button></div><div class="batch-actions"><el-button :disabled="!selectedDiscoveries.length" @click="batchDiscovery('IGNORED')">忽略</el-button><el-button :disabled="!selectedDiscoveries.length" @click="batchDiscovery('BLACKLISTED')">加入黑名单</el-button><el-button type="primary" :disabled="!selectedDiscoveries.length" @click="batchCrawl">批量采集</el-button></div></div></div>
       <div class="discovery-toolbar">
-        <el-input v-model="discoveryKeyword" clearable :prefix-icon="Search" placeholder="搜索书名、作者、网站、编码或最新章节" @keyup.enter="applyDiscoveryFilters" />
+        <el-input v-model="discoveryKeyword" clearable :prefix-icon="Search" placeholder="搜索书名、作者、网站、发现页、编码或最新章节" @keyup.enter="applyDiscoveryFilters" />
         <el-select v-model="discoverySiteId" clearable placeholder="全部采集网站"><el-option v-for="site in sites" :key="site.id" :label="site.siteName" :value="site.id" /></el-select>
         <el-select v-model="discoverySort" aria-label="发现书籍排序"><el-option v-for="item in discoverySortOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
         <el-button type="primary" :icon="Search" @click="applyDiscoveryFilters">查询</el-button><el-button @click="resetDiscoveryFilters">重置</el-button>
@@ -63,6 +54,7 @@
       <el-table v-if="discoveryViewMode==='table'" v-loading="discoveryLoading" :data="discoveredBooks" class="data-table" @selection-change="selectedDiscoveries=$event">
         <el-table-column type="selection" width="48" />
         <el-table-column label="书籍" min-width="260"><template #default="{row}"><div class="book-cell"><div class="mini-cover">{{ row.bookName.slice(0,1) }}</div><div><strong>{{ row.bookName }}</strong><p>{{ row.author || '未知作者' }} · {{ row.siteName }}</p></div></div></template></el-table-column>
+        <el-table-column label="发现页" width="160"><template #default="{row}"><el-tag v-if="row.discoveryPageName" size="small" effect="plain">{{ row.discoveryPageName }}</el-tag><span v-else class="muted-text">站点首页 / 未记录</span></template></el-table-column>
         <el-table-column prop="category" label="分类" width="130" />
         <el-table-column prop="latestChapter" label="最新章节" min-width="180" />
         <el-table-column label="发现时间" width="170"><template #default="{row}">{{ formatTime(row.discoverTime) }}</template></el-table-column>
@@ -73,7 +65,7 @@
         <div class="discovery-card-grid">
           <article v-for="book in discoveredBooks" :key="book.id" class="discovery-card" :class="{selected:isDiscoverySelected(book)}">
             <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><el-checkbox class="discovery-card-check" :model-value="isDiscoverySelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleDiscoverySelection(book,Boolean($event))"/></div>
-            <div class="discovery-card-body"><div class="discovery-card-title"><div><strong :title="book.bookName">{{ book.bookName }}</strong><p>{{ book.author || '未知作者' }}</p></div><el-tag v-if="book.category" size="small" effect="plain">{{ book.category }}</el-tag></div><dl><div><dt>来源</dt><dd>{{ book.siteName }}</dd></div><div><dt>最新章节</dt><dd :title="book.latestChapter">{{ book.latestChapter || '暂未识别' }}</dd></div><div><dt>发现时间</dt><dd>{{ formatTime(book.discoverTime) }}</dd></div></dl></div>
+            <div class="discovery-card-body"><div class="discovery-card-title"><div><strong :title="book.bookName">{{ book.bookName }}</strong><p>{{ book.author || '未知作者' }}</p></div><el-tag v-if="book.category" size="small" effect="plain">{{ book.category }}</el-tag></div><dl><div><dt>来源网站</dt><dd>{{ book.siteName }}</dd></div><div><dt>发现页</dt><dd>{{ book.discoveryPageName || '站点首页 / 未记录' }}</dd></div><div><dt>最新章节</dt><dd :title="book.latestChapter">{{ book.latestChapter || '暂未识别' }}</dd></div><div><dt>发现时间</dt><dd>{{ formatTime(book.discoverTime) }}</dd></div></dl></div>
             <footer class="discovery-card-actions"><el-button text type="primary" @click="crawlDiscovered(book)">开始采集</el-button><a class="source-link" :href="book.bookUrl" target="_blank" rel="noopener noreferrer">查看网站</a><el-button text @click="batchDiscovery('IGNORED',[book.id])">忽略</el-button><el-button text type="danger" @click="batchDiscovery('BLACKLISTED',[book.id])">黑名单</el-button></footer>
           </article>
         </div>
@@ -109,7 +101,7 @@
     <section v-else class="panel" role="tabpanel">
       <div class="section-heading"><div><p class="eyebrow">{{ activeTab === 'failed' ? 'NEEDS ATTENTION' : 'PERSISTENT QUEUE' }}</p><h2>{{ activeTab === 'failed' ? '失败任务' : '采集任务' }}</h2></div><el-button text :icon="Refresh" @click="refresh">刷新</el-button></div>
       <div v-loading="activeTab === 'failed' ? failedTaskLoading : taskLoading">
-        <TaskTable :tasks="activeTab === 'failed' ? failedTasks : tasks" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" />
+        <TaskTable :tasks="activeTab === 'failed' ? failedTasks : tasks" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" @scan-results="openScanResults" />
       </div>
       <el-empty v-if="activeTab === 'tasks'&&!taskLoading&&!tasks.length" description="暂无采集任务" />
       <el-empty v-if="activeTab === 'failed'&&!failedTaskLoading&&!failedTasks.length" description="暂无失败任务" />
@@ -143,6 +135,19 @@
         </div>
       </el-form>
       <template #footer><el-button @click="siteDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveSite">保存网站</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="discoveryManagerDialog" :title="`${discoveryManagerSite?.siteName || ''} · 发现页管理`" width="min(820px, 96vw)" append-to-body destroy-on-close>
+      <div class="discovery-manager-toolbar"><div><strong>发现页</strong><p>各发现页可独立手动扫描或开启自动扫描。</p></div><el-button type="primary" :icon="Plus" @click="discoveryManagerSite && openDiscoveryPage(discoveryManagerSite)">新增发现页</el-button></div>
+      <div v-if="managedDiscoveryPages.length" class="discovery-pages discovery-pages-dialog-list">
+        <article v-for="page in managedDiscoveryPages" :key="page.id" class="discovery-page-row">
+          <div><strong>{{ page.pageName }}</strong><a :href="page.pageUrl" target="_blank" rel="noopener noreferrer">{{ page.pageUrl }}</a><small>最多 {{ page.maxPages }} 页 · 每 {{ page.scanIntervalMinutes }} 分钟 · {{ page.lastScanAt ? `上次 ${formatTime(page.lastScanAt)}` : '尚未扫描' }}</small></div>
+          <el-switch :model-value="page.autoScanEnabled" :disabled="!discoveryManagerSite?.enabled" inline-prompt active-text="自动" inactive-text="手动" aria-label="自动扫描发现页" @change="toggleDiscoveryPageAuto(page,Boolean($event))" />
+          <div class="discovery-page-actions"><el-button text size="small" :disabled="!discoveryManagerSite?.enabled || !discoveryManagerSite?.rule?.discoveryItemSelector" @click="scanDiscoveryPage(page)">扫描</el-button><el-button text size="small" @click="discoveryManagerSite && openDiscoveryPage(discoveryManagerSite,page)">编辑</el-button><el-button text size="small" type="danger" @click="removeDiscoveryPage(page)">删除</el-button></div>
+        </article>
+      </div>
+      <el-empty v-else description="尚未添加发现页" />
+      <template #footer><el-button @click="discoveryManagerDialog=false">关闭</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="discoveryPageDialog" :title="editingDiscoveryPage ? '编辑发现页' : '新增发现页'" width="min(620px, 94vw)" append-to-body destroy-on-close>
@@ -257,6 +262,19 @@
       <template #footer><el-button @click="taskEditDialog=false">取消</el-button><el-button type="primary" :loading="savingTask" @click="saveTask">保存修改</el-button></template>
     </el-dialog>
 
+    <el-dialog v-model="scanResultsDialog" :title="`${scanResultsTask?.discoveryPageName || '发现页'} · 扫描结果`" width="min(920px, 96vw)" append-to-body>
+      <div v-if="scanResultsTask" class="scan-result-summary"><span><small>扫描到</small><strong>{{ scanResultsTask.totalCount }}</strong></span><span><small>成功</small><strong>{{ scanResultsTask.successCount }}</strong></span><span><small>新增</small><strong>{{ scanResultsTask.newBookCount }}</strong></span><span><small>重复</small><strong>{{ scanResultsTask.duplicateCount }}</strong></span><span><small>失败</small><strong>{{ scanResultsTask.failedCount }}</strong></span></div>
+      <el-table v-loading="scanResultsLoading" :data="scanResults" max-height="52vh" class="scan-results-table">
+        <el-table-column prop="bookName" label="书籍" min-width="220" show-overflow-tooltip />
+        <el-table-column label="结果" width="100"><template #default="{row}"><el-tag :type="scanResultType(row.resultStatus)" effect="light">{{ scanResultLabel(row.resultStatus) }}</el-tag></template></el-table-column>
+        <el-table-column label="地址" min-width="280" show-overflow-tooltip><template #default="{row}"><a :href="row.bookUrl" target="_blank">{{ row.bookUrl }}</a></template></el-table-column>
+        <el-table-column prop="errorMessage" label="说明" min-width="180" show-overflow-tooltip />
+      </el-table>
+      <el-empty v-if="!scanResultsLoading&&!scanResults.length" description="任务尚未产生书籍扫描结果" />
+      <div v-if="scanResultsTotal" class="scan-results-pagination"><span>共 {{ scanResultsTotal }} 条</span><el-pagination v-model:current-page="scanResultsPage" v-model:page-size="scanResultsPageSize" :page-sizes="[20,50,100]" :total="scanResultsTotal" layout="sizes, prev, pager, next" background small @current-change="loadScanResults" @size-change="handleScanResultSizeChange" /></div>
+      <template #footer><el-button @click="scanResultsDialog=false">关闭</el-button></template>
+    </el-dialog>
+
     <el-drawer v-model="bookDrawer" size="min(760px, 96vw)" :title="selectedBook?.bookName || '采集书籍详情'" class="book-detail-drawer">
       <div v-if="selectedBook" class="book-drawer-content">
         <div class="book-summary"><div class="large-cover">{{ selectedBook.bookName.slice(0,1) }}</div><div><h2>{{ selectedBook.bookName }}</h2><p>{{ selectedBook.author || '未知作者' }} · {{ selectedBook.siteName }}</p><el-progress :percentage="progress(selectedBook)"/><small>{{ selectedBook.crawledChapterCount }} / {{ selectedBook.chapterCount }} 章，失败 {{ selectedBook.failedChapterCount }}</small></div></div>
@@ -266,7 +284,7 @@
         <section v-show="bookDetailTab==='chapters'" class="drawer-detail-panel chapter-progress-panel" role="tabpanel">
           <div class="chapter-list-heading"><div><p class="eyebrow">CHAPTER INDEX</p><h3>章节进度</h3></div><div class="chapter-heading-tools"><label class="chapter-follow" :class="{active:followCurrentChapter}"><strong>跟随采集</strong><el-switch :model-value="followCurrentChapter" aria-label="自动跟随当前采集章节" @change="setFollowCurrentChapter(Boolean($event))" /></label><div class="chapter-sort" :class="{disabled:followCurrentChapter}" role="tablist" aria-label="章节排序方式" @keydown="handleChapterSortKey"><span class="chapter-sort-indicator" :style="{transform:`translateX(${chapterSortIndex*100}%)`}"/><button v-for="item in chapterSortOptions" :key="item.value" type="button" role="tab" :disabled="followCurrentChapter" :aria-selected="chapterSort===item.value" :tabindex="chapterSort===item.value?0:-1" :class="{active:chapterSort===item.value}" @click="changeChapterSort(item.value)">{{ item.label }}</button></div></div></div>
           <el-table v-loading="chapterLoading" :data="chapters" height="100%" class="chapters-table" :row-class-name="chapterRowClassName" @row-click="openChapter"><el-table-column prop="chapterIndex" label="#" width="65"/><el-table-column label="章节" min-width="220"><template #default="{row}"><div class="chapter-name-cell"><span>{{ row.chapterName }}</span><em v-if="row.id===currentCrawlingChapter?.id"><i/>当前采集</em></div></template></el-table-column><el-table-column prop="wordCount" label="字数" width="90"/><el-table-column label="状态" width="120"><template #default="{row}"><el-tag :type="statusType(row.crawlStatus)">{{ statusLabel(row.crawlStatus) }}</el-tag></template></el-table-column></el-table>
-          <div v-if="chapterTotal" class="chapter-pagination"><span>第 {{ chapterPage }} / {{ Math.max(1,Math.ceil(chapterTotal/chapterPageSize)) }} 页 · 共 {{ chapterTotal }} 章</span><el-pagination v-model:current-page="chapterPage" v-model:page-size="chapterPageSize" :page-sizes="[20,50,100]" :total="chapterTotal" layout="sizes, prev, pager, next" background small @current-change="loadChapterPage" @size-change="handleChapterSizeChange" /></div>
+          <div v-if="chapterTotal" class="chapter-pagination"><span>第 {{ chapterPage }} / {{ Math.max(1,Math.ceil(chapterTotal/chapterPageSize)) }} 页 · 共 {{ chapterTotal }} 章</span><el-pagination v-model:current-page="chapterPage" :page-size="chapterPageSize" :page-sizes="[20,50,100]" :total="chapterTotal" layout="sizes, prev, pager, next" background small @current-change="loadChapterPage" @size-change="handleChapterSizeChange" /></div>
         </section>
         <section v-show="bookDetailTab==='logs'" class="drawer-detail-panel realtime-log-panel" role="tabpanel">
           <div class="realtime-log-heading"><div><p class="eyebrow">LIVE CRAWLER FEED</p><h3>实时日志</h3></div><span class="live-state"><i/>每 {{ pollingIntervalSeconds }} 秒同步</span></div>
@@ -283,21 +301,23 @@
 
 <script setup lang="ts">
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, Plus, Refresh, Search, Tickets, Upload, Warning } from '@element-plus/icons-vue'
 import { ElButton, ElProgress, ElTable, ElTableColumn, ElTag, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
-import { crawlerApi, type CrawlerBook, type CrawlerChapter, type CrawlerDashboard, type CrawlerDiscoveryPage, type CrawlerDiscoveryPagePayload, type CrawlerLog, type CrawlerRule, type CrawlerRuleExport, type CrawlerRuleTest, type CrawlerRuleVersion, type CrawlerSite, type CrawlerSitePayload, type CrawlerTask } from '@/utils/crawler'
+import { crawlerApi, type CrawlerBook, type CrawlerChapter, type CrawlerDashboard, type CrawlerDiscoveryPage, type CrawlerDiscoveryPagePayload, type CrawlerLog, type CrawlerRule, type CrawlerRuleExport, type CrawlerRuleTest, type CrawlerRuleVersion, type CrawlerScanResult, type CrawlerSite, type CrawlerSitePayload, type CrawlerTask } from '@/utils/crawler'
+import { usePreferencesStore } from '@/stores/preferences'
 import { getCoverUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { confirm, message } from '@/utils/message'
 
-const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true}}, emits:['command','edit','delete'], setup(props,{emit}) { return () => h(ElTable,{data:props.tasks,class:'data-table'},()=>[
+const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true}}, emits:['command','edit','delete','scan-results'], setup(props,{emit}) { return () => h(ElTable,{data:props.tasks,class:'data-table'},()=>[
   h(ElTableColumn,{label:'任务',minWidth:240},{default:({row}:{row:CrawlerTask})=>h('div',{class:'task-name'},[h('strong',row.bookName||row.discoveryPageName||row.type),h('p',`${row.siteName} · ${row.type}`)])}),
-  h(ElTableColumn,{label:'进度',minWidth:180},{default:({row}:{row:CrawlerTask})=>h(ElProgress,{percentage:row.totalCount?Math.round(row.successCount/row.totalCount*100):0,strokeWidth:7})}),
+  h(ElTableColumn,{label:'进度 / 扫描结果',minWidth:300},{default:({row}:{row:CrawlerTask})=>row.type==='SITE_SCAN'?h('div',{class:'task-scan-progress'},[h(ElProgress,{percentage:scanTaskPercentage(row),strokeWidth:7}),h('small',scanTaskProgressText(row)),h('div',{class:'task-scan-summary'},[`扫描到 ${row.totalCount}`,h('b',`成功 ${row.successCount}`),h('i',`新增 ${row.newBookCount}`),h('em',`重复 ${row.duplicateCount}`),row.failedCount?h('strong',`失败 ${row.failedCount}`):null])]):h(ElProgress,{percentage:row.totalCount?Math.round(row.successCount/row.totalCount*100):0,strokeWidth:7})}),
   h(ElTableColumn,{label:'状态',width:130},{default:({row}:{row:CrawlerTask})=>h(ElTag,{type:statusType(row.status)},()=>statusLabel(row.status))}),
   h(ElTableColumn,{label:'优先级',width:90},{default:({row}:{row:CrawlerTask})=>h(ElTag,{type:priorityType(row.priority),effect:'plain'},()=>priorityLabel(row.priority))}),
   h(ElTableColumn,{label:'当前章节',prop:'currentChapter',minWidth:150}),
-  h(ElTableColumn,{label:'操作',width:300},{default:({row}:{row:CrawlerTask})=>[['WAITING','PAUSED','FAILED'].includes(row.status)?h(ElButton,{text:true,onClick:()=>emit('edit',row)},()=> '修改'):null,row.status==='RUNNING'?h(ElButton,{text:true,onClick:()=>emit('command',row,'pause')},()=> '暂停'):null,['PAUSED','FAILED'].includes(row.status)?h(ElButton,{text:true,type:'primary',onClick:()=>emit('command',row,'resume')},()=> '继续'):null,['RUNNING','WAITING','PAUSED'].includes(row.status)?h(ElButton,{text:true,type:'danger',onClick:()=>emit('command',row,'cancel')},()=> '取消'):null,row.status!=='RUNNING'?h(ElButton,{text:true,type:'danger',onClick:()=>emit('delete',row)},()=> '删除'):null]})
+  h(ElTableColumn,{label:'操作',width:340},{default:({row}:{row:CrawlerTask})=>[row.type==='SITE_SCAN'?h(ElButton,{text:true,type:'primary',onClick:()=>emit('scan-results',row)},()=> '查看结果'):null,['WAITING','PAUSED','FAILED'].includes(row.status)?h(ElButton,{text:true,onClick:()=>emit('edit',row)},()=> '修改'):null,row.status==='RUNNING'?h(ElButton,{text:true,onClick:()=>emit('command',row,'pause')},()=> '暂停'):null,['PAUSED','FAILED'].includes(row.status)?h(ElButton,{text:true,type:'primary',onClick:()=>emit('command',row,'resume')},()=> '继续'):null,['RUNNING','WAITING','PAUSED'].includes(row.status)?h(ElButton,{text:true,type:'danger',onClick:()=>emit('command',row,'cancel')},()=> '取消'):null,row.status!=='RUNNING'?h(ElButton,{text:true,type:'danger',onClick:()=>emit('delete',row)},()=> '删除'):null]})
 ]) }})
 
 type TabKey='overview'|'sites'|'discovered'|'books'|'tasks'|'failed'
@@ -307,21 +327,23 @@ type SiteEditorTab='basic'|'request'|'validation'|'proxy'|'automation'
 type DiscoveryViewMode='table'|'card'
 type LoadOptions={silent?:boolean;preserveSelection?:boolean}
 const router=useRouter()
+const preferencesStore=usePreferencesStore()
+const {crawlerFollowCurrentChapter:followCurrentChapter,crawlerChapterPageSize:chapterPageSize}=storeToRefs(preferencesStore)
 const DISCOVERY_VIEW_MODE_KEY='aibook.crawler.discoveryViewMode'
 const POLLING_INTERVAL_KEY='aibook.crawler.pollingIntervalSeconds'
-const FOLLOW_CURRENT_CHAPTER_KEY='aibook.crawler.followCurrentChapter'
 const pollingIntervalOptions=[1,3,5,10,30] as const
 type PollingIntervalSeconds=typeof pollingIntervalOptions[number]
 const storedPollingInterval=Number(localStorage.getItem(POLLING_INTERVAL_KEY))
 const pollingIntervalSeconds=ref<PollingIntervalSeconds>(pollingIntervalOptions.includes(storedPollingInterval as PollingIntervalSeconds)?storedPollingInterval as PollingIntervalSeconds:3)
 const activeTab=ref<TabKey>('overview'), dashboard=ref<CrawlerDashboard>(), sites=ref<CrawlerSite[]>([]), books=ref<CrawlerBook[]>([]), discoveredBooks=ref<CrawlerBook[]>([]), tasks=ref<CrawlerTask[]>([]), failedTasks=ref<CrawlerTask[]>([])
-const siteDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), chapterDetail=ref<{title:string;url:string;content:string;errorMessage:string}>(), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
+const siteDialog=ref(false), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), chapterDetail=ref<{title:string;url:string;content:string;errorMessage:string}>(), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
 const discoveryPagesBySite=ref<Record<number,CrawlerDiscoveryPage[]>>({})
 const bookLoading=ref(false), bookPage=ref(1), bookPageSize=ref(20), bookTotal=ref(0)
 const bookSiteId=ref<number>(), bookCrawlStatus=ref(''), bookImportStatus=ref(''), bookSort=ref('CREATED_DESC')
-const chapterLoading=ref(false), chapterPage=ref(1), chapterPageSize=ref(20), chapterTotal=ref(0)
-const followCurrentChapter=ref(localStorage.getItem(FOLLOW_CURRENT_CHAPTER_KEY)==='true'), currentCrawlingChapter=ref<CrawlerChapter>()
+const chapterLoading=ref(false), chapterPage=ref(1), chapterTotal=ref(0)
+const currentCrawlingChapter=ref<CrawlerChapter>()
 const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=ref(0)
+const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
 const failedTaskLoading=ref(false), failedTaskPage=ref(1), failedTaskPageSize=ref(20), failedTaskTotal=ref(0)
 const discoveryViewMode=ref<DiscoveryViewMode>(localStorage.getItem(DISCOVERY_VIEW_MODE_KEY)==='card'?'card':'table')
 const ruleTestSite=ref<CrawlerSite>(), ruleTestDraft=ref<CrawlerRule>(), ruleSite=ref<CrawlerSite>(), editingRule=ref<CrawlerRuleVersion>(), ruleTestUrl=ref(''), ruleTestResult=ref<CrawlerRuleTest>(), ruleVersions=ref<CrawlerRuleVersion[]>([]), importInput=ref<HTMLInputElement>(), importMode=ref<'text'|'file'>('text'), importJsonText=ref(''), importFileName=ref('')
@@ -358,6 +380,7 @@ const activeIndex=computed(()=>tabs.value.findIndex(t=>t.key===activeTab.value))
 const selectedDiscoveryIds=computed(()=>new Set(selectedDiscoveries.value.map(book=>book.id)))
 const allDiscoveredSelected=computed(()=>discoveredBooks.value.length>0&&discoveredBooks.value.every(book=>selectedDiscoveryIds.value.has(book.id)))
 const someDiscoveredSelected=computed(()=>discoveredBooks.value.some(book=>selectedDiscoveryIds.value.has(book.id)))
+const managedDiscoveryPages=computed(()=>discoveryManagerSite.value?discoveryPagesBySite.value[discoveryManagerSite.value.id]||[]:[])
 const chapterSortIndex=computed(()=>chapterSortOptions.findIndex(item=>item.value===chapterSort.value))
 const bookDetailTabIndex=computed(()=>bookDetailTabs.findIndex(item=>item.value===bookDetailTab.value))
 const taskPriorityIndex=computed(()=>taskPriorityOptions.findIndex(item=>item.value===taskPriority.value))
@@ -366,7 +389,7 @@ const metrics=computed(()=>[{label:'采集网站',value:dashboard.value?.siteCou
 let timer:number|undefined
 let progressPolling=false
 let chapterRequestSequence=0
-onMounted(async()=>{await refresh();restartPolling()})
+onMounted(async()=>{await preferencesStore.hydrate();await refresh();restartPolling()})
 onUnmounted(()=>{if(timer)window.clearInterval(timer)})
 function restartPolling(){if(timer)window.clearInterval(timer);timer=window.setInterval(()=>{void pollCrawlerProgress()},pollingIntervalSeconds.value*1000)}
 function setPollingInterval(value:number){if(!pollingIntervalOptions.includes(value as PollingIntervalSeconds))return;pollingIntervalSeconds.value=value as PollingIntervalSeconds;localStorage.setItem(POLLING_INTERVAL_KEY,String(value));restartPolling();void pollCrawlerProgress()}
@@ -418,9 +441,9 @@ async function syncOpenBookProgress(options:LoadOptions={}){
 }
 function chapterSortApiValue(value:ChapterSort){return value==='indexDesc'?'INDEX_DESC':value==='createdDesc'?'CREATED_DESC':'INDEX_ASC'}
 async function loadChapterPage(){await syncOpenBookProgress()}
-async function handleChapterSizeChange(){chapterPage.value=1;await syncOpenBookProgress()}
+async function handleChapterSizeChange(size:number){preferencesStore.setCrawlerChapterPageSize(size);chapterPage.value=1;await syncOpenBookProgress()}
 async function changeChapterSort(value:ChapterSort){if(followCurrentChapter.value||chapterSort.value===value)return;chapterSort.value=value;chapterPage.value=1;await syncOpenBookProgress()}
-async function setFollowCurrentChapter(enabled:boolean){followCurrentChapter.value=enabled;localStorage.setItem(FOLLOW_CURRENT_CHAPTER_KEY,String(enabled));currentCrawlingChapter.value=undefined;if(enabled){chapterSort.value='indexAsc';chapterPage.value=1}await syncOpenBookProgress()}
+async function setFollowCurrentChapter(enabled:boolean){preferencesStore.setCrawlerFollowCurrentChapter(enabled);currentCrawlingChapter.value=undefined;if(enabled){chapterSort.value='indexAsc';chapterPage.value=1}await syncOpenBookProgress()}
 function chapterRowClassName({row}:{row:CrawlerChapter}){return row.id===currentCrawlingChapter.value?.id?'current-crawling-row':''}
 async function scrollToCurrentCrawlingChapter(){await nextTick();document.querySelector<HTMLElement>('.book-detail-drawer .current-crawling-row')?.scrollIntoView({block:'center',behavior:'smooth'})}
 async function loadBooks(options:LoadOptions={}){if(!options.silent)bookLoading.value=true;try{const result=await crawlerApi.books({page:bookPage.value-1,size:bookPageSize.value,keyword:bookKeyword.value.trim()||undefined,siteId:bookSiteId.value,crawlStatus:bookCrawlStatus.value||undefined,importStatus:bookImportStatus.value||undefined,sort:bookSort.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/bookPageSize.value));if(bookPage.value>lastPage){bookPage.value=lastPage;return await loadBooks(options)}books.value=result.content;bookTotal.value=result.totalElements}finally{if(!options.silent)bookLoading.value=false}}
@@ -429,6 +452,9 @@ async function applyBookFilters(){bookPage.value=1;await loadBooks()}
 async function resetBookFilters(){bookKeyword.value='';bookSiteId.value=undefined;bookCrawlStatus.value='';bookImportStatus.value='';bookSort.value='CREATED_DESC';bookPage.value=1;await loadBooks()}
 async function loadTasks(options:LoadOptions={}){if(!options.silent)taskLoading.value=true;try{const result=await crawlerApi.tasks({page:taskPage.value-1,size:taskPageSize.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/taskPageSize.value));if(taskPage.value>lastPage){taskPage.value=lastPage;return await loadTasks(options)}tasks.value=result.content;taskTotal.value=result.totalElements}finally{if(!options.silent)taskLoading.value=false}}
 async function handleTaskSizeChange(){taskPage.value=1;await loadTasks()}
+async function openScanResults(task:CrawlerTask){scanResultsTask.value=task;scanResults.value=[];scanResultsPage.value=1;scanResultsTotal.value=0;scanResultsDialog.value=true;await loadScanResults()}
+async function loadScanResults(){if(!scanResultsTask.value)return;scanResultsLoading.value=true;try{const result=await crawlerApi.scanResults(scanResultsTask.value.id,scanResultsPage.value-1,scanResultsPageSize.value);scanResults.value=result.content;scanResultsTotal.value=result.totalElements}finally{scanResultsLoading.value=false}}
+async function handleScanResultSizeChange(){scanResultsPage.value=1;await loadScanResults()}
 async function loadFailedTasks(options:LoadOptions={}){if(!options.silent)failedTaskLoading.value=true;try{const result=await crawlerApi.tasks({page:failedTaskPage.value-1,size:failedTaskPageSize.value,failedOnly:true});const lastPage=Math.max(1,Math.ceil(result.totalElements/failedTaskPageSize.value));if(failedTaskPage.value>lastPage){failedTaskPage.value=lastPage;return await loadFailedTasks(options)}failedTasks.value=result.content;failedTaskTotal.value=result.totalElements}finally{if(!options.silent)failedTaskLoading.value=false}}
 async function handleFailedTaskSizeChange(){failedTaskPage.value=1;await loadFailedTasks()}
 async function loadDiscoveredBooks(options:LoadOptions={}){if(!options.silent)discoveryLoading.value=true;if(!options.preserveSelection)selectedDiscoveries.value=[];try{const result=await crawlerApi.discoveredBooks({page:discoveryPage.value-1,size:discoveryPageSize.value,keyword:discoveryKeyword.value.trim()||undefined,siteId:discoverySiteId.value,sort:discoverySort.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/discoveryPageSize.value));if(discoveryPage.value>lastPage){discoveryPage.value=lastPage;return await loadDiscoveredBooks(options)}discoveredBooks.value=result.content;discoveredTotal.value=result.totalElements}finally{if(!options.silent)discoveryLoading.value=false}}
@@ -457,10 +483,11 @@ function openSite(site?:CrawlerSite){
   siteDialog.value=true
 }
 function openCrawl(id:number){crawlForm.siteId=id;crawlDialog.value=true}
+function openDiscoveryPages(site:CrawlerSite){discoveryManagerSite.value=site;discoveryManagerDialog.value=true}
 function openDiscoveryPage(site:CrawlerSite,page?:CrawlerDiscoveryPage){discoveryPageSite.value=site;editingDiscoveryPage.value=page;Object.assign(discoveryPageForm,page?{pageName:page.pageName,pageUrl:page.pageUrl,autoScanEnabled:page.autoScanEnabled,scanIntervalMinutes:page.scanIntervalMinutes,maxPages:page.maxPages}:{pageName:'',pageUrl:site.homeUrl||site.baseUrl,autoScanEnabled:false,scanIntervalMinutes:360,maxPages:50});discoveryPageDialog.value=true}
 async function saveDiscoveryPage(){if(!discoveryPageSite.value||!discoveryPageForm.pageName.trim()||!discoveryPageForm.pageUrl.trim())return message.warning('请填写发现页名称和起始页面 URL');saving.value=true;try{editingDiscoveryPage.value?await crawlerApi.updateDiscoveryPage(editingDiscoveryPage.value.id,discoveryPageForm):await crawlerApi.createDiscoveryPage(discoveryPageSite.value.id,discoveryPageForm);discoveryPageDialog.value=false;message.success(editingDiscoveryPage.value?'发现页已更新':'发现页已添加');await loadDiscoveryPages()}finally{saving.value=false}}
 async function toggleDiscoveryPageAuto(page:CrawlerDiscoveryPage,enabled:boolean){try{const updated=await crawlerApi.updateDiscoveryPage(page.id,{pageName:page.pageName,pageUrl:page.pageUrl,autoScanEnabled:enabled,scanIntervalMinutes:page.scanIntervalMinutes,maxPages:page.maxPages});discoveryPagesBySite.value[page.siteId]=discoveryPagesBySite.value[page.siteId].map(item=>item.id===page.id?updated:item);message.success(enabled?'已开启自动扫描':'已关闭自动扫描')}catch{await loadDiscoveryPages()}}
-async function scanDiscoveryPage(page:CrawlerDiscoveryPage){await crawlerApi.scanDiscoveryPage(page.id);activeTab.value='tasks';message.success(`“${page.pageName}”扫描任务已创建`);await refresh()}
+async function scanDiscoveryPage(page:CrawlerDiscoveryPage){await crawlerApi.scanDiscoveryPage(page.id);discoveryManagerDialog.value=false;activeTab.value='tasks';message.success(`“${page.pageName}”扫描任务已创建`);await refresh()}
 async function removeDiscoveryPage(page:CrawlerDiscoveryPage){if(!await confirm(`确定删除发现页“${page.pageName}”吗？历史扫描任务不会被删除。`))return;await crawlerApi.deleteDiscoveryPage(page.id);message.success('发现页已删除');await loadDiscoveryPages()}
 function siteTabForField(field:string):SiteEditorTab{
   if(field.startsWith('contentFailureMarkers'))return'validation'
@@ -526,6 +553,10 @@ function statusLabel(status:string){return ({WAITING:'等待中',RUNNING:'运行
 function statusType(status:string):''|'success'|'warning'|'info'|'danger'{if(['SUCCESS','COMPLETED'].includes(status))return'success';if(['FAILED','CONTENT_SUSPECTED'].includes(status))return'danger';if(['PARTIAL_SUCCESS','PAUSED'].includes(status))return'warning';return'info'}
 function priorityLabel(priority:string){return({LOW:'低',NORMAL:'普通',HIGH:'高'} as Record<string,string>)[priority]||priority}
 function priorityType(priority:string):''|'success'|'warning'|'info'|'danger'{return priority==='HIGH'?'warning':priority==='LOW'?'info':''}
+function scanTaskPercentage(task:CrawlerTask){return Math.max(0,Math.min(100,task.progressPercent??(['SUCCESS','PARTIAL_SUCCESS'].includes(task.status)?100:0)))}
+function scanTaskProgressText(task:CrawlerTask){if(task.status==='WAITING')return `等待扫描 · 分页上限 ${task.scanMaxPages||'—'} 页`;if(['SUCCESS','PARTIAL_SUCCESS'].includes(task.status))return task.scannedPageCount>0?`扫描完成 · 共扫描 ${task.scannedPageCount} 页`:'扫描完成';return task.currentChapter||`已扫描 ${task.scannedPageCount||0} / ${task.scanMaxPages||'—'} 页`}
+function scanResultLabel(status:CrawlerScanResult['resultStatus']){return({NEW:'新增',DUPLICATE:'重复',BLACKLISTED:'黑名单',FAILED:'失败'} as const)[status]}
+function scanResultType(status:CrawlerScanResult['resultStatus']):'success'|'warning'|'info'|'danger'{return status==='NEW'?'success':status==='DUPLICATE'?'warning':status==='BLACKLISTED'?'info':'danger'}
 function taskTypeLabel(type:string){return({SITE_SCAN:'发现页扫描',BOOK_METADATA:'书籍信息',BOOK_CHAPTER_LIST:'章节目录',BOOK_CONTENT:'章节正文',BOOK_UPDATE_CHECK:'更新检查',BOOK_FULL_CRAWL:'全本采集',BOOK_EXPORT:'文件生成',BOOK_IMPORT:'加入书库'} as Record<string,string>)[type]||type}
 function formatTime(value?:string){return value?new Date(value).toLocaleString('zh-CN',{hour12:false}):'—'}
 function handleTabKey(e:KeyboardEvent){const keys=tabs.value.map(t=>t.key);let i=activeIndex.value;if(['ArrowRight','ArrowDown'].includes(e.key))i=(i+1)%keys.length;else if(['ArrowLeft','ArrowUp'].includes(e.key))i=(i-1+keys.length)%keys.length;else if(e.key==='Home')i=0;else if(e.key==='End')i=keys.length-1;else return;e.preventDefault();activeTab.value=keys[i];requestAnimationFrame(()=>document.querySelectorAll<HTMLButtonElement>('.segment')[i]?.focus())}
@@ -579,5 +610,7 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 .chapter-heading-tools{display:flex;align-items:center;gap:10px}.chapter-follow{box-sizing:border-box;display:flex;min-width:132px;height:38px;align-items:center;justify-content:space-between;gap:10px;padding:2px 10px;border:1px solid var(--border-color);border-radius:12px;background:var(--bg-page);cursor:pointer;transition:border-color .2s ease,background .2s ease}.chapter-follow strong{color:var(--text-secondary);font-size:11px}.chapter-follow.active{border-color:color-mix(in srgb,var(--primary) 38%,var(--border-color));background:var(--primary-alpha-10)}.chapter-follow.active strong{color:var(--primary)}.chapter-sort.disabled{opacity:.5}.chapter-sort button:disabled{cursor:not-allowed}.chapter-name-cell{display:flex;min-width:0;align-items:center;gap:8px}.chapter-name-cell>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chapter-name-cell em{display:inline-flex;flex:0 0 auto;align-items:center;gap:5px;padding:3px 7px;border-radius:99px;background:var(--primary-alpha-10);color:var(--primary);font-size:9px;font-style:normal;font-weight:800}.chapter-name-cell em i{width:6px;height:6px;border-radius:50%;background:var(--primary);box-shadow:0 0 0 4px var(--primary-alpha-10);animation:chapter-follow-pulse 1.5s ease-out infinite}.chapters-table :deep(.current-crawling-row>td.el-table__cell){background:color-mix(in srgb,var(--primary) 11%,var(--surface-elevated))!important}.chapters-table :deep(.current-crawling-row:hover>td.el-table__cell){background:color-mix(in srgb,var(--primary) 15%,var(--surface-elevated))!important}@keyframes chapter-follow-pulse{70%,100%{box-shadow:0 0 0 8px transparent}}@media(max-width:720px){.chapter-heading-tools{align-items:stretch;flex-direction:column}.chapter-follow{width:100%}}@media(prefers-reduced-motion:reduce){.chapter-follow{transition:none}.chapter-name-cell em i{animation:none}}
 .hero-actions{display:flex;align-items:center;gap:10px}.polling-setting{display:flex;align-items:center;gap:10px;padding:7px 9px 7px 12px;border:1px solid var(--border-color);border-radius:13px;background:color-mix(in srgb,var(--surface-elevated) 88%,transparent);box-shadow:var(--shadow-sm);backdrop-filter:blur(14px)}.polling-setting>span{display:flex;align-items:center;gap:7px;color:var(--text-secondary);font-size:11px;font-weight:700;white-space:nowrap}.polling-setting>span i{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 0 4px var(--success-alpha-15);animation:live-pulse 1.8s ease-out infinite}.polling-setting :deep(.el-select){width:84px}.polling-setting :deep(.el-select__wrapper){border-radius:9px;background:var(--surface-card);box-shadow:none}@media(max-width:640px){.hero-actions{width:100%;align-items:stretch;flex-direction:column}.polling-setting{justify-content:space-between}.polling-setting :deep(.el-select){width:100px}.hero-actions>.el-button{width:100%;margin-left:0}}@media(prefers-reduced-motion:reduce){.polling-setting>span i{animation:none}}
 .import-book-dialog{display:grid;gap:20px}.format-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.format-options :deep(.el-checkbox-button){width:100%}.format-options :deep(.el-checkbox-button__inner){display:grid;width:100%;gap:4px;padding:16px;border:1px solid var(--border-color)!important;border-radius:13px!important;background:var(--surface-elevated);box-shadow:none!important;text-align:left}.format-options :deep(.el-checkbox-button__inner strong){font-size:15px}.format-options :deep(.el-checkbox-button__inner small){color:var(--text-tertiary);font-size:11px;font-weight:400}.format-options :deep(.el-checkbox-button.is-checked .el-checkbox-button__inner){border-color:var(--primary)!important;background:var(--primary-alpha-10);color:var(--primary)}.format-options :deep(.el-checkbox-button.is-focus .el-checkbox-button__inner){outline:2px solid var(--primary);outline-offset:2px}@media(max-width:480px){.format-options{grid-template-columns:minmax(0,1fr)}}
-.discovery-pages-heading{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid var(--border-color-light);font-size:13px}.discovery-pages{display:grid;gap:8px;margin-top:8px}.discovery-page-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center;padding:10px 12px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-card)}.discovery-page-row>div:first-child{display:grid;min-width:0;gap:3px}.discovery-page-row a{overflow:hidden;color:var(--text-secondary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.discovery-page-row small{color:var(--text-tertiary);font-size:10px}.discovery-page-actions{grid-column:1/-1;display:flex;justify-content:flex-end}.discovery-page-actions .el-button{margin-left:0}.site-card>.el-empty{padding:10px 0 0}.discovery-page-form{display:grid;gap:14px}.discovery-page-form .el-form-item{margin-bottom:0}@media(max-width:520px){.discovery-page-row{grid-template-columns:minmax(0,1fr)}.discovery-page-row>.el-switch{justify-self:start}.discovery-page-actions{justify-content:flex-start}}
+.discovery-manager-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;margin-bottom:14px;border-radius:14px;background:var(--primary-alpha-10)}.discovery-manager-toolbar>div{display:grid;gap:3px}.discovery-manager-toolbar p{color:var(--text-secondary);font-size:12px}.discovery-pages{display:grid;gap:8px}.discovery-pages-dialog-list{max-height:58vh;overflow-y:auto;padding-right:4px}.discovery-page-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center;padding:12px 14px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-card)}.discovery-page-row>div:first-child{display:grid;min-width:0;gap:3px}.discovery-page-row a{overflow:hidden;color:var(--text-secondary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.discovery-page-row small{color:var(--text-tertiary);font-size:10px}.discovery-page-actions{grid-column:1/-1;display:flex;justify-content:flex-end}.discovery-page-actions .el-button{margin-left:0}.discovery-page-form{display:grid;gap:14px}.discovery-page-form .el-form-item{margin-bottom:0}@media(max-width:520px){.discovery-manager-toolbar{align-items:stretch;flex-direction:column}.discovery-page-row{grid-template-columns:minmax(0,1fr)}.discovery-page-row>.el-switch{justify-self:start}.discovery-page-actions{justify-content:flex-start}}
+.task-scan-progress{display:grid;gap:5px}.task-scan-progress>small{color:var(--text-tertiary);font-size:10px}.task-scan-summary{display:flex;flex-wrap:wrap;gap:5px;color:var(--text-secondary);font-size:11px}.task-scan-summary>*{padding:2px 6px;border-radius:99px;font-style:normal;font-weight:700}.task-scan-summary b{background:var(--success-alpha-15);color:var(--success)}.task-scan-summary i{background:var(--primary-alpha-10);color:var(--primary)}.task-scan-summary em{background:color-mix(in srgb,var(--warning) 15%,transparent);color:var(--warning)}.task-scan-summary strong{background:color-mix(in srgb,var(--danger) 10%,transparent);color:var(--danger)}.scan-result-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:16px}.scan-result-summary span{display:grid;gap:3px;padding:12px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-elevated)}.scan-result-summary small{color:var(--text-tertiary);font-size:10px}.scan-result-summary strong{font-size:20px}.scan-results-table a{color:var(--primary)}.scan-results-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;color:var(--text-tertiary);font-size:12px}@media(max-width:640px){.scan-result-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.scan-results-pagination{align-items:flex-start;flex-direction:column}}
+.muted-text{color:var(--text-tertiary);font-size:11px}
 </style>

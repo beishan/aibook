@@ -20,11 +20,14 @@ public class CrawlerTask {
     @Column(length = 100) private String discoveryPageName;
     @Column(length = 1000) private String scanStartUrl;
     private Integer scanMaxPages;
+    @Builder.Default private Integer scannedPageCount = 0;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private TaskType type;
     @Enumerated(EnumType.STRING) @Builder.Default private TaskStatus status = TaskStatus.WAITING;
     @Enumerated(EnumType.STRING) @Builder.Default private Priority priority = Priority.HIGH;
     @Builder.Default private Integer totalCount = 0;
     @Builder.Default private Integer successCount = 0;
+    @Builder.Default private Integer newBookCount = 0;
+    @Builder.Default private Integer duplicateCount = 0;
     @Builder.Default private Integer failedCount = 0;
     @Builder.Default private Integer waitingCount = 0;
     private String currentChapter;

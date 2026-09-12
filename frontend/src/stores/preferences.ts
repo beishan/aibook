@@ -24,6 +24,8 @@ interface UserPreferences {
   libraryCardPageSize: number | null
   libraryListPageSize: number | null
   scanThreadCount: number | null
+  crawlerFollowCurrentChapter: boolean | null
+  crawlerChapterPageSize: number | null
   modernThemeColor: string | null
   warmThemeColor: string | null
   naturalThemeColor: string | null
@@ -42,6 +44,8 @@ const LIBRARY_VIEW_MODE_KEY = 'ai-book-view-mode'
 const LIBRARY_PAGE_SIZE_KEY = 'aibook-library-page-size'
 const LIBRARY_CARD_PAGE_SIZE_KEY = 'aibook-library-card-page-size'
 const LIBRARY_LIST_PAGE_SIZE_KEY = 'aibook-library-list-page-size'
+const CRAWLER_FOLLOW_CURRENT_CHAPTER_KEY = 'aibook.crawler.followCurrentChapter'
+const CRAWLER_CHAPTER_PAGE_SIZE_KEY = 'aibook.crawler.chapterPageSize'
 const DOCK_SIZE_KEY = 'aibook-dock-size'
 const DOCK_OPACITY_KEY = 'aibook-dock-opacity'
 const DOCK_MAGNIFICATION_KEY = 'aibook-dock-magnification'
@@ -49,6 +53,9 @@ const DOCK_BLUR_KEY = 'aibook-dock-blur'
 const DOCK_ICON_STYLE_KEY = 'aibook-dock-icon-style'
 const DEFAULT_LIBRARY_PAGE_SIZE: LibraryPageSize = 10
 const DEFAULT_SCAN_THREAD_COUNT = 2
+const CRAWLER_CHAPTER_PAGE_SIZE_OPTIONS = [20, 50, 100] as const
+type CrawlerChapterPageSize = (typeof CRAWLER_CHAPTER_PAGE_SIZE_OPTIONS)[number]
+const DEFAULT_CRAWLER_CHAPTER_PAGE_SIZE: CrawlerChapterPageSize = 20
 export const DEFAULT_DOCK_SIZE = 58
 export const DEFAULT_DOCK_OPACITY = 72
 export const DEFAULT_DOCK_MAGNIFICATION = 128
@@ -94,6 +101,9 @@ const isLibraryViewMode = (value: unknown): value is LibraryViewMode =>
 const isScanThreadCount = (value: unknown): value is number =>
   Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 16
 
+const isCrawlerChapterPageSize = (value: unknown): value is CrawlerChapterPageSize =>
+  typeof value === 'number' && CRAWLER_CHAPTER_PAGE_SIZE_OPTIONS.includes(value as CrawlerChapterPageSize)
+
 const isThemeColor = (value: unknown): value is string =>
   typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
 
@@ -128,6 +138,13 @@ export const usePreferencesStore = defineStore('preferences', () => {
     readLocalLibraryPageSize(LIBRARY_LIST_PAGE_SIZE_KEY)
   )
   const scanThreadCount = ref(DEFAULT_SCAN_THREAD_COUNT)
+  const crawlerFollowCurrentChapter = ref(localStorage.getItem(CRAWLER_FOLLOW_CURRENT_CHAPTER_KEY) === 'true')
+  const storedCrawlerChapterPageSize = Number(localStorage.getItem(CRAWLER_CHAPTER_PAGE_SIZE_KEY))
+  const crawlerChapterPageSize = ref<CrawlerChapterPageSize>(
+    isCrawlerChapterPageSize(storedCrawlerChapterPageSize)
+      ? storedCrawlerChapterPageSize
+      : DEFAULT_CRAWLER_CHAPTER_PAGE_SIZE
+  )
   const dockSize = ref(readLocalNumber(DOCK_SIZE_KEY, DEFAULT_DOCK_SIZE, 44, 76))
   const dockOpacity = ref(readLocalNumber(DOCK_OPACITY_KEY, DEFAULT_DOCK_OPACITY, 40, 96))
   const dockMagnification = ref(readLocalNumber(DOCK_MAGNIFICATION_KEY, DEFAULT_DOCK_MAGNIFICATION, 100, 150))
@@ -178,6 +195,19 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (!isScanThreadCount(value)) return
     scanThreadCount.value = value
     if (syncRemote) persistRemote({ scanThreadCount: value })
+  }
+
+  const setCrawlerFollowCurrentChapter = (value: boolean, syncRemote = true) => {
+    crawlerFollowCurrentChapter.value = value
+    localStorage.setItem(CRAWLER_FOLLOW_CURRENT_CHAPTER_KEY, String(value))
+    if (syncRemote) persistRemote({ crawlerFollowCurrentChapter: value })
+  }
+
+  const setCrawlerChapterPageSize = (value: number, syncRemote = true) => {
+    if (!isCrawlerChapterPageSize(value)) return
+    crawlerChapterPageSize.value = value
+    localStorage.setItem(CRAWLER_CHAPTER_PAGE_SIZE_KEY, String(value))
+    if (syncRemote) persistRemote({ crawlerChapterPageSize: value })
   }
 
   const themeColorPreferenceKey: Record<ThemeId, keyof UserPreferences> = {
@@ -338,6 +368,18 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.scanThreadCount = scanThreadCount.value
       }
 
+      if (typeof data.crawlerFollowCurrentChapter === 'boolean') {
+        setCrawlerFollowCurrentChapter(data.crawlerFollowCurrentChapter, false)
+      } else {
+        missingPreferences.crawlerFollowCurrentChapter = crawlerFollowCurrentChapter.value
+      }
+
+      if (isCrawlerChapterPageSize(data.crawlerChapterPageSize)) {
+        setCrawlerChapterPageSize(data.crawlerChapterPageSize, false)
+      } else {
+        missingPreferences.crawlerChapterPageSize = crawlerChapterPageSize.value
+      }
+
       const remoteThemeColors: Array<[ThemeId, string | null]> = [
         ['modern', data.modernThemeColor],
         ['warm', data.warmThemeColor],
@@ -398,6 +440,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     libraryCardPageSize,
     libraryListPageSize,
     scanThreadCount,
+    crawlerFollowCurrentChapter,
+    crawlerChapterPageSize,
     dockSize,
     dockOpacity,
     dockMagnification,
@@ -411,6 +455,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setLibraryCardPageSize,
     setLibraryListPageSize,
     setScanThreadCount,
+    setCrawlerFollowCurrentChapter,
+    setCrawlerChapterPageSize,
     setThemeAccentColor,
     resetThemeAccentColor,
     resetAllThemeAccentColors,
