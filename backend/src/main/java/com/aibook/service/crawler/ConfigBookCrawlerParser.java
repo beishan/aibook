@@ -53,7 +53,8 @@ public class ConfigBookCrawlerParser implements BookCrawlerParser {
         return new ParsedBook(externalId(pageUrl), title,
                 text(doc, rule.getAuthorSelector()), absoluteAttr(doc, rule.getCoverSelector(), "src"),
                 text(doc, rule.getDescriptionSelector()), text(doc, rule.getCategorySelector()),
-                text(doc, rule.getStatusSelector()), text(doc, rule.getLatestChapterSelector()),
+                texts(doc, rule.getTagsSelector()), text(doc, rule.getStatusSelector()),
+                text(doc, rule.getLatestChapterSelector()),
                 firstNonBlank(absoluteAttr(doc, rule.getChapterListUrlSelector(), "href"), pageUrl));
     }
 
@@ -92,6 +93,12 @@ public class ConfigBookCrawlerParser implements BookCrawlerParser {
     private String text(Document doc, String selector) {
         Element element = select(doc, selector);
         return element == null ? "" : element.text().trim();
+    }
+
+    private List<String> texts(Document doc, String selector) {
+        if (selector == null || selector.isBlank()) return List.of();
+        return doc.select(selector.trim()).stream().map(Element::text).map(String::trim)
+                .filter(value -> !value.isBlank()).distinct().toList();
     }
 
     private String scopedText(Element root, String selector) {

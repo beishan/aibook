@@ -33,6 +33,7 @@ public class BookDTO {
     private String sourcePath;
     private Long fileSize;
     private String language;
+    private String sourceBookStatus;
     private Integer rating;
     private String readingStatus;
     private Long categoryId;

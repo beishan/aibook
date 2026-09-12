@@ -34,6 +34,8 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
      */
     Optional<Category> findByIdAndUser(Long id, User user);
 
+    Optional<Category> findFirstByUserAndNameIgnoreCase(User user, String name);
+
     /**
      * 判断同一父分类下是否重名。
      */

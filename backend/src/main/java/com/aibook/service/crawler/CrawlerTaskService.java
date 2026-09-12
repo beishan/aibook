@@ -586,7 +586,8 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
 
     private void applyMetadata(CrawlerBook book, BookCrawlerParser.ParsedBook m) {
         book.setBookName(m.title()); book.setAuthor(m.author()); book.setCoverUrl(m.coverUrl()); book.setDescription(m.description());
-        book.setCategory(m.category()); book.setBookStatus(m.status()); book.setLatestChapter(m.latestChapter());
+        book.setCategory(m.category()); book.setTags(String.join("\n", m.tags()));
+        book.setBookStatus(m.status()); book.setLatestChapter(m.latestChapter());
     }
 
     private void runSiteScan(CrawlerTask task, CrawlerSite site, CrawlerSiteRule rule, BookCrawlerParser parser) throws Exception {

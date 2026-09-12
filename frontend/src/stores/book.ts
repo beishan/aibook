@@ -20,6 +20,7 @@ export interface Book {
   sourcePath?: string
   fileSize?: number
   language?: string
+  sourceBookStatus?: string
   rating?: number
   readingStatus: string
   categoryId?: number

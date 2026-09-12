@@ -652,6 +652,10 @@
               />
               <span v-else class="info-value">{{ book.publishDate || '未知' }}</span>
             </div>
+            <div v-if="book.sourceType === 'CRAWLER'" class="info-item list-item">
+              <span class="info-label">来源状态</span>
+              <span class="info-value">{{ book.sourceBookStatus || '未识别' }}</span>
+            </div>
             <div class="info-item list-item">
               <span class="info-label">格式</span>
               <span class="info-value">{{ selectedVersionFormat.toUpperCase() }}</span>

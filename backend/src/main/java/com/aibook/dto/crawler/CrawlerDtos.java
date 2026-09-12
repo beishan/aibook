@@ -11,7 +11,7 @@ public final class CrawlerDtos {
 
     public record RulePayload(
             @NotBlank String titleSelector, String authorSelector, String coverSelector,
-            String descriptionSelector, String categorySelector, String statusSelector,
+            String descriptionSelector, String categorySelector, String tagsSelector, String statusSelector,
             String latestChapterSelector, String chapterListUrlSelector,
             @NotBlank String chapterItemSelector, String chapterTitleSelector,
             @NotBlank String chapterUrlSelector, String contentTitleSelector,
@@ -74,7 +74,8 @@ public final class CrawlerDtos {
             @NotBlank @Pattern(regexp = "ACTIVE|IGNORED|BLACKLISTED") String status) { }
     public record RuleTestRequest(@NotBlank String url, @Valid RulePayload rule) { }
     public record RuleTestView(boolean success, String title, String author, String description,
-            String coverUrl, String bookStatus, String chapterListUrl, int chapterCount,
+            String coverUrl, String category, List<String> tags, String bookStatus,
+            String chapterListUrl, int chapterCount,
             String sampleChapter, int contentLength, String contentPreview,
             long durationMillis, String errorMessage) { }
     public record RuleSaveRequest(@Min(1) int version, @NotBlank @Size(max = 300) String changeSummary,
@@ -90,7 +91,7 @@ public final class CrawlerDtos {
 
     public record BookView(Long id, Long siteId, String siteName, String externalBookId,
             String bookUrl, String bookName, String author, String coverUrl, String description,
-            String category, String bookStatus, String latestChapter,
+            String category, List<String> tags, String bookStatus, String latestChapter,
             Long discoveryPageId, String discoveryPageName, int chapterCount,
             int crawledChapterCount, int failedChapterCount, String crawlStatus,
             String discoveryStatus, String importStatus, boolean autoUpdateEnabled,

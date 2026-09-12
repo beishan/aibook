@@ -29,6 +29,8 @@ public class CrawlerExportService {
     private final CrawlerBookExportRepository exportRepository;
     private final CrawlerBookRepository crawlerBookRepository;
     private final BookRepository bookRepository;
+    private final CategoryRepository categoryRepository;
+    private final TagRepository tagRepository;
     private final BookVersionRepository versionRepository;
     private final VersionReadingProgressRepository versionProgressRepository;
     private final OperationLogService operationLogService;
@@ -112,11 +114,14 @@ public class CrawlerExportService {
                 Files.deleteIfExists(target);
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "该采集版本已存在于书库");
             }
-            Book book = bookRepository.save(Book.builder().title(crawlerBook.getBookName()).author(crawlerBook.getAuthor())
+            Book book = Book.builder().title(crawlerBook.getBookName()).author(crawlerBook.getAuthor())
                     .description(crawlerBook.getDescription()).coverUrl(crawlerBook.getCoverUrl())
+                    .sourceBookStatus(crawlerBook.getBookStatus())
                     .format(format.toLowerCase(Locale.ROOT)).filePath(target.toString()).fileSize(Files.size(target))
                     .fileHash(fileHash).sourceType(Book.SourceType.CRAWLER).user(user)
-                    .chapterCount(availableChapterCount).build());
+                    .chapterCount(availableChapterCount).build();
+            applyLibraryMetadata(book, crawlerBook, user);
+            book = bookRepository.save(book);
             versionRepository.save(BookVersion.builder().book(book).displayName(safe(crawlerBook.getBookName()) + "." + format.toLowerCase(Locale.ROOT))
                     .format(format.toLowerCase(Locale.ROOT)).filePath(target.toString()).fileSize(Files.size(target)).fileHash(fileHash)
                     .primaryVersion(true).chapterCount(availableChapterCount).sourceType("CRAWLER")
@@ -189,6 +194,7 @@ public class CrawlerExportService {
         if (libraryBook == null) return 0;
         libraryBook.setTitle(crawlerBook.getBookName()); libraryBook.setAuthor(crawlerBook.getAuthor());
         libraryBook.setDescription(crawlerBook.getDescription()); libraryBook.setCoverUrl(crawlerBook.getCoverUrl());
+        applyLibraryMetadata(libraryBook, crawlerBook, user);
         bookRepository.save(libraryBook);
         List<BookVersion> versions = versionRepository.findByBookOrderByPrimaryVersionDescCreatedAtAsc(libraryBook);
         LinkedHashSet<String> formats = new LinkedHashSet<>();
@@ -245,6 +251,7 @@ public class CrawlerExportService {
             if (primary) {
                 libraryBook.setTitle(crawlerBook.getBookName()); libraryBook.setAuthor(crawlerBook.getAuthor());
                 libraryBook.setDescription(crawlerBook.getDescription()); libraryBook.setCoverUrl(crawlerBook.getCoverUrl());
+                applyLibraryMetadata(libraryBook, crawlerBook, crawlerBook.getSite().getUser());
                 libraryBook.setFilePath(target.toString()); libraryBook.setFileSize(Files.size(target));
                 libraryBook.setFileHash(export.getFileHash()); libraryBook.setChapterCount(version.getChapterCount());
                 bookRepository.save(libraryBook);
@@ -265,6 +272,35 @@ public class CrawlerExportService {
                         .locator(progress.getLocator())
                         .chapterProgress(progress.getChapterProgress()).totalProgress(progress.getTotalProgress())
                         .readingTimeSeconds(progress.getReadingTimeSeconds()).lastReadAt(progress.getLastReadAt()).build()));
+    }
+
+    private void applyLibraryMetadata(Book libraryBook, CrawlerBook crawlerBook, User user) {
+        libraryBook.setSourceBookStatus(trimToNull(crawlerBook.getBookStatus()));
+        String categoryName = trimToNull(crawlerBook.getCategory());
+        if (categoryName != null) {
+            Category category = categoryRepository.findFirstByUserAndNameIgnoreCase(user, categoryName)
+                    .orElseGet(() -> categoryRepository.save(Category.builder().name(categoryName)
+                            .sortOrder(0).builtIn(false).enabled(true).user(user).build()));
+            libraryBook.setCategory(category);
+        }
+        LinkedHashSet<Tag> tags = new LinkedHashSet<>(libraryBook.getTags() == null
+                ? Set.of() : libraryBook.getTags());
+        for (String name : metadataTags(crawlerBook.getTags())) {
+            Tag tag = tagRepository.findByNameIgnoreCaseAndUser(name, user);
+            if (tag == null) tag = tagRepository.save(Tag.builder().name(name).color("#64748B").user(user).build());
+            tags.add(tag);
+        }
+        libraryBook.setTags(tags);
+    }
+
+    private List<String> metadataTags(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        return Arrays.stream(value.split("[\\r\\n,，、]+")).map(String::trim)
+                .filter(tag -> !tag.isBlank()).distinct().toList();
+    }
+
+    private String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private List<CrawlerChapter> availableChapters(CrawlerBook book) {

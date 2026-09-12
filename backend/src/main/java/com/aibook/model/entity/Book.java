@@ -119,6 +119,10 @@ public class Book {
      */
     private String language;
 
+    /** 采集来源声明的连载/完结状态；与用户阅读状态相互独立。 */
+    @Column(length = 80)
+    private String sourceBookStatus;
+
     /**
      * 评分 (1-5)
      */

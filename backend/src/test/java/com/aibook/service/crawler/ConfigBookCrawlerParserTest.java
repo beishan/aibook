@@ -4,13 +4,16 @@ import com.aibook.model.entity.CrawlerSiteRule;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConfigBookCrawlerParserTest {
     private final ConfigBookCrawlerParser parser = new ConfigBookCrawlerParser(new BookContentCleaner(new ObjectMapper()));
     private final CrawlerSiteRule rule = CrawlerSiteRule.builder()
             .titleSelector("h1.title").authorSelector(".author").coverSelector("img.cover::data-src")
-            .descriptionSelector(".intro").chapterListUrlSelector("a.catalog")
+            .descriptionSelector(".intro").categorySelector(".category").tagsSelector(".tags a")
+            .statusSelector(".status").chapterListUrlSelector("a.catalog")
             .chapterItemSelector("#chapters li").chapterTitleSelector(":scope").chapterUrlSelector("a")
             .contentTitleSelector("h1").contentSelector("#content").removeSelectors(".ad")
             .discoveryItemSelector(".books .book").discoveryUrlSelector("a.title")
@@ -40,11 +43,16 @@ class ConfigBookCrawlerParserTest {
     void parsesBookMetadataAndResolvesUrls() {
         String html = "<h1 class='title'>山海记</h1><span class='author'>北山</span>"
                 + "<img class='cover' data-src='/cover.jpg'><div class='intro'>简介</div>"
+                + "<span class='category'>都市</span><span class='status'>连载中</span>"
+                + "<div class='tags'><a>后宫</a><a>NTR</a><a>后宫</a></div>"
                 + "<a class='catalog' href='/book/42/catalog'>目录</a>";
         BookCrawlerParser.ParsedBook book = parser.parseBookDetail(html, "https://books.example.com/book/42", rule);
         assertEquals("山海记", book.title());
         assertEquals("北山", book.author());
         assertEquals("https://books.example.com/cover.jpg", book.coverUrl());
+        assertEquals("都市", book.category());
+        assertEquals(List.of("后宫", "NTR"), book.tags());
+        assertEquals("连载中", book.status());
         assertEquals("https://books.example.com/book/42/catalog", book.chapterListUrl());
     }
 

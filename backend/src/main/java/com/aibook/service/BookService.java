@@ -451,6 +451,7 @@ public class BookService {
                         : null)
                 .fileSize(book.getFileSize())
                 .language(book.getLanguage())
+                .sourceBookStatus(book.getSourceBookStatus())
                 .rating(book.getRating())
                 .readingStatus(book.getReadingStatus().name())
                 .categoryId(book.getCategory() != null ? book.getCategory().getId() : null)

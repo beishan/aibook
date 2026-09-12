@@ -2,18 +2,22 @@ package com.aibook.service.crawler;
 
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.BookVersion;
+import com.aibook.model.entity.Category;
 import com.aibook.model.entity.CrawlerBook;
 import com.aibook.model.entity.CrawlerBookExport;
 import com.aibook.model.entity.CrawlerChapter;
 import com.aibook.model.entity.CrawlerSite;
 import com.aibook.model.entity.User;
+import com.aibook.model.entity.Tag;
 import com.aibook.model.entity.VersionReadingProgress;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookVersionRepository;
+import com.aibook.repository.CategoryRepository;
 import com.aibook.repository.CrawlerBookExportRepository;
 import com.aibook.repository.CrawlerBookRepository;
 import com.aibook.repository.CrawlerChapterRepository;
 import com.aibook.repository.VersionReadingProgressRepository;
+import com.aibook.repository.TagRepository;
 import com.aibook.service.OperationLogService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -157,7 +161,8 @@ class CrawlerExportServiceTest {
         });
         when(progresses.findByUserAndVersion(user, oldVersion)).thenReturn(Optional.of(oldProgress));
         CrawlerExportService service = new CrawlerExportService(management, chapters, exports,
-                crawlerBooks, books, versions, progresses, mock(OperationLogService.class));
+                crawlerBooks, books, mock(CategoryRepository.class), mock(TagRepository.class),
+                versions, progresses, mock(OperationLogService.class));
         ReflectionTestUtils.setField(service, "storagePath", temporaryDirectory.toString());
         ReflectionTestUtils.setField(service, "uploadPath", temporaryDirectory.resolve("uploads").toString());
 
@@ -177,6 +182,9 @@ class CrawlerExportServiceTest {
     void importsSelectedFormatsAsVersionsOfOneLibraryBook() {
         User user = User.builder().id(1L).username("owner").build();
         CrawlerBook crawlerBook = book(user);
+        crawlerBook.setCategory("都市");
+        crawlerBook.setTags("后宫\nNTR\n后宫");
+        crawlerBook.setBookStatus("连载中");
         CrawlerChapter chapter = CrawlerChapter.builder().crawlerBook(crawlerBook).chapterIndex(0)
                 .chapterName("第一章").content("正文").contentHash("content-1").build();
         CrawlerManagementService management = mock(CrawlerManagementService.class);
@@ -184,6 +192,8 @@ class CrawlerExportServiceTest {
         CrawlerBookExportRepository exports = mock(CrawlerBookExportRepository.class);
         CrawlerBookRepository crawlerBooks = mock(CrawlerBookRepository.class);
         BookRepository books = mock(BookRepository.class);
+        CategoryRepository categories = mock(CategoryRepository.class);
+        TagRepository tags = mock(TagRepository.class);
         BookVersionRepository versions = mock(BookVersionRepository.class);
         Map<String, CrawlerBookExport> savedExports = new HashMap<>();
         List<BookVersion> savedVersions = new ArrayList<>();
@@ -201,6 +211,9 @@ class CrawlerExportServiceTest {
             Book saved = invocation.getArgument(0); saved.setId(20L); return saved;
         });
         when(books.findByFileHash(anyString())).thenReturn(Optional.empty());
+        when(categories.findFirstByUserAndNameIgnoreCase(user, "都市")).thenReturn(Optional.empty());
+        when(categories.save(any(Category.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tags.save(any(Tag.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(versions.findByFileHash(anyString())).thenReturn(Optional.empty());
         when(versions.findByBookOrderByPrimaryVersionDescCreatedAtAsc(any(Book.class)))
                 .thenAnswer(invocation -> List.copyOf(savedVersions));
@@ -211,7 +224,8 @@ class CrawlerExportServiceTest {
             return saved;
         });
         CrawlerExportService service = new CrawlerExportService(management, chapters, exports,
-                crawlerBooks, books, versions, mock(VersionReadingProgressRepository.class),
+                crawlerBooks, books, categories, tags,
+                versions, mock(VersionReadingProgressRepository.class),
                 mock(OperationLogService.class));
         ReflectionTestUtils.setField(service, "storagePath", temporaryDirectory.toString());
         ReflectionTestUtils.setField(service, "uploadPath", temporaryDirectory.resolve("uploads").toString());
@@ -223,13 +237,18 @@ class CrawlerExportServiceTest {
         assertThat(savedVersions).filteredOn(BookVersion::getPrimaryVersion).singleElement()
                 .extracting(BookVersion::getFormat).isEqualTo("epub");
         assertThat(crawlerBook.getLibraryBook()).isNotNull();
+        assertThat(crawlerBook.getLibraryBook().getCategory().getName()).isEqualTo("都市");
+        assertThat(crawlerBook.getLibraryBook().getTags()).extracting(Tag::getName)
+                .containsExactlyInAnyOrder("后宫", "NTR");
+        assertThat(crawlerBook.getLibraryBook().getSourceBookStatus()).isEqualTo("连载中");
         verify(crawlerBooks).save(crawlerBook);
     }
 
     private CrawlerExportService service(CrawlerManagementService management,
             CrawlerChapterRepository chapters, CrawlerBookExportRepository exports) {
         CrawlerExportService service = new CrawlerExportService(management, chapters, exports,
-                mock(CrawlerBookRepository.class), mock(BookRepository.class), mock(BookVersionRepository.class),
+                mock(CrawlerBookRepository.class), mock(BookRepository.class),
+                mock(CategoryRepository.class), mock(TagRepository.class), mock(BookVersionRepository.class),
                 mock(VersionReadingProgressRepository.class),
                 mock(OperationLogService.class));
         ReflectionTestUtils.setField(service, "storagePath", temporaryDirectory.toString());

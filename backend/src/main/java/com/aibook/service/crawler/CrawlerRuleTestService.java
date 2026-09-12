@@ -34,10 +34,11 @@ public class CrawlerRuleTestService {
             CrawlerHttpClient.FetchResult chapterResponse = httpClient.get(site, sample.url());
             BookCrawlerParser.ParsedContent content = parser.parseChapter(chapterResponse.html(), sample.url(), rule);
             return new RuleTestView(true, book.title(), book.author(), book.description(), book.coverUrl(),
-                    book.status(), book.chapterListUrl(), chapters.size(), sample.title(), content.content().length(),
+                    book.category(), book.tags(), book.status(), book.chapterListUrl(),
+                    chapters.size(), sample.title(), content.content().length(),
                     preview(content.content()), elapsed(started), null);
         } catch (Exception exception) {
-            return new RuleTestView(false, null, null, null, null, null, null, 0,
+            return new RuleTestView(false, null, null, null, null, null, List.of(), null, null, 0,
                     null, 0, null, elapsed(started), message(exception));
         }
     }

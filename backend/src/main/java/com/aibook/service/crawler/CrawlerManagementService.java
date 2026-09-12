@@ -346,7 +346,8 @@ public class CrawlerManagementService {
     public void applyRule(CrawlerSite site, RulePayload r) {
         CrawlerSiteRule rule = site.getRule() == null ? new CrawlerSiteRule() : site.getRule();
         rule.setTitleSelector(r.titleSelector()); rule.setAuthorSelector(r.authorSelector()); rule.setCoverSelector(r.coverSelector());
-        rule.setDescriptionSelector(r.descriptionSelector()); rule.setCategorySelector(r.categorySelector()); rule.setStatusSelector(r.statusSelector());
+        rule.setDescriptionSelector(r.descriptionSelector()); rule.setCategorySelector(r.categorySelector());
+        rule.setTagsSelector(r.tagsSelector()); rule.setStatusSelector(r.statusSelector());
         rule.setLatestChapterSelector(r.latestChapterSelector()); rule.setChapterListUrlSelector(r.chapterListUrlSelector());
         rule.setChapterItemSelector(r.chapterItemSelector()); rule.setChapterTitleSelector(r.chapterTitleSelector());
         rule.setChapterUrlSelector(r.chapterUrlSelector()); rule.setContentTitleSelector(r.contentTitleSelector());
@@ -379,7 +380,7 @@ public class CrawlerManagementService {
 
     public RulePayload rulePayload(CrawlerSiteRule r) {
         return new RulePayload(r.getTitleSelector(), r.getAuthorSelector(), r.getCoverSelector(), r.getDescriptionSelector(),
-                r.getCategorySelector(), r.getStatusSelector(), r.getLatestChapterSelector(), r.getChapterListUrlSelector(),
+                r.getCategorySelector(), r.getTagsSelector(), r.getStatusSelector(), r.getLatestChapterSelector(), r.getChapterListUrlSelector(),
                 r.getChapterItemSelector(), r.getChapterTitleSelector(), r.getChapterUrlSelector(), r.getContentTitleSelector(),
                 r.getContentSelector(), r.getRemoveSelectors(), r.getRegexReplacementsJson(), r.getMinChapterLength(),
                 r.getDiscoveryItemSelector(), r.getDiscoveryUrlSelector(), r.getDiscoveryTitleSelector(), r.getDiscoveryAuthorSelector(),
@@ -387,7 +388,13 @@ public class CrawlerManagementService {
                 r.getXpathRemoveSelectors(), r.getStringReplacementsJson(), bool(r.getRemoveBlankLines(), true), bool(r.getSaveOriginalHtml(), false));
     }
 
-    public BookView bookView(CrawlerBook b) { return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(), b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(), b.getCoverUrl(), b.getDescription(), b.getCategory(), b.getBookStatus(), b.getLatestChapter(), b.getDiscoveryPageId(), b.getDiscoveryPageName(), value(b.getChapterCount(), 0), value(b.getCrawledChapterCount(), 0), value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(), (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : b.getDiscoveryStatus()).name(), b.getImportStatus().name(), !Boolean.FALSE.equals(b.getAutoUpdateEnabled()), !Boolean.FALSE.equals(b.getAutoSyncLibrary()), b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(), b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt()); }
+    public BookView bookView(CrawlerBook b) { return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(), b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(), b.getCoverUrl(), b.getDescription(), b.getCategory(), splitTags(b.getTags()), b.getBookStatus(), b.getLatestChapter(), b.getDiscoveryPageId(), b.getDiscoveryPageName(), value(b.getChapterCount(), 0), value(b.getCrawledChapterCount(), 0), value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(), (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : b.getDiscoveryStatus()).name(), b.getImportStatus().name(), !Boolean.FALSE.equals(b.getAutoUpdateEnabled()), !Boolean.FALSE.equals(b.getAutoSyncLibrary()), b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(), b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt()); }
+
+    private List<String> splitTags(String value) {
+        if (blank(value)) return List.of();
+        return Arrays.stream(value.split("[\\r\\n,，、]+")).map(String::trim)
+                .filter(tag -> !tag.isBlank()).distinct().toList();
+    }
     public ChapterView chapterView(CrawlerChapter c) { return new ChapterView(c.getId(), c.getChapterIndex(), c.getChapterName(), c.getChapterUrl(), value(c.getWordCount(), 0), c.getCrawlStatus().name(), c.getAccessStatus().name(), value(c.getRetryCount(), 0), c.getErrorMessage(), c.getCrawlTime(), c.getCreatedAt()); }
     public TaskView taskView(CrawlerTask t) { return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(), t.getSite().getId(), t.getSite().getSiteName(), t.getDiscoveryPageId(), t.getDiscoveryPageName(), t.getScanMaxPages(), value(t.getScannedPageCount(), 0), taskProgressPercent(t), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(), value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0), value(t.getNewBookCount(), 0), value(t.getDuplicateCount(), 0), value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(), t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(), t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt()); }
 

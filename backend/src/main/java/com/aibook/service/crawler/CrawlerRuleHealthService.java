@@ -22,7 +22,7 @@ public class CrawlerRuleHealthService {
 
     private RuleTestView check(CrawlerSite site) {
         if (site.getRule() == null) {
-            RuleTestView result = new RuleTestView(false, null, null, null, null, null, null, 0,
+            RuleTestView result = new RuleTestView(false, null, null, null, null, null, java.util.List.of(), null, null, 0,
                     null, 0, null, 0, "当前没有生效的采集规则");
             site.setLastHealthCheckAt(LocalDateTime.now());
             site.setStatus(CrawlerSite.SiteStatus.PAUSED);
@@ -33,7 +33,7 @@ public class CrawlerRuleHealthService {
         CrawlerBook sample = bookRepository.findFirstBySiteOrderByLastCrawlTimeDesc(site).orElse(null);
         RuleTestView result;
         if (sample == null) {
-            result = new RuleTestView(false, null, null, null, null, null, null, 0,
+            result = new RuleTestView(false, null, null, null, null, null, java.util.List.of(), null, null, 0,
                     null, 0, null, 0, "暂无采集书籍，无法执行抽样检查");
             site.setLastHealthCheckAt(LocalDateTime.now());
             site.setHealthMessage("规则未检查：暂无采集书籍样本");

@@ -13,7 +13,7 @@ public interface BookCrawlerParser {
     default boolean supports(CrawlerSite site) { return false; }
 
     record ParsedBook(String externalId, String title, String author, String coverUrl,
-            String description, String category, String status, String latestChapter,
+            String description, String category, List<String> tags, String status, String latestChapter,
             String chapterListUrl) { }
     record ParsedChapter(String externalId, int index, String title, String url) { }
     record ParsedContent(String title, String content, String originalHtml) { }

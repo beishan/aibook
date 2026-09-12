@@ -30,6 +30,7 @@ public class CrawlerSiteRule {
     private String coverSelector;
     private String descriptionSelector;
     private String categorySelector;
+    private String tagsSelector;
     private String statusSelector;
     private String latestChapterSelector;
     private String chapterListUrlSelector;

@@ -392,7 +392,7 @@ class CrawlerManagementServiceTest {
     }
 
     private RulePayload rule(String title, String content) {
-        return new RulePayload(title, ".author", null, "#intro", null, null, null, null,
+        return new RulePayload(title, ".author", null, "#intro", null, null, null, null, null,
                 "#list dd", ":scope", "a", "h1", content, ".ads", null, 100,
                 ".books article", "a", ".title", null, null, null, null, "a.next",
                 null, null, true, false);

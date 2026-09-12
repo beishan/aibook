@@ -2,7 +2,7 @@ import api from '@/utils/api'
 
 export interface CrawlerRule {
   titleSelector: string; authorSelector?: string; coverSelector?: string
-  descriptionSelector?: string; categorySelector?: string; statusSelector?: string
+  descriptionSelector?: string; categorySelector?: string; tagsSelector?: string; statusSelector?: string
   latestChapterSelector?: string; chapterListUrlSelector?: string
   chapterItemSelector: string; chapterTitleSelector?: string; chapterUrlSelector: string
   contentTitleSelector?: string; contentSelector: string; removeSelectors?: string
@@ -24,7 +24,7 @@ export interface CrawlerSitePayload {
 export interface CrawlerSite extends CrawlerSitePayload { id: number; status: string; bookCount: number; proxy?:string; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string }
 export interface CrawlerDiscoveryPagePayload { pageName:string; pageUrl:string; autoScanEnabled:boolean; scanIntervalMinutes:number; maxPages:number }
 export interface CrawlerDiscoveryPage extends CrawlerDiscoveryPagePayload { id:number; siteId:number; lastScanAt?:string; createdAt:string }
-export interface CrawlerBook { id:number; siteId:number; siteName:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; bookStatus?:string; latestChapter?:string; discoveryPageId?:number; discoveryPageName?:string; chapterCount:number; crawledChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; autoUpdateEnabled:boolean; autoSyncLibrary:boolean; libraryBookId?:number; discoverTime:string; lastCrawlStartedAt?:string; lastCrawlTime?:string; createdAt?:string }
+export interface CrawlerBook { id:number; siteId:number; siteName:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; tags:string[]; bookStatus?:string; latestChapter?:string; discoveryPageId?:number; discoveryPageName?:string; chapterCount:number; crawledChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; autoUpdateEnabled:boolean; autoSyncLibrary:boolean; libraryBookId?:number; discoverTime:string; lastCrawlStartedAt?:string; lastCrawlTime?:string; createdAt?:string }
 export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; discoveryPageId?:number; discoveryPageName?:string; scanMaxPages?:number; scannedPageCount:number; progressPercent:number; bookId?:number; bookName?:string; totalCount:number; successCount:number; newBookCount:number; duplicateCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
 export interface CrawlerScanResult { id:number; bookId?:number; bookName:string; bookUrl:string; resultStatus:'NEW'|'DUPLICATE'|'BLACKLISTED'|'FAILED'; errorMessage?:string; createdAt:string }
 export interface CrawlerChapter { id:number; chapterIndex:number; chapterName:string; chapterUrl:string; wordCount:number; crawlStatus:string; accessStatus:string; retryCount:number; errorMessage?:string; crawlTime?:string; createdAt?:string }
@@ -32,7 +32,7 @@ export interface CrawlerChapterFocus { chapter:CrawlerChapter; page:number }
 export interface CrawlerLog { id:number; description:string; details?:string; createdAt:string }
 export interface CrawlerExport { id:number; format:string; fileSize:number; fileHash:string; createdAt:string }
 export interface CrawlerDashboard { siteCount:number; enabledSiteCount:number; bookCount:number; completedBookCount:number; crawlingBookCount:number; failedBookCount:number; todayNewBooks:number; todayNewChapters:number; readyToImportCount:number; importedCount:number; recentTasks:CrawlerTask[] }
-export interface CrawlerRuleTest { success:boolean; title?:string; author?:string; description?:string; coverUrl?:string; bookStatus?:string; chapterListUrl?:string; chapterCount:number; sampleChapter?:string; contentLength:number; contentPreview?:string; durationMillis:number; errorMessage?:string }
+export interface CrawlerRuleTest { success:boolean; title?:string; author?:string; description?:string; coverUrl?:string; category?:string; tags:string[]; bookStatus?:string; chapterListUrl?:string; chapterCount:number; sampleChapter?:string; contentLength:number; contentPreview?:string; durationMillis:number; errorMessage?:string }
 export interface CrawlerRuleVersion { id:number; version:number; changeSummary:string; enabled:boolean; rule:CrawlerRule; createdAt:string; updatedAt?:string }
 export interface CrawlerRuleSave { version:number; changeSummary:string; rule:CrawlerRule; enabled:boolean }
 export interface CrawlerRuleExport { schemaVersion:number; siteCode:string; version:number; changeSummary:string; rule:CrawlerRule; enabled?:boolean }
