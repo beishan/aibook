@@ -89,24 +89,18 @@ public class CrawlerExportService {
     }
 
     @Transactional
-    public Long importLibrary(User user, Long bookId, String preferredFormat) {
+    public Long importLibrary(User user, Long bookId, List<String> requestedFormats) {
         CrawlerBook crawlerBook = managementService.ownedBook(user, bookId);
         int availableChapterCount = availableChapters(crawlerBook).size();
         if (availableChapterCount == 0) throw new ResponseStatusException(
                 HttpStatus.CONFLICT, "书籍还没有可用正文，不能生成或加入书库");
-        String requestedFormat = preferredFormat == null ? "EPUB" : preferredFormat.toUpperCase(Locale.ROOT);
-        if ("BOTH".equals(requestedFormat)) {
-            Long libraryId = crawlerBook.getLibraryBook() == null
-                    ? importLibrary(user, bookId, "EPUB") : crawlerBook.getLibraryBook().getId();
-            CrawlerBook refreshed = managementService.ownedBook(user, bookId);
-            addSecondaryVersion(refreshed, "TXT");
-            return libraryId;
-        }
+        LinkedHashSet<String> formats = normalizeFormats(requestedFormats);
         if (crawlerBook.getLibraryBook() != null) {
-            syncImportedBook(user, bookId);
+            formats.forEach(format -> addSecondaryVersion(crawlerBook, format));
+            syncImportedBook(user, bookId, formats);
             return crawlerBook.getLibraryBook().getId();
         }
-        String format = requestedFormat;
+        String format = formats.contains("EPUB") ? "EPUB" : formats.getFirst();
         generate(user, bookId, List.of(format));
         CrawlerBookExport source = exportRepository.findByCrawlerBookAndFormat(crawlerBook, format).orElseThrow();
         Path sourcePath = Path.of(source.getFilePath());
@@ -130,11 +124,28 @@ public class CrawlerExportService {
             crawlerBook.setLibraryBook(book); crawlerBook.setImportStatus(CrawlerBook.ImportStatus.IMPORTED);
             crawlerBook.setAutoSyncLibrary(true); crawlerBookRepository.save(crawlerBook);
             recordOperation(user, crawlerBook, "采集书籍加入书库：" + crawlerBook.getBookName(),
-                    "格式：" + format + "；可用章节：" + availableChapterCount + "/"
+                    "格式：" + String.join(",", formats) + "；可用章节：" + availableChapterCount + "/"
                             + value(crawlerBook.getChapterCount()) + "；书库ID：" + book.getId());
+            formats.stream().filter(item -> !item.equals(format))
+                    .forEach(item -> addSecondaryVersion(crawlerBook, item));
             return book.getId();
         } catch (ResponseStatusException exception) { throw exception; }
         catch (Exception exception) { try { Files.deleteIfExists(target); } catch (Exception ignored) { } throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "加入书库失败", exception); }
+    }
+
+    private LinkedHashSet<String> normalizeFormats(Collection<String> requestedFormats) {
+        if (requestedFormats == null || requestedFormats.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请至少选择一种入库格式");
+        }
+        LinkedHashSet<String> formats = new LinkedHashSet<>();
+        for (String requested : requestedFormats) {
+            String format = requested == null ? "" : requested.toUpperCase(Locale.ROOT);
+            if (!Set.of("TXT", "EPUB").contains(format)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "仅支持 TXT 或 EPUB 入库");
+            }
+            formats.add(format);
+        }
+        return formats;
     }
 
     private void addSecondaryVersion(CrawlerBook crawlerBook, String format) {
@@ -169,6 +180,10 @@ public class CrawlerExportService {
     /** 将已入库采集书籍的最新内容发布为同一本书的新版本；内容未变化时不重复创建。 */
     @Transactional
     public int syncImportedBook(User user, Long bookId) {
+        return syncImportedBook(user, bookId, null);
+    }
+
+    private int syncImportedBook(User user, Long bookId, Collection<String> selectedFormats) {
         CrawlerBook crawlerBook = managementService.ownedBook(user, bookId);
         Book libraryBook = crawlerBook.getLibraryBook();
         if (libraryBook == null) return 0;
@@ -183,6 +198,7 @@ public class CrawlerExportService {
                 .filter(version -> crawlerBook.getId().toString().equals(version.getSourceId()))
                 .map(BookVersion::getFormat).map(value -> value.toUpperCase(Locale.ROOT))
                 .filter(value -> Set.of("EPUB", "TXT").contains(value)).forEach(formats::add);
+        if (selectedFormats != null) formats.retainAll(normalizeFormats(selectedFormats));
         int published = 0;
         for (String format : formats) {
             generate(crawlerBook.getSite().getUser(), crawlerBook.getId(), List.of(format));

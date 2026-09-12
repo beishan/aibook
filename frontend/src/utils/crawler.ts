@@ -72,7 +72,7 @@ export const crawlerApi = {
   setDiscoveryStatus: (bookIds:number[], status:'ACTIVE'|'IGNORED'|'BLACKLISTED') => api.put<CrawlerBook[]>('/api/crawler/books/batch/discovery-status', {bookIds,status}).then(r => r.data),
   generate: (bookId:number, formats:string[]) => api.post<CrawlerExport[]>(`/api/crawler/books/${bookId}/exports`, { formats }).then(r => r.data),
   exports: (bookId:number) => api.get<CrawlerExport[]>(`/api/crawler/books/${bookId}/exports`).then(r => r.data),
-  importBook: (bookId:number, format:string) => api.post<{bookId:number}>(`/api/crawler/books/${bookId}/import`, { format }).then(r => r.data),
+  importBook: (bookId:number, formats:string[]) => api.post<{bookId:number}>(`/api/crawler/books/${bookId}/import`, { formats }).then(r => r.data),
   tasks: (params:CrawlerTaskQuery) => api.get<PageResult<CrawlerTask>>('/api/crawler/tasks', { params }).then(r => r.data),
   updateTask: (id:string, priority:'LOW'|'NORMAL'|'HIGH') => api.put<CrawlerTask>(`/api/crawler/tasks/${id}`, {priority}).then(r => r.data),
   deleteTask: (id:string) => api.delete(`/api/crawler/tasks/${id}`),
