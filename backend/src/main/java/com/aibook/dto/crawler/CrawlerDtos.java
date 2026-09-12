@@ -86,7 +86,8 @@ public final class CrawlerDtos {
             String discoveryStatus, String importStatus, boolean autoUpdateEnabled,
             boolean autoSyncLibrary,
             Long libraryBookId, LocalDateTime discoverTime,
-            LocalDateTime lastCrawlTime) { }
+            LocalDateTime lastCrawlStartedAt, LocalDateTime lastCrawlTime,
+            LocalDateTime createdAt) { }
 
     public record ChapterView(Long id, int chapterIndex, String chapterName, String chapterUrl,
             int wordCount, String crawlStatus, String accessStatus, int retryCount,

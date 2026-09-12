@@ -307,6 +307,10 @@ public class CrawlerTaskService implements ApplicationListener<ContextRefreshedE
             task.setStartedAt(task.getStartedAt() == null ? LocalDateTime.now() : task.getStartedAt());
             task.setErrorMessage(null);
             taskRepository.save(task);
+            if (task.getCrawlerBook() != null) {
+                task.getCrawlerBook().setLastCrawlStartedAt(task.getStartedAt());
+                bookRepository.save(task.getCrawlerBook());
+            }
         }
         try {
             CrawlerBook book = task.getCrawlerBook();

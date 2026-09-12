@@ -30,6 +30,7 @@ public class CrawlerBook {
     @Column(length = 1500) private String latestChapterUrl;
     private LocalDateTime sourceUpdateTime;
     private LocalDateTime discoverTime;
+    private LocalDateTime lastCrawlStartedAt;
     private LocalDateTime lastCrawlTime;
     private LocalDateTime lastUpdateCheckTime;
     @Builder.Default private Integer chapterCount = 0;

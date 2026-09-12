@@ -317,17 +317,31 @@ class CrawlerManagementServiceTest {
                 .crawlStatus(CrawlerBook.CrawlStatus.COMPLETED)
                 .importStatus(CrawlerBook.ImportStatus.READY).build();
         when(books.searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
-                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), any(Pageable.class)))
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
+                eq(CrawlerBook.CrawlStatus.COMPLETED), eq(CrawlerBook.ImportStatus.READY),
+                any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(book)));
 
-        var result = service.books(user, 2, 50, "  三体  ");
+        var result = service.books(user, 2, 50, "  三体  ", 7L,
+                "completed", "ready", "CRAWL_STARTED_DESC");
 
         assertThat(result.getContent()).hasSize(1);
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
         verify(books).searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
-                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), pageable.capture());
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
+                eq(CrawlerBook.CrawlStatus.COMPLETED), eq(CrawlerBook.ImportStatus.READY),
+                pageable.capture());
         assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
         assertThat(pageable.getValue().getPageSize()).isEqualTo(50);
+        assertThat(pageable.getValue().getSort().getOrderFor("lastCrawlStartedAt").isDescending())
+                .isTrue();
+    }
+
+    @Test
+    void rejectsInvalidManagedBookFilterStatus() {
+        assertThatThrownBy(() -> service.books(user(), 0, 20, null, null,
+                "unknown", null, "CREATED_DESC"))
+                .hasMessageContaining("采集状态无效");
     }
 
     @Test

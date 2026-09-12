@@ -138,12 +138,33 @@ public class CrawlerManagementService {
     }
 
     @Transactional(readOnly = true)
-    public Page<BookView> books(User user, int page, int size, String keyword) {
+    public Page<BookView> books(User user, int page, int size, String keyword, Long siteId,
+            String crawlStatus, String importStatus, String sort) {
+        CrawlerBook.CrawlStatus normalizedCrawlStatus = enumValue(
+                crawlStatus, CrawlerBook.CrawlStatus.class, "采集状态");
+        CrawlerBook.ImportStatus normalizedImportStatus = enumValue(
+                importStatus, CrawlerBook.ImportStatus.class, "入库状态");
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
-                Sort.by("createdAt").descending());
+                managedBookSort(sort));
         return bookRepository.searchManagedBooks(user, CrawlerBook.DiscoveryStatus.ACTIVE,
-                CrawlerBook.CrawlStatus.DISCOVERED, blank(keyword) ? "" : keyword.trim(), pageable)
+                CrawlerBook.CrawlStatus.DISCOVERED, blank(keyword) ? "" : keyword.trim(), siteId,
+                normalizedCrawlStatus, normalizedImportStatus, pageable)
                 .map(this::bookView);
+    }
+
+    private Sort managedBookSort(String value) {
+        String sort = blank(value) ? "CREATED_DESC" : value.trim().toUpperCase(Locale.ROOT);
+        Sort.Order primary = switch (sort) {
+            case "CREATED_ASC" -> Sort.Order.asc("createdAt");
+            case "CRAWL_STARTED_DESC" -> Sort.Order.desc("lastCrawlStartedAt").nullsLast();
+            case "CRAWL_STARTED_ASC" -> Sort.Order.asc("lastCrawlStartedAt").nullsLast();
+            case "LAST_CRAWL_DESC" -> Sort.Order.desc("lastCrawlTime").nullsLast();
+            case "LAST_CRAWL_ASC" -> Sort.Order.asc("lastCrawlTime").nullsLast();
+            case "BOOK_NAME_ASC" -> Sort.Order.asc("bookName").ignoreCase();
+            case "BOOK_NAME_DESC" -> Sort.Order.desc("bookName").ignoreCase();
+            default -> Sort.Order.desc("createdAt");
+        };
+        return Sort.by(primary, Sort.Order.desc("id"));
     }
 
     @Transactional(readOnly = true)
@@ -350,7 +371,7 @@ public class CrawlerManagementService {
                 r.getXpathRemoveSelectors(), r.getStringReplacementsJson(), bool(r.getRemoveBlankLines(), true), bool(r.getSaveOriginalHtml(), false));
     }
 
-    public BookView bookView(CrawlerBook b) { return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(), b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(), b.getCoverUrl(), b.getDescription(), b.getCategory(), b.getBookStatus(), b.getLatestChapter(), value(b.getChapterCount(), 0), value(b.getCrawledChapterCount(), 0), value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(), (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : b.getDiscoveryStatus()).name(), b.getImportStatus().name(), !Boolean.FALSE.equals(b.getAutoUpdateEnabled()), !Boolean.FALSE.equals(b.getAutoSyncLibrary()), b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(), b.getLastCrawlTime()); }
+    public BookView bookView(CrawlerBook b) { return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(), b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(), b.getCoverUrl(), b.getDescription(), b.getCategory(), b.getBookStatus(), b.getLatestChapter(), value(b.getChapterCount(), 0), value(b.getCrawledChapterCount(), 0), value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(), (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : b.getDiscoveryStatus()).name(), b.getImportStatus().name(), !Boolean.FALSE.equals(b.getAutoUpdateEnabled()), !Boolean.FALSE.equals(b.getAutoSyncLibrary()), b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(), b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt()); }
     public ChapterView chapterView(CrawlerChapter c) { return new ChapterView(c.getId(), c.getChapterIndex(), c.getChapterName(), c.getChapterUrl(), value(c.getWordCount(), 0), c.getCrawlStatus().name(), c.getAccessStatus().name(), value(c.getRetryCount(), 0), c.getErrorMessage(), c.getCrawlTime(), c.getCreatedAt()); }
     public TaskView taskView(CrawlerTask t) { return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(), t.getSite().getId(), t.getSite().getSiteName(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(), value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0), value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(), t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(), t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt()); }
 
@@ -409,6 +430,13 @@ public class CrawlerManagementService {
     }
     private String trimSlash(String value) { return value.trim().replaceAll("/+$", ""); }
     private boolean blank(String value) { return value == null || value.isBlank(); }
+    private <E extends Enum<E>> E enumValue(String value, Class<E> type, String label) {
+        if (blank(value)) return null;
+        try { return Enum.valueOf(type, value.trim().toUpperCase(Locale.ROOT)); }
+        catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, label + "无效");
+        }
+    }
     private boolean bool(Boolean value, boolean fallback) { return value == null ? fallback : value; }
     private int value(Integer value, int fallback) { return value == null ? fallback : value; }
     private String ruleJson(RulePayload rule) { try { return objectMapper.writeValueAsString(rule); } catch (Exception e) { throw new IllegalStateException(e); } }

@@ -16,6 +16,9 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
             where b.site.user = :user
               and b.discoveryStatus = :discoveryStatus
               and b.crawlStatus <> :excludedCrawlStatus
+              and (:siteId is null or b.site.id = :siteId)
+              and (:crawlStatus is null or b.crawlStatus = :crawlStatus)
+              and (:importStatus is null or b.importStatus = :importStatus)
               and (:keyword = ''
                    or lower(b.bookName) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
@@ -27,6 +30,9 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
             @Param("discoveryStatus") CrawlerBook.DiscoveryStatus discoveryStatus,
             @Param("excludedCrawlStatus") CrawlerBook.CrawlStatus excludedCrawlStatus,
             @Param("keyword") String keyword,
+            @Param("siteId") Long siteId,
+            @Param("crawlStatus") CrawlerBook.CrawlStatus crawlStatus,
+            @Param("importStatus") CrawlerBook.ImportStatus importStatus,
             Pageable pageable);
     @Query("""
             select b from CrawlerBook b

@@ -48,8 +48,13 @@ public class CrawlerController {
 
     @GetMapping("/books") public Page<BookView> books(Authentication auth,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String keyword) {
-        return managementService.books(user(auth), page, size, keyword);
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long siteId,
+            @RequestParam(required = false) String crawlStatus,
+            @RequestParam(required = false) String importStatus,
+            @RequestParam(defaultValue = "CREATED_DESC") String sort) {
+        return managementService.books(user(auth), page, size, keyword, siteId,
+                crawlStatus, importStatus, sort);
     }
     @GetMapping("/books/discovered") public Page<BookView> discoveredBooks(Authentication auth,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
