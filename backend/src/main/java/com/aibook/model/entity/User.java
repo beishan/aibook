@@ -229,6 +229,14 @@ public class User implements UserDetails {
         preference().setCrawlerDiscoveryViewMode(value);
     }
 
+    public String getCrawlerBookViewMode() {
+        return preference().getCrawlerBookViewMode();
+    }
+
+    public void setCrawlerBookViewMode(String value) {
+        preference().setCrawlerBookViewMode(value);
+    }
+
     public Boolean getScheduledScanEnabled() {
         return preference().getScheduledScanEnabled();
     }

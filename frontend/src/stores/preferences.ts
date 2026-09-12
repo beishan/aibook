@@ -14,6 +14,7 @@ import { normalizeThemeBackgroundConfig } from '@/utils/themeBackground'
 
 export type LibraryViewMode = 'card' | 'compact-card' | 'list'
 export type CrawlerDiscoveryViewMode = 'table' | 'card'
+export type CrawlerBookViewMode = 'table' | 'card'
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 export const LIBRARY_PAGE_SIZE_OPTIONS = [10, 30, 50, 100, 200] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
@@ -28,6 +29,7 @@ interface UserPreferences {
   crawlerFollowCurrentChapter: boolean | null
   crawlerChapterPageSize: number | null
   crawlerDiscoveryViewMode: CrawlerDiscoveryViewMode | null
+  crawlerBookViewMode: CrawlerBookViewMode | null
   modernThemeColor: string | null
   warmThemeColor: string | null
   naturalThemeColor: string | null
@@ -49,6 +51,7 @@ const LIBRARY_LIST_PAGE_SIZE_KEY = 'aibook-library-list-page-size'
 const CRAWLER_FOLLOW_CURRENT_CHAPTER_KEY = 'aibook.crawler.followCurrentChapter'
 const CRAWLER_CHAPTER_PAGE_SIZE_KEY = 'aibook.crawler.chapterPageSize'
 const CRAWLER_DISCOVERY_VIEW_MODE_KEY = 'aibook.crawler.discoveryViewMode'
+const CRAWLER_BOOK_VIEW_MODE_KEY = 'aibook.crawler.bookViewMode'
 const DOCK_SIZE_KEY = 'aibook-dock-size'
 const DOCK_OPACITY_KEY = 'aibook-dock-opacity'
 const DOCK_MAGNIFICATION_KEY = 'aibook-dock-magnification'
@@ -110,6 +113,9 @@ const isCrawlerChapterPageSize = (value: unknown): value is CrawlerChapterPageSi
 const isCrawlerDiscoveryViewMode = (value: unknown): value is CrawlerDiscoveryViewMode =>
   value === 'table' || value === 'card'
 
+const isCrawlerBookViewMode = (value: unknown): value is CrawlerBookViewMode =>
+  value === 'table' || value === 'card'
+
 const isThemeColor = (value: unknown): value is string =>
   typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
 
@@ -153,6 +159,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
   )
   const crawlerDiscoveryViewMode = ref<CrawlerDiscoveryViewMode>(
     localStorage.getItem(CRAWLER_DISCOVERY_VIEW_MODE_KEY) === 'card' ? 'card' : 'table'
+  )
+  const crawlerBookViewMode = ref<CrawlerBookViewMode>(
+    localStorage.getItem(CRAWLER_BOOK_VIEW_MODE_KEY) === 'card' ? 'card' : 'table'
   )
   const dockSize = ref(readLocalNumber(DOCK_SIZE_KEY, DEFAULT_DOCK_SIZE, 44, 76))
   const dockOpacity = ref(readLocalNumber(DOCK_OPACITY_KEY, DEFAULT_DOCK_OPACITY, 40, 96))
@@ -227,6 +236,16 @@ export const usePreferencesStore = defineStore('preferences', () => {
     crawlerDiscoveryViewMode.value = value
     localStorage.setItem(CRAWLER_DISCOVERY_VIEW_MODE_KEY, value)
     if (syncRemote) persistRemote({ crawlerDiscoveryViewMode: value })
+  }
+
+  const setCrawlerBookViewMode = (
+    value: CrawlerBookViewMode,
+    syncRemote = true,
+  ) => {
+    if (!isCrawlerBookViewMode(value)) return
+    crawlerBookViewMode.value = value
+    localStorage.setItem(CRAWLER_BOOK_VIEW_MODE_KEY, value)
+    if (syncRemote) persistRemote({ crawlerBookViewMode: value })
   }
 
   const themeColorPreferenceKey: Record<ThemeId, keyof UserPreferences> = {
@@ -405,6 +424,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.crawlerDiscoveryViewMode = crawlerDiscoveryViewMode.value
       }
 
+      if (isCrawlerBookViewMode(data.crawlerBookViewMode)) {
+        setCrawlerBookViewMode(data.crawlerBookViewMode, false)
+      } else {
+        missingPreferences.crawlerBookViewMode = crawlerBookViewMode.value
+      }
+
       const remoteThemeColors: Array<[ThemeId, string | null]> = [
         ['modern', data.modernThemeColor],
         ['warm', data.warmThemeColor],
@@ -468,6 +493,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     crawlerFollowCurrentChapter,
     crawlerChapterPageSize,
     crawlerDiscoveryViewMode,
+    crawlerBookViewMode,
     dockSize,
     dockOpacity,
     dockMagnification,
@@ -484,6 +510,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setCrawlerFollowCurrentChapter,
     setCrawlerChapterPageSize,
     setCrawlerDiscoveryViewMode,
+    setCrawlerBookViewMode,
     setThemeAccentColor,
     resetThemeAccentColor,
     resetAllThemeAccentColors,

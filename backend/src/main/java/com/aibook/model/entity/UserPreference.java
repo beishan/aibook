@@ -67,6 +67,8 @@ public class UserPreference {
     private Integer crawlerChapterPageSize;
     @Column(name = "crawler_discovery_view_mode")
     private String crawlerDiscoveryViewMode;
+    @Column(name = "crawler_book_view_mode")
+    private String crawlerBookViewMode;
 
     @Column(name = "scheduled_scan_enabled")
     private Boolean scheduledScanEnabled;

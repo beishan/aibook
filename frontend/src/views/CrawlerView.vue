@@ -75,7 +75,7 @@
     </section>
 
     <section v-else-if="activeTab === 'books'" class="panel" role="tabpanel">
-      <div class="section-heading"><div><p class="eyebrow">STRUCTURED BOOKS</p><h2>采集书籍</h2></div></div>
+      <div class="section-heading discovery-heading"><div><p class="eyebrow">STRUCTURED BOOKS</p><h2>采集书籍</h2></div><div class="discovery-view-switch crawler-book-view-switch" role="tablist" aria-label="采集书籍视图" @keydown="handleBookViewKey"><span class="discovery-view-indicator" :style="{transform:`translateX(${bookViewMode==='card'?100:0}%)`}" aria-hidden="true"/><button type="button" role="tab" :aria-selected="bookViewMode==='table'" :tabindex="bookViewMode==='table'?0:-1" :class="{active:bookViewMode==='table'}" @click="setBookViewMode('table')">☰ 表格</button><button type="button" role="tab" :aria-selected="bookViewMode==='card'" :tabindex="bookViewMode==='card'?0:-1" :class="{active:bookViewMode==='card'}" @click="setBookViewMode('card')">▦ 卡片</button></div></div>
       <div class="book-filter-toolbar">
         <el-input v-model="bookKeyword" clearable placeholder="搜索书名、作者、网站或编码" :prefix-icon="Search" @keyup.enter="applyBookFilters" @clear="applyBookFilters" />
         <el-select v-model="bookSiteId" clearable placeholder="全部来源"><el-option v-for="site in sites" :key="site.id" :label="site.siteName" :value="site.id" /></el-select>
@@ -85,7 +85,7 @@
         <el-button type="primary" :icon="Search" @click="applyBookFilters">查询</el-button>
         <el-button @click="resetBookFilters">重置</el-button>
       </div>
-      <el-table v-loading="bookLoading" :data="books" @row-click="openBook" class="data-table">
+      <el-table v-if="bookViewMode==='table'" v-loading="bookLoading" :data="books" @row-click="openBook" class="data-table">
         <el-table-column label="书籍" min-width="260"><template #default="{row}"><div class="book-cell"><div class="mini-cover">{{ row.bookName.slice(0,1) }}</div><div><strong>{{ row.bookName }}</strong><p>{{ row.author || '未知作者' }} · {{ row.siteName }}</p></div></div></template></el-table-column>
         <el-table-column label="进度" min-width="190"><template #default="{row}"><el-progress :class="{'crawler-running-progress':isBookRunning(row)}" :percentage="progress(row)" :stroke-width="7" /><small>{{ row.crawledChapterCount }} / {{ row.chapterCount }} 章</small></template></el-table-column>
         <el-table-column label="状态" width="140"><template #default="{row}"><button class="status-editor" type="button" title="人工修改采集状态" @click.stop="openStatusEditor(row)"><el-tag :type="statusType(row.crawlStatus)">{{ statusLabel(row.crawlStatus) }}</el-tag><small>修改</small></button></template></el-table-column>
@@ -94,6 +94,15 @@
         <el-table-column label="失败" width="80" prop="failedChapterCount" />
         <el-table-column label="操作" width="330"><template #default="{row}"><el-button text @click.stop="checkUpdates(row)">检查更新</el-button><el-button text @click.stop="continueCrawl(row)">继续</el-button><el-button text type="primary" :disabled="!row.crawledChapterCount" @click.stop="startTrial(row)">试读</el-button><el-button text @click.stop="generate(row)">生成</el-button><el-button text type="primary" @click.stop="importBook(row)">{{ row.importStatus==='IMPORTED'?'同步入库':'入库' }}</el-button></template></el-table-column>
       </el-table>
+      <div v-else v-loading="bookLoading" class="discovery-card-panel">
+        <div class="discovery-card-grid">
+          <article v-for="book in books" :key="book.id" class="discovery-card crawler-book-card" @click="openBook(book)">
+            <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><div class="crawler-book-cover-badges"><el-tag :type="statusType(book.crawlStatus)" effect="dark" size="small">{{ statusLabel(book.crawlStatus) }}</el-tag><el-tag v-if="book.importStatus==='IMPORTED'" type="success" effect="dark" size="small">已入库</el-tag></div></div>
+            <div class="discovery-card-body crawler-book-card-body"><div class="discovery-card-title"><div><button type="button" class="crawler-book-title-button" :title="book.bookName" @click.stop="openBook(book)">{{ book.bookName }}</button><p>{{ book.author || '未知作者' }}</p></div><el-tag v-if="book.category" size="small" effect="plain">{{ book.category }}</el-tag></div><div class="crawler-book-progress"><div><span>采集进度</span><strong>{{ book.crawledChapterCount }} / {{ book.chapterCount }} 章</strong></div><el-progress :class="{'crawler-running-progress':isBookRunning(book)}" :percentage="progress(book)" :stroke-width="7" /></div><dl><div><dt>来源网站</dt><dd>{{ book.siteName }}</dd></div><div><dt>创建时间</dt><dd>{{ formatTime(book.createdAt) }}</dd></div><div><dt>开始爬取</dt><dd>{{ book.lastCrawlStartedAt ? formatTime(book.lastCrawlStartedAt) : '暂无记录' }}</dd></div><div><dt>失败章节</dt><dd>{{ book.failedChapterCount }} 章</dd></div></dl></div>
+            <footer class="discovery-card-actions crawler-book-card-actions" @click.stop><el-button text @click="checkUpdates(book)">检查更新</el-button><el-button text @click="continueCrawl(book)">继续</el-button><el-button text type="primary" :disabled="!book.crawledChapterCount" @click="startTrial(book)">试读</el-button><el-button text @click="generate(book)">生成</el-button><el-button text type="primary" @click="importBook(book)">{{ book.importStatus==='IMPORTED'?'同步入库':'入库' }}</el-button><el-button text @click="openStatusEditor(book)">修改状态</el-button></footer>
+          </article>
+        </div>
+      </div>
       <el-empty v-if="!bookLoading&&!books.length" description="暂无符合条件的采集书籍" />
       <div v-if="bookTotal" class="list-pagination"><span>当前显示 {{ books.length }} 本</span><el-pagination v-model:current-page="bookPage" v-model:page-size="bookPageSize" :page-sizes="[20,50,100]" :total="bookTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadBooks()" @size-change="handleBookSizeChange" /></div>
     </section>
@@ -404,7 +413,7 @@ type DiscoveryViewMode='table'|'card'
 type LoadOptions={silent?:boolean;preserveSelection?:boolean}
 const router=useRouter()
 const preferencesStore=usePreferencesStore()
-const {crawlerFollowCurrentChapter:followCurrentChapter,crawlerChapterPageSize:chapterPageSize,crawlerDiscoveryViewMode:discoveryViewMode}=storeToRefs(preferencesStore)
+const {crawlerFollowCurrentChapter:followCurrentChapter,crawlerChapterPageSize:chapterPageSize,crawlerDiscoveryViewMode:discoveryViewMode,crawlerBookViewMode:bookViewMode}=storeToRefs(preferencesStore)
 const POLLING_INTERVAL_KEY='aibook.crawler.pollingIntervalSeconds'
 const pollingIntervalOptions=[1,3,5,10,30] as const
 type PollingIntervalSeconds=typeof pollingIntervalOptions[number]
@@ -562,6 +571,8 @@ async function handleFailedTaskSizeChange(){failedTaskPage.value=1;await loadFai
 async function loadDiscoveredBooks(options:LoadOptions={}){if(!options.silent)discoveryLoading.value=true;if(!options.preserveSelection)selectedDiscoveries.value=[];try{const result=await crawlerApi.discoveredBooks({page:discoveryPage.value-1,size:discoveryPageSize.value,keyword:discoveryKeyword.value.trim()||undefined,siteId:discoverySiteId.value,sort:discoverySort.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/discoveryPageSize.value));if(discoveryPage.value>lastPage){discoveryPage.value=lastPage;return await loadDiscoveredBooks(options)}discoveredBooks.value=result.content;discoveredTotal.value=result.totalElements}finally{if(!options.silent)discoveryLoading.value=false}}
 function setDiscoveryViewMode(mode:DiscoveryViewMode){if(discoveryViewMode.value===mode)return;preferencesStore.setCrawlerDiscoveryViewMode(mode);selectedDiscoveries.value=[]}
 function handleDiscoveryViewKey(event:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();setDiscoveryViewMode(event.key==='ArrowLeft'||event.key==='Home'?'table':'card');requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>(`.discovery-view-switch button:nth-of-type(${discoveryViewMode.value==='table'?1:2})`)?.focus())}
+function setBookViewMode(mode:DiscoveryViewMode){if(bookViewMode.value===mode)return;preferencesStore.setCrawlerBookViewMode(mode)}
+function handleBookViewKey(event:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();setBookViewMode(event.key==='ArrowLeft'||event.key==='Home'?'table':'card');requestAnimationFrame(()=>document.querySelectorAll<HTMLButtonElement>('.crawler-book-view-switch button')[bookViewMode.value==='table'?0:1]?.focus())}
 function isDiscoverySelected(book:CrawlerBook){return selectedDiscoveryIds.value.has(book.id)}
 function toggleDiscoverySelection(book:CrawlerBook,selected:boolean){selectedDiscoveries.value=selected?[...selectedDiscoveries.value.filter(item=>item.id!==book.id),book]:selectedDiscoveries.value.filter(item=>item.id!==book.id)}
 function toggleCurrentDiscoveryPage(selected:boolean){selectedDiscoveries.value=selected?[...discoveredBooks.value]:[]}
@@ -703,6 +714,11 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 .discovery-card-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px;padding:6px;border-top-color:var(--border-color-light)}
 .discovery-card-actions :deep(.el-button),.discovery-card-actions .source-link{display:inline-flex;min-width:0;min-height:26px;align-items:center;justify-content:center;margin:0;padding:4px 3px;font-size:10px;line-height:1.2;text-align:center}
 .discovery-card-actions .source-link{border-radius:6px}
+.crawler-book-card{cursor:pointer}
+.crawler-book-title-button{display:block;width:100%;overflow:hidden;padding:0;border:0;background:transparent;color:var(--text-primary);cursor:pointer;font:inherit;font-size:13px;font-weight:700;text-align:left;text-overflow:ellipsis;white-space:nowrap}.crawler-book-title-button:hover{color:var(--primary)}.crawler-book-title-button:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:4px}
+.crawler-book-cover-badges{position:absolute;top:8px;left:8px;z-index:2;display:flex;max-width:calc(100% - 16px);flex-wrap:wrap;gap:5px}.crawler-book-cover-badges :deep(.el-tag){max-width:100%;border:0;box-shadow:0 3px 10px rgba(0,0,0,.16);backdrop-filter:blur(8px)}
+.crawler-book-card-body{align-content:start}.crawler-book-progress{display:grid;gap:5px}.crawler-book-progress>div{display:flex;align-items:center;justify-content:space-between;gap:6px;color:var(--text-tertiary);font-size:9px}.crawler-book-progress strong{color:var(--text-secondary);font-size:9px;white-space:nowrap}.crawler-book-progress :deep(.el-progress__text){display:none}.crawler-book-progress :deep(.el-progress-bar){padding-right:0;margin-right:0}
+.crawler-book-card-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(max-width:520px){.discovery-card-grid{grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:10px}.discovery-card-cover{height:154px}}
 .discovery-toolbar{display:grid;grid-template-columns:minmax(260px,1.6fr) minmax(160px,.8fr) minmax(190px,.9fr) auto auto;gap:10px;align-items:center;margin-bottom:16px;padding:14px;border:1px solid var(--border-color-light);border-radius:15px;background:var(--surface-elevated)}.book-filter-toolbar{display:grid;grid-template-columns:minmax(230px,1.5fr) repeat(3,minmax(140px,.8fr)) minmax(190px,1fr) auto auto;gap:10px;align-items:center;margin-bottom:16px;padding:14px;border:1px solid var(--border-color-light);border-radius:15px;background:var(--surface-elevated)}@media(max-width:1200px){.book-filter-toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}.book-filter-toolbar .el-button{margin-left:0}}@media(max-width:980px){.discovery-toolbar{grid-template-columns:2fr 1fr 1fr}.discovery-toolbar .el-button{margin-left:0}}@media(max-width:640px){.discovery-toolbar,.book-filter-toolbar{grid-template-columns:minmax(0,1fr)}.discovery-toolbar .el-button,.book-filter-toolbar .el-button{width:100%}}
 .marker-list{display:grid;gap:2px}.marker-row{display:grid;width:100%;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}.marker-row .el-button{margin-left:0}@media(max-width:640px){.marker-row{grid-template-columns:minmax(0,1fr)}.marker-row .el-button{justify-self:end}}

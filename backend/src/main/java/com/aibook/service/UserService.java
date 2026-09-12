@@ -36,6 +36,7 @@ public class UserService implements UserDetailsService {
             Set.of(10, 30, 50, 100, 200);
     private static final Set<Integer> CRAWLER_CHAPTER_PAGE_SIZES = Set.of(20, 50, 100);
     private static final Set<String> CRAWLER_DISCOVERY_VIEW_MODES = Set.of("table", "card");
+    private static final Set<String> CRAWLER_BOOK_VIEW_MODES = Set.of("table", "card");
     private static final int DEFAULT_LIBRARY_PAGE_SIZE = 10;
     private static final Set<String> DOCK_ICON_STYLES =
             Set.of("minimal", "skeuomorphic", "macos26", "custom");
@@ -150,6 +151,11 @@ public class UserService implements UserDetailsService {
                     CRAWLER_DISCOVERY_VIEW_MODES);
             user.setCrawlerDiscoveryViewMode(request.getCrawlerDiscoveryViewMode());
         }
+        if (request.getCrawlerBookViewMode() != null) {
+            requireAllowed("采集书籍显示方式", request.getCrawlerBookViewMode(),
+                    CRAWLER_BOOK_VIEW_MODES);
+            user.setCrawlerBookViewMode(request.getCrawlerBookViewMode());
+        }
         if (request.getModernThemeColor() != null) {
             user.setModernThemeColor(normalizeThemeColor(request.getModernThemeColor()));
         }
@@ -222,6 +228,7 @@ public class UserService implements UserDetailsService {
                 .crawlerFollowCurrentChapter(user.getCrawlerFollowCurrentChapter())
                 .crawlerChapterPageSize(user.getCrawlerChapterPageSize())
                 .crawlerDiscoveryViewMode(user.getCrawlerDiscoveryViewMode())
+                .crawlerBookViewMode(user.getCrawlerBookViewMode())
                 .dockSize(defaultIfNull(user.getDockSize(), DEFAULT_DOCK_SIZE))
                 .dockOpacity(defaultIfNull(user.getDockOpacity(), DEFAULT_DOCK_OPACITY))
                 .dockMagnification(defaultIfNull(
