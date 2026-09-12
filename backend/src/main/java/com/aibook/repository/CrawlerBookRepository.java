@@ -24,6 +24,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
                    or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
                    or lower(b.site.siteName) like lower(concat('%', :keyword, '%'))
                    or lower(b.externalBookId) like lower(concat('%', :keyword, '%')))
+            order by case when b.crawlStatus in :runningStatuses then 0 else 1 end
             """)
     Page<CrawlerBook> searchManagedBooks(
             @Param("user") User user,
@@ -33,6 +34,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
             @Param("siteId") Long siteId,
             @Param("crawlStatus") CrawlerBook.CrawlStatus crawlStatus,
             @Param("importStatus") CrawlerBook.ImportStatus importStatus,
+            @Param("runningStatuses") Collection<CrawlerBook.CrawlStatus> runningStatuses,
             Pageable pageable);
     @Query("""
             select b from CrawlerBook b

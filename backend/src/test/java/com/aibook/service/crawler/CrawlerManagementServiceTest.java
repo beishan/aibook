@@ -323,6 +323,10 @@ class CrawlerManagementServiceTest {
         when(books.searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
                 eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
                 eq(CrawlerBook.CrawlStatus.COMPLETED), eq(CrawlerBook.ImportStatus.READY),
+                eq(List.of(CrawlerBook.CrawlStatus.CRAWLING_METADATA,
+                        CrawlerBook.CrawlStatus.CRAWLING_CHAPTER_LIST,
+                        CrawlerBook.CrawlStatus.CRAWLING_CONTENT,
+                        CrawlerBook.CrawlStatus.UPDATING)),
                 any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(book)));
 
@@ -334,6 +338,10 @@ class CrawlerManagementServiceTest {
         verify(books).searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
                 eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
                 eq(CrawlerBook.CrawlStatus.COMPLETED), eq(CrawlerBook.ImportStatus.READY),
+                eq(List.of(CrawlerBook.CrawlStatus.CRAWLING_METADATA,
+                        CrawlerBook.CrawlStatus.CRAWLING_CHAPTER_LIST,
+                        CrawlerBook.CrawlStatus.CRAWLING_CONTENT,
+                        CrawlerBook.CrawlStatus.UPDATING)),
                 pageable.capture());
         assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
         assertThat(pageable.getValue().getPageSize()).isEqualTo(50);
@@ -380,7 +388,19 @@ class CrawlerManagementServiceTest {
 
         verify(tasks).findByUserAndStatusInOrderByCreatedAtDesc(eq(user),
                 eq(List.of(CrawlerTask.TaskStatus.RUNNING)), any(Pageable.class));
-        verify(tasks, never()).findByUserOrderByCreatedAtDesc(any(), any());
+        verify(tasks, never()).findByUserRunningFirst(any(), any(), any());
+    }
+
+    @Test
+    void usesRunningFirstQueryForUnfilteredTasks() {
+        User user = user();
+        when(tasks.findByUserRunningFirst(eq(user), eq(CrawlerTask.TaskStatus.RUNNING),
+                any(Pageable.class))).thenReturn(Page.empty());
+
+        service.tasks(user, 0, 20, false);
+
+        verify(tasks).findByUserRunningFirst(eq(user), eq(CrawlerTask.TaskStatus.RUNNING),
+                any(Pageable.class));
     }
 
     @Test

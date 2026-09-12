@@ -19,6 +19,11 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class CrawlerManagementService {
+    private static final List<CrawlerBook.CrawlStatus> RUNNING_BOOK_STATUSES = List.of(
+            CrawlerBook.CrawlStatus.CRAWLING_METADATA,
+            CrawlerBook.CrawlStatus.CRAWLING_CHAPTER_LIST,
+            CrawlerBook.CrawlStatus.CRAWLING_CONTENT,
+            CrawlerBook.CrawlStatus.UPDATING);
     private final CrawlerSiteRepository siteRepository;
     private final CrawlerBookRepository bookRepository;
     private final CrawlerChapterRepository chapterRepository;
@@ -151,7 +156,7 @@ public class CrawlerManagementService {
                 managedBookSort(sort));
         return bookRepository.searchManagedBooks(user, CrawlerBook.DiscoveryStatus.ACTIVE,
                 CrawlerBook.CrawlStatus.DISCOVERED, blank(keyword) ? "" : keyword.trim(), siteId,
-                normalizedCrawlStatus, normalizedImportStatus, pageable)
+                normalizedCrawlStatus, normalizedImportStatus, RUNNING_BOOK_STATUSES, pageable)
                 .map(this::bookView);
     }
 
@@ -306,7 +311,8 @@ public class CrawlerManagementService {
             tasks = taskRepository.findByUserAndStatusInOrderByCreatedAtDesc(
                     user, List.of(taskStatus), pageable);
         } else {
-            tasks = taskRepository.findByUserOrderByCreatedAtDesc(user, pageable);
+            tasks = taskRepository.findByUserRunningFirst(
+                    user, CrawlerTask.TaskStatus.RUNNING, pageable);
         }
         return tasks.map(this::taskView);
     }
@@ -330,8 +336,8 @@ public class CrawlerManagementService {
     }
 
     private List<TaskView> recentTasks(User user, int limit) {
-        return taskRepository.findByUserOrderByCreatedAtDesc(
-                user, PageRequest.of(0, Math.min(Math.max(limit, 1), 100))).stream()
+        return taskRepository.findByUserRunningFirst(user, CrawlerTask.TaskStatus.RUNNING,
+                PageRequest.of(0, Math.min(Math.max(limit, 1), 100))).stream()
                 .map(this::taskView).toList();
     }
 

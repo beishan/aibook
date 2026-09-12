@@ -4,11 +4,21 @@ import com.aibook.model.entity.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import java.util.*;
 
 public interface CrawlerTaskRepository extends JpaRepository<CrawlerTask, String> {
     Optional<CrawlerTask> findByIdAndUser(String id, User user);
-    Page<CrawlerTask> findByUserOrderByCreatedAtDesc(User user, Pageable pageable);
+    @Query("""
+            select t from CrawlerTask t
+            where t.user = :user
+            order by case when t.status = :runningStatus then 0 else 1 end, t.createdAt desc
+            """)
+    Page<CrawlerTask> findByUserRunningFirst(
+            @Param("user") User user,
+            @Param("runningStatus") CrawlerTask.TaskStatus runningStatus,
+            Pageable pageable);
     Page<CrawlerTask> findByUserAndStatusInOrderByCreatedAtDesc(
             User user, Collection<CrawlerTask.TaskStatus> statuses, Pageable pageable);
     List<CrawlerTask> findByStatusIn(Collection<CrawlerTask.TaskStatus> statuses);
