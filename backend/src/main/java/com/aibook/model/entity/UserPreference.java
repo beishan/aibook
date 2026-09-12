@@ -65,6 +65,8 @@ public class UserPreference {
     private Boolean crawlerFollowCurrentChapter;
     @Column(name = "crawler_chapter_page_size")
     private Integer crawlerChapterPageSize;
+    @Column(name = "crawler_discovery_view_mode")
+    private String crawlerDiscoveryViewMode;
 
     @Column(name = "scheduled_scan_enabled")
     private Boolean scheduledScanEnabled;

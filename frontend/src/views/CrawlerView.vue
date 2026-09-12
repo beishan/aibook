@@ -384,8 +384,7 @@ type DiscoveryViewMode='table'|'card'
 type LoadOptions={silent?:boolean;preserveSelection?:boolean}
 const router=useRouter()
 const preferencesStore=usePreferencesStore()
-const {crawlerFollowCurrentChapter:followCurrentChapter,crawlerChapterPageSize:chapterPageSize}=storeToRefs(preferencesStore)
-const DISCOVERY_VIEW_MODE_KEY='aibook.crawler.discoveryViewMode'
+const {crawlerFollowCurrentChapter:followCurrentChapter,crawlerChapterPageSize:chapterPageSize,crawlerDiscoveryViewMode:discoveryViewMode}=storeToRefs(preferencesStore)
 const POLLING_INTERVAL_KEY='aibook.crawler.pollingIntervalSeconds'
 const pollingIntervalOptions=[1,3,5,10,30] as const
 type PollingIntervalSeconds=typeof pollingIntervalOptions[number]
@@ -402,7 +401,6 @@ const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=r
 const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
 const queueSettingsDialog=ref(false), savingQueueSettings=ref(false), taskQueueSettings=ref<CrawlerTaskQueueSettings>(), queueLimit=ref(4)
 const failedTaskLoading=ref(false), failedTaskPage=ref(1), failedTaskPageSize=ref(20), failedTaskTotal=ref(0)
-const discoveryViewMode=ref<DiscoveryViewMode>(localStorage.getItem(DISCOVERY_VIEW_MODE_KEY)==='card'?'card':'table')
 const ruleTestSite=ref<CrawlerSite>(), ruleTestDraft=ref<CrawlerRule>(), ruleSite=ref<CrawlerSite>(), editingRule=ref<CrawlerRuleVersion>(), ruleTestUrl=ref(''), ruleTestResult=ref<CrawlerRuleTest>(), ruleVersions=ref<CrawlerRuleVersion[]>([]), importInput=ref<HTMLInputElement>(), importMode=ref<'text'|'file'>('text'), importJsonText=ref(''), importFileName=ref('')
 const importDialog=ref(false), importTarget=ref<CrawlerBook>(), importFormats=ref<string[]>(['EPUB','TXT']), importing=ref(false)
 const importFormatOptions=[{value:'EPUB',label:'EPUB',description:'目录与章节阅读体验更佳'},{value:'TXT',label:'TXT',description:'通用纯文本，便于备份'}]
@@ -533,7 +531,7 @@ async function handleScanResultSizeChange(){scanResultsPage.value=1;await loadSc
 async function loadFailedTasks(options:LoadOptions={}){if(!options.silent)failedTaskLoading.value=true;try{const result=await crawlerApi.tasks({page:failedTaskPage.value-1,size:failedTaskPageSize.value,failedOnly:true});const lastPage=Math.max(1,Math.ceil(result.totalElements/failedTaskPageSize.value));if(failedTaskPage.value>lastPage){failedTaskPage.value=lastPage;return await loadFailedTasks(options)}failedTasks.value=result.content;failedTaskTotal.value=result.totalElements}finally{if(!options.silent)failedTaskLoading.value=false}}
 async function handleFailedTaskSizeChange(){failedTaskPage.value=1;await loadFailedTasks()}
 async function loadDiscoveredBooks(options:LoadOptions={}){if(!options.silent)discoveryLoading.value=true;if(!options.preserveSelection)selectedDiscoveries.value=[];try{const result=await crawlerApi.discoveredBooks({page:discoveryPage.value-1,size:discoveryPageSize.value,keyword:discoveryKeyword.value.trim()||undefined,siteId:discoverySiteId.value,sort:discoverySort.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/discoveryPageSize.value));if(discoveryPage.value>lastPage){discoveryPage.value=lastPage;return await loadDiscoveredBooks(options)}discoveredBooks.value=result.content;discoveredTotal.value=result.totalElements}finally{if(!options.silent)discoveryLoading.value=false}}
-function setDiscoveryViewMode(mode:DiscoveryViewMode){if(discoveryViewMode.value===mode)return;discoveryViewMode.value=mode;selectedDiscoveries.value=[];localStorage.setItem(DISCOVERY_VIEW_MODE_KEY,mode)}
+function setDiscoveryViewMode(mode:DiscoveryViewMode){if(discoveryViewMode.value===mode)return;preferencesStore.setCrawlerDiscoveryViewMode(mode);selectedDiscoveries.value=[]}
 function handleDiscoveryViewKey(event:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();setDiscoveryViewMode(event.key==='ArrowLeft'||event.key==='Home'?'table':'card');requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>(`.discovery-view-switch button:nth-of-type(${discoveryViewMode.value==='table'?1:2})`)?.focus())}
 function isDiscoverySelected(book:CrawlerBook){return selectedDiscoveryIds.value.has(book.id)}
 function toggleDiscoverySelection(book:CrawlerBook,selected:boolean){selectedDiscoveries.value=selected?[...selectedDiscoveries.value.filter(item=>item.id!==book.id),book]:selectedDiscoveries.value.filter(item=>item.id!==book.id)}

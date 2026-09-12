@@ -13,6 +13,7 @@ import {
 import { normalizeThemeBackgroundConfig } from '@/utils/themeBackground'
 
 export type LibraryViewMode = 'card' | 'compact-card' | 'list'
+export type CrawlerDiscoveryViewMode = 'table' | 'card'
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 export const LIBRARY_PAGE_SIZE_OPTIONS = [10, 30, 50, 100, 200] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
@@ -26,6 +27,7 @@ interface UserPreferences {
   scanThreadCount: number | null
   crawlerFollowCurrentChapter: boolean | null
   crawlerChapterPageSize: number | null
+  crawlerDiscoveryViewMode: CrawlerDiscoveryViewMode | null
   modernThemeColor: string | null
   warmThemeColor: string | null
   naturalThemeColor: string | null
@@ -46,6 +48,7 @@ const LIBRARY_CARD_PAGE_SIZE_KEY = 'aibook-library-card-page-size'
 const LIBRARY_LIST_PAGE_SIZE_KEY = 'aibook-library-list-page-size'
 const CRAWLER_FOLLOW_CURRENT_CHAPTER_KEY = 'aibook.crawler.followCurrentChapter'
 const CRAWLER_CHAPTER_PAGE_SIZE_KEY = 'aibook.crawler.chapterPageSize'
+const CRAWLER_DISCOVERY_VIEW_MODE_KEY = 'aibook.crawler.discoveryViewMode'
 const DOCK_SIZE_KEY = 'aibook-dock-size'
 const DOCK_OPACITY_KEY = 'aibook-dock-opacity'
 const DOCK_MAGNIFICATION_KEY = 'aibook-dock-magnification'
@@ -104,6 +107,9 @@ const isScanThreadCount = (value: unknown): value is number =>
 const isCrawlerChapterPageSize = (value: unknown): value is CrawlerChapterPageSize =>
   typeof value === 'number' && CRAWLER_CHAPTER_PAGE_SIZE_OPTIONS.includes(value as CrawlerChapterPageSize)
 
+const isCrawlerDiscoveryViewMode = (value: unknown): value is CrawlerDiscoveryViewMode =>
+  value === 'table' || value === 'card'
+
 const isThemeColor = (value: unknown): value is string =>
   typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
 
@@ -144,6 +150,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
     isCrawlerChapterPageSize(storedCrawlerChapterPageSize)
       ? storedCrawlerChapterPageSize
       : DEFAULT_CRAWLER_CHAPTER_PAGE_SIZE
+  )
+  const crawlerDiscoveryViewMode = ref<CrawlerDiscoveryViewMode>(
+    localStorage.getItem(CRAWLER_DISCOVERY_VIEW_MODE_KEY) === 'card' ? 'card' : 'table'
   )
   const dockSize = ref(readLocalNumber(DOCK_SIZE_KEY, DEFAULT_DOCK_SIZE, 44, 76))
   const dockOpacity = ref(readLocalNumber(DOCK_OPACITY_KEY, DEFAULT_DOCK_OPACITY, 40, 96))
@@ -208,6 +217,16 @@ export const usePreferencesStore = defineStore('preferences', () => {
     crawlerChapterPageSize.value = value
     localStorage.setItem(CRAWLER_CHAPTER_PAGE_SIZE_KEY, String(value))
     if (syncRemote) persistRemote({ crawlerChapterPageSize: value })
+  }
+
+  const setCrawlerDiscoveryViewMode = (
+    value: CrawlerDiscoveryViewMode,
+    syncRemote = true,
+  ) => {
+    if (!isCrawlerDiscoveryViewMode(value)) return
+    crawlerDiscoveryViewMode.value = value
+    localStorage.setItem(CRAWLER_DISCOVERY_VIEW_MODE_KEY, value)
+    if (syncRemote) persistRemote({ crawlerDiscoveryViewMode: value })
   }
 
   const themeColorPreferenceKey: Record<ThemeId, keyof UserPreferences> = {
@@ -380,6 +399,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.crawlerChapterPageSize = crawlerChapterPageSize.value
       }
 
+      if (isCrawlerDiscoveryViewMode(data.crawlerDiscoveryViewMode)) {
+        setCrawlerDiscoveryViewMode(data.crawlerDiscoveryViewMode, false)
+      } else {
+        missingPreferences.crawlerDiscoveryViewMode = crawlerDiscoveryViewMode.value
+      }
+
       const remoteThemeColors: Array<[ThemeId, string | null]> = [
         ['modern', data.modernThemeColor],
         ['warm', data.warmThemeColor],
@@ -442,6 +467,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     scanThreadCount,
     crawlerFollowCurrentChapter,
     crawlerChapterPageSize,
+    crawlerDiscoveryViewMode,
     dockSize,
     dockOpacity,
     dockMagnification,
@@ -457,6 +483,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setScanThreadCount,
     setCrawlerFollowCurrentChapter,
     setCrawlerChapterPageSize,
+    setCrawlerDiscoveryViewMode,
     setThemeAccentColor,
     resetThemeAccentColor,
     resetAllThemeAccentColors,

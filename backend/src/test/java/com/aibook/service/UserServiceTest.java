@@ -371,12 +371,15 @@ class UserServiceTest {
                 UserPreferencesDTO.builder()
                         .crawlerFollowCurrentChapter(true)
                         .crawlerChapterPageSize(50)
+                        .crawlerDiscoveryViewMode("card")
                         .build());
 
         assertEquals(true, user.getCrawlerFollowCurrentChapter());
         assertEquals(50, user.getCrawlerChapterPageSize());
+        assertEquals("card", user.getCrawlerDiscoveryViewMode());
         assertEquals(true, result.getCrawlerFollowCurrentChapter());
         assertEquals(50, result.getCrawlerChapterPageSize());
+        assertEquals("card", result.getCrawlerDiscoveryViewMode());
     }
 
     @Test
@@ -392,6 +395,21 @@ class UserServiceTest {
 
         assertThrows(IllegalArgumentException.class, () -> service.updatePreferences(
                 "reader", UserPreferencesDTO.builder().crawlerChapterPageSize(30).build()));
+    }
+
+    @Test
+    void rejectsInvalidCrawlerDiscoveryViewMode() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        UserService service = new UserService(repository);
+
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences(
+                "reader", UserPreferencesDTO.builder().crawlerDiscoveryViewMode("grid").build()));
     }
 
     @Test
