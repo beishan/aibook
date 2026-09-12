@@ -67,6 +67,20 @@
         </Transition>
       </router-view>
     </main>
+
+    <nav class="mobile-nav" aria-label="手机端主导航">
+      <router-link
+        v-for="item in menuItems"
+        :key="item.path"
+        :to="item.path"
+        class="mobile-nav-item"
+        :class="{ active: isActiveRoute(item.path) }"
+        :aria-label="item.title"
+      >
+        <span aria-hidden="true">{{ item.icon }}</span>
+        <small>{{ item.title }}</small>
+      </router-link>
+    </nav>
   </div>
 </template>
 
@@ -340,6 +354,10 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   max-width: none;
 }
 
+.mobile-nav {
+  display: none;
+}
+
 /* 动画 */
 .fade-enter-active,
 .fade-leave-active {
@@ -381,20 +399,55 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 
   .layout-main {
     padding: var(--spacing-md);
-    padding-bottom: 80px;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
   }
 
-  /* 移动端底部导航 */
-  .layout-container::after {
-    content: '';
+  .mobile-nav {
     position: fixed;
+    right: 0;
     bottom: 0;
     left: 0;
-    right: 0;
-    height: 60px;
-    background: var(--nav-bg);
-    border-top: 1px solid var(--border-color);
     z-index: 100;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--nav-bg) 94%, transparent);
+    backdrop-filter: blur(18px);
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+
+  .mobile-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-nav-item {
+    display: grid;
+    min-width: 64px;
+    min-height: 50px;
+    flex: 1 0 64px;
+    place-items: center;
+    gap: 2px;
+    border-radius: 12px;
+    color: var(--nav-text-secondary, var(--text-secondary));
+    text-decoration: none;
+  }
+
+  .mobile-nav-item span {
+    font-size: 18px;
+  }
+
+  .mobile-nav-item small {
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .mobile-nav-item.active {
+    background: var(--primary-alpha-10);
+    color: var(--primary);
+    font-weight: 700;
   }
 }
 </style>

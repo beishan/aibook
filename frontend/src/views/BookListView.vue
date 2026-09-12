@@ -248,4 +248,46 @@ onMounted(loadBookList)
     transition: none;
   }
 }
+
+@media (max-width: 640px) {
+  .booklist-view {
+    padding: 12px 0;
+  }
+
+  .page-header {
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .back-btn {
+    padding: 8px 11px;
+  }
+
+  .page-title {
+    font-size: clamp(24px, 8vw, 34px);
+    overflow-wrap: anywhere;
+  }
+
+  .page-subtitle {
+    font-size: 13px;
+  }
+
+  .books-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .book-cover {
+    height: auto;
+    aspect-ratio: 2 / 3;
+  }
+
+  .book-card:hover {
+    transform: none;
+  }
+
+  .book-info {
+    padding: 9px 10px 11px;
+  }
+}
 </style>

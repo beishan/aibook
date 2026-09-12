@@ -1602,4 +1602,64 @@ function truncate(text: string | undefined, max: number) {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 640px) {
+  .repair-view {
+    padding: 4px 0 16px;
+  }
+
+  .page-header,
+  .resume-heading,
+  .encoding-info,
+  .task-status-bar,
+  .task-info,
+  .history-task,
+  .issue-actions,
+  .detail-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mode-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .repair-mode-section,
+  .resume-heading,
+  .mode-card {
+    padding: 16px;
+  }
+
+  .encoding-switch,
+  .task-actions,
+  .task-counts,
+  .candidates {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .encoding-select,
+  .filter-select {
+    width: 100%;
+  }
+
+  .repair-workspace {
+    min-height: 0;
+  }
+
+  .right-panel {
+    min-height: 420px;
+  }
+
+  .preview-content {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+  }
+
+  .diff-line {
+    min-width: 0;
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
+  }
+}
 </style>

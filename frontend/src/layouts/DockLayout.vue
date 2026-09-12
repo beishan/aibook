@@ -894,8 +894,21 @@ onUnmounted(() => {
   }
 
   .dock-nav {
+    width: calc(100vw - 20px);
     bottom: 12px;
     padding: 6px 8px 8px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+
+  .dock-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dock-container {
+    width: max-content;
+    min-width: 100%;
   }
 
   .dock-item {

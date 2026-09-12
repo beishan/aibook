@@ -1,0 +1,279 @@
+/* 全站手机端适配基线：仅约束小屏，不改变桌面布局。 */
+@media (max-width: 768px) {
+  :root {
+    --mobile-page-gutter: 14px;
+  }
+
+  html {
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body,
+  #app {
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  img,
+  svg,
+  video,
+  canvas {
+    max-width: 100%;
+  }
+
+  .home-view,
+  .books-view,
+  .shelf-view,
+  .booklist-view,
+  .book-detail-view,
+  .series-view,
+  .settings-view,
+  .connections-view,
+  .category-view,
+  .tag-management-view,
+  .author-management-view,
+  .repair-config-view,
+  .repair-view,
+  .conversion-page,
+  .crawler-page {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .el-button,
+  button,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+
+  .el-button:not(.is-circle) {
+    min-height: 40px;
+  }
+
+  .el-input,
+  .el-select,
+  .el-input-number,
+  .el-date-editor,
+  .el-cascader {
+    max-width: 100%;
+  }
+
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  .el-input-number,
+  .el-date-editor.el-input,
+  .el-date-editor.el-input__wrapper {
+    width: 100%;
+  }
+
+  .el-form-item__label {
+    height: auto;
+    min-height: 32px;
+    white-space: normal;
+  }
+
+  .el-table,
+  .el-table__inner-wrapper,
+  .el-table__header-wrapper,
+  .el-table__body-wrapper {
+    max-width: 100%;
+  }
+
+  .el-table__body-wrapper,
+  .el-table__header-wrapper {
+    overscroll-behavior-inline: contain;
+  }
+
+  .el-tabs__header,
+  .el-tabs__nav-wrap {
+    max-width: 100%;
+  }
+
+  .el-tabs__nav-scroll {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .el-tabs__nav-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .el-pagination {
+    max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 7px 0;
+  }
+
+  .el-overlay-dialog {
+    box-sizing: border-box;
+    padding: 10px;
+    overflow: auto;
+  }
+
+  .el-dialog {
+    display: flex;
+    width: calc(100vw - 20px) !important;
+    max-width: calc(100vw - 20px) !important;
+    max-height: calc(100dvh - 20px);
+    flex-direction: column;
+    margin: 10px auto !important;
+  }
+
+  .el-dialog__header,
+  .el-dialog__footer {
+    flex: 0 0 auto;
+    padding-inline: 16px;
+  }
+
+  .el-dialog__body {
+    min-width: 0;
+    min-height: 0;
+    padding: 14px 16px 18px;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .el-message-box {
+    width: calc(100vw - 28px) !important;
+    max-width: 420px;
+  }
+
+  .el-drawer.ltr,
+  .el-drawer.rtl {
+    width: min(92vw, 420px) !important;
+  }
+
+  .el-drawer.ttb,
+  .el-drawer.btt {
+    height: min(86dvh, 720px) !important;
+  }
+
+  .el-drawer__header {
+    margin-bottom: 0;
+    padding: 16px;
+  }
+
+  .el-drawer__body {
+    min-width: 0;
+    padding: 14px;
+    overflow: auto;
+  }
+
+  .el-popper,
+  .el-select__popper,
+  .el-picker__popper,
+  .el-dropdown__popper {
+    max-width: calc(100vw - 20px) !important;
+  }
+
+  .el-upload,
+  .el-upload-dragger {
+    max-width: 100%;
+  }
+
+  /* 跨页面复用组件：上传、目录、元数据、批处理和阅读批注。 */
+  .dialog-overlay {
+    box-sizing: border-box;
+    padding: 10px;
+  }
+
+  .dialog-overlay > .dialog {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - 20px);
+  }
+
+  .dialog-header,
+  .dialog-body,
+  .dialog-footer {
+    padding-inline: 16px;
+  }
+
+  .result-content,
+  .preview-content,
+  .input-group {
+    min-width: 0;
+  }
+
+  .result-content {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cover-preview {
+    align-self: center;
+  }
+
+  .form-actions,
+  .result-actions,
+  .dialog-footer,
+  .stats {
+    flex-wrap: wrap;
+  }
+
+  .file-item,
+  .result-item,
+  .selected-path {
+    min-width: 0;
+  }
+
+  .path-text,
+  .result-value,
+  .error-msg {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .upload-area {
+    padding: 22px 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --mobile-page-gutter: 10px;
+  }
+
+  .el-pagination__sizes,
+  .el-pagination__jump {
+    display: none !important;
+  }
+
+  .el-notification {
+    right: 10px !important;
+    left: 10px !important;
+    width: auto !important;
+  }
+
+  .el-message {
+    min-width: 0;
+    max-width: calc(100vw - 20px);
+  }
+
+  .input-group {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .input-group .btn {
+    width: 100%;
+  }
+
+  .batch-scrape-idle,
+  .batch-scrape-loading,
+  .batch-scrape-running,
+  .batch-scrape-done,
+  .batch-scrape-error {
+    padding: 8px;
+  }
+}
