@@ -122,6 +122,10 @@ public class CrawlerController {
             Authentication auth, @Valid @RequestBody TaskQueueOrderRequest request) {
         return taskService.reorderQueuedTasks(user(auth), request.taskIds());
     }
+    @PutMapping("/tasks/queued/{id}/prioritize") public List<TaskView> prioritizeQueuedTask(
+            Authentication auth, @PathVariable String id) {
+        return taskService.prioritizeQueuedTask(user(auth), id);
+    }
     @PostMapping("/tasks/batch") public TaskBatchResult batchTasks(
             Authentication auth, @Valid @RequestBody TaskBatchRequest request) {
         return new TaskBatchResult(taskService.batchManageTasks(

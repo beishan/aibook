@@ -85,6 +85,7 @@ export const crawlerApi = {
   tasks: (params:CrawlerTaskQuery) => api.get<PageResult<CrawlerTask>>('/api/crawler/tasks', { params }).then(r => r.data),
   queuedTasks: () => api.get<CrawlerTask[]>('/api/crawler/tasks/queued').then(r => r.data),
   reorderQueuedTasks: (taskIds:string[]) => api.put<CrawlerTask[]>('/api/crawler/tasks/queued/order',{taskIds}).then(r => r.data),
+  prioritizeQueuedTask: (id:string) => api.put<CrawlerTask[]>(`/api/crawler/tasks/queued/${id}/prioritize`).then(r => r.data),
   task: (id:string) => api.get<CrawlerTask>(`/api/crawler/tasks/${id}`).then(r => r.data),
   taskQueueSettings: () => api.get<CrawlerTaskQueueSettings>('/api/crawler/tasks/queue-settings').then(r => r.data),
   updateTaskQueueSettings: (maxConcurrentTasks:number) => api.put<CrawlerTaskQueueSettings>('/api/crawler/tasks/queue-settings',{maxConcurrentTasks}).then(r => r.data),

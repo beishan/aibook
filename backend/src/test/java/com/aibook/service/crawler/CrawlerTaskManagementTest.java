@@ -107,10 +107,13 @@ class CrawlerTaskManagementTest {
             assertThat(service.reorderQueuedTasks(user, List.of(queuedThird.id(), queued.id())))
                     .extracting(task -> task.id())
                     .containsExactly(queuedThird.id(), queued.id());
+            assertThat(service.prioritizeQueuedTask(user, queued.id()))
+                    .extracting(task -> task.id())
+                    .containsExactly(queued.id(), queuedThird.id());
 
             releaseFirst.countDown();
-            assertThat(thirdStarted.await(2, TimeUnit.SECONDS)).isTrue();
             assertThat(secondStarted.await(2, TimeUnit.SECONDS)).isTrue();
+            assertThat(thirdStarted.await(2, TimeUnit.SECONDS)).isTrue();
         } finally {
             releaseFirst.countDown();
             service.shutdown();

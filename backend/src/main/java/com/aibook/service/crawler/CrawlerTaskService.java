@@ -136,6 +136,48 @@ public class CrawlerTaskService {
         return queuedTasks(user);
     }
 
+    @Transactional
+    public synchronized List<TaskView> prioritizeQueuedTask(User user, String taskId) {
+        CrawlerTask task = managementService.ownedTask(user, taskId);
+        if (task.getStatus() != CrawlerTask.TaskStatus.WAITING) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "只有等待中的任务可以立刻优先");
+        }
+        CrawlerJob queuedJob = executor.getQueue().stream()
+                .filter(CrawlerJob.class::isInstance)
+                .map(CrawlerJob.class::cast)
+                .filter(job -> job.taskId.equals(taskId))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.CONFLICT, "任务已离开等待队列，请刷新后重试"));
+        if (!executor.remove(queuedJob)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "任务已开始执行，请刷新后重试");
+        }
+
+        CrawlerTask.Priority previousPriority = task.getPriority();
+        long firstQueueOrder = executor.getQueue().stream()
+                .filter(CrawlerJob.class::isInstance)
+                .map(CrawlerJob.class::cast)
+                .mapToLong(job -> job.queueOrder)
+                .min()
+                .orElseGet(this::nextQueueOrder) - 1L;
+        task.setPriority(CrawlerTask.Priority.HIGH);
+        task.setQueueOrder(firstQueueOrder);
+        try {
+            taskRepository.save(task);
+            executor.getQueue().offer(new CrawlerJob(taskId, CrawlerTask.Priority.HIGH,
+                    firstQueueOrder, jobSequence.incrementAndGet()));
+        } catch (RuntimeException exception) {
+            task.setPriority(previousPriority);
+            task.setQueueOrder(queuedJob.queueOrder);
+            executor.getQueue().offer(queuedJob);
+            throw exception;
+        }
+        log.info("[采集任务] 任务已立刻优先: userId={}, taskId={}, previousPriority={}",
+                user.getId(), taskId, previousPriority);
+        recordCrawlerEvent(task, "任务已立刻优先", "原优先级：" + previousPriority + "；已移动到等待队列首位");
+        return queuedTasks(user);
+    }
+
     public TaskView start(User user, Long siteId, String url) {
         CrawlerSite site = managementService.ownedSite(user, siteId);
         if (!Boolean.TRUE.equals(site.getEnabled())) throw new ResponseStatusException(HttpStatus.CONFLICT, "请先启用该采集网站");
