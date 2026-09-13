@@ -76,6 +76,7 @@ export const crawlerApi = {
   retryFailures: (bookId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/retry-failures`).then(r => r.data),
   checkUpdates: (bookId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/check-updates`).then(r => r.data),
   setBookStatus: (bookId:number, status:string, autoUpdateEnabled:boolean) => api.put<CrawlerBook>(`/api/crawler/books/${bookId}/crawl-status`, {status,autoUpdateEnabled}).then(r => r.data),
+  setBookStatuses: (bookIds:number[], status:string) => api.put<CrawlerBook[]>('/api/crawler/books/batch/crawl-status', {bookIds,status}).then(r => r.data),
   setLibrarySync: (bookId:number, enabled:boolean) => api.put<CrawlerBook>(`/api/crawler/books/${bookId}/library-sync`, {enabled}).then(r => r.data),
   batchCrawl: (bookIds:number[]) => api.post<CrawlerTask[]>('/api/crawler/books/batch/crawl', {bookIds}).then(r => r.data),
   setDiscoveryStatus: (bookIds:number[], status:'ACTIVE'|'IGNORED'|'BLACKLISTED') => api.put<CrawlerBook[]>('/api/crawler/books/batch/discovery-status', {bookIds,status}).then(r => r.data),

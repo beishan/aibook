@@ -473,6 +473,35 @@ class CrawlerTaskManagementTest {
         }
     }
 
+    @Test
+    void batchUpdatesSelectedBookStatuses() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站").build();
+        CrawlerBook first = CrawlerBook.builder().id(8L).site(site).bookName("第一本")
+                .crawlStatus(CrawlerBook.CrawlStatus.FAILED).build();
+        CrawlerBook second = CrawlerBook.builder().id(9L).site(site).bookName("第二本")
+                .crawlStatus(CrawlerBook.CrawlStatus.PAUSED).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        Map<Long, CrawlerBook> selected = Map.of(first.getId(), first, second.getId(), second);
+        when(management.ownedBook(eq(user), anyLong())).thenAnswer(invocation ->
+                selected.get(invocation.getArgument(1)));
+        when(books.save(any(CrawlerBook.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        CrawlerTaskService service = service(tasks, books, management);
+        try {
+            service.setBookStatuses(user, List.of(first.getId(), second.getId()),
+                    CrawlerBook.CrawlStatus.COMPLETED);
+
+            assertThat(first.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.COMPLETED);
+            assertThat(second.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.COMPLETED);
+            verify(books).save(first);
+            verify(books).save(second);
+        } finally {
+            service.shutdown();
+        }
+    }
+
     private CrawlerTaskService service(CrawlerTaskRepository tasks, CrawlerManagementService management) {
         return service(tasks, mock(CrawlerBookRepository.class), management);
     }

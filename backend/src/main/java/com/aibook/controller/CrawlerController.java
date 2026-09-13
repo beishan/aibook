@@ -100,6 +100,11 @@ public class CrawlerController {
     @PutMapping("/books/{id}/crawl-status") public BookView crawlStatus(Authentication auth, @PathVariable Long id, @Valid @RequestBody BookCrawlStatusRequest request) { return taskService.setBookStatus(user(auth), id, CrawlerBook.CrawlStatus.valueOf(request.status()), request.autoUpdateEnabled()); }
     @PutMapping("/books/{id}/library-sync") public BookView librarySync(Authentication auth, @PathVariable Long id, @Valid @RequestBody LibrarySyncRequest request) { return taskService.setLibrarySync(user(auth), id, request.enabled()); }
     @PostMapping("/books/batch/crawl") @ResponseStatus(HttpStatus.ACCEPTED) public List<TaskView> batchCrawl(Authentication auth, @Valid @RequestBody BatchBookRequest request) { return taskService.batchCrawl(user(auth), request.bookIds()); }
+    @PutMapping("/books/batch/crawl-status") public List<BookView> batchCrawlStatus(
+            Authentication auth, @Valid @RequestBody BatchBookStatusRequest request) {
+        return taskService.setBookStatuses(user(auth), request.bookIds(),
+                CrawlerBook.CrawlStatus.valueOf(request.status()));
+    }
     @PutMapping("/books/batch/discovery-status") public List<BookView> discoveryStatus(Authentication auth, @Valid @RequestBody DiscoveryStatusRequest request) { return taskService.setDiscoveryStatus(user(auth), request.bookIds(), CrawlerBook.DiscoveryStatus.valueOf(request.status())); }
     @PostMapping("/books/{id}/exports") public List<ExportView> generate(Authentication auth, @PathVariable Long id, @Valid @RequestBody ExportRequest request) { return exportService.generate(user(auth), id, request.formats()); }
     @GetMapping("/books/{id}/exports") public List<ExportView> exports(Authentication auth, @PathVariable Long id) { return exportService.list(user(auth), id); }

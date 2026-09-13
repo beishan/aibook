@@ -78,6 +78,9 @@ public final class CrawlerDtos {
     public record TaskQueueSettingsRequest(@NotNull @Min(1) @Max(16) Integer maxConcurrentTasks) { }
     public record TaskQueueSettingsView(int maxConcurrentTasks, int runningCount, int queuedCount) { }
     public record BatchBookRequest(@NotEmpty List<@NotNull Long> bookIds) { }
+    public record BatchBookStatusRequest(
+            @NotEmpty @Size(max = 200) List<@NotNull Long> bookIds,
+            @NotBlank @Pattern(regexp = "DISCOVERED|WAITING|PAUSED|PARTIAL_SUCCESS|COMPLETED|FAILED") String status) { }
     public record DiscoveryStatusRequest(@NotEmpty List<@NotNull Long> bookIds,
             @NotBlank @Pattern(regexp = "ACTIVE|IGNORED|BLACKLISTED") String status) { }
     public record RuleTestRequest(@NotBlank String url, @Valid RulePayload rule) { }

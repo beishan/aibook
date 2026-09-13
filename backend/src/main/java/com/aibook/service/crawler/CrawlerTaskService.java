@@ -273,6 +273,30 @@ public class CrawlerTaskService {
         if (taskRepository.existsByCrawlerBookAndStatusIn(book, ACTIVE_STATUSES)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "该书籍仍有活动任务，请先暂停或取消任务");
         }
+        return applyBookStatus(user, book, status);
+    }
+
+    @Transactional
+    public List<com.aibook.dto.crawler.CrawlerDtos.BookView> setBookStatuses(
+            User user, List<Long> bookIds, CrawlerBook.CrawlStatus status) {
+        LinkedHashSet<Long> uniqueIds = new LinkedHashSet<>(bookIds);
+        if (uniqueIds.size() != bookIds.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "批量状态修改包含重复书籍");
+        }
+        List<CrawlerBook> books = uniqueIds.stream()
+                .map(id -> managementService.ownedBook(user, id))
+                .toList();
+        books.forEach(book -> {
+            if (taskRepository.existsByCrawlerBookAndStatusIn(book, ACTIVE_STATUSES)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "书籍“" + bookName(book) + "”仍有活动任务，请先暂停或取消任务");
+            }
+        });
+        return books.stream().map(book -> applyBookStatus(user, book, status)).toList();
+    }
+
+    private com.aibook.dto.crawler.CrawlerDtos.BookView applyBookStatus(
+            User user, CrawlerBook book, CrawlerBook.CrawlStatus status) {
         CrawlerBook.CrawlStatus previous = book.getCrawlStatus();
         book.setCrawlStatus(status);
         book.setAutoUpdateEnabled(false);
