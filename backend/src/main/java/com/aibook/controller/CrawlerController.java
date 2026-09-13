@@ -118,6 +118,15 @@ public class CrawlerController {
     @GetMapping("/tasks/queued") public List<TaskView> queuedTasks(Authentication auth) {
         return taskService.queuedTasks(user(auth));
     }
+    @PutMapping("/tasks/queued/order") public List<TaskView> reorderQueuedTasks(
+            Authentication auth, @Valid @RequestBody TaskQueueOrderRequest request) {
+        return taskService.reorderQueuedTasks(user(auth), request.taskIds());
+    }
+    @PostMapping("/tasks/batch") public TaskBatchResult batchTasks(
+            Authentication auth, @Valid @RequestBody TaskBatchRequest request) {
+        return new TaskBatchResult(taskService.batchManageTasks(
+                user(auth), request.taskIds(), request.action(), request.priority()));
+    }
     @GetMapping("/tasks/{id}") public TaskView task(Authentication auth, @PathVariable String id) {
         return managementService.task(user(auth), id);
     }

@@ -24,6 +24,7 @@ public class CrawlerTask {
     @Enumerated(EnumType.STRING) @Column(nullable = false) private TaskType type;
     @Enumerated(EnumType.STRING) @Builder.Default private TaskStatus status = TaskStatus.WAITING;
     @Enumerated(EnumType.STRING) @Builder.Default private Priority priority = Priority.HIGH;
+    private Long queueOrder;
     @Builder.Default private Integer totalCount = 0;
     @Builder.Default private Integer successCount = 0;
     @Builder.Default private Integer newBookCount = 0;

@@ -69,6 +69,12 @@ public final class CrawlerDtos {
             Boolean autoUpdateEnabled) { }
     public record LibrarySyncRequest(@NotNull Boolean enabled) { }
     public record TaskUpdateRequest(@NotNull CrawlerTask.Priority priority) { }
+    public record TaskBatchRequest(
+            @NotEmpty @Size(max = 200) List<@NotBlank String> taskIds,
+            @NotBlank @Pattern(regexp = "pause|resume|cancel|delete|priority") String action,
+            CrawlerTask.Priority priority) { }
+    public record TaskBatchResult(int affectedCount) { }
+    public record TaskQueueOrderRequest(@NotEmpty List<@NotBlank String> taskIds) { }
     public record TaskQueueSettingsRequest(@NotNull @Min(1) @Max(16) Integer maxConcurrentTasks) { }
     public record TaskQueueSettingsView(int maxConcurrentTasks, int runningCount, int queuedCount) { }
     public record BatchBookRequest(@NotEmpty List<@NotNull Long> bookIds) { }

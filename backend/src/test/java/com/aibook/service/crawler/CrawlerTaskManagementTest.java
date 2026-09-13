@@ -46,6 +46,8 @@ class CrawlerTaskManagementTest {
                 .pageName("第一页").pageUrl("https://example.com/one").maxPages(1).build();
         var secondPage = com.aibook.model.entity.CrawlerDiscoveryPage.builder().id(12L).site(site)
                 .pageName("第二页").pageUrl("https://example.com/two").maxPages(1).build();
+        var thirdPage = com.aibook.model.entity.CrawlerDiscoveryPage.builder().id(13L).site(site)
+                .pageName("第三页").pageUrl("https://example.com/three").maxPages(1).build();
         Map<String, CrawlerTask> stored = new ConcurrentHashMap<>();
         CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
         when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> {
@@ -55,11 +57,13 @@ class CrawlerTaskManagementTest {
         var pages = mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class);
         when(pages.findById(11L)).thenReturn(Optional.of(firstPage));
         when(pages.findById(12L)).thenReturn(Optional.of(secondPage));
+        when(pages.findById(13L)).thenReturn(Optional.of(thirdPage));
         CrawlerHttpClient http = mock(CrawlerHttpClient.class);
         when(http.validateSiteUrl(eq(site), anyString())).thenAnswer(invocation -> URI.create(invocation.getArgument(1)));
         CountDownLatch firstStarted = new CountDownLatch(1);
         CountDownLatch releaseFirst = new CountDownLatch(1);
         CountDownLatch secondStarted = new CountDownLatch(1);
+        CountDownLatch thirdStarted = new CountDownLatch(1);
         when(http.get(site, "https://example.com/one")).thenAnswer(invocation -> {
             firstStarted.countDown(); releaseFirst.await(2, TimeUnit.SECONDS);
             return new CrawlerHttpClient.FetchResult("one", 200, 1, null, null);
@@ -68,11 +72,17 @@ class CrawlerTaskManagementTest {
             secondStarted.countDown();
             return new CrawlerHttpClient.FetchResult("two", 200, 1, null, null);
         });
+        when(http.get(site, "https://example.com/three")).thenAnswer(invocation -> {
+            thirdStarted.countDown();
+            return new CrawlerHttpClient.FetchResult("three", 200, 1, null, null);
+        });
         BookCrawlerParser parser = mock(BookCrawlerParser.class);
         when(parser.supports(site)).thenReturn(true);
         when(parser.parseBookList(anyString(), anyString(), eq(rule))).thenReturn(List.of());
         when(parser.parseNextBookListPage(anyString(), anyString(), eq(rule))).thenReturn("");
         CrawlerManagementService management = mock(CrawlerManagementService.class);
+        when(management.ownedTask(eq(user), anyString())).thenAnswer(invocation ->
+                stored.get(invocation.getArgument(1)));
         when(management.taskView(any(CrawlerTask.class))).thenCallRealMethod();
         CrawlerSettingsService settings = mock(CrawlerSettingsService.class);
         when(settings.maxConcurrentTasks()).thenReturn(1);
@@ -85,16 +95,21 @@ class CrawlerTaskManagementTest {
             service.scanDiscoveryPage(user, firstPage, false);
             assertThat(firstStarted.await(2, TimeUnit.SECONDS)).isTrue();
             var queued = service.scanDiscoveryPage(user, secondPage, false);
+            var queuedThird = service.scanDiscoveryPage(user, thirdPage, false);
 
             assertThat(queued.status()).isEqualTo("WAITING");
             assertThat(service.queueSettings().runningCount()).isEqualTo(1);
-            assertThat(service.queueSettings().queuedCount()).isEqualTo(1);
+            assertThat(service.queueSettings().queuedCount()).isEqualTo(2);
             assertThat(service.queuedTasks(user)).extracting(task -> task.id())
-                    .containsExactly(queued.id());
+                    .containsExactly(queued.id(), queuedThird.id());
             assertThat(service.queuedTasks(User.builder().id(99L).username("other").build()))
                     .isEmpty();
+            assertThat(service.reorderQueuedTasks(user, List.of(queuedThird.id(), queued.id())))
+                    .extracting(task -> task.id())
+                    .containsExactly(queuedThird.id(), queued.id());
 
             releaseFirst.countDown();
+            assertThat(thirdStarted.await(2, TimeUnit.SECONDS)).isTrue();
             assertThat(secondStarted.await(2, TimeUnit.SECONDS)).isTrue();
         } finally {
             releaseFirst.countDown();
@@ -400,6 +415,56 @@ class CrawlerTaskManagementTest {
             verify(chapters).saveAll(List.of(chapter));
             verify(tasks, timeout(1000).atLeastOnce()).findById(interrupted.getId());
             verify(tasks, timeout(1000).atLeastOnce()).findById(waiting.getId());
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void batchUpdatesPriorityForAllSelectedTasks() {
+        User user = user();
+        CrawlerTask first = task(user, CrawlerTask.TaskStatus.PAUSED);
+        CrawlerTask second = task(user, CrawlerTask.TaskStatus.FAILED);
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        Map<String, CrawlerTask> selected = Map.of(first.getId(), first, second.getId(), second);
+        when(management.ownedTask(eq(user), anyString())).thenAnswer(invocation ->
+                selected.get(invocation.getArgument(1)));
+        CrawlerTaskService service = service(tasks, management);
+        try {
+            int affected = service.batchManageTasks(user, List.of(first.getId(), second.getId()),
+                    "priority", CrawlerTask.Priority.HIGH);
+
+            assertThat(affected).isEqualTo(2);
+            assertThat(first.getPriority()).isEqualTo(CrawlerTask.Priority.HIGH);
+            assertThat(second.getPriority()).isEqualTo(CrawlerTask.Priority.HIGH);
+            verify(tasks).save(first);
+            verify(tasks).save(second);
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void batchValidatesEveryTaskBeforeApplyingAnyChange() {
+        User user = user();
+        CrawlerTask waiting = task(user, CrawlerTask.TaskStatus.WAITING);
+        CrawlerTask failed = task(user, CrawlerTask.TaskStatus.FAILED);
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        Map<String, CrawlerTask> selected = Map.of(waiting.getId(), waiting, failed.getId(), failed);
+        when(management.ownedTask(eq(user), anyString())).thenAnswer(invocation ->
+                selected.get(invocation.getArgument(1)));
+        CrawlerTaskService service = service(tasks, management);
+        try {
+            assertThatThrownBy(() -> service.batchManageTasks(user,
+                    List.of(waiting.getId(), failed.getId()), "pause", null))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("当前状态不支持");
+
+            assertThat(waiting.getStatus()).isEqualTo(CrawlerTask.TaskStatus.WAITING);
+            assertThat(failed.getStatus()).isEqualTo(CrawlerTask.TaskStatus.FAILED);
+            verify(tasks, never()).save(any());
         } finally {
             service.shutdown();
         }

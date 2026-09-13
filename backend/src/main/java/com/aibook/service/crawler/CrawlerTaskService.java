@@ -44,6 +44,7 @@ public class CrawlerTaskService {
     private final ApplicationContext applicationContext;
     private final CrawlerSettingsService crawlerSettingsService;
     private final AtomicLong jobSequence = new AtomicLong();
+    private final AtomicLong queueOrderSequence = new AtomicLong();
     private final Object[] taskLocks = createTaskLocks();
     private final ThreadPoolExecutor executor = new ThreadPoolExecutor(4, 4, 0L, TimeUnit.MILLISECONDS,
             new PriorityBlockingQueue<>(), r -> {
@@ -79,6 +80,60 @@ public class CrawlerTaskService {
                         && Objects.equals(task.getUser().getId(), user.getId())))
                 .map(managementService::taskView)
                 .toList();
+    }
+
+    public synchronized List<TaskView> reorderQueuedTasks(User user, List<String> taskIds) {
+        LinkedHashSet<String> requestedIds = new LinkedHashSet<>(taskIds);
+        if (requestedIds.size() != taskIds.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "任务排序参数包含重复项");
+        }
+        List<CrawlerJob> userJobs = executor.getQueue().stream()
+                .filter(CrawlerJob.class::isInstance)
+                .map(CrawlerJob.class::cast)
+                .sorted()
+                .filter(job -> taskRepository.findById(job.taskId)
+                        .filter(task -> ownedBy(task, user))
+                        .isPresent())
+                .toList();
+        Set<String> queuedIds = userJobs.stream().map(job -> job.taskId).collect(
+                java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        if (!queuedIds.equals(requestedIds)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "等待队列已变化，请刷新后重试");
+        }
+
+        Map<String, CrawlerTask> queuedTasksById = taskIds.stream()
+                .map(id -> managementService.ownedTask(user, id))
+                .collect(java.util.stream.Collectors.toMap(CrawlerTask::getId, task -> task));
+        int previousPriorityRank = -1;
+        for (String taskId : taskIds) {
+            CrawlerTask task = queuedTasksById.get(taskId);
+            if (task.getStatus() != CrawlerTask.TaskStatus.WAITING) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "等待队列已变化，请刷新后重试");
+            }
+            int currentPriorityRank = priorityRank(task.getPriority());
+            if (currentPriorityRank < previousPriorityRank) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "仅支持调整同一优先级内的任务顺序");
+            }
+            previousPriorityRank = currentPriorityRank;
+        }
+
+        Map<String, CrawlerJob> jobsById = userJobs.stream().collect(
+                java.util.stream.Collectors.toMap(job -> job.taskId, job -> job));
+        List<Long> availableQueueOrders = userJobs.stream().map(job -> job.queueOrder).sorted().toList();
+        for (int index = 0; index < taskIds.size(); index++) {
+            String taskId = taskIds.get(index);
+            CrawlerTask task = queuedTasksById.get(taskId);
+            long queueOrder = availableQueueOrders.get(index);
+            task.setQueueOrder(queueOrder);
+            taskRepository.save(task);
+            CrawlerJob queuedJob = jobsById.get(taskId);
+            if (queuedJob != null && executor.remove(queuedJob)) {
+                executor.getQueue().offer(new CrawlerJob(taskId, task.getPriority(), queueOrder,
+                        jobSequence.incrementAndGet()));
+            }
+        }
+        log.info("[采集任务] 等待队列顺序已调整: userId={}, taskIds={}", user.getId(), taskIds);
+        return queuedTasks(user);
     }
 
     public TaskView start(User user, Long siteId, String url) {
@@ -261,6 +316,70 @@ public class CrawlerTaskService {
     }
 
     @Transactional
+    public synchronized int batchManageTasks(User user, List<String> taskIds, String action,
+            CrawlerTask.Priority priority) {
+        LinkedHashSet<String> uniqueIds = new LinkedHashSet<>(taskIds);
+        if (uniqueIds.size() != taskIds.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "批量操作包含重复任务");
+        }
+        List<CrawlerTask> selectedTasks = uniqueIds.stream()
+                .map(id -> managementService.ownedTask(user, id))
+                .toList();
+        validateBatchAction(selectedTasks, action, priority);
+
+        for (CrawlerTask task : selectedTasks) {
+            switch (action) {
+            case "pause", "resume", "cancel" -> command(user, task.getId(), action);
+            case "priority" -> updateTask(user, task.getId(), priority);
+            case "delete" -> deleteTask(user, task.getId());
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的批量任务操作");
+            }
+        }
+        log.info("[采集任务] 批量操作完成: userId={}, action={}, affectedCount={}",
+                user.getId(), action, selectedTasks.size());
+        return selectedTasks.size();
+    }
+
+    private void validateBatchAction(List<CrawlerTask> selectedTasks, String action,
+            CrawlerTask.Priority priority) {
+        if ("priority".equals(action) && priority == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "设置优先级时必须提供优先级");
+        }
+        for (CrawlerTask task : selectedTasks) {
+            CrawlerTask.TaskStatus status = task.getStatus();
+            boolean allowed = switch (action) {
+            case "pause" -> status == CrawlerTask.TaskStatus.RUNNING
+                    || status == CrawlerTask.TaskStatus.WAITING;
+            case "resume" -> (status == CrawlerTask.TaskStatus.PAUSED
+                    || status == CrawlerTask.TaskStatus.FAILED) && !active.contains(task.getId());
+            case "cancel" -> status == CrawlerTask.TaskStatus.RUNNING
+                    || status == CrawlerTask.TaskStatus.WAITING
+                    || status == CrawlerTask.TaskStatus.PAUSED;
+            case "delete" -> status != CrawlerTask.TaskStatus.RUNNING
+                    && (status == CrawlerTask.TaskStatus.WAITING || !active.contains(task.getId()));
+            case "priority" -> status == CrawlerTask.TaskStatus.WAITING
+                    || status == CrawlerTask.TaskStatus.PAUSED
+                    || status == CrawlerTask.TaskStatus.FAILED;
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的批量任务操作");
+            };
+            if (!allowed) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "任务“" + batchTaskName(task) + "”当前状态不支持该批量操作");
+            }
+        }
+    }
+
+    private String batchTaskName(CrawlerTask task) {
+        if (task.getCrawlerBook() != null && task.getCrawlerBook().getBookName() != null) {
+            return task.getCrawlerBook().getBookName();
+        }
+        if (task.getDiscoveryPageName() != null && !task.getDiscoveryPageName().isBlank()) {
+            return task.getDiscoveryPageName();
+        }
+        return task.getId();
+    }
+
+    @Transactional
     public TaskView updateTask(User user, String taskId, CrawlerTask.Priority priority) {
         CrawlerTask task = managementService.ownedTask(user, taskId);
         if (task.getStatus() != CrawlerTask.TaskStatus.WAITING
@@ -328,9 +447,25 @@ public class CrawlerTaskService {
     private void submit(String id) {
         applyConcurrencyLimit(configuredConcurrency());
         if (!active.add(id)) return;
-        CrawlerTask.Priority priority = taskRepository.findById(id).map(CrawlerTask::getPriority).orElse(CrawlerTask.Priority.NORMAL);
-        try { executor.execute(new CrawlerJob(id, priority, jobSequence.incrementAndGet())); }
+        CrawlerTask task = taskRepository.findById(id).orElse(null);
+        if (task == null) {
+            active.remove(id);
+            return;
+        }
+        long queueOrder = task.getQueueOrder() == null ? nextQueueOrder() : task.getQueueOrder();
+        if (task.getQueueOrder() == null) {
+            task.setQueueOrder(queueOrder);
+            taskRepository.save(task);
+        } else {
+            queueOrderSequence.updateAndGet(current -> Math.max(current, queueOrder));
+        }
+        try { executor.execute(new CrawlerJob(id, task.getPriority(), queueOrder, jobSequence.incrementAndGet())); }
         catch (RejectedExecutionException exception) { active.remove(id); throw exception; }
+    }
+
+    private long nextQueueOrder() {
+        long timeBaseline = System.currentTimeMillis() * 1000L;
+        return queueOrderSequence.updateAndGet(current -> Math.max(current + 1L, timeBaseline));
     }
 
     private int configuredConcurrency() {
@@ -359,7 +494,11 @@ public class CrawlerTaskService {
         if (task.getStatus() != CrawlerTask.TaskStatus.WAITING) return;
         for (Runnable queued : executor.getQueue()) {
             if (queued instanceof CrawlerJob job && job.taskId.equals(task.getId()) && executor.remove(queued)) {
-                executor.execute(new CrawlerJob(task.getId(), task.getPriority(), jobSequence.incrementAndGet()));
+                long queueOrder = nextQueueOrder();
+                task.setQueueOrder(queueOrder);
+                taskRepository.save(task);
+                executor.getQueue().offer(new CrawlerJob(task.getId(), task.getPriority(), queueOrder,
+                        jobSequence.incrementAndGet()));
                 return;
             }
         }
@@ -378,14 +517,17 @@ public class CrawlerTaskService {
     private final class CrawlerJob implements Runnable, Comparable<CrawlerJob> {
         private final String taskId;
         private final CrawlerTask.Priority priority;
+        private final long queueOrder;
         private final long sequence;
-        private CrawlerJob(String taskId, CrawlerTask.Priority priority, long sequence) {
-            this.taskId = taskId; this.priority = priority; this.sequence = sequence;
+        private CrawlerJob(String taskId, CrawlerTask.Priority priority, long queueOrder, long sequence) {
+            this.taskId = taskId; this.priority = priority; this.queueOrder = queueOrder; this.sequence = sequence;
         }
         @Override public void run() { try { CrawlerTaskService.this.run(taskId); } finally { active.remove(taskId); } }
         @Override public int compareTo(CrawlerJob other) {
             int rank = Integer.compare(priorityRank(priority), priorityRank(other.priority));
-            return rank == 0 ? Long.compare(sequence, other.sequence) : rank;
+            if (rank != 0) return rank;
+            int queueRank = Long.compare(queueOrder, other.queueOrder);
+            return queueRank == 0 ? Long.compare(sequence, other.sequence) : queueRank;
         }
     }
 
@@ -395,6 +537,7 @@ public class CrawlerTaskService {
             task = taskRepository.findById(taskId).orElse(null);
             if (task == null || task.getStatus() != CrawlerTask.TaskStatus.WAITING) return;
             task.setStatus(CrawlerTask.TaskStatus.RUNNING);
+            task.setQueueOrder(null);
             task.setStartedAt(task.getStartedAt() == null ? LocalDateTime.now() : task.getStartedAt());
             task.setErrorMessage(null);
             taskRepository.save(task);
@@ -882,6 +1025,8 @@ public class CrawlerTaskService {
         List<CrawlerTask> interruptedTasks = new ArrayList<>(taskRepository.findByStatusIn(
                 List.of(CrawlerTask.TaskStatus.RUNNING, CrawlerTask.TaskStatus.WAITING)));
         interruptedTasks.sort(Comparator.comparingInt((CrawlerTask task) -> priorityRank(task.getPriority()))
+                .thenComparingInt(task -> task.getStatus() == CrawlerTask.TaskStatus.RUNNING ? 0 : 1)
+                .thenComparing(CrawlerTask::getQueueOrder, Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(CrawlerTask::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())));
 
         List<CrawlerTask> recoveredTasks = new ArrayList<>();
@@ -954,6 +1099,7 @@ public class CrawlerTaskService {
     private void requireEnabled(CrawlerSite site) { if (!Boolean.TRUE.equals(site.getEnabled())) throw new ResponseStatusException(HttpStatus.CONFLICT, "请先启用该采集网站"); }
     private void requireRule(CrawlerSite site) { if (site.getRule() == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "请先在规则管理中启用一条采集规则"); }
     private void ensureNoActiveTask(CrawlerBook book) { if (taskRepository.existsByCrawlerBookAndStatusIn(book, ACTIVE_STATUSES)) throw new ResponseStatusException(HttpStatus.CONFLICT, "该书已有运行中或暂停的采集任务"); }
+    private boolean ownedBy(CrawlerTask task, User user) { return task.getUser() == user || (user.getId() != null && Objects.equals(task.getUser().getId(), user.getId())); }
     private int priorityRank(CrawlerTask.Priority priority) { return switch (priority) { case HIGH -> 0; case NORMAL -> 1; case LOW -> 2; }; }
     private CrawlerBook.DiscoveryStatus discoveryStatus(CrawlerBook book) { return book.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : book.getDiscoveryStatus(); }
     private int value(Integer value, int fallback) { return value == null ? fallback : value; }
