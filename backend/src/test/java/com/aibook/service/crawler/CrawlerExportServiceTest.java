@@ -10,6 +10,7 @@ import com.aibook.model.entity.CrawlerSite;
 import com.aibook.model.entity.User;
 import com.aibook.model.entity.Tag;
 import com.aibook.model.entity.VersionReadingProgress;
+import com.aibook.model.entity.LibraryChapter;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookVersionRepository;
 import com.aibook.repository.CategoryRepository;
@@ -17,6 +18,7 @@ import com.aibook.repository.CrawlerBookExportRepository;
 import com.aibook.repository.CrawlerBookRepository;
 import com.aibook.repository.CrawlerChapterRepository;
 import com.aibook.repository.VersionReadingProgressRepository;
+import com.aibook.repository.LibraryChapterRepository;
 import com.aibook.repository.TagRepository;
 import com.aibook.service.OperationLogService;
 import org.junit.jupiter.api.Test;
@@ -161,7 +163,8 @@ class CrawlerExportServiceTest {
         });
         when(progresses.findByUserAndVersion(user, oldVersion)).thenReturn(Optional.of(oldProgress));
         CrawlerExportService service = new CrawlerExportService(management, chapters, exports,
-                crawlerBooks, books, mock(CategoryRepository.class), mock(TagRepository.class),
+                crawlerBooks, books, mock(LibraryChapterRepository.class),
+                mock(CategoryRepository.class), mock(TagRepository.class),
                 versions, progresses, mock(OperationLogService.class));
         ReflectionTestUtils.setField(service, "storagePath", temporaryDirectory.toString());
         ReflectionTestUtils.setField(service, "uploadPath", temporaryDirectory.resolve("uploads").toString());
@@ -224,7 +227,7 @@ class CrawlerExportServiceTest {
             return saved;
         });
         CrawlerExportService service = new CrawlerExportService(management, chapters, exports,
-                crawlerBooks, books, categories, tags,
+                crawlerBooks, books, mock(LibraryChapterRepository.class), categories, tags,
                 versions, mock(VersionReadingProgressRepository.class),
                 mock(OperationLogService.class));
         ReflectionTestUtils.setField(service, "storagePath", temporaryDirectory.toString());
@@ -244,11 +247,63 @@ class CrawlerExportServiceTest {
         verify(crawlerBooks).save(crawlerBook);
     }
 
+    @Test
+    void importsStructuredSnapshotWithoutGeneratingBookFile() {
+        User user = User.builder().id(1L).username("owner").build();
+        CrawlerBook crawlerBook = book(user);
+        crawlerBook.setExternalBookId("book-3");
+        CrawlerChapter first = CrawlerChapter.builder().crawlerBook(crawlerBook)
+                .externalChapterId("chapter-1").chapterIndex(1).chapterName("第一章")
+                .content("正文一").contentHash("hash-1").wordCount(3).build();
+        CrawlerChapter second = CrawlerChapter.builder().crawlerBook(crawlerBook)
+                .externalChapterId("chapter-2").chapterIndex(2).chapterName("第二章")
+                .content("正文二").contentHash("hash-2").wordCount(3).build();
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        CrawlerChapterRepository chapters = mock(CrawlerChapterRepository.class);
+        CrawlerBookExportRepository exports = mock(CrawlerBookExportRepository.class);
+        CrawlerBookRepository crawlerBooks = mock(CrawlerBookRepository.class);
+        BookRepository books = mock(BookRepository.class);
+        BookVersionRepository versions = mock(BookVersionRepository.class);
+        LibraryChapterRepository libraryChapters = mock(LibraryChapterRepository.class);
+        AtomicReference<Book> savedBook = new AtomicReference<>();
+        AtomicReference<BookVersion> savedVersion = new AtomicReference<>();
+        AtomicReference<List<LibraryChapter>> snapshot = new AtomicReference<>();
+        when(management.ownedBook(user, 3L)).thenReturn(crawlerBook);
+        when(chapters.findByCrawlerBookOrderByChapterIndexAsc(crawlerBook))
+                .thenReturn(List.of(first, second));
+        when(books.save(any(Book.class))).thenAnswer(invocation -> {
+            Book value = invocation.getArgument(0); value.setId(20L); savedBook.set(value); return value;
+        });
+        when(versions.save(any(BookVersion.class))).thenAnswer(invocation -> {
+            BookVersion value = invocation.getArgument(0); value.setId(30L); savedVersion.set(value); return value;
+        });
+        when(libraryChapters.saveAll(anyList())).thenAnswer(invocation -> {
+            snapshot.set(new ArrayList<>(invocation.getArgument(0))); return invocation.getArgument(0);
+        });
+        CrawlerExportService service = new CrawlerExportService(management, chapters, exports,
+                crawlerBooks, books, libraryChapters, mock(CategoryRepository.class),
+                mock(TagRepository.class), versions, mock(VersionReadingProgressRepository.class),
+                mock(OperationLogService.class));
+
+        Long bookId = service.importLibrary(user, crawlerBook.getId(), List.of("STRUCTURED"));
+
+        assertThat(bookId).isEqualTo(20L);
+        assertThat(savedBook.get().getFormat()).isEqualTo("structured");
+        assertThat(savedBook.get().getFilePath()).startsWith("structured://crawler/3/");
+        assertThat(savedVersion.get().getPrimaryVersion()).isTrue();
+        assertThat(snapshot.get()).extracting(LibraryChapter::getTitle)
+                .containsExactly("第一章", "第二章");
+        assertThat(snapshot.get()).extracting(LibraryChapter::getChapterIndex)
+                .containsExactly(0, 1);
+        verifyNoInteractions(exports);
+    }
+
     private CrawlerExportService service(CrawlerManagementService management,
             CrawlerChapterRepository chapters, CrawlerBookExportRepository exports) {
         CrawlerExportService service = new CrawlerExportService(management, chapters, exports,
                 mock(CrawlerBookRepository.class), mock(BookRepository.class),
-                mock(CategoryRepository.class), mock(TagRepository.class), mock(BookVersionRepository.class),
+                mock(LibraryChapterRepository.class), mock(CategoryRepository.class),
+                mock(TagRepository.class), mock(BookVersionRepository.class),
                 mock(VersionReadingProgressRepository.class),
                 mock(OperationLogService.class));
         ReflectionTestUtils.setField(service, "storagePath", temporaryDirectory.toString());

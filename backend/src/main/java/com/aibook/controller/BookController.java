@@ -21,6 +21,7 @@ import com.aibook.service.BookVersionRebuildTaskService;
 import com.aibook.service.BookVersionService;
 import com.aibook.service.OperationLogService;
 import com.aibook.service.RandomBookCoverService;
+import com.aibook.service.StructuredPublicationService;
 import com.aibook.service.TxtParserService;
 import com.aibook.service.UserService;
 import com.aibook.service.scraper.BatchScrapeTaskService;
@@ -80,6 +81,7 @@ public class BookController {
     private final BookVersionRebuildTaskService bookVersionRebuildTaskService;
     private final OperationLogService operationLogService;
     private final BookHtmlSanitizer bookHtmlSanitizer;
+    private final StructuredPublicationService structuredPublicationService;
 
     /**
      * 获取书籍列表
@@ -299,6 +301,9 @@ public class BookController {
         User user = userService.findByUsername(authentication.getName());
         Book book = bookService.getBookEntity(id, user);
         BookVersion version = bookVersionService.resolveVersion(book, versionId);
+        if (structuredPublicationService.supports(version)) {
+            return ResponseEntity.ok(structuredPublicationService.tableOfContents(version));
+        }
         return ResponseEntity.ok(bookParsingService.getTableOfContents(
                 bookVersionService.toReadableBook(book, version)));
     }
@@ -497,6 +502,10 @@ public class BookController {
         User user = userService.findByUsername(authentication.getName());
         Book book = bookService.getBookEntity(id, user);
         BookVersion version = bookVersionService.resolveVersion(book, versionId);
+
+        if (structuredPublicationService.supports(version)) {
+            return ResponseEntity.ok(structuredPublicationService.processedContent(version));
+        }
 
         Path filePath = Paths.get(version.getFilePath());
         if (!Files.exists(filePath)) {

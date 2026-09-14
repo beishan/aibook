@@ -29,6 +29,7 @@ public class CrawlerExportService {
     private final CrawlerBookExportRepository exportRepository;
     private final CrawlerBookRepository crawlerBookRepository;
     private final BookRepository bookRepository;
+    private final LibraryChapterRepository libraryChapterRepository;
     private final CategoryRepository categoryRepository;
     private final TagRepository tagRepository;
     private final BookVersionRepository versionRepository;
@@ -93,14 +94,17 @@ public class CrawlerExportService {
     @Transactional
     public Long importLibrary(User user, Long bookId, List<String> requestedFormats) {
         CrawlerBook crawlerBook = managementService.ownedBook(user, bookId);
-        int availableChapterCount = availableChapters(crawlerBook).size();
+        List<CrawlerChapter> chapters = availableChapters(crawlerBook);
+        int availableChapterCount = chapters.size();
         if (availableChapterCount == 0) throw new ResponseStatusException(
                 HttpStatus.CONFLICT, "书籍还没有可用正文，不能生成或加入书库");
         LinkedHashSet<String> formats = normalizeFormats(requestedFormats);
         if (crawlerBook.getLibraryBook() != null) {
-            formats.forEach(format -> addSecondaryVersion(crawlerBook, format));
             syncImportedBook(user, bookId, formats);
             return crawlerBook.getLibraryBook().getId();
+        }
+        if (formats.contains("STRUCTURED")) {
+            return importStructured(user, crawlerBook, chapters, formats);
         }
         String format = formats.contains("EPUB") ? "EPUB" : formats.getFirst();
         generate(user, bookId, List.of(format));
@@ -145,12 +149,46 @@ public class CrawlerExportService {
         LinkedHashSet<String> formats = new LinkedHashSet<>();
         for (String requested : requestedFormats) {
             String format = requested == null ? "" : requested.toUpperCase(Locale.ROOT);
-            if (!Set.of("TXT", "EPUB").contains(format)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "仅支持 TXT 或 EPUB 入库");
+            if (!Set.of("STRUCTURED", "TXT", "EPUB").contains(format)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "仅支持结构化章节、TXT 或 EPUB 入库");
             }
             formats.add(format);
         }
         return formats;
+    }
+
+    private Long importStructured(User user, CrawlerBook crawlerBook,
+            List<CrawlerChapter> chapters, LinkedHashSet<String> formats) {
+        String sourceHash = structuredHash(crawlerBook, chapters);
+        String sourceUri = structuredUri(crawlerBook, sourceHash);
+        long contentSize = structuredSize(chapters);
+        Book book = Book.builder().title(crawlerBook.getBookName()).author(crawlerBook.getAuthor())
+                .description(crawlerBook.getDescription()).coverUrl(crawlerBook.getCoverUrl())
+                .sourceBookStatus(crawlerBook.getBookStatus())
+                .format("structured").filePath(sourceUri).fileSize(contentSize)
+                .fileHash(sourceHash).sourceType(Book.SourceType.CRAWLER).user(user)
+                .chapterCount(chapters.size()).build();
+        applyLibraryMetadata(book, crawlerBook, user);
+        book = bookRepository.save(book);
+        BookVersion version = versionRepository.save(BookVersion.builder().book(book)
+                .displayName(safe(crawlerBook.getBookName()) + ".在线章节")
+                .format("structured").filePath(sourceUri).fileSize(contentSize)
+                .fileHash(sourceHash).primaryVersion(true).chapterCount(chapters.size())
+                .sourceType("CRAWLER").sourceId(crawlerBook.getId().toString())
+                .sourceSite(crawlerBook.getSite().getSiteCode())
+                .sourceUrl(crawlerBook.getBookUrl()).build());
+        saveChapterSnapshot(version, chapters);
+        crawlerBook.setLibraryBook(book);
+        crawlerBook.setImportStatus(CrawlerBook.ImportStatus.IMPORTED);
+        crawlerBook.setAutoSyncLibrary(true);
+        crawlerBookRepository.save(crawlerBook);
+        formats.stream().filter(format -> !"STRUCTURED".equals(format))
+                .forEach(format -> addSecondaryVersion(crawlerBook, format));
+        recordOperation(user, crawlerBook, "采集书籍结构化入库：" + crawlerBook.getBookName(),
+                "未生成主阅读文件；可用章节：" + chapters.size() + "/"
+                        + value(crawlerBook.getChapterCount()) + "；书库ID：" + book.getId());
+        return book.getId();
     }
 
     private void addSecondaryVersion(CrawlerBook crawlerBook, String format) {
@@ -197,16 +235,28 @@ public class CrawlerExportService {
         applyLibraryMetadata(libraryBook, crawlerBook, user);
         bookRepository.save(libraryBook);
         List<BookVersion> versions = versionRepository.findByBookOrderByPrimaryVersionDescCreatedAtAsc(libraryBook);
-        LinkedHashSet<String> formats = new LinkedHashSet<>();
-        formats.add(libraryBook.getFormat().toUpperCase(Locale.ROOT));
-        versions.stream()
-                .filter(version -> "CRAWLER".equals(version.getSourceType()))
-                .filter(version -> crawlerBook.getId().toString().equals(version.getSourceId()))
-                .map(BookVersion::getFormat).map(value -> value.toUpperCase(Locale.ROOT))
-                .filter(value -> Set.of("EPUB", "TXT").contains(value)).forEach(formats::add);
-        if (selectedFormats != null) formats.retainAll(normalizeFormats(selectedFormats));
+        LinkedHashSet<String> formats;
+        if (selectedFormats != null) {
+            formats = normalizeFormats(selectedFormats);
+        } else {
+            formats = new LinkedHashSet<>();
+            formats.add(libraryBook.getFormat().toUpperCase(Locale.ROOT));
+            versions.stream()
+                    .filter(version -> "CRAWLER".equals(version.getSourceType()))
+                    .filter(version -> crawlerBook.getId().toString().equals(version.getSourceId()))
+                    .map(BookVersion::getFormat).map(value -> value.toUpperCase(Locale.ROOT))
+                    .filter(value -> Set.of("STRUCTURED", "EPUB", "TXT").contains(value))
+                    .forEach(formats::add);
+        }
         int published = 0;
         for (String format : formats) {
+            if ("STRUCTURED".equals(format)) {
+                if (publishStructuredVersion(crawlerBook, libraryBook, versions)) {
+                    versions = versionRepository.findByBookOrderByPrimaryVersionDescCreatedAtAsc(libraryBook);
+                    published++;
+                }
+                continue;
+            }
             generate(crawlerBook.getSite().getUser(), crawlerBook.getId(), List.of(format));
             CrawlerBookExport export = exportRepository.findByCrawlerBookAndFormat(crawlerBook, format).orElseThrow();
             Optional<BookVersion> current = versions.stream()
@@ -222,6 +272,89 @@ public class CrawlerExportService {
             published++;
         }
         return published;
+    }
+
+    private boolean publishStructuredVersion(CrawlerBook crawlerBook, Book libraryBook,
+            List<BookVersion> versions) {
+        List<CrawlerChapter> chapters = availableChapters(crawlerBook);
+        validateHasContent(chapters);
+        String sourceHash = structuredHash(crawlerBook, chapters);
+        Optional<BookVersion> current = versions.stream()
+                .filter(version -> "structured".equalsIgnoreCase(version.getFormat()))
+                .filter(version -> "CRAWLER".equals(version.getSourceType()))
+                .filter(version -> crawlerBook.getId().toString().equals(version.getSourceId()))
+                .max(Comparator.comparing(BookVersion::getId));
+        if (current.filter(version -> sourceHash.equals(version.getFileHash())).isPresent()) {
+            return false;
+        }
+        BookVersion previousPrimary = versions.stream()
+                .filter(version -> Boolean.TRUE.equals(version.getPrimaryVersion()))
+                .findFirst().orElse(null);
+        versions.stream().filter(version -> Boolean.TRUE.equals(version.getPrimaryVersion()))
+                .forEach(version -> {
+                    version.setPrimaryVersion(false);
+                    versionRepository.save(version);
+                });
+        String sourceUri = structuredUri(crawlerBook, sourceHash);
+        long contentSize = structuredSize(chapters);
+        BookVersion version = versionRepository.save(BookVersion.builder().book(libraryBook)
+                .displayName(safe(crawlerBook.getBookName()) + "-" + chapters.size() + "章.在线章节")
+                .format("structured").filePath(sourceUri).fileSize(contentSize)
+                .fileHash(sourceHash).primaryVersion(true).chapterCount(chapters.size())
+                .sourceType("CRAWLER").sourceId(crawlerBook.getId().toString())
+                .sourceSite(crawlerBook.getSite().getSiteCode())
+                .sourceUrl(crawlerBook.getBookUrl()).build());
+        saveChapterSnapshot(version, chapters);
+        libraryBook.setFormat("structured");
+        libraryBook.setFilePath(sourceUri);
+        libraryBook.setFileSize(contentSize);
+        libraryBook.setFileHash(sourceHash);
+        libraryBook.setChapterCount(chapters.size());
+        bookRepository.save(libraryBook);
+        migrateProgress(previousPrimary, version);
+        return true;
+    }
+
+    private void saveChapterSnapshot(BookVersion version, List<CrawlerChapter> chapters) {
+        List<LibraryChapter> snapshots = new ArrayList<>(chapters.size());
+        Set<String> usedKeys = new HashSet<>();
+        for (int index = 0; index < chapters.size(); index++) {
+            CrawlerChapter chapter = chapters.get(index);
+            String baseKey = defaultString(chapter.getExternalChapterId(),
+                    defaultString(chapter.getChapterUrl(), "chapter-" + index));
+            if (baseKey.length() > 500) baseKey = sha256(baseKey);
+            String key = baseKey;
+            for (int duplicate = 2; !usedKeys.add(key); duplicate++) {
+                key = baseKey.length() > 490
+                        ? sha256(baseKey + ":" + duplicate)
+                        : baseKey + "-" + duplicate;
+            }
+            String content = chapter.getContent().trim();
+            String contentHash = chapter.getContentHash();
+            if (contentHash == null || !contentHash.matches("[a-fA-F0-9]{64}")) {
+                contentHash = sha256(content);
+            }
+            snapshots.add(LibraryChapter.builder().bookVersion(version).chapterKey(key)
+                    .chapterIndex(index).title(chapter.getChapterName()).content(content)
+                    .contentHash(contentHash.toLowerCase(Locale.ROOT))
+                    .wordCount(chapter.getWordCount() == null ? content.length() : chapter.getWordCount())
+                    .build());
+        }
+        libraryChapterRepository.saveAll(snapshots);
+    }
+
+    private String structuredHash(CrawlerBook book, List<CrawlerChapter> chapters) {
+        return sha256("structured:" + book.getSite().getId() + ":" + book.getExternalBookId()
+                + ":" + sourceHash(book, chapters, "STRUCTURED"));
+    }
+
+    private String structuredUri(CrawlerBook book, String sourceHash) {
+        return "structured://crawler/" + book.getId() + "/" + sourceHash;
+    }
+
+    private long structuredSize(List<CrawlerChapter> chapters) {
+        return chapters.stream().map(CrawlerChapter::getContent).filter(Objects::nonNull)
+                .mapToLong(content -> content.getBytes(StandardCharsets.UTF_8).length).sum();
     }
 
     private void publishVersion(CrawlerBook crawlerBook, Book libraryBook, List<BookVersion> versions,

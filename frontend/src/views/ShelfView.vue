@@ -252,7 +252,7 @@
               <div class="book-title">{{ book.title }}</div>
               <div class="book-author">{{ book.author || '未知作者' }}</div>
               <div v-if="viewMode === 'list'" class="book-meta">
-                <span class="book-format">{{ book.format?.toUpperCase() }}</span>
+                <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
                 <span>加入于 {{ formatShelfDate(book.shelfAddedAt) }}</span>
               </div>
             </div>
@@ -319,7 +319,7 @@
             <div class="book-title">{{ book.title }}</div>
             <div class="book-author">{{ book.author || '未知作者' }}</div>
             <div v-if="viewMode === 'list'" class="book-meta">
-              <span class="book-format">{{ book.format?.toUpperCase() }}</span>
+              <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
               <span v-if="book.publisher">{{ book.publisher }}</span>
             </div>
           </div>
@@ -380,7 +380,7 @@
             <div class="book-title">{{ book.title }}</div>
             <div class="book-author">{{ book.author || '未知作者' }}</div>
             <div v-if="viewMode === 'list'" class="book-meta">
-              <span class="book-format">{{ book.format?.toUpperCase() }}</span>
+              <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
               <span v-if="book.publisher">{{ book.publisher }}</span>
             </div>
           </div>
@@ -433,7 +433,7 @@
             <div class="book-title">{{ book.title }}</div>
             <div class="book-author">{{ book.author || '未知作者' }}</div>
             <div v-if="viewMode === 'list'" class="book-meta">
-              <span class="book-format">{{ book.format?.toUpperCase() }}</span>
+              <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
               <span v-if="book.publisher">{{ book.publisher }}</span>
             </div>
           </div>
@@ -483,7 +483,7 @@
             <div class="book-title">{{ book.title }}</div>
             <div class="book-author">{{ book.author || '未知作者' }}</div>
             <div v-if="viewMode === 'list'" class="book-meta">
-              <span class="book-format">{{ book.format?.toUpperCase() }}</span>
+              <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
               <span v-if="book.publisher">{{ book.publisher }}</span>
             </div>
           </div>

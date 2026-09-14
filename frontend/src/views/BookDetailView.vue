@@ -312,7 +312,7 @@
             @keyup.enter="selectVersion(version.id)"
             @keyup.space.prevent="selectVersion(version.id)"
           >
-            <div class="version-format">{{ version.format.toUpperCase() }}</div>
+            <div class="version-format">{{ version.format === 'structured' ? '在线章节' : version.format.toUpperCase() }}</div>
             <div class="version-content">
               <strong>{{ version.displayName }}</strong>
               <span>

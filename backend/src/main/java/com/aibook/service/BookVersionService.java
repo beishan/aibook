@@ -7,6 +7,7 @@ import com.aibook.model.entity.VersionReadingProgress;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookVersionRepository;
 import com.aibook.repository.ReadingProgressRepository;
+import com.aibook.repository.LibraryChapterRepository;
 import com.aibook.repository.VersionReadingProgressRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,6 +42,7 @@ public class BookVersionService {
     private final BookRepository bookRepository;
     private final ReadingProgressRepository readingProgressRepository;
     private final VersionReadingProgressRepository versionProgressRepository;
+    private final LibraryChapterRepository libraryChapterRepository;
     private final TxtParserService txtParserService;
     private final ObjectMapper objectMapper;
 
@@ -224,6 +226,7 @@ public class BookVersionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "原始版本不能删除");
         }
         versionProgressRepository.deleteByVersion(version);
+        libraryChapterRepository.deleteByBookVersion(version);
         bookVersionRepository.delete(version);
     }
 
@@ -287,6 +290,9 @@ public class BookVersionService {
     private String resolvePrimaryDisplayName(Book book, String uploadedFilename) {
         if (uploadedFilename != null && !uploadedFilename.isBlank()) {
             return safeFilename(uploadedFilename);
+        }
+        if ("structured".equalsIgnoreCase(book.getFormat())) {
+            return book.getTitle() + ".在线章节";
         }
         String storedFilename = Paths.get(book.getFilePath()).getFileName().toString();
         if (!isGeneratedStorageFilename(storedFilename)) {

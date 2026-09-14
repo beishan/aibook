@@ -63,7 +63,7 @@ public final class CrawlerDtos {
             LocalDateTime lastScanAt, LocalDateTime createdAt) { }
     public record ExportRequest(@NotEmpty List<@Pattern(regexp = "(?i)TXT|EPUB") String> formats) { }
     public record ImportRequest(
-            @NotEmpty List<@Pattern(regexp = "(?i)TXT|EPUB") String> formats) { }
+            @NotEmpty List<@Pattern(regexp = "(?i)STRUCTURED|TXT|EPUB") String> formats) { }
     public record BookCrawlStatusRequest(
             @NotBlank @Pattern(regexp = "DISCOVERED|WAITING|PAUSED|PARTIAL_SUCCESS|COMPLETED|FAILED") String status,
             Boolean autoUpdateEnabled) { }

@@ -56,6 +56,7 @@
           <template #prefix><span class="filter-select-label">格式</span></template>
           <el-option label="全部格式" value="" />
           <el-option label="EPUB" value="epub" />
+          <el-option label="在线章节" value="structured" />
           <el-option label="PDF" value="pdf" />
           <el-option label="TXT" value="txt" />
           <el-option label="MOBI" value="mobi" />
@@ -399,7 +400,7 @@
           <div class="book-list-author">{{ row.author || '未知作者' }}</div>
         </div>
         <div class="book-list-meta">
-          <span class="tag tag-info">{{ row.format.toUpperCase() }}</span>
+          <span class="tag tag-info">{{ row.format === 'structured' ? '在线章节' : row.format.toUpperCase() }}</span>
           <span class="tag" :class="getStatusClass(row.readingStatus)">
             {{ getStatusText(row.readingStatus) }}
           </span>
@@ -727,7 +728,7 @@ const getCardMetaLabel = (book: Book) => {
   }
 
   if (book.format?.trim()) {
-    parts.push(book.format.trim().toUpperCase())
+    parts.push(book.format.trim() === 'structured' ? '在线章节' : book.format.trim().toUpperCase())
   }
 
   const category = (book.categoryPath || book.categoryName)?.trim()

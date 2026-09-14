@@ -32,7 +32,7 @@
                 class="reader-version-badge"
                 :title="selectedVersion.displayName"
               >
-                {{ selectedVersion.format.toUpperCase() }}
+                {{ formatLabel(selectedVersion.format) }}
               </span>
             </div>
             <span
@@ -294,7 +294,7 @@
           <div v-if="book.format === 'epub'" ref="epubContainer" class="epub-container"></div>
 
           <!-- TXT / MD 阅读器 -->
-          <div v-else-if="book.format === 'txt' || book.format === 'md'" class="reader-text" :style="contentStyle">
+          <div v-else-if="isTextFormat(book.format)" class="reader-text" :style="contentStyle">
             <template v-for="(paragraph, localIndex) in currentPageContent" :key="localIndex">
               <div v-if="isChapterTitle(paragraph)" class="chapter-title" :id="'chapter-' + getOriginalIndex(localIndex)" :data-reader-index="getOriginalIndex(localIndex)">
                 {{ paragraph }}
@@ -589,7 +589,7 @@
                     </button>
                   </label>
                 </div>
-                <div class="form-group" v-if="book?.format === 'txt' || book?.format === 'md'">
+                <div class="form-group" v-if="isTextFormat(book?.format)">
                   <label class="form-label toggle-label">
                     <span>翻页模式</span>
                     <button class="toggle-switch" :class="{ on: isPaginationMode }" @click="togglePaginationMode">
@@ -857,6 +857,9 @@ const withVersion = (url: string) => {
   return `${url}${separator}versionId=${selectedVersionId.value}`
 }
 
+const isTextFormat = (format?: string) => ['txt', 'md', 'structured'].includes(format || '')
+const formatLabel = (format?: string) => format === 'structured' ? '在线章节' : (format || '').toUpperCase()
+
 // 字体选项
 const builtInFontOptions = [
   { value: 'default', label: '默认', preview: 'inherit' },
@@ -976,7 +979,7 @@ const pageProgressLabel = computed(() => {
   if (book.value?.format === 'pdf') {
     return `${pdfCurrentPage.value}/${Math.max(pdfTotalPages.value, 1)}`
   }
-  if ((book.value?.format === 'txt' || book.value?.format === 'md') && isPaginationMode.value) {
+  if (isTextFormat(book.value?.format) && isPaginationMode.value) {
     return `${Math.min(currentPage.value + 1, Math.max(totalPages.value, 1))}/${Math.max(totalPages.value, 1)}`
   }
   if (book.value?.format === 'epub' && epubPageNumbers.value) {
@@ -1077,7 +1080,7 @@ const readerHeaderStyle = computed(() => ({
 // 两屏模式下的内容样式（仅用于 TXT/MD）
 const contentStyle = computed(() => {
   const isDoubleScreen = settings.value.screenMode === 'double'
-  const isTxtOrMd = book.value?.format === 'txt' || book.value?.format === 'md'
+  const isTxtOrMd = isTextFormat(book.value?.format)
   if (!isTxtOrMd) return {}
   return {
     columnCount: isDoubleScreen ? 2 : 1,
@@ -1334,7 +1337,7 @@ const showSidePanel = computed(() =>
   showSearch.value || showToc.value || showBookmarks.value || showHighlights.value,
 )
 const supportsPageTurning = computed(() =>
-  ['epub', 'txt', 'md', 'html', 'pdf'].includes(book.value?.format || '')
+  ['epub', 'txt', 'md', 'structured', 'html', 'pdf'].includes(book.value?.format || '')
 )
 const showPageNavigation = computed(() =>
   supportsPageTurning.value && !showSidePanel.value && !showSettings.value
@@ -1342,7 +1345,7 @@ const showPageNavigation = computed(() =>
 const canGoPrevious = computed(() => {
   if (book.value?.format === 'epub') return true
   if (book.value?.format === 'pdf') return pdfCurrentPage.value > 1
-  if ((book.value?.format === 'txt' || book.value?.format === 'md') && isPaginationMode.value) {
+  if (isTextFormat(book.value?.format) && isPaginationMode.value) {
     return currentPage.value > 0
   }
   return scrollCurrentPage.value > 1
@@ -1350,7 +1353,7 @@ const canGoPrevious = computed(() => {
 const canGoNext = computed(() => {
   if (book.value?.format === 'epub') return true
   if (book.value?.format === 'pdf') return pdfCurrentPage.value < pdfTotalPages.value
-  if ((book.value?.format === 'txt' || book.value?.format === 'md') && isPaginationMode.value) {
+  if (isTextFormat(book.value?.format) && isPaginationMode.value) {
     return currentPage.value < totalPages.value - 1
   }
   return scrollCurrentPage.value < scrollTotalPages.value
@@ -1406,7 +1409,7 @@ const loadBook = async () => {
     ]
 
     // 根据格式加载内容
-    if (book.value.format === 'txt' || book.value.format === 'md') {
+    if (isTextFormat(book.value.format)) {
       accessoryPromises.push(loadTextContent())
     } else if (book.value.format === 'html') {
       accessoryPromises.push(loadHtmlContent())
@@ -1467,7 +1470,7 @@ const applyRequestedChapter = async () => {
     ? route.query.chapterTitle
     : ''
 
-  if ((book.value.format === 'txt' || book.value.format === 'md') && chapterTitle) {
+  if (isTextFormat(book.value.format) && chapterTitle) {
     const chapter = tocItems.value.find(item => item.title === chapterTitle)
     if (chapter) await jumpToTextChapter(chapter, 'auto')
   }
@@ -1607,7 +1610,7 @@ const captureDocumentSelection = () => {
     const range = selection.getRangeAt(0)
     const reader = document.querySelector<HTMLElement>('.reader-body')
     if (!reader || !reader.contains(range.commonAncestorContainer)) return
-    if (book.value?.format === 'txt' || book.value?.format === 'md') {
+    if (isTextFormat(book.value?.format)) {
       const startBlock = closestReaderBlock(range.startContainer)
       const endBlock = closestReaderBlock(range.endContainer)
       if (!startBlock || !endBlock) return
@@ -2128,9 +2131,12 @@ const mapChaptersToParagraphs = (
   const paragraphs = splitTextIntoParagraphs(processedText)
   const result: Chapter[] = []
 
+  let searchFrom = 0
   for (const ch of backendChapters) {
     const titleTrimmed = ch.title.trim()
-    const paraIndex = paragraphs.findIndex(p => p.trim() === titleTrimmed)
+    const relativeIndex = paragraphs.slice(searchFrom)
+      .findIndex(p => p.trim() === titleTrimmed)
+    const paraIndex = relativeIndex < 0 ? -1 : searchFrom + relativeIndex
     if (paraIndex >= 0) {
       result.push({
         title: titleTrimmed,
@@ -2139,6 +2145,7 @@ const mapChaptersToParagraphs = (
         endIndex: ch.endIndex,
         label: titleTrimmed
       })
+      searchFrom = paraIndex + 1
     }
   }
 
@@ -2819,7 +2826,7 @@ const runSearchNow = async () => {
   searchCompleted.value = false
   try {
     let results: ReaderSearchResult[] = []
-    if (book.value.format === 'txt' || book.value.format === 'md') {
+    if (isTextFormat(book.value.format)) {
       results = searchPlainText(query)
     } else if (book.value.format === 'html') {
       results = searchHtml(query)
@@ -2886,7 +2893,7 @@ const revealDocumentSearchRange = (range: Range | null) => {
 const goToSearchResult = async (result: ReaderSearchResult) => {
   activeSearchResultId.value = result.id
   clearCurrentSearchHighlight()
-  if ((book.value?.format === 'txt' || book.value?.format === 'md')
+  if (isTextFormat(book.value?.format)
       && result.paragraphIndex !== undefined) {
     if (isPaginationMode.value) {
       goToPage(Math.floor(result.paragraphIndex / calculatePageSize()))
@@ -2985,7 +2992,7 @@ const goToTocItem = async (item: Chapter | any) => {
     currentChapterName.value = item.title
     currentTocHref.value = item.href
     await activeEpubEngine.goTo({ href: item.href, title: item.title })
-  } else if (book.value?.format === 'txt' || book.value?.format === 'md') {
+  } else if (isTextFormat(book.value?.format)) {
     await jumpToTextChapter(item)
   } else if (book.value?.format === 'pdf' && item.page) {
     await pdfReader.value?.goToPage(item.page)
@@ -3010,7 +3017,7 @@ const turnPrevious = () => {
     pdfReader.value?.previous()
     return
   }
-  if ((book.value?.format === 'txt' || book.value?.format === 'md') && isPaginationMode.value) {
+  if (isTextFormat(book.value?.format) && isPaginationMode.value) {
     prevTextPage()
     return
   }
@@ -3028,7 +3035,7 @@ const turnNext = () => {
     pdfReader.value?.next()
     return
   }
-  if ((book.value?.format === 'txt' || book.value?.format === 'md') && isPaginationMode.value) {
+  if (isTextFormat(book.value?.format) && isPaginationMode.value) {
     nextTextPage()
     return
   }
