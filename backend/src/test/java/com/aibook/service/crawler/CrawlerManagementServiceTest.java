@@ -3,6 +3,7 @@ package com.aibook.service.crawler;
 import com.aibook.dto.crawler.CrawlerDtos.RulePayload;
 import com.aibook.dto.crawler.CrawlerDtos.SitePayload;
 import com.aibook.dto.crawler.CrawlerDtos.ProxyPayload;
+import com.aibook.dto.crawler.CrawlerDtos.ContentMarkerPayload;
 import com.aibook.model.entity.CrawlerBook;
 import com.aibook.model.entity.CrawlerChapter;
 import com.aibook.model.entity.CrawlerSite;
@@ -166,9 +167,13 @@ class CrawlerManagementServiceTest {
         var result = service.createSite(user, new SitePayload("特征站", "marker-demo", "https://example.com",
                 null, false, false, false, true, false, 1500, 1000, 1,
                 "UTF-8", List.of(), 360, 30, 3, "EPUB",
-                List.of(" VIP 专属 ", "VIP 专属", "请登录后阅读")));
+                List.of(new ContentMarkerPayload(" VIP 专属 ", "FAILED"),
+                        new ContentMarkerPayload("VIP 专属", "FAILED"),
+                        new ContentMarkerPayload("请登录后阅读", "PENDING_RELEASE"))));
 
-        assertThat(result.contentFailureMarkers()).containsExactly("VIP 专属", "请登录后阅读");
+        assertThat(result.contentMarkers()).containsExactly(
+                new ContentMarkerPayload("VIP 专属", "FAILED"),
+                new ContentMarkerPayload("请登录后阅读", "PENDING_RELEASE"));
     }
 
     @Test

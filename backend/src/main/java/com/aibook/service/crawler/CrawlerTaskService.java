@@ -2,10 +2,13 @@ package com.aibook.service.crawler;
 
 import com.aibook.dto.crawler.CrawlerDtos.TaskQueueSettingsView;
 import com.aibook.dto.crawler.CrawlerDtos.TaskView;
+import com.aibook.dto.crawler.CrawlerDtos.ContentMarkerPayload;
 import com.aibook.model.entity.*;
 import com.aibook.repository.*;
 import com.aibook.service.CrawlerSettingsService;
 import com.aibook.service.OperationLogService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +32,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @RequiredArgsConstructor
 @Slf4j
 public class CrawlerTaskService {
+    private static final ObjectMapper CONTENT_MARKER_MAPPER = new ObjectMapper();
     private final CrawlerSiteRepository siteRepository;
     private final CrawlerDiscoveryPageRepository discoveryPageRepository;
     private final CrawlerBookRepository bookRepository;
@@ -773,10 +777,38 @@ public class CrawlerTaskService {
                     continue;
                 }
                 BookCrawlerParser.ParsedContent parsed = parser.parseChapter(response.html(), chapter.getChapterUrl(), rule);
-                String failureMarker = matchedContentFailureMarker(site, parsed.content());
-                if (failureMarker != null) {
+                ContentMarkerMatch contentMarker = matchedContentMarker(site, parsed.content());
+                if (contentMarker != null && contentMarker.status() == ContentMarkerStatus.PENDING_RELEASE) {
+                    if (parsed.title() != null && !parsed.title().isBlank()) {
+                        chapter.setChapterName(parsed.title());
+                    }
                     chapter.setAccessStatus(CrawlerChapter.AccessStatus.LOCKED);
-                    throw new IllegalStateException("正文命中未拉取特征：" + shortText(failureMarker, 100));
+                    chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.PENDING_RELEASE);
+                    chapter.setCrawlTime(LocalDateTime.now());
+                    chapter.setErrorMessage("正文待开放，命中特征：" + shortText(contentMarker.marker(), 100));
+                    chapter.setSourceEtag(null); chapter.setSourceLastModified(null);
+                    if (!hadParsedContent) {
+                        chapter.setContent(null); chapter.setContentHash(null);
+                        chapter.setOriginalHtml(null); chapter.setWordCount(0);
+                    }
+                    chapterRepository.save(chapter);
+                    log.info("[采集任务] 章节正文待开放: taskId={}, book={}, chapter={}, marker={}",
+                            task.getId(), bookName(book), chapter.getChapterName(), contentMarker.marker());
+                    recordCrawlerDetail(task, "章节正文待开放", "进度：" + current + "/"
+                            + task.getTotalCount() + "；章节：" + chapter.getChapterName()
+                            + "；命中特征：" + shortText(contentMarker.marker(), 100));
+                    if (recheckCompleted) {
+                        refreshUpdateCounts(book, task, ++updateSuccess, updateFailed,
+                                pending.size(), durationTotal, requests);
+                    } else {
+                        refreshCounts(book, task, durationTotal, requests);
+                    }
+                    continue;
+                }
+                if (contentMarker != null) {
+                    chapter.setAccessStatus(CrawlerChapter.AccessStatus.LOCKED);
+                    throw new IllegalStateException("正文命中失败特征："
+                            + shortText(contentMarker.marker(), 100));
                 }
                 chapter.setAccessStatus(CrawlerChapter.AccessStatus.FREE);
                 if (parsed.title() != null && !parsed.title().isBlank()) chapter.setChapterName(parsed.title());
@@ -1009,9 +1041,11 @@ public class CrawlerTaskService {
 
     private void refreshCounts(CrawlerBook book, CrawlerTask task, long totalDuration, int requests) {
         refreshBookCounts(book);
-        task.setTotalCount(book.getChapterCount()); task.setSuccessCount(book.getCrawledChapterCount());
+        task.setTotalCount(book.getChapterCount()); task.setSuccessCount(book.getCrawledChapterCount()
+                + value(book.getPendingReleaseChapterCount(), 0));
         task.setFailedCount(book.getFailedChapterCount());
-        task.setWaitingCount(Math.max(0, book.getChapterCount() - book.getCrawledChapterCount() - book.getFailedChapterCount()));
+        task.setWaitingCount(Math.max(0, book.getChapterCount() - book.getCrawledChapterCount()
+                - value(book.getPendingReleaseChapterCount(), 0) - book.getFailedChapterCount()));
         task.setAverageRequestMillis(requests == 0 ? 0 : totalDuration / requests); saveProgressIfRunning(task);
     }
 
@@ -1025,10 +1059,14 @@ public class CrawlerTaskService {
 
     private void refreshBookCounts(CrawlerBook book) {
         int completed = (int) chapterRepository.countByCrawlerBookAndCrawlStatus(book, CrawlerChapter.CrawlStatus.COMPLETED);
+        int pendingRelease = (int) chapterRepository.countByCrawlerBookAndCrawlStatus(
+                book, CrawlerChapter.CrawlStatus.PENDING_RELEASE);
         int failed = (int) (chapterRepository.countByCrawlerBookAndCrawlStatus(book, CrawlerChapter.CrawlStatus.FAILED)
                 + chapterRepository.countByCrawlerBookAndCrawlStatus(book, CrawlerChapter.CrawlStatus.CONTENT_SUSPECTED));
         int total = (int) chapterRepository.countByCrawlerBook(book);
-        book.setChapterCount(total); book.setCrawledChapterCount(completed); book.setFailedChapterCount(failed); bookRepository.save(book);
+        book.setChapterCount(total); book.setCrawledChapterCount(completed);
+        book.setPendingReleaseChapterCount(pendingRelease);
+        book.setFailedChapterCount(failed); bookRepository.save(book);
     }
 
     private BookCrawlerParser parser(CrawlerSite site) {
@@ -1271,13 +1309,30 @@ public class CrawlerTaskService {
         if (codePoints <= 50) return normalized;
         return normalized.substring(0, normalized.offsetByCodePoints(0, 50)) + "…";
     }
-    static String matchedContentFailureMarker(CrawlerSite site, String content) {
-        if (site == null || site.getContentFailureMarkers() == null || site.getContentFailureMarkers().isBlank()
+    static ContentMarkerMatch matchedContentMarker(CrawlerSite site, String content) {
+        if (site == null || site.getContentMarkersJson() == null || site.getContentMarkersJson().isBlank()
                 || content == null || content.isBlank()) return null;
         String normalizedContent = content.toLowerCase(Locale.ROOT);
-        return site.getContentFailureMarkers().lines().map(String::trim).filter(marker -> !marker.isBlank())
-                .filter(marker -> normalizedContent.contains(marker.toLowerCase(Locale.ROOT)))
+        return configuredContentMarkers(site).stream()
+                .filter(marker -> normalizedContent.contains(marker.marker().toLowerCase(Locale.ROOT)))
+                .map(marker -> new ContentMarkerMatch(marker.marker(),
+                        ContentMarkerStatus.valueOf(marker.status().toUpperCase(Locale.ROOT))))
                 .findFirst().orElse(null);
     }
+    private static List<ContentMarkerPayload> configuredContentMarkers(CrawlerSite site) {
+        String stored = site.getContentMarkersJson().trim();
+        if (!stored.startsWith("[")) {
+            return stored.lines().map(String::trim).filter(marker -> !marker.isBlank())
+                    .map(marker -> new ContentMarkerPayload(marker, "FAILED")).toList();
+        }
+        try {
+            return CONTENT_MARKER_MAPPER.readValue(stored,
+                    new TypeReference<List<ContentMarkerPayload>>() { });
+        } catch (Exception exception) {
+            throw new IllegalStateException("正文特征配置数据损坏", exception);
+        }
+    }
+    enum ContentMarkerStatus { FAILED, PENDING_RELEASE }
+    record ContentMarkerMatch(String marker, ContentMarkerStatus status) { }
     private static String userMessage(Exception e) { if (e instanceof ResponseStatusException r && r.getReason() != null) return r.getReason(); return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(); }
 }

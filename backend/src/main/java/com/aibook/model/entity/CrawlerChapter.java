@@ -35,6 +35,6 @@ public class CrawlerChapter {
     @CreationTimestamp private LocalDateTime createdAt;
     @UpdateTimestamp private LocalDateTime updatedAt;
 
-    public enum CrawlStatus { NOT_CRAWLED, WAITING, CRAWLING, COMPLETED, FAILED, CONTENT_SUSPECTED, IGNORED }
+    public enum CrawlStatus { NOT_CRAWLED, WAITING, CRAWLING, COMPLETED, PENDING_RELEASE, FAILED, CONTENT_SUSPECTED, IGNORED }
     public enum AccessStatus { FREE, VIP, LOCKED, UNKNOWN }
 }

@@ -37,6 +37,7 @@ public class CrawlerBook {
     private LocalDateTime lastUpdateCheckTime;
     @Builder.Default private Integer chapterCount = 0;
     @Builder.Default private Integer crawledChapterCount = 0;
+    @Builder.Default private Integer pendingReleaseChapterCount = 0;
     @Builder.Default private Integer failedChapterCount = 0;
     @Column(nullable = false, columnDefinition = "boolean default true")
     @Builder.Default private Boolean autoUpdateEnabled = true;
@@ -56,6 +57,7 @@ public class CrawlerBook {
         if (discoveryStatus == null) discoveryStatus = DiscoveryStatus.ACTIVE;
         if (autoUpdateEnabled == null) autoUpdateEnabled = true;
         if (autoSyncLibrary == null) autoSyncLibrary = true;
+        if (pendingReleaseChapterCount == null) pendingReleaseChapterCount = 0;
     }
 
     public enum CrawlStatus { DISCOVERED, WAITING, CRAWLING_METADATA, CRAWLING_CHAPTER_LIST, CRAWLING_CONTENT, PARTIAL_SUCCESS, COMPLETED, FAILED, UPDATING, PAUSED }

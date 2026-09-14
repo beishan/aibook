@@ -42,7 +42,8 @@ public class CrawlerSite {
     @Builder.Default private Integer randomDelayMillis = 1000;
     @Builder.Default private Integer maxConcurrency = 1;
     @Builder.Default private String encoding = "UTF-8";
-    @Column(columnDefinition = "TEXT") private String contentFailureMarkers;
+    /** 正文特征配置 JSON；兼容读取旧版本按行保存的失败特征。 */
+    @Column(name = "content_failure_markers", columnDefinition = "TEXT") private String contentMarkersJson;
     @Column(length = 1000) private String proxy;
     @Column(columnDefinition = "TEXT") private String proxyConfigsJson;
     @Enumerated(EnumType.STRING) @Builder.Default private ParserType parserType = ParserType.CONFIG;

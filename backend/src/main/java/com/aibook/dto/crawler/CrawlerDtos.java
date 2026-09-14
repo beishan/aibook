@@ -27,6 +27,10 @@ public final class CrawlerDtos {
     public record ProxyPayload(@NotBlank @Size(max = 100) String name,
             @NotBlank @Size(max = 1000) String url, Boolean enabled) { }
 
+    public record ContentMarkerPayload(
+            @NotBlank @Size(max = 500) String marker,
+            @NotBlank @Pattern(regexp = "FAILED|PENDING_RELEASE") String status) { }
+
     public record SitePayload(
             @NotBlank String siteName, @Pattern(regexp = "\\s*|[a-zA-Z0-9_-]+") String siteCode,
             @NotBlank String baseUrl, String homeUrl, Boolean enabled,
@@ -37,7 +41,7 @@ public final class CrawlerDtos {
             @Min(1) Integer scanIntervalMinutes, @Min(1) Integer updateIntervalMinutes,
             @Min(1) @Max(50) Integer maxDiscoveryPages,
             @Pattern(regexp = "(?i)TXT|EPUB|BOTH") String autoImportFormat,
-            @Size(max = 50) List<@NotBlank @Size(max = 500) String> contentFailureMarkers) { }
+            @Size(max = 50) List<@Valid ContentMarkerPayload> contentMarkers) { }
 
     public record SiteView(Long id, String siteName, String siteCode, String baseUrl, String homeUrl,
             boolean enabled, boolean autoScan, boolean autoCrawl, boolean autoUpdate,
@@ -49,7 +53,7 @@ public final class CrawlerDtos {
             Integer ruleVersion, Long activeRuleId, long ruleCount,
             LocalDateTime lastScanAt, LocalDateTime lastUpdateAt,
             LocalDateTime lastHealthCheckAt, String healthMessage, LocalDateTime createdAt,
-            List<String> contentFailureMarkers) { }
+            List<ContentMarkerPayload> contentMarkers) { }
 
     public record ManualCrawlRequest(@NotBlank String url) { }
     public record DiscoveryPagePayload(
@@ -104,7 +108,8 @@ public final class CrawlerDtos {
             String bookUrl, String bookName, String author, String coverUrl, String description,
             String category, List<String> tags, String bookStatus, String latestChapter,
             Long discoveryPageId, String discoveryPageName, int chapterCount,
-            int crawledChapterCount, int failedChapterCount, String crawlStatus,
+            int crawledChapterCount, int pendingReleaseChapterCount, int failedChapterCount,
+            String crawlStatus,
             String discoveryStatus, String importStatus, boolean autoUpdateEnabled,
             boolean autoSyncLibrary,
             Long libraryBookId, LocalDateTime discoverTime,

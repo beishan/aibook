@@ -72,14 +72,27 @@ class CrawlerTaskServiceLoggingTest {
     @Test
     void matchesAnyConfiguredContentFailureMarkerIgnoringCase() {
         CrawlerSite site = CrawlerSite.builder()
-                .contentFailureMarkers("以下内容为VIP专属，升级会员即可继续阅读\nAccess Denied").build();
+                .contentMarkersJson("[{\"marker\":\"以下内容为VIP专属，升级会员即可继续阅读\","
+                        + "\"status\":\"PENDING_RELEASE\"},{\"marker\":\"Access Denied\","
+                        + "\"status\":\"FAILED\"}]").build();
 
-        assertThat(CrawlerTaskService.matchedContentFailureMarker(site,
+        assertThat(CrawlerTaskService.matchedContentMarker(site,
                 "本章提示：以下内容为VIP专属，升级会员即可继续阅读"))
-                .isEqualTo("以下内容为VIP专属，升级会员即可继续阅读");
-        assertThat(CrawlerTaskService.matchedContentFailureMarker(site, "ACCESS DENIED"))
-                .isEqualTo("Access Denied");
-        assertThat(CrawlerTaskService.matchedContentFailureMarker(site, "正常章节正文")).isNull();
+                .extracting(CrawlerTaskService.ContentMarkerMatch::marker,
+                        CrawlerTaskService.ContentMarkerMatch::status)
+                .containsExactly("以下内容为VIP专属，升级会员即可继续阅读",
+                        CrawlerTaskService.ContentMarkerStatus.PENDING_RELEASE);
+        assertThat(CrawlerTaskService.matchedContentMarker(site, "ACCESS DENIED").status())
+                .isEqualTo(CrawlerTaskService.ContentMarkerStatus.FAILED);
+        assertThat(CrawlerTaskService.matchedContentMarker(site, "正常章节正文")).isNull();
+    }
+
+    @Test
+    void treatsLegacyLineBasedMarkersAsFailures() {
+        CrawlerSite site = CrawlerSite.builder().contentMarkersJson("旧版失败提示").build();
+
+        assertThat(CrawlerTaskService.matchedContentMarker(site, "出现旧版失败提示").status())
+                .isEqualTo(CrawlerTaskService.ContentMarkerStatus.FAILED);
     }
 
     @Test

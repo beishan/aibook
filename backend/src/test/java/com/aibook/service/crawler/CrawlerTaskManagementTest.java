@@ -247,6 +247,68 @@ class CrawlerTaskManagementTest {
     }
 
     @Test
+    void pendingReleaseMarkerCompletesBookWithoutCountingChapterAsFailure() throws Exception {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站")
+                .contentMarkersJson("[{\"marker\":\"VIP专属\",\"status\":\"PENDING_RELEASE\"}]")
+                .build();
+        com.aibook.model.entity.CrawlerSiteRule rule =
+                new com.aibook.model.entity.CrawlerSiteRule();
+        site.attachRule(rule);
+        CrawlerBook book = CrawlerBook.builder().id(8L).site(site).bookName("待开放测试").build();
+        CrawlerChapter chapter = CrawlerChapter.builder().id(10L).crawlerBook(book)
+                .chapterIndex(1).chapterName("第一章")
+                .chapterUrl("https://example.com/chapter/1").build();
+        CrawlerTask task = CrawlerTask.builder().user(user).site(site).crawlerBook(book)
+                .type(CrawlerTask.TaskType.BOOK_CONTENT).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerChapterRepository chapters = mock(CrawlerChapterRepository.class);
+        CrawlerHttpClient httpClient = mock(CrawlerHttpClient.class);
+        BookCrawlerParser parser = mock(BookCrawlerParser.class);
+        when(tasks.findById(task.getId())).thenAnswer(invocation -> {
+            if (task.getStatus() != CrawlerTask.TaskStatus.SUCCESS) return Optional.of(task);
+            return Optional.of(CrawlerTask.builder().id(task.getId()).user(user).site(site)
+                    .crawlerBook(book).type(CrawlerTask.TaskType.BOOK_CONTENT)
+                    .status(CrawlerTask.TaskStatus.RUNNING).build());
+        });
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(books.save(any(CrawlerBook.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(chapters.findByCrawlerBookOrderByChapterIndexAsc(book)).thenReturn(List.of(chapter));
+        when(chapters.countByCrawlerBook(book)).thenReturn(1L);
+        when(chapters.countByCrawlerBookAndCrawlStatus(eq(book), any()))
+                .thenAnswer(invocation -> chapter.getCrawlStatus() == invocation.getArgument(1) ? 1L : 0L);
+        when(parser.supports(site)).thenReturn(true);
+        when(httpClient.get(site, chapter.getChapterUrl()))
+                .thenReturn(new CrawlerHttpClient.FetchResult("page", 200, 10, null, null));
+        when(parser.parseChapter("page", chapter.getChapterUrl(), rule))
+                .thenReturn(new BookCrawlerParser.ParsedContent(
+                        "第一章", "以下内容为VIP专属，升级会员即可继续阅读", "html"));
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
+                chapters, tasks, mock(CrawlerScanResultRepository.class),
+                mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
+                mock(OperationLogService.class), mock(CrawlerExportService.class), httpClient,
+                List.of(parser), mock(ApplicationContext.class),
+                mock(CrawlerSettingsService.class));
+        try {
+            service.run(task.getId());
+
+            assertThat(chapter.getCrawlStatus())
+                    .isEqualTo(CrawlerChapter.CrawlStatus.PENDING_RELEASE);
+            assertThat(chapter.getAccessStatus()).isEqualTo(CrawlerChapter.AccessStatus.LOCKED);
+            assertThat(chapter.getContent()).isNull();
+            assertThat(book.getPendingReleaseChapterCount()).isEqualTo(1);
+            assertThat(book.getFailedChapterCount()).isZero();
+            assertThat(book.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.COMPLETED);
+            assertThat(task.getStatus()).isEqualTo(CrawlerTask.TaskStatus.SUCCESS);
+            assertThat(task.getSuccessCount()).isEqualTo(1);
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void stopsBookTaskAfterConfiguredConsecutiveRequestFailures() throws Exception {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站").build();

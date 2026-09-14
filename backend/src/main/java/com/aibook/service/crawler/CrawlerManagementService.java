@@ -231,6 +231,7 @@ public class CrawlerManagementService {
         boolean normalized = false;
         for (CrawlerChapter chapter : chapters) {
             if (chapter.getContent() != null && !chapter.getContent().isBlank()
+                    && chapter.getCrawlStatus() != CrawlerChapter.CrawlStatus.PENDING_RELEASE
                     && chapter.getCrawlStatus() != CrawlerChapter.CrawlStatus.COMPLETED) {
                 chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.COMPLETED);
                 chapter.setErrorMessage(null);
@@ -277,11 +278,14 @@ public class CrawlerManagementService {
         int total = (int) chapterRepository.countByCrawlerBook(book);
         int completed = (int) chapterRepository.countByCrawlerBookAndCrawlStatus(
                 book, CrawlerChapter.CrawlStatus.COMPLETED);
+        int pendingRelease = (int) chapterRepository.countByCrawlerBookAndCrawlStatus(
+                book, CrawlerChapter.CrawlStatus.PENDING_RELEASE);
         int failed = (int) (chapterRepository.countByCrawlerBookAndCrawlStatus(
                 book, CrawlerChapter.CrawlStatus.FAILED) + chapterRepository.countByCrawlerBookAndCrawlStatus(
                 book, CrawlerChapter.CrawlStatus.CONTENT_SUSPECTED));
-        book.setChapterCount(total); book.setCrawledChapterCount(completed); book.setFailedChapterCount(failed);
-        if (total > 0 && completed == total) {
+        book.setChapterCount(total); book.setCrawledChapterCount(completed);
+        book.setPendingReleaseChapterCount(pendingRelease); book.setFailedChapterCount(failed);
+        if (total > 0 && completed + pendingRelease == total) {
             book.setCrawlStatus(CrawlerBook.CrawlStatus.COMPLETED);
             book.setImportStatus(book.getLibraryBook() == null ? CrawlerBook.ImportStatus.READY : CrawlerBook.ImportStatus.IMPORTED);
         } else if (failed > 0) book.setCrawlStatus(CrawlerBook.CrawlStatus.PARTIAL_SUCCESS);
@@ -368,7 +372,7 @@ public class CrawlerManagementService {
         site.setRequestIntervalMillis(value(p.requestIntervalMillis(), 1500)); site.setRandomDelayMillis(value(p.randomDelayMillis(), 1000));
         site.setMaxConcurrency(value(p.maxConcurrency(), 1));
         site.setEncoding(blank(p.encoding()) ? "UTF-8" : p.encoding());
-        applyContentFailureMarkers(site, p.contentFailureMarkers());
+        applyContentMarkers(site, p.contentMarkers());
         applyProxies(site, p.proxies());
     }
 
@@ -404,7 +408,7 @@ public class CrawlerManagementService {
                 bookRepository.countBySite(s), rv, r == null ? null : r.getRuleVersion(),
                 active.map(CrawlerSiteRuleVersion::getId).orElse(null), ruleVersionRepository.countBySite(s),
                 s.getLastScanAt(), s.getLastUpdateAt(),
-                s.getLastHealthCheckAt(), s.getHealthMessage(), s.getCreatedAt(), contentFailureMarkers(s));
+                s.getLastHealthCheckAt(), s.getHealthMessage(), s.getCreatedAt(), contentMarkers(s));
     }
 
     public RulePayload rulePayload(CrawlerSiteRule r) {
@@ -417,7 +421,7 @@ public class CrawlerManagementService {
                 r.getXpathRemoveSelectors(), r.getStringReplacementsJson(), bool(r.getRemoveBlankLines(), true), bool(r.getSaveOriginalHtml(), false));
     }
 
-    public BookView bookView(CrawlerBook b) { return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(), b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(), b.getCoverUrl(), b.getDescription(), b.getCategory(), splitTags(b.getTags()), b.getBookStatus(), b.getLatestChapter(), b.getDiscoveryPageId(), b.getDiscoveryPageName(), value(b.getChapterCount(), 0), value(b.getCrawledChapterCount(), 0), value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(), (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : b.getDiscoveryStatus()).name(), b.getImportStatus().name(), !Boolean.FALSE.equals(b.getAutoUpdateEnabled()), !Boolean.FALSE.equals(b.getAutoSyncLibrary()), b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(), b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt()); }
+    public BookView bookView(CrawlerBook b) { return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(), b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(), b.getCoverUrl(), b.getDescription(), b.getCategory(), splitTags(b.getTags()), b.getBookStatus(), b.getLatestChapter(), b.getDiscoveryPageId(), b.getDiscoveryPageName(), value(b.getChapterCount(), 0), value(b.getCrawledChapterCount(), 0), value(b.getPendingReleaseChapterCount(), 0), value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(), (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : b.getDiscoveryStatus()).name(), b.getImportStatus().name(), !Boolean.FALSE.equals(b.getAutoUpdateEnabled()), !Boolean.FALSE.equals(b.getAutoSyncLibrary()), b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(), b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt()); }
 
     private List<String> splitTags(String value) {
         if (blank(value)) return List.of();
@@ -474,14 +478,36 @@ public class CrawlerManagementService {
         catch (Exception exception) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "代理配置无法保存", exception); }
         site.setProxy(proxies.stream().filter(ProxyPayload::enabled).map(ProxyPayload::url).findFirst().orElse(null));
     }
-    private void applyContentFailureMarkers(CrawlerSite site, List<String> values) {
-        String markers = values == null ? "" : values.stream().filter(Objects::nonNull).map(String::trim)
-                .filter(value -> !value.isBlank()).distinct().collect(java.util.stream.Collectors.joining("\n"));
-        site.setContentFailureMarkers(markers.isBlank() ? null : markers);
+    private void applyContentMarkers(CrawlerSite site, List<ContentMarkerPayload> values) {
+        LinkedHashMap<String, ContentMarkerPayload> markers = new LinkedHashMap<>();
+        if (values != null) {
+            values.stream().filter(Objects::nonNull).forEach(value -> {
+                String marker = value.marker().trim();
+                String status = value.status().trim().toUpperCase(Locale.ROOT);
+                markers.putIfAbsent(marker.toLowerCase(Locale.ROOT),
+                        new ContentMarkerPayload(marker, status));
+            });
+        }
+        try {
+            site.setContentMarkersJson(markers.isEmpty() ? null
+                    : objectMapper.writeValueAsString(markers.values()));
+        } catch (Exception exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "正文特征配置无法保存", exception);
+        }
     }
-    private List<String> contentFailureMarkers(CrawlerSite site) {
-        if (blank(site.getContentFailureMarkers())) return List.of();
-        return site.getContentFailureMarkers().lines().map(String::trim).filter(value -> !value.isBlank()).toList();
+    private List<ContentMarkerPayload> contentMarkers(CrawlerSite site) {
+        if (blank(site.getContentMarkersJson())) return List.of();
+        String stored = site.getContentMarkersJson().trim();
+        if (!stored.startsWith("[")) {
+            return stored.lines().map(String::trim).filter(value -> !value.isBlank())
+                    .map(value -> new ContentMarkerPayload(value, "FAILED")).toList();
+        }
+        try {
+            return objectMapper.readValue(stored,
+                    new TypeReference<List<ContentMarkerPayload>>() { });
+        } catch (Exception exception) {
+            throw new IllegalStateException("正文特征配置数据损坏", exception);
+        }
     }
     private List<ProxyPayload> proxyPayloads(CrawlerSite site) {
         if (blank(site.getProxyConfigsJson())) return blank(site.getProxy()) ? List.of() :
