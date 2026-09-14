@@ -82,6 +82,34 @@ public class CrawlerTaskService {
                 .toList();
     }
 
+    public List<TaskView> currentTasks(User user) {
+        return taskRepository.findByUserAndStatusInOrderByCreatedAtDesc(user, ACTIVE_STATUSES).stream()
+                .sorted(this::compareCurrentTasks)
+                .map(managementService::taskView)
+                .toList();
+    }
+
+    private int compareCurrentTasks(CrawlerTask left, CrawlerTask right) {
+        int statusComparison = Integer.compare(currentTaskStatusRank(left), currentTaskStatusRank(right));
+        if (statusComparison != 0) return statusComparison;
+        if (left.getStatus() == CrawlerTask.TaskStatus.WAITING) {
+            int queueComparison = Comparator.nullsLast(Long::compareTo)
+                    .compare(left.getQueueOrder(), right.getQueueOrder());
+            if (queueComparison != 0) return queueComparison;
+        }
+        return Comparator.nullsLast(Comparator.<LocalDateTime>reverseOrder())
+                .compare(left.getCreatedAt(), right.getCreatedAt());
+    }
+
+    private int currentTaskStatusRank(CrawlerTask task) {
+        return switch (task.getStatus()) {
+        case RUNNING -> 0;
+        case WAITING -> 1;
+        case PAUSED -> 2;
+        default -> 3;
+        };
+    }
+
     public synchronized List<TaskView> reorderQueuedTasks(User user, List<String> taskIds) {
         LinkedHashSet<String> requestedIds = new LinkedHashSet<>(taskIds);
         if (requestedIds.size() != taskIds.size()) {

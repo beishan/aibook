@@ -123,6 +123,9 @@ public class CrawlerController {
     @GetMapping("/tasks/queued") public List<TaskView> queuedTasks(Authentication auth) {
         return taskService.queuedTasks(user(auth));
     }
+    @GetMapping("/tasks/current") public List<TaskView> currentTasks(Authentication auth) {
+        return taskService.currentTasks(user(auth));
+    }
     @PutMapping("/tasks/queued/order") public List<TaskView> reorderQueuedTasks(
             Authentication auth, @Valid @RequestBody TaskQueueOrderRequest request) {
         return taskService.reorderQueuedTasks(user(auth), request.taskIds());

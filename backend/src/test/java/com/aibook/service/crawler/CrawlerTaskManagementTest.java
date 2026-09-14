@@ -121,6 +121,29 @@ class CrawlerTaskManagementTest {
     }
 
     @Test
+    void listsRunningWaitingAndPausedTasksInCurrentTaskOrder() {
+        User user = user();
+        CrawlerTask paused = task(user, CrawlerTask.TaskStatus.PAUSED);
+        CrawlerTask waitingLater = task(user, CrawlerTask.TaskStatus.WAITING);
+        waitingLater.setQueueOrder(20L);
+        CrawlerTask running = task(user, CrawlerTask.TaskStatus.RUNNING);
+        CrawlerTask waitingFirst = task(user, CrawlerTask.TaskStatus.WAITING);
+        waitingFirst.setQueueOrder(10L);
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        when(tasks.findByUserAndStatusInOrderByCreatedAtDesc(eq(user), anyCollection()))
+                .thenReturn(List.of(paused, waitingLater, running, waitingFirst));
+        when(management.taskView(any(CrawlerTask.class))).thenCallRealMethod();
+        CrawlerTaskService service = service(tasks, mock(CrawlerBookRepository.class), management);
+        try {
+            assertThat(service.currentTasks(user)).extracting(task -> task.id())
+                    .containsExactly(running.getId(), waitingFirst.getId(), waitingLater.getId(), paused.getId());
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void pausesRunningTaskWithoutChangingItToFailed() {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站").build();
