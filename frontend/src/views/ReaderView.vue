@@ -19,97 +19,78 @@
         class="reader-header"
         :style="readerHeaderStyle"
       >
-        <button v-show="!showSidePanel" type="button" class="back-btn glass" @click="goBack">
-          <span>‹</span>
-          <span>返回</span>
+        <button type="button" class="back-btn" @click="goBack">
+          <span class="reader-icon" aria-hidden="true">←</span>
+          <span>返回书库</span>
         </button>
-        <div class="reader-title glass">
-          <div class="reader-title-main">
-            <div class="reader-book-identity">
+        <div class="reader-title">
+          <div class="reader-cover" aria-hidden="true">
+            <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="" />
+            <span v-else>{{ book.title?.slice(0, 1) || '书' }}</span>
+          </div>
+          <div class="reader-book-identity">
+            <div class="reader-book-line">
               <span class="reader-book-name" :title="book.title">{{ book.title }}</span>
-              <span
-                v-if="selectedVersion"
-                class="reader-version-badge"
-                :title="selectedVersion.displayName"
-              >
+              <span v-if="selectedVersion" class="reader-version-badge" :title="selectedVersion.displayName">
                 {{ formatLabel(selectedVersion.format) }}
               </span>
             </div>
+            <span class="reader-book-author">{{ book.author || '佚名' }}</span>
+          </div>
+          <span class="reader-title-divider" aria-hidden="true"></span>
+          <div class="reader-title-main">
             <span
               v-if="performancePaginationMode"
               class="performance-mode-badge"
               title="长文本已自动使用分页渲染，避免一次创建过多页面节点"
-            >
-              性能模式
-            </span>
+            >性能模式</span>
             <div class="reader-title-meta">
-              <span class="reader-current-chapter" :title="headerChapterName">
-                {{ headerChapterName }}
-              </span>
-              <span v-if="settings.showProgress" class="reader-title-separator">·</span>
-              <span v-if="settings.showProgress" class="reader-header-progress">{{ headerProgress }}%</span>
+              <span class="reader-current-chapter" :title="headerChapterName">{{ headerChapterName }}</span>
             </div>
           </div>
         </div>
-        <div class="reader-actions glass" aria-label="阅读工具">
-          <button
-            class="btn btn-icon"
-            :class="{ active: showSearch }"
-            @click="togglePanel('search')"
-            title="书内搜索（⌘/Ctrl + F）"
-          >
-            <span>⌕</span>
-          </button>
-          <button
-            v-if="book.format === 'epub' || tocItems.length > 0"
-            class="btn btn-icon"
-            :class="{ active: showToc }"
-            @click="togglePanel('toc')"
-            title="目录"
-          >
-            <span>☰</span>
-          </button>
-          <button
-            class="btn btn-icon"
-            :class="{ active: showBookmarks }"
-            @click="togglePanel('bookmarks')"
-            title="书签"
-          >
-            <span>📑</span>
-          </button>
-          <button
-            class="btn btn-icon"
-            :class="{ active: showHighlights }"
-            @click="togglePanel('highlights')"
-            title="高亮"
-          >
-            <span>🖍️</span>
-          </button>
-          <button class="btn btn-icon" @click="showSettings = true" title="设置">
-            <span>⚙️</span>
-          </button>
-          <button class="btn btn-icon" @click="toggleFullscreen" :title="isFullscreen ? '退出全屏' : '全屏'">
-            <span>{{ isFullscreen ? '⊡' : '⊞' }}</span>
+        <div class="reader-header-actions">
+          <form class="reader-header-search" role="search" @submit.prevent="runSearchNow">
+            <span aria-hidden="true">⌕</span>
+            <input
+              v-model="searchQuery"
+              type="search"
+              autocomplete="off"
+              placeholder="搜索本书内容"
+              aria-label="搜索本书内容"
+              @focus="openSearchPanel"
+              @input="scheduleSearch"
+            />
+            <kbd>⌘ F</kbd>
+          </form>
+          <button type="button" class="reader-shelf-button" @click="$router.push('/shelf')">
+            <span aria-hidden="true">▤</span>
+            我的书架
           </button>
         </div>
       </header>
 
       <div class="reader-body-wrapper">
-        <!-- 左侧面板：目录/书签/高亮 -->
+        <!-- 目录/搜索从左侧展开，书签/划线从右侧展开 -->
         <Transition name="slide-left">
-          <div v-if="showSidePanel" class="side-panel glass">
+          <aside
+            v-if="showSidePanel"
+            class="side-panel"
+            :class="{ 'side-panel--right': rightPanelOpen }"
+          >
             <!-- 面板标签页 -->
             <div class="panel-tabs">
               <div
+                v-if="rightPanelOpen"
                 class="panel-tabs-nav"
-                :style="panelTabStyle"
+                :style="annotationPanelStyle"
                 role="tablist"
-                aria-label="阅读辅助面板"
+                aria-label="书签与划线"
                 @keydown="handlePanelTabKeydown"
               >
                 <span class="panel-tab-indicator" aria-hidden="true"></span>
                 <button
-                  v-for="tab in panelTabs"
+                  v-for="tab in annotationPanelTabs"
                   :key="tab.value"
                   class="tab-btn"
                   :class="{ active: activeTab === tab.value }"
@@ -120,6 +101,10 @@
                 >
                   {{ tab.label }}
                 </button>
+              </div>
+              <div v-else class="panel-heading">
+                <strong>{{ activeTab === 'toc' ? '目录' : '书内搜索' }}</strong>
+                <span v-if="activeTab === 'toc'">共 {{ tocItems.length }} {{ book.format === 'pdf' ? '项' : '章' }}</span>
               </div>
               <button
                 class="btn btn-icon btn-small close-panel"
@@ -177,14 +162,14 @@
 
             <!-- 目录内容 -->
             <div v-if="activeTab === 'toc'" class="panel-content">
-              <div class="toc-header">
-                <span>📑 章节目录</span>
-                <span class="tag">{{ tocItems.length }} {{ book.format === 'pdf' ? '项' : '章' }}</span>
-              </div>
+              <label class="toc-search">
+                <span aria-hidden="true">⌕</span>
+                <input v-model="tocQuery" type="search" placeholder="搜索章节" />
+              </label>
               <div class="toc-list">
                 <div
-                  v-for="(item, index) in tocItems"
-                  :key="index"
+                  v-for="(item, index) in filteredTocItems"
+                  :key="`${item.href || item.index}-${index}`"
                   class="toc-item"
                   :class="{ active: isCurrentTocItem(item) }"
                   :style="item.level ? { paddingLeft: `${14 + item.level * 16}px` } : undefined"
@@ -199,7 +184,6 @@
             <!-- 书签内容 -->
             <div v-if="activeTab === 'bookmarks'" class="panel-content">
               <div class="bookmarks-header">
-                <span>📑 我的书签</span>
                 <button
                   class="btn btn-primary bookmark-add-btn"
                   type="button"
@@ -240,7 +224,6 @@
             <!-- 高亮内容 -->
             <div v-if="activeTab === 'highlights'" class="panel-content">
               <div class="highlights-header">
-                <span>🖍️ 高亮与笔记</span>
                 <span class="tag">{{ highlights.length }} 条</span>
               </div>
               <div v-if="highlights.length === 0" class="empty-panel">
@@ -275,7 +258,7 @@
                 </div>
               </div>
             </div>
-          </div>
+          </aside>
         </Transition>
 
         <!-- 阅读器内容 -->
@@ -328,6 +311,33 @@
         </div>
       </div>
 
+      <nav
+        v-show="!isFullscreen"
+        class="reader-tool-rail"
+        :class="{ 'reader-tool-rail--shifted': rightPanelOpen }"
+        aria-label="阅读工具"
+      >
+        <button
+          v-if="book.format === 'epub' || tocItems.length > 0"
+          type="button"
+          :class="{ active: showToc }"
+          title="目录"
+          @click="togglePanel('toc')"
+        ><span aria-hidden="true">☷</span><small>目录</small></button>
+        <button type="button" :class="{ active: showBookmarks }" title="书签" @click="togglePanel('bookmarks')">
+          <span aria-hidden="true">♧</span><small>书签</small>
+        </button>
+        <button type="button" :class="{ active: showHighlights }" title="划线" @click="togglePanel('highlights')">
+          <span aria-hidden="true">⌁</span><small>划线</small>
+        </button>
+        <button type="button" :class="{ active: showSettings }" title="阅读设置" @click="showSettings = true">
+          <span class="reader-tool-aa" aria-hidden="true">Aa</span><small>设置</small>
+        </button>
+        <button type="button" title="全屏阅读" @click="toggleFullscreen">
+          <span aria-hidden="true">⛶</span><small>全屏</small>
+        </button>
+      </nav>
+
       <!-- 正文两侧空白区域翻页 -->
       <button
         v-if="showPageNavigation"
@@ -354,9 +364,14 @@
         <span class="page-turn-button" aria-hidden="true">›</span>
       </button>
 
-      <!-- 仅保留页码的迷你阅读 Dock -->
-      <div v-if="settings.showProgress" class="reader-progress-dock glass" role="status" aria-label="阅读进度">
-        {{ pageProgressLabel }}
+      <div v-if="settings.showProgress" class="reader-progress-dock" role="status" aria-label="阅读进度">
+        <div class="reader-progress-primary">
+          <span>全书进度 {{ headerProgress }}%</span>
+          <span class="reader-progress-track" aria-hidden="true">
+            <span :style="{ width: `${headerProgress}%` }"></span>
+          </span>
+        </div>
+        <span class="reader-progress-page">{{ pageProgressLabel }} 页</span>
       </div>
 
       <!-- 全屏模式下的浮动控制条 -->
@@ -385,7 +400,7 @@
         <div v-if="showSettings" class="settings-overlay" @click.self="showSettings = false">
           <div class="settings-panel glass">
             <div class="settings-header">
-              <span>⚙️ 阅读设置</span>
+              <span>阅读设置</span>
               <button class="dialog-close" @click="showSettings = false">✕</button>
             </div>
             <div class="settings-body">
@@ -668,6 +683,7 @@ import type {
 import api from '@/utils/api'
 import { message, confirm } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'
+import { getCoverUrl } from '@/utils/cover'
 import {
   BUILT_IN_READER_BACKGROUNDS,
   toReaderBackgroundOption,
@@ -792,13 +808,19 @@ const panelTabs: Array<{ value: PanelTab; label: string }> = [
   { value: 'search', label: '搜索' },
   { value: 'toc', label: '目录' },
   { value: 'bookmarks', label: '书签' },
-  { value: 'highlights', label: '高亮' },
+  { value: 'highlights', label: '划线' },
 ]
-const panelTabStyle = computed(() => ({
-  '--panel-tab-index': String(Math.max(0, panelTabs.findIndex(tab => tab.value === activeTab.value))),
-  '--panel-tab-count': String(panelTabs.length),
-}))
+const annotationPanelTabs: Array<{ value: PanelTab; label: string }> = [
+  { value: 'bookmarks', label: '书签' },
+  { value: 'highlights', label: '划线' },
+]
 const tocItems = ref<Chapter[]>([])
+const tocQuery = ref('')
+const filteredTocItems = computed(() => {
+  const keyword = tocQuery.value.trim().toLocaleLowerCase()
+  if (!keyword) return tocItems.value
+  return tocItems.value.filter(item => (item.label || item.title || '').toLocaleLowerCase().includes(keyword))
+})
 const currentTocHref = ref('')
 const currentLocation = ref('')
 const currentChapterName = ref('')
@@ -1336,6 +1358,11 @@ const clearEpubKeyboardBindings = () => {
 const showSidePanel = computed(() =>
   showSearch.value || showToc.value || showBookmarks.value || showHighlights.value,
 )
+const rightPanelOpen = computed(() => showBookmarks.value || showHighlights.value)
+const annotationPanelStyle = computed(() => ({
+  '--panel-tab-index': String(activeTab.value === 'highlights' ? 1 : 0),
+  '--panel-tab-count': String(annotationPanelTabs.length),
+}))
 const supportsPageTurning = computed(() =>
   ['epub', 'txt', 'md', 'structured', 'html', 'pdf'].includes(book.value?.format || '')
 )
@@ -2933,13 +2960,14 @@ const activatePanelTab = (panel: PanelTab) => {
 const handlePanelTabKeydown = (event: KeyboardEvent) => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
   event.preventDefault()
-  const currentIndex = panelTabs.findIndex(tab => tab.value === activeTab.value)
+  const tabs = rightPanelOpen.value ? annotationPanelTabs : panelTabs
+  const currentIndex = Math.max(0, tabs.findIndex(tab => tab.value === activeTab.value))
   const targetIndex = event.key === 'Home'
     ? 0
     : event.key === 'End'
-      ? panelTabs.length - 1
-      : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + panelTabs.length) % panelTabs.length
-  activatePanelTab(panelTabs[targetIndex].value)
+      ? tabs.length - 1
+      : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
+  activatePanelTab(tabs[targetIndex].value)
   nextTick(() => {
     document.querySelectorAll<HTMLButtonElement>('.panel-tabs-nav .tab-btn')[targetIndex]?.focus()
   })
@@ -5203,6 +5231,744 @@ onBeforeUnmount(() => {
   .reading-room-mode .side-panel {
     width: 88%;
     max-width: 340px;
+  }
+}
+
+/* 参考 read_ui 视觉稿的正式网页阅读界面 */
+.reader-view {
+  --reader-chrome: color-mix(in srgb, var(--reader-room-background) 86%, #ede7dc);
+  --reader-paper: color-mix(in srgb, var(--reader-room-background) 96%, #fffdf8);
+  --reader-ink: var(--reader-room-text);
+  --reader-muted: color-mix(in srgb, var(--reader-room-text) 58%, transparent);
+  --reader-line: color-mix(in srgb, var(--reader-room-text) 12%, transparent);
+  background: var(--reader-chrome);
+}
+
+.reader-header {
+  position: absolute;
+  inset: 0 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 76px;
+  padding: 10px 24px;
+  column-gap: 24px;
+  border-bottom: 1px solid var(--reader-line);
+  background: color-mix(in srgb, var(--reader-paper) 92%, transparent);
+  box-shadow: 0 3px 18px color-mix(in srgb, var(--reader-ink) 4%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  pointer-events: auto;
+}
+
+.back-btn {
+  grid-column: 1;
+  gap: 8px;
+  align-self: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--reader-line);
+  border-radius: 11px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--reader-ink);
+  font-size: 14px;
+}
+
+.back-btn:hover,
+.reader-shelf-button:hover,
+.reader-tool-rail button:hover {
+  background: color-mix(in srgb, var(--reader-ink) 6%, transparent);
+}
+
+.reader-icon {
+  font-size: 18px;
+}
+
+.reader-title {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-self: start;
+  width: min(100%, 650px);
+  min-width: 0;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.reader-cover {
+  display: grid;
+  width: 38px;
+  height: 50px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 4px;
+  background: linear-gradient(145deg, #496a58, #243c31);
+  box-shadow: 0 3px 9px rgba(29, 38, 32, 0.2);
+  color: #fff;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 15px;
+}
+
+.reader-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.reader-book-identity {
+  display: grid;
+  flex: 0 1 auto;
+  gap: 4px;
+  max-width: 280px;
+}
+
+.reader-book-line {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+}
+
+.reader-book-name {
+  color: var(--reader-ink);
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.reader-book-author {
+  overflow: hidden;
+  color: var(--reader-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-version-badge,
+.performance-mode-badge {
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+}
+
+.reader-title-divider {
+  width: 1px;
+  height: 30px;
+  flex: 0 0 auto;
+  background: var(--reader-line);
+}
+
+.reader-title-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.reader-title-meta {
+  display: block;
+  max-width: none;
+  color: var(--reader-muted);
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 13px;
+}
+
+.reader-header-actions {
+  grid-column: 3;
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: 12px;
+}
+
+.reader-header-search {
+  display: flex;
+  width: clamp(190px, 19vw, 280px);
+  height: 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid var(--reader-line);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--reader-paper) 64%, transparent);
+  color: var(--reader-muted);
+}
+
+.reader-header-search:focus-within {
+  border-color: color-mix(in srgb, var(--primary) 52%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.reader-header-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--reader-ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.reader-header-search kbd {
+  padding: 2px 5px;
+  border: 1px solid var(--reader-line);
+  border-radius: 5px;
+  color: var(--reader-muted);
+  font: 10px/1.35 inherit;
+  white-space: nowrap;
+}
+
+.reader-shelf-button {
+  display: inline-flex;
+  height: 40px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--reader-ink);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.reader-body-wrapper {
+  background: transparent;
+}
+
+.reader-body {
+  flex: 1 1 auto;
+  width: calc(100% - 250px);
+  max-height: calc(100% - 166px);
+  margin: 94px auto 72px;
+  padding: 48px clamp(48px, 7vw, 108px) 72px;
+  border: 1px solid color-mix(in srgb, var(--reader-ink) 7%, transparent);
+  border-radius: 7px;
+  background-color: var(--reader-paper) !important;
+  box-shadow:
+    0 24px 60px color-mix(in srgb, var(--reader-ink) 8%, transparent),
+    0 2px 8px color-mix(in srgb, var(--reader-ink) 5%, transparent);
+  color: var(--reader-ink);
+  scrollbar-width: thin;
+}
+
+.reader-text p,
+.reader-html {
+  color: inherit;
+  font-family: "Songti SC", "STSong", serif;
+  text-align: justify;
+}
+
+.chapter-title {
+  margin-top: 0.9em;
+  border: 0;
+  font-family: "Songti SC", "STSong", serif;
+  letter-spacing: 0.08em;
+}
+
+.side-panel {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: min(390px, 88vw);
+  border: 0;
+  border-right: 1px solid var(--reader-line);
+  background: color-mix(in srgb, var(--reader-paper) 97%, transparent);
+  box-shadow: 12px 0 36px color-mix(in srgb, var(--reader-ink) 8%, transparent);
+  color: var(--reader-ink);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.side-panel--right {
+  inset: 0 0 0 auto;
+  border-right: 0;
+  border-left: 1px solid var(--reader-line);
+  box-shadow: -12px 0 36px color-mix(in srgb, var(--reader-ink) 8%, transparent);
+}
+
+.slide-left-enter-from.side-panel--right,
+.slide-left-leave-to.side-panel--right {
+  transform: translateX(100%);
+}
+
+.panel-tabs {
+  min-height: 76px;
+  padding: 18px 22px;
+  border-bottom-color: var(--reader-line);
+  background: transparent;
+}
+
+.panel-heading {
+  display: grid;
+  gap: 3px;
+  color: var(--reader-ink);
+}
+
+.panel-heading strong {
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 20px;
+}
+
+.reader-view.reading-room-mode .reader-header {
+  position: absolute;
+  inset: 0 0 auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 76px;
+  padding: 10px 24px;
+  column-gap: 24px;
+  border-bottom-color: var(--reader-line);
+  background: color-mix(in srgb, var(--reader-paper) 92%, transparent);
+}
+
+.reader-view.reading-room-mode .reader-title {
+  padding: 0;
+}
+
+.reader-view.reading-room-mode .reader-title-main {
+  display: flex;
+}
+
+.reader-view.reading-room-mode .reader-book-identity {
+  display: grid;
+  max-width: 280px;
+}
+
+.reader-view.reading-room-mode .reader-title-meta {
+  max-width: none;
+}
+
+.reader-view.reading-room-mode .side-panel {
+  width: min(390px, 88vw);
+  border-right-color: var(--reader-line);
+  background: color-mix(in srgb, var(--reader-paper) 97%, transparent);
+}
+
+.reader-view.reading-room-mode .side-panel--right {
+  border-right: 0;
+  border-left: 1px solid var(--reader-line);
+  box-shadow: -12px 0 36px color-mix(in srgb, var(--reader-ink) 8%, transparent);
+}
+
+.reader-view.reading-room-mode .reader-body {
+  padding: 48px clamp(48px, 7vw, 108px) 72px;
+  border: 1px solid color-mix(in srgb, var(--reader-ink) 7%, transparent);
+  box-shadow:
+    0 24px 60px color-mix(in srgb, var(--reader-ink) 8%, transparent),
+    0 2px 8px color-mix(in srgb, var(--reader-ink) 5%, transparent);
+}
+
+.reader-view.reading-room-mode .reader-body--epub,
+.reader-view.reading-room-mode .reader-body--pdf {
+  padding: 18px 24px 52px;
+}
+
+.reader-view.reading-room-mode .reader-progress-dock {
+  padding: 6px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.panel-heading span {
+  color: var(--reader-muted);
+  font-size: 11px;
+}
+
+.panel-tabs-nav {
+  max-width: 238px;
+  border-color: var(--reader-line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--reader-ink) 5%, transparent);
+}
+
+.panel-tab-indicator {
+  border-color: var(--reader-line);
+  background: var(--reader-paper);
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--reader-ink) 10%, transparent);
+}
+
+.tab-btn.active {
+  color: var(--reader-ink);
+}
+
+.panel-content {
+  padding: 20px 22px 32px;
+}
+
+.toc-search {
+  display: flex;
+  height: 39px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 0 12px;
+  border: 1px solid var(--reader-line);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--reader-ink) 3%, transparent);
+  color: var(--reader-muted);
+}
+
+.toc-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--reader-ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.toc-list {
+  gap: 2px;
+}
+
+.toc-item {
+  position: relative;
+  min-height: 42px;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 7px;
+  color: var(--reader-muted);
+}
+
+.toc-item.active {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.toc-item.active::before {
+  position: absolute;
+  inset: 9px auto 9px 0;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--primary);
+  content: "";
+}
+
+.toc-index {
+  display: block;
+  width: 28px;
+  height: auto;
+  background: transparent;
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.toc-item.active .toc-index {
+  background: transparent;
+  color: inherit;
+}
+
+.bookmarks-header {
+  justify-content: flex-end;
+}
+
+.bookmark-add-btn {
+  border-radius: 9px;
+}
+
+.bookmark-item,
+.highlight-item,
+.search-result-item {
+  border: 1px solid var(--reader-line);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--reader-ink) 3%, transparent);
+}
+
+.reader-tool-rail {
+  position: absolute;
+  top: 50%;
+  right: 22px;
+  z-index: 145;
+  display: flex;
+  width: 54px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--reader-line);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--reader-paper) 94%, transparent);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--reader-ink) 9%, transparent);
+  transform: translateY(-46%);
+  transition: right 260ms ease;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.reader-tool-rail--shifted {
+  right: 406px;
+}
+
+.reader-tool-rail button {
+  display: grid;
+  min-height: 57px;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  padding: 5px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--reader-line);
+  background: transparent;
+  color: var(--reader-muted);
+  cursor: pointer;
+}
+
+.reader-tool-rail button:last-child {
+  border-bottom: 0;
+}
+
+.reader-tool-rail button.active {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+}
+
+.reader-tool-rail button > span {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.reader-tool-rail button > .reader-tool-aa {
+  font: 600 13px/1.1 Georgia, serif;
+}
+
+.reader-tool-rail small {
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.page-turn-zone {
+  top: 78px;
+  bottom: 62px;
+}
+
+.page-turn-button {
+  width: 34px;
+  height: 54px;
+  border-color: var(--reader-line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--reader-paper) 88%, transparent);
+  box-shadow: 0 7px 20px color-mix(in srgb, var(--reader-ink) 8%, transparent);
+}
+
+.reader-progress-dock {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  z-index: 130;
+  display: flex;
+  width: min(760px, calc(100% - 300px));
+  min-width: 0;
+  align-items: center;
+  gap: 18px;
+  padding: 6px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--reader-muted);
+  font-size: 11px;
+  font-weight: 500;
+  transform: translateX(-50%);
+}
+
+.reader-progress-primary {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+}
+
+.reader-progress-primary > span:first-child {
+  white-space: nowrap;
+}
+
+.reader-progress-track {
+  position: relative;
+  height: 3px;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--reader-ink) 14%, transparent);
+}
+
+.reader-progress-track > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 180ms ease;
+}
+
+.reader-progress-page {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-overlay {
+  background: color-mix(in srgb, #171b19 12%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.settings-panel {
+  width: min(420px, 100%);
+  border-left: 1px solid var(--reader-line);
+  background: var(--reader-paper);
+  color: var(--reader-ink);
+  box-shadow: -16px 0 50px rgba(22, 27, 24, 0.13);
+}
+
+.settings-header {
+  min-height: 76px;
+  padding: 18px 24px;
+  border-bottom-color: var(--reader-line);
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 20px;
+}
+
+@media (max-width: 1024px) {
+  .reader-header {
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 14px;
+  }
+
+  .reader-header-actions {
+    display: none;
+  }
+
+  .reader-body {
+    width: calc(100% - 150px);
+  }
+
+  .reader-progress-dock {
+    width: min(640px, calc(100% - 180px));
+  }
+}
+
+@media (max-width: 768px) {
+  .reader-header,
+  .reader-view.reading-room-mode .reader-header {
+    inset: 0 0 auto;
+    grid-template-columns: 42px minmax(0, 1fr);
+    min-height: 66px;
+    padding: 8px 10px;
+  }
+
+  .back-btn,
+  .reader-view.reading-room-mode .back-btn {
+    width: 42px;
+    min-height: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .back-btn span:last-child {
+    display: none;
+  }
+
+  .reader-title,
+  .reader-view.reading-room-mode .reader-title {
+    grid-column: 2;
+    grid-row: 1;
+    width: 100%;
+    gap: 9px;
+    padding: 0;
+  }
+
+  .reader-cover {
+    width: 32px;
+    height: 42px;
+  }
+
+  .reader-book-identity {
+    max-width: 45%;
+  }
+
+  .reader-book-name {
+    font-size: 13px;
+  }
+
+  .reader-title-divider {
+    height: 24px;
+  }
+
+  .reader-title-meta {
+    font-size: 11px;
+  }
+
+  .reader-version-badge,
+  .performance-mode-badge,
+  .reader-book-author {
+    display: none;
+  }
+
+  .reader-body,
+  .reader-view.reading-room-mode .reader-body {
+    width: calc(100% - 24px);
+    max-height: calc(100% - 130px);
+    margin: 76px auto 54px;
+    padding: 30px 28px 58px;
+    border-radius: 5px;
+  }
+
+  .reader-body--epub,
+  .reader-body--pdf,
+  .reader-view.reading-room-mode .reader-body--epub,
+  .reader-view.reading-room-mode .reader-body--pdf {
+    padding: 12px 8px 48px;
+  }
+
+  .reader-tool-rail {
+    top: auto;
+    right: 50%;
+    bottom: 8px;
+    width: auto;
+    flex-direction: row;
+    transform: translateX(50%);
+  }
+
+  .reader-tool-rail--shifted {
+    right: 50%;
+  }
+
+  .reader-tool-rail button {
+    width: 49px;
+    min-height: 43px;
+    border-right: 1px solid var(--reader-line);
+    border-bottom: 0;
+  }
+
+  .reader-tool-rail button > span {
+    font-size: 16px;
+  }
+
+  .reader-tool-rail small {
+    font-size: 8px;
+  }
+
+  .reader-progress-dock {
+    display: none;
+  }
+
+  .page-turn-zone {
+    top: 66px;
+    bottom: 52px;
+    width: 38px;
+  }
+
+  .page-turn-button {
+    width: 28px;
+    height: 44px;
+  }
+
+  .side-panel,
+  .reader-view.reading-room-mode .side-panel {
+    width: min(370px, 92vw);
+    max-width: none;
   }
 }
 </style>
