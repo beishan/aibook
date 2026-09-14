@@ -38,6 +38,7 @@ export interface CrawlerRuleTest { success:boolean; title?:string; author?:strin
 export interface CrawlerRuleVersion { id:number; version:number; changeSummary:string; enabled:boolean; rule:CrawlerRule; createdAt:string; updatedAt?:string }
 export interface CrawlerRuleSave { version:number; changeSummary:string; rule:CrawlerRule; enabled:boolean }
 export interface CrawlerRuleExport { schemaVersion:number; siteCode:string; version:number; changeSummary:string; rule:CrawlerRule; enabled?:boolean }
+export interface CrawlerSiteConfiguration { schemaVersion:number; type:'AIBOOK_CRAWLER_SITE'; site:CrawlerSitePayload; rules:CrawlerRuleSave[]; discoveryPages:CrawlerDiscoveryPagePayload[] }
 export interface PageResult<T> { content:T[]; totalElements:number; totalPages:number; number:number; size:number; first:boolean; last:boolean }
 export interface CrawlerDiscoveryQuery { page:number; size:number; keyword?:string; siteId?:number; sort:string }
 export interface CrawlerBookQuery { page:number; size:number; keyword?:string; siteId?:number; crawlStatus?:string; importStatus?:string; sort:string }
@@ -50,6 +51,8 @@ export const crawlerApi = {
   createSite: (data:CrawlerSitePayload) => api.post<CrawlerSite>('/api/crawler/sites', data).then(r => r.data),
   updateSite: (id:number, data:CrawlerSitePayload) => api.put<CrawlerSite>(`/api/crawler/sites/${id}`, data).then(r => r.data),
   deleteSite: (id:number) => api.delete(`/api/crawler/sites/${id}`),
+  exportSiteConfiguration: (id:number) => api.get<CrawlerSiteConfiguration>(`/api/crawler/sites/${id}/configuration`).then(r => r.data),
+  importSiteConfiguration: (data:CrawlerSiteConfiguration) => api.post<CrawlerSite>('/api/crawler/sites/configuration/import', data).then(r => r.data),
   crawlUrl: (siteId:number, url:string) => api.post<CrawlerTask>(`/api/crawler/sites/${siteId}/crawl`, { url }).then(r => r.data),
   scanSite: (siteId:number) => api.post<CrawlerTask>(`/api/crawler/sites/${siteId}/scan`).then(r => r.data),
   discoveryPages: () => api.get<CrawlerDiscoveryPage[]>('/api/crawler/discovery-pages').then(r => r.data),

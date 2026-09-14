@@ -29,6 +29,7 @@ public class CrawlerController {
     private final CrawlerRuleTestService ruleTestService;
     private final CrawlerRuleHealthService ruleHealthService;
     private final CrawlerDiscoveryPageService discoveryPageService;
+    private final CrawlerSiteConfigurationService siteConfigurationService;
     private final CrawlerChapterRepository chapterRepository;
 
     @GetMapping("/dashboard") public DashboardView dashboard(Authentication auth) { return managementService.dashboard(user(auth)); }
@@ -36,6 +37,8 @@ public class CrawlerController {
     @PostMapping("/sites") @ResponseStatus(HttpStatus.CREATED) public SiteView createSite(Authentication auth, @Valid @RequestBody SitePayload payload) { return managementService.createSite(user(auth), payload); }
     @PutMapping("/sites/{id}") public SiteView updateSite(Authentication auth, @PathVariable Long id, @Valid @RequestBody SitePayload payload) { return managementService.updateSite(user(auth), id, payload); }
     @DeleteMapping("/sites/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteSite(Authentication auth, @PathVariable Long id) { managementService.deleteSite(user(auth), id); }
+    @GetMapping("/sites/{id}/configuration") public SiteConfigurationPayload exportSiteConfiguration(Authentication auth, @PathVariable Long id) { return siteConfigurationService.exportConfiguration(user(auth), id); }
+    @PostMapping("/sites/configuration/import") @ResponseStatus(HttpStatus.CREATED) public SiteView importSiteConfiguration(Authentication auth, @Valid @RequestBody SiteConfigurationPayload payload) { return siteConfigurationService.importConfiguration(user(auth), payload); }
     @PostMapping("/sites/{id}/crawl") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView crawl(Authentication auth, @PathVariable Long id, @Valid @RequestBody ManualCrawlRequest request) { return taskService.start(user(auth), id, request.url()); }
     @PostMapping("/sites/{id}/scan") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView scan(Authentication auth, @PathVariable Long id) { return taskService.scanSite(user(auth), id); }
     @GetMapping("/discovery-pages") public List<DiscoveryPageView> discoveryPages(Authentication auth) { return discoveryPageService.pages(user(auth)); }

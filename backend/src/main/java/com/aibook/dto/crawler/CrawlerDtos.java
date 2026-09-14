@@ -104,6 +104,13 @@ public final class CrawlerDtos {
             @NotBlank @Size(max = 300) String changeSummary, @Valid @NotNull RulePayload rule,
             Boolean enabled) { }
 
+    public record SiteConfigurationPayload(
+            @Min(1) int schemaVersion,
+            @NotBlank @Pattern(regexp = "AIBOOK_CRAWLER_SITE") String type,
+            @Valid @NotNull SitePayload site,
+            @Size(max = 100) List<@Valid @NotNull RuleSaveRequest> rules,
+            @Size(max = 100) List<@Valid @NotNull DiscoveryPagePayload> discoveryPages) { }
+
     public record BookView(Long id, Long siteId, String siteName, String externalBookId,
             String bookUrl, String bookName, String author, String coverUrl, String description,
             String category, List<String> tags, String bookStatus, String latestChapter,
