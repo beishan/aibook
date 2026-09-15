@@ -20,6 +20,8 @@ import com.aibook.repository.BookScanSourceRepository;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
@@ -45,12 +47,18 @@ class ScanDirectoryTaskServiceTest {
         FileScannerService fileScannerService = mock(FileScannerService.class);
         ScanRecordRepository scanRecordRepository = mock(ScanRecordRepository.class);
         BookScanSourceRepository sourceRepository = mock(BookScanSourceRepository.class);
+        CountDownLatch directoryCountStarted = new CountDownLatch(1);
+        CountDownLatch releaseDirectoryCount = new CountDownLatch(1);
         when(repository.findByIdAndUser(2L, user))
                 .thenReturn(Optional.of(directory));
         when(repository.findByIdAndUserId(2L, 1L))
                 .thenReturn(Optional.of(directory));
         when(sourceRepository.countDistinctActiveBooksByScanDirectoryAndUser(directory, user))
-                .thenReturn(1L);
+                .thenAnswer(invocation -> {
+                    directoryCountStarted.countDown();
+                    releaseDirectoryCount.await(2, TimeUnit.SECONDS);
+                    return 1L;
+                });
         when(fileScannerService.scanDirectory(
                 eq(tempDir.toString()),
                 eq(1L),
@@ -77,6 +85,9 @@ class ScanDirectoryTaskServiceTest {
         try {
             Map<String, Object> started = service.startScan(2L, user);
             assertThat(started.get("status")).isIn("PENDING", "RUNNING");
+            assertThat(directoryCountStarted.await(2, TimeUnit.SECONDS)).isTrue();
+            assertThat(service.getProgress(2L, user).get("status")).isEqualTo("RUNNING");
+            releaseDirectoryCount.countDown();
 
             Map<String, Object> progress = waitForCompletion(service, user);
 
@@ -102,6 +113,7 @@ class ScanDirectoryTaskServiceTest {
             assertThat(finalRecord.getFailedBooks()).isEqualTo(1);
             assertThat(finalRecord.getDurationMs()).isNotNull();
         } finally {
+            releaseDirectoryCount.countDown();
             service.shutdown();
         }
     }

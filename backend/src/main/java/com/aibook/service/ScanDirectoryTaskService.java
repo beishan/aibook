@@ -121,10 +121,12 @@ public class ScanDirectoryTaskService {
             idle.put("scannedCount", 0);
             return idle;
         }
-        if (task.isActive()) {
-            persistRecord(task, false);
+        synchronized (task) {
+            if (task.isActive()) {
+                persistRecord(task, false);
+            }
+            return task.toMap();
         }
-        return task.toMap();
     }
 
     public Page<ScanRecordDTO> getHistory(
@@ -170,6 +172,8 @@ public class ScanDirectoryTaskService {
         task.startedAt = System.currentTimeMillis();
         task.record.setStartedAt(LocalDateTime.now());
         persistRecord(task, false);
+        ScanRecord.Status terminalStatus = ScanRecord.Status.FAILED;
+        String terminalMessage = "扫描失败";
         try {
             fileScannerService.scanDirectory(
                     task.path,
@@ -180,20 +184,24 @@ public class ScanDirectoryTaskService {
                     task.result);
 
             if (task.result.getErrors().isEmpty()) {
-                task.status = ScanRecord.Status.COMPLETED;
-                task.message = "扫描完成";
                 updateDirectory(task);
+                terminalStatus = ScanRecord.Status.COMPLETED;
+                terminalMessage = "扫描完成";
             } else {
-                task.status = ScanRecord.Status.FAILED;
-                task.message = task.result.getErrors().get(0).get("message");
+                terminalStatus = ScanRecord.Status.FAILED;
+                terminalMessage = task.result.getErrors().get(0).get("message");
             }
         } catch (Exception e) {
-            task.status = ScanRecord.Status.FAILED;
-            task.message = e.getMessage() == null ? "扫描失败" : e.getMessage();
+            terminalStatus = ScanRecord.Status.FAILED;
+            terminalMessage = e.getMessage() == null ? "扫描失败" : e.getMessage();
             log.error("目录扫描任务失败: taskId={}, path={}", task.taskId, task.path, e);
         } finally {
-            task.finishedAt = System.currentTimeMillis();
-            persistRecord(task, true);
+            synchronized (task) {
+                task.finishedAt = System.currentTimeMillis();
+                persistRecord(task, true, terminalStatus, terminalMessage);
+                task.message = terminalMessage;
+                task.status = terminalStatus;
+            }
             log.info(
                     "目录扫描任务结束: taskId={}, status={}, scanned={}/{}",
                     task.taskId,
@@ -204,9 +212,17 @@ public class ScanDirectoryTaskService {
     }
 
     private void persistRecord(ScanTask task, boolean finished) {
+        persistRecord(task, finished, task.status, task.message);
+    }
+
+    private void persistRecord(
+            ScanTask task,
+            boolean finished,
+            ScanRecord.Status status,
+            String message) {
         ScanRecord record = task.record;
-        record.setStatus(task.status);
-        record.setMessage(task.message);
+        record.setStatus(status);
+        record.setMessage(message);
         record.setTotalCount(task.result.getTotalCount());
         record.setScannedCount(task.result.getScannedCount());
         record.setNewBooks(task.result.getNewCount());
