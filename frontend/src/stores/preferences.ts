@@ -15,6 +15,8 @@ import { normalizeThemeBackgroundConfig } from '@/utils/themeBackground'
 export type LibraryViewMode = 'card' | 'compact-card' | 'list'
 export type CrawlerDiscoveryViewMode = 'table' | 'card'
 export type CrawlerBookViewMode = 'table' | 'card'
+export const CRAWLER_POLLING_INTERVAL_OPTIONS = [1, 3, 5, 10, 30] as const
+export type CrawlerPollingIntervalSeconds = (typeof CRAWLER_POLLING_INTERVAL_OPTIONS)[number]
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 export const LIBRARY_PAGE_SIZE_OPTIONS = [10, 30, 50, 100, 200] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
@@ -26,6 +28,7 @@ interface UserPreferences {
   libraryCardPageSize: number | null
   libraryListPageSize: number | null
   scanThreadCount: number | null
+  crawlerPollingIntervalSeconds: number | null
   crawlerFollowCurrentChapter: boolean | null
   crawlerChapterPageSize: number | null
   crawlerDiscoveryViewMode: CrawlerDiscoveryViewMode | null
@@ -49,6 +52,7 @@ const LIBRARY_PAGE_SIZE_KEY = 'aibook-library-page-size'
 const LIBRARY_CARD_PAGE_SIZE_KEY = 'aibook-library-card-page-size'
 const LIBRARY_LIST_PAGE_SIZE_KEY = 'aibook-library-list-page-size'
 const CRAWLER_FOLLOW_CURRENT_CHAPTER_KEY = 'aibook.crawler.followCurrentChapter'
+const CRAWLER_POLLING_INTERVAL_KEY = 'aibook.crawler.pollingIntervalSeconds'
 const CRAWLER_CHAPTER_PAGE_SIZE_KEY = 'aibook.crawler.chapterPageSize'
 const CRAWLER_DISCOVERY_VIEW_MODE_KEY = 'aibook.crawler.discoveryViewMode'
 const CRAWLER_BOOK_VIEW_MODE_KEY = 'aibook.crawler.bookViewMode'
@@ -59,6 +63,7 @@ const DOCK_BLUR_KEY = 'aibook-dock-blur'
 const DOCK_ICON_STYLE_KEY = 'aibook-dock-icon-style'
 const DEFAULT_LIBRARY_PAGE_SIZE: LibraryPageSize = 10
 const DEFAULT_SCAN_THREAD_COUNT = 2
+const DEFAULT_CRAWLER_POLLING_INTERVAL_SECONDS: CrawlerPollingIntervalSeconds = 3
 const CRAWLER_CHAPTER_PAGE_SIZE_OPTIONS = [20, 50, 100] as const
 type CrawlerChapterPageSize = (typeof CRAWLER_CHAPTER_PAGE_SIZE_OPTIONS)[number]
 const DEFAULT_CRAWLER_CHAPTER_PAGE_SIZE: CrawlerChapterPageSize = 20
@@ -110,6 +115,12 @@ const isScanThreadCount = (value: unknown): value is number =>
 const isCrawlerChapterPageSize = (value: unknown): value is CrawlerChapterPageSize =>
   typeof value === 'number' && CRAWLER_CHAPTER_PAGE_SIZE_OPTIONS.includes(value as CrawlerChapterPageSize)
 
+const isCrawlerPollingIntervalSeconds = (
+  value: unknown,
+): value is CrawlerPollingIntervalSeconds =>
+  typeof value === 'number'
+  && CRAWLER_POLLING_INTERVAL_OPTIONS.includes(value as CrawlerPollingIntervalSeconds)
+
 const isCrawlerDiscoveryViewMode = (value: unknown): value is CrawlerDiscoveryViewMode =>
   value === 'table' || value === 'card'
 
@@ -150,6 +161,14 @@ export const usePreferencesStore = defineStore('preferences', () => {
     readLocalLibraryPageSize(LIBRARY_LIST_PAGE_SIZE_KEY)
   )
   const scanThreadCount = ref(DEFAULT_SCAN_THREAD_COUNT)
+  const storedCrawlerPollingIntervalSeconds = Number(
+    localStorage.getItem(CRAWLER_POLLING_INTERVAL_KEY),
+  )
+  const crawlerPollingIntervalSeconds = ref<CrawlerPollingIntervalSeconds>(
+    isCrawlerPollingIntervalSeconds(storedCrawlerPollingIntervalSeconds)
+      ? storedCrawlerPollingIntervalSeconds
+      : DEFAULT_CRAWLER_POLLING_INTERVAL_SECONDS,
+  )
   const crawlerFollowCurrentChapter = ref(localStorage.getItem(CRAWLER_FOLLOW_CURRENT_CHAPTER_KEY) === 'true')
   const storedCrawlerChapterPageSize = Number(localStorage.getItem(CRAWLER_CHAPTER_PAGE_SIZE_KEY))
   const crawlerChapterPageSize = ref<CrawlerChapterPageSize>(
@@ -219,6 +238,13 @@ export const usePreferencesStore = defineStore('preferences', () => {
     crawlerFollowCurrentChapter.value = value
     localStorage.setItem(CRAWLER_FOLLOW_CURRENT_CHAPTER_KEY, String(value))
     if (syncRemote) persistRemote({ crawlerFollowCurrentChapter: value })
+  }
+
+  const setCrawlerPollingIntervalSeconds = (value: number, syncRemote = true) => {
+    if (!isCrawlerPollingIntervalSeconds(value)) return
+    crawlerPollingIntervalSeconds.value = value
+    localStorage.setItem(CRAWLER_POLLING_INTERVAL_KEY, String(value))
+    if (syncRemote) persistRemote({ crawlerPollingIntervalSeconds: value })
   }
 
   const setCrawlerChapterPageSize = (value: number, syncRemote = true) => {
@@ -412,6 +438,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.crawlerFollowCurrentChapter = crawlerFollowCurrentChapter.value
       }
 
+      if (isCrawlerPollingIntervalSeconds(data.crawlerPollingIntervalSeconds)) {
+        setCrawlerPollingIntervalSeconds(data.crawlerPollingIntervalSeconds, false)
+      } else {
+        missingPreferences.crawlerPollingIntervalSeconds = crawlerPollingIntervalSeconds.value
+      }
+
       if (isCrawlerChapterPageSize(data.crawlerChapterPageSize)) {
         setCrawlerChapterPageSize(data.crawlerChapterPageSize, false)
       } else {
@@ -490,6 +522,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     libraryCardPageSize,
     libraryListPageSize,
     scanThreadCount,
+    crawlerPollingIntervalSeconds,
     crawlerFollowCurrentChapter,
     crawlerChapterPageSize,
     crawlerDiscoveryViewMode,
@@ -507,6 +540,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setLibraryCardPageSize,
     setLibraryListPageSize,
     setScanThreadCount,
+    setCrawlerPollingIntervalSeconds,
     setCrawlerFollowCurrentChapter,
     setCrawlerChapterPageSize,
     setCrawlerDiscoveryViewMode,

@@ -22,6 +22,7 @@ public class UserPreferencesDTO {
     private Integer libraryCardPageSize;
     private Integer libraryListPageSize;
     private Integer scanThreadCount;
+    private Integer crawlerPollingIntervalSeconds;
     private Boolean crawlerFollowCurrentChapter;
     private Integer crawlerChapterPageSize;
     private String crawlerDiscoveryViewMode;
@@ -132,6 +133,14 @@ public class UserPreferencesDTO {
 
     public void setScanThreadCount(Integer scanThreadCount) {
         this.scanThreadCount = scanThreadCount;
+    }
+
+    public Integer getCrawlerPollingIntervalSeconds() {
+        return crawlerPollingIntervalSeconds;
+    }
+
+    public void setCrawlerPollingIntervalSeconds(Integer crawlerPollingIntervalSeconds) {
+        this.crawlerPollingIntervalSeconds = crawlerPollingIntervalSeconds;
     }
 
     public Boolean getCrawlerFollowCurrentChapter() {
@@ -266,6 +275,11 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder scanThreadCount(Integer scanThreadCount) {
             value.setScanThreadCount(scanThreadCount);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder crawlerPollingIntervalSeconds(Integer value) {
+            this.value.setCrawlerPollingIntervalSeconds(value);
             return this;
         }
 

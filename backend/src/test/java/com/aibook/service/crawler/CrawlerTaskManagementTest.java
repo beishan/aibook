@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.net.URI;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,6 +34,54 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class CrawlerTaskManagementTest {
+
+    @Test
+    void loweringConcurrencyMovesSurplusRunningTasksBackToWaiting() {
+        User user = user();
+        CrawlerTask retained = task(user, CrawlerTask.TaskStatus.RUNNING);
+        retained.setPriority(CrawlerTask.Priority.HIGH);
+        retained.setStartedAt(LocalDateTime.now().minusMinutes(3));
+        CrawlerTask yieldedNormal = task(user, CrawlerTask.TaskStatus.RUNNING);
+        yieldedNormal.setPriority(CrawlerTask.Priority.NORMAL);
+        yieldedNormal.setStartedAt(LocalDateTime.now().minusMinutes(2));
+        CrawlerTask yieldedLow = task(user, CrawlerTask.TaskStatus.RUNNING);
+        yieldedLow.setPriority(CrawlerTask.Priority.LOW);
+        yieldedLow.setStartedAt(LocalDateTime.now().minusMinutes(1));
+        Map<String, CrawlerTask> stored = Map.of(
+                retained.getId(), retained,
+                yieldedNormal.getId(), yieldedNormal,
+                yieldedLow.getId(), yieldedLow);
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        when(tasks.findByStatusIn(List.of(CrawlerTask.TaskStatus.RUNNING)))
+                .thenReturn(List.of(yieldedLow, retained, yieldedNormal));
+        when(tasks.findById(anyString())).thenAnswer(invocation ->
+                Optional.ofNullable(stored.get(invocation.getArgument(0))));
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        CrawlerSettingsService settings = mock(CrawlerSettingsService.class);
+        when(settings.updateMaxConcurrentTasks(1)).thenReturn(1);
+        when(settings.maxConcurrentTasks()).thenReturn(1);
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class),
+                mock(CrawlerBookRepository.class), mock(CrawlerChapterRepository.class), tasks,
+                mock(CrawlerScanResultRepository.class), mock(CrawlerTaskLogRepository.class),
+                mock(CrawlerManagementService.class), mock(OperationLogService.class),
+                mock(CrawlerExportService.class), mock(CrawlerHttpClient.class), List.of(),
+                mock(ApplicationContext.class), settings);
+        try {
+            var result = service.updateQueueSettings(1);
+
+            assertThat(result.maxConcurrentTasks()).isEqualTo(1);
+            assertThat(retained.getStatus()).isEqualTo(CrawlerTask.TaskStatus.RUNNING);
+            assertThat(yieldedNormal.getStatus()).isEqualTo(CrawlerTask.TaskStatus.WAITING);
+            assertThat(yieldedLow.getStatus()).isEqualTo(CrawlerTask.TaskStatus.WAITING);
+            assertThat(yieldedNormal.getQueueOrder()).isNotNull();
+            assertThat(yieldedLow.getQueueOrder()).isGreaterThan(yieldedNormal.getQueueOrder());
+            verify(tasks).save(yieldedNormal);
+            verify(tasks).save(yieldedLow);
+        } finally {
+            service.shutdown();
+        }
+    }
 
     @Test
     void queuesTasksBeyondConfiguredConcurrencyAndStartsNextAutomatically() throws Exception {

@@ -35,6 +35,7 @@ public class UserService implements UserDetailsService {
     private static final Set<Integer> LIBRARY_PAGE_SIZES =
             Set.of(10, 30, 50, 100, 200);
     private static final Set<Integer> CRAWLER_CHAPTER_PAGE_SIZES = Set.of(20, 50, 100);
+    private static final Set<Integer> CRAWLER_POLLING_INTERVAL_SECONDS = Set.of(1, 3, 5, 10, 30);
     private static final Set<String> CRAWLER_DISCOVERY_VIEW_MODES = Set.of("table", "card");
     private static final Set<String> CRAWLER_BOOK_VIEW_MODES = Set.of("table", "card");
     private static final int DEFAULT_LIBRARY_PAGE_SIZE = 10;
@@ -141,6 +142,11 @@ public class UserService implements UserDetailsService {
         if (request.getCrawlerFollowCurrentChapter() != null) {
             user.setCrawlerFollowCurrentChapter(request.getCrawlerFollowCurrentChapter());
         }
+        if (request.getCrawlerPollingIntervalSeconds() != null) {
+            requireAllowed("采集自动刷新频率", request.getCrawlerPollingIntervalSeconds(),
+                    CRAWLER_POLLING_INTERVAL_SECONDS);
+            user.setCrawlerPollingIntervalSeconds(request.getCrawlerPollingIntervalSeconds());
+        }
         if (request.getCrawlerChapterPageSize() != null) {
             requireAllowed("采集章节分页大小", request.getCrawlerChapterPageSize(),
                     CRAWLER_CHAPTER_PAGE_SIZES);
@@ -225,6 +231,7 @@ public class UserService implements UserDetailsService {
                 .libraryListPageSize(listPageSize)
                 .scanThreadCount(
                         ScanSettings.normalizeThreadCount(user.getScanThreadCount()))
+                .crawlerPollingIntervalSeconds(user.getCrawlerPollingIntervalSeconds())
                 .crawlerFollowCurrentChapter(user.getCrawlerFollowCurrentChapter())
                 .crawlerChapterPageSize(user.getCrawlerChapterPageSize())
                 .crawlerDiscoveryViewMode(user.getCrawlerDiscoveryViewMode())

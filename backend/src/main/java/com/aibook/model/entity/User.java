@@ -205,6 +205,14 @@ public class User implements UserDetails {
         preference().setScanThreadCount(value);
     }
 
+    public Integer getCrawlerPollingIntervalSeconds() {
+        return preference().getCrawlerPollingIntervalSeconds();
+    }
+
+    public void setCrawlerPollingIntervalSeconds(Integer value) {
+        preference().setCrawlerPollingIntervalSeconds(value);
+    }
+
     public Boolean getCrawlerFollowCurrentChapter() {
         return preference().getCrawlerFollowCurrentChapter();
     }

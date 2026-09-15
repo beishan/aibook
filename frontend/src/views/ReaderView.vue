@@ -4,6 +4,7 @@
     :class="{
       'fullscreen-mode': isFullscreen,
       'reading-room-mode': settings.appearance === 'readingRoom',
+      'trial-reader-mode': settings.appearance === 'trialReader',
     }"
     :style="readerShellStyle"
   >
@@ -965,7 +966,7 @@ const getThemePreviewStyle = (theme: any) => {
 
 const SETTINGS_STORAGE_KEY = 'ai-book-reader-settings'
 
-type ReaderAppearance = 'classic' | 'readingRoom'
+type ReaderAppearance = 'classic' | 'readingRoom' | 'trialReader'
 
 const appearanceOptions: Array<{
   value: ReaderAppearance
@@ -974,6 +975,7 @@ const appearanceOptions: Array<{
 }> = [
   { value: 'classic', label: '经典', description: '保留原有布局' },
   { value: 'readingRoom', label: '书房', description: '沉浸纸书风格' },
+  { value: 'trialReader', label: '临时阅读', description: '轻量试读布局' },
 ]
 
 const settings = ref({
@@ -1088,9 +1090,18 @@ const handleAppearanceKeydown = (event: KeyboardEvent) => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
   event.preventDefault()
   const group = event.currentTarget as HTMLElement | null
-  settings.value.appearance = event.key === 'ArrowLeft' || event.key === 'Home'
-    ? 'classic'
-    : 'readingRoom'
+  const currentIndex = Math.max(
+    0,
+    appearanceOptions.findIndex(option => option.value === settings.value.appearance),
+  )
+  const nextIndex = event.key === 'Home'
+    ? 0
+    : event.key === 'End'
+      ? appearanceOptions.length - 1
+      : event.key === 'ArrowLeft'
+        ? (currentIndex - 1 + appearanceOptions.length) % appearanceOptions.length
+        : (currentIndex + 1) % appearanceOptions.length
+  settings.value.appearance = appearanceOptions[nextIndex].value
   nextTick(() => {
     group?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus()
   })
@@ -4798,7 +4809,7 @@ onBeforeUnmount(() => {
   --appearance-index: 0;
   position: relative;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 4px;
   overflow: hidden;
   border: 1px solid var(--border-color-light);
@@ -4810,12 +4821,16 @@ onBeforeUnmount(() => {
   --appearance-index: 1;
 }
 
+.appearance-segmented--trialReader {
+  --appearance-index: 2;
+}
+
 .appearance-segmented-indicator {
   position: absolute;
   top: 4px;
   bottom: 4px;
   left: 4px;
-  width: calc((100% - 8px) / 2);
+  width: calc((100% - 8px) / 3);
   border: 1px solid var(--border-color-light);
   border-radius: 12px;
   background: var(--surface-elevated);
@@ -5974,6 +5989,335 @@ onBeforeUnmount(() => {
   .reader-view.reading-room-mode .side-panel {
     width: min(370px, 92vw);
     max-width: none;
+  }
+}
+/* 临时阅读：迁移试读页布局，继续复用正式阅读器的完整能力 */
+.trial-reader-mode {
+  --trial-surface: color-mix(in srgb, var(--reader-room-background) 92%, transparent);
+  --trial-surface-solid: color-mix(in srgb, var(--reader-room-background) 97%, var(--reader-room-text) 3%);
+  --trial-line: color-mix(in srgb, var(--reader-room-text) 14%, transparent);
+  --trial-muted: color-mix(in srgb, var(--reader-room-text) 58%, transparent);
+  background:
+    radial-gradient(circle at 50% -20%, color-mix(in srgb, #fff 38%, transparent), transparent 42%),
+    linear-gradient(135deg, color-mix(in srgb, var(--reader-room-text) 3%, transparent) 25%, transparent 25%) 0 0 / 22px 22px,
+    var(--reader-room-background);
+  color: var(--reader-room-text);
+}
+
+.trial-reader-mode .reader-header {
+  inset: 0 0 auto;
+  grid-template-columns: 48px minmax(0, 1fr);
+  min-height: 64px;
+  padding: 8px 270px 8px 16px;
+  column-gap: 12px;
+  border-bottom: 1px solid var(--trial-line);
+  background: var(--trial-surface);
+  box-shadow: none;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.trial-reader-mode .back-btn {
+  width: 38px;
+  min-height: 38px;
+  justify-content: center;
+  padding: 0;
+  border-color: var(--trial-line);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--reader-room-text);
+}
+
+.trial-reader-mode .back-btn span:last-child,
+.trial-reader-mode .reader-cover,
+.trial-reader-mode .reader-title-divider,
+.trial-reader-mode .reader-book-author,
+.trial-reader-mode .reader-header-actions {
+  display: none;
+}
+
+.trial-reader-mode .reader-title {
+  grid-column: 2;
+  display: grid;
+  justify-self: stretch;
+  width: 100%;
+  gap: 3px;
+  padding: 0;
+}
+
+.trial-reader-mode .reader-book-identity,
+.trial-reader-mode .reader-title-main,
+.trial-reader-mode .reader-title-meta {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  justify-content: flex-start;
+}
+
+.trial-reader-mode .reader-book-identity {
+  flex: none;
+}
+
+.trial-reader-mode .reader-book-name {
+  color: var(--reader-room-text);
+  font-family: "Iowan Old Style", "Songti SC", "STSong", serif;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.trial-reader-mode .reader-version-badge,
+.trial-reader-mode .performance-mode-badge {
+  border-color: color-mix(in srgb, var(--primary) 34%, transparent);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.trial-reader-mode .reader-title-meta {
+  color: var(--trial-muted);
+  font-size: 11px;
+}
+
+.trial-reader-mode .reader-body-wrapper {
+  background: transparent;
+}
+
+.trial-reader-mode .reader-body {
+  width: calc(100% - 64px);
+  max-height: none;
+  margin: 64px auto 0;
+  padding: 64px 0 122px;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent !important;
+  box-shadow: none;
+  color: var(--reader-room-text);
+}
+
+.trial-reader-mode .reader-body--epub,
+.trial-reader-mode .reader-body--pdf {
+  width: 100%;
+  padding: 12px 18px 82px;
+}
+
+.trial-reader-mode .reader-text,
+.trial-reader-mode .reader-html {
+  letter-spacing: 0.025em;
+}
+
+.trial-reader-mode .reader-text p,
+.trial-reader-mode .reader-html {
+  font-family: "Iowan Old Style", "Songti SC", "STSong", serif;
+  text-align: justify;
+}
+
+.trial-reader-mode .chapter-title {
+  margin: 0 0 1.5em;
+  padding: 0 0 1.55em;
+  border: 0;
+  font-family: "Iowan Old Style", "Songti SC", "STSong", serif;
+  font-size: 1.8em;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+
+.trial-reader-mode .chapter-title::after {
+  display: block;
+  margin-top: 1.5em;
+  color: var(--primary);
+  content: "◆";
+  font-size: 8px;
+  line-height: 1;
+}
+
+.trial-reader-mode .side-panel {
+  inset: 64px auto 0 0;
+  width: min(330px, 88vw);
+  border-right: 1px solid var(--trial-line);
+  background: var(--trial-surface);
+  box-shadow: 14px 0 38px color-mix(in srgb, var(--reader-room-text) 8%, transparent);
+  color: var(--reader-room-text);
+}
+
+.trial-reader-mode .side-panel--right {
+  inset: 64px 0 0 auto;
+  border-right: 0;
+  border-left: 1px solid var(--trial-line);
+  box-shadow: -14px 0 38px color-mix(in srgb, var(--reader-room-text) 8%, transparent);
+}
+
+.trial-reader-mode .panel-tabs {
+  min-height: 62px;
+  padding: 14px 18px;
+  border-bottom-color: var(--trial-line);
+}
+
+.trial-reader-mode .reader-tool-rail {
+  top: 10px;
+  right: 16px;
+  width: auto;
+  flex-direction: row;
+  border-color: var(--trial-line);
+  border-radius: 11px;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.trial-reader-mode .reader-tool-rail--shifted {
+  right: 16px;
+}
+
+.trial-reader-mode .reader-tool-rail button {
+  width: 44px;
+  min-height: 42px;
+  border-right: 1px solid var(--trial-line);
+  border-bottom: 0;
+  color: var(--trial-muted);
+}
+
+.trial-reader-mode .reader-tool-rail button:last-child {
+  border-right: 0;
+}
+
+.trial-reader-mode .reader-tool-rail small {
+  display: none;
+}
+
+.trial-reader-mode .reader-progress-dock {
+  bottom: 18px;
+  display: flex;
+  width: min(650px, calc(100% - 48px));
+  min-height: 50px;
+  box-sizing: border-box;
+  padding: 9px 132px;
+  border: 1px solid var(--trial-line);
+  border-radius: 16px;
+  background: var(--trial-surface);
+  box-shadow: 0 14px 40px color-mix(in srgb, var(--reader-room-text) 14%, transparent);
+  color: var(--trial-muted);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.trial-reader-mode .page-turn-zone {
+  top: auto;
+  bottom: 18px;
+  z-index: 135;
+  width: 120px;
+  height: 50px;
+}
+
+.trial-reader-mode .page-turn-zone--previous {
+  left: max(24px, calc(50% - 325px));
+}
+
+.trial-reader-mode .page-turn-zone--next {
+  right: max(24px, calc(50% - 325px));
+}
+
+.trial-reader-mode .page-turn-button {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--reader-room-text);
+  opacity: 0.8;
+}
+
+.trial-reader-mode .settings-overlay {
+  background: transparent;
+}
+
+.trial-reader-mode .settings-panel {
+  width: min(360px, 100%);
+  border-left: 1px solid var(--trial-line);
+  background: var(--trial-surface-solid);
+  color: var(--reader-room-text);
+  box-shadow: -14px 0 38px color-mix(in srgb, var(--reader-room-text) 8%, transparent);
+}
+
+@media (max-width: 768px) {
+  .trial-reader-mode .reader-header {
+    grid-template-columns: 38px minmax(0, 1fr);
+    min-height: 58px;
+    padding: 7px 188px 7px 8px;
+    column-gap: 8px;
+  }
+
+  .trial-reader-mode .back-btn {
+    width: 36px;
+    min-height: 36px;
+  }
+
+  .trial-reader-mode .reader-book-name {
+    font-size: 14px;
+  }
+
+  .trial-reader-mode .reader-version-badge,
+  .trial-reader-mode .performance-mode-badge {
+    display: none;
+  }
+
+  .trial-reader-mode .reader-body {
+    width: calc(100% - 34px);
+    max-height: none;
+    margin: 58px auto 0;
+    padding: 48px 0 112px;
+  }
+
+  .trial-reader-mode .reader-body--epub,
+  .trial-reader-mode .reader-body--pdf {
+    width: 100%;
+    padding: 8px 6px 72px;
+  }
+
+  .trial-reader-mode .side-panel,
+  .trial-reader-mode .side-panel--right {
+    top: 58px;
+    bottom: 0;
+  }
+
+  .trial-reader-mode .reader-tool-rail {
+    top: 7px;
+    right: 8px;
+    bottom: auto;
+    transform: none;
+  }
+
+  .trial-reader-mode .reader-tool-rail--shifted {
+    right: 8px;
+  }
+
+  .trial-reader-mode .reader-tool-rail button {
+    width: 34px;
+    min-height: 36px;
+  }
+
+  .trial-reader-mode .reader-progress-dock {
+    bottom: 10px;
+    width: calc(100% - 20px);
+    min-height: 48px;
+    padding: 8px 86px;
+  }
+
+  .trial-reader-mode .reader-progress-page {
+    display: none;
+  }
+
+  .trial-reader-mode .page-turn-zone {
+    bottom: 10px;
+    width: 80px;
+    height: 48px;
+  }
+
+  .trial-reader-mode .page-turn-zone--previous {
+    left: 10px;
+  }
+
+  .trial-reader-mode .page-turn-zone--next {
+    right: 10px;
   }
 }
 </style>

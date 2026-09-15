@@ -339,7 +339,14 @@
     <el-drawer v-model="taskDrawer" size="min(720px, 96vw)" :title="selectedTask ? `${taskTypeLabel(selectedTask.type)}详情` : '采集任务详情'" class="task-detail-drawer">
       <div v-if="selectedTask" v-loading="taskDetailLoading" class="task-detail-content">
         <header class="task-detail-hero">
-          <div class="task-detail-mark"><span :class="`state-${selectedTask.status.toLowerCase()}`"/><b>{{ taskProgress(selectedTask) }}%</b></div>
+          <el-progress
+            class="task-detail-circle"
+            type="circle"
+            :percentage="taskProgress(selectedTask)"
+            :status="taskCircleStatus(selectedTask.status)"
+            :width="72"
+            :stroke-width="7"
+          />
           <div><p class="eyebrow">{{ selectedTask.id }}</p><h2>{{ selectedTask.bookName || selectedTask.discoveryPageName || selectedTask.siteName }}</h2><p>{{ selectedTask.siteName }} · {{ taskTypeLabel(selectedTask.type) }}</p></div>
           <el-tag :type="statusType(selectedTask.status)" effect="light">{{ statusLabel(selectedTask.status) }}</el-tag>
         </header>
@@ -385,7 +392,7 @@
     <el-dialog v-model="queueSettingsDialog" title="采集任务并行设置" width="min(520px, 94vw)" append-to-body>
       <div class="queue-settings-content">
         <div class="queue-settings-summary"><span><small>正在运行</small><strong>{{ taskQueueSettings?.runningCount || 0 }}</strong></span><span><small>等待队列</small><strong>{{ taskQueueSettings?.queuedCount || 0 }}</strong></span></div>
-        <el-form label-position="top"><el-form-item label="最多同时运行任务数"><el-input-number v-model="queueLimit" :min="1" :max="16" controls-position="right" /><small class="field-hint">新任务超过上限后保持等待状态；有任务结束时，按高、中、低优先级及入队顺序自动开始。调低上限不会强制中断已运行任务。</small></el-form-item></el-form>
+        <el-form label-position="top"><el-form-item label="最多同时运行任务数"><el-input-number v-model="queueLimit" :min="1" :max="16" controls-position="right" /><small class="field-hint">新任务超过上限后保持等待状态；调低上限时，超出数量的运行任务会保留进度并安全转回等待队列，之后按高、中、低优先级及入队顺序自动继续。</small></el-form-item></el-form>
       </div>
       <template #footer><el-button @click="queueSettingsDialog=false">取消</el-button><el-button type="primary" :loading="savingQueueSettings" @click="saveQueueSettings">保存设置</el-button></template>
     </el-dialog>
@@ -451,7 +458,11 @@ import { useRouter } from 'vue-router'
 import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, Plus, Refresh, Search, Tickets, Upload, Warning } from '@element-plus/icons-vue'
 import { ElButton, ElProgress, ElTable, ElTableColumn, ElTag, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
 import { crawlerApi, type CrawlerBook, type CrawlerChapter, type CrawlerDashboard, type CrawlerDiscoveryPage, type CrawlerDiscoveryPagePayload, type CrawlerLog, type CrawlerRule, type CrawlerRuleExport, type CrawlerRuleTest, type CrawlerRuleVersion, type CrawlerScanResult, type CrawlerSite, type CrawlerSiteConfiguration, type CrawlerSitePayload, type CrawlerTask, type CrawlerTaskQueueSettings } from '@/utils/crawler'
-import { usePreferencesStore } from '@/stores/preferences'
+import {
+  CRAWLER_POLLING_INTERVAL_OPTIONS,
+  usePreferencesStore,
+  type CrawlerPollingIntervalSeconds,
+} from '@/stores/preferences'
 import { getCoverUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { confirm, message } from '@/utils/message'
@@ -477,12 +488,8 @@ type DiscoveryViewMode='table'|'card'
 type LoadOptions={silent?:boolean;preserveSelection?:boolean}
 const router=useRouter()
 const preferencesStore=usePreferencesStore()
-const {crawlerFollowCurrentChapter:followCurrentChapter,crawlerChapterPageSize:chapterPageSize,crawlerDiscoveryViewMode:discoveryViewMode,crawlerBookViewMode:bookViewMode}=storeToRefs(preferencesStore)
-const POLLING_INTERVAL_KEY='aibook.crawler.pollingIntervalSeconds'
-const pollingIntervalOptions=[1,3,5,10,30] as const
-type PollingIntervalSeconds=typeof pollingIntervalOptions[number]
-const storedPollingInterval=Number(localStorage.getItem(POLLING_INTERVAL_KEY))
-const pollingIntervalSeconds=ref<PollingIntervalSeconds>(pollingIntervalOptions.includes(storedPollingInterval as PollingIntervalSeconds)?storedPollingInterval as PollingIntervalSeconds:3)
+const {crawlerFollowCurrentChapter:followCurrentChapter,crawlerChapterPageSize:chapterPageSize,crawlerDiscoveryViewMode:discoveryViewMode,crawlerBookViewMode:bookViewMode,crawlerPollingIntervalSeconds:pollingIntervalSeconds}=storeToRefs(preferencesStore)
+const pollingIntervalOptions=CRAWLER_POLLING_INTERVAL_OPTIONS
 const activeTab=ref<TabKey>('overview'), dashboard=ref<CrawlerDashboard>(), sites=ref<CrawlerSite[]>([]), books=ref<CrawlerBook[]>([]), discoveredBooks=ref<CrawlerBook[]>([]), tasks=ref<CrawlerTask[]>([]), failedTasks=ref<CrawlerTask[]>([])
 const currentCrawlerTasks=ref<CrawlerTask[]>([]), submittingBookTaskIds=ref(new Set<number>())
 const siteDialog=ref(false), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), chapterDetail=ref<{title:string;url:string;content:string;errorMessage:string}>(), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
@@ -566,7 +573,7 @@ let chapterRequestSequence=0
 onMounted(async()=>{await preferencesStore.hydrate();await refresh();restartPolling()})
 onUnmounted(()=>{if(timer)window.clearInterval(timer)})
 function restartPolling(){if(timer)window.clearInterval(timer);timer=window.setInterval(()=>{void pollCrawlerProgress()},pollingIntervalSeconds.value*1000)}
-function setPollingInterval(value:number){if(!pollingIntervalOptions.includes(value as PollingIntervalSeconds))return;pollingIntervalSeconds.value=value as PollingIntervalSeconds;localStorage.setItem(POLLING_INTERVAL_KEY,String(value));restartPolling();void pollCrawlerProgress()}
+function setPollingInterval(value:number){if(!pollingIntervalOptions.includes(value as CrawlerPollingIntervalSeconds))return;preferencesStore.setCrawlerPollingIntervalSeconds(value);restartPolling();void pollCrawlerProgress()}
 async function refresh(){const [dashboardData,siteData]=await Promise.all([crawlerApi.dashboard(),crawlerApi.sites(),loadBooks(),loadTasks(),loadFailedTasks(),loadDiscoveredBooks(),loadTaskQueueSettings(),loadCurrentCrawlerTasks()]);dashboard.value=dashboardData;sites.value=siteData;await loadDiscoveryPages()}
 async function loadCurrentCrawlerTasks(){currentCrawlerTasks.value=await crawlerApi.currentTasks()}
 async function loadDiscoveryPages(){const pages=await crawlerApi.discoveryPages();discoveryPagesBySite.value=pages.reduce<Record<number,CrawlerDiscoveryPage[]>>((groups,page)=>{(groups[page.siteId]??=[]).push(page);return groups},{})}
@@ -632,7 +639,7 @@ async function syncOpenTask(options:LoadOptions={}){
 }
 async function loadTaskQueueSettings(){taskQueueSettings.value=await crawlerApi.taskQueueSettings();queueLimit.value=taskQueueSettings.value.maxConcurrentTasks}
 function openQueueSettings(){if(taskQueueSettings.value)queueLimit.value=taskQueueSettings.value.maxConcurrentTasks;queueSettingsDialog.value=true}
-async function saveQueueSettings(){savingQueueSettings.value=true;try{taskQueueSettings.value=await crawlerApi.updateTaskQueueSettings(queueLimit.value);queueLimit.value=taskQueueSettings.value.maxConcurrentTasks;queueSettingsDialog.value=false;message.success(`最多同时运行 ${queueLimit.value} 个采集任务`);await loadTasks({silent:true})}finally{savingQueueSettings.value=false}}
+async function saveQueueSettings(){const previousLimit=taskQueueSettings.value?.maxConcurrentTasks??queueLimit.value;savingQueueSettings.value=true;try{taskQueueSettings.value=await crawlerApi.updateTaskQueueSettings(queueLimit.value);queueLimit.value=taskQueueSettings.value.maxConcurrentTasks;queueSettingsDialog.value=false;message.success(queueLimit.value<previousLimit?`最多同时运行 ${queueLimit.value} 个采集任务，超出任务已转回等待队列`:`最多同时运行 ${queueLimit.value} 个采集任务`);await Promise.all([loadTasks({silent:true}),loadCurrentCrawlerTasks()])}finally{savingQueueSettings.value=false}}
 async function openQueuedTasks(){queuedTasksDialog.value=true;await loadQueuedTasks()}
 async function loadQueuedTasks(options:LoadOptions={}){if(options.silent&&(queuedTaskDraggingId.value||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value))return;if(!options.silent)queuedTasksLoading.value=true;try{queuedTasks.value=await crawlerApi.currentTasks()}finally{if(!options.silent)queuedTasksLoading.value=false}}
 async function openQueuedTask(task:CrawlerTask){queuedTasksDialog.value=false;await openTask(task)}
@@ -838,6 +845,7 @@ function priorityLabel(priority:string){return({LOW:'低',NORMAL:'普通',HIGH:'
 function priorityType(priority:string):''|'success'|'warning'|'info'|'danger'{return priority==='HIGH'?'warning':priority==='LOW'?'info':''}
 function scanTaskPercentage(task:CrawlerTask){return Math.max(0,Math.min(100,task.progressPercent??(['SUCCESS','PARTIAL_SUCCESS'].includes(task.status)?100:0)))}
 function taskProgress(task:CrawlerTask){return scanTaskPercentage(task)}
+function taskCircleStatus(status:string):'success'|'exception'|'warning'|undefined{if(status==='SUCCESS')return'success';if(status==='FAILED')return'exception';if(['PAUSED','PARTIAL_SUCCESS'].includes(status))return'warning';return undefined}
 function taskProgressDescription(task:CrawlerTask){if(task.type==='SITE_SCAN')return scanTaskProgressText(task);if(task.currentChapter)return task.currentChapter;if(task.status==='WAITING')return '任务正在队列中等待执行';if(task.status==='SUCCESS')return `处理完成 · 成功 ${task.successCount} 项`;if(task.status==='PARTIAL_SUCCESS')return `处理完成 · 成功 ${task.successCount} 项，失败 ${task.failedCount} 项`;if(task.status==='FAILED')return task.errorMessage||'任务执行失败';if(task.status==='PAUSED')return '任务已暂停，可从下方继续执行';if(task.status==='CANCELLED')return '任务已取消';return `已处理 ${task.successCount+task.failedCount} / ${task.totalCount} 项`}
 function scanTaskProgressText(task:CrawlerTask){if(task.status==='WAITING')return `等待扫描 · 分页上限 ${task.scanMaxPages||'—'} 页`;if(['SUCCESS','PARTIAL_SUCCESS'].includes(task.status))return task.scannedPageCount>0?`扫描完成 · 共扫描 ${task.scannedPageCount} 页`:'扫描完成';return task.currentChapter||`已扫描 ${task.scannedPageCount||0} / ${task.scanMaxPages||'—'} 页`}
 function scanResultLabel(status:CrawlerScanResult['resultStatus']){return({NEW:'新增',DUPLICATE:'重复',BLACKLISTED:'黑名单',FAILED:'失败'} as const)[status]}
@@ -887,6 +895,7 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 .discovery-source-badge{position:absolute;bottom:8px;left:8px;z-index:3;box-sizing:border-box;max-width:calc(100% - 50px);overflow:hidden;padding:4px 8px;border:1px solid rgba(255,255,255,.28);border-radius:7px;background:rgba(20,24,31,.72);box-shadow:0 3px 10px rgba(0,0,0,.16);color:#fff;font-family:inherit;font-size:9px;font-weight:700;line-height:1.2;text-overflow:ellipsis;white-space:nowrap;backdrop-filter:blur(9px)}.discovery-card-category{display:flex;min-height:32px;align-items:center;padding:7px 9px}.discovery-card-category :deep(.el-tag){max-width:100%;overflow:hidden;text-overflow:ellipsis}
 :global(.discovery-more-popper .danger-dropdown-item){color:var(--danger)}
 .crawler-book-card{cursor:pointer}
+.task-detail-circle{flex:0 0 72px}.task-detail-circle :deep(.el-progress__text){color:var(--text-primary);font-size:14px!important;font-weight:800}
 .crawler-book-title-button{display:block;width:100%;overflow:hidden;padding:0;border:0;background:transparent;color:var(--text-primary);cursor:pointer;font:inherit;font-size:13px;font-weight:700;text-align:left;text-overflow:ellipsis;white-space:nowrap}.crawler-book-title-button:hover{color:var(--primary)}.crawler-book-title-button:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:4px}
 .crawler-book-cover-badges{position:absolute;bottom:8px;left:8px;z-index:2;display:flex;max-width:calc(100% - 54px);flex-wrap:wrap;gap:5px}.crawler-book-cover-badges :deep(.el-tag){max-width:100%;border:0;box-shadow:0 3px 10px rgba(0,0,0,.16);backdrop-filter:blur(8px)}.crawler-book-card-check{z-index:5}
 .crawler-book-card-body{align-content:start}.crawler-book-progress{display:grid;gap:5px;padding-top:8px;border-top:1px solid var(--border-color-light)}.crawler-book-progress>div{display:flex;align-items:center;justify-content:space-between;gap:6px;color:var(--text-tertiary);font-size:9px}.crawler-book-progress strong{color:var(--text-secondary);font-size:9px;white-space:nowrap}.crawler-book-progress :deep(.el-progress__text){display:none}.crawler-book-progress :deep(.el-progress-bar){padding-right:0;margin-right:0}

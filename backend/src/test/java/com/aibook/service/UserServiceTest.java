@@ -369,16 +369,19 @@ class UserServiceTest {
         UserPreferencesDTO result = service.updatePreferences(
                 "reader",
                 UserPreferencesDTO.builder()
+                        .crawlerPollingIntervalSeconds(10)
                         .crawlerFollowCurrentChapter(true)
                         .crawlerChapterPageSize(50)
                         .crawlerDiscoveryViewMode("card")
                         .crawlerBookViewMode("card")
                         .build());
 
+        assertEquals(10, user.getCrawlerPollingIntervalSeconds());
         assertEquals(true, user.getCrawlerFollowCurrentChapter());
         assertEquals(50, user.getCrawlerChapterPageSize());
         assertEquals("card", user.getCrawlerDiscoveryViewMode());
         assertEquals("card", user.getCrawlerBookViewMode());
+        assertEquals(10, result.getCrawlerPollingIntervalSeconds());
         assertEquals(true, result.getCrawlerFollowCurrentChapter());
         assertEquals(50, result.getCrawlerChapterPageSize());
         assertEquals("card", result.getCrawlerDiscoveryViewMode());
@@ -398,6 +401,21 @@ class UserServiceTest {
 
         assertThrows(IllegalArgumentException.class, () -> service.updatePreferences(
                 "reader", UserPreferencesDTO.builder().crawlerChapterPageSize(30).build()));
+    }
+
+    @Test
+    void rejectsInvalidCrawlerPollingInterval() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        UserService service = new UserService(repository);
+
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences(
+                "reader", UserPreferencesDTO.builder().crawlerPollingIntervalSeconds(2).build()));
     }
 
     @Test

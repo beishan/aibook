@@ -63,13 +63,48 @@ public class CrawlerTaskService {
 
     public TaskQueueSettingsView queueSettings() {
         applyConcurrencyLimit(configuredConcurrency());
+        int activeCount = executor.getActiveCount();
+        int limit = executor.getMaximumPoolSize();
         return new TaskQueueSettingsView(
-                executor.getMaximumPoolSize(), executor.getActiveCount(), executor.getQueue().size());
+                limit, Math.min(activeCount, limit),
+                executor.getQueue().size() + Math.max(0, activeCount - limit));
     }
 
-    public TaskQueueSettingsView updateQueueSettings(Integer limit) {
-        applyConcurrencyLimit(crawlerSettingsService.updateMaxConcurrentTasks(limit));
+    public synchronized TaskQueueSettingsView updateQueueSettings(Integer limit) {
+        int normalized = crawlerSettingsService.updateMaxConcurrentTasks(limit);
+        applyConcurrencyLimit(normalized);
+        yieldRunningTasksAbove(normalized);
         return queueSettings();
+    }
+
+    private void yieldRunningTasksAbove(int limit) {
+        List<CrawlerTask> runningTasks = new ArrayList<>(
+                taskRepository.findByStatusIn(List.of(CrawlerTask.TaskStatus.RUNNING)));
+        if (runningTasks.size() <= limit) return;
+        runningTasks.sort(Comparator
+                .comparingInt((CrawlerTask task) -> priorityRank(task.getPriority()))
+                .thenComparing(CrawlerTask::getStartedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(CrawlerTask::getCreatedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())));
+        int yielded = 0;
+        for (CrawlerTask candidate : runningTasks.subList(limit, runningTasks.size())) {
+            synchronized (taskLock(candidate.getId())) {
+                CrawlerTask task = taskRepository.findById(candidate.getId()).orElse(null);
+                if (task == null || task.getStatus() != CrawlerTask.TaskStatus.RUNNING) continue;
+                task.setStatus(CrawlerTask.TaskStatus.WAITING);
+                task.setQueueOrder(nextQueueOrder());
+                taskRepository.save(task);
+                if (task.getCrawlerBook() != null) {
+                    task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.WAITING);
+                    bookRepository.save(task.getCrawlerBook());
+                }
+                recordCrawlerEvent(task, "并行上限调低，任务转回等待",
+                        "新并行上限：" + limit + "；保留当前进度并等待重新调度");
+                yielded++;
+            }
+        }
+        log.info("[采集任务] 并行上限调低后收缩运行任务: limit={}, yielded={}", limit, yielded);
     }
 
     public List<TaskView> queuedTasks(User user) {
@@ -620,13 +655,27 @@ public class CrawlerTaskService {
         private CrawlerJob(String taskId, CrawlerTask.Priority priority, long queueOrder, long sequence) {
             this.taskId = taskId; this.priority = priority; this.queueOrder = queueOrder; this.sequence = sequence;
         }
-        @Override public void run() { try { CrawlerTaskService.this.run(taskId); } finally { active.remove(taskId); } }
+        @Override public void run() {
+            try {
+                CrawlerTaskService.this.run(taskId);
+            } finally {
+                active.remove(taskId);
+                resubmitAfterConcurrencyYield(taskId);
+            }
+        }
         @Override public int compareTo(CrawlerJob other) {
             int rank = Integer.compare(priorityRank(priority), priorityRank(other.priority));
             if (rank != 0) return rank;
             int queueRank = Long.compare(queueOrder, other.queueOrder);
             return queueRank == 0 ? Long.compare(sequence, other.sequence) : queueRank;
         }
+    }
+
+    private void resubmitAfterConcurrencyYield(String taskId) {
+        if (shuttingDown) return;
+        taskRepository.findById(taskId)
+                .filter(task -> task.getStatus() == CrawlerTask.TaskStatus.WAITING)
+                .ifPresent(task -> submit(taskId));
     }
 
     void run(String taskId) {
@@ -1138,6 +1187,7 @@ public class CrawlerTaskService {
     private boolean isStopRequested(String taskId) {
         return taskRepository.findById(taskId)
                 .map(task -> task.getStatus() == CrawlerTask.TaskStatus.PAUSED
+                        || task.getStatus() == CrawlerTask.TaskStatus.WAITING
                         || task.getStatus() == CrawlerTask.TaskStatus.CANCELLED)
                 .orElse(true);
     }
