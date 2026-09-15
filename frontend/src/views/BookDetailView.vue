@@ -22,6 +22,15 @@
             <span>{{ book.onShelf ? '📚' : '➕' }}</span>
             <span>{{ book.onShelf ? '已在书架' : '加入书架' }}</span>
           </button>
+          <button
+            class="btn"
+            type="button"
+            :disabled="downloadingBook || !selectedVersionId"
+            @click="handleDownloadBook"
+          >
+            <span aria-hidden="true">⇩</span>
+            <span>{{ downloadingBook ? '下载中...' : '下载到本地' }}</span>
+          </button>
           <el-dropdown
             trigger="click"
             @command="handleBookActionCommand"
@@ -853,6 +862,7 @@ import ScraperDialog from '@/components/ScraperDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import { allBookCoversHidden, shouldLoadBookCover } from '@/utils/imagePrivacy'
+import { downloadBookToLocal } from '@/utils/bookDownload'
 
 const route = useRoute()
 const router = useRouter()
@@ -880,6 +890,7 @@ const activeTabIndex = computed(() => Math.max(
 const scraping = ref(false)
 const reparsing = ref(false)
 const downloadingCover = ref(false)
+const downloadingBook = ref(false)
 const uploadingCover = ref(false)
 const randomizingCover = ref(false)
 const coverInput = ref<HTMLInputElement | null>(null)
@@ -1151,6 +1162,24 @@ const handleRead = () => {
       ? { versionId: String(selectedVersionId.value) }
       : undefined,
   })
+}
+
+const handleDownloadBook = async () => {
+  if (!book.value || !selectedVersionId.value || downloadingBook.value) return
+  downloadingBook.value = true
+  try {
+    await downloadBookToLocal({
+      bookId: book.value.id,
+      title: book.value.title,
+      format: selectedVersionFormat.value,
+      versionId: selectedVersionId.value,
+    })
+    message.success('已开始下载到本地')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '书籍下载失败，请稍后重试')
+  } finally {
+    downloadingBook.value = false
+  }
 }
 
 const openFormatConversion = () => {

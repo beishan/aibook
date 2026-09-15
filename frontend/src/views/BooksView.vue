@@ -309,6 +309,16 @@
             </button>
             <button
               class="action-btn"
+              :class="{ 'is-processing': downloadingBookId === book.id }"
+              :disabled="downloadingBookId !== null"
+              aria-label="下载到本地"
+              title="下载到本地"
+              @click.stop="handleDownloadBook(book)"
+            >
+              <span class="action-icon">⇩</span>
+            </button>
+            <button
+              class="action-btn"
               :class="{ 'is-processing': processingBookId === book.id }"
               aria-label="更多操作"
               title="更多操作"
@@ -444,6 +454,13 @@
             <span class="list-action-label">{{ row.onShelf ? '已在书架' : '加入书架' }}</span>
           </button>
           <button class="btn btn-text" @click.stop="$router.push(`/reader/${row.id}`)">阅读</button>
+          <button
+            class="btn btn-text"
+            :disabled="downloadingBookId !== null"
+            @click.stop="handleDownloadBook(row)"
+          >
+            {{ downloadingBookId === row.id ? '下载中...' : '下载到本地' }}
+          </button>
           <el-dropdown
             trigger="click"
             :disabled="processingBookId === row.id"
@@ -601,6 +618,7 @@ import {
   toggleAllBookCovers,
 } from '@/utils/imagePrivacy'
 import { scrapeBook } from '@/utils/scraper'
+import { downloadBookToLocal } from '@/utils/bookDownload'
 
 const route = useRoute()
 const router = useRouter()
@@ -642,6 +660,7 @@ const editingBook = ref<Book | null>(null)
 const showAddToListDialog = ref(false)
 const bookToAddToList = ref<Book | null>(null)
 const processingBookId = ref<number | null>(null)
+const downloadingBookId = ref<number | null>(null)
 const showVersionRebuildDialog = ref(false)
 const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 const coversPreparing = ref(false)
@@ -898,6 +917,23 @@ const handleToggleShelf = async (book: Book) => {
     }
   } catch (error) {
     message.error(book.onShelf ? '移出书架失败' : '加入书架失败')
+  }
+}
+
+const handleDownloadBook = async (book: Book) => {
+  if (downloadingBookId.value !== null) return
+  downloadingBookId.value = book.id
+  try {
+    await downloadBookToLocal({
+      bookId: book.id,
+      title: book.title,
+      format: book.format,
+    })
+    message.success('已开始下载到本地')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '书籍下载失败，请稍后重试')
+  } finally {
+    downloadingBookId.value = null
   }
 }
 
@@ -1587,14 +1623,14 @@ onMounted(async () => {
 }
 
 .books-grid-compact .book-cover-actions {
-  gap: 4px;
-  padding: 6px;
+  gap: 3px;
+  padding: 5px;
 }
 
 .books-grid-compact .action-btn {
-  --card-action-size: 28px;
-  min-width: 20px;
-  width: 28px;
+  --card-action-size: 24px;
+  min-width: 16px;
+  width: 24px;
   font-size: 12px;
 }
 
@@ -1720,8 +1756,8 @@ onMounted(async () => {
   left: 0;
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
-  padding: 9px 10px;
+  gap: 4px;
+  padding: 8px;
   background: rgba(15, 23, 42, 0.72);
   border-bottom: 1px solid rgba(255, 255, 255, 0.22);
   opacity: 0;
@@ -1738,10 +1774,10 @@ onMounted(async () => {
 }
 
 .action-btn {
-  --card-action-size: 34px;
+  --card-action-size: 30px;
   flex: 0 1 var(--card-action-size);
-  min-width: 26px;
-  width: 34px;
+  min-width: 22px;
+  width: 30px;
   height: auto;
   aspect-ratio: 1;
   padding: 0;

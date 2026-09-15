@@ -241,6 +241,13 @@
                   </template>
                 </el-dropdown>
                 <button
+                  class="action-btn"
+                  :disabled="downloadingBookId !== null"
+                  aria-label="下载到本地"
+                  title="下载到本地"
+                  @click.stop="handleDownloadBook(book)"
+                ><span class="action-icon">{{ downloadingBookId === book.id ? '…' : '⇩' }}</span></button>
+                <button
                   class="action-btn remove-reading-action"
                   :disabled="shelfActionBookId === book.id"
                   title="移出书架"
@@ -270,6 +277,9 @@
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
+              <button class="btn btn-text" :disabled="downloadingBookId !== null" @click="handleDownloadBook(book)">
+                {{ downloadingBookId === book.id ? '下载中...' : '下载到本地' }}
+              </button>
               <button class="btn btn-text remove-reading-list-action" @click="removeShelfBook(book)">移出书架</button>
             </div>
           </div>
@@ -314,6 +324,15 @@
               :book-title="book.title"
               :compact="viewMode === 'list'"
             />
+            <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
+              <button
+                class="action-btn"
+                :disabled="downloadingBookId !== null"
+                aria-label="下载到本地"
+                title="下载到本地"
+                @click.stop="handleDownloadBook(book)"
+              ><span class="action-icon">{{ downloadingBookId === book.id ? '…' : '⇩' }}</span></button>
+            </div>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ book.title }}</div>
@@ -323,6 +342,12 @@
               <span v-if="book.publisher">{{ book.publisher }}</span>
             </div>
           </div>
+          <button
+            v-if="viewMode === 'list'"
+            class="btn btn-text"
+            :disabled="downloadingBookId !== null"
+            @click.stop="handleDownloadBook(book)"
+          >{{ downloadingBookId === book.id ? '下载中...' : '下载到本地' }}</button>
         </div>
       </div>
     </div>
@@ -366,6 +391,15 @@
             />
             <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
               <button
+                class="action-btn"
+                :disabled="downloadingBookId !== null"
+                aria-label="下载到本地"
+                title="下载到本地"
+                @click.stop="handleDownloadBook(book)"
+              >
+                <span class="action-icon">{{ downloadingBookId === book.id ? '…' : '⇩' }}</span>
+              </button>
+              <button
                 class="action-btn remove-reading-action"
                 :disabled="removingReadingIds.has(book.id)"
                 aria-label="移除正在阅读"
@@ -384,6 +418,12 @@
               <span v-if="book.publisher">{{ book.publisher }}</span>
             </div>
           </div>
+          <button
+            v-if="viewMode === 'list'"
+            class="btn btn-text"
+            :disabled="downloadingBookId !== null"
+            @click.stop="handleDownloadBook(book)"
+          >{{ downloadingBookId === book.id ? '下载中...' : '下载到本地' }}</button>
           <button
             v-if="viewMode === 'list'"
             class="btn btn-text remove-reading-list-action"
@@ -428,6 +468,15 @@
               :book-title="book.title"
               :compact="viewMode === 'list'"
             />
+            <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
+              <button
+                class="action-btn"
+                :disabled="downloadingBookId !== null"
+                aria-label="下载到本地"
+                title="下载到本地"
+                @click.stop="handleDownloadBook(book)"
+              ><span class="action-icon">{{ downloadingBookId === book.id ? '…' : '⇩' }}</span></button>
+            </div>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ book.title }}</div>
@@ -437,6 +486,12 @@
               <span v-if="book.publisher">{{ book.publisher }}</span>
             </div>
           </div>
+          <button
+            v-if="viewMode === 'list'"
+            class="btn btn-text"
+            :disabled="downloadingBookId !== null"
+            @click.stop="handleDownloadBook(book)"
+          >{{ downloadingBookId === book.id ? '下载中...' : '下载到本地' }}</button>
         </div>
       </div>
     </div>
@@ -478,6 +533,15 @@
               :book-title="book.title"
               :compact="viewMode === 'list'"
             />
+            <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
+              <button
+                class="action-btn"
+                :disabled="downloadingBookId !== null"
+                aria-label="下载到本地"
+                title="下载到本地"
+                @click.stop="handleDownloadBook(book)"
+              ><span class="action-icon">{{ downloadingBookId === book.id ? '…' : '⇩' }}</span></button>
+            </div>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ book.title }}</div>
@@ -487,6 +551,12 @@
               <span v-if="book.publisher">{{ book.publisher }}</span>
             </div>
           </div>
+          <button
+            v-if="viewMode === 'list'"
+            class="btn btn-text"
+            :disabled="downloadingBookId !== null"
+            @click.stop="handleDownloadBook(book)"
+          >{{ downloadingBookId === book.id ? '下载中...' : '下载到本地' }}</button>
         </div>
       </div>
     </div>
@@ -612,6 +682,7 @@ import { getCoverUrl } from '@/utils/cover'
 import { allBookCoversHidden, shouldLoadBookCover } from '@/utils/imagePrivacy'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import type { Book } from '@/stores/book'
+import { downloadBookToLocal } from '@/utils/bookDownload'
 
 const router = useRouter()
 const bookStore = useBookStore()
@@ -662,6 +733,7 @@ const wantedLoading = ref(false)
 const readingBooks = ref<Book[]>([])
 const readingLoading = ref(false)
 const removingReadingIds = ref(new Set<number>())
+const downloadingBookId = ref<number | null>(null)
 const shelfOverview = ref<ShelfOverview>({ ungroupedBooks: [], groups: [], totalBooks: 0 })
 const shelfLoading = ref(false)
 const selectedShelfGroup = ref<'all' | 'ungrouped' | number>('all')
@@ -965,6 +1037,23 @@ const removeFromReading = async (book: Book) => {
     message.error('移除正在阅读失败')
   } finally {
     removingReadingIds.value.delete(book.id)
+  }
+}
+
+const handleDownloadBook = async (book: Book) => {
+  if (downloadingBookId.value !== null) return
+  downloadingBookId.value = book.id
+  try {
+    await downloadBookToLocal({
+      bookId: book.id,
+      title: book.title,
+      format: book.format,
+    })
+    message.success('已开始下载到本地')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '书籍下载失败，请稍后重试')
+  } finally {
+    downloadingBookId.value = null
   }
 }
 
@@ -1606,13 +1695,14 @@ button.shelf-folder-card {
 
 .books-grid.card-small .shelf-book-actions {
   gap: 3px;
-  padding: 6px;
+  padding: 5px;
 }
 
 .books-grid.card-small .shelf-book-actions .action-btn {
-  flex-basis: 27px;
-  width: 27px;
-  height: 27px;
+  min-width: 16px;
+  flex-basis: 24px;
+  width: 24px;
+  height: 24px;
   font-size: 12px;
 }
 
@@ -1703,8 +1793,8 @@ button.shelf-folder-card {
   left: 0;
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
-  padding: 9px 10px;
+  gap: 4px;
+  padding: 8px;
   background: rgba(15, 23, 42, 0.72);
   border-bottom: 1px solid rgba(255, 255, 255, 0.22);
   opacity: 0;
@@ -1721,11 +1811,12 @@ button.shelf-folder-card {
 .action-btn {
   position: relative;
   display: flex;
-  flex: 0 0 34px;
+  flex: 0 1 30px;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  min-width: 22px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.96);

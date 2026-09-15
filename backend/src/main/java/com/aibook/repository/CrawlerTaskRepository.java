@@ -10,19 +10,27 @@ import java.util.*;
 
 public interface CrawlerTaskRepository extends JpaRepository<CrawlerTask, String> {
     Optional<CrawlerTask> findByIdAndUser(String id, User user);
-    @Query("""
+    @Query(value = """
             select t from CrawlerTask t
             where t.user = :user
             order by case when t.status = :runningStatus then 0 else 1 end, t.createdAt desc
+            """, countQuery = """
+            select count(t) from CrawlerTask t
+            where t.user = :user
+              and (t.status = :runningStatus or t.status <> :runningStatus or t.status is null)
             """)
     Page<CrawlerTask> findByUserRunningFirst(
             @Param("user") User user,
             @Param("runningStatus") CrawlerTask.TaskStatus runningStatus,
             Pageable pageable);
-    @Query("""
+    @Query(value = """
             select t from CrawlerTask t
             where t.user = :user and t.type = :type
             order by case when t.status = :runningStatus then 0 else 1 end, t.createdAt desc
+            """, countQuery = """
+            select count(t) from CrawlerTask t
+            where t.user = :user and t.type = :type
+              and (t.status = :runningStatus or t.status <> :runningStatus or t.status is null)
             """)
     Page<CrawlerTask> findByUserAndTypeRunningFirst(
             @Param("user") User user,

@@ -311,7 +311,9 @@
           <div v-else class="reader-placeholder">
             <div class="placeholder-icon">📚</div>
             <p>{{ book.format.toUpperCase() }} 格式暂不支持在线阅读</p>
-            <button class="btn btn-primary" @click="handleDownload">下载文件</button>
+            <button class="btn btn-primary" :disabled="downloadingBook" @click="handleDownload">
+              {{ downloadingBook ? '下载中...' : '下载到本地' }}
+            </button>
           </div>
         </div>
       </div>
@@ -337,6 +339,9 @@
         </button>
         <button type="button" :class="{ active: showSettings }" title="阅读设置" @click="showSettings = true">
           <span class="reader-tool-aa" aria-hidden="true">Aa</span><small>设置</small>
+        </button>
+        <button type="button" :disabled="downloadingBook" title="下载到本地" @click="handleDownload">
+          <span aria-hidden="true">⇩</span><small>{{ downloadingBook ? '下载中' : '下载' }}</small>
         </button>
         <button type="button" title="全屏阅读" @click="toggleFullscreen">
           <span aria-hidden="true">⛶</span><small>全屏</small>
@@ -695,6 +700,7 @@ import { message, confirm } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import { getCoverUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
+import { downloadBookToLocal } from '@/utils/bookDownload'
 import {
   BUILT_IN_READER_BACKGROUNDS,
   toReaderBackgroundOption,
@@ -805,6 +811,7 @@ const selectedVersion = computed(() =>
   versions.value.find(version => version.id === selectedVersionId.value) || null,
 )
 const loading = ref(true)
+const downloadingBook = ref(false)
 const loadError = ref('')
 const content = ref<string[]>([])
 const htmlContent = ref('')
@@ -3059,22 +3066,21 @@ const goBack = () => {
 }
 
 const handleDownload = async () => {
-  if (!book.value) return
+  if (!book.value || downloadingBook.value) return
+  downloadingBook.value = true
   try {
-    const response = await api.get(withVersion(`/api/books/${book.value.id}/content`), {
-      responseType: 'blob',
+    await downloadBookToLocal({
+      bookId: book.value.id,
+      title: book.value.title,
+      format: selectedVersion.value?.format || book.value.format,
+      versionId: selectedVersionId.value,
     })
-    const downloadUrl = URL.createObjectURL(response.data)
-    const anchor = document.createElement('a')
-    anchor.href = downloadUrl
-    anchor.download = `${book.value.title || 'book'}.${book.value.format || 'bin'}`
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0)
-  } catch (error) {
+    message.success('已开始下载到本地')
+  } catch (error: any) {
     console.error('Failed to download book:', error)
-    message.error('下载失败，请稍后重试')
+    message.error(error.response?.data?.message || '书籍下载失败，请稍后重试')
+  } finally {
+    downloadingBook.value = false
   }
 }
 
