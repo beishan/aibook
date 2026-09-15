@@ -20,6 +20,42 @@ export type CrawlerPollingIntervalSeconds = (typeof CRAWLER_POLLING_INTERVAL_OPT
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 export const LIBRARY_PAGE_SIZE_OPTIONS = [10, 30, 50, 100, 200] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
+export type ReaderAppearance = 'classic' | 'readingRoom' | 'trialReader'
+export type ReaderEpubEngine = 'epubjs' | 'readium'
+export type ReaderContentWidth = 'narrow' | 'medium' | 'wide' | 'wider' | 'full'
+export type ReaderScreenMode = 'single' | 'double'
+
+export interface ReaderSettings {
+  appearance: ReaderAppearance
+  epubEngine: ReaderEpubEngine
+  fontFamily: string
+  fontSize: number
+  lineHeight: number
+  paragraphSpacing: number
+  backgroundColor: string
+  backgroundImageId: string
+  textIndent: boolean
+  showProgress: boolean
+  paginationMode: boolean
+  contentWidth: ReaderContentWidth
+  screenMode: ReaderScreenMode
+}
+
+export const DEFAULT_READER_SETTINGS: ReaderSettings = {
+  appearance: 'classic',
+  epubEngine: 'epubjs',
+  fontFamily: 'default',
+  fontSize: 16,
+  lineHeight: 1.8,
+  paragraphSpacing: 16,
+  backgroundColor: 'auto',
+  backgroundImageId: 'none',
+  textIndent: true,
+  showProgress: true,
+  paginationMode: false,
+  contentWidth: 'medium',
+  screenMode: 'single',
+}
 
 interface UserPreferences {
   theme: ThemeId | null
@@ -45,6 +81,7 @@ interface UserPreferences {
   dockIconStyle: DockIconStyle | null
   uiFontId: number | null
   readerFontId: number | null
+  readerSettings: ReaderSettings | null
 }
 
 const LIBRARY_VIEW_MODE_KEY = 'ai-book-view-mode'
@@ -61,6 +98,8 @@ const DOCK_OPACITY_KEY = 'aibook-dock-opacity'
 const DOCK_MAGNIFICATION_KEY = 'aibook-dock-magnification'
 const DOCK_BLUR_KEY = 'aibook-dock-blur'
 const DOCK_ICON_STYLE_KEY = 'aibook-dock-icon-style'
+export const READER_SETTINGS_STORAGE_KEY = 'ai-book-reader-settings'
+const READER_SETTINGS_SAVE_DELAY_MS = 500
 const DEFAULT_LIBRARY_PAGE_SIZE: LibraryPageSize = 10
 const DEFAULT_SCAN_THREAD_COUNT = 2
 const DEFAULT_CRAWLER_POLLING_INTERVAL_SECONDS: CrawlerPollingIntervalSeconds = 3
@@ -151,6 +190,72 @@ const isBackgroundSettings = (value: unknown): value is ThemeBackgroundSettings 
     && isBackgroundConfig(settings.macos26)
 }
 
+const READER_APPEARANCES: ReaderAppearance[] = ['classic', 'readingRoom', 'trialReader']
+const READER_EPUB_ENGINES: ReaderEpubEngine[] = ['epubjs', 'readium']
+const READER_CONTENT_WIDTHS: ReaderContentWidth[] = ['narrow', 'medium', 'wide', 'wider', 'full']
+const READER_SCREEN_MODES: ReaderScreenMode[] = ['single', 'double']
+const READER_BACKGROUND_COLORS = [
+  'auto', '#ffffff', '#f5f5dc', '#e8f5e9', '#fff8e1', '#2d2d2d', '#1a1a2e',
+]
+const READER_BUILT_IN_FONTS = [
+  'default', 'SimSun, serif', 'SimHei, sans-serif', 'KaiTi, serif', 'FangSong, serif',
+]
+
+const isOneOf = <T extends string>(value: unknown, values: readonly T[]): value is T =>
+  typeof value === 'string' && values.includes(value as T)
+
+const normalizedNumber = (value: unknown, fallback: number, min: number, max: number) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : fallback
+}
+
+export const normalizeReaderSettings = (value: unknown): ReaderSettings => {
+  const source = value && typeof value === 'object' ? value as Partial<ReaderSettings> : {}
+  const fontFamily = typeof source.fontFamily === 'string'
+    && (READER_BUILT_IN_FONTS.includes(source.fontFamily) || /^managed:[1-9]\d*$/.test(source.fontFamily))
+    ? source.fontFamily
+    : DEFAULT_READER_SETTINGS.fontFamily
+  const backgroundImageId = typeof source.backgroundImageId === 'string'
+    && /^(none|warm-paper|rice-paper|sage-linen|mist-blue|custom-[1-9]\d*)$/.test(source.backgroundImageId)
+    ? source.backgroundImageId
+    : DEFAULT_READER_SETTINGS.backgroundImageId
+
+  return {
+    appearance: isOneOf(source.appearance, READER_APPEARANCES)
+      ? source.appearance : DEFAULT_READER_SETTINGS.appearance,
+    epubEngine: isOneOf(source.epubEngine, READER_EPUB_ENGINES)
+      ? source.epubEngine : DEFAULT_READER_SETTINGS.epubEngine,
+    fontFamily,
+    fontSize: normalizedNumber(source.fontSize, DEFAULT_READER_SETTINGS.fontSize, 12, 28),
+    lineHeight: normalizedNumber(source.lineHeight, DEFAULT_READER_SETTINGS.lineHeight, 1.2, 2.5),
+    paragraphSpacing: normalizedNumber(
+      source.paragraphSpacing, DEFAULT_READER_SETTINGS.paragraphSpacing, 0, 40,
+    ),
+    backgroundColor: isOneOf(source.backgroundColor, READER_BACKGROUND_COLORS)
+      ? source.backgroundColor : DEFAULT_READER_SETTINGS.backgroundColor,
+    backgroundImageId,
+    textIndent: typeof source.textIndent === 'boolean'
+      ? source.textIndent : DEFAULT_READER_SETTINGS.textIndent,
+    showProgress: typeof source.showProgress === 'boolean'
+      ? source.showProgress : DEFAULT_READER_SETTINGS.showProgress,
+    paginationMode: typeof source.paginationMode === 'boolean'
+      ? source.paginationMode : DEFAULT_READER_SETTINGS.paginationMode,
+    contentWidth: isOneOf(source.contentWidth, READER_CONTENT_WIDTHS)
+      ? source.contentWidth : DEFAULT_READER_SETTINGS.contentWidth,
+    screenMode: isOneOf(source.screenMode, READER_SCREEN_MODES)
+      ? source.screenMode : DEFAULT_READER_SETTINGS.screenMode,
+  }
+}
+
+const readLocalReaderSettings = (): ReaderSettings => {
+  try {
+    const saved = localStorage.getItem(READER_SETTINGS_STORAGE_KEY)
+    return normalizeReaderSettings(saved ? JSON.parse(saved) : null)
+  } catch {
+    return { ...DEFAULT_READER_SETTINGS }
+  }
+}
+
 export const usePreferencesStore = defineStore('preferences', () => {
   const themeStore = useThemeStore()
   const libraryViewMode = ref<LibraryViewMode>(readLocalLibraryViewMode())
@@ -189,8 +294,10 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const dockIconStyle = ref<DockIconStyle>(readLocalDockIconStyle())
   const uiFontId = ref<number | null>(null)
   const readerFontId = ref<number | null>(null)
+  const readerSettings = ref<ReaderSettings>(readLocalReaderSettings())
   const hydrated = ref(false)
   let saveQueue: Promise<unknown> = Promise.resolve()
+  let readerSettingsSaveTimer: ReturnType<typeof setTimeout> | null = null
 
   const persistRemote = (preferences: Partial<UserPreferences>) => {
     if (!localStorage.getItem('token')) return
@@ -385,6 +492,28 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (syncRemote) persistRemote({ readerFontId: value })
   }
 
+  const setReaderSettings = (
+    value: ReaderSettings,
+    syncRemote = true,
+    debounceRemote = true,
+  ) => {
+    const normalized = normalizeReaderSettings(value)
+    readerSettings.value = normalized
+    try {
+      localStorage.setItem(READER_SETTINGS_STORAGE_KEY, JSON.stringify(normalized))
+    } catch {
+      // localStorage 不可用时仍保留当前会话内的阅读设置。
+    }
+    if (!syncRemote || !localStorage.getItem('token')) return
+    if (readerSettingsSaveTimer) clearTimeout(readerSettingsSaveTimer)
+    const persist = () => {
+      readerSettingsSaveTimer = null
+      persistRemote({ readerSettings: normalized })
+    }
+    if (debounceRemote) readerSettingsSaveTimer = setTimeout(persist, READER_SETTINGS_SAVE_DELAY_MS)
+    else persist()
+  }
+
   const hydrate = async (force = false) => {
     if (hydrated.value && !force) return
     if (!localStorage.getItem('token')) return
@@ -500,6 +629,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
         false
       )
 
+      if (data.readerSettings) {
+        setReaderSettings(data.readerSettings, false)
+      } else {
+        missingPreferences.readerSettings = readerSettings.value
+      }
+
       hydrated.value = true
 
       if (Object.keys(missingPreferences).length > 0) {
@@ -534,6 +669,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     dockIconStyle,
     uiFontId,
     readerFontId,
+    readerSettings,
     hydrated,
     setTheme,
     setLibraryViewMode,
@@ -559,6 +695,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     resetDockAppearance,
     setUiFontId,
     setReaderFontId,
+    setReaderSettings,
     hydrate,
     resetHydration,
   }

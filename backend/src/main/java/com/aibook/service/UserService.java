@@ -38,6 +38,19 @@ public class UserService implements UserDetailsService {
     private static final Set<Integer> CRAWLER_POLLING_INTERVAL_SECONDS = Set.of(1, 3, 5, 10, 30);
     private static final Set<String> CRAWLER_DISCOVERY_VIEW_MODES = Set.of("table", "card");
     private static final Set<String> CRAWLER_BOOK_VIEW_MODES = Set.of("table", "card");
+    private static final Set<String> READER_APPEARANCES =
+            Set.of("classic", "readingRoom", "trialReader");
+    private static final Set<String> READER_EPUB_ENGINES = Set.of("epubjs", "readium");
+    private static final Set<String> READER_CONTENT_WIDTHS =
+            Set.of("narrow", "medium", "wide", "wider", "full");
+    private static final Set<String> READER_BACKGROUND_COLORS =
+            Set.of("auto", "#ffffff", "#f5f5dc", "#e8f5e9", "#fff8e1", "#2d2d2d", "#1a1a2e");
+    private static final Set<String> READER_SCREEN_MODES = Set.of("single", "double");
+    private static final Set<String> READER_BUILT_IN_FONTS = Set.of(
+            "default", "SimSun, serif", "SimHei, sans-serif", "KaiTi, serif", "FangSong, serif");
+    private static final Pattern MANAGED_READER_FONT_PATTERN = Pattern.compile("^managed:[1-9][0-9]*$");
+    private static final Pattern READER_BACKGROUND_PATTERN = Pattern.compile(
+            "^(none|warm-paper|rice-paper|sage-linen|mist-blue|custom-[1-9][0-9]*)$");
     private static final int DEFAULT_LIBRARY_PAGE_SIZE = 10;
     private static final Set<String> DOCK_ICON_STYLES =
             Set.of("minimal", "skeuomorphic", "macos26", "custom");
@@ -206,6 +219,10 @@ public class UserService implements UserDetailsService {
             validateFont(request.getReaderFontId());
             user.setReaderFontId(request.getReaderFontId());
         }
+        if (request.getReaderSettings() != null) {
+            user.setReaderSettings(serializeReaderSettings(
+                    normalizeReaderSettings(request.getReaderSettings())));
+        }
 
         return toPreferences(userRepository.save(user));
     }
@@ -245,6 +262,7 @@ public class UserService implements UserDetailsService {
                         user.getDockIconStyle(), DEFAULT_DOCK_ICON_STYLE))
                 .uiFontId(activeFontId(user.getUiFontId()))
                 .readerFontId(activeFontId(user.getReaderFontId()))
+                .readerSettings(readReaderSettings(user.getReaderSettings()))
                 .build();
     }
 
@@ -370,5 +388,60 @@ public class UserService implements UserDetailsService {
         defaults.put("macos26", new UserPreferencesDTO.ThemeBackgroundDTO(
                 "gradient", "#DCEBFA", "#F1E4F8", "#F8FBFF", 62, "#FFFFFF", 58));
         return defaults;
+    }
+
+    private UserPreferencesDTO.ReaderSettingsDTO normalizeReaderSettings(
+            UserPreferencesDTO.ReaderSettingsDTO settings) {
+        requireAllowed("阅读器外观", settings.getAppearance(), READER_APPEARANCES);
+        requireAllowed("EPUB 阅读引擎", settings.getEpubEngine(), READER_EPUB_ENGINES);
+        if (!READER_BUILT_IN_FONTS.contains(settings.getFontFamily())
+                && (settings.getFontFamily() == null
+                || !MANAGED_READER_FONT_PATTERN.matcher(settings.getFontFamily()).matches())) {
+            throw new IllegalArgumentException("阅读字体不支持该值: " + settings.getFontFamily());
+        }
+        requireRange("阅读字号", requireValue("阅读字号", settings.getFontSize()), 12, 28);
+        double lineHeight = requireValue("阅读行距", settings.getLineHeight());
+        if (!Double.isFinite(lineHeight) || lineHeight < 1.2 || lineHeight > 2.5) {
+            throw new IllegalArgumentException("阅读行距必须在 1.2 到 2.5 之间");
+        }
+        requireRange("阅读段距", requireValue("阅读段距", settings.getParagraphSpacing()), 0, 40);
+        requireAllowed("阅读宽度", settings.getContentWidth(), READER_CONTENT_WIDTHS);
+        requireAllowed("阅读背景色", settings.getBackgroundColor(), READER_BACKGROUND_COLORS);
+        if (settings.getBackgroundImageId() == null
+                || !READER_BACKGROUND_PATTERN.matcher(settings.getBackgroundImageId()).matches()) {
+            throw new IllegalArgumentException("阅读背景壁纸不支持该值: " + settings.getBackgroundImageId());
+        }
+        requireAllowed("单双页模式", settings.getScreenMode(), READER_SCREEN_MODES);
+        requireValue("翻页模式", settings.getPaginationMode());
+        requireValue("首行缩进", settings.getTextIndent());
+        requireValue("阅读进度显示", settings.getShowProgress());
+        return settings;
+    }
+
+    private String serializeReaderSettings(UserPreferencesDTO.ReaderSettingsDTO settings) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(settings);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("无法保存阅读设置", exception);
+        }
+    }
+
+    private UserPreferencesDTO.ReaderSettingsDTO readReaderSettings(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return normalizeReaderSettings(OBJECT_MAPPER.readValue(
+                    value, UserPreferencesDTO.ReaderSettingsDTO.class));
+        } catch (JsonProcessingException | IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    private <T> T requireValue(String label, T value) {
+        if (value == null) {
+            throw new IllegalArgumentException(label + "不能为空");
+        }
+        return value;
     }
 }

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
-const readerSource = await readFile(
-  new URL('../src/views/ReaderView.vue', import.meta.url),
-  'utf8',
-)
+const [readerSource, preferencesSource] = await Promise.all([
+  readFile(new URL('../src/views/ReaderView.vue', import.meta.url), 'utf8'),
+  readFile(new URL('../src/stores/preferences.ts', import.meta.url), 'utf8'),
+])
 
 assert.match(
   readerSource,
@@ -12,7 +12,7 @@ assert.match(
   'ReaderView must activate the migrated trial-reader layout class',
 )
 assert.match(
-  readerSource,
+  preferencesSource,
   /type ReaderAppearance = 'classic' \| 'readingRoom' \| 'trialReader'/,
 )
 assert.match(

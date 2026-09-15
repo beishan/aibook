@@ -95,6 +95,9 @@ public class UserPreference {
     private Long uiFontId;
     @Column(name = "reader_font_id")
     private Long readerFontId;
+
+    @Column(name = "reader_settings", columnDefinition = "TEXT")
+    private String readerSettings;
     @Column(name = "all_book_covers_hidden")
     private Boolean allBookCoversHidden;
 

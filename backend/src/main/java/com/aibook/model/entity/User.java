@@ -325,6 +325,14 @@ public class User implements UserDetails {
         preference().setReaderFontId(value);
     }
 
+    public String getReaderSettings() {
+        return preference().getReaderSettings();
+    }
+
+    public void setReaderSettings(String value) {
+        preference().setReaderSettings(value);
+    }
+
     public Boolean getAllBookCoversHidden() {
         return preference().getAllBookCoversHidden();
     }

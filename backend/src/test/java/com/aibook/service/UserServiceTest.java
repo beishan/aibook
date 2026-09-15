@@ -449,6 +449,80 @@ class UserServiceTest {
     }
 
     @Test
+    void storesAndRestoresReaderSettingsForTheAccount() throws Exception {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .preferences(UserPreference.builder().build())
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        when(repository.save(user)).thenReturn(user);
+        UserService service = new UserService(repository);
+
+        UserPreferencesDTO result = service.updatePreferences(
+                "reader",
+                UserPreferencesDTO.builder().readerSettings(validReaderSettings()).build());
+
+        UserPreferencesDTO.ReaderSettingsDTO stored = new ObjectMapper().readValue(
+                user.getReaderSettings(), UserPreferencesDTO.ReaderSettingsDTO.class);
+        assertEquals("readingRoom", stored.getAppearance());
+        assertEquals("readium", stored.getEpubEngine());
+        assertEquals("managed:12", stored.getFontFamily());
+        assertEquals(22, stored.getFontSize());
+        assertEquals(2.1, stored.getLineHeight());
+        assertEquals(24, stored.getParagraphSpacing());
+        assertEquals("wide", stored.getContentWidth());
+        assertEquals("#f5f5dc", stored.getBackgroundColor());
+        assertEquals("custom-7", stored.getBackgroundImageId());
+        assertEquals(true, stored.getPaginationMode());
+        assertEquals("double", stored.getScreenMode());
+        assertEquals(false, stored.getTextIndent());
+        assertEquals(false, stored.getShowProgress());
+        assertEquals("readingRoom", result.getReaderSettings().getAppearance());
+        assertEquals("double", service.getPreferences("reader").getReaderSettings().getScreenMode());
+    }
+
+    @Test
+    void rejectsInvalidReaderSettings() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder()
+                .username("reader")
+                .email("reader@example.com")
+                .password("encoded")
+                .build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        UserService service = new UserService(repository);
+        UserPreferencesDTO.ReaderSettingsDTO invalidSize = validReaderSettings();
+        invalidSize.setFontSize(48);
+        UserPreferencesDTO.ReaderSettingsDTO invalidBackground = validReaderSettings();
+        invalidBackground.setBackgroundImageId("javascript:alert(1)");
+
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences(
+                "reader", UserPreferencesDTO.builder().readerSettings(invalidSize).build()));
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences(
+                "reader", UserPreferencesDTO.builder().readerSettings(invalidBackground).build()));
+    }
+
+    private UserPreferencesDTO.ReaderSettingsDTO validReaderSettings() {
+        return new UserPreferencesDTO.ReaderSettingsDTO(
+                "readingRoom",
+                "readium",
+                "managed:12",
+                22,
+                2.1,
+                24,
+                "wide",
+                "#f5f5dc",
+                "custom-7",
+                true,
+                "double",
+                false,
+                false);
+    }
+
+    @Test
     void distinguishesOmittedFontFromExplicitNull() throws Exception {
         UserRepository repository = mock(UserRepository.class);
         FontAssetRepository fonts = mock(FontAssetRepository.class);

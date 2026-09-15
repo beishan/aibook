@@ -34,6 +34,7 @@ public class UserPreferencesDTO {
     private String dockIconStyle;
     private Long uiFontId;
     private Long readerFontId;
+    private ReaderSettingsDTO readerSettings;
 
     @JsonIgnore
     private boolean uiFontIdPresent;
@@ -235,6 +236,14 @@ public class UserPreferencesDTO {
         this.readerFontIdPresent = true;
     }
 
+    public ReaderSettingsDTO getReaderSettings() {
+        return readerSettings;
+    }
+
+    public void setReaderSettings(ReaderSettingsDTO readerSettings) {
+        this.readerSettings = readerSettings;
+    }
+
     @JsonIgnore
     public boolean hasUiFontId() {
         return uiFontIdPresent;
@@ -364,9 +373,89 @@ public class UserPreferencesDTO {
             return this;
         }
 
+        public UserPreferencesDTOBuilder readerSettings(ReaderSettingsDTO readerSettings) {
+            value.setReaderSettings(readerSettings);
+            return this;
+        }
+
         public UserPreferencesDTO build() {
             return value;
         }
+    }
+
+    public static class ReaderSettingsDTO {
+        private String appearance;
+        private String epubEngine;
+        private String fontFamily;
+        private Integer fontSize;
+        private Double lineHeight;
+        private Integer paragraphSpacing;
+        private String contentWidth;
+        private String backgroundColor;
+        private String backgroundImageId;
+        private Boolean paginationMode;
+        private String screenMode;
+        private Boolean textIndent;
+        private Boolean showProgress;
+
+        public ReaderSettingsDTO() {
+        }
+
+        public ReaderSettingsDTO(
+                String appearance,
+                String epubEngine,
+                String fontFamily,
+                Integer fontSize,
+                Double lineHeight,
+                Integer paragraphSpacing,
+                String contentWidth,
+                String backgroundColor,
+                String backgroundImageId,
+                Boolean paginationMode,
+                String screenMode,
+                Boolean textIndent,
+                Boolean showProgress) {
+            this.appearance = appearance;
+            this.epubEngine = epubEngine;
+            this.fontFamily = fontFamily;
+            this.fontSize = fontSize;
+            this.lineHeight = lineHeight;
+            this.paragraphSpacing = paragraphSpacing;
+            this.contentWidth = contentWidth;
+            this.backgroundColor = backgroundColor;
+            this.backgroundImageId = backgroundImageId;
+            this.paginationMode = paginationMode;
+            this.screenMode = screenMode;
+            this.textIndent = textIndent;
+            this.showProgress = showProgress;
+        }
+
+        public String getAppearance() { return appearance; }
+        public void setAppearance(String value) { appearance = value; }
+        public String getEpubEngine() { return epubEngine; }
+        public void setEpubEngine(String value) { epubEngine = value; }
+        public String getFontFamily() { return fontFamily; }
+        public void setFontFamily(String value) { fontFamily = value; }
+        public Integer getFontSize() { return fontSize; }
+        public void setFontSize(Integer value) { fontSize = value; }
+        public Double getLineHeight() { return lineHeight; }
+        public void setLineHeight(Double value) { lineHeight = value; }
+        public Integer getParagraphSpacing() { return paragraphSpacing; }
+        public void setParagraphSpacing(Integer value) { paragraphSpacing = value; }
+        public String getContentWidth() { return contentWidth; }
+        public void setContentWidth(String value) { contentWidth = value; }
+        public String getBackgroundColor() { return backgroundColor; }
+        public void setBackgroundColor(String value) { backgroundColor = value; }
+        public String getBackgroundImageId() { return backgroundImageId; }
+        public void setBackgroundImageId(String value) { backgroundImageId = value; }
+        public Boolean getPaginationMode() { return paginationMode; }
+        public void setPaginationMode(Boolean value) { paginationMode = value; }
+        public String getScreenMode() { return screenMode; }
+        public void setScreenMode(String value) { screenMode = value; }
+        public Boolean getTextIndent() { return textIndent; }
+        public void setTextIndent(Boolean value) { textIndent = value; }
+        public Boolean getShowProgress() { return showProgress; }
+        public void setShowProgress(Boolean value) { showProgress = value; }
     }
 
     public static class ThemeBackgroundDTO {

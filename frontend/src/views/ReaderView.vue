@@ -675,7 +675,12 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookStore } from '@/stores/book'
 import { useThemeStore } from '@/stores/theme'
-import { usePreferencesStore } from '@/stores/preferences'
+import {
+  DEFAULT_READER_SETTINGS,
+  usePreferencesStore,
+  type ReaderAppearance,
+  type ReaderSettings,
+} from '@/stores/preferences'
 import { useFontStore } from '@/stores/font'
 import PdfReader from '@/components/reader/PdfReader.vue'
 import { EpubJsReaderEngine } from '@/reader/EpubJsReaderEngine'
@@ -964,10 +969,6 @@ const getThemePreviewStyle = (theme: any) => {
   return { background: theme.value, color: theme.textColor }
 }
 
-const SETTINGS_STORAGE_KEY = 'ai-book-reader-settings'
-
-type ReaderAppearance = 'classic' | 'readingRoom' | 'trialReader'
-
 const appearanceOptions: Array<{
   value: ReaderAppearance
   label: string
@@ -978,21 +979,8 @@ const appearanceOptions: Array<{
   { value: 'trialReader', label: '临时阅读', description: '轻量试读布局' },
 ]
 
-const settings = ref({
-  appearance: 'classic' as ReaderAppearance,
-  epubEngine: 'epubjs' as 'epubjs' | 'readium',
-  fontFamily: 'default',
-  fontSize: 16,
-  lineHeight: 1.8,
-  paragraphSpacing: 16,
-  backgroundColor: 'auto',
-  backgroundImageId: 'none',
-  textIndent: true,
-  showProgress: true,
-  paginationMode: false, // 翻页模式
-  contentWidth: 'medium', // 内容宽度: narrow, medium, wide
-  screenMode: 'single', // 屏幕模式: single(一屏), double(两屏)
-})
+const settings = ref<ReaderSettings>({ ...DEFAULT_READER_SETTINGS })
+let readerSettingsReady = false
 
 const isPaginationMode = computed(
   () => settings.value.paginationMode || performancePaginationMode.value
@@ -1127,27 +1115,6 @@ const contentStyle = computed(() => {
     height: isDoubleScreen ? '100%' : 'auto',
   }
 })
-
-// 加载保存的阅读设置
-const loadReaderSettings = () => {
-  try {
-    const saved = localStorage.getItem(SETTINGS_STORAGE_KEY)
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      Object.assign(settings.value, parsed)
-      if (!appearanceOptions.some(option => option.value === settings.value.appearance)) {
-        settings.value.appearance = 'classic'
-      }
-    }
-  } catch (e) { /* ignore */ }
-}
-
-// 保存阅读设置
-const saveReaderSettings = () => {
-  try {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings.value))
-  } catch (e) { /* ignore */ }
-}
 
 const handleEngineKeydown = (event: KeyboardEvent) => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
@@ -2534,7 +2501,7 @@ const initEpub = async (progressReady: Promise<void> = Promise.resolve()) => {
     } catch (error) {
       console.error('[Reader] Readium initialization failed, falling back to epub.js:', error)
       settings.value.epubEngine = 'epubjs'
-      saveReaderSettings()
+      preferencesStore.setReaderSettings(settings.value)
       message.warning('Readium 无法打开此书，已自动切换到 epub.js')
       if (epubContainer.value) epubContainer.value.replaceChildren()
     }
@@ -3220,7 +3187,7 @@ watch(() => settings.value, () => {
       console.warn('[Reader] Failed to apply EPUB settings:', error)
     })
   }
-  saveReaderSettings()
+  if (readerSettingsReady) preferencesStore.setReaderSettings(settings.value)
   updateTotalPages()
 }, { deep: true })
 
@@ -3289,9 +3256,11 @@ const handleResize = () => {
 }
 
 const initializeReader = async () => {
-  loadReaderSettings()
   try {
     await preferencesStore.hydrate()
+    Object.assign(settings.value, preferencesStore.readerSettings)
+    await nextTick()
+    readerSettingsReady = true
     await Promise.all([fontStore.fetchFonts(), loadReaderBackgrounds()])
     const preferredFontId = preferencesStore.readerFontId
     if (preferredFontId != null) {
@@ -3302,6 +3271,9 @@ const initializeReader = async () => {
     }
   } catch (error) {
     console.error('Failed to initialize reader font:', error)
+    Object.assign(settings.value, preferencesStore.readerSettings)
+    await nextTick()
+    readerSettingsReady = true
     if (preferencesStore.readerFontId != null) {
       preferencesStore.setReaderFontId(null)
     }
