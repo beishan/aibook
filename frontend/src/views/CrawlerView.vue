@@ -134,8 +134,11 @@
         <el-select v-model="taskStatusFilter" clearable placeholder="全部任务状态" aria-label="任务状态筛选" @change="handleTaskStatusFilter">
           <el-option v-for="status in taskStatusOptions" :key="status" :label="statusLabel(status)" :value="status" />
         </el-select>
+        <el-select v-model="taskTypeFilter" clearable placeholder="全部任务类型" aria-label="任务类型筛选" @change="handleTaskTypeFilter">
+          <el-option v-for="type in taskTypeOptions" :key="type" :label="taskTypeLabel(type)" :value="type" />
+        </el-select>
         <el-button :type="taskStatusFilter==='RUNNING'?'primary':undefined" @click="showRunningTasks">只看进行中</el-button>
-        <el-button v-if="taskStatusFilter" text @click="clearTaskStatusFilter">清除筛选</el-button>
+        <el-button v-if="taskStatusFilter||taskTypeFilter" text @click="clearTaskFilters">清除筛选</el-button>
       </div>
       <transition name="task-batch-rise">
         <div v-if="selectedTaskRows.length" class="task-batch-bar" role="toolbar" aria-label="采集任务批量管理">
@@ -155,7 +158,7 @@
       <div v-loading="activeTab === 'failed' ? failedTaskLoading : taskLoading">
         <TaskTable :key="activeTab" :tasks="activeTab === 'failed' ? failedTasks : tasks" selectable @selection-change="handleTaskSelectionChange" @open="openTask" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" @scan-results="openScanResults" />
       </div>
-      <el-empty v-if="activeTab === 'tasks'&&!taskLoading&&!tasks.length" :description="taskStatusFilter?'暂无符合状态的采集任务':'暂无采集任务'" />
+      <el-empty v-if="activeTab === 'tasks'&&!taskLoading&&!tasks.length" :description="taskStatusFilter||taskTypeFilter?'暂无符合筛选条件的采集任务':'暂无采集任务'" />
       <el-empty v-if="activeTab === 'failed'&&!failedTaskLoading&&!failedTasks.length" description="暂无失败任务" />
       <div v-if="activeTab === 'tasks'&&taskTotal" class="list-pagination"><span>当前显示 {{ tasks.length }} 项</span><el-pagination v-model:current-page="taskPage" v-model:page-size="taskPageSize" :page-sizes="[20,50,100]" :total="taskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadTasks()" @size-change="handleTaskSizeChange" /></div>
       <div v-if="activeTab === 'failed'&&failedTaskTotal" class="list-pagination"><span>当前显示 {{ failedTasks.length }} 项</span><el-pagination v-model:current-page="failedTaskPage" v-model:page-size="failedTaskPageSize" :page-sizes="[20,50,100]" :total="failedTaskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadFailedTasks()" @size-change="handleFailedTaskSizeChange" /></div>
@@ -455,8 +458,8 @@
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
-import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, Plus, Refresh, Search, Tickets, Upload, Warning } from '@element-plus/icons-vue'
-import { ElButton, ElProgress, ElTable, ElTableColumn, ElTag, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
+import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, MoreFilled, Plus, Refresh, Search, Tickets, Upload, Warning } from '@element-plus/icons-vue'
+import { ElButton, ElButtonGroup, ElDropdown, ElDropdownItem, ElDropdownMenu, ElProgress, ElTable, ElTableColumn, ElTag, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
 import { crawlerApi, type CrawlerBook, type CrawlerChapter, type CrawlerDashboard, type CrawlerDiscoveryPage, type CrawlerDiscoveryPagePayload, type CrawlerLog, type CrawlerRule, type CrawlerRuleExport, type CrawlerRuleTest, type CrawlerRuleVersion, type CrawlerScanResult, type CrawlerSite, type CrawlerSiteConfiguration, type CrawlerSitePayload, type CrawlerTask, type CrawlerTaskQueueSettings } from '@/utils/crawler'
 import {
   CRAWLER_POLLING_INTERVAL_OPTIONS,
@@ -467,7 +470,21 @@ import { getCoverUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { confirm, message } from '@/utils/message'
 
-const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true},selectable:{type:Boolean,default:false}}, emits:['open','command','edit','delete','scan-results','selection-change'], setup(props,{emit}) { return () => h(ElTable,{data:props.tasks,rowKey:'id',class:'data-table',onSelectionChange:(rows:CrawlerTask[])=>emit('selection-change',rows)},()=>[
+type TaskMoreCommand='scan-results'|'edit'|'resume'|'delete'
+type TaskMoreAction={command:TaskMoreCommand;label:string;danger?:boolean;divided?:boolean}
+
+const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true},selectable:{type:Boolean,default:false}}, emits:['open','command','edit','delete','scan-results','selection-change'], setup(props,{emit}) {
+  const moreActions=(row:CrawlerTask):TaskMoreAction[]=>[
+    row.type==='SITE_SCAN'?{command:'scan-results',label:'扫描结果'}:null,
+    ['PAUSED','FAILED'].includes(row.status)?{command:'resume',label:'继续'}:null,
+    ['WAITING','PAUSED','FAILED'].includes(row.status)?{command:'edit',label:'修改'}:null,
+    row.status!=='RUNNING'?{command:'delete',label:'删除',danger:true,divided:true}:null,
+  ].filter((action):action is TaskMoreAction=>Boolean(action))
+  const handleMoreCommand=(row:CrawlerTask,command:TaskMoreCommand)=>{
+    if(command==='resume')emit('command',row,'resume')
+    else emit(command,row)
+  }
+  return () => h(ElTable,{data:props.tasks,rowKey:'id',class:'data-table',onSelectionChange:(rows:CrawlerTask[])=>emit('selection-change',rows)},()=>[
   props.selectable?h(ElTableColumn,{type:'selection',width:48,reserveSelection:true}):null,
   h(ElTableColumn,{label:'任务',minWidth:240},{default:({row}:{row:CrawlerTask})=>h('div',{class:'task-open',role:'button',tabindex:0,onClick:()=>emit('open',row),onKeydown:(event:KeyboardEvent)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();emit('open',row)}}},[h('strong',row.bookName||row.discoveryPageName||taskTypeLabel(row.type)),h('p',row.siteName)])}),
   h(ElTableColumn,{label:'任务类型',width:120},{default:({row}:{row:CrawlerTask})=>taskTypeLabel(row.type)}),
@@ -477,7 +494,18 @@ const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask
   h(ElTableColumn,{label:'创建时间',width:170},{default:({row}:{row:CrawlerTask})=>formatTime(row.createdAt)}),
   h(ElTableColumn,{label:'完成时间',width:170},{default:({row}:{row:CrawlerTask})=>formatTime(row.finishedAt)}),
   h(ElTableColumn,{label:'当前章节',prop:'currentChapter',minWidth:150}),
-  h(ElTableColumn,{label:'操作',width:390},{default:({row}:{row:CrawlerTask})=>[h(ElButton,{text:true,type:'primary',onClick:()=>emit('open',row)},()=> '详情'),row.type==='SITE_SCAN'?h(ElButton,{text:true,onClick:()=>emit('scan-results',row)},()=> '扫描结果'):null,['WAITING','PAUSED','FAILED'].includes(row.status)?h(ElButton,{text:true,onClick:()=>emit('edit',row)},()=> '修改'):null,row.status==='RUNNING'?h(ElButton,{text:true,onClick:()=>emit('command',row,'pause')},()=> '暂停'):null,['PAUSED','FAILED'].includes(row.status)?h(ElButton,{text:true,type:'primary',onClick:()=>emit('command',row,'resume')},()=> '继续'):null,['RUNNING','WAITING','PAUSED'].includes(row.status)?h(ElButton,{text:true,type:'danger',onClick:()=>emit('command',row,'cancel')},()=> '取消'):null,row.status!=='RUNNING'?h(ElButton,{text:true,type:'danger',onClick:()=>emit('delete',row)},()=> '删除'):null]})
+  h(ElTableColumn,{label:'操作',width:250,fixed:'right'},{default:({row}:{row:CrawlerTask})=>{
+    const actions=moreActions(row)
+    return h(ElButtonGroup,{class:'task-action-button-group'},()=>[
+      h(ElButton,{size:'small',type:'primary',plain:true,onClick:()=>emit('open',row)},()=> '详情'),
+      ['RUNNING','WAITING'].includes(row.status)?h(ElButton,{size:'small',onClick:()=>emit('command',row,'pause')},()=> '暂停'):null,
+      ['RUNNING','WAITING','PAUSED'].includes(row.status)?h(ElButton,{size:'small',type:'danger',plain:true,onClick:()=>emit('command',row,'cancel')},()=> '取消'):null,
+      actions.length?h(ElDropdown,{trigger:'click',placement:'bottom-end',onCommand:(command:TaskMoreCommand)=>handleMoreCommand(row,command)},{
+        default:()=>h(ElButton,{size:'small',icon:MoreFilled,'aria-label':'更多操作',title:'更多操作'}),
+        dropdown:()=>h(ElDropdownMenu,{},()=>actions.map(action=>h(ElDropdownItem,{command:action.command,divided:action.divided,class:action.danger?'danger-dropdown-item':undefined},()=>action.label))),
+      }):null,
+    ])
+  }})
 ]) }})
 
 type TabKey='overview'|'sites'|'discovered'|'books'|'tasks'|'failed'
@@ -500,7 +528,7 @@ const bookSiteId=ref<number>(), bookCrawlStatus=ref(''), bookImportStatus=ref(''
 const chapterLoading=ref(false), chapterPage=ref(1), chapterTotal=ref(0)
 const currentCrawlingChapter=ref<CrawlerChapter>()
 const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=ref(0)
-const taskStatusFilter=ref('')
+const taskStatusFilter=ref(''), taskTypeFilter=ref('')
 const selectedTasks=ref<CrawlerTask[]>([]), selectedFailedTasks=ref<CrawlerTask[]>([]), batchTaskManaging=ref(false), batchTaskAction=ref<'pause'|'resume'|'cancel'|'delete'|'priority'>()
 const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
 const queueSettingsDialog=ref(false), savingQueueSettings=ref(false), taskQueueSettings=ref<CrawlerTaskQueueSettings>(), queueLimit=ref(4), queuedTasksDialog=ref(false), queuedTasksLoading=ref(false), queuedTasksReordering=ref(false), queuedTaskPrioritizingId=ref<string>(), queuedTaskCommandId=ref<string>(), queuedTaskCommand=ref<'pause'|'resume'>(), queuedTaskDraggingId=ref<string>(), queuedTaskDragStartOrder=ref<string[]>([]), queuedTasks=ref<CrawlerTask[]>([])
@@ -539,6 +567,7 @@ const bookDetailTabs:{value:BookDetailTab;label:string}[]=[{value:'chapters',lab
 const chapterSortOptions:{value:ChapterSort;label:string}[]=[{value:'indexAsc',label:'章节正序'},{value:'indexDesc',label:'章节倒序'},{value:'createdDesc',label:'添加时间'}]
 const taskPriorityOptions:{value:'LOW'|'NORMAL'|'HIGH';label:string}[]=[{value:'LOW',label:'低'},{value:'NORMAL',label:'普通'},{value:'HIGH',label:'高'}]
 const taskStatusOptions=['WAITING','RUNNING','PAUSED','SUCCESS','PARTIAL_SUCCESS','FAILED','CANCELLED']
+const taskTypeOptions=['SITE_SCAN','BOOK_METADATA','BOOK_CHAPTER_LIST','BOOK_CONTENT','BOOK_UPDATE_CHECK','BOOK_FULL_CRAWL','BOOK_EXPORT','BOOK_IMPORT']
 const discoverySortOptions=[{value:'DISCOVER_TIME_DESC',label:'发现时间：最新优先'},{value:'DISCOVER_TIME_ASC',label:'发现时间：最早优先'},{value:'BOOK_NAME_ASC',label:'书名：正序'},{value:'BOOK_NAME_DESC',label:'书名：倒序'},{value:'AUTHOR_ASC',label:'作者：正序'},{value:'AUTHOR_DESC',label:'作者：倒序'}]
 const managedBookStatusOptions=[{value:'WAITING',label:'等待中'},{value:'CRAWLING_METADATA',label:'采集元数据'},{value:'CRAWLING_CHAPTER_LIST',label:'采集目录'},{value:'CRAWLING_CONTENT',label:'采集正文'},{value:'PARTIAL_SUCCESS',label:'部分成功'},{value:'COMPLETED',label:'已完成'},{value:'FAILED',label:'失败'},{value:'UPDATING',label:'更新中'},{value:'PAUSED',label:'已暂停'}]
 const bookImportStatusOptions=[{value:'NOT_IMPORTED',label:'未入库'},{value:'READY',label:'待入库'},{value:'IMPORTED',label:'已入库'}]
@@ -666,11 +695,12 @@ async function loadBooks(options:LoadOptions={}){if(!options.silent)bookLoading.
 async function handleBookSizeChange(){bookPage.value=1;await loadBooks()}
 async function applyBookFilters(){bookPage.value=1;await loadBooks()}
 async function resetBookFilters(){bookKeyword.value='';bookSiteId.value=undefined;bookCrawlStatus.value='';bookImportStatus.value='';bookSort.value='CREATED_DESC';bookPage.value=1;await loadBooks()}
-async function loadTasks(options:LoadOptions={}){if(!options.silent){taskLoading.value=true;selectedTasks.value=[]}try{const result=await crawlerApi.tasks({page:taskPage.value-1,size:taskPageSize.value,status:taskStatusFilter.value||undefined});const lastPage=Math.max(1,Math.ceil(result.totalElements/taskPageSize.value));if(taskPage.value>lastPage){taskPage.value=lastPage;return await loadTasks(options)}tasks.value=result.content;taskTotal.value=result.totalElements}finally{if(!options.silent)taskLoading.value=false}}
+async function loadTasks(options:LoadOptions={}){if(!options.silent){taskLoading.value=true;selectedTasks.value=[]}try{const result=await crawlerApi.tasks({page:taskPage.value-1,size:taskPageSize.value,status:taskStatusFilter.value||undefined,type:taskTypeFilter.value||undefined});const lastPage=Math.max(1,Math.ceil(result.totalElements/taskPageSize.value));if(taskPage.value>lastPage){taskPage.value=lastPage;return await loadTasks(options)}tasks.value=result.content;taskTotal.value=result.totalElements}finally{if(!options.silent)taskLoading.value=false}}
 async function handleTaskSizeChange(){taskPage.value=1;await loadTasks()}
 async function handleTaskStatusFilter(){taskPage.value=1;await loadTasks()}
+async function handleTaskTypeFilter(){taskPage.value=1;await loadTasks()}
 async function showRunningTasks(){taskStatusFilter.value='RUNNING';await handleTaskStatusFilter()}
-async function clearTaskStatusFilter(){taskStatusFilter.value='';await handleTaskStatusFilter()}
+async function clearTaskFilters(){taskStatusFilter.value='';taskTypeFilter.value='';taskPage.value=1;await loadTasks()}
 function handleTaskSelectionChange(rows:CrawlerTask[]){if(activeTab.value==='failed')selectedFailedTasks.value=rows;else selectedTasks.value=rows}
 async function handleBatchTaskPriority(priority:'LOW'|'NORMAL'|'HIGH'){await manageSelectedTasks('priority',priority)}
 async function manageSelectedTasks(action:'pause'|'resume'|'cancel'|'delete'|'priority',priority?:'LOW'|'NORMAL'|'HIGH'){
@@ -927,6 +957,7 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 .muted-text{color:var(--text-tertiary);font-size:11px}
 .task-filter-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:12px 14px;border:1px solid var(--border-color-light);border-radius:14px;background:var(--surface-elevated)}.task-filter-toolbar :deep(.el-select){width:210px}.task-filter-toolbar .el-button{margin-left:0}@media(max-width:520px){.task-filter-toolbar{align-items:stretch;flex-direction:column}.task-filter-toolbar :deep(.el-select),.task-filter-toolbar .el-button{width:100%}}
 .task-batch-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px;padding:11px 12px;border:1px solid color-mix(in srgb,var(--primary) 28%,var(--border-color-light));border-radius:15px;background:linear-gradient(105deg,var(--primary-alpha-10),color-mix(in srgb,var(--surface-elevated) 94%,var(--primary) 6%));box-shadow:0 8px 24px color-mix(in srgb,var(--primary) 8%,transparent)}.task-batch-summary{display:flex;min-width:0;align-items:center;gap:10px}.task-batch-summary>span{display:grid;width:36px;height:36px;flex:0 0 36px;place-items:center;border-radius:11px;background:var(--primary);color:#fff;font-size:14px;font-weight:800;box-shadow:0 6px 14px color-mix(in srgb,var(--primary) 25%,transparent)}.task-batch-summary>div{display:grid;min-width:0;gap:2px}.task-batch-summary strong{font-size:12px}.task-batch-summary small{overflow:hidden;color:var(--text-secondary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.task-batch-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:7px}.task-batch-actions .el-button{margin-left:0}.task-batch-rise-enter-active,.task-batch-rise-leave-active{transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.2,1)}.task-batch-rise-enter-from,.task-batch-rise-leave-to{opacity:0;transform:translateY(-8px)}@media(max-width:760px){.task-batch-bar{align-items:stretch;flex-direction:column}.task-batch-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.task-batch-actions :deep(.el-dropdown),.task-batch-actions :deep(.el-button){width:100%}}@media(max-width:440px){.task-batch-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(prefers-reduced-motion:reduce){.task-batch-rise-enter-active,.task-batch-rise-leave-active{transition:none}}
+.task-action-button-group{display:inline-flex;white-space:nowrap}.task-action-button-group :deep(.el-dropdown){display:inline-flex}.task-action-button-group :deep(.el-dropdown .el-button){margin-left:-1px;border-top-left-radius:0;border-bottom-left-radius:0}.task-action-button-group:has(.el-dropdown) :deep(>.el-button:last-of-type){border-top-right-radius:0;border-bottom-right-radius:0}
 .book-batch-actions,.book-batch-task-actions,.book-batch-status-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}.book-batch-status-actions{padding-left:8px;border-left:1px solid var(--border-color)}.book-batch-actions :deep(.el-select){width:170px}.book-batch-actions .el-button{margin-left:0}@media(max-width:760px){.book-batch-actions{width:100%;align-items:stretch;flex-direction:column}.book-batch-task-actions,.book-batch-status-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));justify-content:stretch}.book-batch-status-actions{grid-template-columns:minmax(0,1fr) auto;padding:8px 0 0;border-top:1px solid var(--border-color);border-left:0}.book-batch-actions :deep(.el-select),.book-batch-actions .el-button{width:100%}}@media(max-width:440px){.book-batch-task-actions{grid-template-columns:minmax(0,1fr)}.book-batch-status-actions{grid-template-columns:minmax(0,1fr)}}
 :deep(.task-success-progress){display:flex;align-items:center;gap:10px;min-height:24px;color:var(--success)}:deep(.task-success-progress strong){font-size:13px}:deep(.task-success-progress span){color:var(--text-tertiary);font-size:11px}@keyframes crawler-progress-stripes{from{background-position:0 0}to{background-position:24px 0}}:deep(.crawler-running-progress .el-progress-bar__inner){background-color:var(--success)!important;background-image:linear-gradient(45deg,rgba(255,255,255,.38) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.38) 50%,rgba(255,255,255,.38) 75%,transparent 75%,transparent);background-size:24px 24px;animation:crawler-progress-stripes .7s linear infinite}:deep(.crawler-running-progress .el-progress__text){color:var(--success)}@media(prefers-reduced-motion:reduce){:deep(.crawler-running-progress .el-progress-bar__inner){animation:none}}
 </style>

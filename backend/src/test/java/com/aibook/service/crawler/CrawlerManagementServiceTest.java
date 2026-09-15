@@ -397,6 +397,36 @@ class CrawlerManagementServiceTest {
     }
 
     @Test
+    void filtersTasksByRequestedTypeAndStatus() {
+        User user = user();
+        when(tasks.findByUserAndTypeAndStatusInOrderByCreatedAtDesc(eq(user),
+                eq(CrawlerTask.TaskType.BOOK_CONTENT),
+                eq(List.of(CrawlerTask.TaskStatus.RUNNING)), any(Pageable.class)))
+                .thenReturn(Page.empty());
+
+        service.tasks(user, 0, 20, false, "running", "book_content");
+
+        verify(tasks).findByUserAndTypeAndStatusInOrderByCreatedAtDesc(eq(user),
+                eq(CrawlerTask.TaskType.BOOK_CONTENT),
+                eq(List.of(CrawlerTask.TaskStatus.RUNNING)), any(Pageable.class));
+        verify(tasks, never()).findByUserRunningFirst(any(), any(), any());
+    }
+
+    @Test
+    void filtersTasksByRequestedTypeWithRunningFirstOrder() {
+        User user = user();
+        when(tasks.findByUserAndTypeRunningFirst(eq(user),
+                eq(CrawlerTask.TaskType.SITE_SCAN), eq(CrawlerTask.TaskStatus.RUNNING),
+                any(Pageable.class))).thenReturn(Page.empty());
+
+        service.tasks(user, 0, 20, false, null, "site_scan");
+
+        verify(tasks).findByUserAndTypeRunningFirst(eq(user),
+                eq(CrawlerTask.TaskType.SITE_SCAN), eq(CrawlerTask.TaskStatus.RUNNING),
+                any(Pageable.class));
+    }
+
+    @Test
     void usesRunningFirstQueryForUnfilteredTasks() {
         User user = user();
         when(tasks.findByUserRunningFirst(eq(user), eq(CrawlerTask.TaskStatus.RUNNING),
@@ -413,6 +443,14 @@ class CrawlerManagementServiceTest {
         assertThatThrownBy(() -> service.tasks(user(), 0, 20, false, "processing"))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("任务状态无效");
+    }
+
+    @Test
+    void rejectsInvalidTaskTypeFilter() {
+        assertThatThrownBy(() -> service.tasks(
+                user(), 0, 20, false, null, "unknown"))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("任务类型无效");
     }
 
     @Test

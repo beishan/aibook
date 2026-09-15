@@ -19,8 +19,21 @@ public interface CrawlerTaskRepository extends JpaRepository<CrawlerTask, String
             @Param("user") User user,
             @Param("runningStatus") CrawlerTask.TaskStatus runningStatus,
             Pageable pageable);
+    @Query("""
+            select t from CrawlerTask t
+            where t.user = :user and t.type = :type
+            order by case when t.status = :runningStatus then 0 else 1 end, t.createdAt desc
+            """)
+    Page<CrawlerTask> findByUserAndTypeRunningFirst(
+            @Param("user") User user,
+            @Param("type") CrawlerTask.TaskType type,
+            @Param("runningStatus") CrawlerTask.TaskStatus runningStatus,
+            Pageable pageable);
     Page<CrawlerTask> findByUserAndStatusInOrderByCreatedAtDesc(
             User user, Collection<CrawlerTask.TaskStatus> statuses, Pageable pageable);
+    Page<CrawlerTask> findByUserAndTypeAndStatusInOrderByCreatedAtDesc(
+            User user, CrawlerTask.TaskType type,
+            Collection<CrawlerTask.TaskStatus> statuses, Pageable pageable);
     List<CrawlerTask> findByUserAndStatusInOrderByCreatedAtDesc(
             User user, Collection<CrawlerTask.TaskStatus> statuses);
     List<CrawlerTask> findByStatusIn(Collection<CrawlerTask.TaskStatus> statuses);

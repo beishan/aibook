@@ -294,17 +294,28 @@ public class CrawlerManagementService {
 
     @Transactional(readOnly = true)
     public Page<TaskView> tasks(User user, int page, int size, boolean failedOnly) {
-        return tasks(user, page, size, failedOnly, null);
+        return tasks(user, page, size, failedOnly, null, null);
     }
 
     @Transactional(readOnly = true)
     public Page<TaskView> tasks(User user, int page, int size, boolean failedOnly, String status) {
+        return tasks(user, page, size, failedOnly, status, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TaskView> tasks(
+            User user, int page, int size, boolean failedOnly, String status, String type) {
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        CrawlerTask.TaskType taskType = parseTaskType(type);
         Page<CrawlerTask> tasks;
         if (failedOnly) {
-            tasks = taskRepository.findByUserAndStatusInOrderByCreatedAtDesc(user,
-                    List.of(CrawlerTask.TaskStatus.FAILED,
-                            CrawlerTask.TaskStatus.PARTIAL_SUCCESS), pageable);
+            List<CrawlerTask.TaskStatus> failedStatuses = List.of(
+                    CrawlerTask.TaskStatus.FAILED, CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
+            tasks = taskType == null
+                    ? taskRepository.findByUserAndStatusInOrderByCreatedAtDesc(
+                            user, failedStatuses, pageable)
+                    : taskRepository.findByUserAndTypeAndStatusInOrderByCreatedAtDesc(
+                            user, taskType, failedStatuses, pageable);
         } else if (status != null && !status.isBlank()) {
             CrawlerTask.TaskStatus taskStatus;
             try {
@@ -312,13 +323,28 @@ public class CrawlerManagementService {
             } catch (IllegalArgumentException exception) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "任务状态无效");
             }
-            tasks = taskRepository.findByUserAndStatusInOrderByCreatedAtDesc(
-                    user, List.of(taskStatus), pageable);
+            tasks = taskType == null
+                    ? taskRepository.findByUserAndStatusInOrderByCreatedAtDesc(
+                            user, List.of(taskStatus), pageable)
+                    : taskRepository.findByUserAndTypeAndStatusInOrderByCreatedAtDesc(
+                            user, taskType, List.of(taskStatus), pageable);
         } else {
-            tasks = taskRepository.findByUserRunningFirst(
-                    user, CrawlerTask.TaskStatus.RUNNING, pageable);
+            tasks = taskType == null
+                    ? taskRepository.findByUserRunningFirst(
+                            user, CrawlerTask.TaskStatus.RUNNING, pageable)
+                    : taskRepository.findByUserAndTypeRunningFirst(
+                            user, taskType, CrawlerTask.TaskStatus.RUNNING, pageable);
         }
         return tasks.map(this::taskView);
+    }
+
+    private CrawlerTask.TaskType parseTaskType(String type) {
+        if (type == null || type.isBlank()) return null;
+        try {
+            return CrawlerTask.TaskType.valueOf(type.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "任务类型无效");
+        }
     }
 
     @Transactional(readOnly = true)
