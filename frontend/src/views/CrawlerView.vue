@@ -584,7 +584,6 @@ async function pollCrawlerProgress(){
       requests.push(loadCurrentCrawlerTasks())
       if(queuedTasksDialog.value)requests.push(loadQueuedTasks({silent:true}))
       if(activeTab.value==='sites')requests.push(crawlerApi.sites().then(data=>{sites.value=data}))
-      if(activeTab.value==='discovered')requests.push(loadDiscoveredBooks({silent:true,preserveSelection:true}))
       if(activeTab.value==='books')requests.push(loadBooks({silent:true,preserveSelection:true}))
       if(activeTab.value==='failed')requests.push(loadFailedTasks({silent:true}))
     }
