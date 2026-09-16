@@ -42,6 +42,7 @@ class CrawlerManagementServiceTest {
     private CrawlerChapterRepository chapters;
     private CrawlerTaskLogRepository crawlerLogs;
     private CrawlerTaskRepository tasks;
+    private CrawlerHttpClient httpClient;
     private CrawlerManagementService service;
 
     @BeforeEach
@@ -52,15 +53,31 @@ class CrawlerManagementServiceTest {
         chapters = mock(CrawlerChapterRepository.class);
         crawlerLogs = mock(CrawlerTaskLogRepository.class);
         tasks = mock(CrawlerTaskRepository.class);
+        httpClient = mock(CrawlerHttpClient.class);
+        when(httpClient.protectionState(any(CrawlerSite.class))).thenReturn(
+                new CrawlerHttpClient.ProtectionState(false, null, null, 0, 0));
         service = new CrawlerManagementService(sites, books,
                 chapters, tasks, crawlerLogs, rules,
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class),
                 mock(com.aibook.repository.CrawlerScanResultRepository.class),
-                new ObjectMapper());
+                new ObjectMapper(), httpClient);
         when(sites.save(any(CrawlerSite.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(rules.save(any(CrawlerSiteRuleVersion.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(books.save(any(CrawlerBook.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(chapters.save(any(CrawlerChapter.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    @Test
+    void resetsOnlyOwnedSiteProtectionAndReturnsUpdatedState() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站")
+                .siteCode("demo").baseUrl("https://example.com").build();
+        when(sites.findByIdAndUser(7L, user)).thenReturn(Optional.of(site));
+
+        var result = service.resetSiteProtection(user, 7L);
+
+        verify(httpClient).resetProtection(site);
+        assertThat(result.protection().coolingDown()).isFalse();
     }
 
     @Test
@@ -70,7 +87,7 @@ class CrawlerManagementServiceTest {
 
         var result = service.createSite(user, new SitePayload("示例站", "demo", "https://example.com/",
                 null, false, false, false, true, false, 1500, 1000, 1,
-                "UTF-8", List.of(), 360, 30, 3, "EPUB", List.of()));
+                "UTF-8", List.of(), 360, 30, 3, "EPUB", List.of(), null));
 
         assertThat(result.rule()).isNull();
         assertThat(result.ruleVersion()).isNull();
@@ -79,6 +96,7 @@ class CrawlerManagementServiceTest {
         assertThat(result.autoCrawl()).isFalse();
         assertThat(result.autoUpdate()).isFalse();
         assertThat(result.autoImportLibrary()).isFalse();
+        assertThat(result.respectRobotsTxt()).isTrue();
     }
 
     @Test
@@ -109,7 +127,7 @@ class CrawlerManagementServiceTest {
 
         var result = service.createSite(user, new SitePayload("示例站", " ", "https://www.example.com/books",
                 null, false, false, false, true, false, 1500, 1000, 1,
-                "UTF-8", List.of(), 360, 30, 3, "EPUB", List.of()));
+                "UTF-8", List.of(), 360, 30, 3, "EPUB", List.of(), true));
 
         assertThat(result.siteCode()).isEqualTo("example_com_2");
     }
@@ -124,10 +142,12 @@ class CrawlerManagementServiceTest {
 
         var result = service.updateSite(user, 7L, new SitePayload("新名称", "example_com", "https://example.com",
                 null, true, false, false, true, false, 1500, 1000, 1,
-                "UTF-8", List.of(), 360, 30, 3, "EPUB", List.of()));
+                "UTF-8", List.of(), 360, 30, 3, "EPUB", List.of(), false));
 
         assertThat(result.siteName()).isEqualTo("新名称");
         assertThat(result.siteCode()).isEqualTo("example_com");
+        assertThat(result.respectRobotsTxt()).isFalse();
+        verify(httpClient).refreshSiteConfiguration(existing);
     }
 
     @Test
@@ -139,7 +159,7 @@ class CrawlerManagementServiceTest {
                 null, false, false, false, true, false, 1500, 1000, 1,
                 "UTF-8", List.of(
                         new ProxyPayload("备用", "http://127.0.0.1:7890", false),
-                        new ProxyPayload("当前", "http://192.168.1.2:8080", true)), 360, 30, 3, "EPUB", List.of()));
+                        new ProxyPayload("当前", "http://192.168.1.2:8080", true)), 360, 30, 3, "EPUB", List.of(), true));
 
         assertThat(result.proxies()).hasSize(2);
         assertThat(result.proxy()).isEqualTo("http://192.168.1.2:8080");
@@ -153,7 +173,7 @@ class CrawlerManagementServiceTest {
                 null, false, false, false, true, false, 1500, 1000, 1,
                 "UTF-8", List.of(
                         new ProxyPayload("代理一", "http://127.0.0.1:7890", true),
-                        new ProxyPayload("代理二", "http://127.0.0.1:8080", true)), 360, 30, 3, "EPUB", List.of());
+                        new ProxyPayload("代理二", "http://127.0.0.1:8080", true)), 360, 30, 3, "EPUB", List.of(), true);
 
         assertThatThrownBy(() -> service.createSite(user, payload))
                 .hasMessageContaining("只能启用一组代理");
@@ -169,7 +189,7 @@ class CrawlerManagementServiceTest {
                 "UTF-8", List.of(), 360, 30, 3, "EPUB",
                 List.of(new ContentMarkerPayload(" VIP 专属 ", "FAILED"),
                         new ContentMarkerPayload("VIP 专属", "FAILED"),
-                        new ContentMarkerPayload("请登录后阅读", "PENDING_RELEASE"))));
+                        new ContentMarkerPayload("请登录后阅读", "PENDING_RELEASE")), true));
 
         assertThat(result.contentMarkers()).containsExactly(
                 new ContentMarkerPayload("VIP 专属", "FAILED"),

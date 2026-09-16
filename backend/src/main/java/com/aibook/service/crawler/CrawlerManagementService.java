@@ -33,6 +33,7 @@ public class CrawlerManagementService {
     private final CrawlerDiscoveryPageRepository discoveryPageRepository;
     private final CrawlerScanResultRepository scanResultRepository;
     private final ObjectMapper objectMapper;
+    private final CrawlerHttpClient httpClient;
 
     @Transactional(readOnly = true)
     public List<SiteView> sites(User user) { return siteRepository.findByUserOrderByCreatedAtDesc(user).stream().map(this::siteView).toList(); }
@@ -44,6 +45,7 @@ public class CrawlerManagementService {
         CrawlerSite site = CrawlerSite.builder().user(user).build();
         apply(site, payload, siteCode);
         site = siteRepository.save(site);
+        httpClient.refreshSiteConfiguration(site);
         return siteView(site);
     }
 
@@ -54,6 +56,7 @@ public class CrawlerManagementService {
         String siteCode = resolveSiteCode(user, payload.siteCode(), payload.baseUrl(), id);
         apply(site, payload, siteCode);
         site = siteRepository.save(site);
+        httpClient.refreshSiteConfiguration(site);
         return siteView(site);
     }
 
@@ -65,6 +68,14 @@ public class CrawlerManagementService {
         discoveryPageRepository.deleteBySite(site);
         ruleVersionRepository.deleteBySite(site);
         siteRepository.delete(site);
+        httpClient.removeSiteRuntimeState(id);
+    }
+
+    @Transactional
+    public SiteView resetSiteProtection(User user, Long id) {
+        CrawlerSite site = ownedSite(user, id);
+        httpClient.resetProtection(site);
+        return siteView(site);
     }
 
     public CrawlerSite ownedSite(User user, Long id) {
@@ -397,6 +408,7 @@ public class CrawlerManagementService {
         site.setAutoImportFormat(blank(p.autoImportFormat()) ? "EPUB" : p.autoImportFormat().toUpperCase(Locale.ROOT));
         site.setRequestIntervalMillis(value(p.requestIntervalMillis(), 1500)); site.setRandomDelayMillis(value(p.randomDelayMillis(), 1000));
         site.setMaxConcurrency(value(p.maxConcurrency(), 1));
+        site.setRespectRobotsTxt(bool(p.respectRobotsTxt(), true));
         site.setEncoding(blank(p.encoding()) ? "UTF-8" : p.encoding());
         applyContentMarkers(site, p.contentMarkers());
         applyProxies(site, p.proxies());
@@ -425,6 +437,7 @@ public class CrawlerManagementService {
         CrawlerSiteRule r = s.getRule();
         RulePayload rv = r == null ? null : rulePayload(r);
         Optional<CrawlerSiteRuleVersion> active = ruleVersionRepository.findFirstBySiteAndEnabledTrue(s);
+        CrawlerHttpClient.ProtectionState protection = httpClient.protectionState(s);
         return new SiteView(s.getId(), s.getSiteName(), s.getSiteCode(), s.getBaseUrl(), s.getHomeUrl(), bool(s.getEnabled(), false),
                 bool(s.getAutoScan(), false), bool(s.getAutoCrawl(), false), bool(s.getAutoUpdate(), false), bool(s.getAutoImportLibrary(), false),
                 value(s.getRequestIntervalMillis(), 1500), value(s.getRandomDelayMillis(), 1000), value(s.getMaxConcurrency(), 1),
@@ -434,7 +447,10 @@ public class CrawlerManagementService {
                 bookRepository.countBySite(s), rv, r == null ? null : r.getRuleVersion(),
                 active.map(CrawlerSiteRuleVersion::getId).orElse(null), ruleVersionRepository.countBySite(s),
                 s.getLastScanAt(), s.getLastUpdateAt(),
-                s.getLastHealthCheckAt(), s.getHealthMessage(), s.getCreatedAt(), contentMarkers(s));
+                s.getLastHealthCheckAt(), s.getHealthMessage(), s.getCreatedAt(), contentMarkers(s),
+                bool(s.getRespectRobotsTxt(), true), new CrawlerProtectionView(
+                        protection.coolingDown(), protection.blockedUntil(), protection.reason(),
+                        protection.consecutiveFailures(), protection.adaptiveDelayMillis()));
     }
 
     public RulePayload rulePayload(CrawlerSiteRule r) {

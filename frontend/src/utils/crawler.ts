@@ -15,14 +15,16 @@ export interface CrawlerRule {
 }
 export interface CrawlerProxy { name:string; url:string; enabled:boolean }
 export interface CrawlerContentMarker { marker:string; status:'FAILED'|'PENDING_RELEASE' }
+export interface CrawlerProtectionState { coolingDown:boolean; blockedUntil?:string; reason?:string; consecutiveFailures:number; adaptiveDelayMillis:number }
 export interface CrawlerSitePayload {
   siteName: string; siteCode: string; baseUrl: string; homeUrl?: string; enabled: boolean
   autoScan: boolean; autoCrawl: boolean; autoUpdate: boolean; autoImportLibrary: boolean
   requestIntervalMillis: number; randomDelayMillis: number; maxConcurrency: number
   encoding: string; proxies:CrawlerProxy[]; scanIntervalMinutes:number
   updateIntervalMinutes:number; maxDiscoveryPages:number; autoImportFormat:'TXT'|'EPUB'|'BOTH'; contentMarkers:CrawlerContentMarker[]
+  respectRobotsTxt:boolean
 }
-export interface CrawlerSite extends CrawlerSitePayload { id: number; status: string; bookCount: number; proxy?:string; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string }
+export interface CrawlerSite extends CrawlerSitePayload { id: number; status: string; bookCount: number; proxy?:string; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string; protection:CrawlerProtectionState }
 export interface CrawlerDiscoveryPagePayload { pageName:string; pageUrl:string; autoScanEnabled:boolean; scanIntervalMinutes:number; maxPages:number }
 export interface CrawlerDiscoveryPage extends CrawlerDiscoveryPagePayload { id:number; siteId:number; lastScanAt?:string; createdAt:string }
 export interface CrawlerBook { id:number; siteId:number; siteName:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; tags:string[]; bookStatus?:string; latestChapter?:string; discoveryPageId?:number; discoveryPageName?:string; chapterCount:number; crawledChapterCount:number; pendingReleaseChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; autoUpdateEnabled:boolean; autoSyncLibrary:boolean; libraryBookId?:number; discoverTime:string; lastCrawlStartedAt?:string; lastCrawlTime?:string; createdAt?:string }
@@ -51,6 +53,7 @@ export const crawlerApi = {
   createSite: (data:CrawlerSitePayload) => api.post<CrawlerSite>('/api/crawler/sites', data).then(r => r.data),
   updateSite: (id:number, data:CrawlerSitePayload) => api.put<CrawlerSite>(`/api/crawler/sites/${id}`, data).then(r => r.data),
   deleteSite: (id:number) => api.delete(`/api/crawler/sites/${id}`),
+  resetSiteProtection: (id:number) => api.post<CrawlerSite>(`/api/crawler/sites/${id}/protection/reset`).then(r => r.data),
   exportSiteConfiguration: (id:number) => api.get<CrawlerSiteConfiguration>(`/api/crawler/sites/${id}/configuration`).then(r => r.data),
   importSiteConfiguration: (data:CrawlerSiteConfiguration) => api.post<CrawlerSite>('/api/crawler/sites/configuration/import', data).then(r => r.data),
   crawlUrl: (siteId:number, url:string) => api.post<CrawlerTask>(`/api/crawler/sites/${siteId}/crawl`, { url }).then(r => r.data),

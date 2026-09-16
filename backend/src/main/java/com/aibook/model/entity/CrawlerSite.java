@@ -6,6 +6,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Table(name = "crawler_sites", uniqueConstraints =
@@ -41,6 +42,7 @@ public class CrawlerSite {
     @Builder.Default private Integer requestIntervalMillis = 1500;
     @Builder.Default private Integer randomDelayMillis = 1000;
     @Builder.Default private Integer maxConcurrency = 1;
+    @Builder.Default private Boolean respectRobotsTxt = true;
     @Builder.Default private String encoding = "UTF-8";
     /** 正文特征配置 JSON；兼容读取旧版本按行保存的失败特征。 */
     @Column(name = "content_failure_markers", columnDefinition = "TEXT") private String contentMarkersJson;
@@ -53,6 +55,8 @@ public class CrawlerSite {
     private LocalDateTime lastUpdateAt;
     private LocalDateTime lastHealthCheckAt;
     @Column(columnDefinition = "TEXT") private String healthMessage;
+    private Instant crawlerBlockedUntil;
+    @Column(length = 500) private String crawlerBlockReason;
     @OneToOne(mappedBy = "site", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private CrawlerSiteRule rule;
     @CreationTimestamp private LocalDateTime createdAt;

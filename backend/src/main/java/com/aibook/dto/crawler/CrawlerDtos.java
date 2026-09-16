@@ -3,6 +3,7 @@ package com.aibook.dto.crawler;
 import com.aibook.model.entity.CrawlerTask;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -41,7 +42,8 @@ public final class CrawlerDtos {
             @Min(1) Integer scanIntervalMinutes, @Min(1) Integer updateIntervalMinutes,
             @Min(1) @Max(50) Integer maxDiscoveryPages,
             @Pattern(regexp = "(?i)TXT|EPUB|BOTH") String autoImportFormat,
-            @Size(max = 50) List<@Valid ContentMarkerPayload> contentMarkers) { }
+            @Size(max = 50) List<@Valid ContentMarkerPayload> contentMarkers,
+            Boolean respectRobotsTxt) { }
 
     public record SiteView(Long id, String siteName, String siteCode, String baseUrl, String homeUrl,
             boolean enabled, boolean autoScan, boolean autoCrawl, boolean autoUpdate,
@@ -53,7 +55,11 @@ public final class CrawlerDtos {
             Integer ruleVersion, Long activeRuleId, long ruleCount,
             LocalDateTime lastScanAt, LocalDateTime lastUpdateAt,
             LocalDateTime lastHealthCheckAt, String healthMessage, LocalDateTime createdAt,
-            List<ContentMarkerPayload> contentMarkers) { }
+            List<ContentMarkerPayload> contentMarkers, boolean respectRobotsTxt,
+            CrawlerProtectionView protection) { }
+
+    public record CrawlerProtectionView(boolean coolingDown, Instant blockedUntil, String reason,
+            int consecutiveFailures, long adaptiveDelayMillis) { }
 
     public record ManualCrawlRequest(@NotBlank String url) { }
     public record DiscoveryPagePayload(

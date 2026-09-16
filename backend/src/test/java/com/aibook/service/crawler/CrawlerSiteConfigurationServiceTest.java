@@ -29,7 +29,7 @@ class CrawlerSiteConfigurationServiceTest {
         SiteView siteView = new SiteView(7L, "示例站", "demo", "https://example.com", null,
                 true, false, false, false, false, 1000, 0, 1, "UTF-8", null,
                 List.of(), 360, 30, 3, "EPUB", "READY", 0, null, null, null, 1,
-                null, null, null, null, null, List.of());
+                null, null, null, null, null, List.of(), false, null);
         RulePayload rulePayload = rulePayload();
         when(management.ownedSite(user, 7L)).thenReturn(site);
         when(management.siteView(site)).thenReturn(siteView);
@@ -46,6 +46,7 @@ class CrawlerSiteConfigurationServiceTest {
         assertThat(result.schemaVersion()).isEqualTo(1);
         assertThat(result.type()).isEqualTo("AIBOOK_CRAWLER_SITE");
         assertThat(result.site().siteCode()).isEqualTo("demo");
+        assertThat(result.site().respectRobotsTxt()).isFalse();
         assertThat(result.rules()).singleElement().satisfies(rule -> {
             assertThat(rule.version()).isEqualTo(2);
             assertThat(rule.enabled()).isTrue();
@@ -61,14 +62,14 @@ class CrawlerSiteConfigurationServiceTest {
         CrawlerDiscoveryPageService discoveryPages = mock(CrawlerDiscoveryPageService.class);
         SitePayload sitePayload = new SitePayload("导入站", "imported", "https://example.com",
                 null, true, false, false, false, false, 1000, 0, 1, "UTF-8", List.of(),
-                360, 30, 3, "EPUB", List.of());
+                360, 30, 3, "EPUB", List.of(), false);
         RuleSaveRequest rule = new RuleSaveRequest(1, "初始规则", rulePayload(), true);
         DiscoveryPagePayload page = new DiscoveryPagePayload(
                 "热门", "https://example.com/hot", false, 360, 50);
         SiteView created = new SiteView(9L, "导入站", "imported", "https://example.com", null,
                 true, false, false, false, false, 1000, 0, 1, "UTF-8", null,
                 List.of(), 360, 30, 3, "EPUB", "READY", 0, null, null, null, 1,
-                null, null, null, null, null, List.of());
+                null, null, null, null, null, List.of(), false, null);
         CrawlerSite importedEntity = CrawlerSite.builder().id(9L).user(user).build();
         when(management.createSite(user, sitePayload)).thenReturn(created);
         when(management.ownedSite(user, 9L)).thenReturn(importedEntity);
