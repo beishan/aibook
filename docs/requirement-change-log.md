@@ -22,6 +22,21 @@
 
 ## 变更记录
 
+### REQ-20260916-007 阅读统计图表
+
+- 需求时间：2026-09-16
+- 完成时间：2026-09-16
+- 状态：已完成
+- 应用版本：`1.42.0`
+- 需求内容：在书架已有的年/月阅读量统计需求基础上，构建完整的阅读统计图表模块。包括：年度阅读报告（月度折线 + 每日热力图）、阅读时长分布（排行榜与累计）、完成率、评分直方图、个人阅读偏好画像（体裁、作者偏好）。前端可借助 ECharts。
+- 完成情况：后端新增 `ReadingStatisticsController` + `ReadingStatisticsService` + `ReadingStatisticsDTO`，从 Book、VersionReadingProgress 两张现有表通过 JPQL 与 原生 PostgreSQL 聚合查询计算总览、月度、日度热力图、评分分布、分类偏好、作者偏好、格式偏好及阅读时长排行八类数据。前端引入 ECharts，新建 `ReadingStatisticsView.vue`，可视化展示：8 张概览卡片、年度月度柱状+趋势线、365 天 GitHub 风热力图、评分分布柱图、分类偏好环形图、作者与格式横向柱图、阅读时长 TOP10 排行。三种布局（Sidebar、TopBar、Dock）的导航菜单均已新增"阅读统计"入口。
+- 开源调研：ECharts 是 Apache 2.0 许可的可视化库，与当前 Vue 3 技术栈集成方案成熟；通过动态路由懒加载和全量注册引入，可按需加载、无需额外外挂工具。
+- 主要改动：
+  - 后端：新增 `ReadingStatisticsDTO.java`、`ReadingStatisticsController.java`、`ReadingStatisticsService.java`、`repository/projections/BookStatisticsProjections.java`；`BookRepository` 新增按阅读状态、评分、分类、格式、作者聚合的查询以及想读数/已评数/平均评分；`VersionReadingProgressRepository` 新增年/月度活跃度、日度热力图、累计阅读秒数和阅读时长排行查询。
+  - 测试：新增 `ReadingStatisticsServiceTest.java` 六组用例覆盖总览聚合、空数据兜底、评分 5 档填充、月度 12 月补全、热力图搬运与偏好排行投射。
+  - 前端：新建 `ReadingStatisticsView.vue`；`router/index.ts` 新增 `/statistics` 路由；`SidebarLayout` / `TopbarLayout` / `DockLayout` 添加统计入口；`DockIcon.vue` 增加 `statistics` 图标名与 Element Plus `Histogram` 绑定；`package.json` 引入 `echarts` 依赖。
+- 验证结果：后端 `mvn compile` 与 `test-compile` 通过；`ReadingStatisticsServiceTest` 6 个用例全部成功（总览聚合/空值兜底/5 档评分/12 月填充/热力图/偏好排行）。前端 `vite build` 成功，懒加载 chunk 大小符合预期。后端现有测试套件未发生回归。版本号由 1.41.0 升至 1.42.0，`package.json` 与 `package-lock.json` 已同步。
+
 ### REQ-20260916-006 开放爬虫保护参数配置
 
 - 需求时间：2026-09-16

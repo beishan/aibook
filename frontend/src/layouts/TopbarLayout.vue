@@ -104,6 +104,7 @@ const menuItems = [
   { path: '/text-repair', icon: '🔧', title: '内容修复' },
   { path: '/format-conversion', icon: '🔄', title: '格式转换' },
   { path: '/crawler', icon: '🕸️', title: '书籍爬虫' },
+  { path: '/statistics', icon: '📊', title: '阅读统计' },
   { path: '/settings', icon: '⚙️', title: '设置' },
 ]
 

@@ -4,6 +4,11 @@ import com.aibook.model.entity.Book;
 import com.aibook.model.entity.Category;
 import com.aibook.model.entity.Tag;
 import com.aibook.model.entity.User;
+import com.aibook.repository.projections.BookStatisticsProjections.BookAuthorCount;
+import com.aibook.repository.projections.BookStatisticsProjections.BookCategoryCount;
+import com.aibook.repository.projections.BookStatisticsProjections.BookFormatCount;
+import com.aibook.repository.projections.BookStatisticsProjections.BookRatingCount;
+import com.aibook.repository.projections.BookStatisticsProjections.BookStatusCount;
 import java.util.List;
 import java.util.Optional;
 import java.time.LocalDateTime;
@@ -257,4 +262,70 @@ public interface BookRepository extends JpaRepository<Book, Long> {
             @Param("user") User user);
 
     long countByUserAndDeletedAtIsNotNullAndPurgedAtIsNull(User user);
+
+    // ==================== 阅读统计查询 ====================
+
+    /**
+     * 按阅读状态统计书籍数量。
+     */
+    @Query("SELECT b.readingStatus AS status, COUNT(b) AS cnt "
+            + "FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE
+            + " GROUP BY b.readingStatus")
+    List<BookStatusCount> countByReadingStatus(@Param("user") User user);
+
+    /**
+     * 按评分统计书籍数量。
+     */
+    @Query("SELECT b.rating AS rating, COUNT(b) AS cnt "
+            + "FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL "
+            + "AND b.rating IS NOT NULL AND" + LIBRARY_VISIBLE
+            + " GROUP BY b.rating ORDER BY b.rating")
+    List<BookRatingCount> countByRating(@Param("user") User user);
+
+    /**
+     * 按分类统计书籍数量。
+     */
+    @Query("SELECT b.category.id AS categoryId, b.category.name AS categoryName, COUNT(b) AS cnt "
+            + "FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL "
+            + "AND b.category IS NOT NULL AND" + LIBRARY_VISIBLE
+            + " GROUP BY b.category.id, b.category.name ORDER BY cnt DESC")
+    List<BookCategoryCount> countByCategory(@Param("user") User user);
+
+    /**
+     * 按格式统计书籍数量。
+     */
+    @Query("SELECT b.format AS format, COUNT(b) AS cnt "
+            + "FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE
+            + " GROUP BY b.format ORDER BY cnt DESC")
+    List<BookFormatCount> countByFormat(@Param("user") User user);
+
+    /**
+     * 用户想读的书籍数量。
+     */
+    @Query("SELECT COUNT(b) FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL "
+            + "AND b.isWanted = true AND" + LIBRARY_VISIBLE)
+    long countWanted(@Param("user") User user);
+
+    /**
+     * 按作者统计书籍数量（前 20）。
+     */
+    @Query("SELECT b.author AS author, COUNT(b) AS cnt "
+            + "FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL "
+            + "AND b.author IS NOT NULL AND b.author <> '' AND" + LIBRARY_VISIBLE
+            + " GROUP BY b.author ORDER BY cnt DESC")
+    List<BookAuthorCount> countByAuthor(@Param("user") User user, Pageable pageable);
+
+    /**
+     * 统计已评分书籍数量。
+     */
+    @Query("SELECT COUNT(b) FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL "
+            + "AND b.rating IS NOT NULL AND" + LIBRARY_VISIBLE)
+    long countRated(@Param("user") User user);
+
+    /**
+     * 统计用户书籍平均评分。
+     */
+    @Query("SELECT AVG(b.rating) FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL "
+            + "AND b.rating IS NOT NULL AND" + LIBRARY_VISIBLE)
+    Double averageRating(@Param("user") User user);
 }

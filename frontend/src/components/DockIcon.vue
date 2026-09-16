@@ -123,10 +123,10 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance } from 'vue'
-import { Collection, Connection, Delete, DeleteFilled, HomeFilled, Reading, Setting, Tools, Switch } from '@element-plus/icons-vue'
+import { Collection, Connection, Delete, DeleteFilled, Histogram, HomeFilled, Reading, Setting, Tools, Switch } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
 
-export type DockIconName = 'home' | 'library' | 'shelf' | 'repair' | 'conversion' | 'crawler' | 'settings' | 'trashEmpty' | 'trashFull'
+export type DockIconName = 'home' | 'library' | 'shelf' | 'repair' | 'conversion' | 'crawler' | 'statistics' | 'settings' | 'trashEmpty' | 'trashFull'
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 
 const props = defineProps<{
@@ -142,6 +142,7 @@ const minimalIcons: Record<DockIconName, Component> = {
   repair: Tools,
   conversion: Switch,
   crawler: Connection,
+  statistics: Histogram,
   settings: Setting,
   trashEmpty: Delete,
   trashFull: DeleteFilled,

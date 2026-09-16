@@ -1,6 +1,6 @@
 {
   "name": "aibook-frontend",
-  "version": "1.41.0",
+  "version": "1.42.0",
   "description": "汗牛充栋 - 阅读书籍管理系统前端",
   "type": "module",
   "scripts": {
@@ -31,6 +31,7 @@
     "@readium/navigator-html-injectables": "^2.6.3",
     "@readium/shared": "^2.4.0",
     "axios": "^1.6.0",
+    "echarts": "^6.1.0",
     "element-plus": "^2.4.0",
     "epubjs": "^0.3.93",
     "pdfjs-dist": "^6.3.289",
