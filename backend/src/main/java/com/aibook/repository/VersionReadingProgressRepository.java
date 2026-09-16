@@ -26,11 +26,11 @@ public interface VersionReadingProgressRepository
 
     /**
      * 按年/月聚合阅读活跃度：统计每个年月组合中被阅读过（非零进度或有时长）的不同书籍数与阅读秒数合计。
-     * <p>使用原生 PostgreSQL 查询利用 DATE_PART 与 HAVING。</p>
+     * <p>原生查询用 CAST + EXTRACT 取年月，避免 Hibernate 将 PostgreSQL 的 :: 转换误判为参数占位符。</p>
      */
     @Query(value = """
-            SELECT DATE_PART('year', vp.last_read_at)::int  AS year,
-                   DATE_PART('month', vp.last_read_at)::int AS month,
+            SELECT CAST(EXTRACT(YEAR FROM vp.last_read_at)    AS INTEGER) AS year,
+                   CAST(EXTRACT(MONTH FROM vp.last_read_at)   AS INTEGER) AS month,
                    COUNT(DISTINCT vp.version_id)              AS bookCount,
                    SUM(vp.reading_time_seconds)                AS totalReadingSeconds
             FROM version_reading_progress vp
