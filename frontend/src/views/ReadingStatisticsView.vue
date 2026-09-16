@@ -13,6 +13,12 @@
       <p>正在计算阅读数据...</p>
     </div>
 
+    <div v-else-if="loadError" class="empty error-state glass" role="alert">
+      <div class="empty-icon">⚠️</div>
+      <p>{{ loadError }}</p>
+      <button type="button" class="retry-button" @click="loadStatistics">重新加载</button>
+    </div>
+
     <div v-else-if="!stats" class="empty glass">
       <div class="empty-icon">📊</div>
       <p>暂无统计数据</p>
@@ -171,7 +177,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import api from '@/utils/api'
 
@@ -237,6 +243,7 @@ interface ReadingStatistics {
 
 const loading = ref(true)
 const stats = ref<ReadingStatistics | null>(null)
+const loadError = ref('')
 
 const monthlyTrendRef = ref<HTMLElement>()
 const heatmapRef = ref<HTMLElement>()
@@ -256,17 +263,45 @@ let authorChart: echarts.ECharts | null = null
 
 const loadStatistics = async () => {
   loading.value = true
+  loadError.value = ''
   try {
     const { data } = await api.get<ReadingStatistics>('/api/reading-statistics')
-    stats.value = data
-    await nextTick()
-    renderCharts()
+    stats.value = normalizeStatistics(data)
   } catch (error) {
     console.error('Failed to load reading statistics:', error)
+    stats.value = null
+    loadError.value = '阅读统计加载失败，请稍后重试'
   } finally {
     loading.value = false
+    // loading 分支结束后图表容器才会挂载，必须在此后初始化 ECharts。
+    await nextTick()
+    if (stats.value) renderCharts()
   }
 }
+
+const emptyOverview = (): Overview => ({
+  totalBooks: 0,
+  finishedBooks: 0,
+  readingBooks: 0,
+  unreadBooks: 0,
+  wantedBooks: 0,
+  completionRate: 0,
+  totalReadingTimeSeconds: 0,
+  averageReadingTimeSeconds: 0,
+  averageRating: 0,
+  ratedBooks: 0,
+})
+
+const normalizeStatistics = (value: Partial<ReadingStatistics> | null | undefined): ReadingStatistics => ({
+  overview: { ...emptyOverview(), ...(value?.overview || {}) },
+  monthlyStats: value?.monthlyStats || {},
+  dailyHeatmap: value?.dailyHeatmap || {},
+  ratingDistribution: Array.isArray(value?.ratingDistribution) ? value.ratingDistribution : [],
+  categoryPreference: Array.isArray(value?.categoryPreference) ? value.categoryPreference : [],
+  authorPreference: Array.isArray(value?.authorPreference) ? value.authorPreference : [],
+  formatPreference: Array.isArray(value?.formatPreference) ? value.formatPreference : [],
+  topReadingTimeBooks: Array.isArray(value?.topReadingTimeBooks) ? value.topReadingTimeBooks : [],
+})
 
 const formatHours = (seconds: number): string => {
   if (!seconds || seconds <= 0) return '0 小时'
@@ -678,12 +713,6 @@ const handleResize = () => {
   authorChart?.resize()
 }
 
-watch(stats, () => {
-  if (stats.value) {
-    nextTick(renderCharts)
-  }
-})
-
 onMounted(() => {
   loadStatistics()
   window.addEventListener('resize', handleResize)
@@ -744,6 +773,27 @@ onBeforeUnmount(() => {
 
 .empty-icon {
   font-size: 48px;
+}
+
+.error-state p {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.retry-button {
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  padding: 8px 18px;
+  color: var(--primary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.retry-button:hover,
+.retry-button:focus-visible {
+  color: #fff;
+  background: var(--primary);
+  outline: none;
 }
 
 /* 概览卡片 */
