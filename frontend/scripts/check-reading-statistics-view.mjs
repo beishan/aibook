@@ -26,5 +26,7 @@ for (const field of [
 
 assert.match(source, /v-else-if="loadError"/)
 assert.match(source, /@click="loadStatistics"/)
+assert.match(source, /import \{ getCoverUrl \} from '@\/utils\/cover'/)
+assert.match(source, /:src="getCoverUrl\(book\.coverUrl\)"/)
 
 console.log('Reading statistics waits for mounted chart containers and degrades safely')

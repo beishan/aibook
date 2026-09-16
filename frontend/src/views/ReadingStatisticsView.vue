@@ -180,6 +180,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import api from '@/utils/api'
+import { getCoverUrl } from '@/utils/cover'
 
 interface Overview {
   totalBooks: number
