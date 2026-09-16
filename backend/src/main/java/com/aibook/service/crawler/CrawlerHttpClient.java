@@ -36,13 +36,6 @@ import java.util.regex.Pattern;
 public class CrawlerHttpClient {
     private static final String DEFAULT_USER_AGENT =
             "AiBookCrawler/1.0 (+private library; authorized content only)";
-    private static final Duration ROBOTS_CACHE_DURATION = Duration.ofHours(6);
-    private static final Duration ROBOTS_ERROR_CACHE_DURATION = Duration.ofMinutes(15);
-    private static final Duration CIRCUIT_COOLDOWN = Duration.ofMinutes(15);
-    private static final Duration ACCESS_DENIED_COOLDOWN = Duration.ofHours(1);
-    private static final long MAX_INLINE_RETRY_DELAY_MILLIS = 30_000L;
-    private static final int MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
-    private static final long MAX_ADAPTIVE_DELAY_MILLIS = 60_000L;
     private static final Pattern CHALLENGE_TITLE = Pattern.compile(
             "(?is)<title[^>]*>\\s*(?:just a moment|access denied|安全验证|访问验证|验证码|请求过于频繁|访问过于频繁)[^<]*</title>");
 
@@ -50,8 +43,10 @@ public class CrawlerHttpClient {
     private final ProxySettingsService proxySettingsService;
     private final CrawlerSettingsService crawlerSettingsService;
     private final CrawlerSiteRepository crawlerSiteRepository;
-    private final Map<Long, AtomicLong> nextRequests = new ConcurrentHashMap<>();
+    private final Map<Long, AtomicLong> siteNextRequests = new ConcurrentHashMap<>();
+    private final Map<String, AtomicLong> originNextRequests = new ConcurrentHashMap<>();
     private final Map<Long, AdjustableConcurrencyGate> concurrencyGates = new ConcurrentHashMap<>();
+    private final Map<String, AdjustableConcurrencyGate> originConcurrencyGates = new ConcurrentHashMap<>();
     private final Map<String, RobotsCacheEntry> robotsCache = new ConcurrentHashMap<>();
     private final Map<String, Object> robotsLocks = new ConcurrentHashMap<>();
     private final Map<Long, CircuitState> circuitStates = new ConcurrentHashMap<>();
@@ -72,7 +67,7 @@ public class CrawlerHttpClient {
         int proxyIndex = 0;
         Exception last = null;
         for (int attempt = 0; attempt < attempts; attempt++) {
-            long retryDelay = retryBackoffMillis(attempt);
+            long retryDelay = retryBackoffMillis(attempt, settings.retryBackoffMaxMillis());
             try {
                 String proxyUrl = proxies.isEmpty() ? null : proxies.get(proxyIndex % proxies.size());
                 TimedResponse timed = sendFollowingSafeRedirects(
@@ -86,10 +81,11 @@ public class CrawlerHttpClient {
                     validateContentType(response);
                     Charset charset = Charset.forName(defaultString(site.getEncoding(), "UTF-8"));
                     String html = new String(response.body(), charset);
-                    Optional<String> softBlock = detectSoftBlock(html);
+                    Optional<String> softBlock = settings.softBlockDetectionEnabled()
+                            ? detectSoftBlock(html) : Optional.empty();
                     if (softBlock.isPresent()) {
-                        increaseAdaptiveDelay(site, MAX_ADAPTIVE_DELAY_MILLIS);
-                        openCircuit(site, ACCESS_DENIED_COOLDOWN, "检测到疑似反爬验证页：" + softBlock.get());
+                        increaseAdaptiveDelay(site, settings.adaptiveDelayMaxMillis(), settings.adaptiveDelayMaxMillis());
+                        openCircuit(site, Duration.ofSeconds(settings.accessDeniedCooldownSeconds()), "检测到疑似反爬验证页：" + softBlock.get());
                         throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                                 "检测到疑似反爬验证页（" + softBlock.get() + "），已暂停该站点请求");
                     }
@@ -99,13 +95,13 @@ public class CrawlerHttpClient {
                             response.headers().firstValue("Last-Modified").orElse(null));
                 }
                 if (Set.of(401, 403, 451).contains(response.statusCode())) {
-                    increaseAdaptiveDelay(site, MAX_ADAPTIVE_DELAY_MILLIS);
-                    openCircuit(site, ACCESS_DENIED_COOLDOWN, "源站拒绝访问（HTTP " + response.statusCode() + "）");
+                    increaseAdaptiveDelay(site, settings.adaptiveDelayMaxMillis(), settings.adaptiveDelayMaxMillis());
+                    openCircuit(site, Duration.ofSeconds(settings.accessDeniedCooldownSeconds()), "源站拒绝访问（HTTP " + response.statusCode() + "）");
                     throw new ResponseStatusException(HttpStatusCode.valueOf(response.statusCode()),
                             "源站拒绝访问（HTTP " + response.statusCode() + "），已暂停该站点请求且不会切换代理重试");
                 }
                 if (response.statusCode() != 429 && response.statusCode() < 500) {
-                    recordFailure(site, settings.maxConsecutiveFailures());
+                    recordFailure(site, settings.maxConsecutiveFailures(), settings.circuitCooldownSeconds());
                     throw new ResponseStatusException(HttpStatusCode.valueOf(response.statusCode()),
                             "源站返回 HTTP " + response.statusCode() + "，该响应不会自动重试");
                 }
@@ -115,9 +111,9 @@ public class CrawlerHttpClient {
                     retryDelay = requestedDelay.orElse(retryDelay);
                     openCircuitUntil(site, Instant.now().plusMillis(Math.max(1000L, retryDelay)),
                             "源站要求降低请求频率（HTTP 429）");
-                    if (retryDelay > MAX_INLINE_RETRY_DELAY_MILLIS) break;
+                    if (retryDelay > settings.maxInlineRetryDelayMillis()) break;
                 }
-                increaseAdaptiveDelay(site, Math.min(MAX_ADAPTIVE_DELAY_MILLIS, retryDelay));
+                increaseAdaptiveDelay(site, retryDelay, settings.adaptiveDelayMaxMillis());
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
                 throw exception;
@@ -132,9 +128,10 @@ public class CrawlerHttpClient {
             if (attempt + 1 < attempts) Thread.sleep(retryDelay);
         }
         if (last instanceof IOException) {
-            increaseAdaptiveDelay(site, retryBackoffMillis(Math.max(0, attempts - 1)));
+            increaseAdaptiveDelay(site, retryBackoffMillis(Math.max(0, attempts - 1),
+                    settings.retryBackoffMaxMillis()), settings.adaptiveDelayMaxMillis());
         }
-        recordFailure(site, settings.maxConsecutiveFailures());
+        recordFailure(site, settings.maxConsecutiveFailures(), settings.circuitCooldownSeconds());
         throw last == null ? new IllegalStateException("请求失败") : last;
     }
 
@@ -155,33 +152,49 @@ public class CrawlerHttpClient {
             String lastModified, String proxyUrl, CrawlerRequestSettings settings) throws Exception {
         URI current = original;
         long duration = 0;
-        for (int redirects = 0; redirects <= 5; redirects++) {
-            throttle(site);
-            HttpRequest.Builder request = HttpRequest.newBuilder(current)
-                    .timeout(Duration.ofMillis(settings.timeoutMillis()))
-                    .GET().header("Accept", "text/html,application/xhtml+xml")
-                    .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.6")
-                    .header("User-Agent", defaultString(settings.userAgent(), DEFAULT_USER_AGENT));
-            if (etag != null && !etag.isBlank()) request.header("If-None-Match", etag);
-            if (lastModified != null && !lastModified.isBlank()) request.header("If-Modified-Since", lastModified);
-            if (!settings.cookie().isBlank()) request.header("Cookie", settings.cookie());
-            applyHeaders(request, settings.headersJson());
+        for (int redirects = 0; redirects <= settings.maxRedirects(); redirects++) {
+            String origin = originKey(current);
+            AdjustableConcurrencyGate originGate = originConcurrencyGates.computeIfAbsent(
+                    origin, ignored -> new AdjustableConcurrencyGate());
+            originGate.acquire(settings.maxOriginConcurrency(), null);
+            NetworkResponse response;
             long started = System.nanoTime();
-            HttpResponse<InputStream> rawResponse = client(settings.timeoutMillis(), proxyUrl)
-                    .send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
-            byte[] responseBody;
-            try (InputStream input = rawResponse.body()) {
-                responseBody = readBounded(input, contentLength(rawResponse.headers()));
+            try {
+                throttle(site, current);
+                HttpRequest.Builder request = HttpRequest.newBuilder(current)
+                        .timeout(Duration.ofMillis(settings.timeoutMillis()))
+                        .GET().header("Accept", "text/html,application/xhtml+xml")
+                        .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.6")
+                        .header("User-Agent", defaultString(settings.userAgent(), DEFAULT_USER_AGENT));
+                if (etag != null && !etag.isBlank()) request.header("If-None-Match", etag);
+                if (lastModified != null && !lastModified.isBlank()) request.header("If-Modified-Since", lastModified);
+                if (!settings.cookie().isBlank()) request.header("Cookie", settings.cookie());
+                applyHeaders(request, settings.headersJson());
+                HttpResponse<InputStream> rawResponse = client(settings.timeoutMillis(), proxyUrl)
+                        .send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
+                byte[] responseBody;
+                try (InputStream input = rawResponse.body()) {
+                    responseBody = readBounded(input, contentLength(rawResponse.headers()),
+                            settings.maxResponseSizeMb() * 1024 * 1024);
+                }
+                response = new NetworkResponse(
+                        rawResponse.statusCode(), rawResponse.headers(), responseBody);
+            } finally {
+                originGate.release();
             }
-            NetworkResponse response = new NetworkResponse(
-                    rawResponse.statusCode(), rawResponse.headers(), responseBody);
             duration += (System.nanoTime() - started) / 1_000_000;
             if (!Set.of(301, 302, 303, 307, 308).contains(response.statusCode())) {
                 return new TimedResponse(response, duration);
             }
             String location = response.headers().firstValue("Location")
                     .orElseThrow(() -> new IllegalStateException("源站重定向缺少 Location"));
-            current = validateSiteUrl(site, current.resolve(location).toString());
+            URI redirected = validateSiteUrl(site, current.resolve(location).toString());
+            if (!Boolean.FALSE.equals(site.getRespectRobotsTxt())
+                    && !originKey(current).equals(originKey(redirected))) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        "源站发生跨源重定向，无法沿用当前 robots.txt 策略；请将网站基础地址改为最终地址");
+            }
+            current = redirected;
         }
         throw new IllegalStateException("源站重定向次数过多");
     }
@@ -223,6 +236,12 @@ public class CrawlerHttpClient {
 
     int cachedHttpClientCount() { return clients.size(); }
 
+    public void refreshGlobalConfiguration(CrawlerRequestSettings settings) {
+        robotsCache.clear();
+        robotsLocks.clear();
+        adaptiveDelays.values().forEach(delay -> delay.cap(settings.adaptiveDelayMaxMillis()));
+    }
+
     void refreshSiteConfiguration(CrawlerSite site) {
         if (site.getId() == null) return;
         concurrencyGates.computeIfAbsent(site.getId(), ignored -> new AdjustableConcurrencyGate())
@@ -237,7 +256,7 @@ public class CrawlerHttpClient {
         concurrencyGates.remove(siteId);
         circuitStates.remove(siteId);
         adaptiveDelays.remove(siteId);
-        nextRequests.remove(siteId);
+        siteNextRequests.remove(siteId);
         String keyPrefix = siteId + "|";
         robotsCache.keySet().removeIf(key -> key.startsWith(keyPrefix));
         robotsLocks.keySet().removeIf(key -> key.startsWith(keyPrefix));
@@ -258,7 +277,7 @@ public class CrawlerHttpClient {
     void resetProtection(CrawlerSite site) {
         circuitStates.remove(site.getId());
         adaptiveDelays.remove(site.getId());
-        nextRequests.remove(site.getId());
+        siteNextRequests.remove(site.getId());
         persistProtection(site, null, null);
     }
 
@@ -297,18 +316,19 @@ public class CrawlerHttpClient {
                 Charset charset = Charset.forName(defaultString(site.getEncoding(), "UTF-8"));
                 String body = new String(timed.response().body(), charset);
                 return new RobotsCacheEntry(CrawlerRobotsPolicy.parse(body, productToken(settings.userAgent())),
-                        now.plus(ROBOTS_CACHE_DURATION));
+                        now.plus(Duration.ofMinutes(settings.robotsCacheMinutes())));
             }
             if (status == 404 || status == 410) {
-                return new RobotsCacheEntry(CrawlerRobotsPolicy.ALLOW_ALL, now.plus(ROBOTS_CACHE_DURATION));
+                return new RobotsCacheEntry(CrawlerRobotsPolicy.ALLOW_ALL,
+                        now.plus(Duration.ofMinutes(settings.robotsCacheMinutes())));
             }
             if (status == 401 || status == 403) {
                 return new RobotsCacheEntry(CrawlerRobotsPolicy.DISALLOW_ALL,
-                        now.plus(ROBOTS_ERROR_CACHE_DURATION));
+                        now.plus(Duration.ofMinutes(settings.robotsErrorCacheMinutes())));
             }
             if (status == 429 || status == 503) {
                 long delay = retryAfterMillis(timed.response().headers(), now)
-                        .orElse(ROBOTS_ERROR_CACHE_DURATION.toMillis());
+                        .orElse(Duration.ofMinutes(settings.robotsErrorCacheMinutes()).toMillis());
                 Instant blockedUntil = now.plusMillis(Math.max(1000L, delay));
                 robotsCache.put(robotsKey(site, target),
                         new RobotsCacheEntry(CrawlerRobotsPolicy.DISALLOW_ALL, blockedUntil));
@@ -321,7 +341,8 @@ public class CrawlerHttpClient {
             throw exception;
         } catch (Exception exception) {
             robotsCache.put(robotsKey(site, target), new RobotsCacheEntry(
-                    CrawlerRobotsPolicy.DISALLOW_ALL, now.plus(ROBOTS_ERROR_CACHE_DURATION)));
+                    CrawlerRobotsPolicy.DISALLOW_ALL,
+                    now.plus(Duration.ofMinutes(settings.robotsErrorCacheMinutes()))));
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "暂时无法确认 robots.txt 访问策略，已暂停目标请求", exception);
         }
@@ -352,10 +373,10 @@ public class CrawlerHttpClient {
         }
     }
 
-    static byte[] readBounded(InputStream input, long declaredLength) throws IOException {
-        if (declaredLength > MAX_RESPONSE_BYTES) {
+    static byte[] readBounded(InputStream input, long declaredLength, int maximumBytes) throws IOException {
+        if (declaredLength > maximumBytes) {
             throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,
-                    "源站响应超过允许的 8 MiB 上限");
+                    "源站响应超过允许的 " + maximumBytes / (1024 * 1024) + " MiB 上限");
         }
         ByteArrayOutputStream output = new ByteArrayOutputStream(
                 (int) Math.min(Math.max(0, declaredLength), 64 * 1024));
@@ -364,9 +385,9 @@ public class CrawlerHttpClient {
         int read;
         while ((read = input.read(buffer)) != -1) {
             total += read;
-            if (total > MAX_RESPONSE_BYTES) {
+            if (total > maximumBytes) {
                 throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,
-                        "源站响应超过允许的 8 MiB 上限");
+                        "源站响应超过允许的 " + maximumBytes / (1024 * 1024) + " MiB 上限");
             }
             output.write(buffer, 0, read);
         }
@@ -407,8 +428,8 @@ public class CrawlerHttpClient {
         }
     }
 
-    private long retryBackoffMillis(int attempt) {
-        long ceiling = Math.min(30_000L, 1000L << Math.min(attempt, 5));
+    private long retryBackoffMillis(int attempt, int maximumMillis) {
+        long ceiling = Math.min(maximumMillis, 1000L << Math.min(attempt, 16));
         return ThreadLocalRandom.current().nextLong(Math.max(1L, ceiling / 2), ceiling + 1);
     }
 
@@ -440,11 +461,11 @@ public class CrawlerHttpClient {
         if (delay != null && delay.recover() == 0) adaptiveDelays.remove(site.getId(), delay);
     }
 
-    private void recordFailure(CrawlerSite site, int maximumFailures) {
+    private void recordFailure(CrawlerSite site, int maximumFailures, int cooldownSeconds) {
         circuitStates.compute(site.getId(), (ignored, current) -> {
             int failures = current == null ? 1 : current.failures() + 1;
             Instant blockedUntil = failures >= Math.max(1, maximumFailures)
-                    ? Instant.now().plus(CIRCUIT_COOLDOWN)
+                    ? Instant.now().plusSeconds(cooldownSeconds)
                     : current == null ? null : current.blockedUntil();
             return new CircuitState(failures, blockedUntil,
                     blockedUntil == null ? current == null ? null : current.reason()
@@ -483,9 +504,9 @@ public class CrawlerHttpClient {
         return first.isAfter(second) ? first : second;
     }
 
-    private void increaseAdaptiveDelay(CrawlerSite site, long minimumDelayMillis) {
+    private void increaseAdaptiveDelay(CrawlerSite site, long minimumDelayMillis, long maximumDelayMillis) {
         adaptiveDelays.computeIfAbsent(site.getId(), ignored -> new AdaptiveDelay())
-                .increase(minimumDelayMillis);
+                .increase(minimumDelayMillis, maximumDelayMillis);
     }
 
     private String robotsKey(CrawlerSite site, URI target) {
@@ -494,21 +515,38 @@ public class CrawlerHttpClient {
 
     private CrawlerRequestSettings requestSettings() {
         CrawlerRequestSettings settings = crawlerSettingsService.settings();
-        return settings == null ? new CrawlerRequestSettings(15000, 2, 5, "", "", "{}") : settings;
+        return settings == null ? new CrawlerRequestSettings(15000, 2, 5, 30000, 30000,
+                8, 5, 4, 60000, 900, 3600, 360, 15, true, "", "", "{}") : settings;
     }
 
-    private void throttle(CrawlerSite site) throws InterruptedException {
+    private void throttle(CrawlerSite site, URI target) throws InterruptedException {
         long now = System.currentTimeMillis();
         AdaptiveDelay adaptiveDelay = adaptiveDelays.get(site.getId());
         long interval = value(site.getRequestIntervalMillis(), 1500) +
                 (value(site.getRandomDelayMillis(), 1000) == 0 ? 0
                         : ThreadLocalRandom.current().nextInt(value(site.getRandomDelayMillis(), 1000) + 1))
                 + (adaptiveDelay == null ? 0 : adaptiveDelay.current());
-        AtomicLong gate = nextRequests.computeIfAbsent(site.getId(), ignored -> new AtomicLong());
-        long slot;
-        do { slot = gate.get(); } while (!gate.compareAndSet(slot, Math.max(now, slot) + interval));
-        long wait = slot - now;
+        long siteSlot = reserveRequestSlot(
+                siteNextRequests.computeIfAbsent(site.getId(), ignored -> new AtomicLong()), now, interval);
+        long originSlot = reserveRequestSlot(
+                originNextRequests.computeIfAbsent(originKey(target), ignored -> new AtomicLong()), now, interval);
+        long wait = Math.max(siteSlot, originSlot) - now;
         if (wait > 0) Thread.sleep(wait);
+    }
+
+    static long reserveRequestSlot(AtomicLong gate, long now, long interval) {
+        long slot;
+        do {
+            slot = gate.get();
+        } while (!gate.compareAndSet(slot, Math.max(now, slot) + Math.max(0, interval)));
+        return Math.max(now, slot);
+    }
+
+    static String originKey(URI uri) {
+        String scheme = Objects.toString(uri.getScheme(), "").toLowerCase(Locale.ROOT);
+        String host = Objects.toString(uri.getHost(), "").toLowerCase(Locale.ROOT);
+        int port = uri.getPort() >= 0 ? uri.getPort() : "https".equals(scheme) ? 443 : 80;
+        return scheme + "://" + host + ":" + port;
     }
 
     private void applyHeaders(HttpRequest.Builder request, String json) throws Exception {
@@ -535,8 +573,8 @@ public class CrawlerHttpClient {
     static final class AdaptiveDelay {
         private long delayMillis;
 
-        synchronized long increase(long minimumDelayMillis) {
-            delayMillis = Math.min(MAX_ADAPTIVE_DELAY_MILLIS,
+        synchronized long increase(long minimumDelayMillis, long maximumDelayMillis) {
+            delayMillis = Math.min(maximumDelayMillis,
                     Math.max(Math.max(1000L, minimumDelayMillis), delayMillis == 0 ? 1000L : delayMillis * 2));
             return delayMillis;
         }
@@ -548,6 +586,10 @@ public class CrawlerHttpClient {
 
         synchronized long current() {
             return delayMillis;
+        }
+
+        synchronized void cap(long maximumDelayMillis) {
+            delayMillis = Math.min(delayMillis, maximumDelayMillis);
         }
     }
 

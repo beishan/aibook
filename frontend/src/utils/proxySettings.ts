@@ -44,6 +44,17 @@ export interface CrawlerRequestSettings {
   timeoutMillis: number
   retryCount: number
   maxConsecutiveFailures: number
+  retryBackoffMaxMillis: number
+  maxInlineRetryDelayMillis: number
+  maxResponseSizeMb: number
+  maxRedirects: number
+  maxOriginConcurrency: number
+  adaptiveDelayMaxMillis: number
+  circuitCooldownSeconds: number
+  accessDeniedCooldownSeconds: number
+  robotsCacheMinutes: number
+  robotsErrorCacheMinutes: number
+  softBlockDetectionEnabled: boolean
   userAgent: string
   cookie: string
   headersJson: string

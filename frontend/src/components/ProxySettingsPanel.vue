@@ -52,7 +52,18 @@
           <el-form-item label="单次请求超时（ms）"><el-input-number v-model="requestSettings.timeoutMillis" :min="1000" :max="120000" :step="1000" controls-position="right" /></el-form-item>
           <el-form-item label="单次请求失败重试"><el-input-number v-model="requestSettings.retryCount" :min="0" :max="8" controls-position="right" /></el-form-item>
           <el-form-item label="任务连续请求失败上限"><el-input-number v-model="requestSettings.maxConsecutiveFailures" :min="1" :max="100" controls-position="right" /><small>达到上限后停止整项任务；任一请求成功后重新计数。</small></el-form-item>
+          <el-form-item label="重试退避上限（ms）"><el-input-number v-model="requestSettings.retryBackoffMaxMillis" :min="500" :max="120000" :step="500" controls-position="right" /></el-form-item>
+          <el-form-item label="原地等待上限（ms）"><el-input-number v-model="requestSettings.maxInlineRetryDelayMillis" :min="0" :max="120000" :step="1000" controls-position="right" /><small>Retry-After 超过此值时结束本次请求并进入冷却。</small></el-form-item>
+          <el-form-item label="响应体积上限（MiB）"><el-input-number v-model="requestSettings.maxResponseSizeMb" :min="1" :max="64" controls-position="right" /></el-form-item>
+          <el-form-item label="重定向次数上限"><el-input-number v-model="requestSettings.maxRedirects" :min="0" :max="10" controls-position="right" /></el-form-item>
+          <el-form-item label="同源总并发上限"><el-input-number v-model="requestSettings.maxOriginConcurrency" :min="1" :max="16" controls-position="right" /><small>相同协议、主机和端口下所有网站配置共享。</small></el-form-item>
+          <el-form-item label="自适应附加延迟上限（ms）"><el-input-number v-model="requestSettings.adaptiveDelayMaxMillis" :min="1000" :max="300000" :step="1000" controls-position="right" /></el-form-item>
+          <el-form-item label="普通熔断冷却（秒）"><el-input-number v-model="requestSettings.circuitCooldownSeconds" :min="10" :max="86400" :step="60" controls-position="right" /></el-form-item>
+          <el-form-item label="访问拒绝冷却（秒）"><el-input-number v-model="requestSettings.accessDeniedCooldownSeconds" :min="60" :max="604800" :step="300" controls-position="right" /></el-form-item>
+          <el-form-item label="robots.txt 缓存（分钟）"><el-input-number v-model="requestSettings.robotsCacheMinutes" :min="1" :max="10080" :step="30" controls-position="right" /></el-form-item>
+          <el-form-item label="robots.txt 异常缓存（分钟）"><el-input-number v-model="requestSettings.robotsErrorCacheMinutes" :min="1" :max="1440" :step="5" controls-position="right" /></el-form-item>
         </div>
+        <el-form-item label="反爬验证页识别"><el-switch v-model="requestSettings.softBlockDetectionEnabled" active-text="启用并自动冷却" inactive-text="关闭识别" /><small>关闭后验证页可能被当作正文；不会自动绕过验证码或访问控制。</small></el-form-item>
       </el-form>
     </section>
 
@@ -186,7 +197,7 @@ const rows = ref<ProxyRow[]>([])
 const systemOptions = ref<SystemProxyConfig[]>([])
 const formRef = ref<FormInstance>()
 const form = reactive({ sourceType: 'CUSTOM' as 'CUSTOM' | 'SYSTEM', name: '', url: '', systemProxyId: undefined as number | undefined, enabled: true, priority: 100 })
-const requestSettings = reactive<CrawlerRequestSettings>({timeoutMillis:15000,retryCount:2,maxConsecutiveFailures:5,userAgent:'',cookie:'',headersJson:'{}'})
+const requestSettings = reactive<CrawlerRequestSettings>({timeoutMillis:15000,retryCount:2,maxConsecutiveFailures:5,retryBackoffMaxMillis:30000,maxInlineRetryDelayMillis:30000,maxResponseSizeMb:8,maxRedirects:5,maxOriginConcurrency:4,adaptiveDelayMaxMillis:60000,circuitCooldownSeconds:900,accessDeniedCooldownSeconds:3600,robotsCacheMinutes:360,robotsErrorCacheMinutes:15,softBlockDetectionEnabled:true,userAgent:'',cookie:'',headersJson:'{}'})
 const rules: FormRules = {
   name: [{ required: true, whitespace: true, message: '请输入代理名称', trigger: ['blur', 'change'] }],
   url: [{ required: true, whitespace: true, message: '请输入代理地址', trigger: ['blur', 'change'] }],

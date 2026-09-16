@@ -11,6 +11,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.http.HttpHeaders;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -19,10 +20,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -60,7 +63,7 @@ class CrawlerHttpClientTest {
 
     @Test void usesGlobalConsecutiveFailureLimit() {
         when(crawlerSettings.settings()).thenReturn(
-                new CrawlerRequestSettings(30000, 4, 7, "CrawlerBot/2.0", "", "{}"));
+                settings(30000, 4, 7, "CrawlerBot/2.0", "", "{}"));
 
         assertEquals(7, client.maxConsecutiveFailures());
     }
@@ -77,9 +80,9 @@ class CrawlerHttpClientTest {
 
     @Test void boundsStreamingResponsesAndDetectsSoftBlockingPages() throws Exception {
         assertThrows(ResponseStatusException.class, () -> CrawlerHttpClient.readBounded(
-                new ByteArrayInputStream(new byte[0]), 8L * 1024 * 1024 + 1));
+                new ByteArrayInputStream(new byte[0]), 8L * 1024 * 1024 + 1, 8 * 1024 * 1024));
         assertThrows(ResponseStatusException.class, () -> CrawlerHttpClient.readBounded(
-                new ByteArrayInputStream(new byte[8 * 1024 * 1024 + 1]), -1));
+                new ByteArrayInputStream(new byte[8 * 1024 * 1024 + 1]), -1, 8 * 1024 * 1024));
 
         assertTrue(CrawlerHttpClient.detectSoftBlock("""
                 <html><head><title>Just a moment...</title></head>
@@ -93,10 +96,80 @@ class CrawlerHttpClientTest {
     @Test void adaptiveDelayIncreasesOnFailuresAndRecoversGradually() {
         CrawlerHttpClient.AdaptiveDelay delay = new CrawlerHttpClient.AdaptiveDelay();
 
-        assertEquals(1000, delay.increase(500));
-        assertEquals(2000, delay.increase(500));
+        assertEquals(1000, delay.increase(500, 60_000));
+        assertEquals(2000, delay.increase(500, 60_000));
         assertEquals(1000, delay.recover());
         assertEquals(0, delay.recover());
+    }
+
+    @Test void normalizesOriginsAndReservesSharedRequestSlots() {
+        assertEquals("https://example.com:443",
+                CrawlerHttpClient.originKey(URI.create("HTTPS://Example.COM/path")));
+        assertEquals("https://example.com:8443",
+                CrawlerHttpClient.originKey(URI.create("https://example.com:8443/path")));
+        AtomicLong gate = new AtomicLong();
+
+        assertEquals(1_000L, CrawlerHttpClient.reserveRequestSlot(gate, 1_000L, 150L));
+        assertEquals(1_150L, CrawlerHttpClient.reserveRequestSlot(gate, 1_000L, 150L));
+    }
+
+    @Test void sharesRequestSpacingAcrossSiteConfigurationsForTheSameOrigin() throws Exception {
+        List<Long> starts = new CopyOnWriteArrayList<>();
+        HttpServer server = server("User-agent: *\nAllow: /\n", exchange -> {
+            starts.add(System.nanoTime());
+            respond(exchange, 200, "content");
+        });
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            CrawlerHttpClient httpClient = configuredClient(0);
+            CrawlerSite first = localSite(server, 19L);
+            CrawlerSite second = localSite(server, 20L);
+            first.setRespectRobotsTxt(false);
+            second.setRespectRobotsTxt(false);
+            first.setRequestIntervalMillis(120);
+            second.setRequestIntervalMillis(120);
+
+            Future<?> firstRequest = executor.submit(
+                    () -> httpClient.get(first, first.getBaseUrl() + "/one"));
+            Future<?> secondRequest = executor.submit(
+                    () -> httpClient.get(second, second.getBaseUrl() + "/two"));
+            firstRequest.get(2, TimeUnit.SECONDS);
+            secondRequest.get(2, TimeUnit.SECONDS);
+
+            assertEquals(2, starts.size());
+            starts.sort(Long::compareTo);
+            assertTrue(TimeUnit.NANOSECONDS.toMillis(starts.get(1) - starts.get(0)) >= 80,
+                    "同一源的不同网站配置不应同时突发请求");
+        } finally {
+            executor.shutdownNow();
+            server.stop(0);
+        }
+    }
+
+    @Test void blocksCrossOriginRedirectWhenRobotsEnforcementIsEnabled() throws Exception {
+        AtomicInteger redirectedRequests = new AtomicInteger();
+        HttpServer target = server("User-agent: *\nAllow: /\n", exchange -> {
+            redirectedRequests.incrementAndGet();
+            respond(exchange, 200, "target");
+        });
+        HttpServer source = server("User-agent: *\nAllow: /\n", exchange -> {
+            exchange.getResponseHeaders().add("Location",
+                    "http://127.0.0.1:" + target.getAddress().getPort() + "/target");
+            respondWithoutBody(exchange, 302);
+        });
+        try {
+            CrawlerHttpClient httpClient = configuredClient(0);
+            CrawlerSite localSite = localSite(source, 21L);
+
+            ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                    () -> httpClient.get(localSite, localSite.getBaseUrl() + "/redirect"));
+
+            assertEquals(502, exception.getStatusCode().value());
+            assertEquals(0, redirectedRequests.get());
+        } finally {
+            source.stop(0);
+            target.stop(0);
+        }
     }
 
     @Test void appliesNewerConcurrencyLimitWithoutOldConfigurationOverwritingIt() throws Exception {
@@ -208,6 +281,33 @@ class CrawlerHttpClientTest {
             assertEquals(1, targetRequests.get());
         } finally {
             server.stop(0);
+        }
+    }
+
+    @Test void appliesConfiguredResponseLimitAndSoftBlockSwitch() throws Exception {
+        HttpServer oversized = server("User-agent: *\nAllow: /\n", exchange ->
+                respond(exchange, 200, "x".repeat(1024 * 1024 + 1)));
+        HttpServer challenge = server("User-agent: *\nAllow: /\n", exchange ->
+                respond(exchange, 200, "<title>访问过于频繁</title>"));
+        try {
+            CrawlerRequestSettings strict = settings(5000, 0, 3,
+                    "AiBookCrawler/1.0", "", "{}", 1, true);
+            CrawlerRequestSettings detectionDisabled = settings(5000, 0, 3,
+                    "AiBookCrawler/1.0", "", "{}", 8, false);
+            CrawlerSite largeSite = localSite(oversized, 22L);
+            CrawlerSite challengeSite = localSite(challenge, 23L);
+
+            ResponseStatusException tooLarge = assertThrows(ResponseStatusException.class,
+                    () -> configuredClient(strict).get(
+                            largeSite, largeSite.getBaseUrl() + "/large"));
+            CrawlerHttpClient.FetchResult accepted = configuredClient(detectionDisabled).get(
+                    challengeSite, challengeSite.getBaseUrl() + "/challenge");
+
+            assertEquals(413, tooLarge.getStatusCode().value());
+            assertEquals(200, accepted.statusCode());
+        } finally {
+            oversized.stop(0);
+            challenge.stop(0);
         }
     }
 
@@ -325,9 +425,31 @@ class CrawlerHttpClientTest {
         CrawlerSettingsService settings = mock(CrawlerSettingsService.class);
         when(proxies.activeCrawlerProxyUrls()).thenReturn(List.of());
         when(settings.settings()).thenReturn(
-                new CrawlerRequestSettings(5000, retries, maximumFailures,
+                settings(5000, retries, maximumFailures,
                         "AiBookCrawler/1.0", "", "{}"));
         return new CrawlerHttpClient(new ObjectMapper(), proxies, settings, repository);
+    }
+
+    private CrawlerHttpClient configuredClient(CrawlerRequestSettings requestSettings) {
+        ProxySettingsService proxies = mock(ProxySettingsService.class);
+        CrawlerSettingsService settings = mock(CrawlerSettingsService.class);
+        when(proxies.activeCrawlerProxyUrls()).thenReturn(List.of());
+        when(settings.settings()).thenReturn(requestSettings);
+        return new CrawlerHttpClient(new ObjectMapper(), proxies, settings,
+                mock(CrawlerSiteRepository.class));
+    }
+
+    private CrawlerRequestSettings settings(int timeout, int retries, int failures,
+            String userAgent, String cookie, String headers) {
+        return settings(timeout, retries, failures, userAgent, cookie, headers, 8, true);
+    }
+
+    private CrawlerRequestSettings settings(int timeout, int retries, int failures,
+            String userAgent, String cookie, String headers, int responseSizeMb,
+            boolean softBlockDetectionEnabled) {
+        return new CrawlerRequestSettings(timeout, retries, failures, 30_000, 30_000,
+                responseSizeMb, 5, 4, 60_000, 900, 3600, 360, 15, softBlockDetectionEnabled,
+                userAgent, cookie, headers);
     }
 
     private CrawlerSite localSite(HttpServer server, long id) {

@@ -27,6 +27,9 @@ class CrawlerSettingsServiceTest {
         assertThat(settings.timeoutMillis()).isEqualTo(15000);
         assertThat(settings.retryCount()).isEqualTo(2);
         assertThat(settings.maxConsecutiveFailures()).isEqualTo(5);
+        assertThat(settings.maxResponseSizeMb()).isEqualTo(8);
+        assertThat(settings.maxOriginConcurrency()).isEqualTo(4);
+        assertThat(settings.softBlockDetectionEnabled()).isTrue();
         assertThat(settings.headersJson()).isEqualTo("{}");
         assertThat(service.maxConcurrentTasks()).isEqualTo(4);
     }
@@ -37,7 +40,9 @@ class CrawlerSettingsServiceTest {
         CrawlerSettingsService service = new CrawlerSettingsService(configs, new ObjectMapper());
 
         CrawlerRequestSettings saved = service.update(new CrawlerRequestSettings(
-                30000, 4, 7, " CustomBot/1.0 ", " session=abc ", "{\"X-Source\":\"library\"}"));
+                30000, 4, 7, 45000, 20000, 16, 3, 6, 90000,
+                1200, 7200, 720, 30, false,
+                " CustomBot/1.0 ", " session=abc ", "{\"X-Source\":\"library\"}"));
 
         assertThat(saved.userAgent()).isEqualTo("CustomBot/1.0");
         assertThat(saved.cookie()).isEqualTo("session=abc");
@@ -46,7 +51,10 @@ class CrawlerSettingsServiceTest {
         verify(configs).saveConfigs(values.capture());
         assertThat(values.getValue()).containsEntry("crawler.request.timeoutMillis", "30000")
                 .containsEntry("crawler.request.retryCount", "4")
-                .containsEntry("crawler.request.maxConsecutiveFailures", "7");
+                .containsEntry("crawler.request.maxConsecutiveFailures", "7")
+                .containsEntry("crawler.request.maxResponseSizeMb", "16")
+                .containsEntry("crawler.request.maxOriginConcurrency", "6")
+                .containsEntry("crawler.request.softBlockDetectionEnabled", "false");
         assertThat(service.settings()).isSameAs(saved);
     }
 
@@ -56,7 +64,8 @@ class CrawlerSettingsServiceTest {
                 mock(SystemConfigService.class), new ObjectMapper());
 
         assertThatThrownBy(() -> service.update(new CrawlerRequestSettings(
-                15000, 2, 5, "", "", "not-json")))
+                15000, 2, 5, 30000, 30000, 8, 5, 4, 60000,
+                900, 3600, 360, 15, true, "", "", "not-json")))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("字符串键值对 JSON");
     }
