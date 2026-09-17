@@ -161,7 +161,11 @@
           >
             <div class="rank-badge" :class="{ top3: index < 3 }">{{ index + 1 }}</div>
             <div class="top-book-cover">
-              <img v-if="book.coverUrl" :src="getCoverUrl(book.coverUrl)" alt="" />
+              <img
+                v-if="book.coverUrl && shouldLoadBookCover(book.bookId)"
+                :src="getCoverUrl(book.coverUrl)"
+                alt=""
+              />
               <span v-else>{{ book.title.charAt(0) }}</span>
             </div>
             <div class="top-book-meta">
@@ -181,6 +185,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
+import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 
 interface Overview {
   totalBooks: number

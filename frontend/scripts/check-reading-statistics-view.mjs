@@ -28,5 +28,15 @@ assert.match(source, /v-else-if="loadError"/)
 assert.match(source, /@click="loadStatistics"/)
 assert.match(source, /import \{ getCoverUrl \} from '@\/utils\/cover'/)
 assert.match(source, /:src="getCoverUrl\(book\.coverUrl\)"/)
+assert.match(
+  source,
+  /import \{ shouldLoadBookCover \} from '@\/utils\/imagePrivacy'/,
+  'reading-time ranking must reuse the shared cover privacy guard',
+)
+assert.match(
+  source,
+  /<img\s+v-if="book\.coverUrl && shouldLoadBookCover\(book\.bookId\)"\s+:src="getCoverUrl\(book\.coverUrl\)"\s+alt=""\s*\/>\s*<span v-else>/,
+  'hidden ranking covers must not create an img/src and must retain the text placeholder',
+)
 
-console.log('Reading statistics waits for mounted chart containers and degrades safely')
+console.log('Reading statistics renders safely and honors book cover privacy')
