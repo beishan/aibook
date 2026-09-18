@@ -317,6 +317,14 @@ const formatHours = (seconds: number): string => {
   return minutes > 0 ? `${hours} 小时${minutes} 分钟` : `${hours} 小时`
 }
 
+// 统计键是账户所在环境的自然日，不能使用 toISOString（东时区凌晨会退到前一天）。
+const localDateKey = (date: Date): string => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 const disposeCharts = () => {
   monthlyChart?.dispose()
   heatmapChart?.dispose()
@@ -361,7 +369,7 @@ const renderMonthlyTrend = () => {
       textStyle: { color: '#374151' },
     },
     legend: {
-      data: ['阅读本数', '阅读分钟'],
+      data: ['活跃书籍', '阅读分钟'],
       top: 0,
       textStyle: { color: '#6b7280' },
     },
@@ -390,7 +398,7 @@ const renderMonthlyTrend = () => {
     ],
     series: [
       {
-        name: '读完本数',
+        name: '活跃书籍',
         type: 'bar',
         data: bookCounts,
         itemStyle: {
@@ -434,7 +442,7 @@ const renderHeatmap = () => {
   for (let i = 364; i >= 0; i--) {
     const d = new Date(today)
     d.setDate(d.getDate() - i)
-    const key = d.toISOString().slice(0, 10)
+    const key = localDateKey(d)
     data.push([key, rawHeatmap[key] || 0])
   }
 
@@ -472,11 +480,7 @@ const renderHeatmap = () => {
       right: 20,
       bottom: 40,
       cellSize: [14, 14],
-      range: [
-        new Date(today.getFullYear() - 1, today.getMonth(), today.getDate() + 1)
-          .toISOString().slice(0, 10),
-        today.toISOString().slice(0, 10),
-      ],
+      range: [data[0][0], data[data.length - 1][0]],
       itemStyle: { borderWidth: 2, borderColor: '#fff', color: '#ebedf0' },
       splitLine: { show: false },
       dayLabel: { color: '#9ca3af', fontSize: 10, nameMap: 'cn' },

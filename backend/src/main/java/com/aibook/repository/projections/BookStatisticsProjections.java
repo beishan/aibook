@@ -35,7 +35,7 @@ public final class BookStatisticsProjections {
     }
 
     /**
-     * 按年/月聚合阅读活跃度（以书籍主阅读进度的最后阅读时间为依据）。
+     * 按真实日记录聚合阅读活跃度（旧数据按最后阅读时间降级）。
      */
     public interface MonthlyReadingCount {
         Integer getYear();

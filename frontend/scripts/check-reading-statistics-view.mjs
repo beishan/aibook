@@ -9,6 +9,11 @@ const source = await readFile(
 assert.match(source, /stats\.value = normalizeStatistics\(data\)/)
 assert.match(source, /loading\.value = false[\s\S]*await nextTick\(\)[\s\S]*if \(stats\.value\) renderCharts\(\)/)
 assert.doesNotMatch(source, /watch\(stats,/)
+assert.match(source, /const localDateKey = \(date: Date\): string =>/)
+assert.match(source, /const key = localDateKey\(d\)/)
+assert.doesNotMatch(source, /toISOString\(\)\.slice\(0, 10\)/)
+assert.match(source, /range: \[data\[0\]\[0\], data\[data\.length - 1\]\[0\]\]/)
+assert.match(source, /name: '活跃书籍'/)
 
 for (const field of [
   'ratingDistribution',

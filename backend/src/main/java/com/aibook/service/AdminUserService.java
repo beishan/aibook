@@ -197,6 +197,8 @@ public class AdminUserService {
                 + ownedBooks + ")", userId, userId);
         update("DELETE FROM text_repair_templates WHERE user_id = ?", userId);
 
+        update("DELETE FROM reading_daily_activity WHERE user_id = ? OR version_id IN ("
+                + ownedVersions + ")", userId, userId);
         update("DELETE FROM version_reading_progress WHERE user_id = ? OR version_id IN ("
                 + ownedVersions + ")", userId, userId);
         update("DELETE FROM reading_progress WHERE user_id = ? OR book_id IN ("

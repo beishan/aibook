@@ -5,6 +5,7 @@ import com.aibook.model.entity.BookVersion;
 import com.aibook.model.entity.User;
 import com.aibook.model.entity.VersionReadingProgress;
 import com.aibook.repository.BookRepository;
+import com.aibook.repository.ReadingDailyActivityRepository;
 import com.aibook.repository.ReadingProgressRepository;
 import com.aibook.repository.VersionReadingProgressRepository;
 import org.junit.jupiter.api.Test;
@@ -49,11 +50,13 @@ class ReadingProgressServiceTest {
                 mock(ReadingProgressRepository.class);
         VersionReadingProgressRepository versionRepository =
                 mock(VersionReadingProgressRepository.class);
+        ReadingDailyActivityRepository dailyRepository = mock(ReadingDailyActivityRepository.class);
         BookRepository bookRepository = mock(BookRepository.class);
         BookVersionService versionService = mock(BookVersionService.class);
         ReadingProgressService service = new ReadingProgressService(
                 aggregateRepository,
                 versionRepository,
+                dailyRepository,
                 bookRepository,
                 versionService);
 
@@ -61,9 +64,9 @@ class ReadingProgressServiceTest {
                 .thenReturn(Optional.of(book));
         when(versionService.resolveVersion(book, 11L)).thenReturn(epubVersion);
         when(versionService.resolveVersion(book, 12L)).thenReturn(textVersion);
-        when(versionRepository.findByUserAndVersion(user, epubVersion))
+        when(versionRepository.findByUserAndVersionForUpdate(user, epubVersion))
                 .thenReturn(Optional.empty());
-        when(versionRepository.findByUserAndVersion(user, textVersion))
+        when(versionRepository.findByUserAndVersionForUpdate(user, textVersion))
                 .thenReturn(Optional.empty());
         when(versionRepository.save(any(VersionReadingProgress.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -107,15 +110,16 @@ class ReadingProgressServiceTest {
         ReadingProgressRepository aggregateRepository = mock(ReadingProgressRepository.class);
         VersionReadingProgressRepository versionRepository =
                 mock(VersionReadingProgressRepository.class);
+        ReadingDailyActivityRepository dailyRepository = mock(ReadingDailyActivityRepository.class);
         BookRepository bookRepository = mock(BookRepository.class);
         BookVersionService versionService = mock(BookVersionService.class);
         ReadingProgressService service = new ReadingProgressService(
-                aggregateRepository, versionRepository, bookRepository, versionService);
+                aggregateRepository, versionRepository, dailyRepository, bookRepository, versionService);
 
         when(bookRepository.findByIdAndUserAndDeletedAtIsNull(9L, user))
                 .thenReturn(Optional.of(book));
         when(versionService.resolveVersion(book, 11L)).thenReturn(version);
-        when(versionRepository.findByUserAndVersion(user, version)).thenReturn(Optional.empty());
+        when(versionRepository.findByUserAndVersionForUpdate(user, version)).thenReturn(Optional.empty());
         when(versionRepository.save(any(VersionReadingProgress.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(aggregateRepository.findByUserAndBook(user, book)).thenReturn(Optional.empty());
@@ -153,16 +157,18 @@ class ReadingProgressServiceTest {
         ReadingProgressRepository aggregateRepository = mock(ReadingProgressRepository.class);
         VersionReadingProgressRepository versionRepository =
                 mock(VersionReadingProgressRepository.class);
+        ReadingDailyActivityRepository dailyRepository = mock(ReadingDailyActivityRepository.class);
         BookRepository bookRepository = mock(BookRepository.class);
         BookVersionService versionService = mock(BookVersionService.class);
         ReadingProgressService service = new ReadingProgressService(
-                aggregateRepository, versionRepository, bookRepository, versionService);
+                aggregateRepository, versionRepository, dailyRepository, bookRepository, versionService);
 
         when(bookRepository.findByIdAndUserAndDeletedAtIsNull(9L, user))
                 .thenReturn(Optional.of(book));
         when(versionService.resolveVersion(book, 11L)).thenReturn(version);
-        when(versionRepository.findByUserAndVersion(user, version))
+        when(versionRepository.findByUserAndVersionForUpdate(user, version))
                 .thenReturn(Optional.of(progress));
+        when(dailyRepository.existsByUserIdAndVersionId(1L, 11L)).thenReturn(true);
         when(versionRepository.save(any(VersionReadingProgress.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(aggregateRepository.findByUserAndBook(user, book)).thenReturn(Optional.empty());
@@ -173,5 +179,40 @@ class ReadingProgressServiceTest {
 
         assertThat(progress.getReadingTimeSeconds()).isEqualTo(45L);
         assertThat(progress.getReadingSessionElapsedSeconds()).isEqualTo(45L);
+    }
+
+    @Test
+    void archivesLegacyTimeOnceAndAddsOnlyTheHeartbeatDeltaToToday() {
+        User user = User.builder().id(1L).username("reader").build();
+        Book book = Book.builder().id(9L).title("旧数据").user(user)
+                .readingStatus(Book.ReadingStatus.READING).build();
+        BookVersion version = BookVersion.builder().id(11L).book(book)
+                .displayName("旧数据.epub").format("epub").filePath("/books/legacy.epub").build();
+        VersionReadingProgress progress = VersionReadingProgress.builder()
+                .version(version).user(user).readingTimeSeconds(600L)
+                .lastReadAt(java.time.LocalDateTime.of(2026, 8, 20, 9, 0)).build();
+
+        ReadingProgressRepository aggregateRepository = mock(ReadingProgressRepository.class);
+        VersionReadingProgressRepository versionRepository = mock(VersionReadingProgressRepository.class);
+        ReadingDailyActivityRepository dailyRepository = mock(ReadingDailyActivityRepository.class);
+        BookRepository bookRepository = mock(BookRepository.class);
+        BookVersionService versionService = mock(BookVersionService.class);
+        ReadingProgressService service = new ReadingProgressService(
+                aggregateRepository, versionRepository, dailyRepository, bookRepository, versionService);
+
+        when(bookRepository.findByIdAndUserAndDeletedAtIsNull(9L, user)).thenReturn(Optional.of(book));
+        when(versionService.resolveVersion(book, 11L)).thenReturn(version);
+        when(versionRepository.findByUserAndVersionForUpdate(user, version)).thenReturn(Optional.of(progress));
+        when(versionRepository.save(any(VersionReadingProgress.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(aggregateRepository.findByUserAndBook(user, book)).thenReturn(Optional.empty());
+
+        service.updateReadingTime(9L, 11L, user, 30L, null);
+
+        verify(dailyRepository).addReadingTime(
+                1L, 11L, java.time.LocalDate.of(2026, 8, 20), 600L);
+        verify(dailyRepository).addReadingTime(
+                1L, 11L, java.time.LocalDate.now(), 30L);
+        assertThat(progress.getReadingTimeSeconds()).isEqualTo(630L);
     }
 }

@@ -11,6 +11,7 @@ import com.aibook.dto.ReadingStatisticsDTO.RatingStat;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
+import com.aibook.repository.ReadingDailyActivityRepository;
 import com.aibook.repository.VersionReadingProgressRepository;
 import com.aibook.repository.projections.BookStatisticsProjections.BookAuthorCount;
 import com.aibook.repository.projections.BookStatisticsProjections.BookCategoryCount;
@@ -45,6 +46,7 @@ public class ReadingStatisticsService {
 
     private final BookRepository bookRepository;
     private final VersionReadingProgressRepository versionReadingProgressRepository;
+    private final ReadingDailyActivityRepository dailyActivityRepository;
 
     /**
      * 生成当前用户的阅读统计数据。
@@ -118,8 +120,8 @@ public class ReadingStatisticsService {
             result.put(m, MonthReadingStat.builder()
                     .month(m).activeCount(0).readingTimeSeconds(0L).build());
         }
-        // 以阅读进度 lastReadAt 归属月份，统计当月阅读活跃的本数与时长
-        for (MonthlyReadingCount row : versionReadingProgressRepository.countMonthlyReading(user.getId())) {
+        // 日记录提供真实时间序列；仓库查询会仅对没有日记录的旧进度使用 lastReadAt 降级。
+        for (MonthlyReadingCount row : dailyActivityRepository.countMonthlyReading(user.getId())) {
             if (row.getYear() != null && row.getYear() == currentYear && row.getMonth() != null) {
                 result.get(row.getMonth()).setActiveCount(safe(row.getBookCount()));
                 result.get(row.getMonth()).setReadingTimeSeconds(
@@ -132,7 +134,7 @@ public class ReadingStatisticsService {
     // ==================== 热力图 ====================
 
     private Map<String, Integer> buildDailyHeatmap(User user) {
-        List<DailyReadingCount> rows = versionReadingProgressRepository.countDailyReading(user.getId());
+        List<DailyReadingCount> rows = dailyActivityRepository.countDailyReading(user.getId());
         if (rows == null || rows.isEmpty()) {
             return Collections.emptyMap();
         }

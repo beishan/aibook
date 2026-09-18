@@ -5,6 +5,7 @@ import com.aibook.dto.ReadingStatisticsDTO.MonthReadingStat;
 import com.aibook.dto.ReadingStatisticsDTO.RatingStat;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
+import com.aibook.repository.ReadingDailyActivityRepository;
 import com.aibook.repository.VersionReadingProgressRepository;
 import com.aibook.repository.projections.BookStatisticsProjections.BookAuthorCount;
 import com.aibook.repository.projections.BookStatisticsProjections.BookCategoryCount;
@@ -37,6 +38,9 @@ class ReadingStatisticsServiceTest {
     @Mock
     private VersionReadingProgressRepository versionReadingProgressRepository;
 
+    @Mock
+    private ReadingDailyActivityRepository dailyActivityRepository;
+
     @InjectMocks
     private ReadingStatisticsService service;
 
@@ -60,8 +64,8 @@ class ReadingStatisticsServiceTest {
         when(versionReadingProgressRepository.sumReadingTimeSeconds(user)).thenReturn(36_000L);
         when(bookRepository.countRated(user)).thenReturn(9L);
         when(bookRepository.averageRating(user)).thenReturn(4.2);
-        when(versionReadingProgressRepository.countMonthlyReading(user.getId())).thenReturn(List.of());
-        when(versionReadingProgressRepository.countDailyReading(user.getId())).thenReturn(List.of());
+        when(dailyActivityRepository.countMonthlyReading(user.getId())).thenReturn(List.of());
+        when(dailyActivityRepository.countDailyReading(user.getId())).thenReturn(List.of());
         when(bookRepository.countByRating(user)).thenReturn(List.of());
         when(bookRepository.countByCategory(user)).thenReturn(List.of());
         when(bookRepository.countByAuthor(user, PageRequest.of(0, 20))).thenReturn(List.of());
@@ -118,7 +122,7 @@ class ReadingStatisticsServiceTest {
 
     @Test
     void 月度统计应包含当前年全部12个月() {
-        when(versionReadingProgressRepository.countMonthlyReading(user.getId())).thenReturn(List.of(
+        when(dailyActivityRepository.countMonthlyReading(user.getId())).thenReturn(List.of(
                 monthlyCount(2026, 1, 3L, 7200L),
                 monthlyCount(2026, 3, 5L, 10800L)
         ));
@@ -127,7 +131,7 @@ class ReadingStatisticsServiceTest {
         Map<Integer, MonthReadingStat> monthly = dto.getMonthlyStats();
 
         assertThat(monthly).hasSize(12);
-        // 阅读活跃本数与时长均来自阅读进度统计（lastReadAt 归属月份）
+        // 阅读活跃本数与时长均来自真实日记录聚合。
         assertThat(monthly.get(1).getActiveCount()).isEqualTo(3);
         assertThat(monthly.get(1).getReadingTimeSeconds()).isEqualTo(7200);
         assertThat(monthly.get(3).getActiveCount()).isEqualTo(5);
@@ -136,7 +140,7 @@ class ReadingStatisticsServiceTest {
 
     @Test
     void 热力图应返回日度聚合() {
-        when(versionReadingProgressRepository.countDailyReading(user.getId())).thenReturn(List.of(
+        when(dailyActivityRepository.countDailyReading(user.getId())).thenReturn(List.of(
                 dailyCount("2026-09-01", 2L),
                 dailyCount("2026-09-02", 1L)
         ));

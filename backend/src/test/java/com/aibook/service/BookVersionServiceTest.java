@@ -5,6 +5,7 @@ import com.aibook.model.entity.BookVersion;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookVersionRepository;
 import com.aibook.repository.ReadingProgressRepository;
+import com.aibook.repository.ReadingDailyActivityRepository;
 import com.aibook.repository.VersionReadingProgressRepository;
 import com.aibook.repository.LibraryChapterRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,6 +36,7 @@ class BookVersionServiceTest {
                 mock(BookRepository.class),
                 progressRepository,
                 mock(VersionReadingProgressRepository.class),
+                mock(ReadingDailyActivityRepository.class),
                 mock(LibraryChapterRepository.class),
                 new TxtParserService(),
                 new ObjectMapper());

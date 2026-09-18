@@ -7,6 +7,7 @@ import com.aibook.model.entity.VersionReadingProgress;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookVersionRepository;
 import com.aibook.repository.ReadingProgressRepository;
+import com.aibook.repository.ReadingDailyActivityRepository;
 import com.aibook.repository.LibraryChapterRepository;
 import com.aibook.repository.VersionReadingProgressRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -42,6 +43,7 @@ public class BookVersionService {
     private final BookRepository bookRepository;
     private final ReadingProgressRepository readingProgressRepository;
     private final VersionReadingProgressRepository versionProgressRepository;
+    private final ReadingDailyActivityRepository dailyActivityRepository;
     private final LibraryChapterRepository libraryChapterRepository;
     private final TxtParserService txtParserService;
     private final ObjectMapper objectMapper;
@@ -225,6 +227,7 @@ public class BookVersionService {
         if (Boolean.TRUE.equals(version.getPrimaryVersion())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "原始版本不能删除");
         }
+        dailyActivityRepository.deleteByVersionId(version.getId());
         versionProgressRepository.deleteByVersion(version);
         libraryChapterRepository.deleteByBookVersion(version);
         bookVersionRepository.delete(version);

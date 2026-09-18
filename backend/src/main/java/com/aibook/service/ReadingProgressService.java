@@ -6,12 +6,14 @@ import com.aibook.model.entity.ReadingProgress;
 import com.aibook.model.entity.User;
 import com.aibook.model.entity.VersionReadingProgress;
 import com.aibook.repository.BookRepository;
+import com.aibook.repository.ReadingDailyActivityRepository;
 import com.aibook.repository.ReadingProgressRepository;
 import com.aibook.repository.VersionReadingProgressRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -24,6 +26,7 @@ public class ReadingProgressService {
 
     private final ReadingProgressRepository readingProgressRepository;
     private final VersionReadingProgressRepository versionProgressRepository;
+    private final ReadingDailyActivityRepository dailyActivityRepository;
     private final BookRepository bookRepository;
     private final BookVersionService bookVersionService;
 
@@ -73,11 +76,13 @@ public class ReadingProgressService {
         BookVersion version = bookVersionService.resolveVersion(book, versionId);
 
         VersionReadingProgress progress =
-                versionProgressRepository.findByUserAndVersion(user, version)
+                versionProgressRepository.findByUserAndVersionForUpdate(user, version)
                 .orElse(VersionReadingProgress.builder()
                         .version(version)
                         .user(user)
                         .build());
+        LocalDate legacyDate = progress.getLastReadAt() == null
+                ? null : progress.getLastReadAt().toLocalDate();
 
         progress.setCurrentChapter(currentChapter);
         if (currentChapterTitle != null && !currentChapterTitle.isBlank()) {
@@ -102,6 +107,8 @@ public class ReadingProgressService {
         bookRepository.save(book);
 
         VersionReadingProgress saved = versionProgressRepository.save(progress);
+        recordActivity(user, version, progress, legacyDate,
+                saved.getLastReadAt().toLocalDate(), 0L);
         syncAggregateProgress(book, user, saved);
         return toDTO(saved);
     }
@@ -123,26 +130,31 @@ public class ReadingProgressService {
         BookVersion version = bookVersionService.resolveVersion(book, versionId);
 
         VersionReadingProgress progress =
-                versionProgressRepository.findByUserAndVersion(user, version)
+                versionProgressRepository.findByUserAndVersionForUpdate(user, version)
                 .orElse(VersionReadingProgress.builder()
                         .version(version)
                         .user(user)
                         .build());
+        LocalDate legacyDate = progress.getLastReadAt() == null
+                ? null : progress.getLastReadAt().toLocalDate();
 
         long currentSeconds = progress.getReadingTimeSeconds() == null ? 0L : progress.getReadingTimeSeconds();
         long safeSeconds = Math.max(0L, Math.min(seconds, 86_400L));
+        long increment;
         if (sessionId != null && !sessionId.isBlank()) {
             String normalizedSessionId = sessionId.length() > 100
                     ? sessionId.substring(0, 100) : sessionId;
             long previousElapsed = normalizedSessionId.equals(progress.getReadingSessionId())
                     && progress.getReadingSessionElapsedSeconds() != null
                     ? progress.getReadingSessionElapsedSeconds() : 0L;
-            progress.setReadingTimeSeconds(currentSeconds + Math.max(0L, safeSeconds - previousElapsed));
+            increment = Math.max(0L, safeSeconds - previousElapsed);
+            progress.setReadingTimeSeconds(currentSeconds + increment);
             progress.setReadingSessionId(normalizedSessionId);
             progress.setReadingSessionElapsedSeconds(Math.max(previousElapsed, safeSeconds));
         } else {
             // 保持 KOReader 等旧客户端按增量秒数上报的兼容行为。
-            progress.setReadingTimeSeconds(currentSeconds + safeSeconds);
+            increment = safeSeconds;
+            progress.setReadingTimeSeconds(currentSeconds + increment);
         }
         progress.setLastReadAt(LocalDateTime.now());
 
@@ -153,6 +165,8 @@ public class ReadingProgressService {
         }
 
         VersionReadingProgress saved = versionProgressRepository.save(progress);
+        recordActivity(user, version, progress, legacyDate,
+                saved.getLastReadAt().toLocalDate(), increment);
         syncAggregateProgress(book, user, saved);
         return toDTO(saved);
     }
@@ -180,6 +194,29 @@ public class ReadingProgressService {
         aggregate.setReadingTimeSeconds(versionProgress.getReadingTimeSeconds());
         aggregate.setLastReadAt(versionProgress.getLastReadAt());
         readingProgressRepository.save(aggregate);
+    }
+
+    /**
+     * 首次写入日记录时，将升级前的累计值按旧 lastReadAt 做一次降级归档；随后只累加本次真实增量。
+     */
+    private void recordActivity(
+            User user,
+            BookVersion version,
+            VersionReadingProgress progress,
+            LocalDate legacyDate,
+            LocalDate activityDate,
+            long increment) {
+        boolean hasDailyHistory = dailyActivityRepository.existsByUserIdAndVersionId(
+                user.getId(), version.getId());
+        long total = progress.getReadingTimeSeconds() == null ? 0L : progress.getReadingTimeSeconds();
+        long legacySeconds = Math.max(0L, total - increment);
+        if (!hasDailyHistory && legacySeconds > 0L) {
+            dailyActivityRepository.addReadingTime(
+                    user.getId(), version.getId(),
+                    legacyDate == null ? activityDate : legacyDate, legacySeconds);
+        }
+        dailyActivityRepository.addReadingTime(
+                user.getId(), version.getId(), activityDate, Math.max(0L, increment));
     }
 
     private com.aibook.dto.ReadingProgressDTO emptyProgress(
