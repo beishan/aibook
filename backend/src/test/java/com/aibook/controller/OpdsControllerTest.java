@@ -157,7 +157,7 @@ class OpdsControllerTest {
         private String searchDescription = "";
 
         StubOpdsService() {
-            super(null);
+            super(null, null);
         }
 
         @Override
@@ -175,7 +175,7 @@ class OpdsControllerTest {
         private Map<String, Object> root = Map.of();
 
         StubOpds2Service() {
-            super(null);
+            super(null, null);
         }
 
         @Override

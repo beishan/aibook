@@ -26,7 +26,8 @@ class BookSourceTypeDtoTest {
                 mock(CategoryService.class),
                 mock(TagService.class),
                 mock(AuthorService.class),
-                mock(OperationLogService.class));
+                mock(OperationLogService.class),
+                mock(FullTextSearchSupport.class));
         User user = User.builder().id(1L).build();
         Book scanned = Book.builder()
                 .id(1L).title("扫描书籍").format("epub").filePath("/books/扫描书籍.epub")

@@ -26,6 +26,7 @@ public class Opds2Service {
     private static final int PAGE_SIZE = 50;
 
     private final BookRepository bookRepository;
+private final BookService bookService;
 
     /**
      * 根目录
@@ -114,7 +115,7 @@ public class Opds2Service {
      * 搜索书籍
      */
     public Map<String, Object> searchBooks(User user, String query, int page) {
-        Page<Book> books = bookRepository.searchByKeyword(user, query, PageRequest.of(page, PAGE_SIZE));
+        Page<Book> books = bookService.searchBookEntities(user, query, PageRequest.of(page, PAGE_SIZE));
         String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
         return buildPublicationsFeed(
                 books,

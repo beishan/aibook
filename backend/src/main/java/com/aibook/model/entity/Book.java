@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import com.aibook.util.PinyinUtils;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -102,6 +103,13 @@ public class Book {
     @Enumerated(EnumType.STRING)
     @Column(name = "source_type")
     private SourceType sourceType;
+
+    /**
+     * 拼音检索串（书名+作者的无空格全拼、分词全拼与首字母缩写），
+     * 由实体回调自动维护，支持 sanguo / sanguoyanyi / sgyy 等拼音搜索。
+     */
+    @Column(name = "search_pinyin", length = 2000)
+    private String searchPinyin;
 
     /**
      * 文件大小（字节）
@@ -229,6 +237,13 @@ public class Book {
         UNREADING,    // 未读
         READING,     // 正在阅读
         FINISHED     // 已读完
+    }
+
+    /** 新增或保存时自动刷新拼音检索串，覆盖上传、扫描、爬虫导入与刮削等全部入库路径。 */
+    @PrePersist
+    @PreUpdate
+    void refreshSearchPinyin() {
+        this.searchPinyin = PinyinUtils.buildSearchIndex(title, author);
     }
 
     public enum SourceType {

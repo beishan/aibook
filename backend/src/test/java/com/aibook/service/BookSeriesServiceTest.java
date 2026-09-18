@@ -25,7 +25,7 @@ class BookSeriesServiceTest {
                 mock(com.aibook.repository.BookmarkRepository.class),
                 mock(com.aibook.repository.BookHighlightRepository.class),
                 mock(com.aibook.repository.BookListRepository.class), mock(CategoryService.class),
-                mock(TagService.class), mock(AuthorService.class), mock(OperationLogService.class));
+                mock(TagService.class), mock(AuthorService.class), mock(OperationLogService.class), mock(FullTextSearchSupport.class));
         var dto = service.updateBookMetadata(1L,
                 com.aibook.dto.BookDTO.builder().title("新书名").build(), owner);
         assertEquals("系列", dto.getSeriesName());

@@ -66,6 +66,13 @@
             <version>1.17.2</version>
         </dependency>
 
+        <!-- pinyin-plus for Chinese pinyin search index (Apache-2.0, TapTap) -->
+        <dependency>
+            <groupId>com.github.taptap</groupId>
+            <artifactId>pinyin-plus</artifactId>
+            <version>1.0</version>
+        </dependency>
+
         <!-- Jackson Hibernate5 module for lazy loading serialization -->
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>

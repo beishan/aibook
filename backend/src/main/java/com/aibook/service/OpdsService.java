@@ -30,6 +30,7 @@ public class OpdsService {
     private static final String OPDS_TYPE = "application/atom+xml;profile=opds-catalog";
 
     private final BookRepository bookRepository;
+private final BookService bookService;
 
     /**
      * 获取 OpenSearch 描述
@@ -173,12 +174,12 @@ public class OpdsService {
     /**
      * 搜索书籍（分页）
      */
-    public String searchBooks(User user, String query, int page) {
-        Page<Book> books = bookRepository.searchByKeyword(user, query, PageRequest.of(page, PAGE_SIZE));
-        String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
-        return buildBooksFeed(books, "搜索: " + query, "urn:aibook:search:" + query,
-                "/opds/search?query=" + encodedQuery, page);
-    }
+public String searchBooks(User user, String query, int page) {
+Page<Book> books = bookService.searchBookEntities(user, query, PageRequest.of(page, PAGE_SIZE));
+String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
+return buildBooksFeed(books, "搜索: " + query, "urn:aibook:search:" + query,
+"/opds/search?query=" + encodedQuery, page);
+}
 
     /**
      * 构建书籍 Feed（分页版本）

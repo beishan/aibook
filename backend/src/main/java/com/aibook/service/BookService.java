@@ -12,8 +12,10 @@ import com.aibook.repository.BookListRepository;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookmarkRepository;
 import com.aibook.repository.ReadingProgressRepository;
+import com.aibook.util.PinyinUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -42,6 +44,7 @@ public class BookService {
     private final TagService tagService;
     private final AuthorService authorService;
     private final OperationLogService operationLogService;
+    private final FullTextSearchSupport fullTextSearchSupport;
 
     /**
      * 获取用户书籍列表
@@ -110,11 +113,33 @@ public class BookService {
     }
 
     /**
-     * 搜索书籍
+     * 搜索书籍：zhparser 可用时走中文全文检索（相关度加权排序），
+     * 否则降级为 LIKE + 拼音匹配；纯 ASCII 关键词同时命中拼音检索串。
      */
     public Page<BookDTO> searchBooks(User user, String keyword, Pageable pageable) {
-        Page<Book> books = bookRepository.searchByKeyword(user, keyword, pageable);
-        return books.map(this::convertToDTO);
+        return searchBookEntities(user, keyword, pageable).map(this::convertToDTO);
+    }
+
+    /**
+     * 搜索书籍实体，供 Web 搜索与 OPDS 检索共用。
+     */
+    public Page<Book> searchBookEntities(User user, String keyword, Pageable pageable) {
+        String trimmed = keyword == null ? "" : keyword.trim();
+        if (fullTextSearchSupport.isFullTextEnabled()) {
+            String lower = trimmed.toLowerCase(Locale.ROOT);
+            // 排序由 SQL 内相关度加权决定，忽略外部传入的 Sort。
+            return bookRepository.searchFullText(
+                    user.getId(), trimmed,
+                    "%" + lower + "%", lower + "%",
+                    "%" + PinyinUtils.normalizePinyinKeyword(trimmed) + "%",
+                    PinyinUtils.isAsciiKeyword(trimmed),
+                    PageRequest.of(pageable.getPageNumber(), pageable.getPageSize()));
+        }
+        return bookRepository.searchByKeyword(
+                user, trimmed,
+                PinyinUtils.normalizePinyinKeyword(trimmed),
+                PinyinUtils.isAsciiKeyword(trimmed),
+                pageable);
     }
 
     /**

@@ -115,15 +115,74 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     /** 分组删除时计算未分组顺序，包含当前用户全部书架关联。 */
     List<Book> findByUserAndOnShelfTrue(User user);
 
+    /** 按主键游标分页读取拼音检索串为空的书籍，用于存量数据回填。 */
+    @Query("SELECT b FROM Book b WHERE b.searchPinyin IS NULL AND b.id > :afterId ORDER BY b.id")
+    List<Book> findPinyinBackfillCandidates(
+            @Param("afterId") Long afterId, Pageable pageable);
+
     /**
-     * 全文搜索书籍
+     * 关键词搜索书籍（降级模式）：LIKE 匹配原文，纯 ASCII 关键词额外匹配拼音列。
      */
     @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL AND (" +
            "LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(b.author) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(b.isbn) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(b.description) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND" + LIBRARY_VISIBLE)
-    Page<Book> searchByKeyword(@Param("user") User user, @Param("keyword") String keyword, Pageable pageable);
+           "LOWER(b.description) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+           "(:isAscii = true AND LOWER(COALESCE(b.searchPinyin, '')) " +
+           "LIKE LOWER(CONCAT('%', :pinyinKeyword, '%')))) AND" + LIBRARY_VISIBLE)
+    Page<Book> searchByKeyword(
+            @Param("user") User user,
+            @Param("keyword") String keyword,
+            @Param("pinyinKeyword") String pinyinKeyword,
+            @Param("isAscii") boolean isAscii,
+            Pageable pageable);
+
+    /**
+     * 中文全文检索（zhparser chinese_zh 配置）：
+     * 全文匹配 + 原文/拼音子串兼容，按“精确命中 > 书名前缀 > 书名包含 > 作者包含 >
+     * 拼音命中 > ts_rank_cd 相关度”加权排序。
+     */
+    @Query(value = "SELECT b.* FROM books b WHERE b.user_id = :userId "
+            + "AND b.deleted_at IS NULL "
+            + "AND (NOT EXISTS (SELECT 1 FROM book_scan_sources bss WHERE bss.book_id = b.id) "
+            + "OR EXISTS (SELECT 1 FROM book_scan_sources bss "
+            + "JOIN scan_directories sd ON sd.id = bss.scan_directory_id "
+            + "WHERE bss.book_id = b.id AND (sd.library_visible = true OR sd.library_visible IS NULL))) "
+            + "AND (b.search_vector @@ plainto_tsquery('chinese_zh', :keyword) "
+            + "OR lower(b.title) LIKE :infix "
+            + "OR lower(coalesce(b.author, '')) LIKE :infix "
+            + "OR lower(coalesce(b.isbn, '')) LIKE :infix "
+            + "OR lower(coalesce(b.description, '')) LIKE :infix "
+            + "OR (:isAscii = true AND lower(coalesce(b.search_pinyin, '')) LIKE :pinyinInfix)) "
+            + "ORDER BY (CASE WHEN lower(b.title) = lower(:keyword) THEN 100 "
+            + "WHEN lower(b.title) LIKE :prefix THEN 60 "
+            + "WHEN lower(b.title) LIKE :infix THEN 40 "
+            + "WHEN lower(coalesce(b.author, '')) LIKE :infix THEN 30 "
+            + "WHEN :isAscii = true AND lower(coalesce(b.search_pinyin, '')) LIKE :pinyinInfix THEN 20 "
+            + "ELSE 0 END) "
+            + "+ coalesce(ts_rank_cd(b.search_vector, plainto_tsquery('chinese_zh', :keyword)), 0) DESC, "
+            + "b.created_at DESC",
+            countQuery = "SELECT COUNT(*) FROM books b WHERE b.user_id = :userId "
+            + "AND b.deleted_at IS NULL "
+            + "AND (NOT EXISTS (SELECT 1 FROM book_scan_sources bss WHERE bss.book_id = b.id) "
+            + "OR EXISTS (SELECT 1 FROM book_scan_sources bss "
+            + "JOIN scan_directories sd ON sd.id = bss.scan_directory_id "
+            + "WHERE bss.book_id = b.id AND (sd.library_visible = true OR sd.library_visible IS NULL))) "
+            + "AND (b.search_vector @@ plainto_tsquery('chinese_zh', :keyword) "
+            + "OR lower(b.title) LIKE :infix "
+            + "OR lower(coalesce(b.author, '')) LIKE :infix "
+            + "OR lower(coalesce(b.isbn, '')) LIKE :infix "
+            + "OR lower(coalesce(b.description, '')) LIKE :infix "
+            + "OR (:isAscii = true AND lower(coalesce(b.search_pinyin, '')) LIKE :pinyinInfix))) ",
+            nativeQuery = true)
+    Page<Book> searchFullText(
+            @Param("userId") Long userId,
+            @Param("keyword") String keyword,
+            @Param("infix") String infix,
+            @Param("prefix") String prefix,
+            @Param("pinyinInfix") String pinyinInfix,
+            @Param("isAscii") boolean isAscii,
+            Pageable pageable);
 
     /**
      * 根据用户和分类查询书籍

@@ -22,6 +22,23 @@
 
 ## 变更记录
 
+### REQ-20260918-003 数据库全文检索与拼音搜索
+
+- 需求时间：2026-09-18
+- 完成时间：2026-09-18
+- 状态：已完成
+- 应用版本：`1.43.0`
+- 需求内容：将书籍搜索从常规 LIKE 查询升级为 PostgreSQL 全文检索（to_tsvector/tsquery + zhparser 中文分词），并建设书籍表全文索引；前端搜索结果高亮与拼音搜索容错。
+- 完成情况：
+  - **后端全文检索**：新增启动初始化器，幂等完成 `CREATE EXTENSION zhparser`、`chinese_zh` 分词配置（n/v/a/i/e/l 映射）、`books.search_vector` 列、GIN 索引、元数据变更自动重算触发器及存量数据回填；搜索改为"全文匹配 + 原文/拼音子串兜底"，按"书名精确 > 书名前缀 > 书名包含 > 作者包含 > 拼音命中 > ts_rank_cd 相关度"加权排序。zhparser 不可用（如本地开发环境）时自动降级为 LIKE + 拼音匹配，功能不中断。
+  - **拼音搜索**：`books` 表新增 `search_pinyin` 列（无空格全拼 + 分词全拼 + 首字母缩写），由 Book 实体 `@PrePersist/@PreUpdate` 回调自动维护，覆盖上传、扫描、爬虫导入、刮削等全部入库路径，启动时分批回填存量；输入 `sanguo`/`sanguoyanyi`/`sgyy` 均可命中《三国演义》，该能力不依赖数据库扩展。
+  - **前端高亮**：新增 `HighlightText` 组件与 `searchHighlight` 工具，书库页卡片/小卡片/列表视图的书名与作者在搜索态下高亮关键词；拉丁关键词经 pinyin-pro `match` 拼音反查高亮对应汉字（输入 `sgyy` 高亮"三国演义"四字），支持非连续缩写命中。
+  - **OPDS 联动**：OPDS 1.x/2.0 搜索复用同一检索服务，外部阅读器客户端同步获得全文检索与拼音搜索能力。
+  - **部署**：新增 `docker/postgres/Dockerfile`，基于官方 `postgres:16`（debian）编译安装 SCWS 1.2.3 + zhparser v2.3；`docker-compose.yml` 的 postgres 服务改为该定制镜像，数据卷不受影响（仍为 PG16）。
+- 开源调研：按规范向用户说明并确认后引入——zhparser v2.3（PostgreSQL License，PG 扩展，用户需求点名）与 SCWS 1.2.3（LGPL-2.1，动态链接，zhparser 依赖）；后端拼音库原拟 TinyPinyin（Apache-2.0），因已随 jcenter 关闭无法从 Maven Central 获取，改用功能对等且更适合索引场景的 pinyin-plus 1.0（TapTap，Apache-2.0，基于 cc-cedict/kaifangcidian 词库解决多音字）；前端拼音高亮采用 pinyin-pro（MIT）。未引入 Meilisearch 等外部搜索服务，坚持 PostgreSQL 原生方案降低私有化部署成本。
+- 主要改动：后端新增 `PinyinUtils`、`FullTextSearchInitializer`、`FullTextSearchSupport`、`BookRepository.searchFullText` 原生查询与拼音回填查询，`Book` 实体新增拼音列及回调，`BookService` 检索分支（含降级），OPDS 1.x/2.0 复用检索服务，`pom.xml` 新增 pinyin-plus 依赖；前端新增 `HighlightText.vue`、`searchHighlight.ts`、`scripts/check-search-highlight.mjs`，`BooksView.vue` 接入高亮，`package.json` 新增 pinyin-pro 依赖与 `test:search-highlight` 命令；Docker 新增 `postgres/Dockerfile` 并调整 `docker-compose.yml`；应用版本升至 1.43.0。
+- 验证结果：后端 `PinyinUtilsTest`（拼音索引生成/空值/英文保留/超长截断/ASCII 判定/归一化共 6 项）与 `BookRepositorySearchQueryTest`（count 参数声明、排序权重链、降级查询拼音条件、回填游标共 4 项）全部通过；后端全量测试 301 项通过（排除本机已知原生崩溃的 `CoverControllerTest`/`CoverImageCacheServiceTest`，为既有问题，与本次改动无关）；受影响的 OPDS/BookService 相关测试同步修复并通过。前端 `test:search-highlight` 回归（含 pinyin-pro 运行时拼音反查断言）、Vite 生产构建、lint 检查及 `git diff --check` 通过。zhparser 定制镜像因本地 Docker 未运行未执行构建验证，将在 NAS 部署时通过 `docker-compose up -d --build` 首次构建并验证；降级路径已在无 zhparser 环境下验证编译与单元逻辑正确性。
+
 ### REQ-20260918-002 已完成采集书籍展示采集结果
 
 - 需求时间：2026-09-18

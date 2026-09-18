@@ -42,7 +42,7 @@
             v-model="searchKeyword"
             type="text"
             class="input"
-            placeholder="搜索书名、作者、ISBN..."
+            placeholder="搜索书名、作者、ISBN，支持拼音..."
             @keyup.enter="handleSearch"
           />
         </div>
@@ -353,7 +353,9 @@
         </div>
 
         <div class="book-info">
-          <div class="book-title" :title="book.title">{{ book.title }}</div>
+          <div class="book-title" :title="book.title">
+            <HighlightText :text="book.title" :keyword="searchKeyword" />
+          </div>
           <div v-if="book.tags?.length" class="book-tag-list">
             <span
               v-for="tag in book.tags.slice(0, 3)"
@@ -406,8 +408,13 @@
           />
         </div>
         <div class="book-list-info">
-          <div class="book-list-title">{{ row.title }}</div>
-          <div class="book-list-author">{{ row.author || '未知作者' }}</div>
+          <div class="book-list-title" :title="row.title">
+            <HighlightText :text="row.title" :keyword="searchKeyword" />
+          </div>
+          <div class="book-list-author">
+            <HighlightText v-if="row.author" :text="row.author" :keyword="searchKeyword" />
+            <template v-else>未知作者</template>
+          </div>
         </div>
         <div class="book-list-meta">
           <span class="tag tag-info">{{ row.format === 'structured' ? '在线章节' : row.format.toUpperCase() }}</span>
@@ -611,6 +618,7 @@ import ScraperDialog from '@/components/ScraperDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import BookVersionRebuildDialog from '@/components/BookVersionRebuildDialog.vue'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
+import HighlightText from '@/components/HighlightText.vue'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import {
   allBookCoversHidden,

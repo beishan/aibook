@@ -6,7 +6,12 @@ x-logging: &default-logging
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-aibook-postgres:latest}
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
+      labels:
+        com.aibook.image-scope: postgres
     container_name: aibook-postgres
     restart: unless-stopped
     environment:
