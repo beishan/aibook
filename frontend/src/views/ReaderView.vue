@@ -2423,7 +2423,8 @@ const toEngineSettings = (): ReaderEngineSettings => {
     fontSize: Number(settings.value.fontSize),
     lineHeight: Number(settings.value.lineHeight),
     paragraphSpacing: Number(settings.value.paragraphSpacing),
-    backgroundColor: colors.bg,
+    // 阅读舞台统一绘制主题背景，EPUB iframe 保持透明，避免形成独立书页边界。
+    backgroundColor: 'transparent',
     textColor: colors.text,
     paragraphIndent: settings.value.textIndent,
     columnCount: settings.value.screenMode === 'double' ? 2 : 1,
@@ -3113,16 +3114,8 @@ const applyThemeToContent = (contents: any) => {
   contents.css('font-size', `${settings.value.fontSize}px`, true)
   contents.css('line-height', `${settings.value.lineHeight}`, true)
   contents.css('color', colors.text, true)
-  const backgroundUrl = selectedReaderBackground.value
-    ? new URL(selectedReaderBackground.value.imageUrl, window.location.origin).href
-    : ''
-  const backgroundImage = backgroundUrl ? `url(${JSON.stringify(backgroundUrl)})` : 'none'
-
-  contents.css('background-color', colors.bg, true)
-  contents.css('background-image', backgroundImage, true)
-  contents.css('background-position', 'center', true)
-  contents.css('background-repeat', 'no-repeat', true)
-  contents.css('background-size', 'cover', true)
+  contents.css('background-color', 'transparent', true)
+  contents.css('background-image', 'none', true)
 
   try {
     const doc = contents.document
@@ -3143,13 +3136,10 @@ const applyThemeToContent = (contents: any) => {
           line-height: ${settings.value.lineHeight} !important;
           color: ${colors.text} !important;
         }
+        html,
         body {
           min-height: 100vh !important;
-          background-color: ${colors.bg} !important;
-          background-image: ${backgroundImage} !important;
-          background-position: center !important;
-          background-repeat: no-repeat !important;
-          background-size: cover !important;
+          background: transparent !important;
         }
         img,
         svg {
@@ -4131,12 +4121,19 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   position: relative;
+  background: transparent;
+}
+
+.epub-container :deep(.epub-view),
+.epub-container :deep(iframe) {
+  border: 0;
+  background: transparent !important;
+  box-shadow: none;
 }
 
 .epub-container :deep(.readium-navigator-iframe) {
   width: 100%;
   height: 100%;
-  border: 0;
 }
 
 .reader-text {

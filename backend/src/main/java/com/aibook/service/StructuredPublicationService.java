@@ -14,9 +14,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /** Provides file-free, immutable library publications backed by chapter rows. */
 @Service
@@ -25,7 +27,6 @@ public class StructuredPublicationService {
 
     private final LibraryChapterRepository chapterRepository;
     private final ObjectMapper objectMapper;
-    private final TxtParserService txtParserService;
 
     public boolean supports(BookVersion version) {
         return version != null && "structured".equalsIgnoreCase(version.getFormat());
@@ -41,7 +42,7 @@ public class StructuredPublicationService {
             if (!text.isEmpty()) text.append("\n\n");
             int start = text.length();
             text.append(chapter.getTitle()).append("\n\n")
-                    .append(txtParserService.processText(chapter.getContent()));
+                    .append(formatChapterContent(chapter.getContent()));
             chapterInfo.add(Map.of(
                     "key", chapter.getChapterKey(),
                     "title", chapter.getTitle(),
@@ -117,6 +118,27 @@ public class StructuredPublicationService {
 
     private List<LibraryChapter> chapters(BookVersion version) {
         return chapterRepository.findByBookVersionOrderByChapterIndexAsc(version);
+    }
+
+    /**
+     * Mirrors the crawler trial reader: blank-line blocks win, otherwise each source line is a
+     * paragraph.
+     */
+    private String formatChapterContent(String content) {
+        String normalized = content == null ? "" : content
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .trim();
+        if (normalized.isEmpty()) return "";
+        List<String> blocks = Arrays.stream(normalized.split("\\n\\s*\\n+"))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .toList();
+        if (blocks.size() > 1) return String.join("\n\n", blocks);
+        return Arrays.stream(normalized.split("\\n"))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .collect(Collectors.joining("\n\n"));
     }
 
     private void requireStructured(BookVersion version) {

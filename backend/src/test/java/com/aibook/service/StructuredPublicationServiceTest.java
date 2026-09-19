@@ -26,18 +26,19 @@ class StructuredPublicationServiceTest {
                 .content("第一段\n\n第二段").contentHash("h1").build();
         LibraryChapter second = LibraryChapter.builder().id(12L).bookVersion(version)
                 .chapterKey("c2").chapterIndex(1).title("同名章节")
-                .content("第三段").contentHash("h2").build();
+                .content("第三段\n第四段").contentHash("h2").build();
         when(repository.findByBookVersionOrderByChapterIndexAsc(version))
                 .thenReturn(List.of(first, second));
         ObjectMapper objectMapper = new ObjectMapper();
-        StructuredPublicationService service = new StructuredPublicationService(
-                repository, objectMapper, new TxtParserService());
+        StructuredPublicationService service = new StructuredPublicationService(repository, objectMapper);
 
         var content = service.processedContent(version);
         var chapterInfo = objectMapper.readTree(content.get("chapterInfo"));
         var manifest = service.manifest(book, version);
 
         assertThat(content.get("text")).contains("同名章节", "第一段", "第三段");
+        assertThat(content.get("text")).contains("第一段\n\n第二段", "第三段\n\n第四段");
+        assertThat(content.get("text")).doesNotContain("第三段第四段");
         assertThat(chapterInfo).hasSize(2);
         assertThat(chapterInfo.get(0).get("key").asText()).isEqualTo("c1");
         assertThat((List<?>) manifest.get("readingOrder")).hasSize(2);
