@@ -451,7 +451,47 @@
         </section>
       </div>
     </el-drawer>
-    <el-dialog v-model="chapterDialog" :title="chapterDetail?.title || '章节正文'" width="min(760px, 94vw)"><a v-if="chapterDetail" :href="chapterDetail.url" target="_blank">查看原始网页</a><pre class="chapter-content">{{ chapterDetail?.content || chapterDetail?.errorMessage }}</pre></el-dialog>
+    <el-dialog v-model="chapterDialog" :title="chapterDetail?.title || chapterReaderActive?.chapterName || '章节正文'" width="min(760px, 94vw)" class="chapter-reader-dialog" destroy-on-close @closed="closeChapterReader">
+      <div class="chapter-reader" :class="`chapter-reader--${chapterReaderTheme}`">
+        <header class="chapter-reader-toolbar">
+          <div>
+            <span>临时阅读</span>
+            <p>{{ selectedBook?.bookName || '采集书籍' }}<template v-if="chapterReaderPosition"> · {{ chapterReaderPosition }} / {{ chapterReaderChapters.length }}</template></p>
+          </div>
+          <div class="chapter-reader-actions">
+            <a v-if="chapterDetail?.url" :href="chapterDetail.url" target="_blank" rel="noopener noreferrer">原始网页 ↗</a>
+            <button type="button" :aria-expanded="chapterReaderSettingsOpen" aria-controls="chapter-reader-settings" @click="chapterReaderSettingsOpen=!chapterReaderSettingsOpen">Aa <span>阅读设置</span></button>
+          </div>
+        </header>
+        <div class="chapter-reader-stage">
+          <section ref="chapterReaderSurface" class="chapter-reader-surface" :style="chapterReaderArticleStyle">
+            <div v-if="chapterReaderLoading" class="chapter-reader-state" role="status"><i/><p>正在展开书页…</p></div>
+            <article v-else>
+              <p class="chapter-reader-kicker">{{ selectedBook?.author || '未知作者' }} · {{ selectedBook?.siteName }}</p>
+              <h2>{{ chapterDetail?.title || chapterReaderActive?.chapterName }}</h2>
+              <div class="chapter-reader-rule"><span>◆</span></div>
+              <p v-for="(paragraph,index) in chapterReaderParagraphs" :key="index" class="chapter-reader-paragraph">{{ paragraph }}</p>
+              <p v-if="!chapterReaderParagraphs.length" class="chapter-reader-empty">{{ chapterDetail?.errorMessage || '本章暂无可阅读正文' }}</p>
+            </article>
+          </section>
+          <Transition name="chapter-settings-slide">
+            <aside v-if="chapterReaderSettingsOpen" id="chapter-reader-settings" class="chapter-reader-settings" aria-label="章节阅读设置">
+              <div class="chapter-reader-settings-heading"><div><small>READING ROOM</small><h3>阅读设置</h3></div><button type="button" aria-label="关闭阅读设置" @click="chapterReaderSettingsOpen=false">×</button></div>
+              <div class="chapter-reader-setting"><label>阅读主题</label><div class="chapter-reader-theme" role="radiogroup" aria-label="阅读主题"><span :style="{transform:`translateX(${chapterReaderThemeIndex*100}%)`}"/><button v-for="item in chapterReaderThemes" :key="item.value" type="button" role="radio" :aria-checked="chapterReaderTheme===item.value" :class="{active:chapterReaderTheme===item.value}" @click="setChapterReaderTheme(item.value)">{{ item.label }}</button></div></div>
+              <div class="chapter-reader-setting"><label for="chapter-reader-font-size">字号 <b>{{ readerSettings.fontSize }}px</b></label><input id="chapter-reader-font-size" :value="readerSettings.fontSize" type="range" min="14" max="30" @input="setChapterReaderNumber('fontSize',$event)" /></div>
+              <div class="chapter-reader-setting"><label for="chapter-reader-line-height">行距 <b>{{ readerSettings.lineHeight }}</b></label><input id="chapter-reader-line-height" :value="readerSettings.lineHeight" type="range" min="1.4" max="2.5" step="0.1" @input="setChapterReaderNumber('lineHeight',$event)" /></div>
+              <div class="chapter-reader-setting"><label>版心宽度</label><div class="chapter-reader-widths"><button v-for="item in chapterReaderWidths" :key="item.value" type="button" :class="{active:readerSettings.contentWidth===item.value}" @click="setChapterReaderWidth(item.value)">{{ item.label }}</button></div></div>
+              <p>阅读设置会保存到当前账户，并同步用于网页阅读器。</p>
+            </aside>
+          </Transition>
+        </div>
+        <footer class="chapter-reader-navigation">
+          <button type="button" :disabled="chapterReaderPosition<=1||chapterReaderLoading" @click="moveChapterReader(-1)"><span>←</span><small>上一章</small></button>
+          <div><span class="chapter-reader-progress"><i :style="{width:`${chapterReaderProgress}%`}"/></span><small>{{ chapterReaderPosition ? `第 ${chapterReaderPosition} 章` : '章节预览' }}</small></div>
+          <button type="button" :disabled="!chapterReaderPosition||chapterReaderPosition>=chapterReaderChapters.length||chapterReaderLoading" @click="moveChapterReader(1)"><small>下一章</small><span>→</span></button>
+        </footer>
+      </div>
+    </el-dialog>
   </main>
 </template>
 
@@ -466,6 +506,8 @@ import {
   CRAWLER_POLLING_INTERVAL_OPTIONS,
   usePreferencesStore,
   type CrawlerPollingIntervalSeconds,
+  type ReaderContentWidth,
+  type ReaderSettings,
 } from '@/stores/preferences'
 import { getCoverUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
@@ -515,13 +557,15 @@ type BookDetailTab='chapters'|'logs'
 type SiteEditorTab='basic'|'request'|'validation'|'proxy'|'automation'
 type DiscoveryViewMode='table'|'card'
 type LoadOptions={silent?:boolean;preserveSelection?:boolean}
+type ChapterReaderTheme='paper'|'light'|'night'
 const router=useRouter()
 const preferencesStore=usePreferencesStore()
-const {crawlerFollowCurrentChapter:followCurrentChapter,crawlerChapterPageSize:chapterPageSize,crawlerDiscoveryViewMode:discoveryViewMode,crawlerBookViewMode:bookViewMode,crawlerPollingIntervalSeconds:pollingIntervalSeconds}=storeToRefs(preferencesStore)
+const {crawlerFollowCurrentChapter:followCurrentChapter,crawlerChapterPageSize:chapterPageSize,crawlerDiscoveryViewMode:discoveryViewMode,crawlerBookViewMode:bookViewMode,crawlerPollingIntervalSeconds:pollingIntervalSeconds,readerSettings}=storeToRefs(preferencesStore)
 const pollingIntervalOptions=CRAWLER_POLLING_INTERVAL_OPTIONS
 const activeTab=ref<TabKey>('overview'), dashboard=ref<CrawlerDashboard>(), sites=ref<CrawlerSite[]>([]), books=ref<CrawlerBook[]>([]), discoveredBooks=ref<CrawlerBook[]>([]), tasks=ref<CrawlerTask[]>([]), failedTasks=ref<CrawlerTask[]>([])
 const currentCrawlerTasks=ref<CrawlerTask[]>([]), submittingBookTaskIds=ref(new Set<number>())
 const siteDialog=ref(false), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), chapterDetail=ref<{title:string;url:string;content:string;errorMessage:string}>(), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
+const chapterReaderSurface=ref<HTMLElement>(), chapterReaderActive=ref<CrawlerChapter>(), chapterReaderChapters=ref<CrawlerChapter[]>([]), chapterReaderBookId=ref<number>(), chapterReaderLoading=ref(false), chapterReaderSettingsOpen=ref(false)
 const discoveryPagesBySite=ref<Record<number,CrawlerDiscoveryPage[]>>({})
 const bookLoading=ref(false), bookPage=ref(1), bookPageSize=ref(20), bookTotal=ref(0)
 const bookTableRef=ref<InstanceType<typeof ElTable>>()
@@ -566,6 +610,8 @@ const chapterSort=ref<ChapterSort>('indexAsc')
 const bookDetailTab=ref<BookDetailTab>('chapters')
 const bookDetailTabs:{value:BookDetailTab;label:string}[]=[{value:'chapters',label:'章节进度'},{value:'logs',label:'实时日志'}]
 const chapterSortOptions:{value:ChapterSort;label:string}[]=[{value:'indexAsc',label:'章节正序'},{value:'indexDesc',label:'章节倒序'},{value:'createdDesc',label:'添加时间'}]
+const chapterReaderThemes:{value:ChapterReaderTheme;label:string}[]=[{value:'paper',label:'宣纸'},{value:'light',label:'明亮'},{value:'night',label:'夜读'}]
+const chapterReaderWidths:{value:ReaderContentWidth;label:string}[]=[{value:'narrow',label:'窄'},{value:'medium',label:'适中'},{value:'wide',label:'宽'}]
 const taskPriorityOptions:{value:'LOW'|'NORMAL'|'HIGH';label:string}[]=[{value:'LOW',label:'低'},{value:'NORMAL',label:'普通'},{value:'HIGH',label:'高'}]
 const taskStatusOptions=['WAITING','RUNNING','PAUSED','SUCCESS','PARTIAL_SUCCESS','FAILED','CANCELLED']
 const taskTypeOptions=['SITE_SCAN','BOOK_METADATA','BOOK_CHAPTER_LIST','BOOK_CONTENT','BOOK_UPDATE_CHECK','BOOK_FULL_CRAWL','BOOK_EXPORT','BOOK_IMPORT']
@@ -591,6 +637,13 @@ const allDiscoveredSelected=computed(()=>discoveredBooks.value.length>0&&discove
 const someDiscoveredSelected=computed(()=>discoveredBooks.value.some(book=>selectedDiscoveryIds.value.has(book.id)))
 const managedDiscoveryPages=computed(()=>discoveryManagerSite.value?discoveryPagesBySite.value[discoveryManagerSite.value.id]||[]:[])
 const chapterSortIndex=computed(()=>chapterSortOptions.findIndex(item=>item.value===chapterSort.value))
+const chapterReaderPosition=computed(()=>chapterReaderChapters.value.findIndex(item=>item.id===chapterReaderActive.value?.id)+1)
+const chapterReaderProgress=computed(()=>chapterReaderPosition.value&&chapterReaderChapters.value.length?chapterReaderPosition.value/chapterReaderChapters.value.length*100:0)
+const chapterReaderParagraphs=computed(()=>{const text=(chapterDetail.value?.content||'').trim();if(!text)return[];const blocks=text.split(/\r?\n\s*\r?\n+/).map(value=>value.trim()).filter(Boolean);return blocks.length>1?blocks:text.split(/\r?\n/).map(value=>value.trim()).filter(Boolean)})
+const chapterReaderTheme=computed<ChapterReaderTheme>(()=>readerSettings.value.backgroundColor==='#2d2d2d'||readerSettings.value.backgroundColor==='#1a1a2e'?'night':readerSettings.value.backgroundColor==='#ffffff'?'light':'paper')
+const chapterReaderThemeIndex=computed(()=>chapterReaderThemes.findIndex(item=>item.value===chapterReaderTheme.value))
+const chapterReaderContentWidth=computed(()=>({narrow:560,medium:640,wide:700,wider:720,full:740} as Record<ReaderContentWidth,number>)[readerSettings.value.contentWidth])
+const chapterReaderArticleStyle=computed(()=>({'--chapter-reader-font-size':`${readerSettings.value.fontSize}px`,'--chapter-reader-line-height':String(readerSettings.value.lineHeight),'--chapter-reader-content-width':`${chapterReaderContentWidth.value}px`,'--chapter-reader-font-family':readerSettings.value.fontFamily==='default'?"'Iowan Old Style','Songti SC','STSong',serif":readerSettings.value.fontFamily}))
 const bookDetailTabIndex=computed(()=>bookDetailTabs.findIndex(item=>item.value===bookDetailTab.value))
 const taskPriorityIndex=computed(()=>taskPriorityOptions.findIndex(item=>item.value===taskPriority.value))
 const activeSiteTabIndex=computed(()=>siteEditorTabs.findIndex(tab=>tab.key===activeSiteTab.value))
@@ -600,8 +653,9 @@ const metrics=computed(()=>[{label:'采集网站',value:dashboard.value?.siteCou
 let timer:number|undefined
 let progressPolling=false
 let chapterRequestSequence=0
-onMounted(async()=>{await preferencesStore.hydrate();await refresh();restartPolling()})
-onUnmounted(()=>{if(timer)window.clearInterval(timer)})
+let chapterReaderRequestSequence=0
+onMounted(async()=>{document.addEventListener('keydown',handleChapterReaderKeydown);await preferencesStore.hydrate();await refresh();restartPolling()})
+onUnmounted(()=>{if(timer)window.clearInterval(timer);document.removeEventListener('keydown',handleChapterReaderKeydown)})
 function restartPolling(){if(timer)window.clearInterval(timer);timer=window.setInterval(()=>{void pollCrawlerProgress()},pollingIntervalSeconds.value*1000)}
 function setPollingInterval(value:number){if(!pollingIntervalOptions.includes(value as CrawlerPollingIntervalSeconds))return;preferencesStore.setCrawlerPollingIntervalSeconds(value);restartPolling();void pollCrawlerProgress()}
 async function refresh(){const [dashboardData,siteData]=await Promise.all([crawlerApi.dashboard(),crawlerApi.sites(),loadBooks(),loadTasks(),loadFailedTasks(),loadDiscoveredBooks(),loadTaskQueueSettings(),loadCurrentCrawlerTasks()]);dashboard.value=dashboardData;sites.value=siteData;await loadDiscoveryPages()}
@@ -872,7 +926,49 @@ async function runTaskCommand(task:CrawlerTask,command:'pause'|'resume'|'cancel'
 function openTaskEditor(task:CrawlerTask){editingTask.value=task;taskPriority.value=(task.priority as 'LOW'|'NORMAL'|'HIGH')||'NORMAL';taskEditDialog.value=true}
 async function saveTask(){if(!editingTask.value)return;savingTask.value=true;try{const updated=await crawlerApi.updateTask(editingTask.value.id,taskPriority.value);if(selectedTask.value?.id===updated.id)selectedTask.value=updated;taskEditDialog.value=false;message.success('任务优先级已更新');await refresh()}finally{savingTask.value=false}}
 async function removeTask(task:CrawlerTask){if(!await confirm(`确定删除“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”的任务记录吗？关联书籍和章节不会被删除。`))return;await crawlerApi.deleteTask(task.id);if(selectedTask.value?.id===task.id){taskDrawer.value=false;selectedTask.value=undefined}message.success('任务记录已删除');await refresh()}
-async function openChapter(chapter:CrawlerChapter){if(!selectedBook.value)return;chapterDetail.value=await crawlerApi.chapter(selectedBook.value.id,chapter.id);chapterDialog.value=true}
+async function loadChapterReaderIndex(bookId:number){
+  if(chapterReaderBookId.value===bookId&&chapterReaderChapters.value.length===chapterTotal.value)return
+  const first=await crawlerApi.chapters(bookId,{page:0,size:100,sort:'INDEX_ASC'})
+  const remaining=await Promise.all(Array.from({length:Math.max(0,first.totalPages-1)},(_,index)=>crawlerApi.chapters(bookId,{page:index+1,size:100,sort:'INDEX_ASC'})))
+  chapterReaderBookId.value=bookId
+  chapterReaderChapters.value=[...first.content,...remaining.flatMap(page=>page.content)]
+}
+async function selectChapterReader(chapter:CrawlerChapter){
+  const bookId=selectedBook.value?.id
+  if(!bookId)return
+  const requestSequence=++chapterReaderRequestSequence
+  chapterReaderActive.value=chapter
+  chapterReaderLoading.value=true
+  try{
+    const detail=await crawlerApi.chapter(bookId,chapter.id)
+    if(requestSequence!==chapterReaderRequestSequence)return
+    chapterDetail.value=detail
+    await nextTick()
+    chapterReaderSurface.value?.scrollTo({top:0,behavior:'auto'})
+  }catch(error:any){
+    if(requestSequence!==chapterReaderRequestSequence)return
+    chapterDetail.value={title:chapter.chapterName,url:chapter.chapterUrl,content:'',errorMessage:error.response?.data?.message||chapter.errorMessage||'章节正文加载失败'}
+  }finally{if(requestSequence===chapterReaderRequestSequence)chapterReaderLoading.value=false}
+}
+async function openChapter(chapter:CrawlerChapter){
+  const bookId=selectedBook.value?.id
+  if(!bookId)return
+  const openingSequence=++chapterReaderRequestSequence
+  chapterDialog.value=true
+  chapterReaderSettingsOpen.value=false
+  chapterReaderActive.value=chapter
+  chapterDetail.value=undefined
+  chapterReaderLoading.value=true
+  try{await loadChapterReaderIndex(bookId);if(openingSequence!==chapterReaderRequestSequence||!chapterDialog.value)return;await selectChapterReader(chapter)}
+  catch(error:any){if(openingSequence!==chapterReaderRequestSequence||!chapterDialog.value)return;chapterDetail.value={title:chapter.chapterName,url:chapter.chapterUrl,content:'',errorMessage:error.response?.data?.message||'章节正文加载失败'};chapterReaderLoading.value=false}
+}
+function moveChapterReader(offset:-1|1){const index=chapterReaderPosition.value-1,target=chapterReaderChapters.value[index+offset];if(target)void selectChapterReader(target)}
+function closeChapterReader(){chapterReaderRequestSequence++;chapterReaderSettingsOpen.value=false;chapterReaderLoading.value=false;chapterDetail.value=undefined;chapterReaderActive.value=undefined}
+function updateChapterReaderSettings(patch:Partial<ReaderSettings>){preferencesStore.setReaderSettings({...readerSettings.value,...patch})}
+function setChapterReaderTheme(theme:ChapterReaderTheme){updateChapterReaderSettings({backgroundColor:theme==='night'?'#2d2d2d':theme==='light'?'#ffffff':'#f5f5dc'})}
+function setChapterReaderWidth(width:ReaderContentWidth){updateChapterReaderSettings({contentWidth:width})}
+function setChapterReaderNumber(field:'fontSize'|'lineHeight',event:Event){const value=Number((event.target as HTMLInputElement).value);if(Number.isFinite(value))updateChapterReaderSettings({[field]:value})}
+function handleChapterReaderKeydown(event:KeyboardEvent){if(!chapterDialog.value||event.target instanceof HTMLInputElement||event.target instanceof HTMLButtonElement||event.target instanceof HTMLAnchorElement)return;if(event.key==='ArrowLeft')moveChapterReader(-1);else if(event.key==='ArrowRight')moveChapterReader(1)}
 function progress(book:CrawlerBook){return book.chapterCount?Math.round((book.crawledChapterCount+book.pendingReleaseChapterCount)/book.chapterCount*100):0}
 function isBookRunning(book:CrawlerBook){return ['CRAWLING_METADATA','CRAWLING_CHAPTER_LIST','CRAWLING_CONTENT','UPDATING'].includes(book.crawlStatus)}
 function isBookTaskActive(book:CrawlerBook){return submittingBookTaskIds.value.has(book.id)||activeBookTaskIds.value.has(book.id)}
@@ -967,4 +1063,8 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 :deep(.task-success-progress){display:flex;align-items:center;gap:10px;min-height:24px;color:var(--success)}:deep(.task-success-progress strong){font-size:13px}:deep(.task-success-progress span){color:var(--text-tertiary);font-size:11px}@keyframes crawler-progress-stripes{from{background-position:0 0}to{background-position:24px 0}}:deep(.crawler-running-progress .el-progress-bar__inner){background-color:var(--success)!important;background-image:linear-gradient(45deg,rgba(255,255,255,.38) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.38) 50%,rgba(255,255,255,.38) 75%,transparent 75%,transparent);background-size:24px 24px;animation:crawler-progress-stripes .7s linear infinite}:deep(.crawler-running-progress .el-progress__text){color:var(--success)}@media(prefers-reduced-motion:reduce){:deep(.crawler-running-progress .el-progress-bar__inner){animation:none}}
 .site-protection{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--warning) 22%,var(--border-color-light));border-radius:12px;background:color-mix(in srgb,var(--warning) 8%,var(--surface-card))}.site-protection>div{display:grid;min-width:0;gap:2px}.site-protection strong{color:var(--warning);font-size:12px}.site-protection span{overflow:hidden;color:var(--text-secondary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.site-protection small{flex:0 0 auto;color:var(--text-tertiary);font-size:10px}.site-protection.cooling{border-color:color-mix(in srgb,var(--danger) 24%,var(--border-color-light));background:color-mix(in srgb,var(--danger) 7%,var(--surface-card))}.site-protection.cooling strong{color:var(--danger)}
 @media(max-width:520px){.site-protection{align-items:stretch;flex-direction:column;gap:5px}.site-protection small{flex:auto}}
+
+:deep(.chapter-reader-dialog .el-dialog__body){padding:0 20px 20px}.chapter-reader{--reader-bg:#eee5d2;--reader-surface:rgba(250,246,236,.94);--reader-solid:#faf6ec;--reader-ink:#30291f;--reader-muted:#766c5e;--reader-line:rgba(79,62,39,.16);--reader-accent:#8b4e2d;overflow:hidden;border:1px solid var(--reader-line);border-radius:16px;background:radial-gradient(circle at 50% -30%,rgba(255,255,255,.82),transparent 44%),linear-gradient(135deg,rgba(115,83,44,.045) 25%,transparent 25%) 0 0/22px 22px,var(--reader-bg);color:var(--reader-ink)}.chapter-reader--light{--reader-bg:#f4f5f6;--reader-surface:rgba(255,255,255,.95);--reader-solid:#fff;--reader-ink:#202226;--reader-muted:#6c7078;--reader-line:rgba(24,30,40,.12);--reader-accent:#8a4b2b}.chapter-reader--night{--reader-bg:#17191c;--reader-surface:rgba(34,37,41,.96);--reader-solid:#222529;--reader-ink:#d8d2c6;--reader-muted:#918b82;--reader-line:rgba(255,255,255,.1);--reader-accent:#d4986d}.chapter-reader-toolbar{display:flex;min-height:48px;align-items:center;justify-content:space-between;gap:12px;padding:9px 14px;border-bottom:1px solid var(--reader-line);background:var(--reader-surface);backdrop-filter:blur(18px)}.chapter-reader-toolbar>div:first-child{display:grid;min-width:0;gap:2px}.chapter-reader-toolbar>div:first-child>span{color:var(--reader-accent);font-size:9px;font-weight:900;letter-spacing:.14em}.chapter-reader-toolbar p{overflow:hidden;color:var(--reader-muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.chapter-reader-actions{display:flex;flex:0 0 auto;align-items:center;gap:7px}.chapter-reader-actions a,.chapter-reader-actions button{padding:7px 10px;border:1px solid var(--reader-line);border-radius:9px;background:transparent;color:var(--reader-muted);font-family:inherit;font-size:11px;text-decoration:none;cursor:pointer}.chapter-reader-actions button{color:var(--reader-ink);font-weight:700}.chapter-reader-actions a:hover,.chapter-reader-actions button:hover,.chapter-reader-actions a:focus-visible,.chapter-reader-actions button:focus-visible{border-color:var(--reader-accent);outline:none;color:var(--reader-accent)}.chapter-reader-stage{position:relative;height:min(58vh,620px);min-height:370px;overflow:hidden}.chapter-reader-surface{height:100%;overflow:auto;scrollbar-color:var(--reader-line) transparent}.chapter-reader-surface article{width:min(var(--chapter-reader-content-width),calc(100% - 56px));min-height:100%;box-sizing:border-box;margin:0 auto;padding:42px 0 70px}.chapter-reader-kicker{margin:0 0 10px!important;color:var(--reader-accent)!important;font-size:10px!important;font-weight:800;letter-spacing:.12em;text-align:center;text-indent:0!important}.chapter-reader-surface h2{margin:0;color:var(--reader-ink);font:600 clamp(24px,4vw,34px)/1.35 'Iowan Old Style','Songti SC',serif;text-align:center}.chapter-reader-rule{display:flex;align-items:center;justify-content:center;gap:12px;margin:20px auto 30px;color:var(--reader-accent);font-size:7px}.chapter-reader-rule::before,.chapter-reader-rule::after{width:62px;height:1px;background:linear-gradient(90deg,transparent,var(--reader-line));content:''}.chapter-reader-rule::after{background:linear-gradient(90deg,var(--reader-line),transparent)}.chapter-reader-paragraph{margin:0 0 1.05em;color:var(--reader-ink);font-family:var(--chapter-reader-font-family);font-size:var(--chapter-reader-font-size);line-height:var(--chapter-reader-line-height);letter-spacing:.025em;text-align:justify;text-indent:2em;overflow-wrap:anywhere}.chapter-reader-empty{padding:50px 0;color:var(--reader-muted);text-align:center}.chapter-reader-state{display:grid;height:100%;place-content:center;place-items:center;gap:12px;color:var(--reader-muted)}.chapter-reader-state i{width:28px;height:28px;border:2px solid var(--reader-line);border-top-color:var(--reader-accent);border-radius:50%;animation:chapter-reader-spin .8s linear infinite}.chapter-reader-settings{position:absolute;inset:0 0 0 auto;z-index:2;width:min(310px,88%);overflow:auto;border-left:1px solid var(--reader-line);background:var(--reader-surface);box-shadow:-14px 0 38px rgba(30,24,18,.13);backdrop-filter:blur(22px)}.chapter-reader-settings-heading{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 12px}.chapter-reader-settings-heading small{color:var(--reader-accent);font-size:9px;font-weight:900;letter-spacing:.15em}.chapter-reader-settings-heading h3{margin:3px 0 0;color:var(--reader-ink);font:600 21px 'Iowan Old Style','Songti SC',serif}.chapter-reader-settings-heading>button{border:0;background:transparent;color:var(--reader-muted);font-size:24px;cursor:pointer}.chapter-reader-setting{display:grid;gap:10px;padding:14px 18px;border-top:1px solid var(--reader-line)}.chapter-reader-setting>label{display:flex;justify-content:space-between;color:var(--reader-muted);font-size:12px}.chapter-reader-setting b{color:var(--reader-ink)}.chapter-reader-setting input{width:100%;accent-color:var(--reader-accent)}.chapter-reader-theme{position:relative;display:grid;grid-template-columns:repeat(3,1fr);padding:3px;border:1px solid var(--reader-line);border-radius:11px;background:color-mix(in srgb,var(--reader-bg) 72%,transparent);isolation:isolate}.chapter-reader-theme>span{position:absolute;inset:3px auto 3px 3px;z-index:-1;width:calc((100% - 6px)/3);border-radius:8px;background:var(--reader-solid);box-shadow:0 2px 8px rgba(0,0,0,.08);transition:transform .22s ease}.chapter-reader-theme button{padding:8px 4px;border:0;background:transparent;color:var(--reader-muted);font-size:11px;cursor:pointer}.chapter-reader-theme button.active{color:var(--reader-accent);font-weight:800}.chapter-reader-widths{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.chapter-reader-widths button{padding:8px;border:1px solid var(--reader-line);border-radius:9px;background:transparent;color:var(--reader-muted);cursor:pointer}.chapter-reader-widths button.active{border-color:var(--reader-accent);background:color-mix(in srgb,var(--reader-accent) 9%,transparent);color:var(--reader-accent)}.chapter-reader-settings>p{margin:12px 18px 18px;color:var(--reader-muted);font-size:11px;line-height:1.6}.chapter-reader-navigation{display:grid;grid-template-columns:110px minmax(100px,220px) 110px;align-items:center;justify-content:center;gap:18px;padding:8px 12px;border-top:1px solid var(--reader-line);background:var(--reader-surface);backdrop-filter:blur(18px)}.chapter-reader-navigation button{display:flex;align-items:center;justify-content:center;gap:8px;padding:7px;border:0;background:transparent;color:var(--reader-ink);cursor:pointer}.chapter-reader-navigation button:disabled{opacity:.28;cursor:not-allowed}.chapter-reader-navigation button span{font-size:18px}.chapter-reader-navigation button small,.chapter-reader-navigation>div small{color:var(--reader-muted);font-size:10px}.chapter-reader-navigation>div{display:grid;gap:5px;text-align:center}.chapter-reader-progress{height:3px;overflow:hidden;border-radius:99px;background:var(--reader-line)}.chapter-reader-progress i{display:block;height:100%;border-radius:inherit;background:var(--reader-accent);transition:width .25s ease}.chapter-settings-slide-enter-active,.chapter-settings-slide-leave-active{transition:transform .24s ease,opacity .2s ease}.chapter-settings-slide-enter-from,.chapter-settings-slide-leave-to{transform:translateX(100%);opacity:0}@keyframes chapter-reader-spin{to{transform:rotate(360deg)}}
+@media(max-width:620px){:deep(.chapter-reader-dialog){width:96vw!important;margin-top:2vh!important}:deep(.chapter-reader-dialog .el-dialog__body){padding:0 10px 10px}.chapter-reader-toolbar{align-items:flex-start}.chapter-reader-actions a{display:none}.chapter-reader-actions button span{display:none}.chapter-reader-stage{height:66vh;min-height:360px}.chapter-reader-surface article{width:calc(100% - 32px);padding:34px 0 60px}.chapter-reader-navigation{grid-template-columns:76px minmax(80px,1fr) 76px;gap:5px}.chapter-reader-navigation button small{display:none}}
+@media(prefers-reduced-motion:reduce){.chapter-reader-theme>span,.chapter-reader-progress i,.chapter-settings-slide-enter-active,.chapter-settings-slide-leave-active{transition:none}.chapter-reader-state i{animation:none}}
 </style>
