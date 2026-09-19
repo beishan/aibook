@@ -2131,13 +2131,13 @@ onMounted(() => {
 
 /* 书籍内容 */
 .book-content {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  padding: 24px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface-card) 92%, var(--bg-secondary));
+  box-shadow: 0 18px 48px rgba(45, 65, 98, 0.06);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .detail-toolbar {
@@ -2680,7 +2680,7 @@ onMounted(() => {
 
 .version-list {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 10px;
 }
 
@@ -3267,7 +3267,7 @@ onMounted(() => {
   }
 
   .book-content {
-    padding: 0;
+    padding: 16px;
   }
 
   .detail-toolbar {
