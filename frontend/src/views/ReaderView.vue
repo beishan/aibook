@@ -875,6 +875,7 @@ const headerProgress = computed(() => {
 const currentPage = ref(0)
 const totalPages = ref(0)
 const paginationPageSize = ref(5)
+const scrollRenderLimit = ref(300)
 const scrollCurrentPage = ref(1)
 const scrollTotalPages = ref(1)
 const performancePaginationMode = ref(false)
@@ -1047,6 +1048,7 @@ const pageProgressLabel = computed(() => {
 
 const LARGE_TEXT_PARAGRAPH_THRESHOLD = 1200
 const LARGE_TEXT_FILE_SIZE_THRESHOLD = 2 * 1024 * 1024
+const SCROLL_RENDER_BATCH_SIZE = 300
 const MAX_PARAGRAPH_LENGTH = 4000
 
 // 内容宽度选项
@@ -1169,9 +1171,10 @@ const handleEngineKeydown = (event: KeyboardEvent) => {
 
 // 翻页模式相关计算
 const currentPageContent = computed(() => {
-  if (!isPaginationMode.value || book.value?.format === 'epub') {
+  if (book.value?.format === 'epub') {
     return content.value
   }
+  if (!isPaginationMode.value) return content.value.slice(0, scrollRenderLimit.value)
   const pageSize = paginationPageSize.value
   const start = currentPage.value * pageSize
   const end = start + pageSize
@@ -1185,6 +1188,22 @@ const getOriginalIndex = (localIndex: number): number => {
   }
   const pageSize = paginationPageSize.value
   return currentPage.value * pageSize + localIndex
+}
+
+const ensureScrollContentRendered = async (textIndex: number) => {
+  if (isPaginationMode.value) return
+  const requiredLimit = Math.min(
+    content.value.length,
+    Math.max(SCROLL_RENDER_BATCH_SIZE, textIndex + SCROLL_RENDER_BATCH_SIZE),
+  )
+  while (!isPaginationMode.value && scrollRenderLimit.value < requiredLimit) {
+    scrollRenderLimit.value = Math.min(
+      requiredLimit,
+      scrollRenderLimit.value + SCROLL_RENDER_BATCH_SIZE,
+    )
+    await nextTick()
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+  }
 }
 
 // 计算每页能显示多少段落（基于实际渲染高度）
@@ -1504,6 +1523,7 @@ const retryLoadBook = async () => {
   loading.value = true
   loadError.value = ''
   content.value = []
+  scrollRenderLimit.value = SCROLL_RENDER_BATCH_SIZE
   htmlContent.value = ''
   pdfSource.value = null
   pdfCurrentPage.value = 1
@@ -1926,6 +1946,8 @@ const handleGotoHighlight = async (highlight: Highlight) => {
       currentPage.value = Math.floor(textIndex / paginationPageSize.value)
       await nextTick()
       renderDocumentHighlights()
+    } else {
+      await ensureScrollContentRendered(textIndex)
     }
     document.querySelector<HTMLElement>(`[data-reader-index="${textIndex}"]`)
       ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -2240,6 +2262,7 @@ const isCurrentTocItem = (item: Chapter): boolean => {
 
 const loadTextContent = async () => {
   try {
+    scrollRenderLimit.value = SCROLL_RENDER_BATCH_SIZE
     const token = localStorage.getItem('token')
 
     const response = await fetch(withVersion(
@@ -2309,6 +2332,9 @@ const setReadingMode = async (mode: ReaderFlowMode) => {
     && !settings.value.paginationMode
   if (mode === activeReadingMode.value && !persistAutomaticPagination) return
 
+  if (mode === 'scroll') {
+    scrollRenderLimit.value = Math.min(content.value.length, SCROLL_RENDER_BATCH_SIZE)
+  }
   performancePaginationMode.value = false
   settings.value.paginationMode = mode === 'pagination'
   if (mode === 'pagination') {
@@ -2317,6 +2343,8 @@ const setReadingMode = async (mode: ReaderFlowMode) => {
   }
 
   await nextTick()
+  await ensureScrollContentRendered(textIndex)
+  renderDocumentHighlights()
   document.querySelector<HTMLElement>(`[data-reader-index="${textIndex}"]`)
     ?.scrollIntoView({ block: 'start' })
   handleScroll()
@@ -2350,8 +2378,10 @@ const restoreScrollPosition = () => {
         Math.floor(safeIndex / paginationPageSize.value),
       )
     } else {
-      nextTick(() => document.querySelector<HTMLElement>(`[data-reader-index="${safeIndex}"]`)
-        ?.scrollIntoView({ block: 'start' }))
+      void ensureScrollContentRendered(safeIndex).then(() => {
+        document.querySelector<HTMLElement>(`[data-reader-index="${safeIndex}"]`)
+          ?.scrollIntoView({ block: 'start' })
+      })
     }
     return
   }
@@ -2359,6 +2389,14 @@ const restoreScrollPosition = () => {
     if (isPaginationMode.value && totalPages.value > 0) {
       // 翻页模式下恢复到对应页码
       currentPage.value = Math.floor((progress.value / 100) * (totalPages.value - 1))
+    } else if (isTextFormat(book.value?.format)) {
+      const targetIndex = Math.round(
+        (progress.value / 100) * Math.max(0, content.value.length - 1),
+      )
+      void ensureScrollContentRendered(targetIndex).then(() => {
+        document.querySelector<HTMLElement>(`[data-reader-index="${targetIndex}"]`)
+          ?.scrollIntoView({ block: 'start' })
+      })
     } else {
       const readerBody = document.querySelector('.reader-body')
       if (readerBody) {
@@ -2372,6 +2410,7 @@ const restoreScrollPosition = () => {
 /**
  * 处理滚动事件
  */
+let scrollExtensionPending = false
 const handleScroll = () => {
   if (book.value?.format === 'epub') return
 
@@ -2379,17 +2418,43 @@ const handleScroll = () => {
   if (!readerBody) return
 
   const viewportHeight = Math.max(readerBody.clientHeight, 1)
-  scrollTotalPages.value = Math.max(1, Math.ceil(readerBody.scrollHeight / viewportHeight))
+  const renderedPages = Math.max(1, Math.ceil(readerBody.scrollHeight / viewportHeight))
+  const isProgressiveTextScroll = isTextFormat(book.value?.format) && !isPaginationMode.value
+  if (isProgressiveTextScroll) {
+    scrollTotalPages.value = Math.max(renderedPages, Math.ceil(
+      renderedPages * content.value.length / Math.max(1, scrollRenderLimit.value),
+    ))
+    const nearRenderedEnd = readerBody.scrollTop + viewportHeight
+      >= readerBody.scrollHeight - viewportHeight * 2
+    if (nearRenderedEnd
+        && scrollRenderLimit.value < content.value.length
+        && !scrollExtensionPending) {
+      scrollExtensionPending = true
+      scrollRenderLimit.value = Math.min(
+        content.value.length,
+        scrollRenderLimit.value + SCROLL_RENDER_BATCH_SIZE,
+      )
+      void nextTick(() => {
+        scrollExtensionPending = false
+        renderDocumentHighlights()
+        handleScroll()
+      })
+    }
+  } else {
+    scrollTotalPages.value = renderedPages
+  }
 
   const maxScroll = readerBody.scrollHeight - readerBody.clientHeight
   scrollCurrentPage.value = maxScroll <= 0
     ? 1
     : Math.min(
       scrollTotalPages.value,
-      Math.round((readerBody.scrollTop / maxScroll) * (scrollTotalPages.value - 1)) + 1,
+      Math.floor(readerBody.scrollTop / viewportHeight) + 1,
     )
-  if (maxScroll > 0) {
-    const currentProgress = Math.round((readerBody.scrollTop / maxScroll) * 100)
+  if (maxScroll > 0 || isProgressiveTextScroll) {
+    const currentProgress = isProgressiveTextScroll
+      ? Math.round((visibleTextIndex() / Math.max(1, content.value.length - 1)) * 100)
+      : Math.round((readerBody.scrollTop / maxScroll) * 100)
     if (Math.abs(currentProgress - progress.value) >= 1) {
       progress.value = currentProgress
       currentChapterName.value = findCurrentChapter()
@@ -2976,6 +3041,8 @@ const goToSearchResult = async (result: ReaderSearchResult) => {
     if (isPaginationMode.value) {
       goToPage(Math.floor(result.paragraphIndex / paginationPageSize.value))
       await nextTick()
+    } else {
+      await ensureScrollContentRendered(result.paragraphIndex)
     }
     const range = textRangeFromLocation(
       `text:${result.paragraphIndex}:${result.startOffset || 0}:${result.paragraphIndex}:${result.endOffset || 0}`,
@@ -3054,6 +3121,8 @@ const jumpToTextChapter = async (
     const pageSize = paginationPageSize.value
     currentPage.value = Math.floor(item.index / pageSize)
     await nextTick()
+  } else {
+    await ensureScrollContentRendered(item.index)
   }
   const element = document.getElementById('chapter-' + item.index)
   if (element) {
