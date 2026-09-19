@@ -8,12 +8,18 @@
     }"
     :style="readerShellStyle"
   >
+    <div
+      v-if="loading"
+      class="reader-loading-overlay loading glass"
+      role="status"
+      aria-live="polite"
+    >
+      <span class="loading-spinner" aria-hidden="true"></span>
+      <p>正在打开书籍…</p>
+    </div>
+
     <!-- 阅读器内容 -->
     <div v-if="book" class="reader-content">
-      <div v-if="loading" class="reader-loading-overlay loading glass" role="status">
-        <span class="loading-spinner" aria-hidden="true"></span>
-        <p>正在打开书籍…</p>
-      </div>
       <!-- 阅读器头部 -->
       <header
         v-show="!isFullscreen"
@@ -679,12 +685,7 @@
       </div>
     </div>
 
-    <div v-else-if="loading" class="loading glass" role="status">
-      <span class="loading-spinner" aria-hidden="true"></span>
-      <p>正在打开书籍…</p>
-    </div>
-
-    <div v-else class="empty glass">
+    <div v-if="!loading && !book" class="empty glass">
       <div class="empty-icon">{{ loadError ? '⚠️' : '📚' }}</div>
       <p>{{ loadError || '书籍不存在' }}</p>
       <div class="empty-actions">
