@@ -9,18 +9,18 @@
     <!-- 书籍内容 -->
     <div v-else-if="book" class="book-content glass">
       <div class="detail-toolbar">
-        <button class="back-btn" @click="$router.back()">
-          <span>‹</span>
-          <span>返回书库</span>
-        </button>
+        <div class="detail-breadcrumb">
+          <button class="back-btn" @click="$router.back()">
+            <span aria-hidden="true">←</span>
+            <span>返回书库</span>
+          </button>
+          <span class="breadcrumb-separator" aria-hidden="true">/</span>
+          <span class="breadcrumb-current">图书详情</span>
+        </div>
         <div class="detail-toolbar-actions">
           <button class="btn" @click="showAddToListDialog = true">
             <span>📚</span>
             <span>加入书单</span>
-          </button>
-          <button class="btn" :class="{ active: book.onShelf }" @click="handleToggleShelf">
-            <span>{{ book.onShelf ? '📚' : '➕' }}</span>
-            <span>{{ book.onShelf ? '已在书架' : '加入书架' }}</span>
           </button>
           <button
             class="btn"
@@ -50,6 +50,9 @@
             </button>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item command="shelf">
+                  📚 {{ book.onShelf ? '移出书架' : '加入书架' }}
+                </el-dropdown-item>
                 <el-dropdown-item command="scrape" :disabled="scraping">
                   🔍 {{ scraping ? '刮削中...' : '刮削元数据' }}
                 </el-dropdown-item>
@@ -124,6 +127,11 @@
         </aside>
 
         <div class="book-summary">
+          <div class="book-meta-path">
+            <span>{{ book.categoryPath || book.categoryName || '未分类' }}</span>
+            <span>·</span>
+            <span>{{ selectedVersionFormat === 'structured' ? '在线章节' : selectedVersionFormat.toUpperCase() }}</span>
+          </div>
           <div class="book-title-wrapper">
             <h1 v-if="!editingTitle" class="book-title">{{ book.title }}</h1>
             <div v-else class="title-edit-group">
@@ -162,7 +170,9 @@
           </div>
 
           <div class="book-badges">
-            <span class="detail-badge primary">{{ selectedVersionFormat.toUpperCase() }}</span>
+            <span class="detail-badge primary">
+              {{ selectedVersionFormat === 'structured' ? '在线章节' : selectedVersionFormat.toUpperCase() }}
+            </span>
             <span v-if="versions.length > 1" class="detail-badge">
               {{ versions.length }} 个版本
             </span>
@@ -184,6 +194,7 @@
                 ★
               </button>
             </div>
+            <span class="rating-hint">点击星星评分</span>
           </div>
 
           <div v-if="hasReadingProgress" class="current-reading-card">
@@ -224,10 +235,18 @@
             </button>
           </div>
 
+          <blockquote v-if="heroExcerpt" class="hero-excerpt">
+            <p>{{ heroExcerpt }}</p>
+            <footer>— {{ book.author || '未知作者' }}</footer>
+          </blockquote>
+        </div>
+
+        <aside class="book-side-card" aria-label="书籍设置与信息">
           <BookSeriesPanel :book="book" @updated="loadBook" />
 
           <div class="organization-panel">
             <div class="organization-row">
+              <span class="organization-icon" aria-hidden="true">▣</span>
               <span class="organization-label">分类</span>
               <el-select
                 class="category-select"
@@ -246,6 +265,7 @@
               </el-select>
             </div>
             <div class="organization-row">
+              <span class="organization-icon" aria-hidden="true">◇</span>
               <span class="organization-label">标签</span>
               <el-select
                 v-model="selectedTagIds"
@@ -277,7 +297,33 @@
               </button>
             </div>
           </div>
-        </div>
+
+          <section class="side-book-info" aria-labelledby="side-book-info-title">
+            <h2 id="side-book-info-title">图书信息</h2>
+            <dl>
+              <div>
+                <dt><span aria-hidden="true">▤</span> 文件格式</dt>
+                <dd>{{ selectedVersionFormat === 'structured' ? '在线章节' : selectedVersionFormat.toUpperCase() }}</dd>
+              </div>
+              <div>
+                <dt><span aria-hidden="true">◎</span> 语言</dt>
+                <dd>{{ book.language || '未知' }}</dd>
+              </div>
+              <div>
+                <dt><span aria-hidden="true">▣</span> 来源</dt>
+                <dd>{{ formatSourceType(book.sourceType) }}</dd>
+              </div>
+              <div>
+                <dt><span aria-hidden="true">⇩</span> 大小</dt>
+                <dd>{{ formatFileSize(selectedVersion?.fileSize) }}</dd>
+              </div>
+              <div>
+                <dt><span aria-hidden="true">☷</span> 章节/条目</dt>
+                <dd>{{ selectedVersion?.chapterCount ?? tocItems.length }} 章</dd>
+              </div>
+            </dl>
+          </section>
+        </aside>
       </section>
 
       <section class="version-panel">
@@ -996,6 +1042,14 @@ const hasReadingProgress = computed(() => Boolean(
   || readingProgress.value?.currentChapter
   || (readingProgress.value?.totalProgress || 0) > 0,
 ))
+const heroExcerpt = computed(() => {
+  const description = String(book.value?.description || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!description) return ''
+  const sentence = description.match(/^[^。！？!?]*[。！？!?]/)?.[0]?.trim() || description
+  return sentence.length > 92 ? `${sentence.slice(0, 92).trim()}…` : sentence
+})
 
 // 书单相关
 const showAddToListDialog = ref(false)
@@ -1192,6 +1246,9 @@ const openFormatConversion = () => {
 
 const handleBookActionCommand = (command: string) => {
   switch (command) {
+    case 'shelf':
+      void handleToggleShelf()
+      break
     case 'scrape':
       void handleScrape()
       break
@@ -1699,9 +1756,9 @@ onMounted(() => {
 
 <style scoped>
 .book-detail-view {
-  max-width: 1120px;
+  max-width: 1580px;
   margin: 0 auto;
-  padding: var(--spacing-lg) 0;
+  padding: 18px 20px 40px;
 }
 
 .category-select {
@@ -1709,7 +1766,7 @@ onMounted(() => {
 }
 
 .detail-tabs-scroll {
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -1726,15 +1783,12 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(var(--detail-tab-count), minmax(0, 1fr));
   min-width: 540px;
-  padding: 5px;
-  border: 1px solid color-mix(in srgb, white 66%, var(--border-color));
-  border-radius: 17px;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.48), rgba(229, 239, 251, 0.24));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.88),
-    inset 0 -1px 0 rgba(70, 92, 126, 0.1),
-    0 10px 28px rgba(45, 63, 94, 0.1);
+  padding: 7px 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-color-light);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
 }
@@ -1742,37 +1796,28 @@ onMounted(() => {
 .detail-tab-slider {
   position: absolute;
   z-index: -1;
-  top: 5px;
-  bottom: 5px;
-  left: 5px;
-  width: calc((100% - 10px) / var(--detail-tab-count));
-  border: 1px solid rgba(255, 255, 255, 0.88);
-  border-radius: 13px;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(225, 239, 255, 0.7));
-  box-shadow:
-    0 7px 18px rgba(45, 65, 98, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 -1px 0 rgba(90, 116, 153, 0.12);
+  top: 7px;
+  bottom: 0;
+  left: 10px;
+  width: calc((100% - 20px) / var(--detail-tab-count));
+  border: 0;
+  border-bottom: 3px solid var(--primary);
+  border-radius: 14px 14px 0 0;
+  background: linear-gradient(180deg, var(--primary-alpha-10), rgba(255, 255, 255, 0));
+  box-shadow: none;
   transform: translateX(calc(var(--detail-tab-index) * 100%));
   transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .detail-tab-slider::after {
-  position: absolute;
-  inset: 1px 12% auto;
-  height: 45%;
-  border-radius: inherit;
-  background: linear-gradient(rgba(255, 255, 255, 0.5), transparent);
-  content: '';
-  pointer-events: none;
+  display: none;
 }
 
 .detail-tab-button {
   position: relative;
   display: flex;
   min-width: 0;
-  min-height: 44px;
+  min-height: 52px;
   align-items: center;
   justify-content: center;
   gap: 7px;
@@ -1782,7 +1827,7 @@ onMounted(() => {
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
-  font-weight: 560;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
   transition: color 180ms ease, background-color 180ms ease;
@@ -1794,8 +1839,8 @@ onMounted(() => {
 }
 
 .detail-tab-button.active {
-  color: var(--text-primary);
-  font-weight: 650;
+  color: var(--primary);
+  font-weight: 700;
 }
 
 .detail-tab-button:focus-visible {
@@ -1804,22 +1849,14 @@ onMounted(() => {
 }
 
 :global(html[data-theme="macos26"]) .detail-segmented-tabs {
-  border-color: rgba(255, 255, 255, 0.74);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.58), rgba(221, 237, 255, 0.28));
-  box-shadow:
-    0 18px 38px rgba(48, 66, 100, 0.13),
-    inset 0 1px 0 rgba(255, 255, 255, 0.96),
-    inset 0 -1px 0 rgba(88, 112, 148, 0.11);
+  border-bottom-color: var(--border-color-light);
+  background: transparent;
+  box-shadow: none;
 }
 
 :global(html[data-theme="macos26"]) .detail-tab-slider {
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(222, 239, 255, 0.72));
-  box-shadow:
-    0 8px 22px rgba(48, 66, 100, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 -1px 0 rgba(83, 113, 153, 0.14);
+  background: linear-gradient(180deg, var(--primary-alpha-10), rgba(255, 255, 255, 0));
+  box-shadow: none;
 }
 
 .tab-count {
@@ -2094,12 +2131,13 @@ onMounted(() => {
 
 /* 书籍内容 */
 .book-content {
-  background: var(--surface-card);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: var(--glass-border);
-  border-radius: calc(var(--radius-lg) + 4px);
-  padding: 28px 32px 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .detail-toolbar {
@@ -2107,7 +2145,26 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-md);
-  margin-bottom: 28px;
+  margin-bottom: 18px;
+}
+
+.detail-breadcrumb {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.breadcrumb-separator {
+  color: var(--border-color);
+}
+
+.breadcrumb-current {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .detail-toolbar-actions {
@@ -2120,10 +2177,10 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: 8px 16px;
+  padding: 8px 0;
   border: none;
-  border-radius: var(--radius-full);
-  background: var(--bg-secondary);
+  border-radius: 0;
+  background: transparent;
   color: var(--text-primary);
   font-size: var(--font-size-base);
   cursor: pointer;
@@ -2131,7 +2188,8 @@ onMounted(() => {
 }
 
 .back-btn:hover {
-  background: var(--bg-tertiary);
+  background: transparent;
+  color: var(--primary);
 }
 
 .more-actions-button {
@@ -2163,10 +2221,10 @@ onMounted(() => {
 
 .book-hero {
   display: grid;
-  grid-template-columns: 208px minmax(0, 1fr);
+  grid-template-columns: 230px minmax(390px, 1fr) minmax(300px, 360px);
   align-items: start;
-  gap: 36px;
-  padding: 4px 4px 32px;
+  gap: clamp(26px, 3vw, 48px);
+  padding: 0 4px 30px;
 }
 
 .cover-column {
@@ -2176,16 +2234,17 @@ onMounted(() => {
 
 .book-cover {
   position: relative;
-  width: 208px;
-  height: 292px;
-  border-radius: var(--radius-lg);
+  width: 230px;
+  height: 326px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  border-radius: 14px;
   overflow: hidden;
   box-shadow: var(--shadow-lg);
 }
 
 .cover-action-row {
   display: grid;
-  width: 208px;
+  width: 230px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
 }
@@ -2240,6 +2299,16 @@ onMounted(() => {
 
 .book-summary {
   min-width: 0;
+  padding-top: 8px;
+}
+
+.book-meta-path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 12px;
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 .book-title-wrapper {
@@ -2251,8 +2320,8 @@ onMounted(() => {
 
 .book-title {
   overflow-wrap: anywhere;
-  font-size: clamp(30px, 4vw, 44px);
-  font-weight: 700;
+  font-size: clamp(34px, 3.5vw, 52px);
+  font-weight: 760;
   color: var(--text-primary);
   margin: 0;
   line-height: 1.15;
@@ -2430,26 +2499,30 @@ onMounted(() => {
 
 .organization-panel {
   display: grid;
-  max-width: 660px;
-  grid-template-columns: minmax(210px, 0.8fr) minmax(320px, 1.2fr);
-  gap: 14px;
-  padding: 14px 16px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  background: var(--bg-primary);
+  grid-template-columns: 1fr;
+  gap: 10px;
+  padding: 14px 0 18px;
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .organization-row {
-  display: flex;
+  display: grid;
   min-width: 0;
+  grid-template-columns: 22px 52px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 7px;
+}
+
+.organization-icon {
+  color: var(--text-secondary);
+  text-align: center;
 }
 
 .organization-label {
   flex-shrink: 0;
-  color: var(--text-tertiary);
-  font-size: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .organization-row .category-select,
@@ -2459,12 +2532,100 @@ onMounted(() => {
   width: auto;
 }
 
+.organization-row .tag-manage-link {
+  grid-column: 3;
+  justify-self: start;
+  padding: 2px 0;
+  font-size: 11px;
+}
+
+.book-side-card {
+  min-width: 0;
+  padding: 20px 22px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-card) 94%, transparent);
+  box-shadow: 0 12px 32px rgba(45, 65, 98, 0.07);
+}
+
+.book-side-card :deep(.series-panel) {
+  margin: 0;
+  padding: 0 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border-color-light);
+  border-radius: 0;
+}
+
+.book-side-card :deep(.series-heading) {
+  align-items: flex-start;
+}
+
+.book-side-card :deep(.eyebrow) {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.book-side-card :deep(.series-heading p) {
+  margin-top: 11px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--primary-alpha-10);
+  line-height: 1.6;
+}
+
+.side-book-info {
+  padding-top: 18px;
+}
+
+.side-book-info h2 {
+  margin: 0 0 12px;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.side-book-info dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.side-book-info dl > div {
+  display: grid;
+  grid-template-columns: minmax(112px, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.side-book-info dt,
+.side-book-info dd {
+  margin: 0;
+  font-size: 12px;
+}
+
+.side-book-info dt {
+  color: var(--text-secondary);
+}
+
+.side-book-info dt span {
+  display: inline-block;
+  width: 20px;
+  color: var(--text-tertiary);
+}
+
+.side-book-info dd {
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .version-panel {
-  margin-bottom: 30px;
-  padding: 20px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  background: var(--bg-primary);
+  margin-bottom: 16px;
+  padding: 22px 28px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 18px;
+  background: var(--surface-card);
+  box-shadow: 0 10px 28px rgba(45, 65, 98, 0.05);
 }
 
 .version-panel-header {
@@ -2472,22 +2633,26 @@ onMounted(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--spacing-md);
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .version-panel-header h2 {
+  display: inline;
   margin: 2px 0 4px;
   color: var(--text-primary);
   font-size: 18px;
 }
 
 .version-panel-header p {
-  margin: 0;
+  display: inline;
+  margin: 0 0 0 12px;
   color: var(--text-secondary);
   font-size: 12px;
 }
 
 .section-eyebrow {
+  display: block;
+  margin-bottom: 4px;
   color: var(--primary);
   font-size: 10px;
   font-weight: 700;
@@ -2515,7 +2680,7 @@ onMounted(() => {
 
 .version-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
@@ -2524,7 +2689,7 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   min-width: 0;
-  padding: 13px 14px;
+  padding: 14px 16px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--surface-card);
@@ -2546,8 +2711,8 @@ onMounted(() => {
 
 .version-format {
   display: flex;
-  width: 52px;
-  height: 36px;
+  width: 64px;
+  height: 44px;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
@@ -2569,7 +2734,7 @@ onMounted(() => {
 .version-content strong {
   overflow: hidden;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2623,11 +2788,12 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   width: fit-content;
-  margin-bottom: 20px;
-  padding: 10px 8px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  background: var(--bg-primary);
+  margin-bottom: 18px;
+  padding: 10px 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border-color-light);
+  border-radius: 0;
+  background: transparent;
 }
 
 .rating-label {
@@ -2645,7 +2811,7 @@ onMounted(() => {
   border: 0;
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 21px;
+  font-size: 26px;
   line-height: 1;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -2659,10 +2825,46 @@ onMounted(() => {
   color: var(--warning);
 }
 
+.rating-hint {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.hero-excerpt {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding: 3px 0 3px 14px;
+  border-left: 2px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.hero-excerpt p,
+.hero-excerpt footer {
+  margin: 0;
+}
+
+.hero-excerpt p {
+  line-height: 1.75;
+}
+
+.hero-excerpt footer {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: right;
+}
+
 /* 内容区 */
 .book-body {
-  border-top: 1px solid var(--border-light);
-  padding-top: var(--spacing-xl);
+  overflow: hidden;
+  border: 1px solid var(--border-color-light);
+  border-radius: 18px;
+  background: var(--surface-card);
+  box-shadow: 0 10px 28px rgba(45, 65, 98, 0.05);
+}
+
+.tab-content {
+  padding: 26px 32px 32px;
 }
 
 .book-description {
@@ -3004,6 +3206,37 @@ onMounted(() => {
 }
 
 /* 响应式 */
+@media (max-width: 1240px) {
+  .book-hero {
+    grid-template-columns: 208px minmax(0, 1fr);
+  }
+
+  .book-cover {
+    width: 208px;
+    height: 294px;
+  }
+
+  .cover-action-row {
+    width: 208px;
+  }
+
+  .book-side-card {
+    grid-column: 1 / -1;
+  }
+
+  .book-side-card :deep(.series-panel) {
+    padding-bottom: 18px;
+  }
+
+  .organization-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .side-book-info dl {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .book-hero {
     grid-template-columns: 180px minmax(0, 1fr);
@@ -3022,15 +3255,19 @@ onMounted(() => {
   .organization-panel {
     grid-template-columns: 1fr;
   }
+
+  .side-book-info dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 768px) {
   .book-detail-view {
-    padding: var(--spacing-sm) 0;
+    padding: var(--spacing-sm) 10px 28px;
   }
 
   .book-content {
-    padding: 18px;
+    padding: 0;
   }
 
   .detail-toolbar {
@@ -3045,7 +3282,7 @@ onMounted(() => {
 
   .detail-toolbar-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .detail-toolbar-actions .btn,
@@ -3066,8 +3303,8 @@ onMounted(() => {
   }
 
   .book-title-wrapper {
-    justify-content: center;
-    text-align: center;
+    justify-content: flex-start;
+    text-align: left;
   }
 
   .book-title {
@@ -3077,7 +3314,7 @@ onMounted(() => {
   .book-byline,
   .book-badges,
   .primary-actions {
-    justify-content: center;
+    justify-content: flex-start;
   }
 
   .current-reading-card {
@@ -3088,6 +3325,10 @@ onMounted(() => {
 
   .organization-panel {
     max-width: none;
+  }
+
+  .book-side-card {
+    padding: 18px;
   }
 
   .version-panel-header {
@@ -3105,6 +3346,19 @@ onMounted(() => {
 
   .version-list {
     grid-template-columns: 1fr;
+  }
+
+  .version-panel {
+    padding: 18px;
+  }
+
+  .version-panel-header p {
+    display: block;
+    margin: 4px 0 0;
+  }
+
+  .tab-content {
+    padding: 22px 18px 24px;
   }
 
   .version-item {
@@ -3157,6 +3411,14 @@ onMounted(() => {
 }
 
 @media (max-width: 480px) {
+  .detail-toolbar-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-toolbar-actions :deep(.el-dropdown) {
+    width: 100%;
+  }
+
   .primary-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -3167,12 +3429,20 @@ onMounted(() => {
   }
 
   .organization-row {
+    grid-template-columns: 22px minmax(0, 1fr);
     align-items: stretch;
-    flex-direction: column;
   }
 
   .organization-label {
+    align-self: center;
     text-align: left;
+  }
+
+  .organization-row .category-select,
+  .organization-row .book-tag-select,
+  .organization-row .tag-manage-link {
+    grid-column: 2;
+    width: 100%;
   }
 
   .tag-manage-link {
@@ -3181,6 +3451,14 @@ onMounted(() => {
 
   .version-selected-badge {
     display: none;
+  }
+
+  .version-primary-badge {
+    display: none;
+  }
+
+  .side-book-info dl {
+    grid-template-columns: 1fr;
   }
 
   .info-item {
