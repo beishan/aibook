@@ -1060,13 +1060,6 @@ const readerStyle = computed(() => {
     fontFamily: resolveReaderFontFamily(settings.value.fontFamily),
     fontSize: `${settings.value.fontSize}px`,
     lineHeight: settings.value.lineHeight,
-    backgroundColor: colors.bg,
-    backgroundImage: selectedReaderBackground.value
-      ? `url(${JSON.stringify(selectedReaderBackground.value.imageUrl)})`
-      : 'none',
-    backgroundPosition: 'center',
-    backgroundRepeat: 'no-repeat',
-    backgroundSize: 'cover',
     color: colors.text,
     // 两屏模式下不限制宽度，让两栏均匀分布
     maxWidth: isDoubleScreen ? '100%' : widthOption.maxWidth,
@@ -1078,6 +1071,13 @@ const readerShellStyle = computed(() => {
   return {
     '--reader-room-background': colors.bg,
     '--reader-room-text': colors.text,
+    backgroundColor: colors.bg,
+    backgroundImage: selectedReaderBackground.value
+      ? `url(${JSON.stringify(selectedReaderBackground.value.imageUrl)})`
+      : 'none',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    backgroundSize: 'cover',
   }
 })
 
@@ -5443,12 +5443,10 @@ onBeforeUnmount(() => {
   max-height: calc(100% - 166px);
   margin: 94px auto 72px;
   padding: 48px clamp(48px, 7vw, 108px) 72px;
-  border: 1px solid color-mix(in srgb, var(--reader-ink) 7%, transparent);
-  border-radius: 7px;
-  background-color: var(--reader-paper) !important;
-  box-shadow:
-    0 24px 60px color-mix(in srgb, var(--reader-ink) 8%, transparent),
-    0 2px 8px color-mix(in srgb, var(--reader-ink) 5%, transparent);
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none;
   color: var(--reader-ink);
   scrollbar-width: thin;
 }
@@ -5552,10 +5550,8 @@ onBeforeUnmount(() => {
 
 .reader-view.reading-room-mode .reader-body {
   padding: 48px clamp(48px, 7vw, 108px) 72px;
-  border: 1px solid color-mix(in srgb, var(--reader-ink) 7%, transparent);
-  box-shadow:
-    0 24px 60px color-mix(in srgb, var(--reader-ink) 8%, transparent),
-    0 2px 8px color-mix(in srgb, var(--reader-ink) 5%, transparent);
+  border: 0;
+  box-shadow: none;
 }
 
 .reader-view.reading-room-mode .reader-body--epub,
