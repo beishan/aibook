@@ -615,12 +615,32 @@
                   </label>
                 </div>
                 <div class="form-group" v-if="isTextFormat(book?.format)">
-                  <label class="form-label toggle-label">
-                    <span>翻页模式</span>
-                    <button class="toggle-switch" :class="{ on: isPaginationMode }" @click="togglePaginationMode">
-                      <span class="toggle-knob"></span>
+                  <label class="form-label">阅读模式</label>
+                  <div
+                    class="reading-mode-segmented"
+                    :class="`reading-mode-segmented--${activeReadingMode}`"
+                    role="radiogroup"
+                    aria-label="阅读模式"
+                    @keydown="handleReadingModeKeydown"
+                  >
+                    <span class="reading-mode-segmented-indicator" aria-hidden="true"></span>
+                    <button
+                      v-for="mode in readingModeOptions"
+                      :key="mode.value"
+                      type="button"
+                      role="radio"
+                      :aria-checked="activeReadingMode === mode.value"
+                      :tabindex="activeReadingMode === mode.value ? 0 : -1"
+                      :class="{ active: activeReadingMode === mode.value }"
+                      @click="setReadingMode(mode.value)"
+                    >
+                      <strong>{{ mode.label }}</strong>
+                      <small>{{ mode.description }}</small>
                     </button>
-                  </label>
+                  </div>
+                  <p v-if="performancePaginationMode && !settings.paginationMode" class="reading-mode-hint">
+                    长文本已自动使用翻页模式以保持流畅；可手动切换为滚动模式。
+                  </p>
                 </div>
               </div>
             </div>
@@ -781,6 +801,7 @@ interface HighlightEditorState {
 }
 
 type PanelTab = 'search' | 'toc' | 'bookmarks' | 'highlights'
+type ReaderFlowMode = 'scroll' | 'pagination'
 
 interface ReaderSearchResult {
   id: string
@@ -853,6 +874,7 @@ const headerProgress = computed(() => {
 // 翻页模式相关
 const currentPage = ref(0)
 const totalPages = ref(0)
+const paginationPageSize = ref(5)
 const scrollCurrentPage = ref(1)
 const scrollTotalPages = ref(1)
 const performancePaginationMode = ref(false)
@@ -992,6 +1014,17 @@ let readerSettingsReady = false
 const isPaginationMode = computed(
   () => settings.value.paginationMode || performancePaginationMode.value
 )
+const activeReadingMode = computed<ReaderFlowMode>(() =>
+  isPaginationMode.value ? 'pagination' : 'scroll'
+)
+const readingModeOptions: Array<{
+  value: ReaderFlowMode
+  label: string
+  description: string
+}> = [
+  { value: 'scroll', label: '滚动', description: '连续上下阅读' },
+  { value: 'pagination', label: '翻页', description: '逐页切换内容' },
+]
 
 const epubPageNumbers = computed(() => {
   const match = currentLocation.value.match(/(\d+)\s*\/\s*(\d+)/)
@@ -1139,7 +1172,7 @@ const currentPageContent = computed(() => {
   if (!isPaginationMode.value || book.value?.format === 'epub') {
     return content.value
   }
-  const pageSize = calculatePageSize()
+  const pageSize = paginationPageSize.value
   const start = currentPage.value * pageSize
   const end = start + pageSize
   return content.value.slice(start, end)
@@ -1150,60 +1183,64 @@ const getOriginalIndex = (localIndex: number): number => {
   if (!isPaginationMode.value || book.value?.format === 'epub') {
     return localIndex
   }
-  const pageSize = calculatePageSize()
+  const pageSize = paginationPageSize.value
   return currentPage.value * pageSize + localIndex
 }
 
 // 计算每页能显示多少段落（基于实际渲染高度）
 const calculatePageSize = (): number => {
-  const readerBody = document.querySelector('.reader-body')
+  const readerBody = document.querySelector<HTMLElement>('.reader-body')
   if (!readerBody) return 5
 
   // 可用高度 = 容器高度 - 上下padding(40px*2) - 提示区域(80px)
-  const availableHeight = readerBody.clientHeight - 160
-  const lineHeight = settings.value.fontSize * settings.value.lineHeight
-  const paragraphSpacing = settings.value.paragraphSpacing
+  const availableHeight = Math.max(160, readerBody.clientHeight - 160)
+  const fontSize = Number(settings.value.fontSize) || 16
+  const lineHeight = fontSize * (Number(settings.value.lineHeight) || 1.8)
+  const paragraphSpacing = Number(settings.value.paragraphSpacing) || 0
 
   // 保守估计每段高度：假设较长的段落会换行
   // 中文段落平均约50-80字，在手机宽度约30字/行，所以约2-3行
-  const charsPerLine = Math.floor((readerBody.clientWidth - 120) / (settings.value.fontSize * 0.9))
+  const charsPerLine = Math.max(8, Math.floor(
+    Math.max(120, readerBody.clientWidth - 120) / (fontSize * 0.9),
+  ))
   const avgLinesPerParagraph = Math.max(2, Math.ceil(60 / charsPerLine)) // 假设每段60字
   const estimatedParagraphHeight = lineHeight * avgLinesPerParagraph + paragraphSpacing
 
   return Math.max(1, Math.floor(availableHeight / estimatedParagraphHeight))
 }
 
-const updateTotalPages = () => {
+const updateTotalPages = (preserveTextIndex?: number) => {
   if (isPaginationMode.value && content.value.length > 0) {
     const pageSize = calculatePageSize()
-    totalPages.value = Math.ceil(content.value.length / pageSize)
+    paginationPageSize.value = pageSize
+    totalPages.value = Math.max(1, Math.ceil(content.value.length / pageSize))
+    currentPage.value = preserveTextIndex === undefined
+      ? Math.min(currentPage.value, totalPages.value - 1)
+      : Math.min(totalPages.value - 1, Math.floor(preserveTextIndex / pageSize))
   } else {
     totalPages.value = 0
   }
 }
 
-// 检查内容是否溢出，如果溢出则减少每页内容
-const checkAndAdjustPageSize = () => {
-  if (!isPaginationMode.value) return
-
-  const readerBody = document.querySelector('.reader-body')
-  if (!readerBody) return
-
-  // 检查是否溢出
-  if (readerBody.scrollHeight > readerBody.clientHeight + 10) {
-    // 内容溢出，重新计算更小的页大小
-    const newPageSize = calculatePageSize()
-    if (newPageSize < currentPageContent.value.length) {
-      // 强制更新页大小
-      updateTotalPages()
-    }
-  }
+let paginationLayoutFrame: number | null = null
+let pendingPaginationTextIndex: number | undefined
+const schedulePaginationLayout = (preserveTextIndex?: number) => {
+  if (preserveTextIndex !== undefined) pendingPaginationTextIndex = preserveTextIndex
+  void nextTick(() => {
+    if (paginationLayoutFrame !== null) cancelAnimationFrame(paginationLayoutFrame)
+    paginationLayoutFrame = requestAnimationFrame(() => {
+      paginationLayoutFrame = null
+      const pendingTextIndex = pendingPaginationTextIndex
+      pendingPaginationTextIndex = undefined
+      updateTotalPages(pendingTextIndex)
+    })
+  })
 }
 
 const goToPage = (page: number) => {
   if (page >= 0 && page < totalPages.value) {
     currentPage.value = page
-    const pageSize = calculatePageSize()
+    const pageSize = paginationPageSize.value
     const currentContentIndex = page * pageSize
     const chapter = [...tocItems.value]
       .reverse()
@@ -1886,7 +1923,7 @@ const handleGotoHighlight = async (highlight: Highlight) => {
   if (textMatch) {
     const textIndex = Number(textMatch[1])
     if (isPaginationMode.value) {
-      currentPage.value = Math.floor(textIndex / calculatePageSize())
+      currentPage.value = Math.floor(textIndex / paginationPageSize.value)
       await nextTick()
       renderDocumentHighlights()
     }
@@ -1976,7 +2013,7 @@ const textChapterProgress = (textIndex: number) => {
 }
 
 const visibleTextIndex = () => {
-  if (isPaginationMode.value) return currentPage.value * calculatePageSize()
+  if (isPaginationMode.value) return currentPage.value * paginationPageSize.value
   const readerBody = document.querySelector<HTMLElement>('.reader-body')
   if (!readerBody) return 0
   const bodyRect = readerBody.getBoundingClientRect()
@@ -2265,16 +2302,36 @@ const enableLargeTextPerformanceMode = () => {
   }
 }
 
-const togglePaginationMode = () => {
-  if (performancePaginationMode.value && !settings.value.paginationMode) {
-    performancePaginationMode.value = false
-    updateTotalPages()
+const setReadingMode = async (mode: ReaderFlowMode) => {
+  const textIndex = visibleTextIndex()
+  const persistAutomaticPagination = mode === 'pagination'
+    && performancePaginationMode.value
+    && !settings.value.paginationMode
+  if (mode === activeReadingMode.value && !persistAutomaticPagination) return
+
+  performancePaginationMode.value = false
+  settings.value.paginationMode = mode === 'pagination'
+  if (mode === 'pagination') {
+    schedulePaginationLayout(textIndex)
     return
   }
-  settings.value.paginationMode = !settings.value.paginationMode
-  if (settings.value.paginationMode) {
-    performancePaginationMode.value = false
-  }
+
+  await nextTick()
+  document.querySelector<HTMLElement>(`[data-reader-index="${textIndex}"]`)
+    ?.scrollIntoView({ block: 'start' })
+  handleScroll()
+}
+
+const handleReadingModeKeydown = (event: KeyboardEvent) => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  const group = event.currentTarget as HTMLElement | null
+  const mode: ReaderFlowMode = event.key === 'ArrowLeft' || event.key === 'Home'
+    ? 'scroll'
+    : 'pagination'
+  void setReadingMode(mode).then(() => {
+    group?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus()
+  })
 }
 
 /**
@@ -2288,7 +2345,10 @@ const restoreScrollPosition = () => {
   if (locatorIndex !== undefined) {
     const safeIndex = Math.max(0, Math.min(locatorIndex, Math.max(0, content.value.length - 1)))
     if (isPaginationMode.value && totalPages.value > 0) {
-      currentPage.value = Math.min(totalPages.value - 1, Math.floor(safeIndex / calculatePageSize()))
+      currentPage.value = Math.min(
+        totalPages.value - 1,
+        Math.floor(safeIndex / paginationPageSize.value),
+      )
     } else {
       nextTick(() => document.querySelector<HTMLElement>(`[data-reader-index="${safeIndex}"]`)
         ?.scrollIntoView({ block: 'start' }))
@@ -2914,7 +2974,7 @@ const goToSearchResult = async (result: ReaderSearchResult) => {
   if (isTextFormat(book.value?.format)
       && result.paragraphIndex !== undefined) {
     if (isPaginationMode.value) {
-      goToPage(Math.floor(result.paragraphIndex / calculatePageSize()))
+      goToPage(Math.floor(result.paragraphIndex / paginationPageSize.value))
       await nextTick()
     }
     const range = textRangeFromLocation(
@@ -2991,9 +3051,8 @@ const jumpToTextChapter = async (
   behavior: ScrollBehavior = 'smooth',
 ) => {
   if (isPaginationMode.value) {
-    const pageSize = calculatePageSize()
+    const pageSize = paginationPageSize.value
     currentPage.value = Math.floor(item.index / pageSize)
-    updateTotalPages()
     await nextTick()
   }
   const element = document.getElementById('chapter-' + item.index)
@@ -3184,19 +3243,8 @@ watch(() => settings.value, () => {
     })
   }
   if (readerSettingsReady) preferencesStore.setReaderSettings(settings.value)
-  updateTotalPages()
+  schedulePaginationLayout()
 }, { deep: true })
-
-// 监听翻页模式变化
-watch(isPaginationMode, (newVal) => {
-  if (newVal) {
-    updateTotalPages()
-    // 切换到翻页模式，根据当前进度计算页码
-    if (totalPages.value > 0) {
-      currentPage.value = Math.floor((progress.value / 100) * (totalPages.value - 1))
-    }
-  }
-})
 
 // 监听屏幕模式变化（EPUB）
 let switchingEpubEngine = false
@@ -3222,16 +3270,13 @@ watch(() => settings.value.epubEngine, async (nextEngine, previousEngine) => {
 
 // 监听内容变化
 watch(content, () => {
-  updateTotalPages()
+  schedulePaginationLayout()
 })
 
-// 监听当前页内容变化，检查是否溢出
+// 当前页变化后只恢复高亮；分页容量由受控布局调度统一计算。
 watch(currentPageContent, () => {
   if (isPaginationMode.value) {
-    nextTick(() => {
-      checkAndAdjustPageSize()
-      renderDocumentHighlights()
-    })
+    nextTick(renderDocumentHighlights)
   }
 })
 
@@ -3240,10 +3285,7 @@ watch(htmlContent, () => nextTick(renderDocumentHighlights))
 // 监听窗口大小变化
 const handleResize = () => {
   if (isPaginationMode.value) {
-    updateTotalPages()
-    if (currentPage.value >= totalPages.value) {
-      currentPage.value = Math.max(0, totalPages.value - 1)
-    }
+    schedulePaginationLayout(visibleTextIndex())
   }
   nextTick(() => {
     handleScroll()
@@ -3296,6 +3338,10 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (paginationLayoutFrame !== null) {
+    cancelAnimationFrame(paginationLayoutFrame)
+    paginationLayoutFrame = null
+  }
   if (saveTimer) {
     clearTimeout(saveTimer)
     saveTimer = null
@@ -3355,6 +3401,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .reader-view {
+  --reader-header-height: 76px;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -3368,6 +3415,7 @@ onBeforeUnmount(() => {
 }
 
 .reader-view.fullscreen-mode {
+  --reader-header-height: 0px;
   /* Already full screen with fixed positioning */
 }
 
@@ -4532,8 +4580,77 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 
+.reading-mode-segmented {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border-color-light);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  isolation: isolate;
+}
+
+.reading-mode-segmented-indicator {
+  position: absolute;
+  z-index: 0;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  border: 1px solid var(--border-color-light);
+  border-radius: 10px;
+  background: var(--surface-card);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: transform 220ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.reading-mode-segmented--pagination .reading-mode-segmented-indicator {
+  transform: translateX(100%);
+}
+
+.reading-mode-segmented button {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.reading-mode-segmented button.active {
+  color: var(--primary);
+}
+
+.reading-mode-segmented button strong {
+  font-size: 12px;
+}
+
+.reading-mode-segmented button small,
+.reading-mode-hint {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.reading-mode-segmented button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.reading-mode-hint {
+  margin: 8px 2px 0;
+  line-height: 1.5;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .engine-segmented-indicator {
+  .engine-segmented-indicator,
+  .reading-mode-segmented-indicator {
     transition: none;
   }
 }
@@ -5464,7 +5581,7 @@ onBeforeUnmount(() => {
 
 .side-panel {
   position: absolute;
-  inset: 0 auto 0 0;
+  inset: var(--reader-header-height) auto 0 0;
   width: min(390px, 88vw);
   border: 0;
   border-right: 1px solid var(--reader-line);
@@ -5476,7 +5593,7 @@ onBeforeUnmount(() => {
 }
 
 .side-panel--right {
-  inset: 0 0 0 auto;
+  inset: var(--reader-header-height) 0 0 auto;
   border-right: 0;
   border-left: 1px solid var(--reader-line);
   box-shadow: -12px 0 36px color-mix(in srgb, var(--reader-ink) 8%, transparent);
@@ -5841,6 +5958,10 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
+  .reader-view {
+    --reader-header-height: 66px;
+  }
+
   .reader-header,
   .reader-view.reading-room-mode .reader-header {
     inset: 0 0 auto;
@@ -5964,6 +6085,7 @@ onBeforeUnmount(() => {
 }
 /* 临时阅读：迁移试读页布局，继续复用正式阅读器的完整能力 */
 .trial-reader-mode {
+  --reader-header-height: 64px;
   --trial-surface: color-mix(in srgb, var(--reader-room-background) 92%, transparent);
   --trial-surface-solid: color-mix(in srgb, var(--reader-room-background) 97%, var(--reader-room-text) 3%);
   --trial-line: color-mix(in srgb, var(--reader-room-text) 14%, transparent);
@@ -6101,7 +6223,7 @@ onBeforeUnmount(() => {
 }
 
 .trial-reader-mode .side-panel {
-  inset: 64px auto 0 0;
+  inset: var(--reader-header-height) auto 0 0;
   width: min(330px, 88vw);
   border-right: 1px solid var(--trial-line);
   background: var(--trial-surface);
@@ -6110,7 +6232,7 @@ onBeforeUnmount(() => {
 }
 
 .trial-reader-mode .side-panel--right {
-  inset: 64px 0 0 auto;
+  inset: var(--reader-header-height) 0 0 auto;
   border-right: 0;
   border-left: 1px solid var(--trial-line);
   box-shadow: -14px 0 38px color-mix(in srgb, var(--reader-room-text) 8%, transparent);
@@ -6210,6 +6332,10 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
+  .trial-reader-mode {
+    --reader-header-height: 58px;
+  }
+
   .trial-reader-mode .reader-header {
     grid-template-columns: 38px minmax(0, 1fr);
     min-height: 58px;
@@ -6246,7 +6372,7 @@ onBeforeUnmount(() => {
 
   .trial-reader-mode .side-panel,
   .trial-reader-mode .side-panel--right {
-    top: 58px;
+    top: var(--reader-header-height);
     bottom: 0;
   }
 
