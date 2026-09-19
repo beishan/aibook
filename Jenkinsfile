@@ -3,6 +3,8 @@ pipeline {
 
     options {
         disableConcurrentBuilds()
+        // 避免 Declarative Pipeline 在命名阶段前再次检出；GitHub 抖动应落在可见的 Checkout 阶段内。
+        skipDefaultCheckout(true)
         timestamps()
         timeout(time: 45, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '20'))
@@ -56,8 +58,15 @@ pipeline {
 
     stages {
         stage('Checkout') {
+            options {
+                timeout(time: 10, unit: 'MINUTES')
+            }
             steps {
-                git branch: 'main', url: 'git@github.com:beishan/aibook.git'
+                retry(3) {
+                    echo '正在从 GitHub 检出 main；连接失败时最多自动重试 3 次。'
+                    deleteDir()
+                    git branch: 'main', url: 'git@github.com:beishan/aibook.git'
+                }
                 script {
                     def shortCommit = sh(
                         script: 'git rev-parse --short=12 HEAD',

@@ -404,3 +404,25 @@ Nginx 通过容器服务名 `backend:8080` 访问后端，不使用 NAS 的映�
 ### 端口冲突
 
 在 Jenkins 构建参数中修改 `FRONTEND_PORT` 或 `BACKEND_PORT`。
+
+### GitHub 连接超时后 Stage View 只剩一个步骤
+
+流水线已经关闭 Declarative Pipeline 默认的隐藏检出，正式代码检出统一在命名的
+`Checkout` 阶段中执行。该阶段单次最多运行 10 分钟，GitHub 连接失败时最多自动
+尝试 3 次。因此，运行期网络抖动会显示为 `Checkout` 阶段失败或重试，后面的
+Validate、Backend Test、Build Images、Deploy 和 Public Health Check 阶段结构仍会
+保留，不会因为隐藏检出提前中断而只显示一个步骤。
+
+使用 `Pipeline script from SCM` 时，Jenkins 在执行仓库中的 Jenkinsfile 之前，仍必须
+先从 SCM 读取 Jenkinsfile。这个启动检出发生在流水线代码生效之前，Jenkinsfile
+自身无法捕获或重试；若它失败，该次构建仍可能没有完整阶段图。建议在 Jenkins：
+
+1. 打开 `Manage Jenkins → System`，将 `SCM checkout retry count` 设置为 `2` 或 `3`。
+2. 打开任务配置的 `Pipeline → SCM`，启用 `Lightweight checkout`，减少启动检出的
+   数据量与超时概率。
+3. 检查 Jenkins 容器到 `github.com:22` 的 DNS、路由与 SSH keepalive；网络不稳定时
+   可配置可靠代理或改用具备凭据的 HTTPS 仓库地址。
+
+如果要求即使 GitHub 完全不可达也始终生成完整 Stage View，只能把流水线定义改为
+Jenkins 本地保存的 `Pipeline script`（或本地共享库），因为远程 Jenkinsfile 尚未读取
+时，Jenkins 无法知道仓库中定义了哪些阶段。
