@@ -9,7 +9,11 @@ assert.ok(dialogStart >= 0 && dialogEnd > dialogStart, 'chapter content must rem
 const dialog = source.slice(dialogStart, dialogEnd)
 
 assert.match(dialog, /class="chapter-reader-dialog"/, 'chapter dialog must use the temporary-reading shell')
+assert.match(dialog, /:show-close="false"/, 'chapter dialog must hide the outer Element Plus close control')
 assert.match(dialog, /class="chapter-reader-surface"/, 'chapter dialog must render a reading surface')
+assert.match(dialog, /class="chapter-reader-heading"[\s\S]*?<strong>\{\{ chapterDetail\?\.title/, 'chapter title must live at the left of the reading toolbar')
+assert.match(dialog, /class="chapter-reader-close"[\s\S]*?@click="chapterDialog=false"/, 'reading toolbar must own the close control')
+assert.doesNotMatch(dialog.slice(0, dialog.indexOf('>')), /:title=/, 'chapter dialog must not render the outer title bar')
 assert.match(dialog, />上一章</)
 assert.match(dialog, />下一章</)
 assert.match(dialog, /阅读设置/)
@@ -21,5 +25,7 @@ assert.match(source, /size:100,sort:'INDEX_ASC'/, 'chapter navigation must load 
 assert.match(source, /first\.totalPages-1/, 'chapter navigation must work beyond the visible drawer page')
 assert.match(source, /preferencesStore\.setReaderSettings/, 'reading adjustments must use account preferences')
 assert.match(source, /handleChapterReaderKeydown/, 'chapter navigation must provide keyboard support')
+assert.match(source, /:global\(\.chapter-reader-dialog\)\{--el-dialog-padding-primary:0;/, 'reading surface must fill the dialog without outer padding')
+assert.match(source, /\.chapter-reader\{border:0;border-radius:16px\}/, 'reading surface must not draw a second outer border')
 
 console.log('Crawler chapter popup provides temporary reading mode without a table of contents')
