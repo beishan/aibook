@@ -319,12 +319,26 @@ public class CrawlerTaskService {
         return managementService.taskView(createBookTask(user, book, CrawlerTask.TaskType.BOOK_UPDATE_CHECK));
     }
 
+    public TaskView refreshMetadata(User user, Long bookId) {
+        CrawlerBook book = managementService.ownedBook(user, bookId);
+        return managementService.taskView(createBookTask(user, book, CrawlerTask.TaskType.BOOK_METADATA));
+    }
+
     public List<TaskView> batchCrawl(User user, List<Long> bookIds) {
         List<CrawlerBook> books = ownedBooks(user, bookIds).stream()
                 .filter(book -> discoveryStatus(book) == CrawlerBook.DiscoveryStatus.ACTIVE).toList();
         books.forEach(this::ensureNoActiveTask);
         return books.stream()
                 .map(book -> managementService.taskView(createBookTask(user, book, CrawlerTask.TaskType.BOOK_FULL_CRAWL))).toList();
+    }
+
+    public List<TaskView> batchRefreshMetadata(User user, List<Long> bookIds) {
+        List<CrawlerBook> books = ownedBooks(user, bookIds);
+        books.forEach(this::ensureNoActiveTask);
+        return books.stream()
+                .map(book -> managementService.taskView(
+                        createBookTask(user, book, CrawlerTask.TaskType.BOOK_METADATA)))
+                .toList();
     }
 
     public List<com.aibook.dto.crawler.CrawlerDtos.BookView> setDiscoveryStatus(
@@ -437,11 +451,13 @@ public class CrawlerTaskService {
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的任务操作");
             }
         }
-        if (task.getCrawlerBook() != null && (task.getStatus() == CrawlerTask.TaskStatus.PAUSED
+        if (task.getCrawlerBook() != null && task.getType() != CrawlerTask.TaskType.BOOK_METADATA
+                && (task.getStatus() == CrawlerTask.TaskStatus.PAUSED
                 || task.getStatus() == CrawlerTask.TaskStatus.CANCELLED)) {
             task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.PAUSED);
             bookRepository.save(task.getCrawlerBook());
-        } else if (task.getCrawlerBook() != null && "resume".equals(command)) {
+        } else if (task.getCrawlerBook() != null
+                && task.getType() != CrawlerTask.TaskType.BOOK_METADATA && "resume".equals(command)) {
             task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.WAITING);
             bookRepository.save(task.getCrawlerBook());
         }
@@ -575,8 +591,11 @@ public class CrawlerTaskService {
         requireEnabled(book.getSite());
         requireRule(book.getSite());
         ensureNoActiveTask(book);
-        book.setCrawlStatus(CrawlerTask.TaskType.BOOK_UPDATE_CHECK == type ? CrawlerBook.CrawlStatus.UPDATING : CrawlerBook.CrawlStatus.WAITING);
-        bookRepository.save(book);
+        if (type != CrawlerTask.TaskType.BOOK_METADATA) {
+            book.setCrawlStatus(CrawlerTask.TaskType.BOOK_UPDATE_CHECK == type
+                    ? CrawlerBook.CrawlStatus.UPDATING : CrawlerBook.CrawlStatus.WAITING);
+            bookRepository.save(book);
+        }
         return createAndSubmit(user, book.getSite(), book, type);
     }
 
@@ -699,7 +718,7 @@ public class CrawlerTaskService {
             task.setStartedAt(task.getStartedAt() == null ? LocalDateTime.now() : task.getStartedAt());
             task.setErrorMessage(null);
             taskRepository.save(task);
-            if (task.getCrawlerBook() != null) {
+            if (task.getCrawlerBook() != null && task.getType() != CrawlerTask.TaskType.BOOK_METADATA) {
                 task.getCrawlerBook().setLastCrawlStartedAt(task.getStartedAt());
                 bookRepository.save(task.getCrawlerBook());
             }
@@ -718,8 +737,13 @@ public class CrawlerTaskService {
                 return;
             }
 
-            if (task.getType() == CrawlerTask.TaskType.BOOK_FULL_CRAWL || task.getType() == CrawlerTask.TaskType.BOOK_UPDATE_CHECK) {
-                book.setCrawlStatus(CrawlerBook.CrawlStatus.CRAWLING_METADATA); bookRepository.save(book);
+            boolean metadataOnly = task.getType() == CrawlerTask.TaskType.BOOK_METADATA;
+            if (metadataOnly || task.getType() == CrawlerTask.TaskType.BOOK_FULL_CRAWL
+                    || task.getType() == CrawlerTask.TaskType.BOOK_UPDATE_CHECK) {
+                if (!metadataOnly) {
+                    book.setCrawlStatus(CrawlerBook.CrawlStatus.CRAWLING_METADATA);
+                    bookRepository.save(book);
+                }
                 log.info("[采集任务] 开始解析书籍信息: taskId={}, book={}, url={}",
                         taskId, bookName(book), book.getBookUrl());
                 CrawlerHttpClient.FetchResult detailResponse = httpClient.get(site, book.getBookUrl());
@@ -731,6 +755,23 @@ public class CrawlerTaskService {
                         taskId, bookName(book), metadata.author(), metadata.status(), metadata.chapterListUrl());
                 recordCrawlerEvent(task, "书籍信息解析完毕", "作者：" + metadata.author()
                         + "；状态：" + metadata.status() + "；目录地址：" + metadata.chapterListUrl());
+                if (metadataOnly) {
+                    bookRepository.save(book);
+                    task.setStatus(CrawlerTask.TaskStatus.SUCCESS);
+                    task.setTotalCount(1);
+                    task.setSuccessCount(1);
+                    task.setWaitingCount(0);
+                    task.setFinishedAt(LocalDateTime.now());
+                    task.setCurrentChapter(null);
+                    task = finishIfRunning(task);
+                    if (task != null) {
+                        log.info("[采集任务] 书籍元数据刷新完成: taskId={}, book={}, category={}, tags={}",
+                                taskId, bookName(book), book.getCategory(), book.getTags());
+                        recordCrawlerEvent(task, "书籍元数据刷新完成", "分类：" + book.getCategory()
+                                + "；标签：" + book.getTags());
+                    }
+                    return;
+                }
                 book.setCrawlStatus(CrawlerBook.CrawlStatus.CRAWLING_CHAPTER_LIST); bookRepository.save(book);
                 log.info("[采集任务] 开始解析章节目录: taskId={}, book={}, url={}",
                         taskId, bookName(book), metadata.chapterListUrl());
@@ -1143,7 +1184,8 @@ public class CrawlerTaskService {
                     || task.getStatus() == CrawlerTask.TaskStatus.WAITING).ifPresent(task -> {
                 task.setStatus(CrawlerTask.TaskStatus.FAILED); task.setErrorMessage(message);
                 task.setFinishedAt(LocalDateTime.now()); taskRepository.save(task);
-                if (task.getCrawlerBook() != null) {
+                if (task.getCrawlerBook() != null
+                        && task.getType() != CrawlerTask.TaskType.BOOK_METADATA) {
                     task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.FAILED);
                     bookRepository.save(task.getCrawlerBook());
                 }
@@ -1231,7 +1273,8 @@ public class CrawlerTaskService {
                 task.setFinishedAt(null);
                 task.setCurrentChapter(null);
                 taskRepository.save(task);
-                if (task.getCrawlerBook() != null) {
+                if (task.getCrawlerBook() != null
+                        && task.getType() != CrawlerTask.TaskType.BOOK_METADATA) {
                     CrawlerBook book = task.getCrawlerBook();
                     List<CrawlerChapter> interruptedChapters = chapterRepository
                             .findByCrawlerBookAndCrawlStatus(book, CrawlerChapter.CrawlStatus.CRAWLING);
@@ -1266,7 +1309,8 @@ public class CrawlerTaskService {
             task.setStatus(CrawlerTask.TaskStatus.PAUSED);
             task.setErrorMessage(message);
             taskRepository.save(task);
-            if (task.getCrawlerBook() != null) {
+            if (task.getCrawlerBook() != null
+                    && task.getType() != CrawlerTask.TaskType.BOOK_METADATA) {
                 task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.PAUSED);
                 bookRepository.save(task.getCrawlerBook());
             }

@@ -321,6 +321,98 @@ class CrawlerTaskManagementTest {
     }
 
     @Test
+    void refreshesOnlyBookMetadataAndPreservesCompletedCrawlState() throws Exception {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("春宵阁")
+                .baseUrl("https://www.chunxiaoge.com").enabled(true).build();
+        com.aibook.model.entity.CrawlerSiteRule rule =
+                new com.aibook.model.entity.CrawlerSiteRule();
+        site.attachRule(rule);
+        CrawlerBook book = CrawlerBook.builder().id(8L).site(site).bookName("旧标题")
+                .bookUrl("https://www.chunxiaoge.com/book/499184/")
+                .category("旧分类").tags("旧标签")
+                .crawlStatus(CrawlerBook.CrawlStatus.COMPLETED).chapterCount(7).build();
+        CrawlerTask task = CrawlerTask.builder().user(user).site(site).crawlerBook(book)
+                .type(CrawlerTask.TaskType.BOOK_METADATA).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerChapterRepository chapters = mock(CrawlerChapterRepository.class);
+        CrawlerHttpClient http = mock(CrawlerHttpClient.class);
+        BookCrawlerParser parser = mock(BookCrawlerParser.class);
+        when(tasks.findById(task.getId())).thenAnswer(invocation -> {
+            if (task.getStatus() != CrawlerTask.TaskStatus.SUCCESS) return Optional.of(task);
+            return Optional.of(CrawlerTask.builder().id(task.getId()).user(user).site(site)
+                    .crawlerBook(book).type(CrawlerTask.TaskType.BOOK_METADATA)
+                    .status(CrawlerTask.TaskStatus.RUNNING).build());
+        });
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(books.save(any(CrawlerBook.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(parser.supports(site)).thenReturn(true);
+        when(http.get(site, book.getBookUrl()))
+                .thenReturn(new CrawlerHttpClient.FetchResult("detail", 200, 10, null, null));
+        when(parser.parseBookDetail("detail", book.getBookUrl(), rule))
+                .thenReturn(new BookCrawlerParser.ParsedBook("499184", "下运河风情", "以泪洗面奶",
+                        "cover", "description", "乡村", List.of("乱交", "村姑"), "已完结",
+                        "第7章", book.getBookUrl()));
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
+                chapters, tasks, mock(CrawlerScanResultRepository.class),
+                mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
+                mock(OperationLogService.class), mock(CrawlerExportService.class), http,
+                List.of(parser), mock(ApplicationContext.class), mock(CrawlerSettingsService.class));
+        try {
+            service.run(task.getId());
+
+            assertThat(book.getBookName()).isEqualTo("下运河风情");
+            assertThat(book.getCategory()).isEqualTo("乡村");
+            assertThat(book.getTags()).isEqualTo("乱交\n村姑");
+            assertThat(book.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.COMPLETED);
+            assertThat(book.getChapterCount()).isEqualTo(7);
+            assertThat(task.getStatus()).isEqualTo(CrawlerTask.TaskStatus.SUCCESS);
+            verify(parser, never()).parseChapterList(anyString(), anyString(), any());
+            verifyNoInteractions(chapters);
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void failedMetadataRefreshDoesNotChangeBookCrawlState() throws Exception {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站")
+                .baseUrl("https://example.com").enabled(true).build();
+        site.attachRule(new com.aibook.model.entity.CrawlerSiteRule());
+        CrawlerBook book = CrawlerBook.builder().id(8L).site(site).bookName("状态保护")
+                .bookUrl("https://example.com/book/8")
+                .crawlStatus(CrawlerBook.CrawlStatus.COMPLETED).build();
+        CrawlerTask task = CrawlerTask.builder().user(user).site(site).crawlerBook(book)
+                .type(CrawlerTask.TaskType.BOOK_METADATA).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerHttpClient http = mock(CrawlerHttpClient.class);
+        BookCrawlerParser parser = mock(BookCrawlerParser.class);
+        when(tasks.findById(task.getId())).thenReturn(Optional.of(task));
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(parser.supports(site)).thenReturn(true);
+        when(http.get(site, book.getBookUrl())).thenThrow(new IOException("连接失败"));
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
+                mock(CrawlerChapterRepository.class), tasks, mock(CrawlerScanResultRepository.class),
+                mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
+                mock(OperationLogService.class), mock(CrawlerExportService.class), http,
+                List.of(parser), mock(ApplicationContext.class), mock(CrawlerSettingsService.class));
+        try {
+            service.run(task.getId());
+
+            assertThat(task.getStatus()).isEqualTo(CrawlerTask.TaskStatus.FAILED);
+            assertThat(book.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.COMPLETED);
+            verify(books, never()).save(any());
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void pauseDuringFailedRequestLeavesCurrentChapterReadyToContinue() throws Exception {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站").build();

@@ -101,9 +101,11 @@ public class CrawlerController {
     @PostMapping("/books/{id}/continue") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView continueBook(Authentication auth, @PathVariable Long id) { return taskService.continueBook(user(auth), id); }
     @PostMapping("/books/{id}/retry-failures") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView retryFailures(Authentication auth, @PathVariable Long id) { return taskService.retryFailures(user(auth), id); }
     @PostMapping("/books/{id}/check-updates") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView checkUpdates(Authentication auth, @PathVariable Long id) { return taskService.checkUpdates(user(auth), id); }
+    @PostMapping("/books/{id}/refresh-metadata") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView refreshMetadata(Authentication auth, @PathVariable Long id) { return taskService.refreshMetadata(user(auth), id); }
     @PutMapping("/books/{id}/crawl-status") public BookView crawlStatus(Authentication auth, @PathVariable Long id, @Valid @RequestBody BookCrawlStatusRequest request) { return taskService.setBookStatus(user(auth), id, CrawlerBook.CrawlStatus.valueOf(request.status()), request.autoUpdateEnabled()); }
     @PutMapping("/books/{id}/library-sync") public BookView librarySync(Authentication auth, @PathVariable Long id, @Valid @RequestBody LibrarySyncRequest request) { return taskService.setLibrarySync(user(auth), id, request.enabled()); }
     @PostMapping("/books/batch/crawl") @ResponseStatus(HttpStatus.ACCEPTED) public List<TaskView> batchCrawl(Authentication auth, @Valid @RequestBody BatchBookRequest request) { return taskService.batchCrawl(user(auth), request.bookIds()); }
+    @PostMapping("/books/batch/refresh-metadata") @ResponseStatus(HttpStatus.ACCEPTED) public List<TaskView> batchRefreshMetadata(Authentication auth, @Valid @RequestBody BatchBookRequest request) { return taskService.batchRefreshMetadata(user(auth), request.bookIds()); }
     @PutMapping("/books/batch/crawl-status") public List<BookView> batchCrawlStatus(
             Authentication auth, @Valid @RequestBody BatchBookStatusRequest request) {
         return taskService.setBookStatuses(user(auth), request.bookIds(),
