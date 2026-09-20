@@ -48,12 +48,13 @@ data class ShelfUiState(
 ) {
     val filteredBooks: List<LocalBook>
         get() {
+            val downloadedRemoteIds = books.mapNotNull { it.remoteBookId }.toSet()
             val matchingRemote = when (folderSelection) {
                 ShelfFolderSelection.All -> remoteBooks
                 ShelfFolderSelection.Favorites -> remoteBooks.filter { it.favorite }
                 ShelfFolderSelection.Unfiled,
                 is ShelfFolderSelection.Folder -> emptyList()
-            }.filter {
+            }.filter { it.remoteBookId !in downloadedRemoteIds }.filter {
                 query.isBlank() || it.title.contains(query, true) || it.author?.contains(query, true) == true
             }
             return ShelfBookSorter.sort(visibleBooks + matchingRemote, sortOption)
@@ -318,6 +319,7 @@ class ShelfViewModel(
                             shelved = true,
                             visibleInStore = false,
                             source = "SERVER",
+                            remoteBookId = remoteId,
                             importedAt = Instant.EPOCH
                         )
                     }

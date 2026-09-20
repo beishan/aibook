@@ -9,10 +9,12 @@ data class ReadingProgressDTO(
     val versionId: Long? = null,
     val currentChapter: String? = null,
     val currentChapterTitle: String? = null,
+    val locator: String? = null,
     val chapterProgress: Int = 0,
     val totalProgress: Int = 0,
     val readingTimeSeconds: Long = 0,
-    val lastReadAt: String? = null
+    val lastReadAt: String? = null,
+    val updatedAt: String? = null
 )
 
 @Serializable
@@ -20,7 +22,8 @@ data class SaveProgressRequest(
     val currentChapter: String? = null,
     val currentChapterTitle: String? = null,
     val chapterProgress: Int = 0,
-    val totalProgress: Int = 0
+    val totalProgress: Int = 0,
+    val locator: String? = null
 )
 
 @Serializable

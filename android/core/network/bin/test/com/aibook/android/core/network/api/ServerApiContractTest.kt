@@ -63,7 +63,8 @@ class ServerApiContractTest {
                     currentChapter = "chapter-18",
                     currentChapterTitle = "第 18 章",
                     chapterProgress = 42,
-                    totalProgress = 37
+                    totalProgress = 37,
+                    locator = "{\"chapterIndex\":17,\"lineIndex\":8}"
                 )
             )
             val request = server.takeRequest()
@@ -72,6 +73,7 @@ class ServerApiContractTest {
             assertEquals("/api/reading-progress/book/7", request.path)
             assertContains(body, "\"currentChapter\":\"chapter-18\"")
             assertContains(body, "\"totalProgress\":37")
+            assertContains(body, "\\\"lineIndex\\\":8")
             assertEquals(37, saved.totalProgress)
         } finally {
             server.close()

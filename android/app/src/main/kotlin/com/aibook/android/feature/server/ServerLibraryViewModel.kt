@@ -178,11 +178,11 @@ class ServerLibraryViewModel(
 
             when (_uiState.value.section) {
                 ServerLibrarySection.ALL -> loadBooks(
-                    serverRepository.getBooks(size = 100).map { it.content },
+                    serverRepository.getAllBooks(),
                     shelfIds
                 )
                 ServerLibrarySection.FAVORITES -> loadBooks(
-                    serverRepository.getFavoriteBooks().map { it.content },
+                    serverRepository.getAllFavoriteBooks(),
                     shelfIds
                 )
                 ServerLibrarySection.SHELF -> loadBooks(

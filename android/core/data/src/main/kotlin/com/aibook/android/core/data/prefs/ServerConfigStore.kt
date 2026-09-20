@@ -95,7 +95,8 @@ class ServerConfigStore(
         chapter: String?,
         chapterTitle: String?,
         chapterProgress: Int,
-        totalProgress: Int
+        totalProgress: Int,
+        locator: String? = null
     ) {
         context.serverConfigStore.edit { prefs ->
             val prefix = "pending_progress_${bookId}_"
@@ -105,6 +106,9 @@ class ServerConfigStore(
             else prefs[stringPreferencesKey("${prefix}title")] = chapterTitle
             prefs[intPreferencesKey("${prefix}chapter_percent")] = chapterProgress
             prefs[intPreferencesKey("${prefix}total_percent")] = totalProgress
+            if (locator == null) prefs.remove(stringPreferencesKey("${prefix}locator"))
+            else prefs[stringPreferencesKey("${prefix}locator")] = locator
+            prefs[stringPreferencesKey("${prefix}saved_at")] = System.currentTimeMillis().toString()
         }
     }
 
@@ -117,7 +121,11 @@ class ServerConfigStore(
             chapter = prefs[stringPreferencesKey("${prefix}chapter")],
             chapterTitle = prefs[stringPreferencesKey("${prefix}title")],
             chapterProgress = prefs[intPreferencesKey("${prefix}chapter_percent")] ?: total,
-            totalProgress = total
+            totalProgress = total,
+            locator = prefs[stringPreferencesKey("${prefix}locator")],
+            savedAtEpochMillis = prefs[stringPreferencesKey("${prefix}saved_at")]
+                ?.toLongOrNull()
+                ?: 0L
         )
     }
 
@@ -128,6 +136,8 @@ class ServerConfigStore(
             prefs.remove(stringPreferencesKey("${prefix}title"))
             prefs.remove(intPreferencesKey("${prefix}chapter_percent"))
             prefs.remove(intPreferencesKey("${prefix}total_percent"))
+            prefs.remove(stringPreferencesKey("${prefix}locator"))
+            prefs.remove(stringPreferencesKey("${prefix}saved_at"))
         }
     }
 }
@@ -136,5 +146,7 @@ data class PendingReadingProgress(
     val chapter: String?,
     val chapterTitle: String?,
     val chapterProgress: Int,
-    val totalProgress: Int
+    val totalProgress: Int,
+    val locator: String?,
+    val savedAtEpochMillis: Long
 )

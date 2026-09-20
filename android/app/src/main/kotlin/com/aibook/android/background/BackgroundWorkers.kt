@@ -80,34 +80,69 @@ class BookDownloadWorker(context: Context, params: WorkerParameters) : Coroutine
         val locator = ServiceLocator.get(applicationContext)
         val task = locator.downloadTaskRepository.getById(taskId) ?: return Result.failure()
         if (task.status == DownloadStatus.PAUSED || task.status == DownloadStatus.CANCELLED) return Result.success()
-        val connection = locator.opdsConnectionRepository.getById(task.connectionId)
-            ?: return fail(taskId, "数据源不存在")
         locator.downloadTaskRepository.update(taskId, DownloadStatus.RUNNING, task.progress, task.downloadedBytes, task.totalBytes)
         setForeground(TaskNotifications.foreground(applicationContext, taskId.hashCode(), task.title, task.progress))
         return try {
             var lastPersistedProgress = -1
             val partial = partialFile(applicationContext, taskId)
-            val downloadedFile = locator.opdsCatalogService.downloadTo(
-                connection,
-                task.href,
-                partial,
-                onProgress = { downloaded, total ->
-                    val progress = total?.takeIf { it > 0 }?.let { (downloaded * 100 / it).toInt() } ?: 0
-                    setProgressAsync(workDataOf("progress" to progress, "downloaded" to downloaded, "total" to (total ?: -1L)))
-                    if (progress != lastPersistedProgress) {
-                        lastPersistedProgress = progress
-                        runBlocking { locator.downloadTaskRepository.update(taskId, DownloadStatus.RUNNING, progress, downloaded, total) }
-                        TaskNotifications.showProgress(applicationContext, taskId.hashCode(), task.title, progress)
-                    }
-                },
-                isCancelled = { isStopped }
-            )
-            val bytes = downloadedFile.readBytes()
+            val isServerDownload = task.connectionId == DownloadQueueManager.SERVER_CONNECTION_ID
+            val bytes = if (isServerDownload) {
+                downloadServerBook(locator, task, partial).also {
+                    locator.downloadTaskRepository.update(taskId, DownloadStatus.RUNNING, 90, it.size.toLong(), it.size.toLong())
+                }
+            } else {
+                val connection = locator.opdsConnectionRepository.getById(task.connectionId)
+                    ?: return fail(taskId, "数据源不存在")
+                locator.opdsCatalogService.downloadTo(
+                    connection,
+                    task.href,
+                    partial,
+                    onProgress = { downloaded, total ->
+                        val progress = total?.takeIf { it > 0 }?.let { (downloaded * 100 / it).toInt() } ?: 0
+                        setProgressAsync(workDataOf("progress" to progress, "downloaded" to downloaded, "total" to (total ?: -1L)))
+                        if (progress != lastPersistedProgress) {
+                            lastPersistedProgress = progress
+                            runBlocking { locator.downloadTaskRepository.update(taskId, DownloadStatus.RUNNING, progress, downloaded, total) }
+                            TaskNotifications.showProgress(applicationContext, taskId.hashCode(), task.title, progress)
+                        }
+                    },
+                    isCancelled = { isStopped }
+                ).readBytes()
+            }
             locator.downloadTaskRepository.update(taskId, DownloadStatus.RUNNING, 95, bytes.size.toLong(), bytes.size.toLong())
-            val result = locator.bookRepository.importDownloadedBook(task.fileName, bytes, task.title)
+            val result = locator.bookRepository.importDownloadedBook(
+                fileName = task.fileName,
+                bytes = bytes,
+                fallbackTitle = task.title,
+                source = if (isServerDownload) "SERVER" else "OPDS",
+                shelved = isServerDownload,
+                remoteBookId = task.href.toLongOrNull().takeIf { isServerDownload }
+            )
             if (result is ImportResult.Failed || result is ImportResult.UnsupportedFormat) {
                 fail(taskId, if (result is ImportResult.Failed) result.message else "不支持该文件格式")
             } else {
+                if (isServerDownload) {
+                    val importedBook = when (result) {
+                        is ImportResult.Added -> result.book
+                        is ImportResult.Replaced -> result.book
+                        is ImportResult.Restored -> result.book
+                        is ImportResult.Duplicate -> result.existingBook
+                        else -> null
+                    }
+                    val serverBookId = task.href.toLongOrNull()
+                    if (importedBook != null && serverBookId != null) {
+                        locator.serverRepository.getBookById(serverBookId).getOrNull()?.let { metadata ->
+                            locator.bookRepository.updateBookMetadata(
+                                id = importedBook.id,
+                                title = metadata.title,
+                                author = metadata.author,
+                                description = metadata.description,
+                                rating = metadata.rating?.toFloat(),
+                                tags = metadata.tagNames.orEmpty()
+                            )
+                        }
+                    }
+                }
                 locator.downloadTaskRepository.update(taskId, DownloadStatus.COMPLETED, 100, bytes.size.toLong(), bytes.size.toLong())
                 partial.delete()
                 TaskNotifications.show(applicationContext, taskId.hashCode(), "下载完成", task.title)
@@ -128,6 +163,21 @@ class BookDownloadWorker(context: Context, params: WorkerParameters) : Coroutine
     private suspend fun fail(id: String, message: String): Result {
         ServiceLocator.get(applicationContext).downloadTaskRepository.update(id, DownloadStatus.FAILED, 0, error = message)
         return Result.failure(workDataOf("error" to message))
+    }
+
+    private suspend fun downloadServerBook(
+        locator: ServiceLocator,
+        task: com.aibook.android.core.data.repository.DownloadTask,
+        target: File
+    ): ByteArray {
+        val bookId = task.href.toLongOrNull() ?: error("云端书籍 ID 无效")
+        val metadata = locator.serverRepository.getBookById(bookId).getOrThrow()
+        if (metadata.format.equals("structured", ignoreCase = true)) {
+            val content = locator.serverRepository.getProcessedContent(bookId).getOrThrow().text
+            require(content.isNotBlank()) { "云端结构化书籍没有可下载正文" }
+            return content.toByteArray(Charsets.UTF_8)
+        }
+        return locator.serverRepository.downloadBookContent(bookId, target).getOrThrow().readBytes()
     }
 
     companion object { const val KEY_TASK_ID = "task_id" }
@@ -178,6 +228,14 @@ class DownloadQueueManager(private val context: Context) {
         return id
     }
 
+    suspend fun enqueueServer(bookId: Long, title: String, format: String?): String {
+        val extension = if (format.equals("structured", ignoreCase = true)) "txt"
+        else format?.lowercase()?.takeIf { it in setOf("txt", "epub") }
+            ?: error("当前仅支持下载 TXT、EPUB 和结构化书籍")
+        val safeTitle = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "云端书籍-$bookId" }
+        return enqueue("server:$bookId", SERVER_CONNECTION_ID, title, bookId.toString(), "$safeTitle.$extension")
+    }
+
     suspend fun pause(id: String) {
         val task = locator.downloadTaskRepository.getById(id) ?: return
         locator.downloadTaskRepository.update(id, DownloadStatus.PAUSED, task.progress, task.downloadedBytes, task.totalBytes)
@@ -215,6 +273,10 @@ class DownloadQueueManager(private val context: Context) {
     }
 
     private fun workName(id: String) = "book-download-$id"
+
+    companion object {
+        const val SERVER_CONNECTION_ID = "SERVER"
+    }
 }
 
 private fun partialFile(context: Context, id: String): File = File(context.cacheDir, "downloads/$id.part")

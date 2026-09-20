@@ -28,6 +28,8 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.io.File
+import java.time.LocalDateTime
+import java.time.ZoneId
 
 class ServerRepository(
     private val serverConfigStore: ServerConfigStore
@@ -118,6 +120,14 @@ class ServerRepository(
         return runCatching { getBookApi().getFavoriteBooks(page = page) }
     }
 
+    suspend fun getAllBooks(pageSize: Int = 100): Result<List<BookDTO>> = runCatching {
+        collectBookPages { page -> getBookApi().getBooks(page = page, size = pageSize) }
+    }
+
+    suspend fun getAllFavoriteBooks(pageSize: Int = 100): Result<List<BookDTO>> = runCatching {
+        collectBookPages { page -> getBookApi().getFavoriteBooks(page = page, size = pageSize) }
+    }
+
     suspend fun getBookById(id: Long): Result<BookDTO> {
         return runCatching { getBookApi().getBookById(id) }
     }
@@ -125,8 +135,11 @@ class ServerRepository(
     suspend fun recordBookOpen(bookId: Long, versionId: Long? = null): Result<Unit> =
         runCatching { getBookApi().recordBookOpen(bookId, versionId) }
 
-    suspend fun getProcessedContent(bookId: Long): Result<ProcessedContentResponse> {
-        return runCatching { getBookApi().getProcessedContent(bookId) }
+    suspend fun getProcessedContent(
+        bookId: Long,
+        versionId: Long? = null
+    ): Result<ProcessedContentResponse> {
+        return runCatching { getBookApi().getProcessedContent(bookId, versionId) }
     }
 
     suspend fun downloadBookContent(
@@ -156,9 +169,10 @@ class ServerRepository(
         chapter: String?,
         chapterTitle: String? = null,
         chapterProgress: Int,
-        totalProgress: Int
+        totalProgress: Int,
+        locator: String? = null
     ): Result<Unit> {
-        val request = SaveProgressRequest(chapter, chapterTitle, chapterProgress, totalProgress)
+        val request = SaveProgressRequest(chapter, chapterTitle, chapterProgress, totalProgress, locator)
         val result = runCatching {
             getReadingProgressApi().saveProgress(
                 bookId,
@@ -170,7 +184,7 @@ class ServerRepository(
             serverConfigStore.clearPendingReadingProgress(bookId)
         } else {
             serverConfigStore.savePendingReadingProgress(
-                bookId, chapter, chapterTitle, chapterProgress, totalProgress
+                bookId, chapter, chapterTitle, chapterProgress, totalProgress, locator
             )
         }
         return result.map { }
@@ -180,8 +194,16 @@ class ServerRepository(
         bookId: Long,
         versionId: Long? = null
     ): Result<ReadingProgressDTO> {
-        flushPendingReadingProgress(bookId, versionId)
-        return runCatching { getReadingProgressApi().getProgress(bookId, versionId) }
+        val remote = runCatching { getReadingProgressApi().getProgress(bookId, versionId) }
+        val current = remote.getOrNull() ?: return remote
+        val pending = serverConfigStore.pendingReadingProgress(bookId) ?: return remote
+        val remoteUpdatedAt = current.updatedAt.toEpochMillisOrNull()
+        if (remoteUpdatedAt != null && pending.savedAtEpochMillis < remoteUpdatedAt) {
+            serverConfigStore.clearPendingReadingProgress(bookId)
+            return remote
+        }
+        val flushed = flushPendingReadingProgress(bookId, versionId, pending)
+        return if (flushed.isSuccess) flushed else remote
     }
 
     suspend fun addReadingTime(
@@ -198,9 +220,11 @@ class ServerRepository(
         }
     }.map { }
 
-    private suspend fun flushPendingReadingProgress(bookId: Long, versionId: Long?) {
-        val pending = serverConfigStore.pendingReadingProgress(bookId) ?: return
-        runCatching {
+    private suspend fun flushPendingReadingProgress(
+        bookId: Long,
+        versionId: Long?,
+        pending: com.aibook.android.core.data.prefs.PendingReadingProgress
+    ): Result<ReadingProgressDTO> = runCatching {
             getReadingProgressApi().saveProgress(
                 bookId,
                 versionId,
@@ -208,11 +232,11 @@ class ServerRepository(
                     pending.chapter,
                     pending.chapterTitle,
                     pending.chapterProgress,
-                    pending.totalProgress
+                    pending.totalProgress,
+                    pending.locator
                 )
             )
         }.onSuccess { serverConfigStore.clearPendingReadingProgress(bookId) }
-    }
 
     suspend fun getShelf(): Result<ShelfOverviewDTO> =
         runCatching { getServerLibraryApi().getShelf() }
@@ -314,5 +338,23 @@ class ServerRepository(
 
     private suspend fun getServerLibraryApi(): ServerLibraryApi {
         return ApiServiceFactory.createServerLibraryApi(ensureRetrofit())
+    }
+
+    private suspend fun collectBookPages(loader: suspend (Int) -> BookPage): List<BookDTO> {
+        val books = mutableListOf<BookDTO>()
+        var pageNumber = 0
+        do {
+            val page = loader(pageNumber)
+            books += page.content
+            pageNumber += 1
+        } while (!page.last && pageNumber < page.totalPages)
+        return books
+    }
+
+    private fun String?.toEpochMillisOrNull(): Long? {
+        if (this.isNullOrBlank()) return null
+        return runCatching {
+            LocalDateTime.parse(this).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }.getOrNull()
     }
 }

@@ -26,19 +26,21 @@ class ServerLibraryDtosTest {
     @Test
     fun `reading progress preserves chapter metadata`() {
         val response = ApiServiceFactory.json.decodeFromString<ReadingProgressDTO>(
-            """{"bookId":7,"versionId":2,"currentChapter":"chapter-8","currentChapterTitle":"黑暗森林","chapterProgress":36,"totalProgress":58}"""
+            """{"bookId":7,"versionId":2,"currentChapter":"chapter-8","currentChapterTitle":"黑暗森林","locator":"{\"chapterIndex\":7,\"lineIndex\":18}","chapterProgress":36,"totalProgress":58}"""
         )
         val requestJson = ApiServiceFactory.json.encodeToString(
             SaveProgressRequest(
                 currentChapter = response.currentChapter,
                 currentChapterTitle = response.currentChapterTitle,
                 chapterProgress = response.chapterProgress,
-                totalProgress = response.totalProgress
+                totalProgress = response.totalProgress,
+                locator = response.locator
             )
         )
 
         assertEquals(2L, response.versionId)
         assertEquals("黑暗森林", response.currentChapterTitle)
+        assertTrue(requestJson.contains("\\\"lineIndex\\\":18"))
         assertTrue(requestJson.contains("\"totalProgress\":58"))
         assertTrue(requestJson.contains("\"currentChapterTitle\":\"黑暗森林\""))
     }

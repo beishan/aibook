@@ -40,6 +40,7 @@ import com.aibook.android.core.reader.ReaderHighlight
 import com.aibook.android.core.reader.ReaderProgressCalculator
 import com.aibook.android.core.reader.TextChapterParser
 import com.aibook.android.core.reader.TextFileDecoder
+import com.aibook.android.core.network.api.dto.structuredChapters
 import com.aibook.android.di.ServiceLocator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +52,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
+import org.json.JSONObject
 
 data class ReaderUiState(
     val book: LocalBook? = null,
@@ -64,6 +66,7 @@ data class ReaderUiState(
     val currentScrollOffset: Int = 0,
     val isRemote: Boolean = false,
     val remoteBookId: Long? = null,
+    val remoteVersionId: Long? = null,
     val remoteProgress: ReadingProgress? = null,
     val settings: ReaderSettings = ReaderSettings(),
     val importedFonts: List<ReaderImportedFont> = emptyList(),
@@ -152,6 +155,7 @@ class ReaderViewModel(
                 errorMessage = null,
                 isRemote = false,
                 remoteBookId = null,
+                remoteVersionId = null,
                 remoteProgress = null
             )
 
@@ -163,11 +167,36 @@ class ReaderViewModel(
 
             _state.value = _state.value.copy(
                 book = book,
+                isRemote = book.remoteBookId != null,
+                remoteBookId = book.remoteBookId,
                 currentChapterIndex = book.progress.chapterIndex ?: 0,
                 currentLineIndex = book.progress.lineIndex ?: 0,
                 currentScrollOffset = book.progress.scrollOffset,
                 scrollProgress = book.progress.percent
             )
+            val linkedRemoteBookId = book.remoteBookId
+            if (linkedRemoteBookId != null) {
+                serverRepository.getReadingProgress(linkedRemoteBookId).getOrNull()?.let { saved ->
+                    val locator = saved.locator?.let(::decodeRemoteLocator)
+                    _state.update {
+                        it.copy(
+                            remoteVersionId = saved.versionId,
+                            remoteProgress = ReadingProgress(
+                                chapterHref = saved.currentChapter,
+                                chapterTitle = saved.currentChapterTitle,
+                                chapterIndex = locator?.chapterIndex,
+                                lineIndex = locator?.lineIndex,
+                                scrollOffset = locator?.scrollOffset ?: 0,
+                                percent = (saved.totalProgress / 100f).coerceIn(0f, 1f)
+                            ),
+                            currentChapterIndex = locator?.chapterIndex ?: book.progress.chapterIndex ?: 0,
+                            currentLineIndex = locator?.lineIndex ?: book.progress.lineIndex ?: 0,
+                            currentScrollOffset = locator?.scrollOffset ?: book.progress.scrollOffset,
+                            scrollProgress = (saved.totalProgress / 100f).coerceIn(0f, 1f)
+                        )
+                    }
+                }
+            }
             observeBookmarks(book.id)
             observeHighlights(book.id)
 
@@ -256,15 +285,21 @@ class ReaderViewModel(
                 errorMessage = null,
                 isRemote = true,
                 remoteBookId = bookId,
+                remoteVersionId = null,
                 remoteProgress = null
             )
             try {
                 serverRepository.getReadingProgress(bookId).getOrNull()?.let { saved ->
+                    val locator = saved.locator?.let(::decodeRemoteLocator)
                     _state.update {
                         it.copy(
+                            remoteVersionId = saved.versionId,
                             remoteProgress = ReadingProgress(
                                 chapterHref = saved.currentChapter,
                                 chapterTitle = saved.currentChapterTitle,
+                                chapterIndex = locator?.chapterIndex,
+                                lineIndex = locator?.lineIndex,
+                                scrollOffset = locator?.scrollOffset ?: 0,
                                 percent = (saved.totalProgress / 100f).coerceIn(0f, 1f)
                             ),
                             scrollProgress = (saved.totalProgress / 100f).coerceIn(0f, 1f)
@@ -272,12 +307,17 @@ class ReaderViewModel(
                     }
                 }
                 val metadata = serverRepository.getBookById(bookId).getOrThrow()
-                serverRepository.recordBookOpen(bookId)
+                val versionId = _state.value.remoteVersionId
+                serverRepository.recordBookOpen(bookId, versionId)
+                if (metadata.format.equals("structured", ignoreCase = true)) {
+                    loadRemoteStructuredBook(bookId, versionId)
+                    return@launch
+                }
                 val format = metadata.format
                     ?.let { BookFormat.fromFileName("book.${it.lowercase()}") }
                     ?: throw IllegalArgumentException("暂不支持该书籍格式")
                 val cacheFile = File(appContext.cacheDir, "server-books/$bookId.${format.extension}")
-                val downloaded = serverRepository.downloadBookContent(bookId, cacheFile)
+                val downloaded = serverRepository.downloadBookContent(bookId, cacheFile, versionId)
                 if (downloaded.isFailure && (!cacheFile.exists() || cacheFile.length() == 0L)) {
                     throw downloaded.exceptionOrNull() ?: IllegalStateException("下载书籍失败")
                 }
@@ -822,12 +862,18 @@ class ReaderViewModel(
             )
         }
         if (state.isRemote && state.remoteBookId != null) {
+            val chapterLineCount = chapter?.content?.lineSequence()?.count()?.coerceAtLeast(1) ?: 1
+            val chapterProgress = ((state.currentLineIndex.toFloat() / chapterLineCount) * 100)
+                .toInt()
+                .coerceIn(0, 100)
             serverRepository.saveReadingProgress(
                 bookId = state.remoteBookId,
+                versionId = state.remoteVersionId,
                 chapter = chapter?.href,
                 chapterTitle = chapter?.title,
-                chapterProgress = (percent * 100).toInt(),
-                totalProgress = (percent * 100).toInt()
+                chapterProgress = chapterProgress,
+                totalProgress = (percent * 100).toInt(),
+                locator = encodeRemoteLocator(state)
             )
         }
     }
@@ -839,7 +885,7 @@ class ReaderViewModel(
         val seconds = ((System.currentTimeMillis() - startedAt) / 1000).coerceAtLeast(0)
         state.book?.id?.let { bookRepository.addReadingDuration(it, seconds) }
         state.remoteBookId?.takeIf { state.isRemote }?.let {
-            serverRepository.addReadingTime(it, seconds)
+            serverRepository.addReadingTime(it, seconds, state.remoteVersionId)
         }
         readingStartedAtMillis = System.currentTimeMillis()
     }
@@ -894,7 +940,49 @@ class ReaderViewModel(
         }
     }
 
+    private suspend fun loadRemoteStructuredBook(bookId: Long, versionId: Long?) {
+        val response = serverRepository.getProcessedContent(bookId, versionId).getOrThrow()
+        val chapters = response.structuredChapters().mapIndexed { index, info ->
+            ReaderChapter(
+                index = index,
+                title = info.title,
+                href = "structured:${info.key}",
+                content = response.text.substring(info.startIndex, info.endIndex)
+                    .removePrefix(info.title)
+                    .trim()
+            )
+        }
+        applyChapters(chapters, response.text)
+    }
+
+    private data class RemoteLocator(
+        val chapterIndex: Int?,
+        val lineIndex: Int?,
+        val scrollOffset: Int
+    )
+
+    private fun decodeRemoteLocator(value: String): RemoteLocator? = runCatching {
+        val json = JSONObject(value)
+        RemoteLocator(
+            chapterIndex = json.optInt("chapterIndex").takeIf { json.has("chapterIndex") },
+            lineIndex = json.optInt("lineIndex").takeIf { json.has("lineIndex") },
+            scrollOffset = json.optInt("scrollOffset", 0).coerceAtLeast(0)
+        )
+    }.getOrNull()
+
+    private fun encodeRemoteLocator(state: ReaderUiState): String = JSONObject()
+        .put("type", "aibook-android")
+        .put("chapterIndex", state.currentChapterIndex)
+        .put("lineIndex", state.currentLineIndex)
+        .put("scrollOffset", state.currentScrollOffset)
+        .toString()
+
     private fun applyChapters(chapters: List<ReaderChapter>, fallbackText: String?) {
+        val activeProgress = if (_state.value.remoteBookId != null) {
+            _state.value.remoteProgress ?: _state.value.book?.progress
+        } else {
+            _state.value.book?.progress
+        }
         if (chapters.isEmpty()) {
             val loaded = fallbackText?.takeIf { it.isNotBlank() }?.let { text ->
                 listOf(ReaderChapter(0, "正文", "fallback", text))
@@ -903,15 +991,15 @@ class ReaderViewModel(
                 loadedChapters = loaded,
                 chapters = emptyList(),
                 currentChapterIndex = 0,
-                currentLineIndex = (_state.value.book?.progress ?: _state.value.remoteProgress)?.lineIndex ?: 0,
-                currentScrollOffset = (_state.value.book?.progress ?: _state.value.remoteProgress)?.scrollOffset ?: 0,
-                scrollProgress = (_state.value.book?.progress ?: _state.value.remoteProgress)?.percent ?: 0f,
+                currentLineIndex = activeProgress?.lineIndex ?: 0,
+                currentScrollOffset = activeProgress?.scrollOffset ?: 0,
+                scrollProgress = activeProgress?.percent ?: 0f,
                 isLoading = false,
                 errorMessage = if (loaded.isEmpty()) "未解析到可阅读内容" else null
             )
             return
         }
-        val savedProgress = _state.value.book?.progress ?: _state.value.remoteProgress
+        val savedProgress = activeProgress
         val initialIndex = ReaderChapterSelection.selectInitialIndex(
             chapters = chapters,
             preferredHref = savedProgress?.chapterHref,

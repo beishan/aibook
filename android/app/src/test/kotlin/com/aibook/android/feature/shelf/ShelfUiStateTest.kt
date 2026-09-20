@@ -20,7 +20,8 @@ class ShelfUiStateTest {
         format = BookFormat.TXT,
         uri = "",
         favorite = true,
-        shelved = true
+        shelved = true,
+        remoteBookId = 7L
     )
 
     @Test
@@ -44,5 +45,17 @@ class ShelfUiStateTest {
         )
 
         assertEquals(listOf("server:7"), state.filteredBooks.map { it.id })
+    }
+
+    @Test
+    fun `downloaded server book replaces cloud placeholder`() {
+        val downloaded = localBook.copy(id = "downloaded-7", remoteBookId = 7L)
+        val state = ShelfUiState(
+            books = listOf(downloaded),
+            visibleBooks = listOf(downloaded),
+            remoteBooks = listOf(remoteBook)
+        )
+
+        assertEquals(listOf("downloaded-7"), state.filteredBooks.map { it.id })
     }
 }

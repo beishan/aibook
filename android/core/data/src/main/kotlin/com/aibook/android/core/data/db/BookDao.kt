@@ -79,6 +79,9 @@ interface BookDao {
     @Query("UPDATE books SET shelved = :shelved WHERE id = :id")
     suspend fun setShelved(id: String, shelved: Boolean)
 
+    @Query("UPDATE books SET remoteBookId = :remoteBookId, source = :source, shelved = :shelved WHERE id = :id")
+    suspend fun linkRemoteBook(id: String, remoteBookId: Long, source: String, shelved: Boolean)
+
     @Query("UPDATE books SET visibleInStore = :visibleInStore WHERE id = :id")
     suspend fun setStoreVisible(id: String, visibleInStore: Boolean)
 

@@ -46,6 +46,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -68,6 +69,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aibook.android.core.data.repository.ServerRepository
+import com.aibook.android.background.DownloadQueueManager
 import com.aibook.android.core.network.api.dto.BookDTO
 import com.aibook.android.core.network.api.dto.ReadingProgressDTO
 import com.aibook.android.di.ServiceLocator
@@ -109,21 +111,24 @@ fun BackendCollectionScreen(
     val state by viewModel.uiState.collectAsState()
     var showList by rememberSaveable { mutableStateOf(listMode) }
     var shelfFilter by rememberSaveable { mutableIntStateOf(0) }
+    var searchVisible by rememberSaveable { mutableStateOf(false) }
+    var filtersVisible by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var formatFilterIndex by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(section, listId) {
         viewModel.selectSection(section)
         if (listId != null) viewModel.selectBookList(listId)
     }
-    val visibleBooks = state.books.filter { book ->
-        when (shelfFilter) {
-            1 -> book.id in state.shelfBookIds
-            2 -> book.id !in state.shelfBookIds
-            else -> true
-        }
-    }
+    val formatFilter = BackendFormatFilter.entries.getOrElse(formatFilterIndex) { BackendFormatFilter.ALL }
+    val visibleBooks = filterBackendBooks(state.books, query, formatFilter, shelfFilter, state.shelfBookIds)
     val collectionState = when {
         state.isLoading -> BookCollectionState.Loading
         state.errorMessage != null -> BookCollectionState.Error(state.errorMessage.orEmpty())
-        visibleBooks.isEmpty() -> BookCollectionState.Empty(if (section == ServerLibrarySection.FAVORITES) "暂未收藏书籍" else "这里还没有书籍")
+        visibleBooks.isEmpty() -> BookCollectionState.Empty(
+            if (query.isNotBlank() || formatFilter != BackendFormatFilter.ALL || shelfFilter != 0) "没有匹配的云端书籍"
+            else if (section == ServerLibrarySection.FAVORITES) "暂未收藏书籍"
+            else "这里还没有书籍"
+        )
         else -> BookCollectionState.Content(visibleBooks.map { it.asCollectionBook(viewModel.coverUrl(it), it.id in state.shelfBookIds) })
     }
     val resolvedTitle = if (section == ServerLibrarySection.LISTS) {
@@ -134,12 +139,33 @@ fun BackendCollectionScreen(
         modifier = Modifier.fillMaxSize(),
         navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
         actions = {
-            IconButton(onClick = {}) { Icon(Icons.Default.Search, "搜索") }
-            IconButton(onClick = {}) { Icon(Icons.Default.FilterList, "筛选") }
+            IconButton(onClick = { searchVisible = !searchVisible }) { Icon(Icons.Default.Search, "搜索") }
+            IconButton(onClick = { filtersVisible = !filtersVisible }) { Icon(Icons.Default.FilterList, "筛选") }
         }
     ) {
         CloudMockNotice()
         Spacer(Modifier.height(DesignTokens.Space12))
+        if (searchVisible) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                placeholder = { Text("搜索书名、作者、分类或标签") }
+            )
+            Spacer(Modifier.height(DesignTokens.Space12))
+        }
+        if (filtersVisible) {
+            Text("文件类型", fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(DesignTokens.Space8))
+            SlidingSegmentedControl(
+                options = BackendFormatFilter.entries.map { it.label },
+                selectedIndex = formatFilterIndex,
+                onSelected = { formatFilterIndex = it }
+            )
+            Spacer(Modifier.height(DesignTokens.Space12))
+        }
         if (section == ServerLibrarySection.FAVORITES) {
             SlidingSegmentedControl(
                 options = listOf("全部", "已加入书架", "未加入书架"),
@@ -326,7 +352,10 @@ data class BackendBookDetailState(
     val message: String? = null
 )
 
-class BackendBookDetailViewModel(private val repository: ServerRepository) : ViewModel() {
+class BackendBookDetailViewModel(
+    private val repository: ServerRepository,
+    private val downloadQueue: DownloadQueueManager
+) : ViewModel() {
     private val _state = MutableStateFlow(BackendBookDetailState())
     val state: StateFlow<BackendBookDetailState> = _state.asStateFlow()
 
@@ -399,11 +428,32 @@ class BackendBookDetailViewModel(private val repository: ServerRepository) : Vie
         }
     }
 
+    fun downloadToLocal() {
+        val book = _state.value.book ?: return
+        val id = book.id ?: return
+        if (CloudMockData.enabled) {
+            _state.update { it.copy(message = "Mock 数据暂不提供文件下载") }
+            return
+        }
+        viewModelScope.launch {
+            runCatching { downloadQueue.enqueueServer(id, book.title, book.format) }
+                .onSuccess {
+                    _state.update { state -> state.copy(message = "已加入下载队列，完成后会自动加入本地书架") }
+                }
+                .onFailure { error ->
+                    _state.update { state -> state.copy(message = error.message ?: "加入下载队列失败") }
+                }
+        }
+    }
+
     companion object {
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as Application
-                BackendBookDetailViewModel(ServiceLocator.get(app).serverRepository)
+                BackendBookDetailViewModel(
+                    ServiceLocator.get(app).serverRepository,
+                    DownloadQueueManager(app)
+                )
             }
         }
     }
@@ -485,7 +535,8 @@ fun BackendBookDetailScreen(
                         viewModel::toggleFavorite
                     )
                     DetailActionButton(Icons.Default.CloudDownload, "下载到本地") {
-                        localMessage = if (CloudMockData.enabled) "Mock 数据暂不提供文件下载" else "云端书籍可在线阅读，本地下载任务将在下载管理中提供"
+                        localMessage = null
+                        viewModel.downloadToLocal()
                     }
                 }
                 Text(

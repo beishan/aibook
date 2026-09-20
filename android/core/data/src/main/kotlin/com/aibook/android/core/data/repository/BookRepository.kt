@@ -336,7 +336,10 @@ class BookRepository(
     suspend fun importDownloadedBook(
         fileName: String,
         bytes: ByteArray,
-        fallbackTitle: String? = null
+        fallbackTitle: String? = null,
+        source: String = "OPDS",
+        shelved: Boolean = false,
+        remoteBookId: Long? = null
     ): ImportResult = withContext(ioDispatcher) {
         val format = BookFormat.fromFileName(fileName)
             ?: return@withContext ImportResult.UnsupportedFormat(fileName)
@@ -344,11 +347,23 @@ class BookRepository(
 
         val existing = bookDao.getBySha256(sha256)
         if (existing != null) {
+            if (remoteBookId != null) {
+                bookDao.linkRemoteBook(existing.id, remoteBookId, source, existing.shelved || shelved)
+            } else if (shelved && !existing.shelved) {
+                bookDao.setShelved(existing.id, true)
+            }
+            val linkedExisting = existing.copy(
+                source = if (remoteBookId != null) source else existing.source,
+                remoteBookId = remoteBookId ?: existing.remoteBookId,
+                shelved = existing.shelved || shelved
+            )
             if (!existing.visibleInStore) {
                 bookDao.restoreStoreVisibility(existing.id)
-                return@withContext ImportResult.Restored(existing.copy(visibleInStore = true).toDomain())
+                return@withContext ImportResult.Restored(
+                    linkedExisting.copy(visibleInStore = true).toDomain()
+                )
             }
-            return@withContext ImportResult.Duplicate(existing.toDomain())
+            return@withContext ImportResult.Duplicate(linkedExisting.toDomain())
         }
 
         val bookId = UUID.nameUUIDFromBytes(sha256.toByteArray()).toString()
@@ -370,7 +385,9 @@ class BookRepository(
             uri = destFile.absolutePath,
             sha256 = sha256,
             coverUri = coverUri,
-            source = "OPDS",
+            source = source,
+            remoteBookId = remoteBookId,
+            shelved = shelved,
             importedAt = Instant.now()
         )
 

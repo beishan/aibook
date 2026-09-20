@@ -51,5 +51,8 @@ interface BookApi {
     ): ResponseBody
 
     @GET("api/books/{id}/content-processed")
-    suspend fun getProcessedContent(@Path("id") id: Long): ProcessedContentResponse
+    suspend fun getProcessedContent(
+        @Path("id") id: Long,
+        @Query("versionId") versionId: Long? = null
+    ): ProcessedContentResponse
 }

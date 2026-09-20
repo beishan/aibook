@@ -56,4 +56,22 @@ class EntityMappersPdfProgressTest {
         assertEquals("OPDS", domain.source)
         assertEquals("OPDS", domain.toEntity().source)
     }
+
+    @Test
+    fun remoteBookLinkRoundTripsThroughBookEntity() {
+        val entity = BookEntity(
+            id = "server-download",
+            title = "云端离线书籍",
+            format = "EPUB",
+            uri = "/downloads/server.epub",
+            source = "SERVER",
+            remoteBookId = 42L,
+            shelved = true
+        )
+
+        val domain = entity.toDomain()
+
+        assertEquals(42L, domain.remoteBookId)
+        assertEquals(42L, domain.toEntity().remoteBookId)
+    }
 }

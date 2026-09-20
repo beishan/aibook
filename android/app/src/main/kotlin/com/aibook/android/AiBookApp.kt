@@ -425,7 +425,8 @@ fun AiBookApp(initialDebugRoute: String? = null) {
                             }
                             navController.navigate(route)
                         },
-                        onBookListClick = { navController.navigate(Screen.BackendBookListDetail.createRoute(it)) }
+                        onBookListClick = { navController.navigate(Screen.BackendBookListDetail.createRoute(it)) },
+                        onSearchClick = { navController.navigate(Screen.StoreSearch.route) }
                     )
                 }
             }

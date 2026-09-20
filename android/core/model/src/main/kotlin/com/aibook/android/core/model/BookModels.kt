@@ -54,7 +54,8 @@ data class LocalBook(
     val lastReadAt: Instant? = null,
     val readingDurationSeconds: Long = 0,
     val progress: ReadingProgress = ReadingProgress(),
-    val source: String = "LOCAL"
+    val source: String = "LOCAL",
+    val remoteBookId: Long? = null
 )
 
 data class ShelfFolder(

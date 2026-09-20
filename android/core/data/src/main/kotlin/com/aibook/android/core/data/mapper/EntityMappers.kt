@@ -30,6 +30,7 @@ fun BookEntity.toDomain(): LocalBook {
         lastReadAt = lastReadAt?.let { Instant.ofEpochMilli(it) },
         readingDurationSeconds = readingDurationSeconds,
         source = source,
+        remoteBookId = remoteBookId,
         progress = ReadingProgress(
             chapterHref = progressChapterHref,
             chapterTitle = progressChapterTitle,
@@ -71,7 +72,8 @@ fun LocalBook.toEntity(): BookEntity {
         progressScrollOffset = progress.scrollOffset,
         progressPdfZoom = progress.pdfZoom,
         progressPositionLabel = progress.positionLabel,
-        source = source
+        source = source,
+        remoteBookId = remoteBookId
     )
 }
 

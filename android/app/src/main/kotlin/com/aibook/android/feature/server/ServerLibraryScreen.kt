@@ -59,6 +59,7 @@ fun ServerLibraryScreen(
     onBookListClick: (Long) -> Unit = {},
     onCreateBookList: () -> Unit = {},
     onEditBookList: (Long) -> Unit = {},
+    onSearchClick: () -> Unit = {},
     onBack: (() -> Unit)? = null,
     viewModel: ServerLibraryViewModel = viewModel(factory = ServerLibraryViewModel.Factory)
 ) {
@@ -81,7 +82,7 @@ fun ServerLibraryScreen(
         },
         actions = {
             if (overviewMode) {
-                Icon(Icons.Default.Search, contentDescription = "搜索", modifier = Modifier.noRippleClick {})
+                Icon(Icons.Default.Search, contentDescription = "搜索", modifier = Modifier.noRippleClick(onSearchClick))
                 Icon(Icons.Default.MoreVert, contentDescription = "更多", modifier = Modifier.noRippleClick(viewModel::loadOverview))
             } else {
                 Icon(Icons.Default.Refresh, contentDescription = "刷新", modifier = Modifier.noRippleClick(viewModel::refresh))
