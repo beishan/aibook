@@ -57,6 +57,29 @@ class ConfigBookCrawlerParserTest {
     }
 
     @Test
+    void parsesDefinitionListCategoryAndIndividualTagsWithoutDependingOnPositions() {
+        CrawlerSiteRule positionalRule = CrawlerSiteRule.builder()
+                .titleSelector("main h1").authorSelector("main dl:nth-of-type(1) dd")
+                .categorySelector("main dl:nth-of-type(2) dd")
+                .tagsSelector("main dl:nth-of-type(3) dd")
+                .statusSelector("main dl:nth-of-type(2) dd")
+                .chapterListUrlSelector("a.catalog").build();
+        String html = "<main><h1>下运河风情</h1>"
+                + "<dl><dt>作者</dt><dd>以泪洗面奶</dd></dl>"
+                + "<dl><dt>状态</dt><dd>已完结</dd></dl>"
+                + "<dl><dt>分类</dt><dd><a href='/cat/192/'>乡村</a></dd></dl>"
+                + "<dl><dt>标签</dt><dd><a href='/tag/2128/'>乱交</a>"
+                + "<a href='/tag/5024/'>村姑</a></dd></dl>"
+                + "<a class='catalog' href='list/'>章节目录</a></main>";
+
+        BookCrawlerParser.ParsedBook book = parser.parseBookDetail(
+                html, "https://www.chunxiaoge.com/book/499184/", positionalRule);
+
+        assertEquals("乡村", book.category());
+        assertEquals(List.of("乱交", "村姑"), book.tags());
+    }
+
+    @Test
     void parsesChaptersAndCleansContent() {
         String catalog = "<ul id='chapters'><li><a href='/c/1.html'>第一章 风起</a></li><li><a href='/c/2.html'>第二章</a></li></ul>";
         var chapters = parser.parseChapterList(catalog, "https://books.example.com/book/42/catalog", rule);

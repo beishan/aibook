@@ -52,8 +52,10 @@ public class ConfigBookCrawlerParser implements BookCrawlerParser {
         if (title.isBlank()) throw new IllegalArgumentException("书名解析结果为空，请检查书名 Selector");
         return new ParsedBook(externalId(pageUrl), title,
                 text(doc, rule.getAuthorSelector()), absoluteAttr(doc, rule.getCoverSelector(), "src"),
-                text(doc, rule.getDescriptionSelector()), text(doc, rule.getCategorySelector()),
-                texts(doc, rule.getTagsSelector()), text(doc, rule.getStatusSelector()),
+                text(doc, rule.getDescriptionSelector()),
+                metadataText(doc, rule.getCategorySelector(), Set.of("分类", "类型")),
+                metadataTexts(doc, rule.getTagsSelector(), Set.of("标签")),
+                text(doc, rule.getStatusSelector()),
                 text(doc, rule.getLatestChapterSelector()),
                 firstNonBlank(absoluteAttr(doc, rule.getChapterListUrlSelector(), "href"), pageUrl));
     }
@@ -99,6 +101,32 @@ public class ConfigBookCrawlerParser implements BookCrawlerParser {
         if (selector == null || selector.isBlank()) return List.of();
         return doc.select(selector.trim()).stream().map(Element::text).map(String::trim)
                 .filter(value -> !value.isBlank()).distinct().toList();
+    }
+
+    private String metadataText(Document doc, String selector, Set<String> labels) {
+        Element value = definitionValue(doc, labels);
+        return value == null ? text(doc, selector) : value.text().trim();
+    }
+
+    private List<String> metadataTexts(Document doc, String selector, Set<String> labels) {
+        Element value = definitionValue(doc, labels);
+        if (value == null) return texts(doc, selector);
+        List<String> linkedValues = value.select("a").stream()
+                .map(Element::text).map(String::trim)
+                .filter(item -> !item.isBlank()).distinct().toList();
+        if (!linkedValues.isEmpty()) return linkedValues;
+        return Arrays.stream(value.text().split("[\\s,，、/]+"))
+                .map(String::trim).filter(item -> !item.isBlank()).distinct().toList();
+    }
+
+    private Element definitionValue(Document doc, Set<String> labels) {
+        for (Element term : doc.select("dl > dt")) {
+            String label = term.text().replaceAll("[\\s:：]+", "").trim();
+            if (!labels.contains(label)) continue;
+            Element value = term.nextElementSibling();
+            if (value != null && "dd".equals(value.normalName())) return value;
+        }
+        return null;
     }
 
     private String scopedText(Element root, String selector) {

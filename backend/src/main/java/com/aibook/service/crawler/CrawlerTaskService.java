@@ -57,6 +57,7 @@ public class CrawlerTaskService {
         return thread;
     });
     private final Set<String> active = ConcurrentHashMap.newKeySet();
+    private final Map<String, Thread> runningThreads = new ConcurrentHashMap<>();
     private volatile boolean shuttingDown;
     private static final List<CrawlerTask.TaskStatus> ACTIVE_STATUSES = List.of(
             CrawlerTask.TaskStatus.WAITING, CrawlerTask.TaskStatus.RUNNING, CrawlerTask.TaskStatus.PAUSED);
@@ -412,24 +413,26 @@ public class CrawlerTaskService {
                     task.setStatus(CrawlerTask.TaskStatus.PAUSED);
                     taskRepository.save(task);
                     removeQueuedTask(taskId);
+                    interruptRunningTask(taskId);
                 }
             }
             case "cancel" -> {
                 task.setStatus(CrawlerTask.TaskStatus.CANCELLED);
                 taskRepository.save(task);
                 removeQueuedTask(taskId);
+                interruptRunningTask(taskId);
             }
             case "resume" -> {
                 if (task.getStatus() != CrawlerTask.TaskStatus.PAUSED
                         && task.getStatus() != CrawlerTask.TaskStatus.FAILED)
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "只有暂停或失败任务可以继续");
-                if (active.contains(taskId))
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "任务仍在停止中，请稍后再继续");
+                boolean waitingForPreviousRun = active.contains(taskId);
                 task.setStatus(CrawlerTask.TaskStatus.WAITING);
                 task.setErrorMessage(null);
                 task.setFinishedAt(null);
                 taskRepository.save(task);
-                submit(task.getId());
+                // 旧线程退出时会在 CrawlerJob.finally 中自动重新入队，避免同一任务并发执行。
+                if (!waitingForPreviousRun) submit(task.getId());
             }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的任务操作");
             }
@@ -484,7 +487,7 @@ public class CrawlerTaskService {
             case "pause" -> status == CrawlerTask.TaskStatus.RUNNING
                     || status == CrawlerTask.TaskStatus.WAITING;
             case "resume" -> (status == CrawlerTask.TaskStatus.PAUSED
-                    || status == CrawlerTask.TaskStatus.FAILED) && !active.contains(task.getId());
+                    || status == CrawlerTask.TaskStatus.FAILED);
             case "cancel" -> status == CrawlerTask.TaskStatus.RUNNING
                     || status == CrawlerTask.TaskStatus.WAITING
                     || status == CrawlerTask.TaskStatus.PAUSED;
@@ -647,6 +650,11 @@ public class CrawlerTaskService {
         return false;
     }
 
+    private void interruptRunningTask(String taskId) {
+        Thread worker = runningThreads.get(taskId);
+        if (worker != null) worker.interrupt();
+    }
+
     private final class CrawlerJob implements Runnable, Comparable<CrawlerJob> {
         private final String taskId;
         private final CrawlerTask.Priority priority;
@@ -656,9 +664,12 @@ public class CrawlerTaskService {
             this.taskId = taskId; this.priority = priority; this.queueOrder = queueOrder; this.sequence = sequence;
         }
         @Override public void run() {
+            Thread worker = Thread.currentThread();
+            runningThreads.put(taskId, worker);
             try {
                 CrawlerTaskService.this.run(taskId);
             } finally {
+                runningThreads.remove(taskId, worker);
                 active.remove(taskId);
                 resubmitAfterConcurrencyYield(taskId);
             }

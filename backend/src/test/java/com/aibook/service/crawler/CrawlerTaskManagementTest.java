@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -215,6 +216,74 @@ class CrawlerTaskManagementTest {
             assertThat(book.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.PAUSED);
             verify(tasks).save(task);
             verify(books).save(book);
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void resumesImmediatelyWhilePausedWorkerIsStillStopping() throws Exception {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站")
+                .baseUrl("https://example.com").enabled(true).build();
+        com.aibook.model.entity.CrawlerSiteRule rule = new com.aibook.model.entity.CrawlerSiteRule();
+        rule.setDiscoveryItemSelector(".book");
+        site.attachRule(rule);
+        com.aibook.model.entity.CrawlerDiscoveryPage page =
+                com.aibook.model.entity.CrawlerDiscoveryPage.builder().id(7L).site(site)
+                        .pageName("暂停恢复测试").pageUrl("https://example.com/discovery")
+                        .maxPages(1).build();
+        Map<String, CrawlerTask> stored = new ConcurrentHashMap<>();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> {
+            CrawlerTask saved = invocation.getArgument(0);
+            stored.put(saved.getId(), saved);
+            return saved;
+        });
+        when(tasks.findById(anyString())).thenAnswer(invocation ->
+                Optional.ofNullable(stored.get(invocation.getArgument(0))));
+        com.aibook.repository.CrawlerDiscoveryPageRepository pages =
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class);
+        when(pages.findById(page.getId())).thenReturn(Optional.of(page));
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        when(management.ownedTask(eq(user), anyString())).thenAnswer(invocation ->
+                stored.get(invocation.getArgument(1)));
+        when(management.taskView(any(CrawlerTask.class))).thenCallRealMethod();
+        CrawlerHttpClient http = mock(CrawlerHttpClient.class);
+        CountDownLatch firstRequestStarted = new CountDownLatch(1);
+        CountDownLatch resumedRequestStarted = new CountDownLatch(1);
+        AtomicInteger requests = new AtomicInteger();
+        when(http.validateSiteUrl(eq(site), anyString())).thenAnswer(invocation ->
+                URI.create(invocation.getArgument(1)));
+        when(http.get(site, page.getPageUrl())).thenAnswer(invocation -> {
+            if (requests.incrementAndGet() == 1) {
+                firstRequestStarted.countDown();
+                new CountDownLatch(1).await();
+            }
+            resumedRequestStarted.countDown();
+            return new CrawlerHttpClient.FetchResult("page", 200, 1, null, null);
+        });
+        BookCrawlerParser parser = mock(BookCrawlerParser.class);
+        when(parser.supports(site)).thenReturn(true);
+        when(parser.parseBookList("page", page.getPageUrl(), rule)).thenReturn(List.of());
+        when(parser.parseNextBookListPage("page", page.getPageUrl(), rule)).thenReturn("");
+        CrawlerSettingsService settings = mock(CrawlerSettingsService.class);
+        when(settings.maxConcurrentTasks()).thenReturn(1);
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), pages,
+                mock(CrawlerBookRepository.class), mock(CrawlerChapterRepository.class), tasks,
+                mock(CrawlerScanResultRepository.class), mock(CrawlerTaskLogRepository.class), management,
+                mock(OperationLogService.class), mock(CrawlerExportService.class), http, List.of(parser),
+                mock(ApplicationContext.class), settings);
+        try {
+            var created = service.scanDiscoveryPage(user, page, false);
+            assertThat(firstRequestStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+            assertThat(service.command(user, created.id(), "pause").status()).isEqualTo("PAUSED");
+            assertThat(service.command(user, created.id(), "resume").status())
+                    .isIn("WAITING", "RUNNING");
+
+            assertThat(resumedRequestStarted.await(2, TimeUnit.SECONDS)).isTrue();
+            assertThat(requests).hasValue(2);
         } finally {
             service.shutdown();
         }
