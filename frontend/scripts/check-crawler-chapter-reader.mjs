@@ -26,6 +26,9 @@ assert.match(source, /first\.totalPages-1/, 'chapter navigation must work beyond
 assert.match(source, /preferencesStore\.setReaderSettings/, 'reading adjustments must use account preferences')
 assert.match(source, /handleChapterReaderKeydown/, 'chapter navigation must provide keyboard support')
 assert.match(source, /:global\(\.chapter-reader-dialog\)\{--el-dialog-padding-primary:0;/, 'reading surface must fill the dialog without outer padding')
-assert.match(source, /\.chapter-reader\{border:0;border-radius:16px\}/, 'reading surface must not draw a second outer border')
+assert.match(source, /:global\(\.chapter-reader-dialog\)\{[^}]*height:80vh;height:80dvh;/, 'chapter dialog must follow about 80 percent of the viewport height')
+assert.match(source, /:global\(\.chapter-reader-dialog\)[^}]*border:0!important;[^}]*background:transparent!important;[^}]*box-shadow:none!important/, 'outer dialog frame must be fully transparent and borderless')
+assert.match(source, /\.chapter-reader\{[^}]*height:100%;[^}]*border:0;[^}]*border-radius:18px/, 'reading surface must fill the dialog and own all four rounded corners')
+assert.match(source, /\.chapter-reader-stage\{[^}]*height:auto;min-height:0;/, 'reading content must expand into the available dialog height')
 
 console.log('Crawler chapter popup provides temporary reading mode without a table of contents')

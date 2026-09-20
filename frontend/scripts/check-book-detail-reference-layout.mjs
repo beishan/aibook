@@ -21,5 +21,6 @@ assert.match(source, /@media \(max-width: 1240px\)[\s\S]*\.book-side-card \{[\s\
 assert.match(source, /@media \(max-width: 768px\)[\s\S]*\.book-hero \{[\s\S]*grid-template-columns: 1fr/)
 assert.match(source, /role="tablist"/)
 assert.match(source, /@keydown="handleDetailTabKeydown\(\$event, index\)"/)
+assert.doesNotMatch(source, /hero-excerpt|heroExcerpt/)
 
-console.log('Book detail view matches the responsive reference layout and keeps accessible tabs')
+console.log('Book detail view matches the responsive reference layout, keeps accessible tabs, and omits the hero description excerpt')

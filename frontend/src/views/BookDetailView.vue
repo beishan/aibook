@@ -235,10 +235,6 @@
             </button>
           </div>
 
-          <blockquote v-if="heroExcerpt" class="hero-excerpt">
-            <p>{{ heroExcerpt }}</p>
-            <footer>— {{ book.author || '未知作者' }}</footer>
-          </blockquote>
         </div>
 
         <aside class="book-side-card" aria-label="书籍设置与信息">
@@ -1042,15 +1038,6 @@ const hasReadingProgress = computed(() => Boolean(
   || readingProgress.value?.currentChapter
   || (readingProgress.value?.totalProgress || 0) > 0,
 ))
-const heroExcerpt = computed(() => {
-  const description = String(book.value?.description || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  if (!description) return ''
-  const sentence = description.match(/^[^。！？!?]*[。！？!?]/)?.[0]?.trim() || description
-  return sentence.length > 92 ? `${sentence.slice(0, 92).trim()}…` : sentence
-})
-
 // 书单相关
 const showAddToListDialog = ref(false)
 const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
@@ -2828,30 +2815,6 @@ onMounted(() => {
 .rating-hint {
   color: var(--text-tertiary);
   font-size: 11px;
-}
-
-.hero-excerpt {
-  display: grid;
-  gap: 7px;
-  margin: 10px 0 0;
-  padding: 3px 0 3px 14px;
-  border-left: 2px solid var(--border-color);
-  color: var(--text-secondary);
-}
-
-.hero-excerpt p,
-.hero-excerpt footer {
-  margin: 0;
-}
-
-.hero-excerpt p {
-  line-height: 1.75;
-}
-
-.hero-excerpt footer {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  text-align: right;
 }
 
 /* 内容区 */

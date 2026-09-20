@@ -1,6 +1,6 @@
 {
   "name": "aibook-frontend",
-  "version": "1.44.0",
+  "version": "1.44.4",
   "description": "汗牛充栋 - 阅读书籍管理系统前端",
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test:crawler-queue-settings-draft": "node scripts/check-crawler-queue-settings-draft.mjs",
     "test:crawler-task-actions": "node scripts/check-crawler-task-actions.mjs",
+    "test:crawler-discovery-metadata": "node scripts/check-crawler-discovery-metadata-refresh.mjs",
     "test:crawler-polling-preference": "node scripts/check-crawler-polling-account-preference.mjs",
     "test:crawler-chapter-reader": "node scripts/check-crawler-chapter-reader.mjs",
     "test:reader-trial-layout": "node scripts/check-reader-trial-layout.mjs",
