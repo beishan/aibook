@@ -10,7 +10,6 @@
 
 ## Global Constraints
 
-- Read `/Users/beibei/aiprojects/ai-book/requires_1.md` before implementation.
 - Preserve existing user work in the dirty Android tree; do not revert unrelated changes.
 - Backend OPDS must support Basic Auth.
 - Android button pressed states must not use shadow or press projection effects.

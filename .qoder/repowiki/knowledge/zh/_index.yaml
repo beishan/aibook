@@ -13,7 +13,6 @@ modules:
             - .gitignore
             - AGENTS.md
             - CLAUDE.md
-            - requires_1.md
         source_files: []
         children:
             - android_app

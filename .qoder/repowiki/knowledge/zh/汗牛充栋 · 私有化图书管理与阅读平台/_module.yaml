@@ -6,7 +6,6 @@ scope:
     - .gitignore
     - AGENTS.md
     - CLAUDE.md
-    - requires_1.md
 source_files: []
 depends_on: []
 related_to: []
