@@ -3,6 +3,7 @@
     :model-value="visible"
     title="批量刮削元数据"
     width="600px"
+    append-to-body
     :close-on-click-modal="false"
     :close-on-press-escape="phase !== 'running'"
     @close="handleClose"

@@ -3,6 +3,7 @@
     v-model="dialogVisible"
     title="刮削书籍元数据"
     width="500px"
+    append-to-body
     :close-on-click-modal="false"
     @close="handleClose"
   >

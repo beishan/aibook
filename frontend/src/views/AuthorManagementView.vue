@@ -82,7 +82,7 @@
       </template>
     </div>
 
-    <el-dialog v-model="dialogVisible" title="新增作者" width="min(440px, 92vw)" @closed="authorName = ''">
+    <el-dialog v-model="dialogVisible" title="新增作者" width="min(440px, 92vw)" append-to-body @closed="authorName = ''">
       <el-form label-position="top" @submit.prevent>
         <el-form-item label="作者名称">
           <el-input

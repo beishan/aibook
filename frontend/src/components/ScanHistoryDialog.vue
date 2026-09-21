@@ -3,6 +3,7 @@
     :model-value="visible"
     title="扫描记录"
     width="min(1080px, 95vw)"
+    append-to-body
     destroy-on-close
     @open="loadHistory(0)"
     @close="emit('close')"

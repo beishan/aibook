@@ -237,7 +237,7 @@
       <template #footer><el-button @click="loadSiteConfigurationTemplate">导入模板</el-button><el-button @click="siteConfigurationImportDialog=false">取消</el-button><el-button type="primary" :loading="savingSiteConfiguration" :disabled="!siteConfigurationJsonText.trim()" @click="submitSiteConfigurationImport">导入网站</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="ruleManagerDialog" :title="`${ruleSite?.siteName || ''} · 规则管理`" width="min(1120px, 96vw)" destroy-on-close>
+    <el-dialog v-model="ruleManagerDialog" :title="`${ruleSite?.siteName || ''} · 规则管理`" width="min(1120px, 96vw)" append-to-body destroy-on-close>
       <div class="rule-manager-bar"><p>多个版本可以长期共存，但同一时间最多启用一条。</p><div><el-button :icon="Upload" @click="openImportDialog">导入 JSON</el-button><el-button type="primary" :icon="Plus" @click="openRuleEditor()">新建规则</el-button></div></div>
       <el-table v-if="ruleVersions.length" :data="ruleVersions" class="rule-table" max-height="58vh" :row-class-name="({row}: {row:CrawlerRuleVersion}) => row.enabled ? 'active-rule-row' : ''">
         <el-table-column label="版本" width="70"><template #default="{row}"><strong class="rule-version-text">v{{ row.version }}</strong></template></el-table-column>
@@ -297,7 +297,7 @@
       <template #footer><el-button v-if="ruleSite" @click="openRuleTest(ruleSite,ruleForm.rule)">测试当前编辑内容</el-button><el-button @click="ruleEditorDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveRule">保存规则</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="ruleTestDialog" title="规则在线测试" width="min(720px, 94vw)">
+    <el-dialog v-model="ruleTestDialog" title="规则在线测试" width="min(720px, 94vw)" append-to-body>
       <el-form label-position="top"><el-form-item label="书籍详情测试 URL"><el-input v-model="ruleTestUrl" placeholder="https://example.com/book/123/" /></el-form-item></el-form>
       <div v-if="ruleTestResult" class="test-result" :class="{failed:!ruleTestResult.success}">
         <template v-if="ruleTestResult.success"><div class="test-facts"><span><small>书名</small><b>{{ ruleTestResult.title }}</b></span><span><small>作者</small><b>{{ ruleTestResult.author || '未知' }}</b></span><span><small>分类</small><b>{{ ruleTestResult.category || '未识别' }}</b></span><span><small>来源状态</small><b>{{ ruleTestResult.bookStatus || '未识别' }}</b></span><span><small>目录</small><b>{{ ruleTestResult.chapterCount }} 章</b></span><span><small>正文样本</small><b>{{ ruleTestResult.contentLength }} 字</b></span></div><div v-if="ruleTestResult.tags?.length" class="metadata-tags"><el-tag v-for="tag in ruleTestResult.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></div><p><b>{{ ruleTestResult.sampleChapter }}</b> · {{ ruleTestResult.durationMillis }} ms</p><pre>{{ ruleTestResult.contentPreview }}</pre></template>
@@ -306,7 +306,7 @@
       <template #footer><el-button @click="ruleTestDialog=false">关闭</el-button><el-button type="primary" :loading="testingRule" @click="runRuleTest">测试详情、目录与正文</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="crawlDialog" title="URL 手动采集" width="min(560px, 94vw)">
+    <el-dialog v-model="crawlDialog" title="URL 手动采集" width="min(560px, 94vw)" append-to-body>
       <el-form label-position="top"><el-form-item label="采集网站"><el-select v-model="crawlForm.siteId" placeholder="选择已启用网站"><el-option v-for="site in sites.filter(s=>s.enabled)" :key="site.id" :label="site.siteName" :value="site.id" /></el-select></el-form-item><el-form-item label="书籍详情 URL"><el-input v-model="crawlForm.url" placeholder="https://example.com/book/123/" /></el-form-item></el-form>
       <template #footer><el-button @click="crawlDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="startCrawl">创建采集任务</el-button></template>
     </el-dialog>
@@ -453,7 +453,7 @@
         </section>
       </div>
     </el-drawer>
-    <el-dialog v-model="chapterDialog" width="min(760px, 94vw)" class="chapter-reader-dialog" :show-close="false" destroy-on-close @closed="closeChapterReader">
+    <el-dialog v-model="chapterDialog" width="min(760px, 94vw)" class="chapter-reader-dialog" :show-close="false" append-to-body destroy-on-close @closed="closeChapterReader">
       <div class="chapter-reader" :class="`chapter-reader--${chapterReaderTheme}`">
         <header class="chapter-reader-toolbar">
           <div class="chapter-reader-heading">

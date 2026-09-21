@@ -3,6 +3,7 @@
     :model-value="visible"
     title="重建书籍多版本"
     width="640px"
+    append-to-body
     :close-on-click-modal="false"
     :close-on-press-escape="phase !== 'running'"
     @close="handleClose"

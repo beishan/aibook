@@ -3,6 +3,7 @@
     :model-value="visible"
     :title="book ? `加入书单 · ${book.title}` : '加入书单'"
     width="min(560px, 92vw)"
+    append-to-body
     destroy-on-close
     @open="loadBookLists"
     @close="closeDialog"

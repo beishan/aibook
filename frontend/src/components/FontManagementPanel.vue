@@ -225,6 +225,7 @@
       v-model="directoryDialogVisible"
       title="新增字体扫描目录"
       width="min(640px, 92vw)"
+      append-to-body
       destroy-on-close
     >
       <p class="dialog-hint">浏览字体根目录，选择要加入扫描配置的目录。</p>
