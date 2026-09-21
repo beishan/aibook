@@ -3,6 +3,7 @@
     v-model="dialogVisible"
     title="编辑书籍"
     width="min(680px, calc(100vw - 32px))"
+    append-to-body
     :close-on-click-modal="false"
     destroy-on-close
     @closed="resetForm"

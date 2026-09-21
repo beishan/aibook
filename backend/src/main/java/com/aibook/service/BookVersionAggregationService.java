@@ -80,6 +80,17 @@ public class BookVersionAggregationService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int aggregatePair(Long primaryId, Long duplicateId, User user) {
+        return aggregatePairInternal(primaryId, duplicateId, user);
+    }
+
+    /** 在调用方事务中合并，供一次选择多本书时保证整体原子性。 */
+    @Transactional
+    public int aggregatePairInCurrentTransaction(
+            Long primaryId, Long duplicateId, User user) {
+        return aggregatePairInternal(primaryId, duplicateId, user);
+    }
+
+    private int aggregatePairInternal(Long primaryId, Long duplicateId, User user) {
         List<Book> books = bookRepository.findByIdInAndUser(
                 List.of(primaryId, duplicateId), user);
         Map<Long, Book> byId = books.stream()

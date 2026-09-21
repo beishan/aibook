@@ -125,6 +125,29 @@ public interface BookRepository extends JpaRepository<Book, Long> {
            "LOWER(b.description) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND" + LIBRARY_VISIBLE)
     Page<Book> searchByKeyword(@Param("user") User user, @Param("keyword") String keyword, Pageable pageable);
 
+    /** 版本导入候选：同名书籍优先，其余可通过书名、作者或 ISBN 浏览搜索。 */
+    @Query(
+            value = "SELECT b FROM Book b WHERE b.user = :user AND b.id <> :excludedId "
+                    + "AND b.deletedAt IS NULL AND (:keyword = '' "
+                    + "OR LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%')) "
+                    + "OR LOWER(b.author) LIKE LOWER(CONCAT('%', :keyword, '%')) "
+                    + "OR LOWER(b.isbn) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND"
+                    + LIBRARY_VISIBLE
+                    + " ORDER BY CASE WHEN LOWER(TRIM(b.title)) = LOWER(TRIM(:targetTitle)) "
+                    + "THEN 0 ELSE 1 END, b.title ASC, b.id ASC",
+            countQuery = "SELECT COUNT(b) FROM Book b WHERE b.user = :user "
+                    + "AND b.id <> :excludedId AND b.deletedAt IS NULL AND (:keyword = '' "
+                    + "OR LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%')) "
+                    + "OR LOWER(b.author) LIKE LOWER(CONCAT('%', :keyword, '%')) "
+                    + "OR LOWER(b.isbn) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND"
+                    + LIBRARY_VISIBLE)
+    Page<Book> findVersionImportCandidates(
+            @Param("user") User user,
+            @Param("excludedId") Long excludedId,
+            @Param("targetTitle") String targetTitle,
+            @Param("keyword") String keyword,
+            Pageable pageable);
+
     /**
      * 根据用户和分类查询书籍
      */

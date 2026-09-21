@@ -339,16 +339,10 @@
             >
               <span>⇄</span><span>转换格式</span>
             </button>
-            <label class="btn version-upload-button" :class="{ disabled: uploadingVersion }">
+            <button class="btn version-upload-button" type="button" :disabled="uploadingVersion" @click="openAddVersionDialog">
               <span>＋</span>
               <span>{{ uploadingVersion ? '上传中...' : '添加版本' }}</span>
-              <input
-                type="file"
-                accept=".txt,.epub,.pdf,.mobi,.azw3,.docx,.doc,.html,.htm,.md,.cbz,.cbr"
-                :disabled="uploadingVersion"
-                @change="handleVersionUpload"
-              />
-            </label>
+            </button>
           </div>
         </div>
         <div class="version-list">
@@ -809,6 +803,81 @@
     />
 
     <el-dialog
+      v-model="addVersionDialog"
+      title="添加书籍版本"
+      width="min(760px, calc(100vw - 32px))"
+      append-to-body
+      destroy-on-close
+      class="add-version-dialog"
+      :close-on-click-modal="!uploadingVersion && !importingVersions"
+      :close-on-press-escape="!uploadingVersion && !importingVersions"
+    >
+      <div class="add-version-mode" role="tablist" aria-label="添加版本方式" @keydown="handleAddVersionModeKey">
+        <span class="add-version-mode-indicator" :style="{ transform: `translateX(${addVersionMode === 'library' ? 100 : 0}%)` }" />
+        <button type="button" role="tab" :aria-selected="addVersionMode === 'upload'" :tabindex="addVersionMode === 'upload' ? 0 : -1" :class="{ active: addVersionMode === 'upload' }" @click="setAddVersionMode('upload')">本地上传</button>
+        <button type="button" role="tab" :aria-selected="addVersionMode === 'library'" :tabindex="addVersionMode === 'library' ? 0 : -1" :class="{ active: addVersionMode === 'library' }" @click="setAddVersionMode('library')">从已有书籍选择</button>
+      </div>
+
+      <div v-if="addVersionMode === 'upload'" class="version-upload-pane">
+        <span class="version-upload-mark" aria-hidden="true">⇧</span>
+        <div><strong>选择本地书籍文件</strong><p>支持 TXT、EPUB、PDF、MOBI、AZW3、DOCX、HTML、Markdown 和漫画压缩包。</p></div>
+        <button class="btn btn-primary" type="button" :disabled="uploadingVersion" @click="versionFileInput?.click()">{{ uploadingVersion ? '上传中…' : '选择文件' }}</button>
+        <input ref="versionFileInput" type="file" hidden accept=".txt,.epub,.pdf,.mobi,.azw3,.docx,.doc,.html,.htm,.md,.cbz,.cbr" :disabled="uploadingVersion" @change="handleVersionUpload" />
+      </div>
+
+      <div v-else-if="candidateStep === 'books'" class="version-library-pane">
+        <div class="version-candidate-toolbar">
+          <el-input v-model="candidateKeyword" clearable placeholder="搜索书名、作者或 ISBN" @keyup.enter="searchVersionCandidates" @clear="searchVersionCandidates" />
+          <el-button type="primary" @click="searchVersionCandidates">搜索</el-button>
+          <el-button v-if="candidateKeyword" @click="browseAllVersionCandidates">浏览全部</el-button>
+        </div>
+        <div class="version-candidate-hint"><span>{{ candidateKeyword === book?.title ? '默认展示同名书籍' : '正在浏览书库' }}</span><strong>已选择 {{ selectedCandidateBooks.length }} 本</strong></div>
+        <div v-loading="candidateLoading" class="version-candidate-list">
+          <button v-for="candidate in versionCandidates" :key="candidate.id" type="button" class="version-candidate" :class="{ selected: isVersionCandidateSelected(candidate.id) }" @click="toggleVersionCandidate(candidate)">
+            <el-checkbox :model-value="isVersionCandidateSelected(candidate.id)" tabindex="-1" @click.stop @change="toggleVersionCandidate(candidate)" />
+            <span class="version-candidate-cover">{{ candidate.title.slice(0, 1) }}</span>
+            <span class="version-candidate-info"><strong>{{ candidate.title }}</strong><small>{{ candidate.author || '未知作者' }} · {{ candidate.format.toUpperCase() }} · {{ candidate.versionCount }} 个版本</small></span>
+            <el-tag v-if="candidate.sameTitle" size="small" type="success" effect="plain">同名推荐</el-tag>
+          </button>
+          <el-empty v-if="!candidateLoading && !versionCandidates.length" :image-size="54" description="没有找到可选书籍" />
+        </div>
+        <div v-if="candidateTotal" class="version-candidate-pagination"><span>共 {{ candidateTotal }} 本</span><el-pagination v-model:current-page="candidatePage" :page-size="candidatePageSize" :total="candidateTotal" layout="prev, pager, next" small background @current-change="loadVersionCandidates" /></div>
+      </div>
+
+      <div v-else class="version-selection-pane">
+        <button class="version-selection-back" type="button" @click="candidateStep = 'books'">← 返回选择书籍</button>
+        <div class="version-selection-summary"><div><strong>选择要导入的版本</strong><p>已选 {{ selectedImportVersionCount }} 个版本，来自 {{ importSources.length }} 本书。</p></div></div>
+        <div class="version-source-list">
+          <section v-for="source in importSources" :key="source.book.id" class="version-source-group">
+            <header><div><strong>{{ source.book.title }}</strong><small>{{ source.book.author || '未知作者' }}</small></div><el-checkbox :model-value="source.selectedVersionIds.length === source.versions.length" :indeterminate="source.selectedVersionIds.length > 0 && source.selectedVersionIds.length < source.versions.length" :disabled="sourceHandling === 'MERGE'" @change="toggleAllSourceVersions(source, Boolean($event))">全选</el-checkbox></header>
+            <div v-for="version in source.versions" :key="version.id" class="import-version-row" @click="toggleImportVersion(source, version.id, !source.selectedVersionIds.includes(version.id))">
+              <el-checkbox :model-value="source.selectedVersionIds.includes(version.id)" :disabled="sourceHandling === 'MERGE'" @click.stop @change="toggleImportVersion(source, version.id, Boolean($event))" />
+              <span class="import-version-format">{{ version.format === 'structured' ? '在线' : version.format.toUpperCase() }}</span>
+              <span><strong>{{ version.displayName }}</strong><small>{{ formatFileSize(version.fileSize) }}<template v-if="version.chapterCount != null"> · {{ version.chapterCount }} 章</template></small></span>
+              <em v-if="version.primaryVersion">原始版本</em>
+            </div>
+          </section>
+        </div>
+        <div class="source-handling-panel">
+          <div><strong>导入后如何处理原书籍</strong><p>{{ sourceHandling === 'KEEP' ? '复制所选版本，原书籍及其阅读数据保持不变。' : '迁移全部版本及关联数据，原书籍将从书库中消失。' }}</p></div>
+          <div class="source-handling-switch" role="radiogroup" aria-label="原书籍处理方式" @keydown="handleSourceHandlingKey">
+            <span :style="{ transform: `translateX(${sourceHandling === 'MERGE' ? 100 : 0}%)` }" />
+            <button type="button" role="radio" :aria-checked="sourceHandling === 'KEEP'" :tabindex="sourceHandling === 'KEEP' ? 0 : -1" :class="{ active: sourceHandling === 'KEEP' }" @click="sourceHandling = 'KEEP'">保留原书籍</button>
+            <button type="button" role="radio" :aria-checked="sourceHandling === 'MERGE'" :tabindex="sourceHandling === 'MERGE' ? 0 : -1" :class="{ active: sourceHandling === 'MERGE' }" @click="selectMergeHandling">合并并移除</button>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <template v-if="addVersionMode === 'library'">
+          <el-button :disabled="importingVersions" @click="addVersionDialog = false">取消</el-button>
+          <el-button v-if="candidateStep === 'books'" type="primary" :loading="candidateVersionsLoading" :disabled="!selectedCandidateBooks.length" @click="prepareVersionImport">下一步：选择版本</el-button>
+          <el-button v-else type="primary" :loading="importingVersions" :disabled="!selectedImportVersionCount" @click="submitVersionImport">{{ sourceHandling === 'MERGE' ? '确认合并' : '导入所选版本' }}</el-button>
+        </template>
+      </template>
+    </el-dialog>
+
+    <el-dialog
       v-model="showCreateTagDialog"
       title="新建标签"
       width="min(440px, calc(100vw - 32px))"
@@ -977,6 +1046,22 @@ interface BookVersion {
   createdAt?: string
 }
 
+interface VersionCandidate {
+  id: number
+  title: string
+  author?: string
+  coverUrl?: string
+  format: string
+  versionCount: number
+  sameTitle: boolean
+}
+
+interface VersionImportSource {
+  book: VersionCandidate
+  versions: BookVersion[]
+  selectedVersionIds: number[]
+}
+
 const getDetailTabCount = (tab: DetailTabKey) => {
   if (tab === 'toc') return tocItems.value.length
   if (tab === 'bookmarks') return bookmarks.value.length
@@ -1010,6 +1095,28 @@ const bookmarksError = ref('')
 const versions = ref<BookVersion[]>([])
 const selectedVersionId = ref<number | null>(null)
 const uploadingVersion = ref(false)
+const addVersionDialog = ref(false)
+const addVersionMode = ref<'upload' | 'library'>('upload')
+const versionFileInput = ref<HTMLInputElement | null>(null)
+const candidateStep = ref<'books' | 'versions'>('books')
+const candidateKeyword = ref('')
+const candidatePage = ref(1)
+const candidatePageSize = 10
+const candidateTotal = ref(0)
+const candidateLoading = ref(false)
+const candidateVersionsLoading = ref(false)
+const versionCandidates = ref<VersionCandidate[]>([])
+const selectedCandidateBooks = ref<VersionCandidate[]>([])
+const importSources = ref<VersionImportSource[]>([])
+const sourceHandling = ref<'KEEP' | 'MERGE'>('KEEP')
+const importingVersions = ref(false)
+const selectedImportVersionCount = computed(() => importSources.value.reduce(
+  (total, source) => total + source.selectedVersionIds.length,
+  0,
+))
+const allImportVersionsSelected = computed(() => importSources.value.length > 0
+  && importSources.value.every(source => source.versions.length > 0
+    && source.selectedVersionIds.length === source.versions.length))
 const selectedVersion = computed(() =>
   versions.value.find(version => version.id === selectedVersionId.value) || null,
 )
@@ -1300,6 +1407,162 @@ const selectVersion = async (versionId: number) => {
   syncTocPageToCurrentChapter()
 }
 
+const openAddVersionDialog = () => {
+  addVersionMode.value = 'upload'
+  candidateStep.value = 'books'
+  candidateKeyword.value = book.value?.title || ''
+  candidatePage.value = 1
+  candidateTotal.value = 0
+  versionCandidates.value = []
+  selectedCandidateBooks.value = []
+  importSources.value = []
+  sourceHandling.value = 'KEEP'
+  addVersionDialog.value = true
+}
+
+const setAddVersionMode = (mode: 'upload' | 'library') => {
+  addVersionMode.value = mode
+  if (mode === 'library' && !versionCandidates.value.length && !candidateLoading.value) {
+    void loadVersionCandidates()
+  }
+}
+
+const handleAddVersionModeKey = (event: KeyboardEvent) => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  setAddVersionMode(event.key === 'ArrowLeft' || event.key === 'Home' ? 'upload' : 'library')
+  requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(
+    `.add-version-mode button:nth-of-type(${addVersionMode.value === 'upload' ? 1 : 2})`,
+  )?.focus())
+}
+
+const loadVersionCandidates = async () => {
+  if (!book.value) return
+  candidateLoading.value = true
+  try {
+    const { data } = await api.get(`/api/books/${book.value.id}/versions/candidates`, {
+      params: {
+        page: candidatePage.value - 1,
+        size: candidatePageSize,
+        keyword: candidateKeyword.value.trim() || undefined,
+      },
+    })
+    versionCandidates.value = data.content || []
+    candidateTotal.value = data.totalElements || 0
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '备选书籍加载失败')
+  } finally {
+    candidateLoading.value = false
+  }
+}
+
+const searchVersionCandidates = async () => {
+  candidatePage.value = 1
+  await loadVersionCandidates()
+}
+
+const browseAllVersionCandidates = async () => {
+  candidateKeyword.value = ''
+  candidatePage.value = 1
+  await loadVersionCandidates()
+}
+
+const isVersionCandidateSelected = (bookId: number) =>
+  selectedCandidateBooks.value.some(candidate => candidate.id === bookId)
+
+const toggleVersionCandidate = (candidate: VersionCandidate) => {
+  selectedCandidateBooks.value = isVersionCandidateSelected(candidate.id)
+    ? selectedCandidateBooks.value.filter(item => item.id !== candidate.id)
+    : [...selectedCandidateBooks.value, candidate]
+}
+
+const prepareVersionImport = async () => {
+  if (!selectedCandidateBooks.value.length) return
+  candidateVersionsLoading.value = true
+  try {
+    importSources.value = await Promise.all(selectedCandidateBooks.value.map(async candidate => {
+      const { data } = await api.get<BookVersion[]>(`/api/books/${candidate.id}/versions`)
+      const sourceVersions = data || []
+      return {
+        book: candidate,
+        versions: sourceVersions,
+        selectedVersionIds: sourceVersions.map(version => version.id),
+      }
+    }))
+    sourceHandling.value = 'KEEP'
+    candidateStep.value = 'versions'
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '备选版本加载失败')
+  } finally {
+    candidateVersionsLoading.value = false
+  }
+}
+
+const toggleAllSourceVersions = (source: VersionImportSource, selected: boolean) => {
+  source.selectedVersionIds = selected ? source.versions.map(version => version.id) : []
+}
+
+const toggleImportVersion = (
+  source: VersionImportSource,
+  versionId: number,
+  selected: boolean,
+) => {
+  if (sourceHandling.value === 'MERGE') return
+  source.selectedVersionIds = selected
+    ? [...source.selectedVersionIds.filter(id => id !== versionId), versionId]
+    : source.selectedVersionIds.filter(id => id !== versionId)
+}
+
+const selectMergeHandling = () => {
+  if (!allImportVersionsSelected.value) {
+    message.warning('合并并移除原书籍时，需要勾选每本备选书籍的全部版本')
+    return
+  }
+  sourceHandling.value = 'MERGE'
+}
+
+const handleSourceHandlingKey = (event: KeyboardEvent) => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  if (event.key === 'ArrowLeft' || event.key === 'Home') sourceHandling.value = 'KEEP'
+  else selectMergeHandling()
+  requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(
+    `.source-handling-switch button:nth-of-type(${sourceHandling.value === 'KEEP' ? 1 : 2})`,
+  )?.focus())
+}
+
+const submitVersionImport = async () => {
+  if (!book.value || !selectedImportVersionCount.value) return
+  if (sourceHandling.value === 'MERGE') {
+    const approved = await confirm(
+      `确定将 ${importSources.value.length} 本书完整合并到《${book.value.title}》吗？\n\n合并后原书籍会从书库中消失，版本、阅读进度、书签、批注和书单关联会迁移到当前书籍。`,
+    )
+    if (!approved) return
+  }
+  importingVersions.value = true
+  try {
+    await api.post(`/api/books/${book.value.id}/versions/import`, {
+      sourceHandling: sourceHandling.value,
+      sources: importSources.value
+        .filter(source => source.selectedVersionIds.length)
+        .map(source => ({
+          bookId: source.book.id,
+          versionIds: source.selectedVersionIds,
+        })),
+    })
+    const count = selectedImportVersionCount.value
+    addVersionDialog.value = false
+    await loadBook()
+    message.success(sourceHandling.value === 'MERGE'
+      ? `已合并 ${importSources.value.length} 本书，共导入 ${count} 个版本`
+      : `已导入 ${count} 个版本，原书籍已保留`)
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '版本导入失败')
+  } finally {
+    importingVersions.value = false
+  }
+}
+
 const handleVersionUpload = async (event: Event) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -1315,6 +1578,7 @@ const handleVersionUpload = async (event: Event) => {
     )
     await loadVersions()
     await selectVersion(response.data.id)
+    addVersionDialog.value = false
     message.success('新版本已添加')
   } catch (error: any) {
     message.error(error.response?.data?.message || '版本上传失败')
@@ -2663,6 +2927,163 @@ onMounted(() => {
 
 .version-upload-button input {
   display: none;
+}
+
+:global(.add-version-dialog .el-dialog__body) {
+  max-height: min(70vh, 720px);
+  overflow-y: auto;
+}
+
+.add-version-mode,
+.source-handling-switch {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-page);
+  isolation: isolate;
+}
+
+.add-version-mode { margin-bottom: 18px; }
+
+.add-version-mode-indicator,
+.source-handling-switch > span {
+  position: absolute;
+  inset: 4px auto 4px 4px;
+  z-index: -1;
+  width: calc((100% - 8px) / 2);
+  border: 1px solid var(--border-color-light);
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.24s cubic-bezier(.2, .8, .2, 1);
+}
+
+.add-version-mode button,
+.source-handling-switch button {
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.add-version-mode button.active,
+.source-handling-switch button.active { color: var(--primary); font-weight: 700; }
+.add-version-mode button:focus-visible,
+.source-handling-switch button:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+.version-upload-pane {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 150px;
+  padding: 24px;
+  border: 1px dashed var(--primary-alpha-30);
+  border-radius: 16px;
+  background: var(--primary-alpha-10);
+}
+
+.version-upload-mark {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--surface-card);
+  color: var(--primary);
+  font-size: 25px;
+}
+
+.version-upload-pane p,
+.version-selection-summary p,
+.source-handling-panel p { margin: 5px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
+.version-library-pane,
+.version-selection-pane { display: grid; gap: 12px; }
+.version-candidate-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
+.version-candidate-hint,
+.version-candidate-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-tertiary); font-size: 12px; }
+.version-candidate-hint strong { color: var(--primary); }
+.version-candidate-list { display: grid; min-height: 180px; gap: 7px; }
+
+.version-candidate {
+  display: grid;
+  grid-template-columns: auto 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 13px;
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease;
+}
+
+.version-candidate:hover,
+.version-candidate:focus-visible,
+.version-candidate.selected { border-color: var(--primary); outline: none; background: var(--primary-alpha-10); }
+.version-candidate-cover { display: grid; width: 38px; height: 44px; place-items: center; border-radius: 8px; background: var(--primary-gradient); color: #fff; font-family: 'Songti SC', serif; }
+.version-candidate-info,
+.import-version-row > span:nth-of-type(2) { display: grid; min-width: 0; gap: 4px; }
+.version-candidate-info strong,
+.version-candidate-info small,
+.import-version-row strong,
+.import-version-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.version-candidate-info small,
+.import-version-row small,
+.version-source-group header small { color: var(--text-secondary); font-size: 11px; }
+.version-selection-back { justify-self: start; padding: 0; border: 0; background: transparent; color: var(--primary); cursor: pointer; }
+.version-source-list { display: grid; gap: 12px; }
+.version-source-group { overflow: hidden; border: 1px solid var(--border-color-light); border-radius: 14px; }
+.version-source-group header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; background: var(--surface-elevated); }
+.version-source-group header > div { display: grid; min-width: 0; gap: 3px; }
+
+.import-version-row {
+  display: grid;
+  grid-template-columns: auto 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-color-light);
+  cursor: pointer;
+}
+
+.import-version-format { display: grid; height: 28px; place-items: center; border-radius: 7px; background: var(--primary-alpha-10); color: var(--primary); font-size: 10px; font-weight: 800; }
+.import-version-row em { color: var(--text-tertiary); font-size: 10px; font-style: normal; }
+
+.source-handling-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  align-items: center;
+  gap: 18px;
+  padding: 14px;
+  border: 1px solid var(--primary-alpha-20);
+  border-radius: 14px;
+  background: var(--primary-alpha-10);
+}
+
+@media (max-width: 640px) {
+  .version-upload-pane,
+  .source-handling-panel { grid-template-columns: minmax(0, 1fr); }
+  .version-upload-mark { display: none; }
+  .version-candidate-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .version-candidate-toolbar > :last-child { grid-column: 1 / -1; }
+  .version-candidate { grid-template-columns: auto 38px minmax(0, 1fr); }
+  .version-candidate :deep(.el-tag) { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .add-version-mode-indicator,
+  .source-handling-switch > span { transition: none; }
 }
 
 .version-list {
