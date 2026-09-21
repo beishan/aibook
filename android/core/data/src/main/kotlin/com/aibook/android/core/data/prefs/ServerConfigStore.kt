@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.aibook.android.core.data.security.PassthroughSecretCipher
 import com.aibook.android.core.data.security.SecretCipher
@@ -29,6 +30,8 @@ class ServerConfigStore(
         val WIFI_ONLY = booleanPreferencesKey("wifi_only_sync")
         val PERSONALIZED_RECOMMENDATIONS = booleanPreferencesKey("personalized_recommendations")
         val USAGE_STATISTICS = booleanPreferencesKey("usage_statistics")
+        val LAST_PROGRESS_SYNC_AT = longPreferencesKey("last_progress_sync_at")
+        val LAST_PROGRESS_SYNC_ERROR = stringPreferencesKey("last_progress_sync_error")
     }
 
     val serverUrl: Flow<String> = context.serverConfigStore.data.map { it[Keys.SERVER_URL] ?: "" }
@@ -44,6 +47,11 @@ class ServerConfigStore(
         context.serverConfigStore.data.map { it[Keys.PERSONALIZED_RECOMMENDATIONS] ?: true }
     val usageStatistics: Flow<Boolean> =
         context.serverConfigStore.data.map { it[Keys.USAGE_STATISTICS] ?: true }
+    val pendingProgressCount: Flow<Int> = context.serverConfigStore.data.map { preferences ->
+        preferences.asMap().keys.count { it.name.matches(Regex("pending_progress_\\d+_total_percent")) }
+    }
+    val lastProgressSyncAt: Flow<Long?> = context.serverConfigStore.data.map { it[Keys.LAST_PROGRESS_SYNC_AT] }
+    val lastProgressSyncError: Flow<String?> = context.serverConfigStore.data.map { it[Keys.LAST_PROGRESS_SYNC_ERROR] }
 
     val isLoggedIn: Flow<Boolean> = jwtToken.map { !it.isNullOrBlank() }
 
@@ -92,6 +100,7 @@ class ServerConfigStore(
 
     suspend fun savePendingReadingProgress(
         bookId: Long,
+        versionId: Long?,
         chapter: String?,
         chapterTitle: String?,
         chapterProgress: Int,
@@ -100,6 +109,8 @@ class ServerConfigStore(
     ) {
         context.serverConfigStore.edit { prefs ->
             val prefix = "pending_progress_${bookId}_"
+            if (versionId == null) prefs.remove(longPreferencesKey("${prefix}version_id"))
+            else prefs[longPreferencesKey("${prefix}version_id")] = versionId
             if (chapter == null) prefs.remove(stringPreferencesKey("${prefix}chapter"))
             else prefs[stringPreferencesKey("${prefix}chapter")] = chapter
             if (chapterTitle == null) prefs.remove(stringPreferencesKey("${prefix}title"))
@@ -118,6 +129,8 @@ class ServerConfigStore(
         val totalKey = intPreferencesKey("${prefix}total_percent")
         val total = prefs[totalKey] ?: return null
         return PendingReadingProgress(
+            bookId = bookId,
+            versionId = prefs[longPreferencesKey("${prefix}version_id")],
             chapter = prefs[stringPreferencesKey("${prefix}chapter")],
             chapterTitle = prefs[stringPreferencesKey("${prefix}title")],
             chapterProgress = prefs[intPreferencesKey("${prefix}chapter_percent")] ?: total,
@@ -132,6 +145,7 @@ class ServerConfigStore(
     suspend fun clearPendingReadingProgress(bookId: Long) {
         context.serverConfigStore.edit { prefs ->
             val prefix = "pending_progress_${bookId}_"
+            prefs.remove(longPreferencesKey("${prefix}version_id"))
             prefs.remove(stringPreferencesKey("${prefix}chapter"))
             prefs.remove(stringPreferencesKey("${prefix}title"))
             prefs.remove(intPreferencesKey("${prefix}chapter_percent"))
@@ -140,9 +154,40 @@ class ServerConfigStore(
             prefs.remove(stringPreferencesKey("${prefix}saved_at"))
         }
     }
+
+    suspend fun pendingReadingProgresses(): List<PendingReadingProgress> {
+        val preferences = context.serverConfigStore.data.first()
+        return preferences.asMap().keys.mapNotNull { key ->
+            Regex("pending_progress_(\\d+)_total_percent")
+                .matchEntire(key.name)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toLongOrNull()
+        }.distinct().mapNotNull { pendingReadingProgress(it) }
+    }
+
+    suspend fun clearAllPendingReadingProgress() {
+        val bookIds = pendingReadingProgresses().map { it.bookId }
+        bookIds.forEach { clearPendingReadingProgress(it) }
+    }
+
+    suspend fun markProgressSyncSuccess(timestamp: Long = System.currentTimeMillis()) {
+        context.serverConfigStore.edit { prefs ->
+            prefs[Keys.LAST_PROGRESS_SYNC_AT] = timestamp
+            prefs.remove(Keys.LAST_PROGRESS_SYNC_ERROR)
+        }
+    }
+
+    suspend fun markProgressSyncFailure(message: String) {
+        context.serverConfigStore.edit { prefs ->
+            prefs[Keys.LAST_PROGRESS_SYNC_ERROR] = message.take(200)
+        }
+    }
 }
 
 data class PendingReadingProgress(
+    val bookId: Long,
+    val versionId: Long?,
     val chapter: String?,
     val chapterTitle: String?,
     val chapterProgress: Int,

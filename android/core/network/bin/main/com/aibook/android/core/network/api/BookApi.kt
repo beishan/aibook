@@ -3,6 +3,8 @@ package com.aibook.android.core.network.api
 import com.aibook.android.core.network.api.dto.BookDTO
 import com.aibook.android.core.network.api.dto.BookPage
 import com.aibook.android.core.network.api.dto.ProcessedContentResponse
+import com.aibook.android.core.network.api.dto.StructuredChapterDTO
+import com.aibook.android.core.network.api.dto.StructuredManifestDTO
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -55,4 +57,17 @@ interface BookApi {
         @Path("id") id: Long,
         @Query("versionId") versionId: Long? = null
     ): ProcessedContentResponse
+
+    @GET("api/books/{id}/structured/manifest")
+    suspend fun getStructuredManifest(
+        @Path("id") id: Long,
+        @Query("versionId") versionId: Long? = null
+    ): StructuredManifestDTO
+
+    @GET("api/books/{id}/structured/chapters/{chapterId}")
+    suspend fun getStructuredChapter(
+        @Path("id") id: Long,
+        @Path("chapterId") chapterId: Long,
+        @Query("versionId") versionId: Long? = null
+    ): StructuredChapterDTO
 }

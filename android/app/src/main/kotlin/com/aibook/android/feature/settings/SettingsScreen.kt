@@ -102,6 +102,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import java.util.Date
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -952,6 +953,13 @@ fun SyncConnectionSettingsScreen(
 
         SectionLabel("同步规则")
         SoftCard {
+            DetailLine(
+                Icons.Default.CloudSync,
+                "阅读进度同步",
+                progressSyncSubtitle(state),
+                actionText = if (state.isLoggedIn) "立即同步" else null,
+                onClick = if (state.isLoggedIn) viewModel::syncReadingProgressNow else null
+            )
             SwitchLine(
                 Icons.Default.Wifi,
                 "仅在 Wi-Fi 下同步",
@@ -961,7 +969,20 @@ fun SyncConnectionSettingsScreen(
                 showDivider = false
             )
         }
+        state.progressSyncMessage?.let { Text(it, color = DesignTokens.Accent) }
+        state.progressSyncError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
+}
+
+private fun progressSyncSubtitle(state: SettingsUiState): String {
+    if (!state.isLoggedIn) return "登录后自动同步各设备阅读位置"
+    if (state.pendingProgressCount > 0) return "${state.pendingProgressCount} 项待同步"
+    val lastSync = state.lastProgressSyncAt ?: return "暂无待同步进度"
+    val formatted = java.text.DateFormat.getDateTimeInstance(
+        java.text.DateFormat.SHORT,
+        java.text.DateFormat.SHORT
+    ).format(Date(lastSync))
+    return "已同步 · $formatted"
 }
 
 @Composable

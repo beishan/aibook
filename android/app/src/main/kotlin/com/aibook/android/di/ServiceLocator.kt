@@ -22,6 +22,7 @@ import com.aibook.android.core.mobi.NativeMobiDocumentParser
 import com.aibook.android.core.reader.BookContentLoaderRegistry
 import com.aibook.android.core.reader.MarkdownBookContentLoader
 import okhttp3.OkHttpClient
+import com.aibook.android.background.BackgroundWorkScheduler
 
 class ServiceLocator(private val context: Context) {
 
@@ -51,7 +52,9 @@ class ServiceLocator(private val context: Context) {
     }
 
     val serverRepository: ServerRepository by lazy {
-        ServerRepository(serverConfigStore)
+        ServerRepository(serverConfigStore) {
+            BackgroundWorkScheduler.syncProgressNow(context)
+        }
     }
 
     val readerBookmarkRepository: ReaderBookmarkRepository by lazy {

@@ -54,6 +54,8 @@ object ApiServiceFactory {
         retrofit.create(ReadingProgressApi::class.java)
     fun createServerLibraryApi(retrofit: Retrofit): ServerLibraryApi =
         retrofit.create(ServerLibraryApi::class.java)
+    fun createAnnotationApi(retrofit: Retrofit): AnnotationApi =
+        retrofit.create(AnnotationApi::class.java)
 
     private fun String.ensureTrailingSlash(): String =
         if (endsWith('/')) this else "$this/"

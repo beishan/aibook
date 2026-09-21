@@ -36,5 +36,11 @@ class AiBookApplication : Application() {
             combine(locator.backgroundTaskStore.opdsIntervalHours, locator.serverConfigStore.wifiOnlySync) { hours, wifi -> hours to wifi }
                 .collect { (hours, wifi) -> BackgroundWorkScheduler.configureOpds(this@AiBookApplication, hours, wifi) }
         }
+        appScope.launch {
+            locator.serverConfigStore.wifiOnlySync.collect { wifiOnly ->
+                BackgroundWorkScheduler.configureProgressSync(this@AiBookApplication, wifiOnly)
+                BackgroundWorkScheduler.syncProgressNow(this@AiBookApplication, wifiOnly)
+            }
+        }
     }
 }

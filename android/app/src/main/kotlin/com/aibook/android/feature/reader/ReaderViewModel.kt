@@ -67,6 +67,8 @@ data class ReaderUiState(
     val isRemote: Boolean = false,
     val remoteBookId: Long? = null,
     val remoteVersionId: Long? = null,
+    val remoteFormat: String? = null,
+    val structuredChapterIds: Map<Int, Long> = emptyMap(),
     val remoteProgress: ReadingProgress? = null,
     val settings: ReaderSettings = ReaderSettings(),
     val importedFonts: List<ReaderImportedFont> = emptyList(),
@@ -116,8 +118,11 @@ class ReaderViewModel(
 
     private val _state = MutableStateFlow(ReaderUiState())
     private val loadingChapterIndexes = mutableSetOf<Int>()
+    private val structuredChapterCache = StructuredChapterCache(File(appContext.cacheDir, "structured-chapters"))
+    private var structuredCacheNamespace: String = "default"
     private var settingsSnapshot: ReaderSettings? = null
     private var bookmarkObservationJob: Job? = null
+    private var highlightObservationJob: Job? = null
     private var readingStartedAtMillis: Long = 0L
 
     val uiState: StateFlow<ReaderUiState> = _state
@@ -149,6 +154,7 @@ class ReaderViewModel(
 
     fun loadLocalBook(bookId: String) {
         viewModelScope.launch {
+            structuredCacheNamespace = "default"
             readingStartedAtMillis = System.currentTimeMillis()
             _state.value = _state.value.copy(
                 isLoading = true,
@@ -156,6 +162,8 @@ class ReaderViewModel(
                 isRemote = false,
                 remoteBookId = null,
                 remoteVersionId = null,
+                remoteFormat = null,
+                structuredChapterIds = emptyMap(),
                 remoteProgress = null
             )
 
@@ -197,8 +205,12 @@ class ReaderViewModel(
                     }
                 }
             }
-            observeBookmarks(book.id)
-            observeHighlights(book.id)
+            if (linkedRemoteBookId != null) {
+                loadCloudAnnotations(linkedRemoteBookId)
+            } else {
+                observeBookmarks(book.id)
+                observeHighlights(book.id)
+            }
 
             try {
                 val file = File(book.uri)
@@ -276,8 +288,10 @@ class ReaderViewModel(
 
     fun loadRemoteBook(bookId: Long) {
         viewModelScope.launch {
+            structuredCacheNamespace = serverRepository.structuredCacheNamespace()
             readingStartedAtMillis = System.currentTimeMillis()
             bookmarkObservationJob?.cancel()
+            highlightObservationJob?.cancel()
             _state.value = _state.value.copy(
                 book = null,
                 bookmarks = emptyList(),
@@ -286,6 +300,8 @@ class ReaderViewModel(
                 isRemote = true,
                 remoteBookId = bookId,
                 remoteVersionId = null,
+                remoteFormat = null,
+                structuredChapterIds = emptyMap(),
                 remoteProgress = null
             )
             try {
@@ -306,7 +322,9 @@ class ReaderViewModel(
                         )
                     }
                 }
+                loadCloudAnnotations(bookId)
                 val metadata = serverRepository.getBookById(bookId).getOrThrow()
+                _state.update { it.copy(remoteFormat = metadata.format?.lowercase()) }
                 val versionId = _state.value.remoteVersionId
                 serverRepository.recordBookOpen(bookId, versionId)
                 if (metadata.format.equals("structured", ignoreCase = true)) {
@@ -323,7 +341,24 @@ class ReaderViewModel(
                 }
                 loadRemoteFile(bookId, cacheFile, format)
             } catch (e: Exception) {
-                _state.value = _state.value.copy(isLoading = false, errorMessage = "加载失败：${e.message}")
+                val cachedPublication = withContext(Dispatchers.IO) {
+                    structuredChapterCache.readManifest(
+                        structuredCacheNamespace,
+                        bookId,
+                        _state.value.remoteVersionId
+                    )
+                }
+                if (cachedPublication != null) {
+                    _state.update {
+                        it.copy(
+                            remoteFormat = STRUCTURED_FORMAT,
+                            remoteVersionId = cachedPublication.versionId
+                        )
+                    }
+                    loadStructuredPublication(bookId, cachedPublication, allowWholeBookFallback = false)
+                } else {
+                    _state.value = _state.value.copy(isLoading = false, errorMessage = "加载失败：${e.message}")
+                }
             }
         }
     }
@@ -371,41 +406,85 @@ class ReaderViewModel(
 
     fun toggleBookmark() {
         val state = _state.value
-        val book = state.book ?: return
         val existing = currentBookmark(state)
+        val remoteBookId = state.remoteBookId
         viewModelScope.launch {
-            if (existing != null) {
-                readerBookmarkRepository.remove(existing.id)
+            if (remoteBookId != null) {
+                if (existing != null) {
+                    serverRepository.deleteBookmark(remoteBookId, existing.id)
+                        .onSuccess { loadCloudAnnotations(remoteBookId) }
+                } else {
+                    val chapter = state.chapters.getOrNull(state.currentChapterIndex)
+                    serverRepository.createBookmark(
+                        remoteBookId,
+                        ReaderBookmark(
+                            bookId = "server:$remoteBookId",
+                            chapterHref = chapter?.href,
+                            chapterTitle = chapter?.title,
+                            progress = state.scrollProgress,
+                            chapterIndex = state.currentChapterIndex,
+                            lineIndex = state.currentLineIndex,
+                            scrollOffset = state.currentScrollOffset
+                        )
+                    ).onSuccess { loadCloudAnnotations(remoteBookId) }
+                }
             } else {
+                val book = state.book ?: return@launch
                 val chapter = state.chapters.getOrNull(state.currentChapterIndex)
-                readerBookmarkRepository.add(
-                    ReaderBookmark(
-                        bookId = book.id,
-                        chapterHref = chapter?.href,
-                        chapterTitle = chapter?.title,
-                        progress = state.scrollProgress,
-                        chapterIndex = state.currentChapterIndex,
-                        lineIndex = state.currentLineIndex,
-                        scrollOffset = state.currentScrollOffset
-                    )
-                )
+                if (existing != null) readerBookmarkRepository.remove(existing.id)
+                else readerBookmarkRepository.add(ReaderBookmark(
+                    bookId = book.id,
+                    chapterHref = chapter?.href,
+                    chapterTitle = chapter?.title,
+                    progress = state.scrollProgress,
+                    chapterIndex = state.currentChapterIndex,
+                    lineIndex = state.currentLineIndex,
+                    scrollOffset = state.currentScrollOffset
+                ))
             }
         }
     }
 
     fun removeBookmark(bookmark: ReaderBookmark) {
-        viewModelScope.launch { readerBookmarkRepository.remove(bookmark.id) }
+        val remoteBookId = _state.value.remoteBookId
+        viewModelScope.launch {
+            if (remoteBookId != null) {
+                serverRepository.deleteBookmark(remoteBookId, bookmark.id)
+                    .onSuccess { loadCloudAnnotations(remoteBookId) }
+            } else readerBookmarkRepository.remove(bookmark.id)
+        }
     }
 
     fun addHighlight(chapter: ReaderChapter, lineIndex: Int, text: String, note: String?, color: Long) {
-        val book = _state.value.book ?: return
+        val state = _state.value
+        val remoteBookId = state.remoteBookId
+        val highlight = ReaderHighlight.create(
+            bookId = remoteBookId?.let { "server:$it" } ?: state.book?.id ?: return,
+            chapterHref = chapter.href,
+            text = text,
+            startOffset = 0,
+            endOffset = text.length,
+            note = note,
+            chapterIndex = chapter.index,
+            lineIndex = lineIndex,
+            color = color
+        )
         viewModelScope.launch {
-            readerHighlightRepository.add(ReaderHighlight.create(book.id, chapter.href, text, 0, text.length, note, chapter.index, lineIndex, color))
+            if (remoteBookId != null) {
+                serverRepository.createHighlight(remoteBookId, highlight)
+                    .onSuccess { loadCloudAnnotations(remoteBookId) }
+            } else readerHighlightRepository.add(highlight)
         }
     }
 
     fun removeHighlight(highlight: ReaderHighlight) {
-        viewModelScope.launch { readerHighlightRepository.remove(highlight.id) }
+        val remoteBookId = _state.value.remoteBookId
+        viewModelScope.launch {
+            if (remoteBookId != null) {
+                serverRepository.deleteHighlight(remoteBookId, highlight.id)
+                    .onSuccess { loadCloudAnnotations(remoteBookId) }
+            } else readerHighlightRepository.remove(highlight.id)
+        }
     }
 
     fun openBookmark(bookmark: ReaderBookmark) {
@@ -413,11 +492,19 @@ class ReaderViewModel(
             ?: _state.value.chapters.indexOfFirst { it.href == bookmark.chapterHref }.takeIf { it >= 0 }
             ?: return
         val chapter = _state.value.chapters.getOrNull(targetIndex) ?: return
-        val book = _state.value.book ?: return
+        val book = _state.value.book
 
         viewModelScope.launch {
             val loaded = if (
-                book.format == BookFormat.EPUB &&
+                isStructuredChapterOnDemand(_state.value, targetIndex) &&
+                chapter.content.isBlank() && chapter.imageUri.isNullOrBlank()
+            ) {
+                loadStructuredChapter(targetIndex) ?: run {
+                    _state.update { it.copy(errorMessage = "书签所在章节加载失败，请检查网络后重试") }
+                    return@launch
+                }
+            } else if (
+                book != null && book.format == BookFormat.EPUB &&
                 chapter.content.isBlank() && chapter.imageUri.isNullOrBlank()
             ) {
                 runCatching { ReadiumEpubReader(appContext).parseChapter(File(book.uri), targetIndex) }.getOrNull()
@@ -439,6 +526,9 @@ class ReaderViewModel(
                         scrollOffset = bookmark.scrollOffset
                     )
                 )
+            }
+            if (isStructuredChapterOnDemand(_state.value, targetIndex)) {
+                prefetchStructuredChapters(targetIndex)
             }
         }
     }
@@ -497,10 +587,22 @@ class ReaderViewModel(
     }
 
     private fun observeHighlights(bookId: String) {
-        viewModelScope.launch {
+        highlightObservationJob?.cancel()
+        highlightObservationJob = viewModelScope.launch {
             readerHighlightRepository.observeForBook(bookId).collect { highlights ->
                 _state.update { it.copy(highlights = highlights) }
             }
+        }
+    }
+
+    private suspend fun loadCloudAnnotations(bookId: Long) {
+        val bookmarks = serverRepository.getBookmarks(bookId)
+        val highlights = serverRepository.getHighlights(bookId)
+        _state.update { state ->
+            state.copy(
+                bookmarks = bookmarks.getOrNull() ?: state.bookmarks,
+                highlights = highlights.getOrNull() ?: state.highlights
+            )
         }
     }
 
@@ -512,9 +614,23 @@ class ReaderViewModel(
     fun selectChapter(index: Int) {
         val chapters = _state.value.chapters
         val chapter = chapters.getOrNull(index) ?: return
-        val book = _state.value.book ?: return
+        val book = _state.value.book
 
-        if (book.format == BookFormat.EPUB && chapter.content.isBlank() && chapter.imageUri.isNullOrBlank()) {
+        if (isStructuredChapterOnDemand(_state.value, index) &&
+            chapter.content.isBlank() && chapter.imageUri.isNullOrBlank()
+        ) {
+            if (!loadingChapterIndexes.add(index)) return
+            viewModelScope.launch {
+                val loaded = loadStructuredChapter(index)
+                loadingChapterIndexes.remove(index)
+                if (loaded == null) {
+                    _state.update { it.copy(errorMessage = "章节加载失败，请检查网络后重试") }
+                    return@launch
+                }
+                publishSelectedChapter(index, loaded)
+                prefetchStructuredChapters(index)
+            }
+        } else if (book != null && book.format == BookFormat.EPUB && chapter.content.isBlank() && chapter.imageUri.isNullOrBlank()) {
             // 需要先从 Readium 加载这个章节
             if (!loadingChapterIndexes.add(index)) return
             viewModelScope.launch {
@@ -527,18 +643,7 @@ class ReaderViewModel(
                 val updatedChapters = _state.value.chapters.map {
                     if (it.index == index) loaded else it
                 }
-                _state.update {
-                    it.copy(
-                        chapters = updatedChapters,
-                        loadedChapters = listOf(loaded),
-                        currentChapterIndex = index,
-                        currentLineIndex = 0,
-                        currentScrollOffset = 0,
-                        scrollProgress = ReaderProgressCalculator.chapterProgress(index, updatedChapters.size),
-                        errorMessage = null
-                    )
-                }
-                saveProgress()
+                publishSelectedChapter(index, loaded, updatedChapters)
                 prefetchNextEpubChapter(index)
             }
         } else {
@@ -554,6 +659,7 @@ class ReaderViewModel(
             }
             saveProgress()
             prefetchNextEpubChapter(index)
+            if (_state.value.remoteFormat == STRUCTURED_FORMAT) prefetchStructuredChapters(index)
         }
     }
 
@@ -569,7 +675,27 @@ class ReaderViewModel(
         val nextChapter = state.chapters[nextIndex]
         val book = state.book
 
-        if (book?.format == BookFormat.EPUB && nextChapter.content.isBlank() && nextChapter.imageUri.isNullOrBlank()) {
+        if (isStructuredChapterOnDemand(state, nextIndex) &&
+            nextChapter.content.isBlank() && nextChapter.imageUri.isNullOrBlank()
+        ) {
+            if (!loadingChapterIndexes.add(nextIndex)) return
+            viewModelScope.launch {
+                val loaded = loadStructuredChapter(nextIndex)
+                loadingChapterIndexes.remove(nextIndex)
+                if (loaded == null) {
+                    _state.update { it.copy(errorMessage = "下一章加载失败，请检查网络后重试") }
+                    return@launch
+                }
+                _state.update {
+                    it.copy(
+                        chapters = it.chapters.map { item -> if (item.index == nextIndex) loaded else item },
+                        loadedChapters = it.loadedChapters + loaded,
+                        errorMessage = null
+                    )
+                }
+                prefetchStructuredChapters(nextIndex)
+            }
+        } else if (book?.format == BookFormat.EPUB && nextChapter.content.isBlank() && nextChapter.imageUri.isNullOrBlank()) {
             if (!loadingChapterIndexes.add(nextIndex)) return
             viewModelScope.launch {
                 val loaded = runCatching {
@@ -624,7 +750,21 @@ class ReaderViewModel(
             }
         }
 
-        if (book?.format == BookFormat.EPUB &&
+        if (isStructuredChapterOnDemand(state, previousIndex) &&
+            previousChapter.content.isBlank() && previousChapter.imageUri.isNullOrBlank()
+        ) {
+            if (!loadingChapterIndexes.add(previousIndex)) return
+            viewModelScope.launch {
+                val loaded = loadStructuredChapter(previousIndex)
+                loadingChapterIndexes.remove(previousIndex)
+                if (loaded == null) {
+                    _state.update { it.copy(errorMessage = "上一章加载失败，请检查网络后重试") }
+                    return@launch
+                }
+                prepend(loaded)
+                prefetchStructuredChapters(previousIndex)
+            }
+        } else if (book?.format == BookFormat.EPUB &&
             previousChapter.content.isBlank() && previousChapter.imageUri.isNullOrBlank()
         ) {
             if (!loadingChapterIndexes.add(previousIndex)) return
@@ -941,6 +1081,103 @@ class ReaderViewModel(
     }
 
     private suspend fun loadRemoteStructuredBook(bookId: Long, versionId: Long?) {
+        val manifest = serverRepository.getStructuredManifest(bookId, versionId).getOrNull()
+        val manifestLinks = manifest?.readingOrder.orEmpty()
+        val networkEntries = manifestLinks.mapNotNull { link ->
+            link.chapterId()?.let { chapterId ->
+                CachedStructuredChapter(
+                    chapterId = chapterId,
+                    key = link.properties.chapterKey,
+                    title = link.title
+                )
+            }
+        }
+        val networkVersionId = manifestLinks.firstNotNullOfOrNull { it.versionId() } ?: versionId
+        val networkPublication = networkVersionId?.let { resolvedVersionId ->
+            CachedStructuredManifest(resolvedVersionId, networkEntries)
+                .takeIf { networkEntries.isNotEmpty() && networkEntries.size == manifestLinks.size }
+        }
+        if (networkPublication != null) {
+            withContext(Dispatchers.IO) {
+                structuredChapterCache.writeManifest(
+                    structuredCacheNamespace,
+                    bookId,
+                    networkPublication,
+                    markActive = true
+                )
+            }
+        }
+        val publication = networkPublication ?: withContext(Dispatchers.IO) {
+            structuredChapterCache.readManifest(structuredCacheNamespace, bookId, versionId)
+        }
+        if (publication == null) {
+            loadRemoteStructuredBookFallback(bookId, versionId)
+            return
+        }
+        loadStructuredPublication(bookId, publication, allowWholeBookFallback = true)
+    }
+
+    private suspend fun loadStructuredPublication(
+        bookId: Long,
+        publication: CachedStructuredManifest,
+        allowWholeBookFallback: Boolean
+    ) {
+        val chapters = publication.chapters.mapIndexed { index, entry ->
+            val chapterKey = entry.key.ifBlank { "chapter-$index" }
+            ReaderChapter(
+                index = index,
+                title = entry.title.ifBlank { "第 ${index + 1} 章" },
+                href = "structured:$chapterKey",
+                content = ""
+            )
+        }
+        val chapterIds = publication.chapters.mapIndexed { index, entry -> index to entry.chapterId }.toMap()
+        val progress = _state.value.remoteProgress
+        val preferredIndex = progress?.chapterIndex?.takeIf { it in chapters.indices }
+            ?: chapters.indexOfFirst { it.href == progress?.chapterHref }.takeIf { it >= 0 }
+            ?: 0
+
+        _state.update {
+            it.copy(
+                chapters = chapters,
+                loadedChapters = emptyList(),
+                structuredChapterIds = chapterIds,
+                remoteVersionId = publication.versionId,
+                currentChapterIndex = preferredIndex
+            )
+        }
+        val loaded = loadStructuredChapter(preferredIndex)
+        if (loaded == null) {
+            if (allowWholeBookFallback) {
+                loadRemoteStructuredBookFallback(bookId, publication.versionId)
+            } else {
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "当前章节尚未缓存，请联网后重试"
+                    )
+                }
+            }
+            return
+        }
+        val updatedChapters = chapters.map { if (it.index == preferredIndex) loaded else it }
+        val restorePosition = progress?.chapterIndex == preferredIndex || progress?.chapterHref == loaded.href
+        _state.update {
+            it.copy(
+                chapters = updatedChapters,
+                loadedChapters = listOf(loaded),
+                currentChapterIndex = preferredIndex,
+                currentLineIndex = if (restorePosition) progress?.lineIndex ?: 0 else 0,
+                currentScrollOffset = if (restorePosition) progress?.scrollOffset ?: 0 else 0,
+                scrollProgress = progress?.percent ?: 0f,
+                isLoading = false,
+                errorMessage = null
+            )
+        }
+        prefetchStructuredChapters(preferredIndex)
+    }
+
+    private suspend fun loadRemoteStructuredBookFallback(bookId: Long, versionId: Long?) {
         val response = serverRepository.getProcessedContent(bookId, versionId).getOrThrow()
         val chapters = response.structuredChapters().mapIndexed { index, info ->
             ReaderChapter(
@@ -952,7 +1189,88 @@ class ReaderViewModel(
                     .trim()
             )
         }
+        _state.update { it.copy(structuredChapterIds = emptyMap()) }
         applyChapters(chapters, response.text)
+    }
+
+    private suspend fun loadStructuredChapter(index: Int): ReaderChapter? {
+        val state = _state.value
+        val bookId = state.remoteBookId ?: return null
+        val versionId = state.remoteVersionId ?: return null
+        val chapterId = state.structuredChapterIds[index] ?: return null
+        val placeholder = state.chapters.getOrNull(index) ?: return null
+        val cachedContent = withContext(Dispatchers.IO) {
+            structuredChapterCache.readChapter(
+                structuredCacheNamespace,
+                bookId,
+                versionId,
+                chapterId
+            )
+        }
+        if (cachedContent != null) return placeholder.copy(content = cachedContent)
+
+        val response = serverRepository.getStructuredChapter(bookId, chapterId, versionId)
+            .getOrNull() ?: return null
+        val content = response.content.replace("\r\n", "\n").replace('\r', '\n').trim()
+        withContext(Dispatchers.IO) {
+            structuredChapterCache.writeChapter(
+                structuredCacheNamespace,
+                bookId,
+                versionId,
+                chapterId,
+                content
+            )
+        }
+        return placeholder.copy(
+            title = response.title.ifBlank { placeholder.title },
+            href = "structured:${response.key.ifBlank { placeholder.href.removePrefix("structured:") }}",
+            content = content
+        )
+    }
+
+    private fun isStructuredChapterOnDemand(state: ReaderUiState, index: Int): Boolean =
+        state.remoteFormat == STRUCTURED_FORMAT && state.structuredChapterIds.containsKey(index)
+
+    private fun publishSelectedChapter(
+        index: Int,
+        loaded: ReaderChapter,
+        chapters: List<ReaderChapter> = _state.value.chapters.map {
+            if (it.index == index) loaded else it
+        }
+    ) {
+        _state.update {
+            it.copy(
+                chapters = chapters,
+                loadedChapters = listOf(loaded),
+                currentChapterIndex = index,
+                currentLineIndex = 0,
+                currentScrollOffset = 0,
+                scrollProgress = ReaderProgressCalculator.chapterProgress(index, chapters.size),
+                errorMessage = null
+            )
+        }
+        saveProgress()
+    }
+
+    private fun prefetchStructuredChapters(aroundIndex: Int) {
+        if (_state.value.remoteFormat != STRUCTURED_FORMAT || _state.value.structuredChapterIds.isEmpty()) return
+        listOf(aroundIndex - 1, aroundIndex + 1).forEach { index ->
+            val state = _state.value
+            val chapter = state.chapters.getOrNull(index) ?: return@forEach
+            if (chapter.content.isNotBlank() || !chapter.imageUri.isNullOrBlank()) return@forEach
+            if (!loadingChapterIndexes.add(index)) return@forEach
+            viewModelScope.launch {
+                val loaded = loadStructuredChapter(index)
+                if (loaded != null) {
+                    _state.update { current ->
+                        current.copy(chapters = current.chapters.map {
+                            if (it.index == index) loaded else it
+                        })
+                    }
+                }
+                loadingChapterIndexes.remove(index)
+            }
+        }
     }
 
     private data class RemoteLocator(
@@ -1050,6 +1368,8 @@ class ReaderViewModel(
     }
 
     companion object {
+        private const val STRUCTURED_FORMAT = "structured"
+
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as Application

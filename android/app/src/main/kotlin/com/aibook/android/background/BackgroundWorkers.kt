@@ -30,6 +30,7 @@ import com.aibook.android.core.network.opds.OpdsSyncMode
 import com.aibook.android.di.ServiceLocator
 import com.aibook.android.feature.opds.OpdsSyncCollector
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import java.util.UUID
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -72,6 +73,18 @@ class OpdsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWork
     }
 
     companion object { const val OPDS_NOTIFICATION = 4102 }
+}
+
+class ReadingProgressSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val repository = ServiceLocator.get(applicationContext).serverRepository
+        if (!repository.isLoggedIn.first()) return Result.success()
+        return runCatching { repository.syncPendingReadingProgress() }
+            .fold(
+                onSuccess = { result -> if (result.failed > 0) Result.retry() else Result.success() },
+                onFailure = { Result.retry() }
+            )
+    }
 }
 
 class BookDownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -186,6 +199,8 @@ class BookDownloadWorker(context: Context, params: WorkerParameters) : Coroutine
 object BackgroundWorkScheduler {
     private const val SCAN_WORK = "periodic-directory-scan"
     private const val OPDS_WORK = "periodic-opds-sync"
+    private const val PROGRESS_SYNC_WORK = "reading-progress-sync"
+    private const val PERIODIC_PROGRESS_SYNC_WORK = "periodic-reading-progress-sync"
 
     fun configureScan(context: Context, intervalHours: Int) {
         val manager = WorkManager.getInstance(context)
@@ -213,6 +228,35 @@ object BackgroundWorkScheduler {
             .setConstraints(constraints)
             .build()
         manager.enqueueUniquePeriodicWork(OPDS_WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
+    }
+
+    fun configureProgressSync(context: Context, wifiOnly: Boolean) {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+            .build()
+        val request = PeriodicWorkRequestBuilder<ReadingProgressSyncWorker>(15, TimeUnit.MINUTES)
+            .setConstraints(constraints)
+            .build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            PERIODIC_PROGRESS_SYNC_WORK,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            request
+        )
+    }
+
+    fun syncProgressNow(context: Context, wifiOnly: Boolean = false) {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+            .build()
+        val request = OneTimeWorkRequestBuilder<ReadingProgressSyncWorker>()
+            .setConstraints(constraints)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.SECONDS)
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            PROGRESS_SYNC_WORK,
+            ExistingWorkPolicy.KEEP,
+            request
+        )
     }
 }
 

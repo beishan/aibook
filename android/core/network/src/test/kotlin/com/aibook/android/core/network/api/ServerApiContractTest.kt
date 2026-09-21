@@ -97,6 +97,29 @@ class ServerApiContractTest {
         }
     }
 
+    @Test
+    fun `structured manifest and chapter use backend publication routes`() = runSuspend {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody(STRUCTURED_MANIFEST_JSON))
+        server.enqueue(MockResponse().setBody(STRUCTURED_CHAPTER_JSON))
+        server.start()
+        try {
+            val api = ApiServiceFactory.createBookApi(retrofit(server, "jwt"))
+
+            val manifest = api.getStructuredManifest(7, 9)
+            val manifestRequest = server.takeRequest()
+            assertEquals("/api/books/7/structured/manifest?versionId=9", manifestRequest.path)
+            assertEquals(42L, manifest.readingOrder.single().chapterId())
+
+            val chapter = api.getStructuredChapter(7, 42, 9)
+            val chapterRequest = server.takeRequest()
+            assertEquals("/api/books/7/structured/chapters/42?versionId=9", chapterRequest.path)
+            assertEquals("正文内容", chapter.content)
+        } finally {
+            server.close()
+        }
+    }
+
     private fun retrofit(server: MockWebServer, token: String?) = ApiServiceFactory.createRetrofit(
         server.url("/").toString(),
         ApiServiceFactory.createOkHttpClient(object : AuthTokenProvider {
@@ -122,5 +145,7 @@ class ServerApiContractTest {
         const val SHELF_JSON = """{"ungroupedBooks":[{"id":7,"title":"三体","format":"EPUB","onShelf":true}],"groups":[],"totalBooks":1}"""
         const val BOOK_LIST_JSON = """[{"id":3,"name":"科幻必读","description":"经典","sortOrder":0,"user":{"id":1},"books":[{"id":7,"title":"三体"}]}]"""
         const val PROGRESS_JSON = """{"id":9,"bookId":7,"currentChapter":"chapter-18","currentChapterTitle":"第 18 章","chapterProgress":42,"totalProgress":37,"readingTimeSeconds":60}"""
+        const val STRUCTURED_MANIFEST_JSON = """{"readingOrder":[{"href":"/api/books/7/structured/chapters/42?versionId=9","title":"第一章","properties":{"chapterKey":"chapter-1","position":0}}]}"""
+        const val STRUCTURED_CHAPTER_JSON = """{"id":42,"key":"chapter-1","index":0,"title":"第一章","content":"正文内容","contentHash":"abc"}"""
     }
 }

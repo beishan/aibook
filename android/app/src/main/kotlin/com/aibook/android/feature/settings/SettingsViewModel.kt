@@ -14,6 +14,7 @@ import com.aibook.android.core.model.AppThemeMode
 import com.aibook.android.core.model.ReaderTheme
 import com.aibook.android.core.model.PageTurnMode
 import com.aibook.android.di.ServiceLocator
+import com.aibook.android.background.BackgroundWorkScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,10 +39,15 @@ data class SettingsUiState(
     val isLoggingIn: Boolean = false,
     val loginMessage: String? = null,
     val serverUrlMessage: String? = null,
-    val serverUrlInput: String = ""
+    val serverUrlInput: String = "",
+    val pendingProgressCount: Int = 0,
+    val lastProgressSyncAt: Long? = null,
+    val progressSyncError: String? = null,
+    val progressSyncMessage: String? = null
 )
 
 class SettingsViewModel(
+    private val app: Application,
     private val serverRepository: ServerRepository,
     private val readerSettingsStore: ReaderSettingsStore,
     private val serverConfigStore: ServerConfigStore
@@ -79,6 +85,21 @@ class SettingsViewModel(
         viewModelScope.launch {
             serverConfigStore.usageStatistics.collect { enabled ->
                 _state.update { it.copy(usageStatistics = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            serverRepository.pendingProgressCount.collect { count ->
+                _state.update { it.copy(pendingProgressCount = count) }
+            }
+        }
+        viewModelScope.launch {
+            serverRepository.lastProgressSyncAt.collect { timestamp ->
+                _state.update { it.copy(lastProgressSyncAt = timestamp) }
+            }
+        }
+        viewModelScope.launch {
+            serverRepository.lastProgressSyncError.collect { error ->
+                _state.update { it.copy(progressSyncError = error) }
             }
         }
         viewModelScope.launch {
@@ -164,6 +185,7 @@ class SettingsViewModel(
             )
             _state.update { it.copy(isLoggingIn = false) }
             result.onSuccess { response ->
+                BackgroundWorkScheduler.syncProgressNow(app, _state.value.wifiOnlySync)
                 _state.update {
                     it.copy(
                         loginMessage = "登录成功：${response.username}",
@@ -181,7 +203,19 @@ class SettingsViewModel(
     }
 
     fun setWifiOnlySync(enabled: Boolean) {
-        viewModelScope.launch { serverConfigStore.setWifiOnlySync(enabled) }
+        viewModelScope.launch {
+            serverConfigStore.setWifiOnlySync(enabled)
+            BackgroundWorkScheduler.configureProgressSync(app, enabled)
+        }
+    }
+
+    fun syncReadingProgressNow() {
+        if (!_state.value.isLoggedIn) {
+            _state.update { it.copy(progressSyncMessage = "请先登录云端账号") }
+            return
+        }
+        BackgroundWorkScheduler.syncProgressNow(app, _state.value.wifiOnlySync)
+        _state.update { it.copy(progressSyncMessage = "已提交同步任务，将在网络条件满足后执行") }
     }
 
     fun setPersonalizedRecommendations(enabled: Boolean) {
@@ -221,7 +255,7 @@ class SettingsViewModel(
             initializer {
                 val app = this[APPLICATION_KEY] as Application
                 val locator = ServiceLocator.get(app)
-                SettingsViewModel(locator.serverRepository, locator.readerSettingsStore, locator.serverConfigStore)
+                SettingsViewModel(app, locator.serverRepository, locator.readerSettingsStore, locator.serverConfigStore)
             }
         }
     }

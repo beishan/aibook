@@ -1,6 +1,7 @@
 package com.aibook.android.core.network.api
 
 import com.aibook.android.core.network.api.dto.ProcessedContentResponse
+import com.aibook.android.core.network.api.dto.StructuredManifestLinkDTO
 import com.aibook.android.core.network.api.dto.structuredChapters
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -33,5 +34,22 @@ class StructuredContentTest {
         )
 
         assertTrue(response.structuredChapters().isEmpty())
+    }
+
+    @Test
+    fun `extracts chapter id from manifest href with version query`() {
+        val link = StructuredManifestLinkDTO(
+            href = "/api/books/7/structured/chapters/42?versionId=9"
+        )
+
+        assertEquals(42L, link.chapterId())
+        assertEquals(9L, link.versionId())
+    }
+
+    @Test
+    fun `rejects malformed manifest chapter href`() {
+        val link = StructuredManifestLinkDTO(href = "/api/books/7/structured/chapters/not-a-number")
+
+        assertEquals(null, link.chapterId())
     }
 }
