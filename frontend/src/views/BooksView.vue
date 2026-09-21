@@ -19,6 +19,14 @@
         </button>
         <button
           class="btn"
+          title="选择多本书籍并合并到其中一本"
+          @click="openBookMergeEntry"
+        >
+          <span>⇄</span>
+          <span>合并书籍</span>
+        </button>
+        <button
+          class="btn"
           title="遍历书库并自动聚合同一本书的不同文件版本"
           @click="showVersionRebuildDialog = true"
         >
@@ -219,6 +227,10 @@
         <button class="btn btn-primary" @click="openBatchScraper('selected')">
           <span>✨</span>
           <span>批量刮削</span>
+        </button>
+        <button class="btn" :disabled="selectedBooks.size < 2" @click="openSelectedBookMerge">
+          <span>⇄</span>
+          <span>合并书籍</span>
         </button>
         <button class="btn batch-trash-button" @click="moveSelectedToTrash">
           <span>🗑️</span>
@@ -586,6 +598,13 @@
       @close="showVersionRebuildDialog = false"
       @complete="handleVersionRebuildComplete"
     />
+
+    <BookMergeDialog
+      :visible="showBookMergeDialog"
+      :books="selectedBookItems"
+      @close="showBookMergeDialog = false"
+      @complete="handleBookMergeComplete"
+    />
   </div>
 </template>
 
@@ -610,6 +629,7 @@ import BookEditDialog from '@/components/BookEditDialog.vue'
 import ScraperDialog from '@/components/ScraperDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import BookVersionRebuildDialog from '@/components/BookVersionRebuildDialog.vue'
+import BookMergeDialog from '@/components/BookMergeDialog.vue'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import {
@@ -662,6 +682,7 @@ const bookToAddToList = ref<Book | null>(null)
 const processingBookId = ref<number | null>(null)
 const downloadingBookId = ref<number | null>(null)
 const showVersionRebuildDialog = ref(false)
+const showBookMergeDialog = ref(false)
 const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 const coversPreparing = ref(false)
 const libraryLoading = computed(() => bookStore.loading || coversPreparing.value)
@@ -675,6 +696,8 @@ let loadBooksSequence = 0
 // 多选相关状态
 const selectionMode = ref(false)
 const selectedBooks = ref<Set<number>>(new Set())
+const selectedBookSnapshots = ref<Map<number, Book>>(new Map())
+const selectedBookItems = computed(() => Array.from(selectedBookSnapshots.value.values()))
 const showBatchScraperDialog = ref(false)
 const batchScraperMode = ref<'selected' | 'all-incomplete'>('selected')
 const batchCategoryId = ref('')
@@ -765,7 +788,7 @@ const handleUploadSuccess = () => {
 
 const handleVersionRebuildComplete = () => {
   currentPage.value = 1
-  selectedBooks.value.clear()
+  clearSelection()
   void loadBooks()
 }
 
@@ -941,26 +964,56 @@ const handleDownloadBook = async (book: Book) => {
 const toggleSelectionMode = () => {
   selectionMode.value = !selectionMode.value
   if (!selectionMode.value) {
-    selectedBooks.value.clear()
+    clearSelection()
   }
 }
 
 const toggleBookSelection = (bookId: number) => {
   if (selectedBooks.value.has(bookId)) {
     selectedBooks.value.delete(bookId)
+    selectedBookSnapshots.value.delete(bookId)
   } else {
     selectedBooks.value.add(bookId)
+    const book = bookStore.books.find(item => item.id === bookId)
+    if (book) selectedBookSnapshots.value.set(bookId, book)
   }
 }
 
 const selectAllCurrentPage = () => {
   bookStore.books.forEach(book => {
     selectedBooks.value.add(book.id)
+    selectedBookSnapshots.value.set(book.id, book)
   })
 }
 
 const clearSelection = () => {
   selectedBooks.value.clear()
+  selectedBookSnapshots.value.clear()
+}
+
+const openBookMergeEntry = () => {
+  if (selectedBooks.value.size >= 2) {
+    openSelectedBookMerge()
+    return
+  }
+  selectionMode.value = true
+  message.info('请选择至少两本要合并的书籍，然后点击“合并书籍”')
+}
+
+const openSelectedBookMerge = () => {
+  if (selectedBooks.value.size < 2 || selectedBookItems.value.length < 2) {
+    message.warning('请至少选择两本要合并的书籍')
+    return
+  }
+  showBookMergeDialog.value = true
+}
+
+const handleBookMergeComplete = async () => {
+  showBookMergeDialog.value = false
+  selectionMode.value = false
+  clearSelection()
+  currentPage.value = 1
+  await loadBooks()
 }
 
 const moveSelectedToTrash = async () => {
@@ -1199,7 +1252,7 @@ const goToPage = (page: number) => {
 
 const handlePageSizeChange = () => {
   currentPage.value = 1
-  selectedBooks.value.clear()
+  clearSelection()
   loadBooks()
 }
 
@@ -1207,7 +1260,7 @@ const handleViewModeChange = (mode: 'card' | 'compact-card' | 'list') => {
   if (viewMode.value === mode) return
   preferencesStore.setLibraryViewMode(mode)
   currentPage.value = 1
-  selectedBooks.value.clear()
+  clearSelection()
   loadBooks()
 }
 
