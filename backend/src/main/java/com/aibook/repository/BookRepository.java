@@ -184,6 +184,15 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE)
     List<Book> findByUserAndDeletedAtIsNull(@Param("user") User user);
 
+    /** 按主键游标分批加载升级前尚未建立规范化作者关联的有效书籍。 */
+    @Query("SELECT b FROM Book b WHERE b.id > :afterId AND b.deletedAt IS NULL "
+            + "AND b.author IS NOT NULL AND TRIM(b.author) <> '' "
+            + "AND LOWER(TRIM(b.author)) NOT IN ('未知', '未知作者', '佚名', 'unknown', 'unknown author') "
+            + "AND b.authors IS EMPTY ORDER BY b.id")
+    List<Book> findAuthorSynchronizationCandidatesAfterId(
+            @Param("afterId") Long afterId,
+            Pageable pageable);
+
     @Query("""
             SELECT b.id AS id,
                    b.title AS title,

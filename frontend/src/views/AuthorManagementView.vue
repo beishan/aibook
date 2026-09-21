@@ -10,15 +10,15 @@
 
     <div class="summary-grid">
       <div class="summary-card glass">
-        <span class="summary-value">{{ authors.length }}</span>
+        <span class="summary-value">{{ summary.totalAuthorCount }}</span>
         <span class="summary-label">作者总数</span>
       </div>
       <div class="summary-card glass">
-        <span class="summary-value">{{ activeAuthorCount }}</span>
+        <span class="summary-value">{{ summary.activeAuthorCount }}</span>
         <span class="summary-label">有关联书籍</span>
       </div>
       <div class="summary-card glass">
-        <span class="summary-value">{{ relatedBookCount }}</span>
+        <span class="summary-value">{{ summary.relatedBookCount }}</span>
         <span class="summary-label">书籍关联次数</span>
       </div>
     </div>
@@ -34,16 +34,22 @@
         >
           <template #prefix>🔍</template>
         </el-input>
-        <span>{{ keyword.trim() ? `找到 ${filteredAuthors.length} 位作者` : `共 ${authors.length} 位作者` }}</span>
+        <el-select v-model="sort" class="author-sort" aria-label="作者排序">
+          <el-option label="名称：正序" value="NAME_ASC" />
+          <el-option label="名称：倒序" value="NAME_DESC" />
+          <el-option label="加入时间：最新" value="CREATED_DESC" />
+          <el-option label="加入时间：最早" value="CREATED_ASC" />
+        </el-select>
+        <span>{{ keyword.trim() ? `找到 ${totalElements} 位作者` : `共 ${summary.totalAuthorCount} 位作者` }}</span>
       </div>
 
       <div v-if="loading" class="state-panel">正在加载作者...</div>
-      <div v-else-if="authors.length === 0" class="state-panel empty-state">
+      <div v-else-if="summary.totalAuthorCount === 0" class="state-panel empty-state">
         <span class="empty-icon">✍️</span>
         <p>还没有作者记录，扫描带作者信息的书籍后会自动出现在这里</p>
         <el-button type="primary" @click="dialogVisible = true">新增第一位作者</el-button>
       </div>
-      <div v-else-if="filteredAuthors.length === 0" class="state-panel empty-state">
+      <div v-else-if="authors.length === 0" class="state-panel empty-state">
         <span class="empty-icon">🔍</span>
         <p>没有找到“{{ keyword.trim() }}”</p>
         <el-button @click="keyword = ''">清除搜索</el-button>
@@ -54,7 +60,7 @@
           <span>关联书籍</span>
           <span>加入时间</span>
         </div>
-        <div v-for="author in pagedAuthors" :key="author.id" class="author-row author-item">
+        <div v-for="author in authors" :key="author.id" class="author-row author-item">
           <div class="author-name">
             <span class="author-avatar">{{ author.name.slice(0, 1).toLocaleUpperCase() }}</span>
             <strong>{{ author.name }}</strong>
@@ -67,8 +73,10 @@
             v-model:current-page="currentPage"
             v-model:page-size="pageSize"
             :page-sizes="[10, 20, 50]"
-            :total="filteredAuthors.length"
-            layout="total, sizes, prev, pager, next"
+            :total="totalElements"
+            layout="total, sizes, prev, pager, next, jumper"
+            @current-change="loadAuthors"
+            @size-change="handlePageSizeChange"
           />
         </div>
       </template>
@@ -98,10 +106,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import api from '@/utils/api'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import { message } from '@/utils/message'
+import { usePreferencesStore } from '@/stores/preferences'
 
 interface Author {
   id: number
@@ -110,41 +120,76 @@ interface Author {
   createdAt: string
 }
 
+interface AuthorPage {
+  content: Author[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
+  summary: {
+    totalAuthorCount: number
+    activeAuthorCount: number
+    relatedBookCount: number
+  }
+}
+
 const authors = ref<Author[]>([])
+const totalElements = ref(0)
+const summary = reactive({ totalAuthorCount: 0, activeAuthorCount: 0, relatedBookCount: 0 })
 const loading = ref(false)
 const saving = ref(false)
 const dialogVisible = ref(false)
 const authorName = ref('')
 const keyword = ref('')
 const currentPage = ref(1)
-const pageSize = ref(10)
-
-const filteredAuthors = computed(() => {
-  const query = keyword.value.trim().toLocaleLowerCase()
-  return query
-    ? authors.value.filter(author => author.name.toLocaleLowerCase().includes(query))
-    : authors.value
-})
-const pagedAuthors = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredAuthors.value.slice(start, start + pageSize.value)
-})
-const activeAuthorCount = computed(() => authors.value.filter(author => author.bookCount > 0).length)
-const relatedBookCount = computed(() => authors.value.reduce((total, author) => total + author.bookCount, 0))
-
-watch([keyword, pageSize], () => { currentPage.value = 1 })
+const sort = ref('NAME_ASC')
+const preferencesStore = usePreferencesStore()
+const { authorPageSize: pageSize } = storeToRefs(preferencesStore)
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+let loadSequence = 0
 
 const loadAuthors = async () => {
+  const sequence = ++loadSequence
   loading.value = true
   try {
-    const { data } = await api.get<Author[]>('/api/authors')
-    authors.value = data
+    const { data } = await api.get<AuthorPage>('/api/authors', { params: {
+      page: currentPage.value - 1,
+      size: pageSize.value,
+      keyword: keyword.value.trim() || undefined,
+      sort: sort.value,
+    } })
+    if (sequence !== loadSequence) return
+    authors.value = data.content
+    totalElements.value = data.totalElements
+    Object.assign(summary, data.summary)
+    const lastPage = Math.max(1, data.totalPages)
+    if (currentPage.value > lastPage) {
+      currentPage.value = lastPage
+      await loadAuthors()
+    }
   } catch (error: any) {
+    if (sequence !== loadSequence) return
     message.error(error.response?.data?.message || '作者列表加载失败')
   } finally {
-    loading.value = false
+    if (sequence === loadSequence) loading.value = false
   }
 }
+
+const handlePageSizeChange = (value: number) => {
+  preferencesStore.setAuthorPageSize(value)
+  currentPage.value = 1
+  void loadAuthors()
+}
+
+watch(keyword, () => {
+  currentPage.value = 1
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { void loadAuthors() }, 250)
+})
+watch(sort, () => {
+  currentPage.value = 1
+  void loadAuthors()
+})
 
 const createAuthor = async () => {
   const name = authorName.value.trim()
@@ -155,6 +200,7 @@ const createAuthor = async () => {
     message.success('作者新增成功')
     dialogVisible.value = false
     authorName.value = ''
+    currentPage.value = 1
     await loadAuthors()
   } catch (error: any) {
     message.error(error.response?.data?.message || '作者新增失败')
@@ -163,7 +209,11 @@ const createAuthor = async () => {
   }
 }
 
-onMounted(loadAuthors)
+onMounted(async () => {
+  await preferencesStore.hydrate()
+  await loadAuthors()
+})
+onUnmounted(() => { if (searchTimer) clearTimeout(searchTimer) })
 </script>
 
 <style scoped>
@@ -176,8 +226,10 @@ onMounted(loadAuthors)
 .summary-value { font-size: 28px; font-weight: 700; }
 .summary-label, .author-toolbar, .author-item > span { color: var(--text-secondary); }
 .author-card { padding: 20px; border-radius: 16px; }
-.author-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.author-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.author-toolbar > span { margin-left: auto; white-space: nowrap; }
 .author-search { max-width: 360px; }
+.author-sort { width: 180px; }
 .author-row { display: grid; grid-template-columns: minmax(180px, 1fr) 120px 190px; align-items: center; gap: 16px; }
 .author-table-header { padding: 10px 14px; color: var(--text-secondary); font-size: 13px; border-bottom: 1px solid var(--border-color); }
 .author-item { min-height: 66px; padding: 8px 14px; border-bottom: 1px solid var(--border-color); }
@@ -193,6 +245,8 @@ onMounted(loadAuthors)
   .summary-grid { grid-template-columns: 1fr; }
   .author-toolbar, .page-header { align-items: stretch; flex-direction: column; }
   .author-search { max-width: none; }
+  .author-sort { width: 100%; }
+  .author-toolbar > span { margin-left: 0; }
   .author-row { grid-template-columns: minmax(0, 1fr) 82px; }
   .author-row > :last-child { display: none; }
   .pagination-wrap { overflow-x: auto; justify-content: flex-start; }

@@ -41,6 +41,7 @@ class UserServiceTest {
                 UserPreferencesDTO.builder()
                         .libraryViewMode("compact-card")
                         .libraryPageSize(30)
+                        .authorPageSize(20)
                         .build());
 
         assertEquals("warm", result.getTheme());
@@ -48,6 +49,7 @@ class UserServiceTest {
         assertEquals(30, result.getLibraryPageSize());
         assertEquals(30, result.getLibraryCardPageSize());
         assertEquals(30, result.getLibraryListPageSize());
+        assertEquals(20, result.getAuthorPageSize());
         assertEquals(2, result.getScanThreadCount());
         assertEquals(58, result.getDockSize());
         assertEquals(72, result.getDockOpacity());

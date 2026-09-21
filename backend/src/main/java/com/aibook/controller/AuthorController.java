@@ -1,12 +1,12 @@
 package com.aibook.controller;
 
 import com.aibook.dto.AuthorDTO;
+import com.aibook.dto.AuthorPageDTO;
 import com.aibook.dto.AuthorRequest;
 import com.aibook.model.entity.User;
 import com.aibook.service.AuthorService;
 import com.aibook.service.UserService;
 import jakarta.validation.Valid;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 当前用户的书籍作者管理接口。 */
@@ -26,8 +27,14 @@ public class AuthorController {
     private final UserService userService;
 
     @GetMapping
-    public ResponseEntity<List<AuthorDTO>> getAuthors(Authentication authentication) {
-        return ResponseEntity.ok(authorService.getAuthors(currentUser(authentication)));
+    public ResponseEntity<AuthorPageDTO> getAuthors(
+            Authentication authentication,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "NAME_ASC") String sort) {
+        return ResponseEntity.ok(authorService.getAuthors(
+                currentUser(authentication), page, size, keyword, sort));
     }
 
     @PostMapping

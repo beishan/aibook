@@ -21,6 +21,7 @@ public class UserPreferencesDTO {
     private Integer libraryPageSize;
     private Integer libraryCardPageSize;
     private Integer libraryListPageSize;
+    private Integer authorPageSize;
     private Integer scanThreadCount;
     private Integer crawlerPollingIntervalSeconds;
     private Boolean crawlerFollowCurrentChapter;
@@ -126,6 +127,14 @@ public class UserPreferencesDTO {
 
     public void setLibraryListPageSize(Integer libraryListPageSize) {
         this.libraryListPageSize = libraryListPageSize;
+    }
+
+    public Integer getAuthorPageSize() {
+        return authorPageSize;
+    }
+
+    public void setAuthorPageSize(Integer authorPageSize) {
+        this.authorPageSize = authorPageSize;
     }
 
     public Integer getScanThreadCount() {
@@ -279,6 +288,11 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder libraryListPageSize(Integer libraryListPageSize) {
             value.setLibraryListPageSize(libraryListPageSize);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder authorPageSize(Integer authorPageSize) {
+            value.setAuthorPageSize(authorPageSize);
             return this;
         }
 

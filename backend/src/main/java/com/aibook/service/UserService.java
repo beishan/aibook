@@ -34,6 +34,7 @@ public class UserService implements UserDetailsService {
             Set.of("card", "compact-card", "list");
     private static final Set<Integer> LIBRARY_PAGE_SIZES =
             Set.of(10, 30, 50, 100, 200);
+    private static final Set<Integer> AUTHOR_PAGE_SIZES = Set.of(10, 20, 50);
     private static final Set<Integer> CRAWLER_CHAPTER_PAGE_SIZES = Set.of(20, 50, 100);
     private static final Set<Integer> CRAWLER_POLLING_INTERVAL_SECONDS = Set.of(1, 3, 5, 10, 30);
     private static final Set<String> CRAWLER_DISCOVERY_VIEW_MODES = Set.of("table", "card");
@@ -141,6 +142,10 @@ public class UserService implements UserDetailsService {
                     LIBRARY_PAGE_SIZES);
             user.setLibraryListPageSize(request.getLibraryListPageSize());
         }
+        if (request.getAuthorPageSize() != null) {
+            requireAllowed("作者列表分页大小", request.getAuthorPageSize(), AUTHOR_PAGE_SIZES);
+            user.setAuthorPageSize(request.getAuthorPageSize());
+        }
         if (request.getScanThreadCount() != null) {
             if (!ScanSettings.isValidThreadCount(request.getScanThreadCount())) {
                 throw new IllegalArgumentException(
@@ -246,6 +251,7 @@ public class UserService implements UserDetailsService {
                 .libraryPageSize(cardPageSize)
                 .libraryCardPageSize(cardPageSize)
                 .libraryListPageSize(listPageSize)
+                .authorPageSize(normalizeAuthorPageSize(user.getAuthorPageSize()))
                 .scanThreadCount(
                         ScanSettings.normalizeThreadCount(user.getScanThreadCount()))
                 .crawlerPollingIntervalSeconds(user.getCrawlerPollingIntervalSeconds())
@@ -268,6 +274,10 @@ public class UserService implements UserDetailsService {
 
     private int normalizeLibraryPageSize(Integer value, int fallback) {
         return value != null && LIBRARY_PAGE_SIZES.contains(value) ? value : fallback;
+    }
+
+    private int normalizeAuthorPageSize(Integer value) {
+        return value != null && AUTHOR_PAGE_SIZES.contains(value) ? value : 10;
     }
 
     private void validateFont(Long id) {

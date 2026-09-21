@@ -1,6 +1,8 @@
 package com.aibook.service;
 
 import com.aibook.dto.AuthorDTO;
+import com.aibook.dto.AuthorPageDTO;
+import com.aibook.dto.AuthorPageDTO.AuthorSummaryDTO;
 import com.aibook.dto.AuthorRequest;
 import com.aibook.model.entity.Author;
 import com.aibook.model.entity.Book;
@@ -10,9 +12,14 @@ import com.aibook.repository.BookRepository;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,13 +37,39 @@ public class AuthorService {
     private final AuthorRepository authorRepository;
     private final BookRepository bookRepository;
 
-    /** 获取作者列表，并幂等补齐升级前已存在书籍的作者关联。 */
-    @Transactional
-    public List<AuthorDTO> getAuthors(User user) {
-        bookRepository.findByUserAndDeletedAtIsNull(user).forEach(this::synchronizeBook);
-        return authorRepository.findByUserOrderByNameAsc(user).stream()
-                .map(this::toDTO)
+    /** 分页读取作者；历史关联补齐由启动迁移处理，不进入列表请求链路。 */
+    @Transactional(readOnly = true)
+    public AuthorPageDTO getAuthors(
+            User user, int page, int size, String keyword, String sort) {
+        Page<Author> authorPage = authorRepository.findPage(
+                user,
+                keyword == null ? "" : keyword.trim(),
+                PageRequest.of(
+                        Math.max(0, page),
+                        Math.max(1, Math.min(size, 100)),
+                        authorSort(sort)));
+        List<Long> authorIds = authorPage.getContent().stream().map(Author::getId).toList();
+        Map<Long, Long> bookCounts = (authorIds.isEmpty()
+                ? List.<AuthorRepository.AuthorBookCount>of()
+                : authorRepository.countActiveBooksByAuthorIds(user, authorIds)).stream()
+                .collect(Collectors.toMap(
+                        AuthorRepository.AuthorBookCount::getAuthorId,
+                        AuthorRepository.AuthorBookCount::getBookCount));
+        List<AuthorDTO> content = authorPage.getContent().stream()
+                .map(author -> toDTO(author, bookCounts.getOrDefault(author.getId(), 0L)))
                 .toList();
+        AuthorRepository.AuthorRelationStatistics relations =
+                authorRepository.summarizeActiveBooks(user);
+        return new AuthorPageDTO(
+                content,
+                authorPage.getTotalElements(),
+                authorPage.getTotalPages(),
+                authorPage.getNumber(),
+                authorPage.getSize(),
+                new AuthorSummaryDTO(
+                        authorRepository.countByUser(user),
+                        relations == null ? 0 : relations.getActiveAuthorCount(),
+                        relations == null ? 0 : relations.getRelatedBookCount()));
     }
 
     /** 手动新增单个作者。 */
@@ -53,7 +86,7 @@ public class AuthorService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "作者已存在");
         }
         return toDTO(authorRepository.findByUserAndNormalizedName(user, normalizedName)
-                .orElseThrow(() -> new IllegalStateException("新增作者后未能读取记录")));
+                .orElseThrow(() -> new IllegalStateException("新增作者后未能读取记录")), 0L);
     }
 
     /** 将书籍的作者字符串规范化为作者记录及书籍关联。 */
@@ -93,13 +126,23 @@ public class AuthorService {
                         .collect(java.util.stream.Collectors.toSet()));
     }
 
-    private AuthorDTO toDTO(Author author) {
+    private AuthorDTO toDTO(Author author, long bookCount) {
         return AuthorDTO.builder()
                 .id(author.getId())
                 .name(author.getName())
-                .bookCount(authorRepository.countActiveBooks(author.getId()))
+                .bookCount(bookCount)
                 .createdAt(author.getCreatedAt())
                 .build();
+    }
+
+    private Sort authorSort(String value) {
+        Sort.Order order = switch (value == null ? "" : value) {
+            case "NAME_DESC" -> Sort.Order.desc("normalizedName");
+            case "CREATED_DESC" -> Sort.Order.desc("createdAt");
+            case "CREATED_ASC" -> Sort.Order.asc("createdAt");
+            default -> Sort.Order.asc("normalizedName");
+        };
+        return Sort.by(order, Sort.Order.asc("id"));
     }
 
     private String cleanName(String value) {

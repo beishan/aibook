@@ -20,6 +20,8 @@ export type CrawlerPollingIntervalSeconds = (typeof CRAWLER_POLLING_INTERVAL_OPT
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 export const LIBRARY_PAGE_SIZE_OPTIONS = [10, 30, 50, 100, 200] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
+export const AUTHOR_PAGE_SIZE_OPTIONS = [10, 20, 50] as const
+export type AuthorPageSize = (typeof AUTHOR_PAGE_SIZE_OPTIONS)[number]
 export type ReaderAppearance = 'classic' | 'readingRoom' | 'trialReader'
 export type ReaderEpubEngine = 'epubjs' | 'readium'
 export type ReaderContentWidth = 'narrow' | 'medium' | 'wide' | 'wider' | 'full'
@@ -63,6 +65,7 @@ interface UserPreferences {
   libraryPageSize: number | null
   libraryCardPageSize: number | null
   libraryListPageSize: number | null
+  authorPageSize: number | null
   scanThreadCount: number | null
   crawlerPollingIntervalSeconds: number | null
   crawlerFollowCurrentChapter: boolean | null
@@ -88,6 +91,7 @@ const LIBRARY_VIEW_MODE_KEY = 'ai-book-view-mode'
 const LIBRARY_PAGE_SIZE_KEY = 'aibook-library-page-size'
 const LIBRARY_CARD_PAGE_SIZE_KEY = 'aibook-library-card-page-size'
 const LIBRARY_LIST_PAGE_SIZE_KEY = 'aibook-library-list-page-size'
+const AUTHOR_PAGE_SIZE_KEY = 'aibook-author-page-size'
 const CRAWLER_FOLLOW_CURRENT_CHAPTER_KEY = 'aibook.crawler.followCurrentChapter'
 const CRAWLER_POLLING_INTERVAL_KEY = 'aibook.crawler.pollingIntervalSeconds'
 const CRAWLER_CHAPTER_PAGE_SIZE_KEY = 'aibook.crawler.chapterPageSize'
@@ -101,6 +105,7 @@ const DOCK_ICON_STYLE_KEY = 'aibook-dock-icon-style'
 export const READER_SETTINGS_STORAGE_KEY = 'ai-book-reader-settings'
 const READER_SETTINGS_SAVE_DELAY_MS = 500
 const DEFAULT_LIBRARY_PAGE_SIZE: LibraryPageSize = 10
+const DEFAULT_AUTHOR_PAGE_SIZE: AuthorPageSize = 10
 const DEFAULT_SCAN_THREAD_COUNT = 2
 const DEFAULT_CRAWLER_POLLING_INTERVAL_SECONDS: CrawlerPollingIntervalSeconds = 3
 const CRAWLER_CHAPTER_PAGE_SIZE_OPTIONS = [20, 50, 100] as const
@@ -120,6 +125,10 @@ const readLocalLibraryViewMode = (): LibraryViewMode => {
 const isLibraryPageSize = (value: unknown): value is LibraryPageSize =>
   typeof value === 'number'
   && LIBRARY_PAGE_SIZE_OPTIONS.some(size => size === value)
+
+const isAuthorPageSize = (value: unknown): value is AuthorPageSize =>
+  typeof value === 'number'
+  && AUTHOR_PAGE_SIZE_OPTIONS.includes(value as AuthorPageSize)
 
 const readLocalLibraryPageSize = (key: string): LibraryPageSize => {
   const saved = Number(localStorage.getItem(key) || localStorage.getItem(LIBRARY_PAGE_SIZE_KEY))
@@ -265,6 +274,10 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const libraryListPageSize = ref<LibraryPageSize>(
     readLocalLibraryPageSize(LIBRARY_LIST_PAGE_SIZE_KEY)
   )
+  const storedAuthorPageSize = Number(localStorage.getItem(AUTHOR_PAGE_SIZE_KEY))
+  const authorPageSize = ref<AuthorPageSize>(
+    isAuthorPageSize(storedAuthorPageSize) ? storedAuthorPageSize : DEFAULT_AUTHOR_PAGE_SIZE
+  )
   const scanThreadCount = ref(DEFAULT_SCAN_THREAD_COUNT)
   const storedCrawlerPollingIntervalSeconds = Number(
     localStorage.getItem(CRAWLER_POLLING_INTERVAL_KEY),
@@ -333,6 +346,13 @@ export const usePreferencesStore = defineStore('preferences', () => {
     libraryListPageSize.value = value
     localStorage.setItem(LIBRARY_LIST_PAGE_SIZE_KEY, String(value))
     if (syncRemote) persistRemote({ libraryListPageSize: value })
+  }
+
+  const setAuthorPageSize = (value: number, syncRemote = true) => {
+    if (!isAuthorPageSize(value)) return
+    authorPageSize.value = value
+    localStorage.setItem(AUTHOR_PAGE_SIZE_KEY, String(value))
+    if (syncRemote) persistRemote({ authorPageSize: value })
   }
 
   const setScanThreadCount = (value: number, syncRemote = true) => {
@@ -555,6 +575,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.libraryListPageSize = libraryListPageSize.value
       }
 
+      if (isAuthorPageSize(data.authorPageSize)) {
+        setAuthorPageSize(data.authorPageSize, false)
+      } else {
+        missingPreferences.authorPageSize = authorPageSize.value
+      }
+
       if (isScanThreadCount(data.scanThreadCount)) {
         setScanThreadCount(data.scanThreadCount, false)
       } else {
@@ -656,6 +682,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     libraryViewMode,
     libraryCardPageSize,
     libraryListPageSize,
+    authorPageSize,
     scanThreadCount,
     crawlerPollingIntervalSeconds,
     crawlerFollowCurrentChapter,
@@ -675,6 +702,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setLibraryViewMode,
     setLibraryCardPageSize,
     setLibraryListPageSize,
+    setAuthorPageSize,
     setScanThreadCount,
     setCrawlerPollingIntervalSeconds,
     setCrawlerFollowCurrentChapter,

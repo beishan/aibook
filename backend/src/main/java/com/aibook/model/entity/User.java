@@ -197,6 +197,14 @@ public class User implements UserDetails {
         preference().setLibraryListPageSize(value);
     }
 
+    public Integer getAuthorPageSize() {
+        return preference().getAuthorPageSize();
+    }
+
+    public void setAuthorPageSize(Integer value) {
+        preference().setAuthorPageSize(value);
+    }
+
     public Integer getScanThreadCount() {
         return preference().getScanThreadCount();
     }

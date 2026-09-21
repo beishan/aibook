@@ -54,4 +54,15 @@ assert.match(source, /currentTaskStatusRank\(task:CrawlerTask\).*task\.status===
 assert.match(source, /orderCurrentTasks\(await crawlerApi\.currentTasks\(\)\)/, 'queue refresh must normalize task status order before pagination')
 assert.match(source, /pagedQueuedTasks=computed\(\(\)=>queuedTasks\.value\.slice/, 'queue pagination must slice the normalized full queue')
 
-console.log('Crawler task actions use a polished action cluster with distinct states and overflow menu')
+const crawlerBookTable = source.match(/<el-table v-if="bookViewMode==='table'"([\s\S]*?)<\/el-table>/)?.[1]
+assert.ok(crawlerBookTable, 'CrawlerView must define the crawler-book table')
+assert.match(crawlerBookTable, /label="操作" width="250" fixed="right" align="right"/, 'crawler-book actions must use the task-list column alignment')
+assert.match(crawlerBookTable, /class="crawler-book-action-cluster"/, 'crawler-book actions must use a unified rounded cluster')
+assert.match(crawlerBookTable, /crawler-book-action-details/, 'crawler-book details must remain a primary action')
+assert.match(crawlerBookTable, /crawler-book-action-continue/, 'crawler-book continue must remain a primary action')
+assert.match(crawlerBookTable, /crawler-book-action-import/, 'crawler-book import must remain a primary action')
+assert.match(crawlerBookTable, /circle :icon="MoreFilled" class="crawler-book-action-more"/, 'crawler-book secondary actions must use a compact overflow button')
+assert.match(crawlerBookTable, /command="updates"[\s\S]*?command="metadata"[\s\S]*?command="trial"[\s\S]*?command="generate"/, 'crawler-book overflow must preserve all secondary actions')
+assert.match(source, /function handleCrawlerBookTableMore\([\s\S]*?command==='trial'[\s\S]*?startTrial\(book\)/, 'crawler-book overflow must route the trial action')
+
+console.log('Crawler task and book actions use polished action clusters with compact overflow menus')

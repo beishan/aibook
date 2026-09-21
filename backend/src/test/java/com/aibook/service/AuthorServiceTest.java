@@ -3,6 +3,7 @@ package com.aibook.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -14,9 +15,13 @@ import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
 import com.aibook.repository.AuthorRepository;
 import com.aibook.repository.BookRepository;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.server.ResponseStatusException;
 
 class AuthorServiceTest {
@@ -70,9 +75,41 @@ class AuthorServiceTest {
                 .thenReturn(1);
         when(authorRepository.findByUserAndNormalizedName(user, "ursula le guin"))
                 .thenReturn(Optional.of(created));
-        when(authorRepository.countActiveBooks(13L)).thenReturn(0L);
-
         assertThat(service.createAuthor(user, request).getName()).isEqualTo("Ursula Le Guin");
+    }
+
+    @Test
+    void loadsOneAuthorPageWithPageScopedCountsAndGlobalSummary() {
+        Author luXun = author(11L, "鲁迅", "鲁迅");
+        Author empty = author(12L, "无作品作者", "无作品作者");
+        AuthorRepository.AuthorBookCount count = mock(AuthorRepository.AuthorBookCount.class);
+        AuthorRepository.AuthorRelationStatistics statistics =
+                mock(AuthorRepository.AuthorRelationStatistics.class);
+        when(authorRepository.findPage(eq(user), eq("鲁"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(
+                        List.of(luXun, empty), PageRequest.of(0, 10), 2));
+        when(authorRepository.countActiveBooksByAuthorIds(user, List.of(11L, 12L)))
+                .thenReturn(List.of(count));
+        when(count.getAuthorId()).thenReturn(11L);
+        when(count.getBookCount()).thenReturn(3L);
+        when(authorRepository.summarizeActiveBooks(user)).thenReturn(statistics);
+        when(statistics.getActiveAuthorCount()).thenReturn(7L);
+        when(statistics.getRelatedBookCount()).thenReturn(15L);
+        when(authorRepository.countByUser(user)).thenReturn(9L);
+
+        var page = service.getAuthors(user, 0, 10, " 鲁 ", "CREATED_DESC");
+
+        assertThat(page.content()).extracting("name", "bookCount")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("鲁迅", 3L),
+                        org.assertj.core.groups.Tuple.tuple("无作品作者", 0L));
+        assertThat(page.totalElements()).isEqualTo(2);
+        assertThat(page.summary().totalAuthorCount()).isEqualTo(9);
+        assertThat(page.summary().activeAuthorCount()).isEqualTo(7);
+        assertThat(page.summary().relatedBookCount()).isEqualTo(15);
+        verify(authorRepository).countActiveBooksByAuthorIds(user, List.of(11L, 12L));
+        verify(bookRepository, never()).findAuthorSynchronizationCandidatesAfterId(
+                any(), any(Pageable.class));
     }
 
     @Test
