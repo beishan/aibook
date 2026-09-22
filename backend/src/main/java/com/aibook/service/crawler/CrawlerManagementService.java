@@ -460,6 +460,77 @@ public class CrawlerManagementService {
                 bookRepository.countBySiteUserAndImportStatus(user, CrawlerBook.ImportStatus.IMPORTED), recentTasks(user, 8));
     }
 
+    @Transactional(readOnly = true)
+    public DashboardStatisticsView dashboardStatistics(User user, int days) {
+        if (!Set.of(7, 30, 90).contains(days)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "统计时间范围仅支持 7、30 或 90 天");
+        }
+        LocalDate firstDay = LocalDate.now().minusDays(days - 1L);
+        LocalDateTime start = firstDay.atStartOfDay();
+        Map<LocalDate, long[]> daily = new LinkedHashMap<>();
+        for (int offset = 0; offset < days; offset++) {
+            daily.put(firstDay.plusDays(offset), new long[5]);
+        }
+        mergeDailyCounts(daily, chapterRepository.countCreatedByDay(user, start), 0);
+        mergeDailyCounts(daily, chapterRepository.countSuccessfulByDay(
+                user, start, CrawlerChapter.CrawlStatus.COMPLETED), 1);
+        mergeDailyCounts(daily, bookRepository.countCreatedByDay(user, start), 2);
+        for (Object[] row : taskRepository.countFinishedByDayAndStatus(user, start, List.of(
+                CrawlerTask.TaskStatus.SUCCESS, CrawlerTask.TaskStatus.PARTIAL_SUCCESS,
+                CrawlerTask.TaskStatus.FAILED))) {
+            long[] values = daily.get(statisticsDate(row[0]));
+            if (values == null) continue;
+            long count = ((Number) row[2]).longValue();
+            values[3] += count;
+            if (row[1] == CrawlerTask.TaskStatus.SUCCESS) values[4] += count;
+        }
+
+        Map<Long, String> siteNames = new HashMap<>();
+        Map<Long, long[]> siteTotals = new HashMap<>();
+        mergeSiteCounts(siteNames, siteTotals, bookRepository.countCreatedBySite(user, start), 0);
+        mergeSiteCounts(siteNames, siteTotals, chapterRepository.countCreatedBySite(user, start), 1);
+        List<SiteContributionView> contributions = siteTotals.entrySet().stream()
+                .map(entry -> new SiteContributionView(entry.getKey(), siteNames.get(entry.getKey()),
+                        entry.getValue()[0], entry.getValue()[1]))
+                .sorted(Comparator.comparingLong(SiteContributionView::newChapters).reversed()
+                        .thenComparing(Comparator.comparingLong(SiteContributionView::newBooks).reversed())
+                        .thenComparing(SiteContributionView::siteName))
+                .limit(5)
+                .toList();
+        List<DailyStatisticsView> dailyViews = daily.entrySet().stream()
+                .map(entry -> new DailyStatisticsView(entry.getKey(), entry.getValue()[0],
+                        entry.getValue()[1], entry.getValue()[2], entry.getValue()[3],
+                        entry.getValue()[4]))
+                .toList();
+        CrawlerFunnelView funnel = new CrawlerFunnelView(
+                bookRepository.countBySiteUser(user), taskRepository.countDistinctTaskedBooks(user),
+                bookRepository.countBySiteUserAndCrawlStatus(user, CrawlerBook.CrawlStatus.COMPLETED),
+                bookRepository.countBySiteUserAndImportStatus(user, CrawlerBook.ImportStatus.IMPORTED));
+        return new DashboardStatisticsView(days, dailyViews, contributions, funnel);
+    }
+
+    private void mergeDailyCounts(Map<LocalDate, long[]> daily, List<Object[]> rows, int index) {
+        for (Object[] row : rows) {
+            long[] values = daily.get(statisticsDate(row[0]));
+            if (values != null) values[index] = ((Number) row[1]).longValue();
+        }
+    }
+
+    private void mergeSiteCounts(Map<Long, String> names, Map<Long, long[]> totals,
+            List<Object[]> rows, int index) {
+        for (Object[] row : rows) {
+            Long siteId = ((Number) row[0]).longValue();
+            names.put(siteId, String.valueOf(row[1]));
+            totals.computeIfAbsent(siteId, ignored -> new long[2])[index] = ((Number) row[2]).longValue();
+        }
+    }
+
+    private LocalDate statisticsDate(Object value) {
+        if (value instanceof LocalDate date) return date;
+        if (value instanceof java.sql.Date date) return date.toLocalDate();
+        return LocalDate.parse(String.valueOf(value));
+    }
+
     private void apply(CrawlerSite site, SitePayload p, String siteCode) {
         site.setSiteName(p.siteName().trim()); site.setSiteCode(siteCode); site.setBaseUrl(trimSlash(p.baseUrl()));
         site.setHomeUrl(blank(p.homeUrl()) ? trimSlash(p.baseUrl()) : p.homeUrl().trim());

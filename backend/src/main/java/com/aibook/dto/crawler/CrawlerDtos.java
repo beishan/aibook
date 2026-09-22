@@ -4,6 +4,7 @@ import com.aibook.model.entity.CrawlerTask;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -161,4 +162,17 @@ public final class CrawlerDtos {
             long completedBookCount, long crawlingBookCount, long failedBookCount,
             long todayNewBooks, long todayNewChapters, long readyToImportCount,
             long importedCount, List<TaskView> recentTasks) { }
+
+    public record DailyStatisticsView(LocalDate date, long newChapters,
+            long successfulChapters, long newBooks, long finishedTasks,
+            long successfulTasks) { }
+
+    public record SiteContributionView(Long siteId, String siteName,
+            long newBooks, long newChapters) { }
+
+    public record CrawlerFunnelView(long discoveredBooks, long taskedBooks,
+            long completedBooks, long importedBooks) { }
+
+    public record DashboardStatisticsView(int days, List<DailyStatisticsView> daily,
+            List<SiteContributionView> siteContributions, CrawlerFunnelView funnel) { }
 }

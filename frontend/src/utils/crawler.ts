@@ -36,6 +36,10 @@ export interface CrawlerChapterFocus { chapter:CrawlerChapter; page:number }
 export interface CrawlerLog { id:number; description:string; details?:string; createdAt:string }
 export interface CrawlerExport { id:number; format:string; fileSize:number; fileHash:string; createdAt:string }
 export interface CrawlerDashboard { siteCount:number; enabledSiteCount:number; bookCount:number; completedBookCount:number; crawlingBookCount:number; failedBookCount:number; todayNewBooks:number; todayNewChapters:number; readyToImportCount:number; importedCount:number; recentTasks:CrawlerTask[] }
+export interface CrawlerDailyStatistics { date:string; newChapters:number; successfulChapters:number; newBooks:number; finishedTasks:number; successfulTasks:number }
+export interface CrawlerSiteContribution { siteId:number; siteName:string; newBooks:number; newChapters:number }
+export interface CrawlerFunnel { discoveredBooks:number; taskedBooks:number; completedBooks:number; importedBooks:number }
+export interface CrawlerDashboardStatistics { days:number; daily:CrawlerDailyStatistics[]; siteContributions:CrawlerSiteContribution[]; funnel:CrawlerFunnel }
 export interface CrawlerRuleTest { success:boolean; title?:string; author?:string; description?:string; coverUrl?:string; category?:string; tags:string[]; bookStatus?:string; chapterListUrl?:string; chapterCount:number; sampleChapter?:string; contentLength:number; contentPreview?:string; durationMillis:number; errorMessage?:string }
 export interface CrawlerRuleVersion { id:number; version:number; changeSummary:string; enabled:boolean; rule:CrawlerRule; createdAt:string; updatedAt?:string }
 export interface CrawlerRuleSave { version:number; changeSummary:string; rule:CrawlerRule; enabled:boolean }
@@ -49,6 +53,7 @@ export interface CrawlerTaskQuery { page:number; size:number; failedOnly?:boolea
 
 export const crawlerApi = {
   dashboard: () => api.get<CrawlerDashboard>('/api/crawler/dashboard').then(r => r.data),
+  dashboardStatistics: (days:7|30|90) => api.get<CrawlerDashboardStatistics>('/api/crawler/dashboard/statistics',{params:{days}}).then(r => r.data),
   sites: () => api.get<CrawlerSite[]>('/api/crawler/sites').then(r => r.data),
   createSite: (data:CrawlerSitePayload) => api.post<CrawlerSite>('/api/crawler/sites', data).then(r => r.data),
   updateSite: (id:number, data:CrawlerSitePayload) => api.put<CrawlerSite>(`/api/crawler/sites/${id}`, data).then(r => r.data),

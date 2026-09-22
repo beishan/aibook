@@ -113,6 +113,7 @@ npm run build  # 包含 vue-tsc
 ### 代码风格
 - **Java**: 遵循 Google Java Style Guide
 - **Vue/TypeScript**: 使用 Composition API + `<script setup>`
+- **可读性**: 编写或修改代码时必须按语义合理换行、缩进和拆分代码块；不得为追求紧凑而将模板、样式或程序逻辑集中写在一行，优先保证代码可读性与可维护性。
 
 ### Android UI 规范
 - 安卓端后续新增或调整按钮时，点击态不要使用阴影或按压投影效果；优先使用颜色、透明度、边框或轻量背景变化表达反馈。

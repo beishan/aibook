@@ -9,7 +9,7 @@ assert.match(taskTable, /type:'selection',width:48,reserveSelection:true,fixed:'
 assert.match(taskTable, /label:'任务',minWidth:240,fixed:'left'/, 'the task-name column must be fixed on the left')
 assert.match(taskTable, /label:'操作',width:340,fixed:'right',align:'right'/, 'the action column must be fixed on the right with right-aligned buttons')
 assert.match(taskTable, /label:'当前章节'[\s\S]*?label:'创建时间'/, 'the current-chapter column must appear before the created-time column')
-assert.match(taskTable, /h\('div',\{class:'task-action-cluster'\}/, 'task actions must use a visually unified action cluster')
+assert.match(taskTable, /h\('div',\{class:'task-action-cluster row-hover-action'\}/, 'task actions must use a row-hover action cluster')
 assert.match(taskTable, /task-action-details/, 'the details action must have a distinct primary treatment')
 assert.match(taskTable, /task-action-pause/, 'the pause action must have a neutral treatment')
 assert.match(taskTable, /task-action-cancel/, 'the cancel action must have a danger treatment')
@@ -26,14 +26,14 @@ assert.match(taskTable, /row\.status==='SUCCESS'&&row\.type==='SITE_SCAN'/, 'com
 assert.match(taskTable, /h\('i',`新增 \$\{row\.newBookCount\}`\)/, 'completed discovery scans must show the new-book count')
 assert.match(taskTable, /h\('em',`重复 \$\{row\.duplicateCount\}`\)/, 'completed discovery scans must show the duplicate-book count')
 
-const mainActionBlock = taskTable.match(/return h\('div',\{class:'task-action-cluster'\}[\s\S]*?\n\s*\]\)/)?.[0] ?? ''
+const mainActionBlock = taskTable.match(/return h\('div',\{class:'task-action-cluster row-hover-action'\}[\s\S]*?\n\s*\]\)/)?.[0] ?? ''
 assert.match(taskTable, /row\.status==='FAILED'\?\{command:'resume',label:'继续'\}/, 'failed tasks must keep resume in the overflow menu')
 assert.doesNotMatch(mainActionBlock, /onClick:[^\n]*emit\('delete',row\)/, 'delete must not remain a primary action button')
 
 const queueDialog = source.match(/<el-dialog v-model="queuedTasksDialog"([\s\S]*?)<\/el-dialog>/)?.[1]
 assert.ok(queueDialog, 'CrawlerView must define the current-task queue dialog')
 assert.match(queueDialog, /label="操作" width="250" fixed="right" align="right"/, 'queue actions must remain fixed and right-aligned')
-assert.match(queueDialog, /<div class="queued-task-actions">/, 'queue row actions must use the polished action cluster')
+assert.match(queueDialog, /<div class="queued-task-actions row-hover-action">/, 'queue row actions must use the hover-revealed polished action cluster')
 assert.match(queueDialog, /:data="pagedQueuedTasks"/, 'queue table must render the current page')
 assert.match(queueDialog, /v-model:current-page="queuedTaskPage"/, 'queue dialog must expose pagination')
 assert.match(queueDialog, /v-model:page-size="queuedTaskPageSize"/, 'queue dialog must allow changing page size')
@@ -58,7 +58,7 @@ assert.match(source, /pagedQueuedTasks=computed\(\(\)=>queuedTasks\.value\.slice
 const crawlerBookTable = source.match(/<el-table v-if="bookViewMode==='table'"([\s\S]*?)<\/el-table>/)?.[1]
 assert.ok(crawlerBookTable, 'CrawlerView must define the crawler-book table')
 assert.match(crawlerBookTable, /label="操作" width="340" fixed="right" align="right"/, 'crawler-book actions must use the task-list column alignment')
-assert.match(crawlerBookTable, /class="crawler-book-action-cluster"/, 'crawler-book actions must use a unified rounded cluster')
+assert.match(crawlerBookTable, /class="crawler-book-action-cluster row-hover-action"/, 'crawler-book actions must use a hover-revealed unified rounded cluster')
 assert.match(crawlerBookTable, /crawler-book-action-details/, 'crawler-book details must remain a primary action')
 assert.match(crawlerBookTable, /crawler-book-action-continue/, 'crawler-book continue must remain a primary action')
 assert.match(crawlerBookTable, /crawler-book-action-import/, 'crawler-book import must remain a primary action')
@@ -69,8 +69,8 @@ assert.match(source, /function handleCrawlerBookTableMore\([\s\S]*?command==='tr
 const discoveryBookTable = source.match(/<el-table v-if="discoveryViewMode==='table'"([\s\S]*?)<\/el-table>/)?.[1]
 assert.ok(discoveryBookTable, 'CrawlerView must define the discovery-book table')
 assert.match(discoveryBookTable, /label="操作" width="340" fixed="right" align="right"/, 'discovery-book actions must match the crawler-book fixed column alignment')
-assert.match(discoveryBookTable, /class="crawler-book-action-cluster discovery-book-action-cluster"/, 'discovery-book actions must reuse the unified rounded cluster')
-assert.match(discoveryBookTable, /crawler-book-action-details[\s\S]*?favorite-action[\s\S]*?crawler-book-action-import/, 'discovery-book details, favorite, and crawl must remain primary actions')
+assert.match(discoveryBookTable, /class="crawler-book-action-cluster discovery-book-action-cluster row-hover-action"/, 'discovery-book actions must reuse the hover-revealed unified rounded cluster')
+assert.match(discoveryBookTable, /crawler-book-action-details[\s\S]*?crawler-book-action-import/, 'discovery-book details and crawl must remain primary actions')
 assert.match(discoveryBookTable, /circle :icon="MoreFilled" class="crawler-book-action-more"/, 'discovery-book secondary actions must use a compact overflow button')
 assert.match(discoveryBookTable, /command="book-lists"[\s\S]*?command="metadata"[\s\S]*?command="website"[\s\S]*?command="ignore"[\s\S]*?command="blacklist"/, 'discovery-book overflow must preserve all secondary actions')
 assert.match(source, /function handleDiscoveryCardMore\([\s\S]*?command==='ignore'[\s\S]*?batchDiscovery\('IGNORED',\[book\.id\]\)/, 'discovery-book overflow must route the ignore action')

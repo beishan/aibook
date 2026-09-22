@@ -27,6 +27,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -83,6 +84,53 @@ class CrawlerManagementServiceTest {
 
         verify(httpClient).resetProtection(site);
         assertThat(result.protection().coolingDown()).isFalse();
+    }
+
+    @Test
+    void buildsAccountScopedDashboardStatisticsWithZeroFilledDays() {
+        User user = user();
+        LocalDate today = LocalDate.now();
+        when(chapters.countCreatedByDay(eq(user), any(LocalDateTime.class))).thenReturn(List.of(
+                new Object[] { today.minusDays(1), 12L }, new Object[] { today, 8L }));
+        when(chapters.countSuccessfulByDay(eq(user), any(LocalDateTime.class),
+                eq(CrawlerChapter.CrawlStatus.COMPLETED))).thenReturn(List.<Object[]>of(
+                        new Object[] { today, 6L }));
+        when(books.countCreatedByDay(eq(user), any(LocalDateTime.class))).thenReturn(List.<Object[]>of(
+                new Object[] { today, 3L }));
+        when(tasks.countFinishedByDayAndStatus(eq(user), any(LocalDateTime.class), anyCollection()))
+                .thenReturn(List.of(new Object[] { today, CrawlerTask.TaskStatus.SUCCESS, 4L },
+                        new Object[] { today, CrawlerTask.TaskStatus.FAILED, 1L }));
+        when(books.countCreatedBySite(eq(user), any(LocalDateTime.class))).thenReturn(List.of(
+                new Object[] { 7L, "甲站", 2L }, new Object[] { 8L, "乙站", 1L }));
+        when(chapters.countCreatedBySite(eq(user), any(LocalDateTime.class))).thenReturn(List.of(
+                new Object[] { 7L, "甲站", 20L }, new Object[] { 8L, "乙站", 30L }));
+        when(books.countBySiteUser(user)).thenReturn(10L);
+        when(tasks.countDistinctTaskedBooks(user)).thenReturn(8L);
+        when(books.countBySiteUserAndCrawlStatus(user, CrawlerBook.CrawlStatus.COMPLETED)).thenReturn(6L);
+        when(books.countBySiteUserAndImportStatus(user, CrawlerBook.ImportStatus.IMPORTED)).thenReturn(4L);
+
+        var result = service.dashboardStatistics(user, 7);
+
+        assertThat(result.daily()).hasSize(7);
+        assertThat(result.daily().get(0).date()).isEqualTo(today.minusDays(6));
+        assertThat(result.daily().get(0).newChapters()).isZero();
+        assertThat(result.daily().get(6).newChapters()).isEqualTo(8);
+        assertThat(result.daily().get(6).successfulChapters()).isEqualTo(6);
+        assertThat(result.daily().get(6).newBooks()).isEqualTo(3);
+        assertThat(result.daily().get(6).finishedTasks()).isEqualTo(5);
+        assertThat(result.daily().get(6).successfulTasks()).isEqualTo(4);
+        assertThat(result.siteContributions()).extracting("siteName").containsExactly("乙站", "甲站");
+        assertThat(result.funnel().discoveredBooks()).isEqualTo(10);
+        assertThat(result.funnel().taskedBooks()).isEqualTo(8);
+        assertThat(result.funnel().completedBooks()).isEqualTo(6);
+        assertThat(result.funnel().importedBooks()).isEqualTo(4);
+    }
+
+    @Test
+    void rejectsUnsupportedDashboardStatisticsRange() {
+        assertThatThrownBy(() -> service.dashboardStatistics(user(), 14))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("7、30 或 90 天");
     }
 
     @Test

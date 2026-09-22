@@ -76,4 +76,17 @@ public interface CrawlerTaskRepository extends JpaRepository<CrawlerTask, String
     boolean existsByCrawlerBookAndStatusIn(CrawlerBook book, Collection<CrawlerTask.TaskStatus> statuses);
     Optional<CrawlerTask> findFirstByCrawlerBookAndStatusOrderByUpdatedAtDesc(
             CrawlerBook book, CrawlerTask.TaskStatus status);
+    @Query("""
+            select cast(t.finishedAt as LocalDate), t.status, count(t)
+            from CrawlerTask t
+            where t.user = :user and t.finishedAt >= :start and t.status in :statuses
+            group by cast(t.finishedAt as LocalDate), t.status
+            order by cast(t.finishedAt as LocalDate)
+            """)
+    List<Object[]> countFinishedByDayAndStatus(@Param("user") User user,
+            @Param("start") java.time.LocalDateTime start,
+            @Param("statuses") Collection<CrawlerTask.TaskStatus> statuses);
+    @Query("select count(distinct t.crawlerBook.id) from CrawlerTask t "
+            + "where t.user = :user and t.crawlerBook is not null")
+    long countDistinctTaskedBooks(@Param("user") User user);
 }

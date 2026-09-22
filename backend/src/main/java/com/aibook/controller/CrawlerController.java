@@ -33,6 +33,10 @@ public class CrawlerController {
     private final CrawlerChapterRepository chapterRepository;
 
     @GetMapping("/dashboard") public DashboardView dashboard(Authentication auth) { return managementService.dashboard(user(auth)); }
+    @GetMapping("/dashboard/statistics") public DashboardStatisticsView dashboardStatistics(
+            Authentication auth, @RequestParam(defaultValue = "30") int days) {
+        return managementService.dashboardStatistics(user(auth), days);
+    }
     @GetMapping("/sites") public List<SiteView> sites(Authentication auth) { return managementService.sites(user(auth)); }
     @PostMapping("/sites") @ResponseStatus(HttpStatus.CREATED) public SiteView createSite(Authentication auth, @Valid @RequestBody SitePayload payload) { return managementService.createSite(user(auth), payload); }
     @PutMapping("/sites/{id}") public SiteView updateSite(Authentication auth, @PathVariable Long id, @Valid @RequestBody SitePayload payload) { return managementService.updateSite(user(auth), id, payload); }

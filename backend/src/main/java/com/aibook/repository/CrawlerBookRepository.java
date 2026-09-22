@@ -86,4 +86,21 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
     long countBySiteUserAndImportStatus(User user, CrawlerBook.ImportStatus status);
     @Query("select count(b) from CrawlerBook b where b.site.user = :user and b.createdAt >= :start")
     long countCreatedSince(@Param("user") User user, @Param("start") java.time.LocalDateTime start);
+    @Query("""
+            select cast(b.createdAt as LocalDate), count(b)
+            from CrawlerBook b
+            where b.site.user = :user and b.createdAt >= :start
+            group by cast(b.createdAt as LocalDate)
+            order by cast(b.createdAt as LocalDate)
+            """)
+    List<Object[]> countCreatedByDay(@Param("user") User user,
+            @Param("start") java.time.LocalDateTime start);
+    @Query("""
+            select b.site.id, b.site.siteName, count(b)
+            from CrawlerBook b
+            where b.site.user = :user and b.createdAt >= :start
+            group by b.site.id, b.site.siteName
+            """)
+    List<Object[]> countCreatedBySite(@Param("user") User user,
+            @Param("start") java.time.LocalDateTime start);
 }
