@@ -14,7 +14,8 @@ assert.match(taskTable, /task-action-details/, 'the details action must have a d
 assert.match(taskTable, /task-action-pause/, 'the pause action must have a neutral treatment')
 assert.match(taskTable, /task-action-cancel/, 'the cancel action must have a danger treatment')
 assert.match(taskTable, /circle:true[\s\S]*?task-action-more/, 'the overflow action must use a compact circular button')
-assert.match(taskTable, /'RUNNING','WAITING'[\s\S]*?'暂停'/, 'running and waiting tasks must expose pause in the primary action group')
+assert.match(taskTable, /'RUNNING','WAITING'[\s\S]*?icon:VideoPause[\s\S]*?'aria-label':'暂停任务'/, 'running and waiting tasks must expose an accessible pause icon')
+assert.match(taskTable, /row\.status==='PAUSED'[\s\S]*?icon:VideoPlay[\s\S]*?'aria-label':'继续任务'/, 'paused tasks must expose an accessible play icon')
 assert.match(taskTable, /'RUNNING','WAITING','PAUSED'[\s\S]*?'取消'/, 'active tasks must expose cancel in the primary action group')
 assert.match(taskTable, /h\(ElDropdown,[\s\S]*?'aria-label':'更多操作'/, 'secondary actions must use an Element Plus dropdown')
 assert.match(taskTable, /command:'scan-results',label:'扫描结果'/)
@@ -26,7 +27,7 @@ assert.match(taskTable, /h\('i',`新增 \$\{row\.newBookCount\}`\)/, 'completed 
 assert.match(taskTable, /h\('em',`重复 \$\{row\.duplicateCount\}`\)/, 'completed discovery scans must show the duplicate-book count')
 
 const mainActionBlock = taskTable.match(/return h\('div',\{class:'task-action-cluster'\}[\s\S]*?\n\s*\]\)/)?.[0] ?? ''
-assert.doesNotMatch(mainActionBlock, /onClick:[^\n]*emit\('command',row,'resume'\)/, 'resume must not remain a primary action button')
+assert.match(taskTable, /row\.status==='FAILED'\?\{command:'resume',label:'继续'\}/, 'failed tasks must keep resume in the overflow menu')
 assert.doesNotMatch(mainActionBlock, /onClick:[^\n]*emit\('delete',row\)/, 'delete must not remain a primary action button')
 
 const queueDialog = source.match(/<el-dialog v-model="queuedTasksDialog"([\s\S]*?)<\/el-dialog>/)?.[1]
@@ -43,8 +44,8 @@ assert.match(queueDialog, /queued-task-action-pause/)
 assert.match(queueDialog, /queued-task-action-resume/)
 assert.match(queueDialog, /queued-task-action-prioritize/)
 assert.match(queueDialog, /queued-task-action-cancel/)
-assert.match(queueDialog, />暂停<\/el-button>/)
-assert.match(queueDialog, />继续<\/el-button>/)
+assert.match(queueDialog, /:icon="VideoPause"[\s\S]*?aria-label="暂停任务"/)
+assert.match(queueDialog, /:icon="VideoPlay"[\s\S]*?aria-label="继续任务"/)
 assert.match(queueDialog, />优先<\/el-button>/)
 assert.match(queueDialog, />详情<\/el-button>/)
 assert.match(queueDialog, /commandCurrentTask\(row,'cancel'\)">取消<\/el-button>/, 'active queue tasks must expose cancel')
@@ -73,5 +74,6 @@ assert.match(discoveryBookTable, /crawler-book-action-details[\s\S]*?favorite-ac
 assert.match(discoveryBookTable, /circle :icon="MoreFilled" class="crawler-book-action-more"/, 'discovery-book secondary actions must use a compact overflow button')
 assert.match(discoveryBookTable, /command="book-lists"[\s\S]*?command="metadata"[\s\S]*?command="website"[\s\S]*?command="ignore"[\s\S]*?command="blacklist"/, 'discovery-book overflow must preserve all secondary actions')
 assert.match(source, /function handleDiscoveryCardMore\([\s\S]*?command==='ignore'[\s\S]*?batchDiscovery\('IGNORED',\[book\.id\]\)/, 'discovery-book overflow must route the ignore action')
+assert.match(source, /Star, StarFilled[\s\S]*?VideoPause, VideoPlay/, 'crawler controls must reuse the Element Plus star, pause, and play icons')
 
 console.log('Crawler task, discovery-book, and crawler-book actions use polished action clusters with compact overflow menus')

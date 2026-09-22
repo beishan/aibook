@@ -17,6 +17,8 @@ for (const text of [
   "crawlerApi.setBookLists",
   "favorite-action",
   "is-favorite",
+  "StarFilled:Star",
+  "取消收藏",
   "background:#f6c85f",
 ]) assert.ok(view.includes(text), `missing crawler favorite/book-list flow: ${text}`)
 
