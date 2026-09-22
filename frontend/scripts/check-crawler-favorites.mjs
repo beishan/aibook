@@ -15,6 +15,9 @@ for (const text of [
   'saveCrawlerBookLists',
   "crawlerApi.setFavorite",
   "crawlerApi.setBookLists",
+  "favorite-action",
+  "is-favorite",
+  "background:#f6c85f",
 ]) assert.ok(view.includes(text), `missing crawler favorite/book-list flow: ${text}`)
 
 for (const text of [

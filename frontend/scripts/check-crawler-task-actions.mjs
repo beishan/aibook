@@ -65,4 +65,13 @@ assert.match(crawlerBookTable, /circle :icon="MoreFilled" class="crawler-book-ac
 assert.match(crawlerBookTable, /command="updates"[\s\S]*?command="metadata"[\s\S]*?command="trial"[\s\S]*?command="generate"/, 'crawler-book overflow must preserve all secondary actions')
 assert.match(source, /function handleCrawlerBookTableMore\([\s\S]*?command==='trial'[\s\S]*?startTrial\(book\)/, 'crawler-book overflow must route the trial action')
 
-console.log('Crawler task and book actions use polished action clusters with compact overflow menus')
+const discoveryBookTable = source.match(/<el-table v-if="discoveryViewMode==='table'"([\s\S]*?)<\/el-table>/)?.[1]
+assert.ok(discoveryBookTable, 'CrawlerView must define the discovery-book table')
+assert.match(discoveryBookTable, /label="操作" width="340" fixed="right" align="right"/, 'discovery-book actions must match the crawler-book fixed column alignment')
+assert.match(discoveryBookTable, /class="crawler-book-action-cluster discovery-book-action-cluster"/, 'discovery-book actions must reuse the unified rounded cluster')
+assert.match(discoveryBookTable, /crawler-book-action-details[\s\S]*?favorite-action[\s\S]*?crawler-book-action-import/, 'discovery-book details, favorite, and crawl must remain primary actions')
+assert.match(discoveryBookTable, /circle :icon="MoreFilled" class="crawler-book-action-more"/, 'discovery-book secondary actions must use a compact overflow button')
+assert.match(discoveryBookTable, /command="book-lists"[\s\S]*?command="metadata"[\s\S]*?command="website"[\s\S]*?command="ignore"[\s\S]*?command="blacklist"/, 'discovery-book overflow must preserve all secondary actions')
+assert.match(source, /function handleDiscoveryCardMore\([\s\S]*?command==='ignore'[\s\S]*?batchDiscovery\('IGNORED',\[book\.id\]\)/, 'discovery-book overflow must route the ignore action')
+
+console.log('Crawler task, discovery-book, and crawler-book actions use polished action clusters with compact overflow menus')

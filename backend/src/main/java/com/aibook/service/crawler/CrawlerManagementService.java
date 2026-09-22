@@ -213,11 +213,13 @@ public class CrawlerManagementService {
     @Transactional
     public BookView setFavorite(User user, Long id, boolean favorite) {
         CrawlerBook book = ownedBook(user, id);
-        book.setFavorite(favorite);
         if (book.getLibraryBook() != null) {
             book.getLibraryBook().setIsFavorite(favorite);
         }
-        return bookView(bookRepository.save(book));
+        if (bookRepository.updateFavorite(id, user, favorite) != 1) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "采集书籍不存在");
+        }
+        return bookView(ownedBook(user, id));
     }
 
     @Transactional

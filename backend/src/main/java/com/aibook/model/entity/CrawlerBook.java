@@ -48,7 +48,8 @@ public class CrawlerBook {
     @Builder.Default private Boolean autoUpdateEnabled = true;
     @Column(nullable = false, columnDefinition = "boolean default true")
     @Builder.Default private Boolean autoSyncLibrary = true;
-    @Column(nullable = false, columnDefinition = "boolean default false")
+    // 收藏由独立更新语句维护，避免长时间运行的采集任务用旧实体快照覆盖用户选择。
+    @Column(nullable = false, updatable = false, columnDefinition = "boolean default false")
     @Builder.Default private Boolean favorite = false;
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

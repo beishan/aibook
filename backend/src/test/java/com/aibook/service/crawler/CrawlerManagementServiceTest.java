@@ -520,12 +520,16 @@ class CrawlerManagementServiceTest {
                 .externalBookId("book-1").bookUrl("https://example.com/book/1")
                 .libraryBook(libraryBook).importStatus(CrawlerBook.ImportStatus.IMPORTED).build();
         when(books.findByIdAndSiteUser(15L, user)).thenReturn(Optional.of(crawlerBook));
+        when(books.updateFavorite(15L, user, true)).thenAnswer(invocation -> {
+            crawlerBook.setFavorite(true);
+            return 1;
+        });
 
         var result = service.setFavorite(user, 15L, true);
 
         assertThat(result.favorite()).isTrue();
         assertThat(libraryBook.getIsFavorite()).isTrue();
-        verify(books).save(crawlerBook);
+        verify(books).updateFavorite(15L, user, true);
     }
 
     @Test
