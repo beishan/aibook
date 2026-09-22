@@ -88,6 +88,7 @@ public class BookListService {
                 .filter(bl -> bl.getUser().equals(user))
                 .orElseThrow(() -> new RuntimeException("书单不存在"));
 
+        bookListRepository.deleteCrawlerBookAssociations(bookList.getId());
         bookListRepository.delete(bookList);
     }
 

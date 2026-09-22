@@ -6,11 +6,16 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "crawler_books", uniqueConstraints =
         @UniqueConstraint(name = "uk_crawler_book_site_external", columnNames = {"site_id", "external_book_id"}),
-        indexes = @Index(name = "idx_crawler_book_site_status", columnList = "site_id,crawl_status"))
+        indexes = {
+                @Index(name = "idx_crawler_book_site_status", columnList = "site_id,crawl_status"),
+                @Index(name = "idx_crawler_book_site_favorite", columnList = "site_id,favorite")
+        })
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class CrawlerBook {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
@@ -43,6 +48,14 @@ public class CrawlerBook {
     @Builder.Default private Boolean autoUpdateEnabled = true;
     @Column(nullable = false, columnDefinition = "boolean default true")
     @Builder.Default private Boolean autoSyncLibrary = true;
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default private Boolean favorite = false;
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "crawler_book_lists",
+            joinColumns = @JoinColumn(name = "crawler_book_id"),
+            inverseJoinColumns = @JoinColumn(name = "book_list_id"))
+    @Builder.Default private List<BookList> bookLists = new ArrayList<>();
     @Enumerated(EnumType.STRING) @Builder.Default private CrawlStatus crawlStatus = CrawlStatus.DISCOVERED;
     @Enumerated(EnumType.STRING) @Builder.Default private DiscoveryStatus discoveryStatus = DiscoveryStatus.ACTIVE;
     @Enumerated(EnumType.STRING) @Builder.Default private ImportStatus importStatus = ImportStatus.NOT_IMPORTED;
@@ -57,6 +70,7 @@ public class CrawlerBook {
         if (discoveryStatus == null) discoveryStatus = DiscoveryStatus.ACTIVE;
         if (autoUpdateEnabled == null) autoUpdateEnabled = true;
         if (autoSyncLibrary == null) autoSyncLibrary = true;
+        if (favorite == null) favorite = false;
         if (pendingReleaseChapterCount == null) pendingReleaseChapterCount = 0;
     }
 

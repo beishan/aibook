@@ -7,7 +7,7 @@ const taskTable = source.match(/const TaskTable = defineComponent\(([\s\S]*?)\r?
 assert.ok(taskTable, 'CrawlerView must define the shared task table')
 assert.match(taskTable, /type:'selection',width:48,reserveSelection:true,fixed:'left'/, 'the selection column must stay fixed beside the task name')
 assert.match(taskTable, /label:'任务',minWidth:240,fixed:'left'/, 'the task-name column must be fixed on the left')
-assert.match(taskTable, /label:'操作',width:250,fixed:'right',align:'right'/, 'the action column must be fixed on the right with right-aligned buttons')
+assert.match(taskTable, /label:'操作',width:340,fixed:'right',align:'right'/, 'the action column must be fixed on the right with right-aligned buttons')
 assert.match(taskTable, /label:'当前章节'[\s\S]*?label:'创建时间'/, 'the current-chapter column must appear before the created-time column')
 assert.match(taskTable, /h\('div',\{class:'task-action-cluster'\}/, 'task actions must use a visually unified action cluster')
 assert.match(taskTable, /task-action-details/, 'the details action must have a distinct primary treatment')
@@ -56,7 +56,7 @@ assert.match(source, /pagedQueuedTasks=computed\(\(\)=>queuedTasks\.value\.slice
 
 const crawlerBookTable = source.match(/<el-table v-if="bookViewMode==='table'"([\s\S]*?)<\/el-table>/)?.[1]
 assert.ok(crawlerBookTable, 'CrawlerView must define the crawler-book table')
-assert.match(crawlerBookTable, /label="操作" width="250" fixed="right" align="right"/, 'crawler-book actions must use the task-list column alignment')
+assert.match(crawlerBookTable, /label="操作" width="340" fixed="right" align="right"/, 'crawler-book actions must use the task-list column alignment')
 assert.match(crawlerBookTable, /class="crawler-book-action-cluster"/, 'crawler-book actions must use a unified rounded cluster')
 assert.match(crawlerBookTable, /crawler-book-action-details/, 'crawler-book details must remain a primary action')
 assert.match(crawlerBookTable, /crawler-book-action-continue/, 'crawler-book continue must remain a primary action')

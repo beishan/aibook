@@ -19,6 +19,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
               and (:siteId is null or b.site.id = :siteId)
               and (:crawlStatus is null or b.crawlStatus = :crawlStatus)
               and (:importStatus is null or b.importStatus = :importStatus)
+              and (:favoriteOnly = false or b.favorite = true)
               and (:keyword = ''
                    or lower(b.bookName) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
@@ -34,14 +35,24 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
             @Param("siteId") Long siteId,
             @Param("crawlStatus") CrawlerBook.CrawlStatus crawlStatus,
             @Param("importStatus") CrawlerBook.ImportStatus importStatus,
+            @Param("favoriteOnly") boolean favoriteOnly,
             @Param("runningStatuses") Collection<CrawlerBook.CrawlStatus> runningStatuses,
             Pageable pageable);
+    default Page<CrawlerBook> searchManagedBooks(
+            User user, CrawlerBook.DiscoveryStatus discoveryStatus,
+            CrawlerBook.CrawlStatus excludedCrawlStatus, String keyword, Long siteId,
+            CrawlerBook.CrawlStatus crawlStatus, CrawlerBook.ImportStatus importStatus,
+            Collection<CrawlerBook.CrawlStatus> runningStatuses, Pageable pageable) {
+        return searchManagedBooks(user, discoveryStatus, excludedCrawlStatus, keyword, siteId,
+                crawlStatus, importStatus, false, runningStatuses, pageable);
+    }
     @Query("""
             select b from CrawlerBook b
             where b.site.user = :user
               and b.discoveryStatus = :discoveryStatus
               and b.crawlStatus = :crawlStatus
               and (:siteId is null or b.site.id = :siteId)
+              and (:favoriteOnly = false or b.favorite = true)
               and (:keyword = ''
                    or lower(b.bookName) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
@@ -56,7 +67,13 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
             @Param("crawlStatus") CrawlerBook.CrawlStatus crawlStatus,
             @Param("keyword") String keyword,
             @Param("siteId") Long siteId,
+            @Param("favoriteOnly") boolean favoriteOnly,
             Pageable pageable);
+    default Page<CrawlerBook> searchDiscoveredBooks(
+            User user, CrawlerBook.DiscoveryStatus discoveryStatus,
+            CrawlerBook.CrawlStatus crawlStatus, String keyword, Long siteId, Pageable pageable) {
+        return searchDiscoveredBooks(user, discoveryStatus, crawlStatus, keyword, siteId, false, pageable);
+    }
     long countBySiteUser(User user);
     long countBySite(CrawlerSite site);
     boolean existsBySite(CrawlerSite site);

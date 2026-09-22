@@ -78,6 +78,9 @@ public final class CrawlerDtos {
             @NotBlank @Pattern(regexp = "DISCOVERED|WAITING|PAUSED|PARTIAL_SUCCESS|COMPLETED|FAILED") String status,
             Boolean autoUpdateEnabled) { }
     public record LibrarySyncRequest(@NotNull Boolean enabled) { }
+    public record FavoriteRequest(@NotNull Boolean favorite) { }
+    public record BookListSelectionRequest(
+            @NotNull @Size(max = 100) List<@NotNull Long> bookListIds) { }
     public record TaskUpdateRequest(@NotNull CrawlerTask.Priority priority) { }
     public record TaskBatchRequest(
             @NotEmpty @Size(max = 200) List<@NotBlank String> taskIds,
@@ -125,6 +128,7 @@ public final class CrawlerDtos {
             String crawlStatus,
             String discoveryStatus, String importStatus, boolean autoUpdateEnabled,
             boolean autoSyncLibrary,
+            boolean favorite, List<Long> bookListIds,
             Long libraryBookId, LocalDateTime discoverTime,
             LocalDateTime lastCrawlStartedAt, LocalDateTime lastCrawlTime,
             LocalDateTime createdAt) { }
@@ -144,6 +148,7 @@ public final class CrawlerDtos {
     public record TaskView(String id, String type, String status, String priority,
             Long siteId, String siteName, Long discoveryPageId, String discoveryPageName,
             Integer scanMaxPages, int scannedPageCount, int progressPercent, Long bookId, String bookName,
+            boolean favorite,
             int totalCount, int successCount, int newBookCount,
             int duplicateCount, int failedCount, int waitingCount, String currentChapter,
             long averageRequestMillis, String errorMessage, LocalDateTime startedAt,

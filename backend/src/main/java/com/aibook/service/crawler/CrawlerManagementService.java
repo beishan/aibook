@@ -32,6 +32,7 @@ public class CrawlerManagementService {
     private final CrawlerSiteRuleVersionRepository ruleVersionRepository;
     private final CrawlerDiscoveryPageRepository discoveryPageRepository;
     private final CrawlerScanResultRepository scanResultRepository;
+    private final BookListRepository bookListRepository;
     private final ObjectMapper objectMapper;
     private final CrawlerHttpClient httpClient;
 
@@ -159,6 +160,12 @@ public class CrawlerManagementService {
     @Transactional(readOnly = true)
     public Page<BookView> books(User user, int page, int size, String keyword, Long siteId,
             String crawlStatus, String importStatus, String sort) {
+        return books(user, page, size, keyword, siteId, crawlStatus, importStatus, false, sort);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<BookView> books(User user, int page, int size, String keyword, Long siteId,
+            String crawlStatus, String importStatus, boolean favoriteOnly, String sort) {
         CrawlerBook.CrawlStatus normalizedCrawlStatus = enumValue(
                 crawlStatus, CrawlerBook.CrawlStatus.class, "采集状态");
         CrawlerBook.ImportStatus normalizedImportStatus = enumValue(
@@ -167,7 +174,7 @@ public class CrawlerManagementService {
                 managedBookSort(sort));
         return bookRepository.searchManagedBooks(user, CrawlerBook.DiscoveryStatus.ACTIVE,
                 CrawlerBook.CrawlStatus.DISCOVERED, blank(keyword) ? "" : keyword.trim(), siteId,
-                normalizedCrawlStatus, normalizedImportStatus, RUNNING_BOOK_STATUSES, pageable)
+                normalizedCrawlStatus, normalizedImportStatus, favoriteOnly, RUNNING_BOOK_STATUSES, pageable)
                 .map(this::bookView);
     }
 
@@ -187,13 +194,54 @@ public class CrawlerManagementService {
     }
 
     @Transactional(readOnly = true)
-    public Page<BookView> discoveredBooks(User user, int page, int size, String keyword, Long siteId, String sort) {
+    public Page<BookView> discoveredBooks(User user, int page, int size, String keyword, Long siteId,
+            String sort) {
+        return discoveredBooks(user, page, size, keyword, siteId, false, sort);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<BookView> discoveredBooks(User user, int page, int size, String keyword, Long siteId,
+            boolean favoriteOnly, String sort) {
         String normalizedKeyword = blank(keyword) ? "" : keyword.trim();
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
                 discoverySort(sort));
         return bookRepository.searchDiscoveredBooks(user, CrawlerBook.DiscoveryStatus.ACTIVE,
-                CrawlerBook.CrawlStatus.DISCOVERED, normalizedKeyword, siteId, pageable)
+                CrawlerBook.CrawlStatus.DISCOVERED, normalizedKeyword, siteId, favoriteOnly, pageable)
                 .map(this::bookView);
+    }
+
+    @Transactional
+    public BookView setFavorite(User user, Long id, boolean favorite) {
+        CrawlerBook book = ownedBook(user, id);
+        book.setFavorite(favorite);
+        if (book.getLibraryBook() != null) {
+            book.getLibraryBook().setIsFavorite(favorite);
+        }
+        return bookView(bookRepository.save(book));
+    }
+
+    @Transactional
+    public BookView setBookLists(User user, Long id, List<Long> bookListIds) {
+        CrawlerBook book = ownedBook(user, id);
+        LinkedHashSet<Long> requestedIds = new LinkedHashSet<>(bookListIds);
+        List<BookList> selected = requestedIds.isEmpty()
+                ? List.of() : bookListRepository.findByIdInAndUser(requestedIds, user);
+        if (selected.size() != requestedIds.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "所选书单不存在或不属于当前账户");
+        }
+        book.getBookLists().clear();
+        book.getBookLists().addAll(selected);
+        if (book.getLibraryBook() != null) {
+            for (BookList list : bookListRepository.findByUser(user)) {
+                boolean shouldContain = requestedIds.contains(list.getId());
+                boolean contains = list.getBooks().stream()
+                        .anyMatch(item -> Objects.equals(item.getId(), book.getLibraryBook().getId()));
+                if (shouldContain && !contains) list.getBooks().add(book.getLibraryBook());
+                else if (!shouldContain && contains) list.getBooks().removeIf(
+                        item -> Objects.equals(item.getId(), book.getLibraryBook().getId()));
+            }
+        }
+        return bookView(bookRepository.save(book));
     }
 
     private Sort discoverySort(String value) {
@@ -305,35 +353,34 @@ public class CrawlerManagementService {
 
     @Transactional(readOnly = true)
     public Page<TaskView> tasks(User user, int page, int size, boolean failedOnly) {
-        return tasks(user, page, size, failedOnly, null, null);
+        return tasks(user, page, size, failedOnly, null, null, false);
     }
 
     @Transactional(readOnly = true)
     public Page<TaskView> tasks(User user, int page, int size, boolean failedOnly, String status) {
-        return tasks(user, page, size, failedOnly, status, null);
+        return tasks(user, page, size, failedOnly, status, null, false);
     }
 
     @Transactional(readOnly = true)
     public Page<TaskView> tasks(
-            User user, int page, int size, boolean failedOnly, String status, String type) {
+            User user, int page, int size, boolean failedOnly, String status, String type,
+            boolean favoriteOnly) {
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
         CrawlerTask.TaskType taskType = parseTaskType(type);
+        CrawlerTask.TaskStatus taskStatus = parseTaskStatus(status);
         Page<CrawlerTask> tasks;
-        if (failedOnly) {
-            List<CrawlerTask.TaskStatus> failedStatuses = List.of(
-                    CrawlerTask.TaskStatus.FAILED, CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
+        List<CrawlerTask.TaskStatus> failedStatuses = List.of(
+                CrawlerTask.TaskStatus.FAILED, CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
+        if (favoriteOnly) {
+            tasks = taskRepository.findFavoriteTasks(user, taskType, taskStatus, failedOnly,
+                    failedStatuses, CrawlerTask.TaskStatus.RUNNING, pageable);
+        } else if (failedOnly) {
             tasks = taskType == null
                     ? taskRepository.findByUserAndStatusInOrderByCreatedAtDesc(
                             user, failedStatuses, pageable)
                     : taskRepository.findByUserAndTypeAndStatusInOrderByCreatedAtDesc(
                             user, taskType, failedStatuses, pageable);
-        } else if (status != null && !status.isBlank()) {
-            CrawlerTask.TaskStatus taskStatus;
-            try {
-                taskStatus = CrawlerTask.TaskStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
-            } catch (IllegalArgumentException exception) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "任务状态无效");
-            }
+        } else if (taskStatus != null) {
             tasks = taskType == null
                     ? taskRepository.findByUserAndStatusInOrderByCreatedAtDesc(
                             user, List.of(taskStatus), pageable)
@@ -347,6 +394,21 @@ public class CrawlerManagementService {
                             user, taskType, CrawlerTask.TaskStatus.RUNNING, pageable);
         }
         return tasks.map(this::taskView);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TaskView> tasks(
+            User user, int page, int size, boolean failedOnly, String status, String type) {
+        return tasks(user, page, size, failedOnly, status, type, false);
+    }
+
+    private CrawlerTask.TaskStatus parseTaskStatus(String status) {
+        if (status == null || status.isBlank()) return null;
+        try {
+            return CrawlerTask.TaskStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "任务状态无效");
+        }
     }
 
     private CrawlerTask.TaskType parseTaskType(String type) {
@@ -463,7 +525,7 @@ public class CrawlerManagementService {
                 r.getXpathRemoveSelectors(), r.getStringReplacementsJson(), bool(r.getRemoveBlankLines(), true), bool(r.getSaveOriginalHtml(), false));
     }
 
-    public BookView bookView(CrawlerBook b) { return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(), b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(), b.getCoverUrl(), b.getDescription(), b.getCategory(), splitTags(b.getTags()), b.getBookStatus(), b.getLatestChapter(), b.getDiscoveryPageId(), b.getDiscoveryPageName(), value(b.getChapterCount(), 0), value(b.getCrawledChapterCount(), 0), value(b.getPendingReleaseChapterCount(), 0), value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(), (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : b.getDiscoveryStatus()).name(), b.getImportStatus().name(), !Boolean.FALSE.equals(b.getAutoUpdateEnabled()), !Boolean.FALSE.equals(b.getAutoSyncLibrary()), b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(), b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt()); }
+    public BookView bookView(CrawlerBook b) { return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(), b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(), b.getCoverUrl(), b.getDescription(), b.getCategory(), splitTags(b.getTags()), b.getBookStatus(), b.getLatestChapter(), b.getDiscoveryPageId(), b.getDiscoveryPageName(), value(b.getChapterCount(), 0), value(b.getCrawledChapterCount(), 0), value(b.getPendingReleaseChapterCount(), 0), value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(), (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : b.getDiscoveryStatus()).name(), b.getImportStatus().name(), !Boolean.FALSE.equals(b.getAutoUpdateEnabled()), !Boolean.FALSE.equals(b.getAutoSyncLibrary()), Boolean.TRUE.equals(b.getFavorite()), b.getBookLists().stream().map(BookList::getId).toList(), b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(), b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt()); }
 
     private List<String> splitTags(String value) {
         if (blank(value)) return List.of();
@@ -471,7 +533,7 @@ public class CrawlerManagementService {
                 .filter(tag -> !tag.isBlank()).distinct().toList();
     }
     public ChapterView chapterView(CrawlerChapter c) { return new ChapterView(c.getId(), c.getChapterIndex(), c.getChapterName(), c.getChapterUrl(), value(c.getWordCount(), 0), c.getCrawlStatus().name(), c.getAccessStatus().name(), value(c.getRetryCount(), 0), c.getErrorMessage(), c.getCrawlTime(), c.getCreatedAt()); }
-    public TaskView taskView(CrawlerTask t) { return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(), t.getSite().getId(), t.getSite().getSiteName(), t.getDiscoveryPageId(), t.getDiscoveryPageName(), t.getScanMaxPages(), value(t.getScannedPageCount(), 0), taskProgressPercent(t), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(), value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0), value(t.getNewBookCount(), 0), value(t.getDuplicateCount(), 0), value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(), t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(), t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt()); }
+    public TaskView taskView(CrawlerTask t) { return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(), t.getSite().getId(), t.getSite().getSiteName(), t.getDiscoveryPageId(), t.getDiscoveryPageName(), t.getScanMaxPages(), value(t.getScannedPageCount(), 0), taskProgressPercent(t), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(), t.getCrawlerBook() != null && Boolean.TRUE.equals(t.getCrawlerBook().getFavorite()), value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0), value(t.getNewBookCount(), 0), value(t.getDuplicateCount(), 0), value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(), t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(), t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt()); }
 
     private int taskProgressPercent(CrawlerTask task) {
         if (task.getType() == CrawlerTask.TaskType.SITE_SCAN) {

@@ -49,6 +49,7 @@
         <el-input v-model="discoveryKeyword" clearable :prefix-icon="Search" placeholder="搜索书名、作者、网站、发现页、编码或最新章节" @keyup.enter="applyDiscoveryFilters" />
         <el-select v-model="discoverySiteId" clearable placeholder="全部采集网站"><el-option v-for="site in sites" :key="site.id" :label="site.siteName" :value="site.id" /></el-select>
         <el-select v-model="discoverySort" aria-label="发现书籍排序"><el-option v-for="item in discoverySortOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
+        <el-checkbox v-model="discoveryFavoriteOnly" border @change="applyDiscoveryFilters">只看已收藏</el-checkbox>
         <el-button type="primary" :icon="Search" @click="applyDiscoveryFilters">查询</el-button><el-button @click="resetDiscoveryFilters">重置</el-button>
       </div>
       <el-table v-if="discoveryViewMode==='table'" v-loading="discoveryLoading" :data="discoveredBooks" class="data-table" @selection-change="selectedDiscoveries=$event">
@@ -58,7 +59,7 @@
         <el-table-column label="分类 / 标签" min-width="190"><template #default="{row}"><div class="crawler-book-tag-list table-tags"><el-tag v-if="row.category" size="small" type="info" effect="plain">{{ row.category }}</el-tag><el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag><span v-if="!row.category&&!row.tags?.length">暂无</span></div></template></el-table-column>
         <el-table-column prop="latestChapter" label="最新章节" min-width="180" />
         <el-table-column label="发现时间" width="170"><template #default="{row}">{{ formatTime(row.discoverTime) }}</template></el-table-column>
-        <el-table-column label="操作" width="410"><template #default="{row}"><el-button text type="primary" @click="crawlDiscovered(row)">开始采集</el-button><el-button text :disabled="isBookTaskActive(row)" @click="refreshBookMetadata(row)">刷新分类标签</el-button><a class="source-link" :href="row.bookUrl" target="_blank" rel="noopener noreferrer">查看网站</a><el-button text @click="batchDiscovery('IGNORED',[row.id])">忽略</el-button><el-button text type="danger" @click="batchDiscovery('BLACKLISTED',[row.id])">黑名单</el-button></template></el-table-column>
+        <el-table-column label="操作" width="550"><template #default="{row}"><el-button text :type="row.favorite?'warning':undefined" @click="toggleFavorite(row)">{{ row.favorite?'已收藏':'收藏' }}</el-button><el-button text @click="openCrawlerBookLists(row)">加入书单</el-button><el-button text type="primary" @click="crawlDiscovered(row)">开始采集</el-button><el-button text :disabled="isBookTaskActive(row)" @click="refreshBookMetadata(row)">刷新分类标签</el-button><a class="source-link" :href="row.bookUrl" target="_blank" rel="noopener noreferrer">查看网站</a><el-button text @click="batchDiscovery('IGNORED',[row.id])">忽略</el-button><el-button text type="danger" @click="batchDiscovery('BLACKLISTED',[row.id])">黑名单</el-button></template></el-table-column>
       </el-table>
       <div v-else v-loading="discoveryLoading" class="discovery-card-panel">
         <div v-if="discoveredBooks.length" class="discovery-card-selection"><el-checkbox :model-value="allDiscoveredSelected" :indeterminate="someDiscoveredSelected&&!allDiscoveredSelected" @change="toggleCurrentDiscoveryPage(Boolean($event))">选择当前页</el-checkbox><span>已选择 {{ selectedDiscoveries.length }} 本</span></div>
@@ -66,10 +67,11 @@
           <article v-for="book in discoveredBooks" :key="book.id" class="discovery-card" :class="{selected:isDiscoverySelected(book)}">
             <div class="discovery-card-action-overlay" role="group" :aria-label="`${book.bookName}快捷操作`" @click.stop>
               <el-button size="small" type="primary" @click="crawlDiscovered(book)">采集</el-button>
+              <el-button size="small" :type="book.favorite?'warning':undefined" @click="toggleFavorite(book)">{{ book.favorite?'已收藏':'收藏' }}</el-button>
               <el-button size="small" @click="batchDiscovery('IGNORED',[book.id])">忽略</el-button>
               <el-dropdown trigger="click" placement="bottom-end" popper-class="discovery-more-popper" @command="handleDiscoveryCardMore($event,book)">
                 <el-button size="small" aria-label="更多操作">更多</el-button>
-                <template #dropdown><el-dropdown-menu><el-dropdown-item command="details">详细信息</el-dropdown-item><el-dropdown-item command="website">查看网站</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(book)">刷新分类标签</el-dropdown-item><el-dropdown-item command="blacklist" divided class="danger-dropdown-item">加入黑名单</el-dropdown-item></el-dropdown-menu></template>
+                <template #dropdown><el-dropdown-menu><el-dropdown-item command="details">详细信息</el-dropdown-item><el-dropdown-item command="book-lists">加入书单</el-dropdown-item><el-dropdown-item command="website">查看网站</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(book)">刷新分类标签</el-dropdown-item><el-dropdown-item command="blacklist" divided class="danger-dropdown-item">加入黑名单</el-dropdown-item></el-dropdown-menu></template>
               </el-dropdown>
             </div>
             <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><span class="discovery-source-badge" :title="book.siteName">{{ book.siteName }}</span><el-checkbox class="discovery-card-check" :model-value="isDiscoverySelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleDiscoverySelection(book,Boolean($event))"/></div>
@@ -89,6 +91,7 @@
         <el-select v-model="bookCrawlStatus" clearable placeholder="全部书籍状态"><el-option v-for="item in managedBookStatusOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
         <el-select v-model="bookImportStatus" clearable placeholder="全部入库状态"><el-option v-for="item in bookImportStatusOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
         <el-select v-model="bookSort" aria-label="采集书籍排序"><el-option v-for="item in managedBookSortOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
+        <el-checkbox v-model="bookFavoriteOnly" border @change="applyBookFilters">只看已收藏</el-checkbox>
         <el-button type="primary" :icon="Search" @click="applyBookFilters">查询</el-button>
         <el-button @click="resetBookFilters">重置</el-button>
       </div>
@@ -107,7 +110,7 @@
         <el-table-column label="创建时间" width="154"><template #default="{row}">{{ formatTime(row.createdAt) }}</template></el-table-column>
         <el-table-column label="开始爬取" width="154"><template #default="{row}">{{ row.lastCrawlStartedAt ? formatTime(row.lastCrawlStartedAt) : '暂无记录' }}</template></el-table-column>
         <el-table-column label="失败" width="80" prop="failedChapterCount" />
-        <el-table-column label="操作" width="250" fixed="right" align="right"><template #default="{row}"><div class="crawler-book-action-cluster" @click.stop><el-button size="small" round class="crawler-book-action-button crawler-book-action-details" @click="openBook(row)">详情</el-button><el-button size="small" round class="crawler-book-action-button crawler-book-action-continue" :disabled="isBookTaskActive(row)" @click="continueCrawl(row)">{{ isBookTaskActive(row)?'任务中':'继续' }}</el-button><el-button size="small" round class="crawler-book-action-button crawler-book-action-import" @click="importBook(row)">{{ row.importStatus==='IMPORTED'?'同步入库':'入库' }}</el-button><el-dropdown trigger="click" placement="bottom-end" popper-class="discovery-more-popper" @command="handleCrawlerBookTableMore($event,row)"><el-button size="small" circle :icon="MoreFilled" class="crawler-book-action-more" aria-label="更多操作" title="更多操作" /><template #dropdown><el-dropdown-menu><el-dropdown-item command="updates">检查更新</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(row)">刷新分类标签</el-dropdown-item><el-dropdown-item command="trial" :disabled="!row.crawledChapterCount">试读</el-dropdown-item><el-dropdown-item command="generate">生成文件</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div></template></el-table-column>
+        <el-table-column label="操作" width="340" fixed="right" align="right"><template #default="{row}"><div class="crawler-book-action-cluster" @click.stop><el-button size="small" round :type="row.favorite?'warning':undefined" @click="toggleFavorite(row)">{{ row.favorite?'已收藏':'收藏' }}</el-button><el-button size="small" round class="crawler-book-action-button crawler-book-action-details" @click="openBook(row)">详情</el-button><el-button size="small" round class="crawler-book-action-button crawler-book-action-continue" :disabled="isBookTaskActive(row)" @click="continueCrawl(row)">{{ isBookTaskActive(row)?'任务中':'继续' }}</el-button><el-button size="small" round class="crawler-book-action-button crawler-book-action-import" @click="importBook(row)">{{ row.importStatus==='IMPORTED'?'同步入库':'入库' }}</el-button><el-dropdown trigger="click" placement="bottom-end" popper-class="discovery-more-popper" @command="handleCrawlerBookTableMore($event,row)"><el-button size="small" circle :icon="MoreFilled" class="crawler-book-action-more" aria-label="更多操作" title="更多操作" /><template #dropdown><el-dropdown-menu><el-dropdown-item command="book-lists">加入书单</el-dropdown-item><el-dropdown-item command="updates">检查更新</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(row)">刷新分类标签</el-dropdown-item><el-dropdown-item command="trial" :disabled="!row.crawledChapterCount">试读</el-dropdown-item><el-dropdown-item command="generate">生成文件</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div></template></el-table-column>
       </el-table>
       <div v-else v-loading="bookLoading" class="discovery-card-panel">
         <div v-if="books.length" class="discovery-card-selection"><el-checkbox :model-value="allBooksSelected" :indeterminate="someBooksSelected&&!allBooksSelected" @change="toggleCurrentBookPage(Boolean($event))">选择当前页</el-checkbox><span>已选择 {{ selectedBooks.length }} 本</span></div>
@@ -115,10 +118,11 @@
           <article v-for="book in books" :key="book.id" class="discovery-card crawler-book-card" :class="{selected:isBookSelected(book)}" @click="openBook(book)">
             <div class="discovery-card-action-overlay crawler-book-action-overlay" role="group" :aria-label="`${book.bookName}快捷操作`" @click.stop>
               <el-button size="small" type="primary" :disabled="isBookTaskActive(book)" @click="continueCrawl(book)">{{ isBookTaskActive(book)?'任务中':'继续' }}</el-button>
+              <el-button size="small" :type="book.favorite?'warning':undefined" @click="toggleFavorite(book)">{{ book.favorite?'已收藏':'收藏' }}</el-button>
               <el-button size="small" :disabled="!book.crawledChapterCount" @click="startTrial(book)">试读</el-button>
               <el-dropdown trigger="click" placement="bottom-end" popper-class="discovery-more-popper" @command="handleCrawlerBookCardMore($event,book)">
                 <el-button size="small" aria-label="更多操作">更多</el-button>
-                <template #dropdown><el-dropdown-menu><el-dropdown-item command="details">详细信息</el-dropdown-item><el-dropdown-item command="website">查看网站</el-dropdown-item><el-dropdown-item command="updates" divided>检查更新</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(book)">刷新分类标签</el-dropdown-item><el-dropdown-item command="generate">生成文件</el-dropdown-item><el-dropdown-item command="import">{{ book.importStatus==='IMPORTED'?'同步入库':'加入书库' }}</el-dropdown-item><el-dropdown-item command="status">修改状态</el-dropdown-item></el-dropdown-menu></template>
+                <template #dropdown><el-dropdown-menu><el-dropdown-item command="details">详细信息</el-dropdown-item><el-dropdown-item command="book-lists">加入书单</el-dropdown-item><el-dropdown-item command="website">查看网站</el-dropdown-item><el-dropdown-item command="updates" divided>检查更新</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(book)">刷新分类标签</el-dropdown-item><el-dropdown-item command="generate">生成文件</el-dropdown-item><el-dropdown-item command="import">{{ book.importStatus==='IMPORTED'?'同步入库':'加入书库' }}</el-dropdown-item><el-dropdown-item command="status">修改状态</el-dropdown-item></el-dropdown-menu></template>
               </el-dropdown>
             </div>
             <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><div class="crawler-book-cover-badges"><el-tag :type="statusType(book.crawlStatus)" effect="dark" size="small">{{ statusLabel(book.crawlStatus) }}</el-tag><el-tag v-if="book.importStatus==='IMPORTED'" type="success" effect="dark" size="small">已入库</el-tag></div><el-checkbox class="discovery-card-check crawler-book-card-check" :model-value="isBookSelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleBookSelection(book,Boolean($event))"/></div>
@@ -139,8 +143,9 @@
         <el-select v-model="taskTypeFilter" clearable placeholder="全部任务类型" aria-label="任务类型筛选" @change="handleTaskTypeFilter">
           <el-option v-for="type in taskTypeOptions" :key="type" :label="taskTypeLabel(type)" :value="type" />
         </el-select>
+        <el-checkbox v-model="taskFavoriteOnly" border @change="handleTaskFavoriteFilter">只看已收藏</el-checkbox>
         <el-button :type="taskStatusFilter==='RUNNING'?'primary':undefined" @click="showRunningTasks">只看进行中</el-button>
-        <el-button v-if="taskStatusFilter||taskTypeFilter" text @click="clearTaskFilters">清除筛选</el-button>
+        <el-button v-if="taskStatusFilter||taskTypeFilter||taskFavoriteOnly" text @click="clearTaskFilters">清除筛选</el-button>
       </div>
       <transition name="task-batch-rise">
         <div v-if="selectedTaskRows.length" class="task-batch-bar" role="toolbar" aria-label="采集任务批量管理">
@@ -158,9 +163,9 @@
         </div>
       </transition>
       <div v-loading="activeTab === 'failed' ? failedTaskLoading : taskLoading">
-        <TaskTable :key="activeTab" :tasks="activeTab === 'failed' ? failedTasks : tasks" selectable @selection-change="handleTaskSelectionChange" @open="openTask" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" @scan-results="openScanResults" />
+        <TaskTable :key="activeTab" :tasks="activeTab === 'failed' ? failedTasks : tasks" selectable @selection-change="handleTaskSelectionChange" @open="openTask" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" @scan-results="openScanResults" @toggle-favorite="toggleTaskFavorite" @book-lists="openTaskBookLists" />
       </div>
-      <el-empty v-if="activeTab === 'tasks'&&!taskLoading&&!tasks.length" :description="taskStatusFilter||taskTypeFilter?'暂无符合筛选条件的采集任务':'暂无采集任务'" />
+      <el-empty v-if="activeTab === 'tasks'&&!taskLoading&&!tasks.length" :description="taskStatusFilter||taskTypeFilter||taskFavoriteOnly?'暂无符合筛选条件的采集任务':'暂无采集任务'" />
       <el-empty v-if="activeTab === 'failed'&&!failedTaskLoading&&!failedTasks.length" description="暂无失败任务" />
       <div v-if="activeTab === 'tasks'&&taskTotal" class="list-pagination"><span>当前显示 {{ tasks.length }} 项</span><el-pagination v-model:current-page="taskPage" v-model:page-size="taskPageSize" :page-sizes="[20,50,100]" :total="taskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadTasks()" @size-change="handleTaskSizeChange" /></div>
       <div v-if="activeTab === 'failed'&&failedTaskTotal" class="list-pagination"><span>当前显示 {{ failedTasks.length }} 项</span><el-pagination v-model:current-page="failedTaskPage" v-model:page-size="failedTaskPageSize" :page-sizes="[20,50,100]" :total="failedTaskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadFailedTasks()" @size-change="handleFailedTaskSizeChange" /></div>
@@ -322,6 +327,19 @@
       <template #footer><el-button @click="importDialog=false">取消</el-button><el-button type="primary" :loading="importing" :disabled="!importFormats.length||!importTargets.some(book=>book.crawledChapterCount>0)" @click="submitImport">{{ importTargets.length>1?'确认批量入库':importTarget?.importStatus==='IMPORTED'?'同步所选格式':'确认入库' }}</el-button></template>
     </el-dialog>
 
+    <el-dialog v-model="bookListDialog" :title="`预选书单 · ${bookListTarget?.bookName || ''}`" width="min(560px, 94vw)" append-to-body>
+      <div v-loading="bookListLoading" class="crawler-book-list-dialog">
+        <el-alert type="info" :closable="false" title="现在选择书单；书籍入库时会自动加入。已入库书籍会立即同步书单。" />
+        <el-empty v-if="!bookListLoading&&!availableBookLists.length" description="暂无书单，请先在书库中创建书单" />
+        <el-checkbox-group v-else v-model="selectedBookListIds" class="crawler-book-list-options">
+          <el-checkbox v-for="list in availableBookLists" :key="list.id" :value="list.id" border>
+            <strong>{{ list.name }}</strong><small>{{ list.description || '暂无描述' }}</small>
+          </el-checkbox>
+        </el-checkbox-group>
+      </div>
+      <template #footer><el-button @click="bookListDialog=false">取消</el-button><el-button type="primary" :loading="bookListSaving" @click="saveCrawlerBookLists">保存书单</el-button></template>
+    </el-dialog>
+
     <el-dialog v-model="statusDialog" title="人工修改采集状态" width="min(520px, 94vw)" append-to-body>
       <div v-if="statusBook" class="status-dialog-content">
         <div class="status-book"><span class="mini-cover">{{ statusBook.bookName.slice(0,1) }}</span><div><strong>{{ statusBook.bookName }}</strong><p>当前状态：{{ statusLabel(statusBook.crawlStatus) }} · 已有正文 {{ statusBook.crawledChapterCount }} / {{ statusBook.chapterCount }} 章</p></div></div>
@@ -437,7 +455,7 @@
         <div class="book-summary"><div class="large-cover">{{ selectedBook.bookName.slice(0,1) }}</div><div><h2>{{ selectedBook.bookName }}</h2><p>{{ selectedBook.author || '未知作者' }} · {{ selectedBook.siteName }}</p><div v-if="isBookCompleted(selectedBook)" class="book-crawl-result drawer-result"><div><span>采集结果详情</span><strong>采集完成</strong></div><small>正文 {{ selectedBook.crawledChapterCount }} 章 · 待开放 {{ selectedBook.pendingReleaseChapterCount }} 章 · 失败 {{ selectedBook.failedChapterCount }} 章</small></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(selectedBook)}" :percentage="progress(selectedBook)"/><small>正文 {{ selectedBook.crawledChapterCount }} / {{ selectedBook.chapterCount }} 章，待开放 {{ selectedBook.pendingReleaseChapterCount }}，失败 {{ selectedBook.failedChapterCount }}</small></template></div></div>
         <div class="crawler-book-metadata"><span><small>来源状态</small><strong>{{ selectedBook.bookStatus || '未识别' }}</strong></span><span><small>分类</small><strong>{{ selectedBook.category || '未分类' }}</strong></span><span class="metadata-tag-row"><small>标签</small><span v-if="selectedBook.tags?.length" class="metadata-tags"><el-tag v-for="tag in selectedBook.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></span><strong v-else>无</strong></span></div>
         <div v-if="selectedBook.libraryBookId" class="library-sync-control"><div><strong>自动同步到书库</strong><p>检查更新或续采成功后，自动发布为同一本书的新版本。</p></div><el-switch :model-value="selectedBook.autoSyncLibrary" @change="toggleLibrarySync(selectedBook,Boolean($event))" /></div>
-        <div class="drawer-actions"><el-button :disabled="isBookTaskActive(selectedBook)" @click="continueCrawl(selectedBook)">{{ isBookTaskActive(selectedBook)?'任务中':'继续采集' }}</el-button><el-button :disabled="isBookTaskActive(selectedBook)" @click="refreshBookMetadata(selectedBook)">刷新分类标签</el-button><el-button :disabled="!selectedBook.failedChapterCount" @click="retryFailures(selectedBook)">重试失败</el-button><el-button @click="openStatusEditor(selectedBook)">修改状态</el-button><el-button type="primary" plain :disabled="!selectedBook.crawledChapterCount" @click="startTrial(selectedBook)">临时试读</el-button><el-button type="primary" @click="generate(selectedBook)">生成 TXT + EPUB</el-button><el-button type="primary" plain @click="importBook(selectedBook)">{{ selectedBook.importStatus==='IMPORTED'?'立即同步书库':'入库' }}</el-button></div>
+        <div class="drawer-actions"><el-button :type="selectedBook.favorite?'warning':undefined" @click="toggleFavorite(selectedBook)">{{ selectedBook.favorite?'已收藏':'加入收藏' }}</el-button><el-button @click="openCrawlerBookLists(selectedBook)">加入书单</el-button><el-button :disabled="isBookTaskActive(selectedBook)" @click="continueCrawl(selectedBook)">{{ isBookTaskActive(selectedBook)?'任务中':'继续采集' }}</el-button><el-button :disabled="isBookTaskActive(selectedBook)" @click="refreshBookMetadata(selectedBook)">刷新分类标签</el-button><el-button :disabled="!selectedBook.failedChapterCount" @click="retryFailures(selectedBook)">重试失败</el-button><el-button @click="openStatusEditor(selectedBook)">修改状态</el-button><el-button type="primary" plain :disabled="!selectedBook.crawledChapterCount" @click="startTrial(selectedBook)">临时试读</el-button><el-button type="primary" @click="generate(selectedBook)">生成 TXT + EPUB</el-button><el-button type="primary" plain @click="importBook(selectedBook)">{{ selectedBook.importStatus==='IMPORTED'?'立即同步书库':'入库' }}</el-button></div>
         <div class="book-detail-tabs" role="tablist" aria-label="书籍采集详情" @keydown="handleBookDetailTabKey"><span class="book-detail-tab-indicator" :style="{transform:`translateX(${bookDetailTabIndex*100}%)`}"/><button v-for="item in bookDetailTabs" :key="item.value" type="button" role="tab" :aria-selected="bookDetailTab===item.value" :tabindex="bookDetailTab===item.value?0:-1" :class="{active:bookDetailTab===item.value}" @click="bookDetailTab=item.value"><span>{{ item.label }}</span><b>{{ item.value==='chapters'?chapterTotal:crawlerLogs.length }}</b></button></div>
         <section v-show="bookDetailTab==='chapters'" class="drawer-detail-panel chapter-progress-panel" role="tabpanel">
           <div class="chapter-list-heading"><div><p class="eyebrow">CHAPTER INDEX</p><h3>章节进度</h3></div><div class="chapter-heading-tools"><label class="chapter-follow" :class="{active:followCurrentChapter}"><strong>跟随采集</strong><el-switch :model-value="followCurrentChapter" aria-label="自动跟随当前采集章节" @change="setFollowCurrentChapter(Boolean($event))" /></label><div class="chapter-sort" :class="{disabled:followCurrentChapter}" role="tablist" aria-label="章节排序方式" @keydown="handleChapterSortKey"><span class="chapter-sort-indicator" :style="{transform:`translateX(${chapterSortIndex*100}%)`}"/><button v-for="item in chapterSortOptions" :key="item.value" type="button" role="tab" :disabled="followCurrentChapter" :aria-selected="chapterSort===item.value" :tabindex="chapterSort===item.value?0:-1" :class="{active:chapterSort===item.value}" @click="changeChapterSort(item.value)">{{ item.label }}</button></div></div></div>
@@ -514,13 +532,17 @@ import {
 import { getCoverUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { confirm, message } from '@/utils/message'
+import api from '@/utils/api'
 
-type TaskMoreCommand='scan-results'|'edit'|'resume'|'delete'
+interface BookListOption { id:number; name:string; description?:string }
+
+type TaskMoreCommand='scan-results'|'book-lists'|'edit'|'resume'|'delete'
 type TaskMoreAction={command:TaskMoreCommand;label:string;danger?:boolean;divided?:boolean}
 
-const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true},selectable:{type:Boolean,default:false}}, emits:['open','command','edit','delete','scan-results','selection-change'], setup(props,{emit}) {
+const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true},selectable:{type:Boolean,default:false}}, emits:['open','command','edit','delete','scan-results','selection-change','toggle-favorite','book-lists'], setup(props,{emit}) {
   const moreActions=(row:CrawlerTask):TaskMoreAction[]=>[
     row.type==='SITE_SCAN'?{command:'scan-results',label:'扫描结果'}:null,
+    row.bookId?{command:'book-lists',label:'加入书单'}:null,
     ['PAUSED','FAILED'].includes(row.status)?{command:'resume',label:'继续'}:null,
     ['WAITING','PAUSED','FAILED'].includes(row.status)?{command:'edit',label:'修改'}:null,
     row.status!=='RUNNING'?{command:'delete',label:'删除',danger:true,divided:true}:null,
@@ -539,10 +561,11 @@ const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask
   h(ElTableColumn,{label:'当前章节',prop:'currentChapter',minWidth:150}),
   h(ElTableColumn,{label:'创建时间',width:170},{default:({row}:{row:CrawlerTask})=>formatTime(row.createdAt)}),
   h(ElTableColumn,{label:'完成时间',width:170},{default:({row}:{row:CrawlerTask})=>formatTime(row.finishedAt)}),
-  h(ElTableColumn,{label:'操作',width:250,fixed:'right',align:'right'},{default:({row}:{row:CrawlerTask})=>{
+  h(ElTableColumn,{label:'操作',width:340,fixed:'right',align:'right'},{default:({row}:{row:CrawlerTask})=>{
     const actions=moreActions(row)
     return h('div',{class:'task-action-cluster'},[
       h(ElButton,{size:'small',round:true,class:'task-action-button task-action-details',onClick:()=>emit('open',row)},()=> '详情'),
+      row.bookId?h(ElButton,{size:'small',round:true,type:row.favorite?'warning':undefined,onClick:()=>emit('toggle-favorite',row)},()=>row.favorite?'已收藏':'收藏'):null,
       ['RUNNING','WAITING'].includes(row.status)?h(ElButton,{size:'small',round:true,class:'task-action-button task-action-pause',onClick:()=>emit('command',row,'pause')},()=> '暂停'):null,
       ['RUNNING','WAITING','PAUSED'].includes(row.status)?h(ElButton,{size:'small',round:true,class:'task-action-button task-action-cancel',onClick:()=>emit('command',row,'cancel')},()=> '取消'):null,
       actions.length?h(ElDropdown,{trigger:'click',placement:'bottom-end',onCommand:(command:TaskMoreCommand)=>handleMoreCommand(row,command)},{
@@ -572,11 +595,11 @@ const discoveryPagesBySite=ref<Record<number,CrawlerDiscoveryPage[]>>({})
 const discoveryMetadataRefreshing=ref(false)
 const bookLoading=ref(false), bookPage=ref(1), bookPageSize=ref(20), bookTotal=ref(0)
 const bookTableRef=ref<InstanceType<typeof ElTable>>()
-const bookSiteId=ref<number>(), bookCrawlStatus=ref(''), bookImportStatus=ref(''), bookSort=ref('CREATED_DESC')
+const bookSiteId=ref<number>(), bookCrawlStatus=ref(''), bookImportStatus=ref(''), bookFavoriteOnly=ref(false), bookSort=ref('CREATED_DESC')
 const chapterLoading=ref(false), chapterPage=ref(1), chapterTotal=ref(0)
 const currentCrawlingChapter=ref<CrawlerChapter>()
 const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=ref(0)
-const taskStatusFilter=ref(''), taskTypeFilter=ref('')
+const taskStatusFilter=ref(''), taskTypeFilter=ref(''), taskFavoriteOnly=ref(false)
 const selectedTasks=ref<CrawlerTask[]>([]), selectedFailedTasks=ref<CrawlerTask[]>([]), batchTaskManaging=ref(false), batchTaskAction=ref<'pause'|'resume'|'cancel'|'delete'|'priority'>()
 const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
 const queueSettingsDialog=ref(false), savingQueueSettings=ref(false), taskQueueSettings=ref<CrawlerTaskQueueSettings>(), queueLimit=ref(4), queuedTasksDialog=ref(false), queuedTasksLoading=ref(false), queuedTasksReordering=ref(false), queuedTaskPrioritizingId=ref<string>(), queuedTaskCommandId=ref<string>(), queuedTaskCommand=ref<'pause'|'resume'|'cancel'>(), queuedTaskDraggingId=ref<string>(), queuedTaskDragStartOrder=ref<string[]>([]), queuedTasks=ref<CrawlerTask[]>([]), queuedTaskPage=ref(1), queuedTaskPageSize=ref(10)
@@ -584,6 +607,8 @@ const failedTaskLoading=ref(false), failedTaskPage=ref(1), failedTaskPageSize=re
 const ruleTestSite=ref<CrawlerSite>(), ruleTestDraft=ref<CrawlerRule>(), ruleSite=ref<CrawlerSite>(), editingRule=ref<CrawlerRuleVersion>(), ruleTestUrl=ref(''), ruleTestResult=ref<CrawlerRuleTest>(), ruleVersions=ref<CrawlerRuleVersion[]>([]), importInput=ref<HTMLInputElement>(), importMode=ref<'text'|'file'>('text'), importJsonText=ref(''), importFileName=ref('')
 const siteConfigurationImportInput=ref<HTMLInputElement>(), siteConfigurationImportMode=ref<'text'|'file'>('text'), siteConfigurationJsonText=ref(''), siteConfigurationImportFileName=ref('')
 const importDialog=ref(false), importTargets=ref<CrawlerBook[]>([]), importFormats=ref<string[]>(['STRUCTURED']), importing=ref(false)
+const discoveryFavoriteOnly=ref(false)
+const bookListDialog=ref(false), bookListLoading=ref(false), bookListSaving=ref(false), bookListTarget=ref<CrawlerBook>(), availableBookLists=ref<BookListOption[]>([]), selectedBookListIds=ref<number[]>([])
 const importTarget=computed(()=>importTargets.value.length===1?importTargets.value[0]:undefined)
 const batchBookBusy=computed(()=>Boolean(batchBookAction.value)||batchBookStatusSaving.value||importing.value)
 const importFormatOptions=[{value:'STRUCTURED',label:'结构化章节',description:'推荐：无需生成文件即可入库阅读'},{value:'EPUB',label:'附加 EPUB',description:'供下载与第三方阅读器使用'},{value:'TXT',label:'附加 TXT',description:'通用纯文本备份'}]
@@ -754,16 +779,17 @@ async function changeChapterSort(value:ChapterSort){if(followCurrentChapter.valu
 async function setFollowCurrentChapter(enabled:boolean){preferencesStore.setCrawlerFollowCurrentChapter(enabled);currentCrawlingChapter.value=undefined;if(enabled){chapterSort.value='indexAsc';chapterPage.value=1}await syncOpenBookProgress()}
 function chapterRowClassName({row}:{row:CrawlerChapter}){return row.id===currentCrawlingChapter.value?.id?'current-crawling-row':''}
 async function scrollToCurrentCrawlingChapter(){await nextTick();document.querySelector<HTMLElement>('.book-detail-drawer .current-crawling-row')?.scrollIntoView({block:'center',behavior:'smooth'})}
-async function loadBooks(options:LoadOptions={}){if(!options.silent)bookLoading.value=true;if(!options.preserveSelection){selectedBooks.value=[];bookTableRef.value?.clearSelection()}try{const result=await crawlerApi.books({page:bookPage.value-1,size:bookPageSize.value,keyword:bookKeyword.value.trim()||undefined,siteId:bookSiteId.value,crawlStatus:bookCrawlStatus.value||undefined,importStatus:bookImportStatus.value||undefined,sort:bookSort.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/bookPageSize.value));if(bookPage.value>lastPage){bookPage.value=lastPage;return await loadBooks(options)}books.value=result.content;bookTotal.value=result.totalElements}finally{if(!options.silent)bookLoading.value=false}}
+async function loadBooks(options:LoadOptions={}){if(!options.silent)bookLoading.value=true;if(!options.preserveSelection){selectedBooks.value=[];bookTableRef.value?.clearSelection()}try{const result=await crawlerApi.books({page:bookPage.value-1,size:bookPageSize.value,keyword:bookKeyword.value.trim()||undefined,siteId:bookSiteId.value,crawlStatus:bookCrawlStatus.value||undefined,importStatus:bookImportStatus.value||undefined,favoriteOnly:bookFavoriteOnly.value||undefined,sort:bookSort.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/bookPageSize.value));if(bookPage.value>lastPage){bookPage.value=lastPage;return await loadBooks(options)}books.value=result.content;bookTotal.value=result.totalElements}finally{if(!options.silent)bookLoading.value=false}}
 async function handleBookSizeChange(){bookPage.value=1;await loadBooks()}
 async function applyBookFilters(){bookPage.value=1;await loadBooks()}
-async function resetBookFilters(){bookKeyword.value='';bookSiteId.value=undefined;bookCrawlStatus.value='';bookImportStatus.value='';bookSort.value='CREATED_DESC';bookPage.value=1;await loadBooks()}
-async function loadTasks(options:LoadOptions={}){if(!options.silent){taskLoading.value=true;selectedTasks.value=[]}try{const result=await crawlerApi.tasks({page:taskPage.value-1,size:taskPageSize.value,status:taskStatusFilter.value||undefined,type:taskTypeFilter.value||undefined});const lastPage=Math.max(1,Math.ceil(result.totalElements/taskPageSize.value));if(taskPage.value>lastPage){taskPage.value=lastPage;return await loadTasks(options)}tasks.value=result.content;taskTotal.value=result.totalElements}finally{if(!options.silent)taskLoading.value=false}}
+async function resetBookFilters(){bookKeyword.value='';bookSiteId.value=undefined;bookCrawlStatus.value='';bookImportStatus.value='';bookFavoriteOnly.value=false;bookSort.value='CREATED_DESC';bookPage.value=1;await loadBooks()}
+async function loadTasks(options:LoadOptions={}){if(!options.silent){taskLoading.value=true;selectedTasks.value=[]}try{const result=await crawlerApi.tasks({page:taskPage.value-1,size:taskPageSize.value,status:taskStatusFilter.value||undefined,type:taskTypeFilter.value||undefined,favoriteOnly:taskFavoriteOnly.value||undefined});const lastPage=Math.max(1,Math.ceil(result.totalElements/taskPageSize.value));if(taskPage.value>lastPage){taskPage.value=lastPage;return await loadTasks(options)}tasks.value=result.content;taskTotal.value=result.totalElements}finally{if(!options.silent)taskLoading.value=false}}
 async function handleTaskSizeChange(){taskPage.value=1;await loadTasks()}
 async function handleTaskStatusFilter(){taskPage.value=1;await loadTasks()}
 async function handleTaskTypeFilter(){taskPage.value=1;await loadTasks()}
+async function handleTaskFavoriteFilter(){taskPage.value=1;await loadTasks()}
 async function showRunningTasks(){taskStatusFilter.value='RUNNING';await handleTaskStatusFilter()}
-async function clearTaskFilters(){taskStatusFilter.value='';taskTypeFilter.value='';taskPage.value=1;await loadTasks()}
+async function clearTaskFilters(){taskStatusFilter.value='';taskTypeFilter.value='';taskFavoriteOnly.value=false;taskPage.value=1;await loadTasks()}
 function handleTaskSelectionChange(rows:CrawlerTask[]){if(activeTab.value==='failed')selectedFailedTasks.value=rows;else selectedTasks.value=rows}
 async function handleBatchTaskPriority(priority:'LOW'|'NORMAL'|'HIGH'){await manageSelectedTasks('priority',priority)}
 async function manageSelectedTasks(action:'pause'|'resume'|'cancel'|'delete'|'priority',priority?:'LOW'|'NORMAL'|'HIGH'){
@@ -788,7 +814,7 @@ async function loadScanResults(){if(!scanResultsTask.value)return;scanResultsLoa
 async function handleScanResultSizeChange(){scanResultsPage.value=1;await loadScanResults()}
 async function loadFailedTasks(options:LoadOptions={}){if(!options.silent){failedTaskLoading.value=true;selectedFailedTasks.value=[]}try{const result=await crawlerApi.tasks({page:failedTaskPage.value-1,size:failedTaskPageSize.value,failedOnly:true});const lastPage=Math.max(1,Math.ceil(result.totalElements/failedTaskPageSize.value));if(failedTaskPage.value>lastPage){failedTaskPage.value=lastPage;return await loadFailedTasks(options)}failedTasks.value=result.content;failedTaskTotal.value=result.totalElements}finally{if(!options.silent)failedTaskLoading.value=false}}
 async function handleFailedTaskSizeChange(){failedTaskPage.value=1;await loadFailedTasks()}
-async function loadDiscoveredBooks(options:LoadOptions={}){if(!options.silent)discoveryLoading.value=true;if(!options.preserveSelection)selectedDiscoveries.value=[];try{const result=await crawlerApi.discoveredBooks({page:discoveryPage.value-1,size:discoveryPageSize.value,keyword:discoveryKeyword.value.trim()||undefined,siteId:discoverySiteId.value,sort:discoverySort.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/discoveryPageSize.value));if(discoveryPage.value>lastPage){discoveryPage.value=lastPage;return await loadDiscoveredBooks(options)}discoveredBooks.value=result.content;discoveredTotal.value=result.totalElements}finally{if(!options.silent)discoveryLoading.value=false}}
+async function loadDiscoveredBooks(options:LoadOptions={}){if(!options.silent)discoveryLoading.value=true;if(!options.preserveSelection)selectedDiscoveries.value=[];try{const result=await crawlerApi.discoveredBooks({page:discoveryPage.value-1,size:discoveryPageSize.value,keyword:discoveryKeyword.value.trim()||undefined,siteId:discoverySiteId.value,favoriteOnly:discoveryFavoriteOnly.value||undefined,sort:discoverySort.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/discoveryPageSize.value));if(discoveryPage.value>lastPage){discoveryPage.value=lastPage;return await loadDiscoveredBooks(options)}discoveredBooks.value=result.content;discoveredTotal.value=result.totalElements}finally{if(!options.silent)discoveryLoading.value=false}}
 function setDiscoveryViewMode(mode:DiscoveryViewMode){if(discoveryViewMode.value===mode)return;preferencesStore.setCrawlerDiscoveryViewMode(mode);selectedDiscoveries.value=[]}
 function handleDiscoveryViewKey(event:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();setDiscoveryViewMode(event.key==='ArrowLeft'||event.key==='Home'?'table':'card');requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>(`.discovery-view-switch button:nth-of-type(${discoveryViewMode.value==='table'?1:2})`)?.focus())}
 function setBookViewMode(mode:DiscoveryViewMode){if(bookViewMode.value===mode)return;preferencesStore.setCrawlerBookViewMode(mode);selectedBooks.value=[]}
@@ -804,7 +830,7 @@ function handleBookTableRowClick(row:CrawlerBook,column:{type?:string}){if(colum
 function hideBrokenCover(event:Event){(event.target as HTMLImageElement).style.display='none'}
 async function handleDiscoverySizeChange(){discoveryPage.value=1;await loadDiscoveredBooks()}
 async function applyDiscoveryFilters(){discoveryPage.value=1;await loadDiscoveredBooks()}
-async function resetDiscoveryFilters(){discoveryKeyword.value='';discoverySiteId.value=undefined;discoverySort.value='DISCOVER_TIME_DESC';discoveryPage.value=1;await loadDiscoveredBooks()}
+async function resetDiscoveryFilters(){discoveryKeyword.value='';discoverySiteId.value=undefined;discoveryFavoriteOnly.value=false;discoverySort.value='DISCOVER_TIME_DESC';discoveryPage.value=1;await loadDiscoveredBooks()}
 function openSite(site?:CrawlerSite){
   editingSite.value=site
   activeSiteTab.value='basic'
@@ -878,7 +904,7 @@ async function submitRuleImport(){if(!ruleSite.value||!importJsonText.value.trim
 async function crawlDiscovered(book:CrawlerBook){await crawlerApi.batchCrawl([book.id]);message.success('采集任务已创建');await refresh()}
 async function batchCrawl(){await crawlerApi.batchCrawl(selectedDiscoveries.value.map(b=>b.id));message.success(`已创建 ${selectedDiscoveries.value.length} 个采集任务`);await refresh()}
 async function batchDiscovery(status:'IGNORED'|'BLACKLISTED',ids=selectedDiscoveries.value.map(b=>b.id)){if(!ids.length)return;await crawlerApi.setDiscoveryStatus(ids,status);message.success(status==='IGNORED'?'已忽略所选书籍':'已加入黑名单，后续扫描不会重新收录');await refresh()}
-function handleDiscoveryCardMore(command:string,book:CrawlerBook){if(command==='details')void openBook(book);else if(command==='website')window.open(book.bookUrl,'_blank','noopener,noreferrer');else if(command==='metadata')void refreshBookMetadata(book);else if(command==='blacklist')void batchDiscovery('BLACKLISTED',[book.id])}
+function handleDiscoveryCardMore(command:string,book:CrawlerBook){if(command==='details')void openBook(book);else if(command==='book-lists')void openCrawlerBookLists(book);else if(command==='website')window.open(book.bookUrl,'_blank','noopener,noreferrer');else if(command==='metadata')void refreshBookMetadata(book);else if(command==='blacklist')void batchDiscovery('BLACKLISTED',[book.id])}
 async function batchRefreshDiscoveryMetadata(){
   if(discoveryMetadataRefreshing.value)return
   const selected=[...selectedDiscoveries.value],eligible=selected.filter(book=>!isBookTaskActive(book)),skipped=selected.length-eligible.length
@@ -895,8 +921,52 @@ async function batchRefreshDiscoveryMetadata(){
   }catch(error:any){message.error(error.response?.data?.message||'批量刷新分类和标签失败')}
   finally{eligible.forEach(book=>setBookTaskSubmitting(book.id,false));discoveryMetadataRefreshing.value=false}
 }
-function handleCrawlerBookCardMore(command:string,book:CrawlerBook){if(command==='details')void openBook(book);else if(command==='website')window.open(book.bookUrl,'_blank','noopener,noreferrer');else if(command==='updates')void checkUpdates(book);else if(command==='metadata')void refreshBookMetadata(book);else if(command==='generate')void generate(book);else if(command==='import')importBook(book);else if(command==='status')openStatusEditor(book)}
-function handleCrawlerBookTableMore(command:string,book:CrawlerBook){if(command==='updates')void checkUpdates(book);else if(command==='metadata')void refreshBookMetadata(book);else if(command==='trial')void startTrial(book);else if(command==='generate')void generate(book)}
+function handleCrawlerBookCardMore(command:string,book:CrawlerBook){if(command==='details')void openBook(book);else if(command==='book-lists')void openCrawlerBookLists(book);else if(command==='website')window.open(book.bookUrl,'_blank','noopener,noreferrer');else if(command==='updates')void checkUpdates(book);else if(command==='metadata')void refreshBookMetadata(book);else if(command==='generate')void generate(book);else if(command==='import')importBook(book);else if(command==='status')openStatusEditor(book)}
+function handleCrawlerBookTableMore(command:string,book:CrawlerBook){if(command==='book-lists')void openCrawlerBookLists(book);else if(command==='updates')void checkUpdates(book);else if(command==='metadata')void refreshBookMetadata(book);else if(command==='trial')void startTrial(book);else if(command==='generate')void generate(book)}
+
+function applyCrawlerBookUpdate(updated:CrawlerBook){
+  books.value=books.value.map(book=>book.id===updated.id?updated:book)
+  discoveredBooks.value=discoveredBooks.value.map(book=>book.id===updated.id?updated:book)
+  selectedBooks.value=selectedBooks.value.map(book=>book.id===updated.id?updated:book)
+  selectedDiscoveries.value=selectedDiscoveries.value.map(book=>book.id===updated.id?updated:book)
+  if(selectedBook.value?.id===updated.id)selectedBook.value=updated
+  const applyTask=(task:CrawlerTask)=>task.bookId===updated.id?{...task,favorite:updated.favorite}:task
+  tasks.value=tasks.value.map(applyTask);failedTasks.value=failedTasks.value.map(applyTask);currentCrawlerTasks.value=currentCrawlerTasks.value.map(applyTask);queuedTasks.value=queuedTasks.value.map(applyTask)
+  if(selectedTask.value?.bookId===updated.id)selectedTask.value=applyTask(selectedTask.value)
+  if(dashboard.value)dashboard.value.recentTasks=dashboard.value.recentTasks.map(applyTask)
+}
+async function toggleFavorite(book:CrawlerBook){
+  const updated=await crawlerApi.setFavorite(book.id,!book.favorite)
+  applyCrawlerBookUpdate(updated)
+  message.success(updated.favorite?'已加入收藏，入库时会同步到书库收藏':'已取消收藏')
+  await reloadFavoriteFilteredLists()
+}
+async function toggleTaskFavorite(task:CrawlerTask){
+  if(!task.bookId)return
+  const updated=await crawlerApi.setFavorite(task.bookId,!task.favorite)
+  applyCrawlerBookUpdate(updated)
+  message.success(updated.favorite?'已加入收藏，入库时会同步到书库收藏':'已取消收藏')
+  await reloadFavoriteFilteredLists()
+}
+async function reloadFavoriteFilteredLists(){
+  const requests:Promise<unknown>[]=[]
+  if(discoveryFavoriteOnly.value)requests.push(loadDiscoveredBooks({silent:true,preserveSelection:true}))
+  if(bookFavoriteOnly.value)requests.push(loadBooks({silent:true,preserveSelection:true}))
+  if(taskFavoriteOnly.value)requests.push(loadTasks({silent:true}))
+  await Promise.all(requests)
+}
+async function openCrawlerBookLists(book:CrawlerBook){
+  bookListTarget.value=book;selectedBookListIds.value=[...(book.bookListIds||[])];bookListDialog.value=true;bookListLoading.value=true
+  try{availableBookLists.value=(await api.get<BookListOption[]>('/api/booklists')).data}
+  finally{bookListLoading.value=false}
+}
+async function openTaskBookLists(task:CrawlerTask){if(task.bookId)await openCrawlerBookLists(await crawlerApi.book(task.bookId))}
+async function saveCrawlerBookLists(){
+  if(!bookListTarget.value)return
+  bookListSaving.value=true
+  try{const updated=await crawlerApi.setBookLists(bookListTarget.value.id,selectedBookListIds.value);applyCrawlerBookUpdate(updated);bookListDialog.value=false;message.success(updated.libraryBookId?'书单已同步到已入库书籍':'已保存，书籍入库时会自动加入所选书单')}
+  finally{bookListSaving.value=false}
+}
 async function openBook(book:CrawlerBook){selectedBook.value=book;chapters.value=[];chapterTotal.value=book.chapterCount;chapterPage.value=1;if(followCurrentChapter.value)chapterSort.value='indexAsc';currentCrawlingChapter.value=undefined;crawlerLogs.value=[];bookDetailTab.value='chapters';bookDrawer.value=true;await syncOpenBookProgress()}
 function startTrial(book:CrawlerBook){if(!book.crawledChapterCount)return;void router.push({name:'CrawlerTrialReader',params:{id:book.id}})}
 async function continueCrawl(book:CrawlerBook){if(isBookTaskActive(book))return;setBookTaskSubmitting(book.id,true);try{const task=await crawlerApi.continueBook(book.id);currentCrawlerTasks.value=[task,...currentCrawlerTasks.value.filter(item=>item.id!==task.id)];message.success('续采任务已创建');await refresh()}finally{setBookTaskSubmitting(book.id,false)}}
@@ -1080,7 +1150,8 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 @media(max-width:520px){.discovery-card-grid{grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:10px}.discovery-card-cover{height:154px}}
 @media(hover:none){.discovery-card-action-overlay{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){.discovery-card-action-overlay{transition:none}}
-.discovery-toolbar{display:grid;grid-template-columns:minmax(260px,1.6fr) minmax(160px,.8fr) minmax(190px,.9fr) auto auto;gap:10px;align-items:center;margin-bottom:16px;padding:14px;border:1px solid var(--border-color-light);border-radius:15px;background:var(--surface-elevated)}.book-filter-toolbar{display:grid;grid-template-columns:minmax(230px,1.5fr) repeat(3,minmax(140px,.8fr)) minmax(190px,1fr) auto auto;gap:10px;align-items:center;margin-bottom:16px;padding:14px;border:1px solid var(--border-color-light);border-radius:15px;background:var(--surface-elevated)}@media(max-width:1200px){.book-filter-toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}.book-filter-toolbar .el-button{margin-left:0}}@media(max-width:980px){.discovery-toolbar{grid-template-columns:2fr 1fr 1fr}.discovery-toolbar .el-button{margin-left:0}}@media(max-width:640px){.discovery-toolbar,.book-filter-toolbar{grid-template-columns:minmax(0,1fr)}.discovery-toolbar .el-button,.book-filter-toolbar .el-button{width:100%}}
+.discovery-toolbar{display:grid;grid-template-columns:minmax(260px,1.6fr) minmax(160px,.8fr) minmax(190px,.9fr) auto auto auto;gap:10px;align-items:center;margin-bottom:16px;padding:14px;border:1px solid var(--border-color-light);border-radius:15px;background:var(--surface-elevated)}.book-filter-toolbar{display:grid;grid-template-columns:minmax(230px,1.5fr) repeat(3,minmax(140px,.8fr)) minmax(190px,1fr) auto auto auto;gap:10px;align-items:center;margin-bottom:16px;padding:14px;border:1px solid var(--border-color-light);border-radius:15px;background:var(--surface-elevated)}@media(max-width:1200px){.book-filter-toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}.book-filter-toolbar .el-button{margin-left:0}}@media(max-width:980px){.discovery-toolbar{grid-template-columns:2fr 1fr 1fr}.discovery-toolbar .el-button{margin-left:0}}@media(max-width:640px){.discovery-toolbar,.book-filter-toolbar{grid-template-columns:minmax(0,1fr)}.discovery-toolbar .el-button,.book-filter-toolbar .el-button{width:100%}}
+.crawler-book-list-dialog{display:grid;gap:14px}.crawler-book-list-options{display:grid;max-height:50vh;gap:8px;overflow-y:auto}.crawler-book-list-options :deep(.el-checkbox){box-sizing:border-box;width:100%;height:auto;margin:0;padding:12px 14px}.crawler-book-list-options :deep(.el-checkbox__label){display:grid;min-width:0;gap:3px}.crawler-book-list-options strong{color:var(--text-primary)}.crawler-book-list-options small{overflow:hidden;color:var(--text-tertiary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
 .marker-list{display:grid;gap:2px}.marker-row{display:grid;width:100%;grid-template-columns:minmax(0,1fr) 132px auto;gap:8px;align-items:center}.marker-status{width:132px}.marker-row .el-button{margin-left:0}@media(max-width:640px){.marker-row{grid-template-columns:minmax(0,1fr)}.marker-status{width:100%}.marker-row .el-button{justify-self:end}}
 :global(.site-editor-dialog){display:flex;width:min(860px,calc(100vw - 32px))!important;max-height:calc(100dvh - 32px);flex-direction:column;margin-top:max(16px,3vh)!important;margin-bottom:16px}
 :global(.site-editor-dialog .el-dialog__body){display:flex;min-width:0;min-height:0;flex:1;flex-direction:column;overflow:hidden}

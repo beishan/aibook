@@ -42,6 +42,31 @@ public interface CrawlerTaskRepository extends JpaRepository<CrawlerTask, String
     Page<CrawlerTask> findByUserAndTypeAndStatusInOrderByCreatedAtDesc(
             User user, CrawlerTask.TaskType type,
             Collection<CrawlerTask.TaskStatus> statuses, Pageable pageable);
+    @Query(value = """
+            select t from CrawlerTask t
+            where t.user = :user
+              and t.crawlerBook.favorite = true
+              and (:type is null or t.type = :type)
+              and (:status is null or t.status = :status)
+              and (:failedOnly = false or t.status in :failedStatuses)
+            order by case when t.status = :runningStatus then 0 else 1 end, t.createdAt desc
+            """, countQuery = """
+            select count(t) from CrawlerTask t
+            where t.user = :user
+              and t.crawlerBook.favorite = true
+              and (:type is null or t.type = :type)
+              and (:status is null or t.status = :status)
+              and (:failedOnly = false or t.status in :failedStatuses)
+              and (t.status = :runningStatus or t.status <> :runningStatus or t.status is null)
+            """)
+    Page<CrawlerTask> findFavoriteTasks(
+            @Param("user") User user,
+            @Param("type") CrawlerTask.TaskType type,
+            @Param("status") CrawlerTask.TaskStatus status,
+            @Param("failedOnly") boolean failedOnly,
+            @Param("failedStatuses") Collection<CrawlerTask.TaskStatus> failedStatuses,
+            @Param("runningStatus") CrawlerTask.TaskStatus runningStatus,
+            Pageable pageable);
     List<CrawlerTask> findByUserAndStatusInOrderByCreatedAtDesc(
             User user, Collection<CrawlerTask.TaskStatus> statuses);
     List<CrawlerTask> findByStatusIn(Collection<CrawlerTask.TaskStatus> statuses);

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import com.aibook.model.entity.CrawlerTask;
 import com.aibook.model.entity.User;
 import java.lang.reflect.Method;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -36,6 +37,22 @@ class CrawlerTaskRepositoryQueryTest {
                 Pageable.class);
 
         assertCountQueryParameters(method, Set.of("user", "type", "runningStatus"));
+    }
+
+    @Test
+    void favoriteTaskCountQueryDeclaresEveryNamedParameter() throws NoSuchMethodException {
+        Method method = CrawlerTaskRepository.class.getMethod(
+                "findFavoriteTasks",
+                User.class,
+                CrawlerTask.TaskType.class,
+                CrawlerTask.TaskStatus.class,
+                boolean.class,
+                Collection.class,
+                CrawlerTask.TaskStatus.class,
+                Pageable.class);
+
+        assertCountQueryParameters(method,
+                Set.of("user", "type", "status", "failedOnly", "failedStatuses", "runningStatus"));
     }
 
     private void assertCountQueryParameters(Method method, Set<String> expectedParameters) {

@@ -64,15 +64,17 @@ public class CrawlerController {
             @RequestParam(required = false) Long siteId,
             @RequestParam(required = false) String crawlStatus,
             @RequestParam(required = false) String importStatus,
+            @RequestParam(defaultValue = "false") boolean favoriteOnly,
             @RequestParam(defaultValue = "CREATED_DESC") String sort) {
         return managementService.books(user(auth), page, size, keyword, siteId,
-                crawlStatus, importStatus, sort);
+                crawlStatus, importStatus, favoriteOnly, sort);
     }
     @GetMapping("/books/discovered") public Page<BookView> discoveredBooks(Authentication auth,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String keyword, @RequestParam(required = false) Long siteId,
+            @RequestParam(defaultValue = "false") boolean favoriteOnly,
             @RequestParam(defaultValue = "DISCOVER_TIME_DESC") String sort) {
-        return managementService.discoveredBooks(user(auth), page, size, keyword, siteId, sort);
+        return managementService.discoveredBooks(user(auth), page, size, keyword, siteId, favoriteOnly, sort);
     }
     @GetMapping("/books/{id}") public BookView book(Authentication auth, @PathVariable Long id) { return managementService.book(user(auth), id); }
     @GetMapping("/books/{id}/chapters") public Page<ChapterView> chapters(
@@ -104,6 +106,8 @@ public class CrawlerController {
     @PostMapping("/books/{id}/refresh-metadata") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView refreshMetadata(Authentication auth, @PathVariable Long id) { return taskService.refreshMetadata(user(auth), id); }
     @PutMapping("/books/{id}/crawl-status") public BookView crawlStatus(Authentication auth, @PathVariable Long id, @Valid @RequestBody BookCrawlStatusRequest request) { return taskService.setBookStatus(user(auth), id, CrawlerBook.CrawlStatus.valueOf(request.status()), request.autoUpdateEnabled()); }
     @PutMapping("/books/{id}/library-sync") public BookView librarySync(Authentication auth, @PathVariable Long id, @Valid @RequestBody LibrarySyncRequest request) { return taskService.setLibrarySync(user(auth), id, request.enabled()); }
+    @PutMapping("/books/{id}/favorite") public BookView favorite(Authentication auth, @PathVariable Long id, @Valid @RequestBody FavoriteRequest request) { return managementService.setFavorite(user(auth), id, request.favorite()); }
+    @PutMapping("/books/{id}/book-lists") public BookView bookLists(Authentication auth, @PathVariable Long id, @Valid @RequestBody BookListSelectionRequest request) { return managementService.setBookLists(user(auth), id, request.bookListIds()); }
     @PostMapping("/books/batch/crawl") @ResponseStatus(HttpStatus.ACCEPTED) public List<TaskView> batchCrawl(Authentication auth, @Valid @RequestBody BatchBookRequest request) { return taskService.batchCrawl(user(auth), request.bookIds()); }
     @PostMapping("/books/batch/refresh-metadata") @ResponseStatus(HttpStatus.ACCEPTED) public List<TaskView> batchRefreshMetadata(Authentication auth, @Valid @RequestBody BatchBookRequest request) { return taskService.batchRefreshMetadata(user(auth), request.bookIds()); }
     @PutMapping("/books/batch/crawl-status") public List<BookView> batchCrawlStatus(
@@ -124,8 +128,9 @@ public class CrawlerController {
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "false") boolean failedOnly,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String type) {
-        return managementService.tasks(user(auth), page, size, failedOnly, status, type);
+            @RequestParam(required = false) String type,
+            @RequestParam(defaultValue = "false") boolean favoriteOnly) {
+        return managementService.tasks(user(auth), page, size, failedOnly, status, type, favoriteOnly);
     }
     @GetMapping("/tasks/queued") public List<TaskView> queuedTasks(Authentication auth) {
         return taskService.queuedTasks(user(auth));

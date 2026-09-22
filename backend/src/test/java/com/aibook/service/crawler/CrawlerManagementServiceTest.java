@@ -4,6 +4,7 @@ import com.aibook.dto.crawler.CrawlerDtos.RulePayload;
 import com.aibook.dto.crawler.CrawlerDtos.SitePayload;
 import com.aibook.dto.crawler.CrawlerDtos.ProxyPayload;
 import com.aibook.dto.crawler.CrawlerDtos.ContentMarkerPayload;
+import com.aibook.model.entity.Book;
 import com.aibook.model.entity.CrawlerBook;
 import com.aibook.model.entity.CrawlerChapter;
 import com.aibook.model.entity.CrawlerSite;
@@ -29,6 +30,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,6 +44,7 @@ class CrawlerManagementServiceTest {
     private CrawlerChapterRepository chapters;
     private CrawlerTaskLogRepository crawlerLogs;
     private CrawlerTaskRepository tasks;
+    private com.aibook.repository.BookListRepository bookLists;
     private CrawlerHttpClient httpClient;
     private CrawlerManagementService service;
 
@@ -53,6 +56,7 @@ class CrawlerManagementServiceTest {
         chapters = mock(CrawlerChapterRepository.class);
         crawlerLogs = mock(CrawlerTaskLogRepository.class);
         tasks = mock(CrawlerTaskRepository.class);
+        bookLists = mock(com.aibook.repository.BookListRepository.class);
         httpClient = mock(CrawlerHttpClient.class);
         when(httpClient.protectionState(any(CrawlerSite.class))).thenReturn(
                 new CrawlerHttpClient.ProtectionState(false, null, null, 0, 0));
@@ -60,6 +64,7 @@ class CrawlerManagementServiceTest {
                 chapters, tasks, crawlerLogs, rules,
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class),
                 mock(com.aibook.repository.CrawlerScanResultRepository.class),
+                bookLists,
                 new ObjectMapper(), httpClient);
         when(sites.save(any(CrawlerSite.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(rules.save(any(CrawlerSiteRuleVersion.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -308,7 +313,7 @@ class CrawlerManagementServiceTest {
                 .discoveryStatus(CrawlerBook.DiscoveryStatus.ACTIVE)
                 .crawlStatus(CrawlerBook.CrawlStatus.DISCOVERED).build();
         when(books.searchDiscoveredBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
-                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L), any(Pageable.class)))
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L), eq(false), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(book)));
 
         var result = service.discoveredBooks(user, 2, 50, "  三体  ", 7L, "BOOK_NAME_ASC");
@@ -316,7 +321,7 @@ class CrawlerManagementServiceTest {
         assertThat(result.getContent()).hasSize(1);
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
         verify(books).searchDiscoveredBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
-                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L), pageable.capture());
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L), eq(false), pageable.capture());
         assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
         assertThat(pageable.getValue().getPageSize()).isEqualTo(50);
         assertThat(pageable.getValue().getSort().getOrderFor("bookName").isAscending()).isTrue();
@@ -326,14 +331,14 @@ class CrawlerManagementServiceTest {
     void bindsBlankDiscoveryKeywordAsTextInsteadOfNull() {
         User user = user();
         when(books.searchDiscoveredBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
-                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq(""), isNull(), any(Pageable.class)))
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq(""), isNull(), eq(false), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
         var result = service.discoveredBooks(user, 0, 20, null, null, "DISCOVER_TIME_DESC");
 
         assertThat(result).isEmpty();
         verify(books).searchDiscoveredBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
-                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq(""), isNull(), any(Pageable.class));
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq(""), isNull(), eq(false), any(Pageable.class));
     }
 
     @Test
@@ -348,6 +353,7 @@ class CrawlerManagementServiceTest {
         when(books.searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
                 eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
                 eq(CrawlerBook.CrawlStatus.COMPLETED), eq(CrawlerBook.ImportStatus.READY),
+                eq(false),
                 eq(List.of(CrawlerBook.CrawlStatus.CRAWLING_METADATA,
                         CrawlerBook.CrawlStatus.CRAWLING_CHAPTER_LIST,
                         CrawlerBook.CrawlStatus.CRAWLING_CONTENT,
@@ -363,6 +369,7 @@ class CrawlerManagementServiceTest {
         verify(books).searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
                 eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
                 eq(CrawlerBook.CrawlStatus.COMPLETED), eq(CrawlerBook.ImportStatus.READY),
+                eq(false),
                 eq(List.of(CrawlerBook.CrawlStatus.CRAWLING_METADATA,
                         CrawlerBook.CrawlStatus.CRAWLING_CHAPTER_LIST,
                         CrawlerBook.CrawlStatus.CRAWLING_CONTENT,
@@ -501,6 +508,41 @@ class CrawlerManagementServiceTest {
         when(tasks.findByIdAndUser("task-complete", user)).thenReturn(Optional.of(task));
 
         assertThat(service.task(user, "task-complete").progressPercent()).isEqualTo(100);
+    }
+
+    @Test
+    void favoritesCrawlerBookAndAlreadyImportedLibraryBookTogether() {
+        User user = user();
+        Book libraryBook = Book.builder().id(31L).title("三体").format("structured")
+                .filePath("structured://31").user(user).build();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();
+        CrawlerBook crawlerBook = CrawlerBook.builder().id(15L).site(site).bookName("三体")
+                .externalBookId("book-1").bookUrl("https://example.com/book/1")
+                .libraryBook(libraryBook).importStatus(CrawlerBook.ImportStatus.IMPORTED).build();
+        when(books.findByIdAndSiteUser(15L, user)).thenReturn(Optional.of(crawlerBook));
+
+        var result = service.setFavorite(user, 15L, true);
+
+        assertThat(result.favorite()).isTrue();
+        assertThat(libraryBook.getIsFavorite()).isTrue();
+        verify(books).save(crawlerBook);
+    }
+
+    @Test
+    void storesOwnedBookListsBeforeLibraryImport() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();
+        CrawlerBook crawlerBook = CrawlerBook.builder().id(15L).site(site).bookName("三体")
+                .externalBookId("book-1").bookUrl("https://example.com/book/1").build();
+        com.aibook.model.entity.BookList list = com.aibook.model.entity.BookList.builder()
+                .id(9L).name("科幻").user(user).build();
+        when(books.findByIdAndSiteUser(15L, user)).thenReturn(Optional.of(crawlerBook));
+        when(bookLists.findByIdInAndUser(eq(Set.of(9L)), eq(user))).thenReturn(List.of(list));
+
+        var result = service.setBookLists(user, 15L, List.of(9L));
+
+        assertThat(result.bookListIds()).containsExactly(9L);
+        assertThat(crawlerBook.getBookLists()).containsExactly(list);
     }
 
     @Test

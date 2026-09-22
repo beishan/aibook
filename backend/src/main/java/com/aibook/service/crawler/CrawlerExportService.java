@@ -29,6 +29,7 @@ public class CrawlerExportService {
     private final CrawlerBookExportRepository exportRepository;
     private final CrawlerBookRepository crawlerBookRepository;
     private final BookRepository bookRepository;
+    private final BookListRepository bookListRepository;
     private final LibraryChapterRepository libraryChapterRepository;
     private final CategoryRepository categoryRepository;
     private final TagRepository tagRepository;
@@ -125,7 +126,9 @@ public class CrawlerExportService {
                     .fileHash(fileHash).sourceType(Book.SourceType.CRAWLER).user(user)
                     .chapterCount(availableChapterCount).build();
             applyLibraryMetadata(book, crawlerBook, user);
+            book.setIsFavorite(Boolean.TRUE.equals(crawlerBook.getFavorite()));
             book = bookRepository.save(book);
+            applyLibraryBookLists(crawlerBook, book, user);
             versionRepository.save(BookVersion.builder().book(book).displayName(safe(crawlerBook.getBookName()) + "." + format.toLowerCase(Locale.ROOT))
                     .format(format.toLowerCase(Locale.ROOT)).filePath(target.toString()).fileSize(Files.size(target)).fileHash(fileHash)
                     .primaryVersion(true).chapterCount(availableChapterCount).sourceType("CRAWLER")
@@ -170,7 +173,9 @@ public class CrawlerExportService {
                 .fileHash(sourceHash).sourceType(Book.SourceType.CRAWLER).user(user)
                 .chapterCount(chapters.size()).build();
         applyLibraryMetadata(book, crawlerBook, user);
+        book.setIsFavorite(Boolean.TRUE.equals(crawlerBook.getFavorite()));
         book = bookRepository.save(book);
+        applyLibraryBookLists(crawlerBook, book, user);
         BookVersion version = versionRepository.save(BookVersion.builder().book(book)
                 .displayName(safe(crawlerBook.getBookName()) + ".在线章节")
                 .format("structured").filePath(sourceUri).fileSize(contentSize)
@@ -232,8 +237,10 @@ public class CrawlerExportService {
         if (libraryBook == null) return 0;
         libraryBook.setTitle(crawlerBook.getBookName()); libraryBook.setAuthor(crawlerBook.getAuthor());
         libraryBook.setDescription(crawlerBook.getDescription()); libraryBook.setCoverUrl(crawlerBook.getCoverUrl());
+        libraryBook.setIsFavorite(Boolean.TRUE.equals(crawlerBook.getFavorite()));
         applyLibraryMetadata(libraryBook, crawlerBook, user);
         bookRepository.save(libraryBook);
+        applyLibraryBookLists(crawlerBook, libraryBook, user);
         List<BookVersion> versions = versionRepository.findByBookOrderByPrimaryVersionDescCreatedAtAsc(libraryBook);
         LinkedHashSet<String> formats;
         if (selectedFormats != null) {
@@ -430,6 +437,18 @@ public class CrawlerExportService {
         if (value == null || value.isBlank()) return List.of();
         return Arrays.stream(value.split("[\\r\\n,，、]+")).map(String::trim)
                 .filter(tag -> !tag.isBlank()).distinct().toList();
+    }
+
+    private void applyLibraryBookLists(CrawlerBook crawlerBook, Book libraryBook, User user) {
+        for (BookList bookList : crawlerBook.getBookLists()) {
+            if (!Objects.equals(bookList.getUser().getId(), user.getId())) continue;
+            boolean present = bookList.getBooks().stream()
+                    .anyMatch(book -> Objects.equals(book.getId(), libraryBook.getId()));
+            if (!present) {
+                bookList.getBooks().add(libraryBook);
+                bookListRepository.save(bookList);
+            }
+        }
     }
 
     private String trimToNull(String value) {

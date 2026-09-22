@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Collection;
 
 /**
  * 书单 Repository
@@ -20,6 +21,7 @@ public interface BookListRepository extends JpaRepository<BookList, Long> {
      * 根据用户查询书单
      */
     List<BookList> findByUser(User user);
+    List<BookList> findByIdInAndUser(Collection<Long> ids, User user);
 
     /**
      * 根据用户和名称查询书单
@@ -32,4 +34,8 @@ public interface BookListRepository extends JpaRepository<BookList, Long> {
     @Modifying
     @Query(value = "DELETE FROM book_list_items WHERE book_id = :bookId", nativeQuery = true)
     void deleteBookAssociations(@Param("bookId") Long bookId);
+
+    @Modifying
+    @Query(value = "DELETE FROM crawler_book_lists WHERE book_list_id = :bookListId", nativeQuery = true)
+    void deleteCrawlerBookAssociations(@Param("bookListId") Long bookListId);
 }

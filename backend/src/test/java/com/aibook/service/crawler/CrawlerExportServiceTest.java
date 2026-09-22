@@ -128,6 +128,10 @@ class CrawlerExportServiceTest {
                 .format("epub").filePath("old.epub").fileHash("old-hash").chapterCount(1).build();
         CrawlerBook crawlerBook = book(user);
         crawlerBook.setExternalBookId("book-3");
+        crawlerBook.setFavorite(true);
+        com.aibook.model.entity.BookList selectedList = com.aibook.model.entity.BookList.builder()
+                .id(8L).name("待读").user(user).build();
+        crawlerBook.getBookLists().add(selectedList);
         crawlerBook.setLibraryBook(libraryBook);
         CrawlerChapter chapter = CrawlerChapter.builder().crawlerBook(crawlerBook).chapterIndex(0)
                 .externalChapterId("chapter-1").chapterUrl("https://example.com/chapter-1")
@@ -142,6 +146,7 @@ class CrawlerExportServiceTest {
         CrawlerBookExportRepository exports = mock(CrawlerBookExportRepository.class);
         CrawlerBookRepository crawlerBooks = mock(CrawlerBookRepository.class);
         BookRepository books = mock(BookRepository.class);
+        com.aibook.repository.BookListRepository bookLists = mock(com.aibook.repository.BookListRepository.class);
         BookVersionRepository versions = mock(BookVersionRepository.class);
         VersionReadingProgressRepository progresses = mock(VersionReadingProgressRepository.class);
         AtomicReference<CrawlerBookExport> savedExport = new AtomicReference<>();
@@ -163,7 +168,8 @@ class CrawlerExportServiceTest {
         });
         when(progresses.findByUserAndVersion(user, oldVersion)).thenReturn(Optional.of(oldProgress));
         CrawlerExportService service = new CrawlerExportService(management, chapters, exports,
-                crawlerBooks, books, mock(LibraryChapterRepository.class),
+                crawlerBooks, books, bookLists,
+                mock(LibraryChapterRepository.class),
                 mock(CategoryRepository.class), mock(TagRepository.class),
                 versions, progresses, mock(OperationLogService.class));
         ReflectionTestUtils.setField(service, "storagePath", temporaryDirectory.toString());
@@ -177,6 +183,9 @@ class CrawlerExportServiceTest {
         assertThat(newVersion.get().getPrimaryVersion()).isTrue();
         assertThat(libraryBook.getFilePath()).isEqualTo(newVersion.get().getFilePath());
         assertThat(libraryBook.getChapterCount()).isEqualTo(1);
+        assertThat(libraryBook.getIsFavorite()).isTrue();
+        assertThat(selectedList.getBooks()).containsExactly(libraryBook);
+        verify(bookLists).save(selectedList);
         verify(progresses).save(argThat(progress -> progress.getVersion() == newVersion.get()
                 && progress.getTotalProgress() == 42 && "第一章".equals(progress.getCurrentChapterTitle())));
     }
@@ -227,7 +236,8 @@ class CrawlerExportServiceTest {
             return saved;
         });
         CrawlerExportService service = new CrawlerExportService(management, chapters, exports,
-                crawlerBooks, books, mock(LibraryChapterRepository.class), categories, tags,
+                crawlerBooks, books, mock(com.aibook.repository.BookListRepository.class),
+                mock(LibraryChapterRepository.class), categories, tags,
                 versions, mock(VersionReadingProgressRepository.class),
                 mock(OperationLogService.class));
         ReflectionTestUtils.setField(service, "storagePath", temporaryDirectory.toString());
@@ -281,7 +291,8 @@ class CrawlerExportServiceTest {
             snapshot.set(new ArrayList<>(invocation.getArgument(0))); return invocation.getArgument(0);
         });
         CrawlerExportService service = new CrawlerExportService(management, chapters, exports,
-                crawlerBooks, books, libraryChapters, mock(CategoryRepository.class),
+                crawlerBooks, books, mock(com.aibook.repository.BookListRepository.class),
+                libraryChapters, mock(CategoryRepository.class),
                 mock(TagRepository.class), versions, mock(VersionReadingProgressRepository.class),
                 mock(OperationLogService.class));
 
@@ -302,6 +313,7 @@ class CrawlerExportServiceTest {
             CrawlerChapterRepository chapters, CrawlerBookExportRepository exports) {
         CrawlerExportService service = new CrawlerExportService(management, chapters, exports,
                 mock(CrawlerBookRepository.class), mock(BookRepository.class),
+                mock(com.aibook.repository.BookListRepository.class),
                 mock(LibraryChapterRepository.class), mock(CategoryRepository.class),
                 mock(TagRepository.class), mock(BookVersionRepository.class),
                 mock(VersionReadingProgressRepository.class),
