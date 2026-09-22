@@ -1240,7 +1240,7 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 
 :deep(.el-table__row .favorite-action.row-hover-action.is-favorite),
 :deep(.el-table__row:hover .row-hover-action),
-:deep(.el-table__row:focus-within .row-hover-action) {
+:deep(.el-table__row .row-hover-action:focus-within) {
   opacity: 1;
   pointer-events: auto;
   transform: none;

@@ -24,7 +24,8 @@ assert.match(source, /class="queued-task-actions row-hover-action"/, 'queue acti
 
 assert.match(source, /:deep\(\.el-table__row \.row-hover-action\) \{[\s\S]*?opacity: 0;[\s\S]*?pointer-events: none;/, 'row actions must be hidden and non-interactive by default')
 assert.match(source, /:deep\(\.el-table__row \.favorite-action\.row-hover-action\.is-favorite\),[\s\S]*?opacity: 1;[\s\S]*?pointer-events: auto;/, 'favorited rows must keep their favorite icon visible and interactive')
-assert.match(source, /:deep\(\.el-table__row:hover \.row-hover-action\),[\s\S]*?:deep\(\.el-table__row:focus-within \.row-hover-action\)/, 'row actions must be revealed by pointer hover and keyboard focus')
+assert.match(source, /:deep\(\.el-table__row:hover \.row-hover-action\),[\s\S]*?:deep\(\.el-table__row \.row-hover-action:focus-within\)/, 'row actions must be revealed by pointer hover or their own keyboard focus')
+assert.doesNotMatch(source, /\.el-table__row:focus-within \.row-hover-action/, 'focusing a favorite must not reveal sibling operation buttons')
 assert.match(source, /@media \(hover: none\)[\s\S]*?:deep\(\.el-table__row \.row-hover-action\) \{[\s\S]*?opacity: 1;[\s\S]*?pointer-events: auto;/, 'touch devices must retain accessible row actions')
 
 console.log('Crawler list favorites and operation clusters are positioned and revealed per row')
