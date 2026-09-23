@@ -25,6 +25,11 @@ assert.match(taskTable, /command:'delete',label:'删除'/)
 assert.match(taskTable, /row\.status==='SUCCESS'&&row\.type==='SITE_SCAN'/, 'completed discovery scans must use the detailed scan result')
 assert.match(taskTable, /h\('i',`新增 \$\{row\.newBookCount\}`\)/, 'completed discovery scans must show the new-book count')
 assert.match(taskTable, /h\('em',`重复 \$\{row\.duplicateCount\}`\)/, 'completed discovery scans must show the duplicate-book count')
+assert.match(taskTable, /showFailureReason:\{type:Boolean,default:false\}/, 'the shared task table must support a dedicated failure-reason column')
+assert.match(taskTable, /label:'失败原因',minWidth:280/, 'failed tasks must expose a clearly labeled failure-reason column')
+assert.match(taskTable, /row\.errorMessage\?\.trim\(\)\|\|'任务执行失败，未记录详细原因'/, 'failure rows must show the backend error or an explicit fallback')
+assert.match(taskTable, /h\(ElTooltip,\{content:reason/, 'long failure reasons must remain available in a tooltip')
+assert.match(source, /:show-failure-reason="activeTab === 'failed'"/, 'only the failed-task view should enable the failure-reason column')
 
 const mainActionBlock = taskTable.match(/return h\('div',\{class:'task-action-cluster row-hover-action'\}[\s\S]*?\n\s*\]\)/)?.[0] ?? ''
 assert.match(taskTable, /row\.status==='FAILED'\?\{command:'resume',label:'继续'\}/, 'failed tasks must keep resume in the overflow menu')

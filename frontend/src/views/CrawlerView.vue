@@ -176,7 +176,20 @@
         </div>
       </transition>
       <div v-loading="activeTab === 'failed' ? failedTaskLoading : taskLoading">
-        <TaskTable :key="activeTab" :tasks="activeTab === 'failed' ? failedTasks : tasks" selectable @selection-change="handleTaskSelectionChange" @open="openTask" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" @scan-results="openScanResults" @toggle-favorite="toggleTaskFavorite" @book-lists="openTaskBookLists" />
+        <TaskTable
+          :key="activeTab"
+          :tasks="activeTab === 'failed' ? failedTasks : tasks"
+          :show-failure-reason="activeTab === 'failed'"
+          selectable
+          @selection-change="handleTaskSelectionChange"
+          @open="openTask"
+          @command="runTaskCommand"
+          @edit="openTaskEditor"
+          @delete="removeTask"
+          @scan-results="openScanResults"
+          @toggle-favorite="toggleTaskFavorite"
+          @book-lists="openTaskBookLists"
+        />
       </div>
       <el-empty v-if="activeTab === 'tasks'&&!taskLoading&&!tasks.length" :description="taskStatusFilter||taskTypeFilter||taskFavoriteOnly?'暂无符合筛选条件的采集任务':'暂无采集任务'" />
       <el-empty v-if="activeTab === 'failed'&&!failedTaskLoading&&!failedTasks.length" description="暂无失败任务" />
@@ -533,7 +546,7 @@ import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactiv
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, MoreFilled, Plus, Refresh, Search, Star, StarFilled, Tickets, Upload, VideoPause, VideoPlay, Warning } from '@element-plus/icons-vue'
-import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElProgress, ElTable, ElTableColumn, ElTag, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
+import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElProgress, ElTable, ElTableColumn, ElTag, ElTooltip, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
 import { crawlerApi, type CrawlerBook, type CrawlerChapter, type CrawlerDashboard, type CrawlerDashboardStatistics, type CrawlerDiscoveryPage, type CrawlerDiscoveryPagePayload, type CrawlerLog, type CrawlerRule, type CrawlerRuleExport, type CrawlerRuleTest, type CrawlerRuleVersion, type CrawlerScanResult, type CrawlerSite, type CrawlerSiteConfiguration, type CrawlerSitePayload, type CrawlerTask, type CrawlerTaskQueueSettings } from '@/utils/crawler'
 import {
   CRAWLER_POLLING_INTERVAL_OPTIONS,
@@ -552,7 +565,7 @@ interface BookListOption { id:number; name:string; description?:string }
 type TaskMoreCommand='scan-results'|'book-lists'|'edit'|'resume'|'delete'
 type TaskMoreAction={command:TaskMoreCommand;label:string;danger?:boolean;divided?:boolean}
 
-const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true},selectable:{type:Boolean,default:false}}, emits:['open','command','edit','delete','scan-results','selection-change','toggle-favorite','book-lists'], setup(props,{emit}) {
+const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true},selectable:{type:Boolean,default:false},showFailureReason:{type:Boolean,default:false}}, emits:['open','command','edit','delete','scan-results','selection-change','toggle-favorite','book-lists'], setup(props,{emit}) {
   const moreActions=(row:CrawlerTask):TaskMoreAction[]=>[
     row.type==='SITE_SCAN'?{command:'scan-results',label:'扫描结果'}:null,
     row.bookId?{command:'book-lists',label:'加入书单'}:null,
@@ -571,6 +584,14 @@ const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask
   h(ElTableColumn,{label:'任务类型',width:120},{default:({row}:{row:CrawlerTask})=>taskTypeLabel(row.type)}),
   h(ElTableColumn,{label:'进度 / 扫描结果',minWidth:300},{default:({row}:{row:CrawlerTask})=>row.status==='SUCCESS'&&row.type==='SITE_SCAN'?h('div',{class:'task-scan-progress task-scan-completed'},[h('div',{class:'task-success-progress'},[h('strong','✓ 已完成'),h('span',`扫描 ${row.scannedPageCount} 页，发现 ${row.totalCount} 本`)]),h('div',{class:'task-scan-summary'},[h('i',`新增 ${row.newBookCount}`),h('em',`重复 ${row.duplicateCount}`),row.failedCount?h('strong',`失败 ${row.failedCount}`):null])]):row.status==='SUCCESS'?h('div',{class:'task-success-progress'},[h('strong','✓ 已完成'),h('span',`成功处理 ${row.successCount} 项`)]):row.type==='SITE_SCAN'?h('div',{class:'task-scan-progress'},[h(ElProgress,{class:row.status==='RUNNING'?'crawler-running-progress':undefined,percentage:scanTaskPercentage(row),strokeWidth:7}),h('small',scanTaskProgressText(row)),h('div',{class:'task-scan-summary'},[`扫描到 ${row.totalCount}`,h('b',`成功 ${row.successCount}`),h('i',`新增 ${row.newBookCount}`),h('em',`重复 ${row.duplicateCount}`),row.failedCount?h('strong',`失败 ${row.failedCount}`):null])]):h(ElProgress,{class:row.status==='RUNNING'?'crawler-running-progress':undefined,percentage:row.totalCount?Math.round(row.successCount/row.totalCount*100):0,strokeWidth:7})}),
   h(ElTableColumn,{label:'状态',width:130},{default:({row}:{row:CrawlerTask})=>h(ElTag,{type:statusType(row.status)},()=>statusLabel(row.status))}),
+  props.showFailureReason?h(ElTableColumn,{label:'失败原因',minWidth:280},{default:({row}:{row:CrawlerTask})=>{
+    const reason=row.errorMessage?.trim()||'任务执行失败，未记录详细原因'
+    return h(ElTooltip,{content:reason,placement:'top',showAfter:250,popperClass:'task-failure-tooltip'},()=>
+      h('div',{class:'task-failure-reason',tabindex:0,'aria-label':`失败原因：${reason}`},[
+        h(Warning,{class:'task-failure-reason-icon'}),
+        h('span',reason),
+      ]))
+  }}):null,
   h(ElTableColumn,{label:'优先级',width:90},{default:({row}:{row:CrawlerTask})=>h(ElTag,{type:priorityType(row.priority),effect:'plain'},()=>priorityLabel(row.priority))}),
   h(ElTableColumn,{label:'当前章节',prop:'currentChapter',minWidth:150}),
   h(ElTableColumn,{label:'创建时间',width:170},{default:({row}:{row:CrawlerTask})=>formatTime(row.createdAt)}),
@@ -1260,6 +1281,7 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   }
 }
 .book-batch-actions,.book-batch-task-actions,.book-batch-status-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}.book-batch-status-actions{padding-left:8px;border-left:1px solid var(--border-color)}.book-batch-actions :deep(.el-select){width:170px}.book-batch-actions .el-button{margin-left:0}@media(max-width:760px){.book-batch-actions{width:100%;align-items:stretch;flex-direction:column}.book-batch-task-actions,.book-batch-status-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));justify-content:stretch}.book-batch-status-actions{grid-template-columns:minmax(0,1fr) auto;padding:8px 0 0;border-top:1px solid var(--border-color);border-left:0}.book-batch-actions :deep(.el-select),.book-batch-actions .el-button{width:100%}}@media(max-width:440px){.book-batch-task-actions{grid-template-columns:minmax(0,1fr)}.book-batch-status-actions{grid-template-columns:minmax(0,1fr)}}
+:deep(.task-failure-reason){display:flex;align-items:flex-start;gap:7px;width:100%;padding:7px 9px;border:1px solid color-mix(in srgb,var(--danger) 22%,transparent);border-radius:9px;background:color-mix(in srgb,var(--danger) 9%,transparent);color:var(--danger);cursor:help}:deep(.task-failure-reason:focus-visible){outline:2px solid var(--danger);outline-offset:2px}:deep(.task-failure-reason-icon){flex:0 0 auto;width:15px;height:15px;margin-top:2px}:deep(.task-failure-reason span){display:-webkit-box;overflow:hidden;color:var(--text-primary);font-size:12px;line-height:1.45;overflow-wrap:anywhere;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 :deep(.task-success-progress){display:flex;align-items:center;gap:10px;min-height:24px;color:var(--success)}:deep(.task-success-progress strong){font-size:13px}:deep(.task-success-progress span){color:var(--text-tertiary);font-size:11px}@keyframes crawler-progress-stripes{from{background-position:0 0}to{background-position:24px 0}}:deep(.crawler-running-progress .el-progress-bar__inner){background-color:var(--success)!important;background-image:linear-gradient(45deg,rgba(255,255,255,.38) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.38) 50%,rgba(255,255,255,.38) 75%,transparent 75%,transparent);background-size:24px 24px;animation:crawler-progress-stripes .7s linear infinite}:deep(.crawler-running-progress .el-progress__text){color:var(--success)}@media(prefers-reduced-motion:reduce){:deep(.crawler-running-progress .el-progress-bar__inner){animation:none}}
 .site-protection{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--warning) 22%,var(--border-color-light));border-radius:12px;background:color-mix(in srgb,var(--warning) 8%,var(--surface-card))}.site-protection>div{display:grid;min-width:0;gap:2px}.site-protection strong{color:var(--warning);font-size:12px}.site-protection span{overflow:hidden;color:var(--text-secondary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.site-protection small{flex:0 0 auto;color:var(--text-tertiary);font-size:10px}.site-protection.cooling{border-color:color-mix(in srgb,var(--danger) 24%,var(--border-color-light));background:color-mix(in srgb,var(--danger) 7%,var(--surface-card))}.site-protection.cooling strong{color:var(--danger)}
 @media(max-width:520px){.site-protection{align-items:stretch;flex-direction:column;gap:5px}.site-protection small{flex:auto}}
