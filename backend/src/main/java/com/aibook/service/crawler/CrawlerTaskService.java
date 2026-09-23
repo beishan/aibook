@@ -18,6 +18,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
@@ -309,7 +311,7 @@ public class CrawlerTaskService {
                 task.getId(), automated ? "自动" : "人工", page.getPageName(), page.getPageUrl());
         recordCrawlerEvent(task, "发现页扫描任务已创建", "触发方式：" + (automated ? "自动调度" : "人工操作")
                 + "；发现页：" + page.getPageName() + "；优先级：" + task.getPriority());
-        submit(task.getId());
+        submitAfterCommit(task.getId());
         return managementService.taskView(task);
     }
 
@@ -440,13 +442,12 @@ public class CrawlerTaskService {
                 if (task.getStatus() != CrawlerTask.TaskStatus.PAUSED
                         && task.getStatus() != CrawlerTask.TaskStatus.FAILED)
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "只有暂停或失败任务可以继续");
-                boolean waitingForPreviousRun = active.contains(taskId);
                 task.setStatus(CrawlerTask.TaskStatus.WAITING);
                 task.setErrorMessage(null);
                 task.setFinishedAt(null);
                 taskRepository.save(task);
-                // 旧线程退出时会在 CrawlerJob.finally 中自动重新入队，避免同一任务并发执行。
-                if (!waitingForPreviousRun) submit(task.getId());
+                // 若旧线程仍在退出，active 会阻止重复执行，随后由 CrawlerJob.finally 自动重新入队。
+                submitAfterCommit(task.getId());
             }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的任务操作");
             }
@@ -583,7 +584,7 @@ public class CrawlerTaskService {
         log.info("[采集任务] 已创建: taskId={}, type={}, priority={}, site={}, book={}",
                 task.getId(), type, CrawlerTask.Priority.HIGH, site.getSiteName(), bookName(book));
         recordCrawlerEvent(task, "任务已创建", "触发方式：人工操作；优先级：" + CrawlerTask.Priority.HIGH);
-        submit(task.getId());
+        submitAfterCommit(task.getId());
         return task;
     }
 
@@ -597,6 +598,20 @@ public class CrawlerTaskService {
             bookRepository.save(book);
         }
         return createAndSubmit(user, book.getSite(), book, type);
+    }
+
+    private void submitAfterCommit(String taskId) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()
+                || !TransactionSynchronizationManager.isSynchronizationActive()) {
+            submit(taskId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                submit(taskId);
+            }
+        });
     }
 
     private void submit(String id) {

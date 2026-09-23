@@ -16,6 +16,8 @@ import com.aibook.service.CrawlerSettingsService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationContext;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
@@ -739,6 +741,44 @@ class CrawlerTaskManagementTest {
             verify(tasks).save(first);
             verify(tasks).save(second);
         } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void batchResumeSubmitsTasksOnlyAfterTransactionCommit() {
+        User user = user();
+        CrawlerTask first = task(user, CrawlerTask.TaskStatus.FAILED);
+        CrawlerTask second = task(user, CrawlerTask.TaskStatus.FAILED);
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        Map<String, CrawlerTask> selected = Map.of(first.getId(), first, second.getId(), second);
+        when(management.ownedTask(eq(user), anyString())).thenAnswer(invocation ->
+                selected.get(invocation.getArgument(1)));
+        when(management.taskView(any(CrawlerTask.class))).thenCallRealMethod();
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tasks.findById(anyString())).thenReturn(Optional.empty());
+        CrawlerTaskService service = service(tasks, management);
+        TransactionSynchronizationManager.initSynchronization();
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        try {
+            int affected = service.batchManageTasks(user, List.of(first.getId(), second.getId()),
+                    "resume", null);
+
+            assertThat(affected).isEqualTo(2);
+            assertThat(first.getStatus()).isEqualTo(CrawlerTask.TaskStatus.WAITING);
+            assertThat(second.getStatus()).isEqualTo(CrawlerTask.TaskStatus.WAITING);
+            verify(tasks, never()).findById(anyString());
+
+            List<TransactionSynchronization> synchronizations =
+                    TransactionSynchronizationManager.getSynchronizations();
+            assertThat(synchronizations).hasSize(2);
+            synchronizations.forEach(TransactionSynchronization::afterCommit);
+
+            verify(tasks).findById(first.getId());
+            verify(tasks).findById(second.getId());
+        } finally {
+            TransactionSynchronizationManager.clear();
             service.shutdown();
         }
     }
