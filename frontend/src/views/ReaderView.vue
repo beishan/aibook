@@ -876,6 +876,16 @@ const headerProgress = computed(() => {
 const currentPage = ref(0)
 const totalPages = ref(0)
 const paginationPageSize = ref(5)
+const txtChapterPageStarts = computed(() => {
+  if (book.value?.format !== 'txt' || !content.value.length) return []
+  const starts = [...new Set(tocItems.value
+    .map(item => item.index)
+    .filter(index => Number.isInteger(index) && index >= 0 && index < content.value.length))]
+    .sort((left, right) => left - right)
+  if (!starts.length) return []
+  if (starts[0] > 0) starts.unshift(0)
+  return starts
+})
 const scrollRenderLimit = ref(300)
 const scrollCurrentPage = ref(1)
 const scrollTotalPages = ref(1)
@@ -1176,16 +1186,39 @@ const currentPageContent = computed(() => {
     return content.value
   }
   if (!isPaginationMode.value) return content.value.slice(0, scrollRenderLimit.value)
+  if (txtChapterPageStarts.value.length) {
+    const start = txtChapterPageStarts.value[currentPage.value] ?? 0
+    const end = txtChapterPageStarts.value[currentPage.value + 1] ?? content.value.length
+    return content.value.slice(start, end)
+  }
   const pageSize = paginationPageSize.value
   const start = currentPage.value * pageSize
   const end = start + pageSize
   return content.value.slice(start, end)
 })
 
+const pageForTextIndex = (textIndex: number) => {
+  const starts = txtChapterPageStarts.value
+  if (!starts.length) return Math.floor(textIndex / paginationPageSize.value)
+  let page = 0
+  for (let index = 0; index < starts.length; index += 1) {
+    if (starts[index] > textIndex) break
+    page = index
+  }
+  return page
+}
+
+const textIndexForPage = (page: number) => txtChapterPageStarts.value.length
+  ? txtChapterPageStarts.value[page] ?? 0
+  : page * paginationPageSize.value
+
 // 获取当前页中某个本地索引对应原始 content 数组的索引
 const getOriginalIndex = (localIndex: number): number => {
   if (!isPaginationMode.value || book.value?.format === 'epub') {
     return localIndex
+  }
+  if (txtChapterPageStarts.value.length) {
+    return textIndexForPage(currentPage.value) + localIndex
   }
   const pageSize = paginationPageSize.value
   return currentPage.value * pageSize + localIndex
@@ -1231,6 +1264,13 @@ const calculatePageSize = (): number => {
 
 const updateTotalPages = (preserveTextIndex?: number) => {
   if (isPaginationMode.value && content.value.length > 0) {
+    if (txtChapterPageStarts.value.length) {
+      totalPages.value = txtChapterPageStarts.value.length
+      currentPage.value = preserveTextIndex === undefined
+        ? Math.min(currentPage.value, totalPages.value - 1)
+        : Math.min(totalPages.value - 1, pageForTextIndex(preserveTextIndex))
+      return
+    }
     const pageSize = calculatePageSize()
     paginationPageSize.value = pageSize
     totalPages.value = Math.max(1, Math.ceil(content.value.length / pageSize))
@@ -1260,21 +1300,21 @@ const schedulePaginationLayout = (preserveTextIndex?: number) => {
 const goToPage = (page: number) => {
   if (page >= 0 && page < totalPages.value) {
     currentPage.value = page
-    const pageSize = paginationPageSize.value
-    const currentContentIndex = page * pageSize
+    const currentContentIndex = textIndexForPage(page)
     const chapter = [...tocItems.value]
       .reverse()
       .find(item => item.index <= currentContentIndex)
+      || (txtChapterPageStarts.value.length ? tocItems.value[0] : undefined)
     if (chapter) currentChapterName.value = chapter.title
     progress.value = totalPages.value <= 1
       ? 100
       : Math.round((page / (totalPages.value - 1)) * 100)
     saveProgress(progress.value, currentChapterName.value)
     // 滚动到顶部
-    const readerBody = document.querySelector('.reader-body')
-    if (readerBody) {
-      readerBody.scrollTop = 0
-    }
+    void nextTick(() => {
+      const readerBody = document.querySelector<HTMLElement>('.reader-body')
+      if (readerBody) readerBody.scrollTop = 0
+    })
   }
 }
 
@@ -1944,7 +1984,7 @@ const handleGotoHighlight = async (highlight: Highlight) => {
   if (textMatch) {
     const textIndex = Number(textMatch[1])
     if (isPaginationMode.value) {
-      currentPage.value = Math.floor(textIndex / paginationPageSize.value)
+      currentPage.value = pageForTextIndex(textIndex)
       await nextTick()
       renderDocumentHighlights()
     } else {
@@ -2036,12 +2076,14 @@ const textChapterProgress = (textIndex: number) => {
 }
 
 const visibleTextIndex = () => {
-  if (isPaginationMode.value) return currentPage.value * paginationPageSize.value
   const readerBody = document.querySelector<HTMLElement>('.reader-body')
   if (!readerBody) return 0
   const bodyRect = readerBody.getBoundingClientRect()
   const visible = Array.from(readerBody.querySelectorAll<HTMLElement>('[data-reader-index]'))
     .find(element => element.getBoundingClientRect().bottom > bodyRect.top + 12)
+  if (isPaginationMode.value && !txtChapterPageStarts.value.length) {
+    return textIndexForPage(currentPage.value)
+  }
   return Number(visible?.dataset.readerIndex || 0)
 }
 
@@ -2376,8 +2418,13 @@ const restoreScrollPosition = () => {
     if (isPaginationMode.value && totalPages.value > 0) {
       currentPage.value = Math.min(
         totalPages.value - 1,
-        Math.floor(safeIndex / paginationPageSize.value),
+        pageForTextIndex(safeIndex),
       )
+      if (txtChapterPageStarts.value.length) {
+        void nextTick(() => document.querySelector<HTMLElement>(
+          `[data-reader-index="${safeIndex}"]`,
+        )?.scrollIntoView({ block: 'start' }))
+      }
     } else {
       void ensureScrollContentRendered(safeIndex).then(() => {
         document.querySelector<HTMLElement>(`[data-reader-index="${safeIndex}"]`)
@@ -2389,7 +2436,13 @@ const restoreScrollPosition = () => {
   if (progress.value > 0) {
     if (isPaginationMode.value && totalPages.value > 0) {
       // 翻页模式下恢复到对应页码
-      currentPage.value = Math.floor((progress.value / 100) * (totalPages.value - 1))
+      const targetTextIndex = Math.round(
+        (progress.value / 100) * Math.max(0, content.value.length - 1),
+      )
+      const targetPage = txtChapterPageStarts.value.length
+        ? pageForTextIndex(targetTextIndex)
+        : Math.floor((progress.value / 100) * (totalPages.value - 1))
+      currentPage.value = Math.min(totalPages.value - 1, targetPage)
     } else if (isTextFormat(book.value?.format)) {
       const targetIndex = Math.round(
         (progress.value / 100) * Math.max(0, content.value.length - 1),
@@ -3040,7 +3093,7 @@ const goToSearchResult = async (result: ReaderSearchResult) => {
   if (isTextFormat(book.value?.format)
       && result.paragraphIndex !== undefined) {
     if (isPaginationMode.value) {
-      goToPage(Math.floor(result.paragraphIndex / paginationPageSize.value))
+      goToPage(pageForTextIndex(result.paragraphIndex))
       await nextTick()
     } else {
       await ensureScrollContentRendered(result.paragraphIndex)
@@ -3119,8 +3172,7 @@ const jumpToTextChapter = async (
   behavior: ScrollBehavior = 'smooth',
 ) => {
   if (isPaginationMode.value) {
-    const pageSize = paginationPageSize.value
-    currentPage.value = Math.floor(item.index / pageSize)
+    currentPage.value = pageForTextIndex(item.index)
     await nextTick()
   } else {
     await ensureScrollContentRendered(item.index)
@@ -3516,6 +3568,10 @@ onBeforeUnmount(() => {
   inset: 0;
   z-index: 2300;
   background: var(--surface-elevated);
+}
+
+.reader-loading-overlay::after {
+  display: none;
 }
 
 @keyframes spin {

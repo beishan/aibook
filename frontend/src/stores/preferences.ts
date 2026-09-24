@@ -307,17 +307,27 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const dockIconStyle = ref<DockIconStyle>(readLocalDockIconStyle())
   const uiFontId = ref<number | null>(null)
   const readerFontId = ref<number | null>(null)
-  const readerSettings = ref<ReaderSettings>(readLocalReaderSettings())
+  const readerSettings = ref<ReaderSettings>(
+    localStorage.getItem('token')
+      ? { ...DEFAULT_READER_SETTINGS }
+      : readLocalReaderSettings(),
+  )
   const hydrated = ref(false)
   let saveQueue: Promise<unknown> = Promise.resolve()
   let readerSettingsSaveTimer: ReturnType<typeof setTimeout> | null = null
 
-  const persistRemote = (preferences: Partial<UserPreferences>) => {
-    if (!localStorage.getItem('token')) return
+  const persistRemote = (
+    preferences: Partial<UserPreferences>,
+    expectedToken = localStorage.getItem('token'),
+  ) => {
+    if (!expectedToken) return
 
     saveQueue = saveQueue
       .catch(() => undefined)
-      .then(() => api.put('/api/user/preferences', preferences))
+      .then(() => {
+        if (localStorage.getItem('token') !== expectedToken) return
+        return api.put('/api/user/preferences', preferences)
+      })
       .catch(error => {
         console.error('Failed to persist user preferences:', error)
       })
@@ -519,16 +529,20 @@ export const usePreferencesStore = defineStore('preferences', () => {
   ) => {
     const normalized = normalizeReaderSettings(value)
     readerSettings.value = normalized
-    try {
-      localStorage.setItem(READER_SETTINGS_STORAGE_KEY, JSON.stringify(normalized))
-    } catch {
-      // localStorage 不可用时仍保留当前会话内的阅读设置。
+    const accountToken = localStorage.getItem('token')
+    if (!accountToken) {
+      try {
+        localStorage.setItem(READER_SETTINGS_STORAGE_KEY, JSON.stringify(normalized))
+      } catch {
+        // localStorage 不可用时仍保留当前会话内的阅读设置。
+      }
+      return
     }
-    if (!syncRemote || !localStorage.getItem('token')) return
+    if (!syncRemote) return
     if (readerSettingsSaveTimer) clearTimeout(readerSettingsSaveTimer)
     const persist = () => {
       readerSettingsSaveTimer = null
-      persistRemote({ readerSettings: normalized })
+      persistRemote({ readerSettings: normalized }, accountToken)
     }
     if (debounceRemote) readerSettingsSaveTimer = setTimeout(persist, READER_SETTINGS_SAVE_DELAY_MS)
     else persist()
@@ -658,7 +672,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
       if (data.readerSettings) {
         setReaderSettings(data.readerSettings, false)
       } else {
-        missingPreferences.readerSettings = readerSettings.value
+        const accountDefaults = { ...DEFAULT_READER_SETTINGS }
+        setReaderSettings(accountDefaults, false)
+        missingPreferences.readerSettings = accountDefaults
       }
 
       hydrated.value = true
@@ -673,6 +689,11 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   const resetHydration = () => {
     hydrated.value = false
+    if (readerSettingsSaveTimer) {
+      clearTimeout(readerSettingsSaveTimer)
+      readerSettingsSaveTimer = null
+    }
+    readerSettings.value = readLocalReaderSettings()
     uiFontId.value = null
     readerFontId.value = null
     void useFontStore().applySystemFont(null)

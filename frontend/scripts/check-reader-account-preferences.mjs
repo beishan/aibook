@@ -28,9 +28,10 @@ for (const field of [
 
 assert.match(preferencesSource, /READER_SETTINGS_STORAGE_KEY = 'ai-book-reader-settings'/)
 assert.match(preferencesSource, /READER_SETTINGS_SAVE_DELAY_MS = 500/)
-assert.match(preferencesSource, /localStorage\.setItem\(READER_SETTINGS_STORAGE_KEY/)
+assert.match(preferencesSource, /if \(!accountToken\) \{[\s\S]*localStorage\.setItem\(READER_SETTINGS_STORAGE_KEY/)
+assert.match(preferencesSource, /if \(localStorage\.getItem\('token'\) !== expectedToken\) return/)
 assert.match(preferencesSource, /if \(data\.readerSettings\)[\s\S]*setReaderSettings\(data\.readerSettings, false\)/)
-assert.match(preferencesSource, /else \{[\s\S]*missingPreferences\.readerSettings = readerSettings\.value/)
+assert.match(preferencesSource, /else \{[\s\S]*setReaderSettings\(accountDefaults, false\)[\s\S]*missingPreferences\.readerSettings = accountDefaults/)
 assert.match(preferencesSource, /catch \(error\) \{[\s\S]*Failed to load user preferences/)
 assert.match(preferencesSource, /setTimeout\(persist, READER_SETTINGS_SAVE_DELAY_MS\)/)
 
@@ -43,4 +44,4 @@ assert.match(dtoSource, /private ReaderSettingsDTO readerSettings/)
 assert.match(serviceSource, /normalizeReaderSettings\(request\.getReaderSettings\(\)\)/)
 assert.match(serviceSource, /readerSettings\(readReaderSettings\(user\.getReaderSettings\(\)\)\)/)
 
-console.log('Reader settings use account persistence with local migration, debounce, and fallback')
+console.log('Reader settings use account persistence and keep logged-in settings isolated from browser cache')
