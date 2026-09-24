@@ -744,9 +744,9 @@ function disposeStatisticsCharts(){statisticsCharts.forEach(chart=>chart.dispose
 function resizeStatisticsCharts(){statisticsCharts.forEach(chart=>chart.resize())}
 function chartCssColor(name:string,fallback:string){return getComputedStyle(document.documentElement).getPropertyValue(name).trim()||fallback}
 async function renderStatisticsCharts(){
-  if(!statistics.value||activeTab.value!=='overview')return
+  if(!statistics.value||activeTab.value!=='statistics')return
   const echarts=await import('echarts')
-  if(!statistics.value||activeTab.value!=='overview')return
+  if(!statistics.value||activeTab.value!=='statistics')return
   disposeStatisticsCharts()
   const text=chartCssColor('--text-secondary','#667085'),line=chartCssColor('--border-color-light','#e4e7ec'),primary=chartCssColor('--primary','#4f6bed'),success=chartCssColor('--success','#23a26d'),warning=chartCssColor('--warning','#d9901a'),danger=chartCssColor('--danger','#dc4c64')
   const animation=!window.matchMedia('(prefers-reduced-motion: reduce)').matches
