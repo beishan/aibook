@@ -11,6 +11,8 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -82,6 +84,32 @@ public class MetadataService {
         return metadata;
     }
 
+    /** 返回多个独立来源的候选项，由用户确认后再应用。 */
+    public List<Map<String, Object>> searchCandidatesByIsbn(String isbn) {
+        List<Map<String, Object>> candidates = new ArrayList<>();
+        addCandidate(candidates, searchDoubanByIsbn(isbn), "douban");
+        addCandidate(candidates, searchOpenLibraryByIsbn(isbn), "openlibrary");
+        return candidates;
+    }
+
+    /** 返回多个独立来源的候选项，由用户确认后再应用。 */
+    public List<Map<String, Object>> searchCandidatesByTitle(String title, String author) {
+        List<Map<String, Object>> candidates = new ArrayList<>();
+        addCandidate(candidates, searchDoubanByTitle(title, author), "douban");
+        addCandidate(candidates, searchOpenLibraryByTitle(title, author), "openlibrary");
+        return candidates;
+    }
+
+    private void addCandidate(
+            List<Map<String, Object>> candidates,
+            Map<String, Object> candidate,
+            String source) {
+        if (candidate == null || candidate.values().stream()
+                .allMatch(value -> value == null || value.toString().isBlank())) return;
+        candidate.put("source", source);
+        candidates.add(candidate);
+    }
+
     /**
      * 从豆瓣读书通过 ISBN 查询
      */
@@ -112,7 +140,8 @@ public class MetadataService {
     private Map<String, Object> searchDoubanByTitle(String title, String author) {
         try {
             String url = UriComponentsBuilder.fromHttpUrl("https://api.douban.com/v2/book/search")
-                    .queryParam("q", title)
+                    .queryParam("q", author == null || author.isBlank()
+                            ? title : title + " " + author)
                     .queryParam("count", 1)
                     .build()
                     .toUriString();
@@ -208,6 +237,8 @@ public class MetadataService {
         try {
             String url = UriComponentsBuilder.fromHttpUrl("https://openlibrary.org/search.json")
                     .queryParam("title", title)
+                    .queryParamIfPresent("author", java.util.Optional.ofNullable(author)
+                            .filter(value -> !value.isBlank()))
                     .queryParam("limit", 1)
                     .build()
                     .toUriString();

@@ -7,14 +7,20 @@ export interface BookScrapeResult {
   bookId: number
   title: string
   success: boolean
+  matched?: boolean
   updatedFields: string[]
+  sources?: string[]
+  message?: string
   error?: string
 }
 
 export interface ScrapeResponse {
   success: boolean
+  matched?: boolean
   message: string
   book?: any
+  updatedFields?: string[]
+  sources?: string[]
   results?: BookScrapeResult[]
   count?: number
 }

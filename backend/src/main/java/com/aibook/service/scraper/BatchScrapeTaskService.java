@@ -94,7 +94,7 @@ public class BatchScrapeTaskService {
         } else {
             // 默认：只刮削缺少元数据的书籍（作者或描述为空）
             booksToScrape = allBooks.stream()
-                    .filter(book -> book.getAuthor() == null || book.getDescription() == null)
+                    .filter(book -> isBlank(book.getAuthor()) || isBlank(book.getDescription()))
                     .collect(Collectors.toList());
 
             if (booksToScrape.isEmpty()) {
@@ -145,7 +145,7 @@ public class BatchScrapeTaskService {
         }
 
         // 查询不完整的书籍（作者或描述为空）
-        List<Book> books = bookRepository.findByUserAndAuthorIsNullOrDescriptionIsNull(user);
+        List<Book> books = bookRepository.findIncompleteMetadataByUser(user);
         if (books.isEmpty()) {
             throw new IllegalArgumentException("所有书籍都已有完整元数据，无需刮削");
         }
@@ -243,20 +243,27 @@ public class BatchScrapeTaskService {
 
                 try {
                     // 执行单本刮削（每本书独立事务）
-                    Book updated = metadataScrapingService.scrapeBook(book, task.isForceUpdate());
-
-                    // 记录更新的字段
-                    List<String> updatedFields = getUpdatedFields(book, updated);
+                    MetadataScrapingService.ScrapeResult scrapeResult =
+                            metadataScrapingService.scrapeBookWithResult(
+                                    book, task.isForceUpdate());
 
                     ScrapeTaskDTO.BookScrapeResult result = ScrapeTaskDTO.BookScrapeResult.builder()
                             .bookId(book.getId())
                             .title(book.getTitle())
-                            .success(true)
-                            .updatedFields(updatedFields)
+                            .success(scrapeResult.isSuccess())
+                            .matched(scrapeResult.isMatched())
+                            .updatedFields(scrapeResult.getUpdatedFields())
+                            .sources(scrapeResult.getSources())
+                            .message(scrapeResult.getMessage())
+                            .error(scrapeResult.isSuccess() ? null : scrapeResult.getMessage())
                             .build();
 
                     task.getResults().add(result);
-                    task.setCompletedBooks(task.getCompletedBooks() + 1);
+                    if (scrapeResult.isSuccess()) {
+                        task.setCompletedBooks(task.getCompletedBooks() + 1);
+                    } else {
+                        task.setFailedBooks(task.getFailedBooks() + 1);
+                    }
 
                     log.debug("刮削成功: {} ({}:{})", book.getTitle(),
                               task.getCompletedBooks(), task.getTotalBooks());
@@ -320,27 +327,8 @@ public class BatchScrapeTaskService {
         }
     }
 
-    /**
-     * 获取更新的字段列表
-     */
-    private List<String> getUpdatedFields(Book before, Book after) {
-        List<String> updated = new ArrayList<>();
-
-        if (!equals(before.getTitle(), after.getTitle())) updated.add("title");
-        if (!equals(before.getAuthor(), after.getAuthor())) updated.add("author");
-        if (!equals(before.getIsbn(), after.getIsbn())) updated.add("isbn");
-        if (!equals(before.getPublisher(), after.getPublisher())) updated.add("publisher");
-        if (!equals(before.getPublishDate(), after.getPublishDate())) updated.add("publishDate");
-        if (!equals(before.getDescription(), after.getDescription())) updated.add("description");
-        if (!equals(before.getCoverUrl(), after.getCoverUrl())) updated.add("coverUrl");
-        if (!equals(before.getLanguage(), after.getLanguage())) updated.add("language");
-
-        return updated;
-    }
-
-    private boolean equals(String a, String b) {
-        if (a == null) return b == null;
-        return a.equals(b);
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     /**

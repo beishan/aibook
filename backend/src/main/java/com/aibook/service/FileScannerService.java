@@ -5,6 +5,7 @@ import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookVersionRepository;
+import com.aibook.util.BookMetadataSources;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -292,6 +293,7 @@ public class FileScannerService {
                 .fileSize(Files.size(file))
                 .fileHash(fileHash)
                 .build();
+            BookMetadataSources.mark(book, "title", "filename");
 
             // 尝试提取元数据
             extractMetadata(file, book);

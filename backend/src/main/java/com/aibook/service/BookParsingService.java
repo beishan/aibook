@@ -3,6 +3,7 @@ package com.aibook.service;
 import com.aibook.dto.BookTocItemDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.repository.BookRepository;
+import com.aibook.util.BookMetadataSources;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -110,6 +111,9 @@ public class BookParsingService {
         updatedFields.add("chapterInfo");
         updatedFields.add("chapterCount");
         updateTitleFromFilename(book, file, updatedFields);
+        if (updatedFields.contains("title")) {
+            BookMetadataSources.mark(book, "title", "filename");
+        }
     }
 
     /**
@@ -161,6 +165,11 @@ public class BookParsingService {
             book.setChapterCount(chapterCount);
             updatedFields.add("chapterCount");
             extractEpubCover(book, zipFile, opfPath, opf, updatedFields);
+            BookMetadataSources.mark(book, updatedFields.stream()
+                    .filter(field -> List.of(
+                            "title", "author", "isbn", "publisher", "publishDate",
+                            "description", "coverUrl", "language").contains(field))
+                    .toList(), "embedded");
         }
     }
 

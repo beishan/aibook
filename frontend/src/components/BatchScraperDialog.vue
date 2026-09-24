@@ -85,7 +85,13 @@
           <el-icon v-if="result.success" color="#67c23a"><Check /></el-icon>
           <el-icon v-else color="#f56c6c"><Close /></el-icon>
           <span class="book-title">{{ result.title }}</span>
-          <span v-if="!result.success && result.error" class="error-msg">{{ result.error }}</span>
+          <span
+            v-if="result.message || result.error"
+            :class="result.success ? 'result-message' : 'error-msg'"
+          >{{ result.message || result.error }}</span>
+          <span v-if="result.sources?.length" class="result-message">
+            来源：{{ result.sources.join('、') }}
+          </span>
         </div>
       </div>
     </div>
@@ -436,6 +442,11 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.result-message {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .error-msg {

@@ -3,6 +3,7 @@ package com.aibook.controller;
 import com.aibook.service.SystemConfigService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -14,6 +15,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/config")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('ADMIN')")
 public class SystemConfigController {
 
     private final SystemConfigService configService;
@@ -24,6 +26,7 @@ public class SystemConfigController {
     @GetMapping("/scraper")
     public ResponseEntity<Map<String, String>> getScraperConfig() {
         Map<String, String> configs = configService.getConfigsByPrefix("scraper.");
+        configs.remove("scraper.google.api-key");
         return ResponseEntity.ok(configs);
     }
 

@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.List;
 
 /**
@@ -26,6 +27,9 @@ public class BookDTO {
     private String publisher;
     private String publishDate;
     private String description;
+    private Map<String, String> metadataSources;
+    /** 仅用于写入元信息时标识所选结果来源，不直接持久化。 */
+    private String metadataSource;
     private String coverUrl;
     private String format;
     private String filePath;

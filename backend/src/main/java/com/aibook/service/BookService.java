@@ -7,6 +7,7 @@ import com.aibook.model.entity.Category;
 import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.Tag;
 import com.aibook.model.entity.User;
+import com.aibook.util.BookMetadataSources;
 import com.aibook.repository.BookHighlightRepository;
 import com.aibook.repository.BookListRepository;
 import com.aibook.repository.BookRepository;
@@ -310,21 +311,57 @@ public class BookService {
     @Transactional
     public BookDTO updateBookMetadata(Long id, BookDTO bookDTO, User user) {
         Book book = getBookEntity(id, user);
+        String metadataSource = bookDTO.getMetadataSource() == null
+                || bookDTO.getMetadataSource().isBlank()
+                ? "manual"
+                : bookDTO.getMetadataSource();
 
-        if (bookDTO.getTitle() != null) book.setTitle(bookDTO.getTitle());
+        if (bookDTO.getTitle() != null) {
+            book.setTitle(bookDTO.getTitle());
+            BookMetadataSources.mark(book, "title", metadataSource);
+        }
         if (bookDTO.getSeriesName() != null) {
             com.aibook.util.BookSeriesMetadata.apply(book, bookDTO.getSeriesName(), bookDTO.getSeriesIndex());
+            BookMetadataSources.mark(book, "seriesName", metadataSource);
+            if (bookDTO.getSeriesIndex() != null) {
+                BookMetadataSources.mark(book, "seriesIndex", metadataSource);
+            }
         } else if (bookDTO.getSeriesIndex() != null) {
             com.aibook.util.BookSeriesMetadata.apply(book, book.getSeriesName(), bookDTO.getSeriesIndex());
+            BookMetadataSources.mark(book, "seriesIndex", metadataSource);
         }
-        if (bookDTO.getAuthor() != null) book.setAuthor(bookDTO.getAuthor());
-        if (bookDTO.getIsbn() != null) book.setIsbn(bookDTO.getIsbn());
-        if (bookDTO.getPublisher() != null) book.setPublisher(bookDTO.getPublisher());
-        if (bookDTO.getPublishDate() != null) book.setPublishDate(bookDTO.getPublishDate());
-        if (bookDTO.getDescription() != null) book.setDescription(bookDTO.getDescription());
-        if (bookDTO.getCoverUrl() != null) book.setCoverUrl(bookDTO.getCoverUrl());
-        if (bookDTO.getLanguage() != null) book.setLanguage(bookDTO.getLanguage());
-        if (bookDTO.getRating() != null) book.setRating(bookDTO.getRating());
+        if (bookDTO.getAuthor() != null) {
+            book.setAuthor(bookDTO.getAuthor());
+            BookMetadataSources.mark(book, "author", metadataSource);
+        }
+        if (bookDTO.getIsbn() != null) {
+            book.setIsbn(bookDTO.getIsbn());
+            BookMetadataSources.mark(book, "isbn", metadataSource);
+        }
+        if (bookDTO.getPublisher() != null) {
+            book.setPublisher(bookDTO.getPublisher());
+            BookMetadataSources.mark(book, "publisher", metadataSource);
+        }
+        if (bookDTO.getPublishDate() != null) {
+            book.setPublishDate(bookDTO.getPublishDate());
+            BookMetadataSources.mark(book, "publishDate", metadataSource);
+        }
+        if (bookDTO.getDescription() != null) {
+            book.setDescription(bookDTO.getDescription());
+            BookMetadataSources.mark(book, "description", metadataSource);
+        }
+        if (bookDTO.getCoverUrl() != null) {
+            book.setCoverUrl(bookDTO.getCoverUrl());
+            BookMetadataSources.mark(book, "coverUrl", metadataSource);
+        }
+        if (bookDTO.getLanguage() != null) {
+            book.setLanguage(bookDTO.getLanguage());
+            BookMetadataSources.mark(book, "language", metadataSource);
+        }
+        if (bookDTO.getRating() != null) {
+            book.setRating(bookDTO.getRating());
+            BookMetadataSources.mark(book, "rating", metadataSource);
+        }
         if (bookDTO.getNotes() != null) book.setNotes(bookDTO.getNotes());
 
         bookRepository.save(book);
@@ -354,6 +391,7 @@ public class BookService {
                 ? null
                 : categoryService.getOwnedCategory(categoryId, user);
         book.setCategory(category);
+        BookMetadataSources.mark(book, "category", "manual");
         return convertToDTO(bookRepository.save(book));
     }
 
@@ -376,7 +414,10 @@ public class BookService {
                     HttpStatus.BAD_REQUEST, "部分书籍不存在或无权访问");
         }
 
-        books.forEach(book -> book.setCategory(category));
+        books.forEach(book -> {
+            book.setCategory(category);
+            BookMetadataSources.mark(book, "category", "manual");
+        });
         return bookRepository.saveAll(books).stream()
                 .map(this::convertToDTO)
                 .toList();
@@ -389,6 +430,7 @@ public class BookService {
     public BookDTO updateBookTags(Long id, List<Long> tagIds, User user) {
         Book book = getBookEntity(id, user);
         book.setTags(tagService.getOwnedTags(tagIds, user));
+        BookMetadataSources.mark(book, "tags", "manual");
         return convertToDTO(bookRepository.save(book));
     }
 
@@ -422,6 +464,7 @@ public class BookService {
                 case "REPLACE" -> book.setTags(new java.util.LinkedHashSet<>(tags));
                 default -> book.getTags().addAll(tags);
             }
+            BookMetadataSources.mark(book, "tags", "manual");
         });
         return bookRepository.saveAll(books).stream()
                 .map(this::convertToDTO)
@@ -442,6 +485,7 @@ public class BookService {
                 .publisher(book.getPublisher())
                 .publishDate(book.getPublishDate())
                 .description(book.getDescription())
+                .metadataSources(BookMetadataSources.read(book))
                 .coverUrl(book.getCoverUrl())
                 .format(book.getFormat())
                 .filePath(book.getFilePath())

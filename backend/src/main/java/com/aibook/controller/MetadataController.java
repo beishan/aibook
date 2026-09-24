@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.List;
 
 /**
  * 元数据控制器
@@ -42,5 +43,18 @@ public class MetadataController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(metadata);
+    }
+
+    @GetMapping("/candidates/isbn/{isbn}")
+    public ResponseEntity<List<Map<String, Object>>> searchCandidatesByIsbn(
+            @PathVariable String isbn) {
+        return ResponseEntity.ok(metadataService.searchCandidatesByIsbn(isbn));
+    }
+
+    @GetMapping("/candidates/search")
+    public ResponseEntity<List<Map<String, Object>>> searchCandidatesByTitle(
+            @RequestParam String title,
+            @RequestParam(required = false) String author) {
+        return ResponseEntity.ok(metadataService.searchCandidatesByTitle(title, author));
     }
 }

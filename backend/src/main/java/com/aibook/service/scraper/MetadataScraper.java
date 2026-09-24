@@ -101,5 +101,6 @@ public interface MetadataScraper {
         private String language;
         private Double rating;
         private String[] tags;
+        private java.util.Map<String, String> metadataSources;
     }
 }

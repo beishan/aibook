@@ -285,6 +285,87 @@
       <AuthorManagementView />
     </div>
 
+    <div v-if="isAdmin && activeTab === 'metadata-scraping'" class="tab-content">
+      <section class="card glass scraper-settings-card">
+        <div class="card-header">
+          <div>
+            <strong>书籍信息刮削</strong>
+            <p class="scraper-settings-description">设置外部元信息来源及查询顺序，配置对所有账户生效。</p>
+          </div>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="loadingScraperSettings || savingScraperSettings || scraperSources.length === 0"
+            @click="handleSaveScraperSettings"
+          >
+            {{ savingScraperSettings ? '保存中…' : '保存配置' }}
+          </button>
+        </div>
+
+        <div v-if="loadingScraperSettings" class="scraper-settings-message">正在加载刮削配置…</div>
+        <div v-else-if="scraperSources.length === 0" class="scraper-settings-message">
+          暂无可用的元信息来源。
+        </div>
+        <div v-else class="scraper-source-list">
+          <article v-for="source in scraperSources" :key="source.configKey" class="scraper-source-row">
+            <div class="scraper-source-main">
+              <div class="scraper-source-heading">
+                <strong>{{ source.name }}</strong>
+                <span v-if="source.needsApiKey" class="scraper-api-status" :class="{ configured: source.hasApiKey }">
+                  {{ source.hasApiKey ? 'API Key 已配置' : '需要 API Key' }}
+                </span>
+              </div>
+              <p>{{ scraperSourceDescription(source.configKey) }}</p>
+            </div>
+            <div class="scraper-source-controls">
+              <label class="scraper-enable-control">
+                <input v-model="source.enabled" type="checkbox" :aria-label="`启用${source.name}`" />
+                <span>启用</span>
+              </label>
+              <label class="scraper-priority-control">
+                <span>优先级</span>
+                <input
+                  v-model.number="source.priority"
+                  type="number"
+                  min="1"
+                  max="999"
+                  step="1"
+                  :aria-label="`${source.name}优先级，数字越小越先查询`"
+                />
+              </label>
+            </div>
+          </article>
+
+          <div v-if="googleScraperSource" class="scraper-api-key-panel">
+            <div>
+              <strong>Google Books API Key</strong>
+              <p>留空会保留已保存的密钥；需要更换时输入新密钥。密钥只会发送到服务端保存。</p>
+            </div>
+            <div class="scraper-api-key-controls">
+              <el-input
+                v-model="googleApiKeyDraft"
+                type="password"
+                show-password
+                autocomplete="new-password"
+                placeholder="输入新的 API Key"
+                :disabled="clearGoogleApiKey"
+                aria-label="Google Books API Key"
+              />
+              <button
+                v-if="googleScraperSource.hasApiKey"
+                type="button"
+                class="btn"
+                :class="clearGoogleApiKey ? 'btn-text' : 'btn-danger'"
+                @click="toggleClearGoogleApiKey"
+              >
+                {{ clearGoogleApiKey ? '保留现有密钥' : '清除密钥' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
     <!-- 系统回收站 -->
     <div v-if="activeTab === 'trash'" class="tab-content">
       <div class="card glass recycle-settings-card">
@@ -575,6 +656,7 @@ import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
 import { useUserStore } from '@/stores/user'
+import { getScraperStatus, updateScraperConfig, type ScraperStatus } from '@/utils/config'
 import { THEMES, type ThemeId } from '@/types/theme'
 import packageMetadata from '../../package.json'
 
@@ -783,6 +865,7 @@ const tabGroups = computed(() => [
       { key: 'authors', label: '作者管理', icon: '✍️' },
       { key: 'trash', label: '回收站', icon: '🗑️' },
       { key: 'scheduler', label: '定时任务', icon: '⏰' },
+      ...(isAdmin.value ? [{ key: 'metadata-scraping', label: '书籍信息刮削', icon: '📚' }] : []),
     ],
   },
   {
@@ -879,6 +962,77 @@ const schedulerConfig = reactive({
 })
 const loadingSchedulerConfig = ref(false)
 const savingSchedulerConfig = ref(false)
+const scraperSources = ref<ScraperStatus[]>([])
+const loadingScraperSettings = ref(false)
+const savingScraperSettings = ref(false)
+const googleApiKeyDraft = ref('')
+const clearGoogleApiKey = ref(false)
+const googleScraperSource = computed(() =>
+  scraperSources.value.find(source => source.configKey === 'google'),
+)
+
+const scraperSourceDescription = (configKey: string) => {
+  const descriptions: Record<string, string> = {
+    douban: '通过豆瓣查询书籍基本信息。',
+    openlibrary: '通过 Open Library 查询书籍元信息。',
+    google: '通过 Google Books 查询书籍信息；启用前需要配置 API Key。',
+    jd: '通过京东图书查询书籍信息。',
+  }
+  return descriptions[configKey] || '参与书籍信息自动补全。'
+}
+
+const loadScraperSettings = async () => {
+  if (!isAdmin.value) return
+  loadingScraperSettings.value = true
+  try {
+    const statuses = await getScraperStatus()
+    scraperSources.value = statuses
+      .map(source => ({ ...source }))
+      .sort((left, right) => left.priority - right.priority || left.name.localeCompare(right.name, 'zh-CN'))
+    googleApiKeyDraft.value = ''
+    clearGoogleApiKey.value = false
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '书籍信息刮削配置加载失败')
+  } finally {
+    loadingScraperSettings.value = false
+  }
+}
+
+const toggleClearGoogleApiKey = () => {
+  clearGoogleApiKey.value = !clearGoogleApiKey.value
+  if (clearGoogleApiKey.value) googleApiKeyDraft.value = ''
+}
+
+const handleSaveScraperSettings = async () => {
+  const invalidPriority = scraperSources.value.find(source =>
+    !Number.isInteger(source.priority) || source.priority < 1 || source.priority > 999,
+  )
+  if (invalidPriority) {
+    message.warning(`${invalidPriority.name}的优先级需为 1–999 的整数`)
+    return
+  }
+
+  savingScraperSettings.value = true
+  try {
+    const configs: Record<string, string> = {}
+    scraperSources.value.forEach(source => {
+      configs[`scraper.${source.configKey}.enabled`] = String(source.enabled)
+      configs[`scraper.${source.configKey}.priority`] = String(source.priority)
+    })
+    if (clearGoogleApiKey.value) {
+      configs['scraper.google.api-key'] = ''
+    } else if (googleApiKeyDraft.value.trim()) {
+      configs['scraper.google.api-key'] = googleApiKeyDraft.value.trim()
+    }
+    await updateScraperConfig(configs)
+    await loadScraperSettings()
+    message.success('书籍信息刮削配置已保存')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '书籍信息刮削配置保存失败')
+  } finally {
+    savingScraperSettings.value = false
+  }
+}
 
 const schedulerTime = computed({
   get: () => schedulerConfig.time,
@@ -1166,6 +1320,7 @@ const getScanProgressStatus = (
 onMounted(async () => {
   await userStore.hydrate()
   syncActiveTab(route.query.tab)
+  if (isAdmin.value) await loadScraperSettings()
   await preferencesStore.hydrate()
   scanThreadCountDraft.value = preferencesStore.scanThreadCount
   await loadSchedulerConfig()
@@ -1498,6 +1653,111 @@ onUnmounted(() => {
   margin-top: var(--spacing-xs);
   color: var(--text-tertiary);
   font-size: var(--font-size-sm);
+}
+
+.scraper-settings-card .card-header > div {
+  min-width: 0;
+}
+
+.scraper-settings-description,
+.scraper-source-main p,
+.scraper-api-key-panel p {
+  margin: var(--spacing-xs) 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+}
+
+.scraper-settings-message {
+  padding: var(--spacing-xl);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.scraper-source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.scraper-source-main {
+  min-width: 0;
+}
+
+.scraper-source-heading,
+.scraper-source-controls,
+.scraper-enable-control,
+.scraper-priority-control,
+.scraper-api-key-controls {
+  display: flex;
+  align-items: center;
+}
+
+.scraper-source-heading {
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.scraper-api-status {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--surface-hover);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.scraper-api-status.configured {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--success);
+}
+
+.scraper-source-controls {
+  flex: 0 0 auto;
+  gap: var(--spacing-lg);
+}
+
+.scraper-enable-control,
+.scraper-priority-control {
+  gap: var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.scraper-enable-control input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.scraper-priority-control input {
+  width: 76px;
+  padding: 7px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.scraper-api-key-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 1.2fr);
+  align-items: center;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  background: var(--surface-hover);
+}
+
+.scraper-api-key-controls {
+  gap: var(--spacing-sm);
+}
+
+.scraper-api-key-controls :deep(.el-input) {
+  min-width: 0;
 }
 
 .btn-danger {
@@ -2224,6 +2484,17 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
+  .scraper-source-row,
+  .scraper-api-key-panel {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .scraper-source-controls {
+    justify-content: space-between;
+  }
+
   .theme-settings-tabs :deep(.el-tabs__header) {
     padding: 10px;
     overflow: hidden;
@@ -2269,6 +2540,16 @@ onUnmounted(() => {
 }
 
 @media (max-width: 640px) {
+  .scraper-settings-card .card-header,
+  .scraper-api-key-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scraper-api-key-controls .btn {
+    align-self: flex-start;
+  }
+
   .scheduler-card .card-header,
   .scheduler-actions {
     align-items: stretch;

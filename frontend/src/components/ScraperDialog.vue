@@ -18,9 +18,18 @@
       <div v-else-if="result" class="scraping-result">
         <el-result
           :icon="result.success ? 'success' : 'warning'"
-          :title="result.success ? '刮削成功' : '刮削完成'"
+          :title="result.success ? '已匹配元信息' : '没有匹配结果'"
           :sub-title="result.message"
         />
+        <p v-if="result.sources?.length" class="scrape-sources">
+          来源：{{ result.sources.join('、') }}
+        </p>
+        <p v-if="result.updatedFields?.length" class="scrape-fields">
+          更新字段：{{ result.updatedFields.join('、') }}
+        </p>
+        <p v-else-if="result.success" class="scrape-fields">
+          现有字段已保留，没有需要更新的字段。
+        </p>
       </div>
     </div>
     <template #footer>
@@ -120,6 +129,14 @@ defineExpose({
 
 .scraping-result {
   width: 100%;
+}
+
+.scrape-sources,
+.scrape-fields {
+  margin: 0 0 8px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  text-align: center;
 }
 
 .dialog-footer {

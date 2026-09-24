@@ -244,12 +244,11 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     Optional<Book> findVisibleByUserAndFilename(
             @Param("user") User user, @Param("filename") String filename);
 
-    /**
-     * 查找作者或描述为空的书籍（用于刮削）
-     */
-    @Query("SELECT b FROM Book b WHERE b.deletedAt IS NULL " +
-            "AND (b.author IS NULL OR b.description IS NULL)")
-    List<Book> findByAuthorIsNullOrDescriptionIsNull();
+    /** 按账户查找缺失关键元信息的书籍，避免跨账户刮削。 */
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL "
+            + "AND (b.author IS NULL OR TRIM(b.author) = '' "
+            + "OR b.description IS NULL OR TRIM(b.description) = '')")
+    List<Book> findIncompleteMetadataByUser(@Param("user") User user);
 
     /**
      * 查找封面为空或以http开头的书籍（用于下载封面）
@@ -264,13 +263,6 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     @Query("SELECT b FROM Book b WHERE b.id IN :ids AND b.user = :user " +
             "AND b.deletedAt IS NULL")
     List<Book> findByIdInAndUser(@Param("ids") List<Long> ids, @Param("user") User user);
-
-    /**
-     * 根据用户查找作者或描述为空的书籍（用于批量刮削）
-     */
-    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL " +
-            "AND (b.author IS NULL OR b.description IS NULL)")
-    List<Book> findByUserAndAuthorIsNullOrDescriptionIsNull(@Param("user") User user);
 
     @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NOT NULL " +
             "AND b.purgedAt IS NULL " +

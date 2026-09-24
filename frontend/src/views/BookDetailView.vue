@@ -620,18 +620,29 @@
               <h2>书籍详细信息</h2>
               <p>{{ editingInfo ? '修改可编辑的书籍元数据，系统信息保持只读。' : '查看书籍元数据及文件信息。' }}</p>
             </div>
-            <div v-if="editingInfo" class="info-edit-actions">
-              <button class="btn" type="button" :disabled="savingInfo" @click="cancelEditInfo">
-                取消
-              </button>
-              <button class="btn btn-primary" type="button" :disabled="savingInfo" @click="saveInfo">
-                {{ savingInfo ? '保存中...' : '保存修改' }}
-              </button>
+            <div class="info-header-actions">
+              <template v-if="editingInfo">
+                <button class="btn" type="button" :disabled="savingInfo" @click="cancelEditInfo">
+                  取消
+                </button>
+                <button class="btn btn-primary" type="button" :disabled="savingInfo" @click="saveInfo">
+                  {{ savingInfo ? '保存中...' : '保存修改' }}
+                </button>
+              </template>
+              <template v-else>
+                <button class="btn" type="button" @click="showMetadataSearch = true">
+                  <span aria-hidden="true">⌕</span>
+                  <span>搜索元信息</span>
+                </button>
+                <button class="btn info-edit-button" type="button" @click="startEditInfo">
+                  <span aria-hidden="true">✎</span>
+                  <span>编辑</span>
+                </button>
+              </template>
             </div>
-            <button v-else class="btn info-edit-button" type="button" @click="startEditInfo">
-              <span aria-hidden="true">✎</span>
-              <span>编辑</span>
-            </button>
+          </div>
+          <div v-if="metadataSourceSummary" class="metadata-source-summary">
+            元信息来源：{{ metadataSourceSummary }}
           </div>
           <div class="info-list grouped-list">
             <div class="info-item list-item">
@@ -953,12 +964,20 @@
         </button>
       </template>
     </el-dialog>
+    <MetadataSearch
+      v-model="showMetadataSearch"
+      :initial-title="book.title"
+      :initial-author="book.author"
+      :initial-isbn="book.isbn"
+      @apply="applyMetadataCandidate"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted, nextTick } from 'vue'
 import BookSeriesPanel from '@/components/BookSeriesPanel.vue'
+import MetadataSearch from '@/components/MetadataSearch.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { message, confirm } from '@/utils/message'
@@ -1123,6 +1142,13 @@ const selectedVersion = computed(() =>
 const selectedVersionFormat = computed(() =>
   selectedVersion.value?.format || book.value?.format || '',
 )
+const metadataSourceSummary = computed(() => {
+  const sources = book.value?.metadataSources as Record<string, string> | undefined
+  if (!sources) return ''
+  return Object.entries(sources)
+    .map(([field, source]) => `${metadataFieldName(field)}：${metadataSourceName(source)}`)
+    .join(' · ')
+})
 const tocCurrentPage = ref(1)
 const tocPageSize = ref(20)
 const tocPageSizeOptions = [20, 50, 100]
@@ -1159,6 +1185,7 @@ const savingDescription = ref(false)
 const descriptionInput = ref<any>(null)
 const editingInfo = ref(false)
 const savingInfo = ref(false)
+const showMetadataSearch = ref(false)
 const infoEditForm = reactive({
   title: '',
   author: '',
@@ -1898,6 +1925,45 @@ const saveInfo = async () => {
     savingInfo.value = false
   }
 }
+
+const applyMetadataCandidate = async (metadata: Record<string, any>) => {
+  if (!book.value) return
+  try {
+    book.value = await bookStore.updateBookMetadata(book.value.id, {
+      title: metadata.title || undefined,
+      author: metadata.author || undefined,
+      isbn: metadata.isbn || undefined,
+      publisher: metadata.publisher || undefined,
+      publishDate: metadata.publishDate || undefined,
+      description: metadata.description || undefined,
+      coverUrl: metadata.coverUrl || undefined,
+      language: metadata.language || undefined,
+      rating: metadata.rating == null ? undefined : Number(metadata.rating),
+      metadataSource: metadata.source || 'unknown',
+    })
+    if (metadata.coverUrl?.startsWith('http')) {
+      await downloadCover(book.value.id)
+      await loadBook()
+    }
+    message.success(`已应用 ${metadataSourceName(metadata.source)} 元信息`)
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '应用元信息失败')
+  }
+}
+
+const metadataFieldName = (field: string) => ({
+  title: '书名', author: '作者', isbn: 'ISBN', publisher: '出版社',
+  publishDate: '出版日期', description: '简介', coverUrl: '封面',
+  language: '语言', rating: '评分', tags: '标签', category: '分类',
+  seriesName: '系列', seriesIndex: '卷序',
+} as Record<string, string>)[field] || field
+
+const metadataSourceName = (source?: string) => ({
+  douban: '豆瓣', openlibrary: 'Open Library',
+  '豆瓣读书': '豆瓣', '京东读书': '京东读书',
+  'Google Books': 'Google Books', embedded: '文件内嵌信息',
+  filename: '文件名', manual: '手动编辑',
+} as Record<string, string>)[source || ''] || source || '未知来源'
 
 const handleDownloadCover = async () => {
   if (!book.value) return
@@ -3464,6 +3530,19 @@ onMounted(() => {
   margin: 0;
 }
 
+.info-header-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.metadata-source-summary {
+  margin: -4px 0 12px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .info-panel-header h2 {
   color: var(--text-primary);
   font-size: 17px;
@@ -3789,6 +3868,7 @@ onMounted(() => {
   .description-edit-actions,
   .description-edit-button,
   .info-edit-actions,
+  .info-header-actions,
   .info-edit-button {
     align-self: flex-end;
   }

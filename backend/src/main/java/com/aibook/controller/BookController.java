@@ -636,12 +636,16 @@ public class BookController {
 
         User user = userService.findByUsername(authentication.getName());
         Book book = bookService.getBookEntity(id, user);
-        Book scrapedBook = metadataScrapingService.scrapeBook(book);
-        BookDTO bookDTO = bookService.convertToDTO(scrapedBook);
+        MetadataScrapingService.ScrapeResult result =
+                metadataScrapingService.scrapeBookWithResult(book, false);
 
         return ResponseEntity.ok(Map.of(
-                "success", true,
-                "book", bookDTO
+                "success", result.isSuccess(),
+                "matched", result.isMatched(),
+                "message", result.getMessage(),
+                "updatedFields", result.getUpdatedFields(),
+                "sources", result.getSources(),
+                "book", bookService.convertToDTO(result.getBook())
         ));
     }
 

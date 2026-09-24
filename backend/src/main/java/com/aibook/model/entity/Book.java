@@ -76,6 +76,10 @@ public class Book {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    /** 元信息字段来源 JSON，例如 title -> douban、author -> manual。 */
+    @Column(name = "metadata_sources", columnDefinition = "TEXT")
+    private String metadataSources;
+
     /**
      * 封面图URL
      */

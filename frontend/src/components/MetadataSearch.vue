@@ -50,45 +50,58 @@
             </div>
 
             <!-- 搜索结果 -->
-            <div v-if="searchResult" class="search-result">
+            <div v-if="searchResults.length > 0 && selectedCandidate" class="search-result">
               <div class="divider">
-                <span class="divider-text">搜索结果</span>
+                <span class="divider-text">搜索结果 · 请核对后应用</span>
+              </div>
+
+              <div class="candidate-list">
+                <button
+                  v-for="candidate in searchResults"
+                  :key="candidate.source"
+                  type="button"
+                  class="candidate-option"
+                  :class="{ selected: selectedCandidate === candidate }"
+                  @click="selectedCandidate = candidate"
+                >
+                  {{ sourceName(candidate.source) }} · {{ candidate.title || '未知书名' }}
+                </button>
               </div>
 
               <div class="result-content">
                 <div class="result-info">
                   <div class="result-item">
                     <span class="result-label">书名</span>
-                    <span class="result-value">{{ searchResult.title }}</span>
+                    <span class="result-value">{{ selectedCandidate.title }}</span>
                   </div>
                   <div class="result-item">
                     <span class="result-label">作者</span>
-                    <span class="result-value">{{ searchResult.author || '未知' }}</span>
+                    <span class="result-value">{{ selectedCandidate.author || '未知' }}</span>
                   </div>
                   <div class="result-item">
                     <span class="result-label">ISBN</span>
-                    <span class="result-value">{{ searchResult.isbn || '无' }}</span>
+                    <span class="result-value">{{ selectedCandidate.isbn || '无' }}</span>
                   </div>
                   <div class="result-item">
                     <span class="result-label">出版社</span>
-                    <span class="result-value">{{ searchResult.publisher || '未知' }}</span>
+                    <span class="result-value">{{ selectedCandidate.publisher || '未知' }}</span>
                   </div>
                   <div class="result-item">
                     <span class="result-label">出版日期</span>
-                    <span class="result-value">{{ searchResult.publishDate || '未知' }}</span>
+                    <span class="result-value">{{ selectedCandidate.publishDate || '未知' }}</span>
                   </div>
                   <div class="result-item">
                     <span class="result-label">页数</span>
-                    <span class="result-value">{{ searchResult.pageCount || '未知' }}</span>
+                    <span class="result-value">{{ selectedCandidate.pageCount || '未知' }}</span>
                   </div>
                   <div class="result-item full">
                     <span class="result-label">简介</span>
-                    <span class="result-value">{{ searchResult.description || '暂无简介' }}</span>
+                    <span class="result-value">{{ selectedCandidate.description || '暂无简介' }}</span>
                   </div>
                 </div>
 
-                <div v-if="searchResult.coverUrl && shouldLoadBookCover()" class="cover-preview">
-                  <img :src="searchResult.coverUrl" alt="封面预览" />
+                <div v-if="selectedCandidate.coverUrl && shouldLoadBookCover()" class="cover-preview">
+                  <img :src="selectedCandidate.coverUrl" alt="封面预览" />
                 </div>
               </div>
 
@@ -97,14 +110,14 @@
                   <span>✓</span>
                   <span>应用到书籍</span>
                 </button>
-                <button class="btn" @click="searchResult = null">
+                <button class="btn" @click="selectedCandidate = null">
                   <span>🔄</span>
                   <span>重新搜索</span>
                 </button>
               </div>
             </div>
 
-            <div v-else-if="searched && !loading" class="empty">
+            <div v-else-if="searched && !loading && searchResults.length === 0" class="empty">
               <div class="empty-icon">🔍</div>
               <p>未找到相关书籍</p>
             </div>
@@ -116,14 +129,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { computed, ref, reactive, watch } from 'vue'
 import api from '@/utils/api'
 import { message } from '@/utils/message'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 
 const props = defineProps<{
   modelValue: boolean
-  bookId?: number
+  initialTitle?: string
+  initialAuthor?: string
+  initialIsbn?: string
 }>()
 
 const emit = defineEmits<{
@@ -131,15 +146,26 @@ const emit = defineEmits<{
   (e: 'apply', metadata: any): void
 }>()
 
-const visible = ref(props.modelValue)
+const visible = computed(() => props.modelValue)
 const loading = ref(false)
 const searched = ref(false)
-const searchResult = ref<any>(null)
+const searchResults = ref<any[]>([])
+const selectedCandidate = ref<any>(null)
 
 const searchForm = reactive({
   isbn: '',
   title: '',
   author: '',
+})
+
+watch(() => props.modelValue, visible => {
+  if (!visible) return
+  searchForm.title = props.initialTitle || ''
+  searchForm.author = props.initialAuthor || ''
+  searchForm.isbn = props.initialIsbn || ''
+  searchResults.value = []
+  selectedCandidate.value = null
+  searched.value = false
 })
 
 const handleSearch = async () => {
@@ -150,27 +176,26 @@ const handleSearch = async () => {
 
   loading.value = true
   searched.value = true
-  searchResult.value = null
+  searchResults.value = []
+  selectedCandidate.value = null
 
   try {
     let response
     if (searchForm.isbn) {
-      response = await api.get(`/api/metadata/isbn/${searchForm.isbn}`)
+      response = await api.get(`/api/metadata/candidates/isbn/${encodeURIComponent(searchForm.isbn)}`)
     } else {
-      response = await api.get('/api/metadata/search', {
+      response = await api.get('/api/metadata/candidates/search', {
         params: {
           title: searchForm.title,
           author: searchForm.author || undefined,
         },
       })
     }
-    searchResult.value = response.data
+    searchResults.value = response.data
+    selectedCandidate.value = searchResults.value[0] || null
+    if (searchResults.value.length === 0) message.info('未找到相关书籍')
   } catch (error: any) {
-    if (error.response?.status === 404) {
-      message.info('未找到相关书籍')
-    } else {
-      message.error('搜索失败')
-    }
+    message.error('搜索失败')
   } finally {
     loading.value = false
   }
@@ -180,16 +205,19 @@ const handleReset = () => {
   searchForm.isbn = ''
   searchForm.title = ''
   searchForm.author = ''
-  searchResult.value = null
+  searchResults.value = []
+  selectedCandidate.value = null
   searched.value = false
 }
 
 const handleApply = () => {
-  if (searchResult.value) {
-    emit('apply', searchResult.value)
+  if (selectedCandidate.value) {
+    emit('apply', selectedCandidate.value)
     handleClose()
   }
 }
+
+const sourceName = (source: string) => source === 'douban' ? '豆瓣' : 'Open Library'
 
 const handleClose = () => {
   emit('update:modelValue', false)
@@ -244,6 +272,31 @@ const handleClose = () => {
 
 .search-result {
   margin-top: var(--spacing-lg);
+}
+
+.candidate-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.candidate-option {
+  max-width: 100%;
+  padding: 8px 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.candidate-option.selected {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
 }
 
 .result-content {

@@ -108,6 +108,30 @@ public class TagService {
         return new LinkedHashSet<>(tags);
     }
 
+    /** 按外部元信息查找或创建当前用户的标签。 */
+    @Transactional
+    public Set<Tag> getOrCreateTags(List<String> names, User user) {
+        if (names == null || names.isEmpty()) return new LinkedHashSet<>();
+        LinkedHashSet<String> normalizedNames = names.stream()
+                .filter(name -> name != null && !name.isBlank())
+                .map(String::trim)
+                .filter(name -> name.length() <= 120)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        LinkedHashSet<Tag> result = new LinkedHashSet<>();
+        for (String name : normalizedNames) {
+            Tag tag = tagRepository.findByNameIgnoreCaseAndUser(name, user);
+            if (tag == null) {
+                tag = tagRepository.save(Tag.builder()
+                        .name(name)
+                        .color("#64748B")
+                        .user(user)
+                        .build());
+            }
+            result.add(tag);
+        }
+        return result;
+    }
+
     public TagDTO convertToDTO(Tag tag, User user) {
         return TagDTO.builder()
                 .id(tag.getId())

@@ -13,6 +13,8 @@ export interface Book {
   publisher?: string
   publishDate?: string
   description?: string
+  metadataSources?: Record<string, string>
+  metadataSource?: string
   coverUrl?: string
   format: string
   filePath: string

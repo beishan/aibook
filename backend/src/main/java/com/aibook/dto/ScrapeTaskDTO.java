@@ -79,7 +79,10 @@ public class ScrapeTaskDTO {
         private Long bookId;
         private String title;
         private boolean success;
+        private boolean matched;
         private List<String> updatedFields;
+        private List<String> sources;
+        private String message;
         private String error;
 
         @Builder.Default

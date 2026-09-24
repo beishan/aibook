@@ -4,6 +4,7 @@ import com.aibook.model.entity.Book;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
 import com.aibook.service.SystemConfigService;
+import com.aibook.service.BookService;
 import com.aibook.service.scraper.CoverDownloadService;
 import com.aibook.service.scraper.MetadataCacheService;
 import com.aibook.service.scraper.MetadataScraper;
@@ -33,6 +34,7 @@ public class ScraperController {
     private final CoverDownloadService coverDownloadService;
     private final MetadataCacheService cacheService;
     private final BookRepository bookRepository;
+    private final BookService bookService;
     private final SystemConfigService configService;
     private final List<MetadataScraper> scrapers;
 
@@ -52,11 +54,15 @@ public class ScraperController {
         }
 
         try {
-            Book updated = scrapingService.scrapeBook(book);
+            MetadataScrapingService.ScrapeResult result =
+                    scrapingService.scrapeBookWithResult(book, false);
             return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "message", "刮削完成",
-                    "book", updated
+                    "success", result.isSuccess(),
+                    "matched", result.isMatched(),
+                    "message", result.getMessage(),
+                    "updatedFields", result.getUpdatedFields(),
+                    "sources", result.getSources(),
+                    "book", bookService.convertToDTO(result.getBook())
             ));
         } catch (Exception e) {
             log.error("刮削书籍失败: {}", bookId, e);
@@ -85,7 +91,7 @@ public class ScraperController {
         }
 
         try {
-            List<ScrapeResult> results = scrapingService.scrapeBooks(books);
+            List<ScrapeResult> results = scrapingService.scrapeBooks(books, false);
             long successCount = results.stream().filter(ScrapeResult::isSuccess).count();
 
             return ResponseEntity.ok(Map.of(
@@ -110,7 +116,7 @@ public class ScraperController {
             @AuthenticationPrincipal User user) {
 
         try {
-            List<ScrapeResult> results = scrapingService.scrapeAllIncomplete();
+            List<ScrapeResult> results = scrapingService.scrapeAllIncomplete(user);
             long successCount = results.stream().filter(ScrapeResult::isSuccess).count();
 
             return ResponseEntity.ok(Map.of(
