@@ -469,7 +469,7 @@ public class CrawlerManagementService {
         LocalDateTime start = firstDay.atStartOfDay();
         Map<LocalDate, long[]> daily = new LinkedHashMap<>();
         for (int offset = 0; offset < days; offset++) {
-            daily.put(firstDay.plusDays(offset), new long[6]);
+            daily.put(firstDay.plusDays(offset), new long[7]);
         }
         mergeDailyCounts(daily, chapterRepository.countCreatedByDay(user, start), 0);
         mergeDailyCounts(daily, chapterRepository.countSuccessfulByDay(
@@ -485,6 +485,7 @@ public class CrawlerManagementService {
             long count = ((Number) row[2]).longValue();
             values[3] += count;
             if (row[1] == CrawlerTask.TaskStatus.SUCCESS) values[4] += count;
+            if (row[1] == CrawlerTask.TaskStatus.FAILED) values[6] += count;
         }
 
         Map<Long, String> siteNames = new HashMap<>();
@@ -502,7 +503,7 @@ public class CrawlerManagementService {
         List<DailyStatisticsView> dailyViews = daily.entrySet().stream()
                 .map(entry -> new DailyStatisticsView(entry.getKey(), entry.getValue()[0],
                         entry.getValue()[1], entry.getValue()[2], entry.getValue()[3],
-                        entry.getValue()[4], entry.getValue()[5]))
+                        entry.getValue()[4], entry.getValue()[5], entry.getValue()[6]))
                 .toList();
         CrawlerFunnelView funnel = new CrawlerFunnelView(
                 bookRepository.countBySiteUser(user), taskRepository.countDistinctTaskedBooks(user),
