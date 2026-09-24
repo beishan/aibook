@@ -165,7 +165,7 @@ public final class CrawlerDtos {
 
     public record DailyStatisticsView(LocalDate date, long newChapters,
             long successfulChapters, long newBooks, long finishedTasks,
-            long successfulTasks) { }
+            long successfulTasks, long successfulBooks) { }
 
     public record SiteContributionView(Long siteId, String siteName,
             long newBooks, long newChapters) { }

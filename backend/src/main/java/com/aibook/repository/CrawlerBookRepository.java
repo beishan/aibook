@@ -96,6 +96,17 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
     List<Object[]> countCreatedByDay(@Param("user") User user,
             @Param("start") java.time.LocalDateTime start);
     @Query("""
+            select cast(b.lastCrawlTime as LocalDate), count(b)
+            from CrawlerBook b
+            where b.site.user = :user and b.crawlStatus = :completedStatus
+              and b.lastCrawlTime >= :start
+            group by cast(b.lastCrawlTime as LocalDate)
+            order by cast(b.lastCrawlTime as LocalDate)
+            """)
+    List<Object[]> countSuccessfullyCrawledByDay(@Param("user") User user,
+            @Param("start") java.time.LocalDateTime start,
+            @Param("completedStatus") CrawlerBook.CrawlStatus completedStatus);
+    @Query("""
             select b.site.id, b.site.siteName, count(b)
             from CrawlerBook b
             where b.site.user = :user and b.createdAt >= :start
