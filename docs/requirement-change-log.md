@@ -28,10 +28,10 @@
 - 完成时间：2026-09-25
 - 状态：部分完成
 - 需求内容：优化发版过程中后端 Maven 依赖被重复下载的问题。
-- 完成情况：已确认 Jenkins 先独立构建后端测试镜像，再由 Compose 构建正式镜像；Maven 测试范围中的依赖可能在 `go-offline` 后才下载，因而无法只靠依赖预取层避免下载。Dockerfile 已改用 BuildKit 持久缓存挂载 Maven 本地仓库，让测试和正式构建共享缓存。
-- 应用版本：`1.45.42`
-- 主要改动：后端 Dockerfile 的依赖预取、测试和打包步骤共用固定 ID 的 BuildKit Maven 仓库缓存，并使用 locked 共享方式避免并行构建写冲突。
-- 验证结果：`git diff --check` 和版本一致性检查通过。Docker Buildx 已安装，但 Dockerfile 检查因本机拒绝访问 `C:\Users\weixu\.docker\buildx\instances` 而未能运行，因此尚未实际验证 BuildKit 构建和跨发版缓存命中。
+- 完成情况：已确认 Jenkins 先独立构建后端测试镜像，再由 Compose 构建正式镜像；Maven 测试范围中的依赖可能在 `go-offline` 后才下载，因而无法只靠依赖预取层避免下载。Dockerfile 已改用 BuildKit 持久缓存挂载 Maven 本地仓库，让测试和正式构建共享缓存。根据 NAS 构建日志，移除了会触发 Docker Hub 认证请求的外部 Dockerfile frontend 声明，改用 BuildKit 内置 frontend。
+- 应用版本：`1.45.43`
+- 主要改动：后端 Dockerfile 的依赖预取、测试和打包步骤共用固定 ID 的 BuildKit Maven 仓库缓存，并使用 locked 共享方式避免并行构建写冲突；移除外部 frontend 依赖。
+- 验证结果：`git diff --check` 和版本一致性检查通过。Docker 官方文档确认未声明 syntax frontend 时，BuildKit 使用内置 frontend；本机 Dockerfile 检查因拒绝访问 Docker Buildx 配置目录而未能运行，尚未在 NAS 上实测缓存命中。
 
 ### REQ-20260925-015 为备份执行结果增加阶段与进度详情
 

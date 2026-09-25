@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 # 后端 Dockerfile
 # 使用多阶段构建
 
