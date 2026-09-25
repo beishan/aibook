@@ -11,10 +11,11 @@ Jenkins Pipeline 会完成以下工作：
 1. 从 GitHub 检出 `main`。
 2. 运行后端测试。
 3. 构建带 Jenkins 构建号和 Git 提交号的前后端镜像。
-4. 备份 PostgreSQL。
-5. 使用 Docker Compose 更新服务。
-6. 检查全部容器及局域网访问地址。
-7. 部署失败时恢复上一版本前后端镜像。
+4. 使用 Docker Compose 更新服务。
+5. 检查全部容器及局域网访问地址。
+6. 部署失败时恢复上一版本前后端镜像。
+
+数据库与文件备份由系统设置中的“数据备份”任务独立运行，不在部署前同步执行。
 
 生产容器如下：
 
@@ -152,17 +153,18 @@ sudo setfacl -m d:g:FONTS_GID:rX,d:m::rX /vol1/docker/aibook/fonts
 `FONT_GIDS=1001,1002`。部署后在“设置 → 字体管理”中配置 `/fontfolder` 或
 `/fontfolder/chinese` 等容器内扫描路径。
 
-应用的 PostgreSQL、上传文件、数据库备份和部署状态使用以下
+应用的 PostgreSQL、上传文件、采集数据和部署状态使用以下
 Docker Volume：
 
 ```text
 aibook-postgres-data
 aibook-uploads-data
-aibook-backups
 aibook-deploy-state
 ```
 
 更新应用或执行 Jenkins `cleanWs()` 不会删除这些 Volume。
+备份目录使用 Jenkins 参数 `BACKUP_PATH` 指定的 NAS 物理目录，并映射至
+`/app/backups`，因此可直接在 NAS 文件管理器中查看备份。
 
 ## 四、创建生产环境凭据
 
@@ -216,6 +218,8 @@ git@github.com:beishan/aibook.git
 | `FRONTEND_PORT` | `8291` | Web 前端端口 |
 | `BACKEND_PORT` | `8292` | 后端健康检查端口 |
 | `BOOKS_PATH` | `/vol1/1000/books` | 主书库宿主机路径，映射到 `/scanfolder` |
+| `BACKUP_PATH` | `/vol1/docker/aibook/backups` | NAS 备份目录物理路径，映射到后端 `/app/backups` |
+| `BACKUP_GID` | `1001` | 备份目录数字 GID，后端进程需有目录写权限 |
 | `BOOKS_GID` | `1001` | 主书库目录的数字 GID |
 | `BOOKS_MOUNTS` | 空 | 附加书库多行挂载配置 |
 | `BOOKS_GIDS` | 空 | 附加目录 GID，多个值用逗号分隔 |
@@ -320,16 +324,26 @@ docker inspect --format '{{.Config.Image}}' aibook-frontend
 
 ## 十、数据库备份与恢复
 
-每次更新前会在 `aibook-backups` Volume 中创建 PostgreSQL custom-format 备份，
-默认保留最近 10 份。
+系统设置 → 数据备份中可以创建多条独立任务。每条任务可选择 PostgreSQL
+数据库、主书库文件、用户上传文件和采集数据文件，并单独设置 Cron 定时规则；
+也可立即执行。执行记录显示内容、详情、状态、文件数、大小、NAS 物理路径及时间。
 
-列出备份：
+Jenkins 参数 `BACKUP_PATH` 指定 NAS 上的绝对路径，该目录映射到后端容器
+`/app/backups`。首次发版前在 NAS 创建目录并授予 `BACKUP_GID` 对应组写权限，例如：
 
 ```bash
-docker run --rm \
-  -v aibook-backups:/backups \
-  postgres:16-alpine \
-  ls -lh /backups
+sudo mkdir -p /vol1/docker/aibook/backups
+sudo chgrp 1001 /vol1/docker/aibook/backups
+sudo chmod 2770 /vol1/docker/aibook/backups
+```
+
+后端使用 PostgreSQL 16 官方 `pg_dump` 工具写出 custom-format 数据库归档。
+发版本身不会执行数据库或文件备份。
+
+列出容器内备份文件：
+
+```bash
+docker exec aibook-backend ls -lah /app/backups
 ```
 
 恢复数据库属于高风险操作，应先停止后端并再次确认备份文件名。基本流程为：
@@ -338,12 +352,12 @@ docker run --rm \
 docker stop aibook-backend
 docker run --rm \
   --network aibook-network \
-  -v aibook-backups:/backups \
+  -v /vol1/docker/aibook/backups:/backups:ro \
   -e PGPASSWORD='数据库密码' \
   postgres:16-alpine \
   pg_restore --clean --if-exists \
     -h postgres -U aibook -d aibook \
-    /backups/选定的备份文件.dump
+    /backups/aibook-时间戳-执行编号/database.dump
 docker start aibook-backend
 ```
 

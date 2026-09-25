@@ -28,7 +28,7 @@ WORKDIR /app
 
 # 创建非 root 用户
 ENV TZ=Asia/Shanghai
-RUN apk add --no-cache tzdata \
+RUN apk add --no-cache tzdata postgresql16-client \
     && cp "/usr/share/zoneinfo/${TZ}" /etc/localtime \
     && echo "${TZ}" > /etc/timezone \
     && addgroup -S appgroup \

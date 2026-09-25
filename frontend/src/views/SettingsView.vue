@@ -472,6 +472,10 @@
       <WebsiteSettingsPanel />
     </div>
 
+    <div v-if="isAdmin && activeTab === 'backups'" class="tab-content">
+      <BackupSettingsPanel />
+    </div>
+
     <!-- 系统信息 -->
     <div v-show="activeTab === 'info'" class="tab-content">
       <div class="card glass">
@@ -644,6 +648,7 @@ import OperationLogPanel from '@/components/OperationLogPanel.vue'
 import UserManagementPanel from '@/components/UserManagementPanel.vue'
 import CurrentUserSettingsPanel from '@/components/CurrentUserSettingsPanel.vue'
 import WebsiteSettingsPanel from '@/components/WebsiteSettingsPanel.vue'
+import BackupSettingsPanel from '@/components/BackupSettingsPanel.vue'
 import DockSettingsPanel from '@/components/DockSettingsPanel.vue'
 import ThemeColorSettingsPanel from '@/components/ThemeColorSettingsPanel.vue'
 import ThemeBackgroundSettingsPanel from '@/components/ThemeBackgroundSettingsPanel.vue'
@@ -887,6 +892,7 @@ const tabGroups = computed(() => [
     label: '系统',
     items: [
       ...(isAdmin.value ? [{ key: 'website', label: '网站设置', icon: '🌐' }] : []),
+      ...(isAdmin.value ? [{ key: 'backups', label: '数据备份', icon: '💾' }] : []),
       { key: 'info', label: '系统信息', icon: 'ℹ️' },
     ],
   },

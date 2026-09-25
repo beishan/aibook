@@ -22,6 +22,18 @@
 
 ## 变更记录
 
+### REQ-20260925-008 系统设置增加可定时的数据备份
+
+- 需求时间：2026-09-25
+- 完成时间：2026-09-25
+- 状态：部分完成
+- 需求内容：移除发版期间同步 PostgreSQL 备份；在系统设置提供立即备份、多条独立定时任务、备份内容选择、执行历史与结果详情，并由 Jenkins 参数配置 NAS 备份目录。
+- 完成情况：备份任务配置、独立调度、立即执行、数据库/目录备份、执行历史，以及 Jenkins NAS 物理目录挂载均已实现；等待在可用的 Linux/JDK 构建环境完成后端镜像构建验证。
+- 开源调研：采用 PostgreSQL 官方 `pg_dump`（PostgreSQL License），官方文档支持并发写入下的一致性 custom-format 归档；已获用户确认将 `postgresql16-client` 加入后端运行镜像。
+- 应用版本：`1.45.34`
+- 主要改动：移除部署脚本中的同步 `pg_dump`；增加备份任务/执行记录及管理员 API、系统设置入口和 Jenkins `BACKUP_PATH` / `BACKUP_GID` 参数。
+- 验证结果：前端 Vite 生产构建成功（2836 个模块）；Docker Compose 配置校验与 Jenkins 部署脚本 `validate` 通过；版本一致性和 `git diff --check` 通过。未运行测试。`vue-tsc --noEmit` 受本地 `vue-tsc`/TypeScript 工具版本不兼容影响未能启动；后端 Maven 编译在本地 Windows JDK 报 `Fatal Error: Cannot close compiler resources`，且 Docker Engine 不可用，故尚未完成后端容器构建验证。
+
 ### REQ-20260925-007 在采集任务列表增加优先按钮
 
 - 需求时间：2026-09-25

@@ -57,6 +57,11 @@ conversion:
 crawler:
   storage-path: ${CRAWLER_STORAGE_PATH:./crawler-data}
 
+# 由 Jenkins 将 NAS 备份物理目录挂载到此容器目录。
+backup:
+  path: ${BACKUP_PATH:/app/backups}
+  host-path: ${BACKUP_HOST_PATH:${BACKUP_PATH:/app/backups}}
+
 # Book scanning configuration
 scanning:
   enabled: true

@@ -9,9 +9,7 @@ ACTION="${1:-deploy}"
 ENV_FILE="${2:-${PROJECT_DIR}/docker/.env.production}"
 STATE_FILE="${3:-${PROJECT_DIR}/.aibook-previous-images}"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-aibook}"
-BACKUP_VOLUME="${BACKUP_VOLUME:-aibook-backups}"
 DEPLOY_STATE_VOLUME="${DEPLOY_STATE_VOLUME:-aibook-deploy-state}"
-BACKUP_RETENTION_COUNT="${BACKUP_RETENTION_COUNT:-10}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-36}"
 HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-5}"
 COMPOSE_OVERRIDE_FILE=""
@@ -227,6 +225,7 @@ prepare_mounts_override() {
     local books_gids
     local fonts_path
     local fonts_gid
+    local backup_gid
     local font_mounts
     local font_gids
     local index
@@ -236,6 +235,11 @@ prepare_mounts_override() {
     validate_gid "BOOKS_GID" "${books_gid}"
     # 基础 Compose 已包含主书库 GID；后续动态 GID 必须与它一起去重。
     SEEN_OVERRIDE_GIDS+="${books_gid}"$'\n'
+
+    backup_gid="$(trim_whitespace "${BACKUP_GID:-$(env_file_value BACKUP_GID)}")"
+    backup_gid="${backup_gid:-${books_gid}}"
+    validate_gid "BACKUP_GID" "${backup_gid}"
+    add_override_gid "${backup_gid}" "备份目录 GID ${backup_gid}"
 
     books_mounts="${BOOKS_MOUNTS:-$(env_file_value BOOKS_MOUNTS)}"
     books_gids="${BOOKS_GIDS:-$(env_file_value BOOKS_GIDS)}"
@@ -346,30 +350,6 @@ record_previous_images() {
     echo "已记录部署前镜像："
     echo "  backend=${backend_image:-<首次部署>}"
     echo "  frontend=${frontend_image:-<首次部署>}"
-}
-
-backup_database() {
-    local backup_name
-
-    if ! docker inspect aibook-postgres >/dev/null 2>&1; then
-        echo "PostgreSQL 容器尚未运行，跳过首次部署前备份。"
-        return 0
-    fi
-
-    backup_name="aibook-$(date '+%Y%m%d-%H%M%S').dump"
-    docker volume create "${BACKUP_VOLUME}" >/dev/null
-
-    echo "正在备份 PostgreSQL：${backup_name}"
-    docker exec aibook-postgres pg_dump -U aibook -d aibook -Fc |
-        docker run --rm -i \
-            -v "${BACKUP_VOLUME}:/backups" \
-            postgres:16-alpine \
-            sh -c "cat > '/backups/${backup_name}'"
-
-    docker run --rm \
-        -v "${BACKUP_VOLUME}:/backups" \
-        postgres:16-alpine \
-        sh -c "ls -1t /backups/aibook-*.dump 2>/dev/null | awk 'NR > ${BACKUP_RETENTION_COUNT}' | while IFS= read -r file; do rm -f \"\$file\"; done"
 }
 
 wait_for_containers() {
@@ -525,7 +505,6 @@ cleanup_images() {
 
 deploy_release() {
     record_previous_images
-    backup_database
 
     echo "正在更新 aibook 服务。"
     if ! compose up -d --remove-orphans; then
