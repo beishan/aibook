@@ -128,7 +128,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from '@/utils/message'
 import { backupApi, type BackupExecution, type BackupPath, type BackupTask, type BackupTaskInput } from '@/utils/backups'
 
@@ -150,7 +150,6 @@ const saving = ref(false)
 const dialogVisible = ref(false)
 const dialogMode = ref<DialogMode>('task')
 const editingId = ref<number | null>(null)
-let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 const emptyDraft = (): BackupTaskInput => ({
   name: '', databaseEnabled: true, booksEnabled: false, uploadsEnabled: false,
@@ -276,10 +275,6 @@ const statusGlyph = (status: BackupExecution['status']) => ({
 
 onMounted(() => {
   void refreshAll()
-  refreshTimer = setInterval(() => void refreshAll(true), 5000)
-})
-onBeforeUnmount(() => {
-  if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>
 
