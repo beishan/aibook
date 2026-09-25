@@ -38,6 +38,19 @@
         备份任务 <span>{{ tasks.length }}</span>
       </button>
       <button
+        id="backup-retention-tab"
+        ref="retentionTabButton"
+        type="button"
+        role="tab"
+        :aria-selected="activeTab === 'retention'"
+        :aria-controls="'backup-retention-panel'"
+        :tabindex="activeTab === 'retention' ? 0 : -1"
+        @click="activateTab('retention')"
+        @keydown="handleTabKeydown($event, 'retention')"
+      >
+        保留策略
+      </button>
+      <button
         id="backup-executions-tab"
         ref="executionTabButton"
         type="button"
@@ -113,6 +126,51 @@
     </section>
 
     <section
+      id="backup-retention-panel"
+      class="backup-tab-panel"
+      role="tabpanel"
+      aria-labelledby="backup-retention-tab"
+      tabindex="0"
+      v-show="activeTab === 'retention'"
+    >
+      <div class="backup-section-heading">
+        <div><span class="backup-section-kicker">RETENTION</span><h3>备份保留策略</h3></div>
+        <button
+          class="btn btn-primary"
+          :disabled="loading || retentionSaving"
+          @click="saveRetention"
+        >
+          {{ retentionSaving ? '保存中…' : '保存保留设置' }}
+        </button>
+      </div>
+      <section class="backup-retention card glass">
+        <label class="backup-inline-check">
+          <input v-model="retention.enabled" type="checkbox" />
+          <span>启用自动清理</span>
+        </label>
+        <div class="backup-retention-fields">
+          <label class="backup-retention-field">
+            <span>最近备份全部保留</span>
+            <div>
+              <input v-model.number="retention.recentDays" type="number" min="1" max="3650" />
+              <small>天</small>
+            </div>
+          </label>
+          <label class="backup-retention-field">
+            <span>之后每月保留最新备份</span>
+            <div>
+              <input v-model.number="retention.monthlyMonths" type="number" min="0" max="120" />
+              <small>个月</small>
+            </div>
+          </label>
+        </div>
+        <p class="backup-retention-note">
+          {{ retentionDescription }} 每天凌晨 04:15 执行清理。关闭自动清理时，备份文件不会自动删除；执行历史会保留。
+        </p>
+      </section>
+    </section>
+
+    <section
       id="backup-executions-panel"
       class="backup-tab-panel"
       role="tabpanel"
@@ -172,42 +230,6 @@
       </div>
     </section>
 
-    <div class="backup-section-heading backup-retention-heading">
-      <div><span class="backup-section-kicker">RETENTION</span><h3>备份保留策略</h3></div>
-      <button
-        class="btn btn-primary"
-        :disabled="loading || retentionSaving"
-        @click="saveRetention"
-      >
-        {{ retentionSaving ? '保存中…' : '保存保留设置' }}
-      </button>
-    </div>
-    <section class="backup-retention card glass">
-      <label class="backup-inline-check">
-        <input v-model="retention.enabled" type="checkbox" />
-        <span>启用自动清理</span>
-      </label>
-      <div class="backup-retention-fields">
-        <label class="backup-retention-field">
-          <span>最近备份全部保留</span>
-          <div>
-            <input v-model.number="retention.recentDays" type="number" min="1" max="3650" />
-            <small>天</small>
-          </div>
-        </label>
-        <label class="backup-retention-field">
-          <span>之后每月保留最新备份</span>
-          <div>
-            <input v-model.number="retention.monthlyMonths" type="number" min="0" max="120" />
-            <small>个月</small>
-          </div>
-        </label>
-      </div>
-      <p class="backup-retention-note">
-        {{ retentionDescription }} 每天凌晨 04:15 执行清理。关闭自动清理时，备份文件不会自动删除；执行历史会保留。
-      </p>
-    </section>
-
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="min(620px, calc(100vw - 32px))" destroy-on-close>
       <div class="backup-form">
         <label v-if="dialogMode === 'task'" class="backup-field">
@@ -262,7 +284,7 @@ import {
 
 type ContentKey = 'databaseEnabled' | 'booksEnabled' | 'uploadsEnabled' | 'crawlerDataEnabled'
 type DialogMode = 'task' | 'run'
-type BackupTab = 'tasks' | 'executions'
+type BackupTab = 'tasks' | 'retention' | 'executions'
 
 const contentOptions: { key: ContentKey; label: string; description: string }[] = [
   { key: 'databaseEnabled', label: 'PostgreSQL 数据库', description: '业务数据、账户与系统配置；使用 pg_dump 一致性归档。' },
@@ -282,6 +304,7 @@ const dialogMode = ref<DialogMode>('task')
 const editingId = ref<number | null>(null)
 const activeTab = ref<BackupTab>('tasks')
 const taskTabButton = ref<HTMLButtonElement | null>(null)
+const retentionTabButton = ref<HTMLButtonElement | null>(null)
 const executionTabButton = ref<HTMLButtonElement | null>(null)
 
 const emptyDraft = (): BackupTaskInput => ({
@@ -313,15 +336,24 @@ const activateTab = (tab: BackupTab) => {
 const focusTab = (tab: BackupTab) => {
   activateTab(tab)
   void nextTick(() => {
-    const button = tab === 'tasks' ? taskTabButton.value : executionTabButton.value
+    const button = {
+      tasks: taskTabButton.value,
+      retention: retentionTabButton.value,
+      executions: executionTabButton.value,
+    }[tab]
     button?.focus()
   })
 }
 
 const handleTabKeydown = (event: KeyboardEvent, currentTab: BackupTab) => {
+  const tabs: BackupTab[] = ['tasks', 'retention', 'executions']
+  const currentIndex = tabs.indexOf(currentTab)
+
   if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
     event.preventDefault()
-    focusTab(currentTab === 'tasks' ? 'executions' : 'tasks')
+    const step = event.key === 'ArrowRight' ? 1 : -1
+    const nextIndex = (currentIndex + step + tabs.length) % tabs.length
+    focusTab(tabs[nextIndex])
   } else if (event.key === 'Home') {
     event.preventDefault()
     focusTab('tasks')
@@ -599,7 +631,7 @@ onMounted(() => {
   bottom: 4px;
   left: 4px;
   z-index: 0;
-  width: calc((100% - 8px) / 2);
+  width: calc((100% - 8px) / 3);
   border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--border-color));
   border-radius: 11px;
   background: var(--surface-card);
@@ -607,8 +639,12 @@ onMounted(() => {
   transition: transform .24s cubic-bezier(.2, .8, .2, 1);
 }
 
-.backup-tab-indicator--executions {
+.backup-tab-indicator--retention {
   transform: translateX(100%);
+}
+
+.backup-tab-indicator--executions {
+  transform: translateX(200%);
 }
 
 .backup-tabs button {
