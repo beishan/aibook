@@ -208,7 +208,16 @@
                 </td>
                 <th scope="row" class="execution-task-cell">{{ execution.taskName }}</th>
                 <td class="execution-details-cell">
-                  <strong>{{ execution.contents }}</strong>
+                  <div class="execution-summary-heading">
+                    <strong>{{ execution.contents }}</strong>
+                    <button
+                      type="button"
+                      class="btn execution-detail-button"
+                      @click="openExecutionDetails(execution)"
+                    >
+                      详情
+                    </button>
+                  </div>
                   <div class="execution-progress-heading">
                     <span>{{ execution.currentStage || fallbackStage(execution.status) }}</span>
                     <span>{{ displayProgress(execution) }}%</span>
@@ -227,12 +236,6 @@
                   >
                     <span :style="{ width: `${displayProgress(execution)}%` }" />
                   </div>
-                  <small>
-                    {{ execution.progressDetail || execution.details || execution.errorMessage || '任务正在等待执行' }}
-                  </small>
-                  <small v-if="execution.details && execution.progressDetail && execution.status !== 'RUNNING'">
-                    {{ execution.details }}
-                  </small>
                 </td>
                 <td>
                   <span class="history-status" :class="`status-${execution.status.toLowerCase()}`">
@@ -252,6 +255,90 @@
         </div>
       </div>
     </section>
+
+    <el-dialog
+      v-model="executionDetailsVisible"
+      title="备份执行详情"
+      width="min(680px, calc(100vw - 32px))"
+      destroy-on-close
+    >
+      <div v-if="selectedExecution" class="execution-detail-content">
+        <div class="execution-detail-summary">
+          <span class="backup-section-kicker">EXECUTION #{{ selectedExecution.id }}</span>
+          <strong>{{ selectedExecution.taskName }}</strong>
+          <span
+            class="history-status"
+            :class="'status-' + selectedExecution.status.toLowerCase()"
+          >
+            <span>{{ statusGlyph(selectedExecution.status) }}</span>
+            {{ statusLabel(selectedExecution.status) }}
+          </span>
+        </div>
+        <dl class="execution-detail-grid">
+          <div>
+            <dt>备份内容</dt>
+            <dd>{{ selectedExecution.contents || '—' }}</dd>
+          </div>
+          <div>
+            <dt>当前阶段</dt>
+            <dd>{{ selectedExecution.currentStage || fallbackStage(selectedExecution.status) }}</dd>
+          </div>
+          <div>
+            <dt>整体进度</dt>
+            <dd>
+              {{ displayProgress(selectedExecution) }}%
+              <div
+                class="execution-progress-track execution-detail-progress-track"
+                :class="{
+                  'is-indeterminate': selectedExecution.currentStage === '导出 PostgreSQL 数据库'
+                    && selectedExecution.status === 'RUNNING',
+                }"
+                role="progressbar"
+                :aria-label="(selectedExecution.currentStage || fallbackStage(selectedExecution.status)) + '进度'"
+                :aria-valuenow="displayProgress(selectedExecution)"
+                aria-valuemin="0"
+                aria-valuemax="100"
+              >
+                <span :style="{ width: displayProgress(selectedExecution) + '%' }" />
+              </div>
+            </dd>
+          </div>
+          <div>
+            <dt>执行时间</dt>
+            <dd>{{ formatTime(selectedExecution.startedAt) }}</dd>
+          </div>
+          <div>
+            <dt>结束时间</dt>
+            <dd>{{ formatTime(selectedExecution.finishedAt) }}</dd>
+          </div>
+          <div>
+            <dt>文件数 / 数据大小</dt>
+            <dd>{{ selectedExecution.fileCount ?? '—' }} / {{ formatBytes(selectedExecution.fileSizeBytes) }}</dd>
+          </div>
+          <div class="execution-detail-wide">
+            <dt>阶段进度说明</dt>
+            <dd>{{ formatExecutionText(selectedExecution.progressDetail) || '暂无进度说明' }}</dd>
+          </div>
+          <div class="execution-detail-wide">
+            <dt>备份结果</dt>
+            <dd class="execution-detail-pre">
+              {{ formatExecutionText(selectedExecution.details) || '暂无结果详情' }}
+            </dd>
+          </div>
+          <div v-if="selectedExecution.errorMessage" class="execution-detail-wide">
+            <dt>错误信息</dt>
+            <dd class="execution-detail-pre is-error">{{ selectedExecution.errorMessage }}</dd>
+          </div>
+          <div v-if="selectedExecution.outputPath" class="execution-detail-wide">
+            <dt>备份目录</dt>
+            <dd class="execution-detail-pre">{{ selectedExecution.outputPath }}</dd>
+          </div>
+        </dl>
+      </div>
+      <template #footer>
+        <button type="button" class="btn" @click="executionDetailsVisible = false">关闭</button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="min(620px, calc(100vw - 32px))" destroy-on-close>
       <div class="backup-form">
@@ -323,6 +410,8 @@ const loading = ref(false)
 const saving = ref(false)
 const retentionSaving = ref(false)
 const dialogVisible = ref(false)
+const executionDetailsVisible = ref(false)
+const selectedExecutionId = ref<number | null>(null)
 const dialogMode = ref<DialogMode>('task')
 const editingId = ref<number | null>(null)
 const activeTab = ref<BackupTab>('tasks')
@@ -346,6 +435,9 @@ const retention = reactive<BackupRetentionSettings>({
 })
 
 const dialogTitle = computed(() => dialogMode.value === 'run' ? '立即备份' : editingId.value ? '编辑备份任务' : '新建备份任务')
+const selectedExecution = computed(
+  () => executions.value.find(execution => execution.id === selectedExecutionId.value) ?? null,
+)
 const pathStatusText = computed(() => !pathInfo.value ? '正在检查' : pathInfo.value.writable ? '可写入' : pathInfo.value.exists ? '无写入权限' : '目录未挂载')
 const pathStatusClass = computed(() => pathInfo.value?.writable ? 'path-ready' : 'path-error')
 const retentionDescription = computed(() => {
@@ -545,6 +637,15 @@ const formatBytes = (value: number | null) => {
   }
   return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`
 }
+const formatExecutionText = (value: string | null) => {
+  if (!value) return ''
+  return value
+    .replace(/(\d+)\s*\/\s*(\d+)\s*字节/g, (_match, copied, total) => {
+      return formatBytes(Number(copied)) + ' / ' + formatBytes(Number(total))
+    })
+    .replace(/(\d+)\s*字节/g, (_match, bytes) => formatBytes(Number(bytes)))
+}
+
 const statusLabel = (status: BackupExecution['status']) => ({
   QUEUED: '排队中',
   RUNNING: '执行中',
@@ -568,6 +669,11 @@ const fallbackStage = (status: BackupExecution['status']) => ({
 const displayProgress = (execution: BackupExecution) => {
   if (execution.status === 'SUCCESS') return 100
   return Math.max(0, Math.min(100, execution.progressPercent ?? 0))
+}
+
+const openExecutionDetails = (execution: BackupExecution) => {
+  selectedExecutionId.value = execution.id
+  executionDetailsVisible.value = true
 }
 
 onMounted(() => {
@@ -844,30 +950,47 @@ onBeforeUnmount(() => {
 
 .task-schedule-cell strong,
 .task-schedule-cell small,
-.execution-details-cell strong,
 .execution-details-cell small {
   display: block;
 }
 
-.task-schedule-cell strong,
-.execution-details-cell strong {
+.task-schedule-cell strong {
   color: var(--text-primary);
   font-size: 11px;
+}
+
+.execution-summary-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.execution-summary-heading > strong {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .execution-progress-heading {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 7px;
+  margin-top: 4px;
   color: var(--text-primary);
   font-size: 10px;
   font-weight: 700;
 }
 
 .execution-progress-track {
-  height: 6px;
-  margin-top: 5px;
+  height: 4px;
+  margin-top: 3px;
   overflow: hidden;
   border-radius: 999px;
   background: color-mix(in srgb, var(--text-secondary) 16%, transparent);
@@ -884,6 +1007,88 @@ onBeforeUnmount(() => {
 .execution-progress-track.is-indeterminate > span {
   width: 38% !important;
   animation: backup-progress-slide 1.2s ease-in-out infinite alternate;
+}
+
+.execution-detail-button {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+.execution-detail-progress-track {
+  max-width: 220px;
+}
+
+.execution-detail-content {
+  display: grid;
+  gap: 18px;
+}
+
+.execution-detail-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px 14px;
+  padding: 15px 16px;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--border-color));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--primary-color) 5%, var(--surface-card));
+}
+
+.execution-detail-summary .backup-section-kicker {
+  grid-column: 1 / -1;
+}
+
+.execution-detail-summary > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.execution-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--border-color);
+}
+
+.execution-detail-grid > div {
+  min-width: 0;
+  padding: 13px 15px;
+  background: var(--surface-card);
+}
+
+.execution-detail-grid dt {
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.execution-detail-grid dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.execution-detail-grid .execution-detail-wide {
+  grid-column: 1 / -1;
+}
+
+.execution-detail-pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.execution-detail-pre.is-error {
+  color: var(--danger, #cf3f46);
 }
 
 @keyframes backup-progress-slide {
@@ -921,8 +1126,14 @@ onBeforeUnmount(() => {
 }
 
 .execution-details-cell {
-  min-width: 230px;
-  max-width: 360px;
+  min-width: 245px;
+  max-width: 350px;
+}
+
+.backup-execution-table th,
+.backup-execution-table td {
+  padding-top: 9px;
+  padding-bottom: 9px;
 }
 
 .execution-details-cell code,
@@ -1203,6 +1414,14 @@ onBeforeUnmount(() => {
 
   .backup-hero {
     grid-template-columns: 1fr;
+  }
+
+  .execution-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .execution-detail-grid .execution-detail-wide {
+    grid-column: auto;
   }
 
   .backup-hero-actions {

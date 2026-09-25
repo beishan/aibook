@@ -432,7 +432,7 @@ public class BackupService {
                 long size = Files.size(dump);
                 fileCount[0]++;
                 totalBytes[0] += size;
-                details.add("PostgreSQL 数据库：database.dump，" + size + " 字节");
+                details.add("PostgreSQL 数据库：database.dump，" + formatBytes(size));
                 completedStages++;
                 updateExecutionProgress(executionId, BackupExecution.Status.RUNNING,
                         "数据库导出完成", "PostgreSQL 数据库导出完成",
@@ -444,7 +444,7 @@ public class BackupService {
                 copyDirectory(executionId, "复制书籍文件", Path.of(booksPath),
                         output.resolve("books"), completedStages, totalStages, fileCount, totalBytes);
                 details.add("书籍文件：" + (fileCount[0] - beforeFiles) + " 个文件，"
-                        + (totalBytes[0] - beforeBytes) + " 字节");
+                        + formatBytes(totalBytes[0] - beforeBytes));
                 completedStages++;
             }
             if (config.uploadsEnabled()) {
@@ -453,7 +453,7 @@ public class BackupService {
                 copyDirectory(executionId, "复制用户上传文件", Path.of(uploadPath),
                         output.resolve("uploads"), completedStages, totalStages, fileCount, totalBytes);
                 details.add("用户上传文件：" + (fileCount[0] - beforeFiles) + " 个文件，"
-                        + (totalBytes[0] - beforeBytes) + " 字节");
+                        + formatBytes(totalBytes[0] - beforeBytes));
                 completedStages++;
             }
             if (config.crawlerDataEnabled()) {
@@ -462,7 +462,7 @@ public class BackupService {
                 copyDirectory(executionId, "复制采集数据文件", Path.of(crawlerPath),
                         output.resolve("crawler-data"), completedStages, totalStages, fileCount, totalBytes);
                 details.add("采集数据文件：" + (fileCount[0] - beforeFiles) + " 个文件，"
-                        + (totalBytes[0] - beforeBytes) + " 字节");
+                        + formatBytes(totalBytes[0] - beforeBytes));
                 completedStages++;
             }
             updateExecution(executionId, BackupExecution.Status.SUCCESS,
@@ -622,7 +622,21 @@ public class BackupService {
 
     private String copyProgressDetail(DirectoryStats stats, long copiedFiles, long copiedBytes) {
         return "已复制 " + copiedFiles + "/" + stats.fileCount() + " 个文件，"
-                + copiedBytes + "/" + stats.totalBytes() + " 字节";
+                + formatBytes(copiedBytes) + " / " + formatBytes(stats.totalBytes());
+    }
+
+    private String formatBytes(long bytes) {
+        String[] units = {"B", "KB", "MB", "GB", "TB"};
+        double size = Math.max(0, bytes);
+        int unitIndex = 0;
+        while (size >= 1024 && unitIndex < units.length - 1) {
+            size /= 1024;
+            unitIndex++;
+        }
+        String formattedSize = size >= 10 || unitIndex == 0
+                ? String.format(java.util.Locale.ROOT, "%.0f", size)
+                : String.format(java.util.Locale.ROOT, "%.1f", size);
+        return formattedSize + " " + units[unitIndex];
     }
 
     private final class ProgressReporter {
