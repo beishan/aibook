@@ -82,6 +82,18 @@
       <el-table v-if="discoveryViewMode==='table'" v-loading="discoveryLoading" :data="discoveredBooks" class="data-table" @selection-change="selectedDiscoveries=$event">
         <el-table-column type="selection" width="48" fixed="left" />
         <el-table-column label="收藏" width="58" fixed="left" align="center"><template #default="{row}"><el-button size="small" circle :icon="row.favorite?StarFilled:Star" class="favorite-action row-hover-action" :class="{'is-favorite':row.favorite}" :aria-label="row.favorite?'取消收藏':'加入收藏'" :title="row.favorite?'取消收藏':'加入收藏'" @click.stop="toggleFavorite(row)"/></template></el-table-column>
+        <el-table-column label="快捷操作" width="88" fixed="left" align="center">
+          <template #default="{row}">
+            <el-button
+              size="small"
+              type="primary"
+              plain
+              :loading="submittingBookTaskIds.has(row.id)"
+              :disabled="isBookTaskActive(row)"
+              @click.stop="crawlDiscovered(row)"
+            >采集</el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="书籍" min-width="260"><template #default="{row}"><div class="book-cell"><div class="mini-cover">{{ row.bookName.slice(0,1) }}</div><div><strong>{{ row.bookName }}</strong><p>{{ row.author || '未知作者' }} · {{ row.siteName }}</p></div></div></template></el-table-column>
         <el-table-column label="发现页" width="160"><template #default="{row}"><el-tag v-if="row.discoveryPageName" size="small" effect="plain">{{ row.discoveryPageName }}</el-tag><span v-else class="muted-text">站点首页 / 未记录</span></template></el-table-column>
         <el-table-column label="分类 / 标签" min-width="190"><template #default="{row}"><div class="crawler-book-tag-list table-tags"><el-tag v-if="row.category" size="small" type="info" effect="plain">{{ row.category }}</el-tag><el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag><span v-if="!row.category&&!row.tags?.length">暂无</span></div></template></el-table-column>
@@ -94,8 +106,8 @@
         <div class="discovery-card-grid">
           <article v-for="book in discoveredBooks" :key="book.id" class="discovery-card" :class="{selected:isDiscoverySelected(book)}">
             <div class="discovery-card-action-overlay" role="group" :aria-label="`${book.bookName}快捷操作`" @click.stop>
-              <el-button size="small" type="primary" @click="crawlDiscovered(book)">采集</el-button>
               <el-button size="small" circle :icon="book.favorite?StarFilled:Star" class="favorite-action" :class="{'is-favorite':book.favorite}" :aria-label="book.favorite?'取消收藏':'加入收藏'" :title="book.favorite?'取消收藏':'加入收藏'" @click="toggleFavorite(book)"/>
+              <el-button size="small" type="primary" :loading="submittingBookTaskIds.has(book.id)" :disabled="isBookTaskActive(book)" @click="crawlDiscovered(book)">采集</el-button>
               <el-button size="small" @click="batchDiscovery('IGNORED',[book.id])">忽略</el-button>
               <el-dropdown trigger="click" placement="bottom-end" popper-class="discovery-more-popper" @command="handleDiscoveryCardMore($event,book)">
                 <el-button size="small" aria-label="更多操作">更多</el-button>
@@ -132,18 +144,6 @@
       <el-table v-if="bookViewMode==='table'" ref="bookTableRef" v-loading="bookLoading" :data="books" row-key="id" @selection-change="selectedBooks=$event" @row-click="handleBookTableRowClick" class="data-table">
         <el-table-column type="selection" width="48" reserve-selection fixed="left" />
         <el-table-column label="收藏" width="58" fixed="left" align="center"><template #default="{row}"><el-button size="small" circle :icon="row.favorite?StarFilled:Star" class="favorite-action row-hover-action" :class="{'is-favorite':row.favorite}" :aria-label="row.favorite?'取消收藏':'加入收藏'" :title="row.favorite?'取消收藏':'加入收藏'" @click.stop="toggleFavorite(row)"/></template></el-table-column>
-        <el-table-column label="快捷操作" width="88" fixed="left" align="center">
-          <template #default="{row}">
-            <el-button
-              size="small"
-              type="primary"
-              plain
-              :loading="submittingBookTaskIds.has(row.id)"
-              :disabled="isBookTaskActive(row)"
-              @click.stop="continueCrawl(row)"
-            >采集</el-button>
-          </template>
-        </el-table-column>
         <el-table-column label="书籍" min-width="260"><template #default="{row}"><div class="book-cell"><div class="mini-cover">{{ row.bookName.slice(0,1) }}</div><div><strong>{{ row.bookName }}</strong><p>{{ row.author || '未知作者' }} · {{ row.siteName }}</p></div></div></template></el-table-column>
         <el-table-column label="分类 / 标签" min-width="210"><template #default="{row}"><div class="crawler-book-tag-list table-tags"><el-tag v-if="row.category" size="small" type="info" effect="plain">{{ row.category }}</el-tag><el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag><span v-if="!row.category&&!row.tags?.length">暂无</span></div></template></el-table-column>
         <el-table-column label="进度 / 采集结果" min-width="250"><template #default="{row}"><div v-if="isBookCompleted(row)" class="book-crawl-result table-result"><div><span>采集结果</span><strong>采集完成</strong></div><small>正文 {{ row.crawledChapterCount }} · 待开放 {{ row.pendingReleaseChapterCount }} · 失败 {{ row.failedChapterCount }}</small><el-button text type="primary" size="small" @click.stop="openBook(row)">采集结果详情</el-button></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(row)}" :percentage="progress(row)" :stroke-width="7" /><small>正文 {{ row.crawledChapterCount }}，待开放 {{ row.pendingReleaseChapterCount }} / 共 {{ row.chapterCount }} 章</small></template></template></el-table-column>
@@ -158,8 +158,8 @@
         <div class="discovery-card-grid">
           <article v-for="book in books" :key="book.id" class="discovery-card crawler-book-card" :class="{selected:isBookSelected(book)}" @click="openBook(book)">
             <div class="discovery-card-action-overlay crawler-book-action-overlay" role="group" :aria-label="`${book.bookName}快捷操作`" @click.stop>
+              <el-button size="small" type="primary" :disabled="isBookTaskActive(book)" @click="continueCrawl(book)">{{ isBookTaskActive(book)?'任务中':'继续' }}</el-button>
               <el-button size="small" circle :icon="book.favorite?StarFilled:Star" class="favorite-action" :class="{'is-favorite':book.favorite}" :aria-label="book.favorite?'取消收藏':'加入收藏'" :title="book.favorite?'取消收藏':'加入收藏'" @click="toggleFavorite(book)"/>
-              <el-button size="small" type="primary" :loading="submittingBookTaskIds.has(book.id)" :disabled="isBookTaskActive(book)" @click="continueCrawl(book)">{{ isBookTaskActive(book)?'任务中':'采集' }}</el-button>
               <el-button size="small" :disabled="!book.crawledChapterCount" @click="startTrial(book)">试读</el-button>
               <el-dropdown trigger="click" placement="bottom-end" popper-class="discovery-more-popper" @command="handleCrawlerBookCardMore($event,book)">
                 <el-button size="small" aria-label="更多操作">更多</el-button>
@@ -1051,7 +1051,18 @@ async function exportRule(rule:CrawlerRuleVersion){if(!ruleSite.value)return;con
 function openImportDialog(){importMode.value='text';importJsonText.value='';importFileName.value='';ruleImportDialog.value=true}
 async function handleImportFile(event:Event){const input=event.target as HTMLInputElement,file=input.files?.[0];input.value='';if(!file)return;importFileName.value=file.name;importJsonText.value=await file.text()}
 async function submitRuleImport(){if(!ruleSite.value||!importJsonText.value.trim())return;let data:CrawlerRuleExport;try{data=JSON.parse(importJsonText.value) as CrawlerRuleExport}catch{return message.error('JSON 字符串格式不正确，请检查后重试')}saving.value=true;try{await crawlerApi.importRule(ruleSite.value.id,{...data,enabled:false});message.success(`规则 v${data.version} 已导入（默认禁用）`);ruleImportDialog.value=false;await reloadRules()}finally{saving.value=false}}
-async function crawlDiscovered(book:CrawlerBook){await crawlerApi.batchCrawl([book.id]);message.success('采集任务已创建');await refresh()}
+async function crawlDiscovered(book:CrawlerBook){
+  if(isBookTaskActive(book))return
+  setBookTaskSubmitting(book.id,true)
+  try{
+    const createdTasks=await crawlerApi.batchCrawl([book.id])
+    const taskIds=new Set(createdTasks.map(task=>task.id))
+    currentCrawlerTasks.value=[...createdTasks,...currentCrawlerTasks.value.filter(task=>!taskIds.has(task.id))]
+    message.success('采集任务已创建')
+    await refresh()
+  }catch(error:any){message.error(error.response?.data?.message||'创建采集任务失败')}
+  finally{setBookTaskSubmitting(book.id,false)}
+}
 async function batchCrawl(){await crawlerApi.batchCrawl(selectedDiscoveries.value.map(b=>b.id));message.success(`已创建 ${selectedDiscoveries.value.length} 个采集任务`);await refresh()}
 async function batchDiscovery(status:'IGNORED'|'BLACKLISTED',ids=selectedDiscoveries.value.map(b=>b.id)){if(!ids.length)return;await crawlerApi.setDiscoveryStatus(ids,status);message.success(status==='IGNORED'?'已忽略所选书籍':'已加入黑名单，后续扫描不会重新收录');await refresh()}
 function handleDiscoveryCardMore(command:string,book:CrawlerBook){if(command==='details')void openBook(book);else if(command==='book-lists')void openCrawlerBookLists(book);else if(command==='website')window.open(book.bookUrl,'_blank','noopener,noreferrer');else if(command==='metadata')void refreshBookMetadata(book);else if(command==='ignore')void batchDiscovery('IGNORED',[book.id]);else if(command==='blacklist')void batchDiscovery('BLACKLISTED',[book.id])}
