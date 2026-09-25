@@ -1,6 +1,7 @@
 package com.aibook.controller;
 
 import com.aibook.dto.backup.BackupExecutionView;
+import com.aibook.dto.backup.BackupRetentionSettings;
 import com.aibook.dto.backup.BackupTaskRequest;
 import com.aibook.dto.backup.BackupTaskView;
 import com.aibook.service.BackupService;
@@ -30,6 +31,17 @@ public class BackupController {
     @GetMapping("/path")
     public ResponseEntity<BackupService.BackupPathView> path() {
         return ResponseEntity.ok(backupService.path());
+    }
+
+    @GetMapping("/retention")
+    public ResponseEntity<BackupRetentionSettings> retentionSettings() {
+        return ResponseEntity.ok(backupService.retentionSettings());
+    }
+
+    @PutMapping("/retention")
+    public ResponseEntity<BackupRetentionSettings> updateRetentionSettings(
+            @RequestBody BackupRetentionSettings request) {
+        return ResponseEntity.ok(backupService.updateRetentionSettings(request));
     }
 
     @GetMapping("/tasks")

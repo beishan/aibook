@@ -1,6 +1,7 @@
 package com.aibook.service;
 
 import com.aibook.dto.backup.BackupExecutionView;
+import com.aibook.dto.backup.BackupRetentionSettings;
 import com.aibook.dto.backup.BackupTaskRequest;
 import com.aibook.dto.backup.BackupTaskView;
 import com.aibook.model.entity.BackupExecution;
@@ -13,14 +14,20 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -36,19 +43,29 @@ public class BackupService {
 
     private static final DateTimeFormatter RUN_STAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+    private static final Pattern BACKUP_DIRECTORY_PATTERN =
+            Pattern.compile("^aibook-(\\d{8})-(\\d{6})-(\\d+)$");
+    private static final DateTimeFormatter DIRECTORY_STAMP =
+            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+    private static final String RETENTION_ENABLED_KEY = "backup.retention.enabled";
+    private static final String RETENTION_RECENT_DAYS_KEY = "backup.retention.recent-days";
+    private static final String RETENTION_MONTHLY_MONTHS_KEY = "backup.retention.monthly-months";
     private static final Logger log = LoggerFactory.getLogger(BackupService.class);
 
     private final BackupTaskRepository taskRepository;
     private final BackupExecutionRepository executionRepository;
+    private final SystemConfigService systemConfigService;
     @Qualifier("backupExecutor")
     private final Executor backupExecutor;
 
     public BackupService(
             BackupTaskRepository taskRepository,
             BackupExecutionRepository executionRepository,
+            SystemConfigService systemConfigService,
             @Qualifier("backupExecutor") Executor backupExecutor) {
         this.taskRepository = taskRepository;
         this.executionRepository = executionRepository;
+        this.systemConfigService = systemConfigService;
         this.backupExecutor = backupExecutor;
     }
 
@@ -89,6 +106,174 @@ public class BackupService {
         Path root = Path.of(backupPath);
         return new BackupPathView(backupHostPath, Files.isDirectory(root), Files.isWritable(root));
     }
+
+    public BackupRetentionSettings retentionSettings() {
+        return new BackupRetentionSettings(
+                systemConfigService.getBooleanConfig(RETENTION_ENABLED_KEY, false),
+                boundedConfig(RETENTION_RECENT_DAYS_KEY, 7, 1, 3650),
+                boundedConfig(RETENTION_MONTHLY_MONTHS_KEY, 12, 0, 120));
+    }
+
+    @Transactional
+    public BackupRetentionSettings updateRetentionSettings(BackupRetentionSettings request) {
+        if (request == null) throw new IllegalArgumentException("请填写备份保留设置");
+        if (request.recentDays() < 1 || request.recentDays() > 3650) {
+            throw new IllegalArgumentException("最近备份保留天数必须在 1 到 3650 天之间");
+        }
+        if (request.monthlyMonths() < 0 || request.monthlyMonths() > 120) {
+            throw new IllegalArgumentException("月度备份保留月数必须在 0 到 120 个月之间");
+        }
+        systemConfigService.saveConfigs(Map.of(
+                RETENTION_ENABLED_KEY, Boolean.toString(request.enabled()),
+                RETENTION_RECENT_DAYS_KEY, Integer.toString(request.recentDays()),
+                RETENTION_MONTHLY_MONTHS_KEY, Integer.toString(request.monthlyMonths())));
+        return request;
+    }
+
+    @Scheduled(cron = "${backup.retention-cron:0 15 4 * * *}")
+    public void cleanExpiredBackups() {
+        BackupRetentionSettings settings = retentionSettings();
+        if (!settings.enabled()) return;
+
+        Path root = Path.of(backupPath);
+        if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)
+                || !Files.isWritable(root)) {
+            log.warn("跳过备份保留清理，目录不可用或不可写：{}", root);
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime recentCutoff = now.minusDays(settings.recentDays());
+        YearMonth currentMonth = YearMonth.from(now);
+        YearMonth earliestMonthlyMonth = settings.monthlyMonths() == 0
+                ? null : currentMonth.minusMonths(settings.monthlyMonths() - 1L);
+        List<BackupFolder> folders = findBackupFolders(root);
+        Map<YearMonth, BackupFolder> latestSuccessfulByMonth = new HashMap<>();
+
+        for (BackupFolder folder : folders) {
+            if (!folder.successful()) continue;
+            YearMonth month = YearMonth.from(folder.createdAt());
+            if (earliestMonthlyMonth == null || month.isBefore(earliestMonthlyMonth)) continue;
+            latestSuccessfulByMonth.merge(month, folder,
+                    (existing, candidate) -> candidate.createdAt().isAfter(existing.createdAt())
+                            ? candidate : existing);
+        }
+
+        for (BackupFolder folder : folders) {
+            if (!folder.createdAt().isBefore(recentCutoff)
+                    || folder.inProgress()
+                    || isMonthlyRestorePoint(folder, earliestMonthlyMonth, latestSuccessfulByMonth)) {
+                continue;
+            }
+            deleteBackupFolder(folder);
+        }
+    }
+
+    private int boundedConfig(String key, int defaultValue, int minimum, int maximum) {
+        int value = systemConfigService.getIntConfig(key, defaultValue);
+        return Math.max(minimum, Math.min(maximum, value));
+    }
+
+    private List<BackupFolder> findBackupFolders(Path root) {
+        List<BackupDirectory> directories = new ArrayList<>();
+        try (var entries = Files.list(root)) {
+            entries.filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
+                    .forEach(path -> parseBackupDirectory(path).ifPresent(directories::add));
+        } catch (IOException exception) {
+            log.warn("读取备份目录失败 path={}", root, exception);
+        }
+
+        Map<Long, BackupExecution> executionsById = new HashMap<>();
+        List<Long> executionIds = directories.stream().map(BackupDirectory::executionId).toList();
+        executionRepository.findAllById(executionIds)
+                .forEach(execution -> executionsById.put(execution.getId(), execution));
+
+        List<BackupFolder> folders = new ArrayList<>(directories.size());
+        for (BackupDirectory directory : directories) {
+            BackupExecution execution = executionsById.get(directory.executionId());
+            if (execution == null || !isRecordedBackupPath(directory.path(), execution)) continue;
+            boolean inProgress = execution.getStatus() == BackupExecution.Status.QUEUED
+                    || execution.getStatus() == BackupExecution.Status.RUNNING;
+            boolean successful = execution.getStatus() == BackupExecution.Status.SUCCESS;
+            folders.add(new BackupFolder(
+                    directory.path(), directory.createdAt(), execution, successful, inProgress));
+        }
+        return folders;
+    }
+
+    private boolean isRecordedBackupPath(Path directory, BackupExecution execution) {
+        if (execution.getOutputPath() == null || execution.getOutputPath().isBlank()) return false;
+        Path expectedPath = Path.of(backupHostPath)
+                .resolve(directory.getFileName())
+                .normalize();
+        return expectedPath.equals(Path.of(execution.getOutputPath()).normalize());
+    }
+
+    private java.util.Optional<BackupDirectory> parseBackupDirectory(Path path) {
+        Matcher matcher = BACKUP_DIRECTORY_PATTERN.matcher(path.getFileName().toString());
+        if (!matcher.matches()) return java.util.Optional.empty();
+        try {
+            LocalDateTime createdAt = LocalDateTime.parse(
+                    matcher.group(1) + "-" + matcher.group(2), DIRECTORY_STAMP);
+            long executionId = Long.parseLong(matcher.group(3));
+            return java.util.Optional.of(new BackupDirectory(path, createdAt, executionId));
+        } catch (RuntimeException exception) {
+            log.warn("跳过无法识别的备份目录：{}", path, exception);
+            return java.util.Optional.empty();
+        }
+    }
+
+    private boolean isMonthlyRestorePoint(
+            BackupFolder folder,
+            YearMonth earliestMonthlyMonth,
+            Map<YearMonth, BackupFolder> latestSuccessfulByMonth) {
+        if (!folder.successful() || earliestMonthlyMonth == null) return false;
+        YearMonth month = YearMonth.from(folder.createdAt());
+        if (month.isBefore(earliestMonthlyMonth)) return false;
+        BackupFolder latest = latestSuccessfulByMonth.get(month);
+        return latest != null && latest.path().equals(folder.path());
+    }
+
+    private void deleteBackupFolder(BackupFolder folder) {
+        try {
+            Files.walkFileTree(folder.path(), new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attributes)
+                        throws IOException {
+                    Files.delete(file);
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path directory, IOException exception)
+                        throws IOException {
+                    if (exception != null) throw exception;
+                    Files.delete(directory);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+            if (folder.execution() != null) {
+                BackupExecution execution = folder.execution();
+                execution.setOutputPath(null);
+                String previousDetails = execution.getDetails() == null ? "" : execution.getDetails();
+                execution.setDetails((previousDetails.isBlank() ? "" : previousDetails + "\n")
+                        + "备份文件已按保留策略清理");
+                executionRepository.save(execution);
+            }
+            log.info("已按保留策略清理备份目录：{}", folder.path());
+        } catch (IOException | RuntimeException exception) {
+            log.warn("清理备份目录失败 path={}", folder.path(), exception);
+        }
+    }
+
+    private record BackupFolder(
+            Path path,
+            LocalDateTime createdAt,
+            BackupExecution execution,
+            boolean successful,
+            boolean inProgress) {}
+
+    private record BackupDirectory(Path path, LocalDateTime createdAt, long executionId) {}
 
     @Transactional
     public BackupTaskView createTask(BackupTaskRequest request) {

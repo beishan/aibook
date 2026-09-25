@@ -38,8 +38,20 @@ export interface BackupPath {
   writable: boolean
 }
 
+export interface BackupRetentionSettings {
+  enabled: boolean
+  recentDays: number
+  monthlyMonths: number
+}
+
 export const backupApi = {
   path: () => api.get<BackupPath>('/api/system/backups/path').then(({ data }) => data),
+  retention: () => api
+    .get<BackupRetentionSettings>('/api/system/backups/retention')
+    .then(({ data }) => data),
+  updateRetention: (settings: BackupRetentionSettings) => api
+    .put<BackupRetentionSettings>('/api/system/backups/retention', settings)
+    .then(({ data }) => data),
   tasks: () => api.get<BackupTask[]>('/api/system/backups/tasks').then(({ data }) => data),
   executions: () => api
     .get<BackupExecution[]>('/api/system/backups/executions')
