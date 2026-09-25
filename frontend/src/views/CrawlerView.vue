@@ -215,8 +215,11 @@
           :key="`${activeTab}-${taskTableSelectionVersion}`"
           :tasks="activeTab === 'failed' ? failedTasks : tasks"
           :show-failure-reason="activeTab === 'failed'"
+          :prioritizing-task-id="queuedTaskPrioritizingId"
+          :batch-managing="batchTaskManaging"
           selectable
           @selection-change="handleTaskSelectionChange"
+          @prioritize="prioritizeQueuedTask"
           @open="openTask"
           @command="runTaskCommand"
           @edit="openTaskEditor"
@@ -600,7 +603,7 @@ interface BookListOption { id:number; name:string; description?:string }
 type TaskMoreCommand='scan-results'|'book-lists'|'edit'|'resume'|'delete'
 type TaskMoreAction={command:TaskMoreCommand;label:string;danger?:boolean;divided?:boolean}
 
-const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true},selectable:{type:Boolean,default:false},showFailureReason:{type:Boolean,default:false}}, emits:['open','command','edit','delete','scan-results','selection-change','toggle-favorite','book-lists'], setup(props,{emit}) {
+const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true},selectable:{type:Boolean,default:false},showFailureReason:{type:Boolean,default:false},prioritizingTaskId:{type:String,default:''},batchManaging:{type:Boolean,default:false}}, emits:['open','command','edit','delete','scan-results','selection-change','toggle-favorite','book-lists','prioritize'], setup(props,{emit}) {
   const moreActions=(row:CrawlerTask):TaskMoreAction[]=>[
     row.type==='SITE_SCAN'?{command:'scan-results',label:'扫描结果'}:null,
     row.bookId?{command:'book-lists',label:'加入书单'}:null,
@@ -636,6 +639,7 @@ const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask
     return h('div',{class:'task-action-cluster row-hover-action'},[
       h(ElButton,{size:'small',round:true,class:'task-action-button task-action-details',onClick:()=>emit('open',row)},()=> '详情'),
       ['RUNNING','WAITING'].includes(row.status)?h(ElButton,{size:'small',circle:true,icon:VideoPause,class:'task-action-button task-action-pause','aria-label':'暂停任务',title:'暂停任务',onClick:()=>emit('command',row,'pause')}):null,
+      row.status==='WAITING'?h(ElButton,{size:'small',round:true,class:'task-action-button task-action-prioritize',loading:props.prioritizingTaskId===row.id,disabled:props.batchManaging||Boolean(props.prioritizingTaskId&&props.prioritizingTaskId!==row.id),onClick:()=>emit('prioritize',row)},()=> '优先'):null,
       row.status==='PAUSED'?h(ElButton,{size:'small',circle:true,icon:VideoPlay,class:'task-action-button task-action-resume','aria-label':'继续任务',title:'继续任务',onClick:()=>emit('command',row,'resume')}):null,
       ['RUNNING','WAITING','PAUSED'].includes(row.status)?h(ElButton,{size:'small',round:true,class:'task-action-button task-action-cancel',onClick:()=>emit('command',row,'cancel')},()=> '取消'):null,
       actions.length?h(ElDropdown,{trigger:'click',placement:'bottom-end',onCommand:(command:TaskMoreCommand)=>handleMoreCommand(row,command)},{
@@ -879,7 +883,7 @@ function clampQueuedTaskPage(){queuedTaskPage.value=Math.min(queuedTaskPage.valu
 function handleQueuedTaskSizeChange(){queuedTaskPage.value=1;clampQueuedTaskPage()}
 async function loadQueuedTasks(options:LoadOptions={}){if(options.silent&&(queuedTaskDraggingId.value||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value))return;if(!options.silent)queuedTasksLoading.value=true;try{queuedTasks.value=orderCurrentTasks(await crawlerApi.currentTasks());clampQueuedTaskPage()}finally{if(!options.silent)queuedTasksLoading.value=false}}
 async function openQueuedTask(task:CrawlerTask){queuedTasksDialog.value=false;await openTask(task)}
-async function prioritizeQueuedTask(task:CrawlerTask){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value)return;queuedTaskPrioritizingId.value=task.id;try{await crawlerApi.prioritizeQueuedTask(task.id);message.success(`“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”已移到等待队列首位`);await Promise.all([loadQueuedTasks(),loadTasks({silent:true}),loadTaskQueueSettings()])}catch(error:any){message.error(error.response?.data?.message||'任务优先调整失败');await loadQueuedTasks()}finally{queuedTaskPrioritizingId.value=undefined}}
+async function prioritizeQueuedTask(task:CrawlerTask){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value||batchTaskManaging.value)return;queuedTaskPrioritizingId.value=task.id;try{await crawlerApi.prioritizeQueuedTask(task.id);message.success(`“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”已移到等待队列首位`);await Promise.all([loadQueuedTasks(),loadTasks({silent:true}),loadTaskQueueSettings()])}catch(error:any){message.error(error.response?.data?.message||'任务优先调整失败');await loadQueuedTasks()}finally{queuedTaskPrioritizingId.value=undefined}}
 async function commandCurrentTask(task:CrawlerTask,command:'pause'|'resume'|'cancel'){if(queuedTaskCommandId.value||queuedTasksReordering.value||queuedTaskPrioritizingId.value)return;queuedTaskCommandId.value=task.id;queuedTaskCommand.value=command;const actionLabel={pause:'暂停',resume:'继续',cancel:'取消'}[command];try{await crawlerApi.taskCommand(task.id,command);message.success(`“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”已${actionLabel}`);const [dashboardData]=await Promise.all([crawlerApi.dashboard(),loadQueuedTasks(),loadTasks({silent:true}),loadFailedTasks({silent:true}),loadTaskQueueSettings()]);dashboard.value=dashboardData}catch(error:any){message.error(error.response?.data?.message||`任务${actionLabel}失败，请稍后重试`);await loadQueuedTasks()}finally{queuedTaskCommandId.value=undefined;queuedTaskCommand.value=undefined}}
 function startQueuedTaskDrag(task:CrawlerTask,event:DragEvent){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskCommandId.value){event.preventDefault();return}queuedTaskDraggingId.value=task.id;queuedTaskDragStartOrder.value=queuedTasks.value.filter(item=>item.status==='WAITING').map(item=>item.id);if(event.dataTransfer){event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',task.id)}}
 function moveDraggedQueuedTask(target:CrawlerTask){const sourceIndex=queuedTasks.value.findIndex(item=>item.id===queuedTaskDraggingId.value),targetIndex=queuedTasks.value.findIndex(item=>item.id===target.id);if(sourceIndex<0||targetIndex<0||sourceIndex===targetIndex||target.status!=='WAITING'||queuedTasks.value[sourceIndex].status!=='WAITING'||queuedTasks.value[sourceIndex].priority!==target.priority)return;const next=[...queuedTasks.value],[source]=next.splice(sourceIndex,1);next.splice(targetIndex,0,source);queuedTasks.value=next}
@@ -1375,4 +1379,10 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 @media(max-width:620px){:deep(.chapter-reader-dialog){width:96vw!important}.chapter-reader-toolbar{align-items:flex-start}.chapter-reader-actions a{display:none}.chapter-reader-actions button span{display:none}.chapter-reader-stage{height:auto;min-height:0}.chapter-reader-surface article{width:calc(100% - 32px);padding:34px 0 60px}.chapter-reader-navigation{grid-template-columns:76px minmax(80px,1fr) 76px;gap:5px}.chapter-reader-navigation button small{display:none}}
 @media(prefers-reduced-motion:reduce){.chapter-reader-theme>span,.chapter-reader-progress i,.chapter-settings-slide-enter-active,.chapter-settings-slide-leave-active{transition:none}.chapter-reader-state i{animation:none}}
 :global(.chapter-reader-dialog){--el-dialog-padding-primary:0;height:80vh;height:80dvh;margin:10vh auto 0!important;overflow:hidden;border:0!important;border-radius:18px!important;background:transparent!important;box-shadow:none!important}:global(.chapter-reader-dialog .el-dialog__header){display:none}:global(.chapter-reader-dialog .el-dialog__body){height:100%;padding:0!important}.chapter-reader-heading{display:grid;min-width:0;gap:3px}.chapter-reader-heading strong{overflow:hidden;color:var(--reader-ink);font:600 16px/1.25 'Iowan Old Style','Songti SC',serif;text-overflow:ellipsis;white-space:nowrap}.chapter-reader-heading p span{color:var(--reader-accent);font-size:9px;font-weight:900;letter-spacing:.12em}.chapter-reader-actions .chapter-reader-close{display:grid;width:32px;height:32px;padding:0;place-items:center;font-size:21px;font-weight:400;line-height:1}
+:deep(.task-action-prioritize) { color: var(--primary); }
+:deep(.task-action-prioritize:hover),
+:deep(.task-action-prioritize:focus-visible) {
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+}
 </style>
