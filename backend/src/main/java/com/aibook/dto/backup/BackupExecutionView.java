@@ -10,6 +10,9 @@ public record BackupExecutionView(
         String status,
         String contents,
         String details,
+        String currentStage,
+        Integer progressPercent,
+        String progressDetail,
         String outputPath,
         String errorMessage,
         Long fileSizeBytes,
@@ -21,6 +24,8 @@ public record BackupExecutionView(
         return new BackupExecutionView(
                 execution.getId(), execution.getTaskId(), execution.getTaskName(),
                 execution.getStatus().name(), execution.getContents(), execution.getDetails(),
+                execution.getCurrentStage(), execution.getProgressPercent(),
+                execution.getProgressDetail(),
                 execution.getOutputPath(), execution.getErrorMessage(),
                 execution.getFileSizeBytes(), execution.getFileCount(),
                 execution.getStartedAt(), execution.getFinishedAt());

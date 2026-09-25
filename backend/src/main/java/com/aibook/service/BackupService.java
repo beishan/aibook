@@ -10,13 +10,16 @@ import com.aibook.repository.BackupExecutionRepository;
 import com.aibook.repository.BackupTaskRepository;
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -339,6 +342,9 @@ public class BackupService {
         execution.setStatus(BackupExecution.Status.QUEUED);
         execution.setContents(contentNames(request));
         execution.setDetails("备份任务已排队");
+        execution.setCurrentStage("排队中");
+        execution.setProgressPercent(0);
+        execution.setProgressDetail("等待备份执行器");
         executionRepository.saveAndFlush(execution);
         submitExecution(execution, request);
         return BackupExecutionView.from(execution);
@@ -388,6 +394,9 @@ public class BackupService {
         execution.setStatus(BackupExecution.Status.QUEUED);
         execution.setContents(contentNames(task));
         execution.setDetails("备份任务已排队");
+        execution.setCurrentStage("排队中");
+        execution.setProgressPercent(0);
+        execution.setProgressDetail("等待备份执行器");
         return execution;
     }
 
@@ -403,42 +412,58 @@ public class BackupService {
         List<String> details = new ArrayList<>();
         long[] fileCount = {0};
         long[] totalBytes = {0};
+        int totalStages = selectedContentCount(config);
+        int completedStages = 0;
         try {
-            updateExecution(executionId, BackupExecution.Status.RUNNING,
-                    "备份正在执行", null, null, 0, 0);
+            updateExecutionProgress(executionId, BackupExecution.Status.RUNNING,
+                    "准备备份目录", "正在检查备份目录并创建执行目录", 0, 0, 0);
             ensureBackupPath();
             String stamp = LocalDateTime.now().format(RUN_STAMP);
             output = Files.createDirectories(Path.of(backupPath))
                     .resolve("aibook-" + stamp + "-" + executionId);
             Files.createDirectory(output);
             if (config.databaseEnabled()) {
+                updateExecutionProgress(executionId, BackupExecution.Status.RUNNING,
+                        "导出 PostgreSQL 数据库",
+                        "pg_dump 正在导出；数据库导出期间无法准确估算百分比",
+                        overallProgress(completedStages, 0, totalStages), fileCount[0], totalBytes[0]);
                 Path dump = output.resolve("database.dump");
                 dumpDatabase(dump);
                 long size = Files.size(dump);
                 fileCount[0]++;
                 totalBytes[0] += size;
                 details.add("PostgreSQL 数据库：database.dump，" + size + " 字节");
+                completedStages++;
+                updateExecutionProgress(executionId, BackupExecution.Status.RUNNING,
+                        "数据库导出完成", "PostgreSQL 数据库导出完成",
+                        overallProgress(completedStages, 0, totalStages), fileCount[0], totalBytes[0]);
             }
             if (config.booksEnabled()) {
                 long beforeFiles = fileCount[0];
                 long beforeBytes = totalBytes[0];
-                copyDirectory(Path.of(booksPath), output.resolve("books"), fileCount, totalBytes);
+                copyDirectory(executionId, "复制书籍文件", Path.of(booksPath),
+                        output.resolve("books"), completedStages, totalStages, fileCount, totalBytes);
                 details.add("书籍文件：" + (fileCount[0] - beforeFiles) + " 个文件，"
                         + (totalBytes[0] - beforeBytes) + " 字节");
+                completedStages++;
             }
             if (config.uploadsEnabled()) {
                 long beforeFiles = fileCount[0];
                 long beforeBytes = totalBytes[0];
-                copyDirectory(Path.of(uploadPath), output.resolve("uploads"), fileCount, totalBytes);
+                copyDirectory(executionId, "复制用户上传文件", Path.of(uploadPath),
+                        output.resolve("uploads"), completedStages, totalStages, fileCount, totalBytes);
                 details.add("用户上传文件：" + (fileCount[0] - beforeFiles) + " 个文件，"
                         + (totalBytes[0] - beforeBytes) + " 字节");
+                completedStages++;
             }
             if (config.crawlerDataEnabled()) {
                 long beforeFiles = fileCount[0];
                 long beforeBytes = totalBytes[0];
-                copyDirectory(Path.of(crawlerPath), output.resolve("crawler-data"), fileCount, totalBytes);
+                copyDirectory(executionId, "复制采集数据文件", Path.of(crawlerPath),
+                        output.resolve("crawler-data"), completedStages, totalStages, fileCount, totalBytes);
                 details.add("采集数据文件：" + (fileCount[0] - beforeFiles) + " 个文件，"
                         + (totalBytes[0] - beforeBytes) + " 字节");
+                completedStages++;
             }
             updateExecution(executionId, BackupExecution.Status.SUCCESS,
                     String.join("\n", details), displayPath(output), null, fileCount[0], totalBytes[0]);
@@ -456,6 +481,21 @@ public class BackupService {
                     fileCount[0], totalBytes[0]);
             if (output != null) writeManifest(output, config, details, fileCount[0], totalBytes[0]);
         }
+    }
+
+    private int selectedContentCount(BackupTaskRequest config) {
+        int count = 0;
+        if (config.databaseEnabled()) count++;
+        if (config.booksEnabled()) count++;
+        if (config.uploadsEnabled()) count++;
+        if (config.crawlerDataEnabled()) count++;
+        return count;
+    }
+
+    private int overallProgress(int completedStages, int currentStagePercent, int totalStages) {
+        if (totalStages <= 0) return 0;
+        double completed = completedStages + Math.max(0, Math.min(100, currentStagePercent)) / 100.0;
+        return Math.min(99, (int) Math.floor(completed * 100 / totalStages));
     }
 
     private void dumpDatabase(Path destination) throws IOException, InterruptedException {
@@ -491,12 +531,27 @@ public class BackupService {
         return new DatabaseAddress(uri.getHost(), uri.getPort() > 0 ? uri.getPort() : 5432, database);
     }
 
-    private void copyDirectory(Path source, Path destination, long[] fileCount, long[] totalBytes)
-            throws IOException {
+    private void copyDirectory(
+            long executionId,
+            String stage,
+            Path source,
+            Path destination,
+            int completedStages,
+            int totalStages,
+            long[] fileCount,
+            long[] totalBytes) throws IOException {
         if (!Files.isDirectory(source) || !Files.isReadable(source)) {
             throw new IOException("源目录不存在或不可读：" + source);
         }
+
+        ProgressReporter reporter = new ProgressReporter(
+                executionId, stage, completedStages, totalStages, fileCount, totalBytes);
+        DirectoryStats stats = scanDirectory(source, reporter);
         Files.createDirectories(destination);
+        long[] copiedFileCount = {0};
+        long[] copiedBytes = {0};
+        reporter.update(0, "扫描完成，共 " + stats.fileCount() + " 个文件，开始复制", true);
+
         Files.walkFileTree(source, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attrs)
@@ -509,13 +564,104 @@ public class BackupService {
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                 if (!attrs.isRegularFile()) return FileVisitResult.CONTINUE;
                 Path target = destination.resolve(source.relativize(file).toString());
-                Files.copy(file, target);
+                try (InputStream input = Files.newInputStream(file);
+                        OutputStream output = Files.newOutputStream(target,
+                                StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+                    byte[] buffer = new byte[1024 * 1024];
+                    int bytesRead;
+                    while ((bytesRead = input.read(buffer)) != -1) {
+                        output.write(buffer, 0, bytesRead);
+                        copiedBytes[0] += bytesRead;
+                        totalBytes[0] += bytesRead;
+                        reporter.update(copyProgress(stats, copiedFileCount[0], copiedBytes[0]),
+                                copyProgressDetail(stats, copiedFileCount[0], copiedBytes[0]), false);
+                    }
+                }
                 fileCount[0]++;
-                totalBytes[0] += attrs.size();
+                copiedFileCount[0]++;
+                reporter.update(copyProgress(stats, copiedFileCount[0], copiedBytes[0]),
+                        copyProgressDetail(stats, copiedFileCount[0], copiedBytes[0]), false);
                 return FileVisitResult.CONTINUE;
             }
         });
+        reporter.update(100, "复制完成，共 " + copiedFileCount[0] + " 个文件", true);
     }
+
+    private DirectoryStats scanDirectory(Path source, ProgressReporter reporter) throws IOException {
+        long[] fileCount = {0};
+        long[] totalBytes = {0};
+        long[] lastReportAt = {System.currentTimeMillis()};
+        reporter.update(0, "正在扫描源目录以估算复制进度", true);
+        Files.walkFileTree(source, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+                if (attributes.isRegularFile()) {
+                    fileCount[0]++;
+                    totalBytes[0] += attributes.size();
+                    long now = System.currentTimeMillis();
+                    if (now - lastReportAt[0] >= 1000) {
+                        reporter.update(0, "扫描中，已发现 " + fileCount[0] + " 个文件", true);
+                        lastReportAt[0] = now;
+                    }
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        return new DirectoryStats(fileCount[0], totalBytes[0]);
+    }
+
+    private int copyProgress(DirectoryStats stats, long copiedFiles, long copiedBytes) {
+        if (stats.totalBytes() > 0) {
+            return (int) Math.min(100, copiedBytes * 100 / stats.totalBytes());
+        }
+        if (stats.fileCount() > 0) {
+            return (int) Math.min(100, copiedFiles * 100 / stats.fileCount());
+        }
+        return 100;
+    }
+
+    private String copyProgressDetail(DirectoryStats stats, long copiedFiles, long copiedBytes) {
+        return "已复制 " + copiedFiles + "/" + stats.fileCount() + " 个文件，"
+                + copiedBytes + "/" + stats.totalBytes() + " 字节";
+    }
+
+    private final class ProgressReporter {
+        private final long executionId;
+        private final String stage;
+        private final int completedStages;
+        private final int totalStages;
+        private final long[] fileCount;
+        private final long[] totalBytes;
+        private int lastPercent = -1;
+        private long lastUpdateAt;
+
+        private ProgressReporter(
+                long executionId,
+                String stage,
+                int completedStages,
+                int totalStages,
+                long[] fileCount,
+                long[] totalBytes) {
+            this.executionId = executionId;
+            this.stage = stage;
+            this.completedStages = completedStages;
+            this.totalStages = totalStages;
+            this.fileCount = fileCount;
+            this.totalBytes = totalBytes;
+        }
+
+        private void update(int stagePercent, String detail, boolean force) {
+            int percent = overallProgress(completedStages, stagePercent, totalStages);
+            long now = System.currentTimeMillis();
+            if (!force && percent == lastPercent && now - lastUpdateAt < 1000) return;
+            updateExecutionProgress(executionId, BackupExecution.Status.RUNNING,
+                    stage, detail, percent, fileCount[0], totalBytes[0]);
+            lastPercent = percent;
+            lastUpdateAt = now;
+        }
+    }
+
+    private record DirectoryStats(long fileCount, long totalBytes) {}
 
     @Transactional
     protected void updateExecution(
@@ -534,6 +680,36 @@ public class BackupService {
         } else if (status == BackupExecution.Status.SUCCESS
                 || status == BackupExecution.Status.FAILED) {
             execution.setFinishedAt(LocalDateTime.now());
+            String stage = execution.getCurrentStage();
+            execution.setCurrentStage(status == BackupExecution.Status.SUCCESS
+                    ? "备份完成"
+                    : stage == null ? "备份失败" : "失败于：" + stage);
+            execution.setProgressDetail(status == BackupExecution.Status.SUCCESS
+                    ? "所有备份内容均已完成"
+                    : (error == null ? "备份未能完成" : error));
+            if (status == BackupExecution.Status.SUCCESS) execution.setProgressPercent(100);
+        }
+        executionRepository.save(execution);
+    }
+
+    private void updateExecutionProgress(
+            long id,
+            BackupExecution.Status status,
+            String stage,
+            String detail,
+            int percent,
+            long fileCount,
+            long totalBytes) {
+        BackupExecution execution = executionRepository.findById(id).orElse(null);
+        if (execution == null) return;
+        execution.setStatus(status);
+        execution.setCurrentStage(stage);
+        execution.setProgressDetail(detail);
+        execution.setProgressPercent(Math.max(0, Math.min(100, percent)));
+        execution.setFileCount(fileCount);
+        execution.setFileSizeBytes(totalBytes);
+        if (status == BackupExecution.Status.RUNNING && execution.getStartedAt() == null) {
+            execution.setStartedAt(LocalDateTime.now());
         }
         executionRepository.save(execution);
     }

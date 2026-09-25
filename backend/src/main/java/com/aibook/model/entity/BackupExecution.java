@@ -40,6 +40,14 @@ public class BackupExecution {
     @Column(columnDefinition = "TEXT")
     private String details;
 
+    @Column(length = 120)
+    private String currentStage;
+
+    private Integer progressPercent;
+
+    @Column(columnDefinition = "TEXT")
+    private String progressDetail;
+
     @Column(columnDefinition = "TEXT")
     private String outputPath;
 

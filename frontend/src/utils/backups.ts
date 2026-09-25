@@ -24,6 +24,9 @@ export interface BackupExecution {
   status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED'
   contents: string
   details: string
+  currentStage: string | null
+  progressPercent: number | null
+  progressDetail: string | null
   outputPath: string | null
   errorMessage: string | null
   fileSizeBytes: number | null

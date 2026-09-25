@@ -209,7 +209,30 @@
                 <th scope="row" class="execution-task-cell">{{ execution.taskName }}</th>
                 <td class="execution-details-cell">
                   <strong>{{ execution.contents }}</strong>
-                  <small>{{ execution.details || execution.errorMessage || '任务正在等待执行' }}</small>
+                  <div class="execution-progress-heading">
+                    <span>{{ execution.currentStage || fallbackStage(execution.status) }}</span>
+                    <span>{{ displayProgress(execution) }}%</span>
+                  </div>
+                  <div
+                    class="execution-progress-track"
+                    :class="{
+                      'is-indeterminate': execution.currentStage === '导出 PostgreSQL 数据库'
+                        && execution.status === 'RUNNING',
+                    }"
+                    role="progressbar"
+                    :aria-label="`${execution.currentStage || fallbackStage(execution.status)}进度`"
+                    :aria-valuenow="displayProgress(execution)"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                  >
+                    <span :style="{ width: `${displayProgress(execution)}%` }" />
+                  </div>
+                  <small>
+                    {{ execution.progressDetail || execution.details || execution.errorMessage || '任务正在等待执行' }}
+                  </small>
+                  <small v-if="execution.details && execution.progressDetail && execution.status !== 'RUNNING'">
+                    {{ execution.details }}
+                  </small>
                 </td>
                 <td>
                   <span class="history-status" :class="`status-${execution.status.toLowerCase()}`">
@@ -271,7 +294,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { message } from '@/utils/message'
 import {
   backupApi,
@@ -306,6 +329,9 @@ const activeTab = ref<BackupTab>('tasks')
 const taskTabButton = ref<HTMLButtonElement | null>(null)
 const retentionTabButton = ref<HTMLButtonElement | null>(null)
 const executionTabButton = ref<HTMLButtonElement | null>(null)
+let executionPollingTimer: ReturnType<typeof setTimeout> | null = null
+let executionPollingInFlight = false
+let componentUnmounted = false
 
 const emptyDraft = (): BackupTaskInput => ({
   name: '', databaseEnabled: true, booksEnabled: false, uploadsEnabled: false,
@@ -372,11 +398,40 @@ const refreshAll = async (quiet = false) => {
     pathInfo.value = path
     tasks.value = taskRows
     executions.value = executionRows
+    syncExecutionPolling()
     Object.assign(retention, retentionSettings)
   } catch (error: any) {
     if (!quiet) message.error(error.response?.data?.message || '备份信息加载失败')
   } finally {
     loading.value = false
+  }
+}
+
+const syncExecutionPolling = () => {
+  if (executionPollingTimer) {
+    clearTimeout(executionPollingTimer)
+    executionPollingTimer = null
+  }
+  if (
+    componentUnmounted
+    || !executions.value.some(execution => ['QUEUED', 'RUNNING'].includes(execution.status))
+  ) return
+  executionPollingTimer = setTimeout(() => {
+    void refreshExecutions()
+  }, 2000)
+}
+
+const refreshExecutions = async () => {
+  if (executionPollingInFlight) return
+  executionPollingInFlight = true
+  try {
+    const executionRows = await backupApi.executions()
+    if (!componentUnmounted) executions.value = executionRows
+  } catch {
+    // Keep the last progress snapshot and retry while an execution is active.
+  } finally {
+    executionPollingInFlight = false
+    syncExecutionPolling()
   }
 }
 
@@ -503,8 +558,25 @@ const statusGlyph = (status: BackupExecution['status']) => ({
   FAILED: '!',
 })[status]
 
+const fallbackStage = (status: BackupExecution['status']) => ({
+  QUEUED: '排队中',
+  RUNNING: '正在处理',
+  SUCCESS: '备份完成',
+  FAILED: '备份失败',
+})[status]
+
+const displayProgress = (execution: BackupExecution) => {
+  if (execution.status === 'SUCCESS') return 100
+  return Math.max(0, Math.min(100, execution.progressPercent ?? 0))
+}
+
 onMounted(() => {
   void refreshAll()
+})
+
+onBeforeUnmount(() => {
+  componentUnmounted = true
+  if (executionPollingTimer) clearTimeout(executionPollingTimer)
 })
 </script>
 
@@ -688,8 +760,10 @@ onMounted(() => {
 
 .backup-tab-panel {
   display: grid;
+  align-content: start;
   gap: 14px;
   min-width: 0;
+  min-height: 520px;
 }
 
 .backup-tab-panel:focus-visible {
@@ -779,6 +853,53 @@ onMounted(() => {
 .execution-details-cell strong {
   color: var(--text-primary);
   font-size: 11px;
+}
+
+.execution-progress-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 7px;
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.execution-progress-track {
+  height: 6px;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-secondary) 16%, transparent);
+}
+
+.execution-progress-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary-color);
+  transition: width 250ms ease;
+}
+
+.execution-progress-track.is-indeterminate > span {
+  width: 38% !important;
+  animation: backup-progress-slide 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes backup-progress-slide {
+  from { transform: translateX(0); }
+  to { transform: translateX(160%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .execution-progress-track > span {
+    transition: none;
+  }
+
+  .execution-progress-track.is-indeterminate > span {
+    animation: none;
+    width: 65% !important;
+  }
 }
 
 .task-schedule-cell small,
@@ -1076,6 +1197,10 @@ onMounted(() => {
 }
 
 @media (max-width: 760px) {
+  .backup-tab-panel {
+    min-height: 420px;
+  }
+
   .backup-hero {
     grid-template-columns: 1fr;
   }
