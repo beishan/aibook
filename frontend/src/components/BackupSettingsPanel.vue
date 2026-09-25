@@ -617,7 +617,7 @@ onMounted(() => {
 .backup-tabs {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 4px;
   border: 1px solid var(--border-color);
   border-radius: 15px;
