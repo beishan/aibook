@@ -15,7 +15,7 @@ pipeline {
         string(name: 'FRONTEND_PORT', defaultValue: '8291', description: '前端对外端口')
         string(name: 'BACKEND_PORT', defaultValue: '8292', description: '后端对外端口')
         string(name: 'BOOKS_PATH', defaultValue: '/vol1/1000/books', description: '主书库路径，映射到 /scanfolder')
-        string(name: 'BACKUP_PATH', defaultValue: '/vol1/docker/aibook/backups', description: '数据库与文件备份目录（NAS 宿主机物理路径）')
+        string(name: 'BACKUP_PATH', defaultValue: '/vol1/1000/books/backup', description: '数据库与文件备份目录（NAS 宿主机物理路径）')
         string(name: 'BACKUP_GID', defaultValue: '1001', description: '备份目录所属用户组 GID，需对该目录有写入权限')
         string(name: 'BOOKS_GID', defaultValue: '1001', description: '主书库目录所属用户组 GID')
         text(
