@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # 后端 Dockerfile
 # 使用多阶段构建
 
@@ -8,18 +9,21 @@ WORKDIR /app
 
 # 复制 pom.xml 并下载依赖（利用 Docker 缓存）
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
+RUN --mount=type=cache,id=aibook-backend-maven-repository,target=/root/.m2/repository,sharing=locked \
+    mvn dependency:go-offline -B
 
 # 复制源代码
 COPY src ./src
 
 # Jenkins 单独构建此阶段来执行测试，确保测试与生产构建都使用 Java 21。
 FROM build-base AS test
-RUN mvn test -B
+RUN --mount=type=cache,id=aibook-backend-maven-repository,target=/root/.m2/repository,sharing=locked \
+    mvn test -B
 
 # 第二阶段：构建应用
 FROM build-base AS builder
-RUN mvn clean package -DskipTests -B
+RUN --mount=type=cache,id=aibook-backend-maven-repository,target=/root/.m2/repository,sharing=locked \
+    mvn clean package -DskipTests -B
 
 # 第三阶段：运行
 FROM eclipse-temurin:21-jre-alpine
