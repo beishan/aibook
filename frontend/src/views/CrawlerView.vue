@@ -193,7 +193,7 @@
       </transition>
       <div v-loading="activeTab === 'failed' ? failedTaskLoading : taskLoading">
         <TaskTable
-          :key="activeTab"
+          :key="`${activeTab}-${taskTableSelectionVersion}`"
           :tasks="activeTab === 'failed' ? failedTasks : tasks"
           :show-failure-reason="activeTab === 'failed'"
           selectable
@@ -654,7 +654,7 @@ const chapterLoading=ref(false), chapterPage=ref(1), chapterTotal=ref(0)
 const currentCrawlingChapter=ref<CrawlerChapter>()
 const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=ref(0)
 const taskStatusFilter=ref(''), taskTypeFilter=ref(''), taskFavoriteOnly=ref(false)
-const selectedTasks=ref<CrawlerTask[]>([]), selectedFailedTasks=ref<CrawlerTask[]>([]), batchTaskManaging=ref(false), batchTaskAction=ref<'pause'|'resume'|'cancel'|'delete'|'priority'>()
+const selectedTasks=ref<CrawlerTask[]>([]), selectedFailedTasks=ref<CrawlerTask[]>([]), taskTableSelectionVersion=ref(0), batchTaskManaging=ref(false), batchTaskAction=ref<'pause'|'resume'|'cancel'|'delete'|'priority'>()
 const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
 const queueSettingsDialog=ref(false), savingQueueSettings=ref(false), taskQueueSettings=ref<CrawlerTaskQueueSettings>(), queueLimit=ref(4), queuedTasksDialog=ref(false), queuedTasksLoading=ref(false), queuedTasksReordering=ref(false), queuedTaskPrioritizingId=ref<string>(), queuedTaskCommandId=ref<string>(), queuedTaskCommand=ref<'pause'|'resume'|'cancel'>(), queuedTaskDraggingId=ref<string>(), queuedTaskDragStartOrder=ref<string[]>([]), queuedTasks=ref<CrawlerTask[]>([]), queuedTaskPage=ref(1), queuedTaskPageSize=ref(10)
 const failedTaskLoading=ref(false), failedTaskPage=ref(1), failedTaskPageSize=ref(20), failedTaskTotal=ref(0)
@@ -901,6 +901,7 @@ async function manageSelectedTasks(action:'pause'|'resume'|'cancel'|'delete'|'pr
     message.success(`已批量${actionLabel} ${result.affectedCount} 个任务`)
     selectedTasks.value=[]
     selectedFailedTasks.value=[]
+    taskTableSelectionVersion.value++
     await refresh()
   }catch(error:any){message.error(error.response?.data?.message||'批量操作失败，请刷新后重试')}
   finally{batchTaskManaging.value=false;batchTaskAction.value=undefined}
@@ -1206,6 +1207,69 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 <style scoped>
 .stat-dot-danger{background:var(--danger)}
 .batch-actions{display:flex;flex-wrap:wrap;gap:8px}.source-link{margin:0 10px;color:var(--primary);font-size:14px;text-decoration:none}.source-link:hover{text-decoration:underline}
+.segmented-wrap {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--tab-count), minmax(0, 1fr));
+  align-items: center;
+  width: 100%;
+  margin-bottom: 24px;
+  padding: 5px;
+  overflow-x: auto;
+  border: 1px solid var(--border-color-light);
+  border-radius: 16px;
+  background: var(--bg-page);
+  isolation: isolate;
+  scrollbar-width: none;
+}
+.segmented-wrap::-webkit-scrollbar { display: none; }
+.segment-indicator {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 5px;
+  z-index: 0;
+  width: calc((100% - 10px) / var(--tab-count));
+  border: 1px solid var(--border-color-light);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+.segment {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.segment.active { color: var(--primary); font-weight: 700; }
+.segment b {
+  padding: 2px 6px;
+  border-radius: 99px;
+  background: var(--primary-alpha-10);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+.segment.active b { background: var(--primary-alpha-10); color: var(--primary); }
+.segment:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) {
+  .segment-indicator, .segment { transition: none; }
+}
 .crawler-page{width:100%;min-width:0;max-width:100%;overflow-x:clip;box-sizing:border-box}.crawler-page>*{min-width:0;max-width:100%;box-sizing:border-box}.panel{width:100%;min-width:0;max-width:100%;overflow:hidden;box-sizing:border-box}.metric-grid,.site-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.site-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.section-heading>*{min-width:0}.data-table,:deep(.el-table){width:100%!important;min-width:0;max-width:100%}.book-cell>div:last-child,.task-name{min-width:0}.book-cell strong,.book-cell p,.task-name strong,.task-name p{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .site-card footer{flex-wrap:wrap}.health-line{margin-top:12px;color:var(--text-tertiary);font-size:11px}.health-line.error{color:var(--danger)}.test-result{padding:18px;border:1px solid var(--success-alpha-15);border-radius:16px;background:var(--surface-elevated)}.test-result.failed{border-color:var(--danger)}.test-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.test-facts span{display:grid;gap:4px}.test-facts small{color:var(--text-tertiary)}.test-result>p{margin:18px 0 8px}.test-result pre{max-height:260px;overflow:auto;padding:14px;border-radius:12px;background:var(--bg-page);font:14px/1.7 'Songti SC',serif;white-space:pre-wrap}.file-input{display:none}.rule-manager-bar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:20px;padding:15px 18px;border-radius:14px;background:var(--primary-alpha-10);color:var(--text-secondary)}.rule-manager-bar>div{display:flex;flex-shrink:0;gap:8px}.rule-table{width:100%;border:1px solid var(--border-color-light);border-radius:14px;overflow:hidden}.rule-version-text{color:var(--primary);font-family:'Iowan Old Style','Songti SC',serif;font-size:17px}.rule-table code{padding:3px 6px;border-radius:6px;background:var(--bg-page);color:var(--text-secondary);font-size:12px}.rule-actions{display:flex;flex-wrap:wrap;align-items:center;gap:2px 4px;white-space:normal}.rule-actions .el-button{margin-left:0;padding:5px 7px}:deep(.rule-table .active-rule-row td.el-table__cell){background:var(--success-alpha-15)!important}:deep(.rule-table .active-rule-row:hover td.el-table__cell){background:var(--success-alpha-15)!important}.import-mode{position:relative;display:grid;grid-template-columns:repeat(2,1fr);max-width:360px;margin:0 auto 20px;padding:4px;border:1px solid var(--border-color);border-radius:14px;background:var(--bg-page);isolation:isolate}.site-configuration-import-mode{margin-top:18px}.import-mode-indicator{position:absolute;top:4px;bottom:4px;left:4px;z-index:-1;width:calc(50% - 4px);border:1px solid var(--border-color-light);border-radius:10px;background:var(--surface-elevated);box-shadow:var(--shadow-sm);transition:transform .25s cubic-bezier(.2,.8,.2,1)}.import-mode button{padding:9px 16px;border:0;background:transparent;color:var(--text-secondary);cursor:pointer}.import-mode button.active{color:var(--primary);font-weight:700}.import-mode button:focus-visible{outline:2px solid var(--primary);outline-offset:-2px;border-radius:10px}.import-pane{display:grid;gap:10px}.import-pane>p{color:var(--text-tertiary);font-size:12px}.file-pane{display:grid;place-items:stretch}.file-picker{display:grid;min-height:150px;place-items:center;padding:24px;border:1px dashed var(--primary);border-radius:16px;background:var(--primary-alpha-10);color:var(--text-secondary);cursor:pointer}.file-picker .el-icon{color:var(--primary);font-size:28px}.file-picker strong{color:var(--text-primary);font-size:15px}.file-picker span{font-size:12px}
 @media(max-width:900px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.site-grid{grid-template-columns:minmax(0,1fr)}.proxy-row{grid-template-columns:1fr 1.5fr}.proxy-state{grid-column:1/-1;justify-content:flex-end}}@media(max-width:640px){.panel{padding:16px}.metric-grid,.form-grid,.proxy-row{grid-template-columns:minmax(0,1fr)}.proxy-state{grid-column:auto}.site-form-section{padding:14px}.site-form-section>.section-with-action{grid-template-columns:auto 1fr}.section-with-action>.el-button{grid-column:1/-1}.segmented-wrap{justify-content:start}.section-heading,.rule-manager-bar{align-items:flex-start;flex-direction:column;gap:12px}.rule-manager-bar>div{width:100%;flex-wrap:wrap}.rule-table{max-width:100%;overflow-x:auto}.search{width:100%}}@media(prefers-reduced-motion:reduce){.segment-indicator,.import-mode-indicator{transition:none}}
