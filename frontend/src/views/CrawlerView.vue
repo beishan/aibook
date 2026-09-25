@@ -132,6 +132,18 @@
       <el-table v-if="bookViewMode==='table'" ref="bookTableRef" v-loading="bookLoading" :data="books" row-key="id" @selection-change="selectedBooks=$event" @row-click="handleBookTableRowClick" class="data-table">
         <el-table-column type="selection" width="48" reserve-selection fixed="left" />
         <el-table-column label="收藏" width="58" fixed="left" align="center"><template #default="{row}"><el-button size="small" circle :icon="row.favorite?StarFilled:Star" class="favorite-action row-hover-action" :class="{'is-favorite':row.favorite}" :aria-label="row.favorite?'取消收藏':'加入收藏'" :title="row.favorite?'取消收藏':'加入收藏'" @click.stop="toggleFavorite(row)"/></template></el-table-column>
+        <el-table-column label="快捷操作" width="88" fixed="left" align="center">
+          <template #default="{row}">
+            <el-button
+              size="small"
+              type="primary"
+              plain
+              :loading="submittingBookTaskIds.has(row.id)"
+              :disabled="isBookTaskActive(row)"
+              @click.stop="continueCrawl(row)"
+            >采集</el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="书籍" min-width="260"><template #default="{row}"><div class="book-cell"><div class="mini-cover">{{ row.bookName.slice(0,1) }}</div><div><strong>{{ row.bookName }}</strong><p>{{ row.author || '未知作者' }} · {{ row.siteName }}</p></div></div></template></el-table-column>
         <el-table-column label="分类 / 标签" min-width="210"><template #default="{row}"><div class="crawler-book-tag-list table-tags"><el-tag v-if="row.category" size="small" type="info" effect="plain">{{ row.category }}</el-tag><el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag><span v-if="!row.category&&!row.tags?.length">暂无</span></div></template></el-table-column>
         <el-table-column label="进度 / 采集结果" min-width="250"><template #default="{row}"><div v-if="isBookCompleted(row)" class="book-crawl-result table-result"><div><span>采集结果</span><strong>采集完成</strong></div><small>正文 {{ row.crawledChapterCount }} · 待开放 {{ row.pendingReleaseChapterCount }} · 失败 {{ row.failedChapterCount }}</small><el-button text type="primary" size="small" @click.stop="openBook(row)">采集结果详情</el-button></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(row)}" :percentage="progress(row)" :stroke-width="7" /><small>正文 {{ row.crawledChapterCount }}，待开放 {{ row.pendingReleaseChapterCount }} / 共 {{ row.chapterCount }} 章</small></template></template></el-table-column>
@@ -146,8 +158,8 @@
         <div class="discovery-card-grid">
           <article v-for="book in books" :key="book.id" class="discovery-card crawler-book-card" :class="{selected:isBookSelected(book)}" @click="openBook(book)">
             <div class="discovery-card-action-overlay crawler-book-action-overlay" role="group" :aria-label="`${book.bookName}快捷操作`" @click.stop>
-              <el-button size="small" type="primary" :disabled="isBookTaskActive(book)" @click="continueCrawl(book)">{{ isBookTaskActive(book)?'任务中':'继续' }}</el-button>
               <el-button size="small" circle :icon="book.favorite?StarFilled:Star" class="favorite-action" :class="{'is-favorite':book.favorite}" :aria-label="book.favorite?'取消收藏':'加入收藏'" :title="book.favorite?'取消收藏':'加入收藏'" @click="toggleFavorite(book)"/>
+              <el-button size="small" type="primary" :loading="submittingBookTaskIds.has(book.id)" :disabled="isBookTaskActive(book)" @click="continueCrawl(book)">{{ isBookTaskActive(book)?'任务中':'采集' }}</el-button>
               <el-button size="small" :disabled="!book.crawledChapterCount" @click="startTrial(book)">试读</el-button>
               <el-dropdown trigger="click" placement="bottom-end" popper-class="discovery-more-popper" @command="handleCrawlerBookCardMore($event,book)">
                 <el-button size="small" aria-label="更多操作">更多</el-button>
@@ -173,6 +185,13 @@
           <el-option v-for="type in taskTypeOptions" :key="type" :label="taskTypeLabel(type)" :value="type" />
         </el-select>
         <el-checkbox v-model="taskFavoriteOnly" border @change="handleTaskFavoriteFilter">只看已收藏</el-checkbox>
+        <el-button
+          type="primary"
+          plain
+          :loading="batchTaskManaging && batchTaskAction==='resume-all'"
+          :disabled="batchTaskManaging || failedTaskTotal===0"
+          @click="resumeAllFailedTasks"
+        >恢复所有失败</el-button>
         <el-button :type="taskStatusFilter==='RUNNING'?'primary':undefined" @click="showRunningTasks">只看进行中</el-button>
         <el-button v-if="taskStatusFilter||taskTypeFilter||taskFavoriteOnly" text @click="clearTaskFilters">清除筛选</el-button>
       </div>
@@ -654,7 +673,7 @@ const chapterLoading=ref(false), chapterPage=ref(1), chapterTotal=ref(0)
 const currentCrawlingChapter=ref<CrawlerChapter>()
 const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=ref(0)
 const taskStatusFilter=ref(''), taskTypeFilter=ref(''), taskFavoriteOnly=ref(false)
-const selectedTasks=ref<CrawlerTask[]>([]), selectedFailedTasks=ref<CrawlerTask[]>([]), taskTableSelectionVersion=ref(0), batchTaskManaging=ref(false), batchTaskAction=ref<'pause'|'resume'|'cancel'|'delete'|'priority'>()
+const selectedTasks=ref<CrawlerTask[]>([]), selectedFailedTasks=ref<CrawlerTask[]>([]), taskTableSelectionVersion=ref(0), batchTaskManaging=ref(false), batchTaskAction=ref<'pause'|'resume'|'cancel'|'delete'|'priority'|'resume-all'>()
 const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
 const queueSettingsDialog=ref(false), savingQueueSettings=ref(false), taskQueueSettings=ref<CrawlerTaskQueueSettings>(), queueLimit=ref(4), queuedTasksDialog=ref(false), queuedTasksLoading=ref(false), queuedTasksReordering=ref(false), queuedTaskPrioritizingId=ref<string>(), queuedTaskCommandId=ref<string>(), queuedTaskCommand=ref<'pause'|'resume'|'cancel'>(), queuedTaskDraggingId=ref<string>(), queuedTaskDragStartOrder=ref<string[]>([]), queuedTasks=ref<CrawlerTask[]>([]), queuedTaskPage=ref(1), queuedTaskPageSize=ref(10)
 const failedTaskLoading=ref(false), failedTaskPage=ref(1), failedTaskPageSize=ref(20), failedTaskTotal=ref(0)
@@ -887,6 +906,40 @@ async function handleTaskFavoriteFilter(){taskPage.value=1;await loadTasks()}
 async function showRunningTasks(){taskStatusFilter.value='RUNNING';await handleTaskStatusFilter()}
 async function clearTaskFilters(){taskStatusFilter.value='';taskTypeFilter.value='';taskFavoriteOnly.value=false;taskPage.value=1;await loadTasks()}
 function handleTaskSelectionChange(rows:CrawlerTask[]){if(activeTab.value==='failed')selectedFailedTasks.value=rows;else selectedTasks.value=rows}
+async function resumeAllFailedTasks(){
+  if(batchTaskManaging.value)return
+  batchTaskManaging.value=true
+  batchTaskAction.value='resume-all'
+  let resumedCount=0
+  try{
+    const firstPage=await crawlerApi.tasks({page:0,size:100,status:'FAILED'})
+    const failedTasks=[...firstPage.content]
+    for(let page=1;page<firstPage.totalPages;page+=4){
+      const pageNumbers=Array.from({length:Math.min(4,firstPage.totalPages-page)},(_,index)=>page+index)
+      const results=await Promise.all(pageNumbers.map(pageNumber=>crawlerApi.tasks({page:pageNumber,size:100,status:'FAILED'})))
+      failedTasks.push(...results.flatMap(result=>result.content))
+    }
+    const failedTaskIds=failedTasks.filter(task=>task.status==='FAILED').map(task=>task.id)
+    if(!failedTaskIds.length){message.info('当前没有可恢复的失败任务');return}
+    for(let offset=0;offset<failedTaskIds.length;offset+=200){
+      const result=await crawlerApi.batchManageTasks(failedTaskIds.slice(offset,offset+200),'resume')
+      resumedCount+=result.affectedCount
+    }
+    message.success(`已恢复 ${resumedCount} 个失败任务`)
+  }catch(error:any){
+    if(resumedCount)message.warning(`已恢复 ${resumedCount} 个任务，其余任务恢复失败，请刷新后重试`)
+    else message.error(error.response?.data?.message||'恢复失败任务失败，请刷新后重试')
+  }finally{
+    if(resumedCount){
+      selectedTasks.value=[]
+      selectedFailedTasks.value=[]
+      taskTableSelectionVersion.value++
+      try{await refresh()}catch{message.warning('任务已恢复，但列表刷新失败，请手动刷新')}
+    }
+    batchTaskManaging.value=false
+    batchTaskAction.value=undefined
+  }
+}
 async function handleBatchTaskPriority(priority:'LOW'|'NORMAL'|'HIGH'){await manageSelectedTasks('priority',priority)}
 async function manageSelectedTasks(action:'pause'|'resume'|'cancel'|'delete'|'priority',priority?:'LOW'|'NORMAL'|'HIGH'){
   const selected=[...selectedTaskRows.value]
