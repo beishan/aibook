@@ -130,7 +130,7 @@
       <div v-if="sites.length" class="site-grid">
         <article v-for="site in sites" :key="site.id" class="site-card">
           <div class="site-top"><span class="site-mark" :style="{ '--site-theme-color': siteThemeColor(site.themeColor) }">{{ site.siteName.slice(0, 1) }}</span><div><h3>{{ site.siteName }}</h3><a :href="site.homeUrl || site.baseUrl" target="_blank">{{ site.baseUrl }}</a></div><el-tag :type="site.status==='RULE_ERROR'?'danger':!site.ruleVersion?'warning':site.enabled?'success':'info'">{{ site.status==='RULE_ERROR'?'规则异常':!site.ruleVersion?'待配置规则':site.enabled?'启用':'停用' }}</el-tag></div>
-          <div class="site-stats"><span><b>{{ site.bookCount }}</b> 本书</span><span><b>{{ site.requestIntervalMillis }}</b> ms 间隔</span><span><b>{{ site.maxConcurrency }}</b> 并发</span></div>
+          <div class="site-stats"><span><b>{{ site.bookCount }}</b> 本书</span><span><b>{{ site.requestIntervalMillis }}–{{ site.maxRequestIntervalMillis }}</b> ms 随机间隔</span><span><b>{{ site.maxConcurrency }}</b> 并发</span></div>
           <div v-if="hasSiteProtection(site)" class="site-protection" :class="{cooling:site.protection.coolingDown}">
             <div class="site-protection-message"><strong>{{ site.protection.coolingDown ? '站点保护冷却中' : '请求节奏正在恢复' }}</strong><span>{{ site.protection.reason || '近期请求失败，系统已自动降低访问频率' }}</span></div>
             <el-button text size="small" type="warning" @click="openSiteProtectionDetails(site)">详情</el-button>
@@ -448,13 +448,66 @@
               </el-button>
             </header>
             <div class="form-grid">
-              <el-form-item label="请求间隔（ms）">
+              <el-form-item label="最短请求间隔（ms）">
                 <el-input-number v-model="siteForm.requestIntervalMillis" :min="100" :step="100" />
               </el-form-item>
-              <el-form-item label="随机延迟（ms）">
-                <el-input-number v-model="siteForm.randomDelayMillis" :min="0" :step="100" />
+              <el-form-item label="最长请求间隔（ms）">
+                <el-input-number
+                  v-model="siteForm.maxRequestIntervalMillis"
+                  :min="siteForm.requestIntervalMillis"
+                  :max="600000"
+                  :step="100"
+                />
               </el-form-item>
             </div>
+            <p class="field-hint request-range-hint">
+              每次请求前会在最短与最长间隔之间随机等待；最小值不能大于最大值，最长可设 600000 毫秒。
+            </p>
+            <section class="blocked-window-editor" aria-labelledby="blocked-window-title">
+              <header>
+                <div>
+                  <h4 id="blocked-window-title">暂停访问时段</h4>
+                  <p>命中任一时段时，等待中的任务会暂停派发，时段结束后自动继续。</p>
+                </div>
+                <el-button
+                  :icon="Plus"
+                  :disabled="siteForm.blockedAccessWindows.length >= 50"
+                  @click="addBlockedAccessWindow"
+                >
+                  添加时段
+                </el-button>
+              </header>
+              <div v-if="siteForm.blockedAccessWindows.length" class="blocked-window-list">
+                <div
+                  v-for="(window, index) in siteForm.blockedAccessWindows"
+                  :key="index"
+                  class="blocked-window-row"
+                >
+                  <el-time-picker
+                    v-model="window.startTime"
+                    format="HH:mm"
+                    value-format="HH:mm"
+                    :clearable="false"
+                    placeholder="开始时间"
+                    aria-label="禁访开始时间"
+                  />
+                  <span>至</span>
+                  <el-time-picker
+                    v-model="window.endTime"
+                    format="HH:mm"
+                    value-format="HH:mm"
+                    :clearable="false"
+                    placeholder="结束时间"
+                    aria-label="禁访结束时间"
+                  />
+                  <el-button text type="danger" @click="removeBlockedAccessWindow(index)">
+                    删除
+                  </el-button>
+                </div>
+              </div>
+              <el-empty v-else :image-size="44" description="未设置禁访时段" />
+              <small class="field-hint">按服务端本地时间判断，精确到分钟；支持跨午夜时段，例如 23:00 至 02:00。</small>
+            </section>
             <el-form-item label="最大并发">
               <el-input-number v-model="siteForm.maxConcurrency" :min="1" :max="8" />
             </el-form-item>
@@ -1164,11 +1217,11 @@ const siteThemeColorOptions=['#286D63','#365F9A','#8F4D2E','#6F5598','#805B17','
 function siteThemeColor(color?:string):string {
   return color && /^#[\da-fA-F]{6}$/.test(color) ? color : '#286D63'
 }
-const emptySite=():CrawlerSitePayload=>({siteName:'',siteCode:'',baseUrl:'',homeUrl:'',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',requestIntervalMillis:1500,randomDelayMillis:1000,maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[],contentMarkers:[],themeColor:'#286D63'})
+const emptySite=():CrawlerSitePayload=>({siteName:'',siteCode:'',baseUrl:'',homeUrl:'',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',requestIntervalMillis:1500,randomDelayMillis:1000,maxRequestIntervalMillis:2500,blockedAccessWindows:[],maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[],contentMarkers:[],themeColor:'#286D63'})
 const siteConfigurationTemplate:CrawlerSiteConfiguration={
   schemaVersion:1,
   type:'AIBOOK_CRAWLER_SITE',
-  site:{siteName:'示例小说站',siteCode:'example_novel',baseUrl:'https://www.example.com',homeUrl:'https://www.example.com',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,requestIntervalMillis:1500,randomDelayMillis:1000,maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[{name:'备用代理',url:'http://127.0.0.1:7890',enabled:false}],scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',contentMarkers:[{marker:'以下内容为VIP专属，升级会员即可继续阅读',status:'PENDING_RELEASE'},{marker:'Access Denied',status:'FAILED'}],themeColor:'#365F9A'},
+  site:{siteName:'示例小说站',siteCode:'example_novel',baseUrl:'https://www.example.com',homeUrl:'https://www.example.com',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,requestIntervalMillis:1500,randomDelayMillis:1000,maxRequestIntervalMillis:2500,blockedAccessWindows:[],maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[{name:'备用代理',url:'http://127.0.0.1:7890',enabled:false}],scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',contentMarkers:[{marker:'以下内容为VIP专属，升级会员即可继续阅读',status:'PENDING_RELEASE'},{marker:'Access Denied',status:'FAILED'}],themeColor:'#365F9A'},
   rules:[{version:1,changeSummary:'初始规则',enabled:true,rule:{discoveryItemSelector:'.book-list .book',discoveryUrlSelector:'a.book-link',discoveryTitleSelector:'.title',discoveryAuthorSelector:'.author',discoveryCoverSelector:'img.cover::data-src',discoveryCategorySelector:'.category',discoveryLatestChapterSelector:'.latest',discoveryNextPageSelector:'a.next',titleSelector:'h1.book-title',authorSelector:'.author',coverSelector:'img.cover::data-src',descriptionSelector:'#intro',categorySelector:'.book-meta .category',tagsSelector:'.book-meta .tags a',statusSelector:'.book-meta .status',latestChapterSelector:'.latest',chapterListUrlSelector:'a.catalog',chapterItemSelector:'#chapter-list a',chapterTitleSelector:':scope',chapterUrlSelector:':scope',contentTitleSelector:'h1',contentSelector:'#content',removeSelectors:'.ads, .navigation',xpathRemoveSelectors:'',stringReplacementsJson:'',regexReplacementsJson:'',removeBlankLines:true,saveOriginalHtml:false,minChapterLength:100}}],
   discoveryPages:[{pageName:'热门小说',pageUrl:'https://www.example.com/rank/hot',autoScanEnabled:false,scanIntervalMinutes:360,maxPages:50}],
 }
@@ -1670,7 +1723,11 @@ function openSite(site?:CrawlerSite){
       const value=site[key]??defaults[key]
       ;(siteForm as any)[key]=key==='proxies'
         ? (value as CrawlerSitePayload['proxies']).map(proxy=>({...proxy}))
-        : key==='contentMarkers' ? (value as CrawlerSitePayload['contentMarkers']).map(marker=>({...marker})) : value
+        : key==='contentMarkers'
+          ? (value as CrawlerSitePayload['contentMarkers']).map(marker=>({...marker}))
+          : key==='blockedAccessWindows'
+            ? (value as CrawlerSitePayload['blockedAccessWindows']).map(window=>({...window}))
+            : value
     })
   }
   siteDialog.value=true
@@ -1685,11 +1742,19 @@ async function removeDiscoveryPage(page:CrawlerDiscoveryPage){if(!await confirm(
 function siteTabForField(field:string):SiteEditorTab{
   if(field.startsWith('contentMarkers'))return'validation'
   if(field.startsWith('proxies'))return'proxy'
-  if(['requestIntervalMillis','randomDelayMillis','maxConcurrency','respectRobotsTxt'].includes(field))return'request'
+  if(['requestIntervalMillis','randomDelayMillis','maxRequestIntervalMillis','blockedAccessWindows','maxConcurrency','respectRobotsTxt'].includes(field))return'request'
   if(['enabled','maxDiscoveryPages'].includes(field))return'automation'
   return'basic'
 }
 async function saveSite(){
+  if(siteForm.maxRequestIntervalMillis<siteForm.requestIntervalMillis){
+    message.warning('最长请求间隔不能小于最短请求间隔')
+    return
+  }
+  if(siteForm.blockedAccessWindows.some(window=>window.startTime===window.endTime)){
+    message.warning('禁访时段的开始时间和结束时间不能相同')
+    return
+  }
   try{await siteFormRef.value?.validate()}
   catch(error){
     const firstField=Object.keys((error as Record<string,unknown>)||{})[0]||''
@@ -1706,6 +1771,11 @@ function addProxy(){siteForm.proxies.push({name:`代理 ${siteForm.proxies.lengt
 function removeProxy(index:number){siteForm.proxies.splice(index,1)}
 function addContentMarker(){if(siteForm.contentMarkers.length<50)siteForm.contentMarkers.push({marker:'',status:'FAILED'})}
 function removeContentMarker(index:number){siteForm.contentMarkers.splice(index,1)}
+function addBlockedAccessWindow(){
+  if(siteForm.blockedAccessWindows.length>=50)return
+  siteForm.blockedAccessWindows.push({startTime:'01:00',endTime:'02:00'})
+}
+function removeBlockedAccessWindow(index:number){siteForm.blockedAccessWindows.splice(index,1)}
 function setActiveProxy(index:number,enabled:boolean){siteForm.proxies.forEach((proxy,current)=>{proxy.enabled=enabled&&current===index})}
 async function removeSite(site:CrawlerSite){if(await confirm(`确定删除采集网站“${site.siteName}”吗？`)){await crawlerApi.deleteSite(site.id);message.success('采集网站已删除');await refresh()}}
 function hasSiteProtection(site:CrawlerSite){return site.protection.coolingDown||site.protection.adaptiveDelayMillis>0||site.protection.consecutiveFailures>0}
@@ -2456,5 +2526,82 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 
 .chapter-reader-kicker :deep(.site-source-tag) {
   letter-spacing: normal;
+}
+
+.request-range-hint {
+  margin-top: -8px;
+  margin-bottom: 14px;
+}
+
+.blocked-window-editor {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 14px;
+  background: var(--surface-card);
+}
+
+.blocked-window-editor > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+}
+
+.blocked-window-editor h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.blocked-window-editor header p {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.blocked-window-list {
+  display: grid;
+  gap: 8px;
+}
+
+.blocked-window-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.blocked-window-row > span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.blocked-window-row > .el-time-picker {
+  width: 100%;
+}
+
+.blocked-window-editor > .el-empty {
+  padding: 0;
+}
+
+@media (max-width: 520px) {
+  .blocked-window-editor > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .blocked-window-row {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .blocked-window-row > .el-button {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
 }
 </style>

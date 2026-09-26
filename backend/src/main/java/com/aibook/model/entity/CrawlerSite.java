@@ -6,7 +6,10 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "crawler_sites", uniqueConstraints =
@@ -46,6 +49,13 @@ public class CrawlerSite {
     @Builder.Default private String autoImportFormat = "EPUB";
     @Builder.Default private Integer requestIntervalMillis = 1500;
     @Builder.Default private Integer randomDelayMillis = 1000;
+    private Integer maxRequestIntervalMillis;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "crawler_site_blocked_windows",
+            joinColumns = @JoinColumn(name = "site_id"))
+    @OrderColumn(name = "window_order")
+    @Builder.Default
+    private List<CrawlerSiteAccessWindow> blockedAccessWindows = new ArrayList<>();
     @Builder.Default private Integer maxConcurrency = 1;
     @Builder.Default private Boolean respectRobotsTxt = true;
     @Builder.Default private String encoding = "UTF-8";
@@ -71,6 +81,15 @@ public class CrawlerSite {
     public void attachRule(CrawlerSiteRule value) {
         rule = value;
         if (value != null) value.setSite(this);
+    }
+
+    public boolean isAccessBlockedAt(LocalTime time) {
+        if (time == null || blockedAccessWindows == null || blockedAccessWindows.isEmpty()) {
+            return false;
+        }
+        int minuteOfDay = time.getHour() * 60 + time.getMinute();
+        return blockedAccessWindows.stream()
+                .anyMatch(window -> window.containsMinute(minuteOfDay));
     }
 
     public enum ParserType { CONFIG, CUSTOM }

@@ -30,6 +30,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -764,6 +765,10 @@ public class CrawlerTaskService {
 
     private void submitLegacy(CrawlerTask task, long queueOrder) {
         if (task.getStatus() != CrawlerTask.TaskStatus.WAITING || !active.add(task.getId())) return;
+        if (task.getSite().isAccessBlockedAt(LocalTime.now())) {
+            active.remove(task.getId());
+            return;
+        }
         applyConcurrencyLimit(configuredConcurrency());
         activeTaskSites.put(task.getId(), task.getSite().getId());
         try {
@@ -817,7 +822,10 @@ public class CrawlerTaskService {
     @Transactional
     public synchronized void dispatchWaitingTasks() {
         if (shuttingDown) return;
-        if (taskQueueRepository == null) return;
+        if (taskQueueRepository == null) {
+            dispatchLegacyWaitingTasks();
+            return;
+        }
         List<CrawlerTaskQueue> queues = taskQueueRepository.findAll();
         if (queues.isEmpty()) return;
         applyConcurrencyLimit(configuredQueueConcurrency());
@@ -833,6 +841,13 @@ public class CrawlerTaskService {
 
         Map<Long, Integer> scheduledBySite = new HashMap<>();
         activeTaskSites.values().forEach(siteId -> scheduledBySite.merge(siteId, 1, Integer::sum));
+        Set<Long> blockedAccessSites = new HashSet<>();
+        LocalTime accessCheckTime = LocalTime.now();
+        for (CrawlerTaskQueue queue : queues) {
+            if (queue.getSite().isAccessBlockedAt(accessCheckTime)) {
+                blockedAccessSites.add(queue.getSite().getId());
+            }
+        }
         List<CrawlerTask> waitingTasks = new ArrayList<>(
                 taskRepository.findByStatusOrderByQueueOrderAsc(CrawlerTask.TaskStatus.WAITING));
         waitingTasks.sort(Comparator.comparingInt((CrawlerTask task) -> priorityRank(task.getPriority()))
@@ -842,6 +857,7 @@ public class CrawlerTaskService {
 
         for (CrawlerTask task : waitingTasks) {
             Long siteId = task.getSite().getId();
+            if (blockedAccessSites.contains(siteId)) continue;
             if (coolingDownSites.contains(siteId)) continue;
             CrawlerTaskQueue queue = queuesBySite.get(siteId);
             if (queue == null) continue;
@@ -873,6 +889,24 @@ public class CrawlerTaskService {
                 queue.setLastTaskStartedAt(LocalDateTime.now());
                 now = queue.getLastTaskStartedAt();
             }
+        }
+    }
+
+    private void dispatchLegacyWaitingTasks() {
+        applyConcurrencyLimit(configuredConcurrency());
+        List<CrawlerTask> waitingTasks = new ArrayList<>(
+                taskRepository.findByStatusOrderByQueueOrderAsc(CrawlerTask.TaskStatus.WAITING));
+        waitingTasks.sort(Comparator.comparingInt((CrawlerTask task) -> priorityRank(task.getPriority()))
+                .thenComparing(CrawlerTask::getQueueOrder,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(CrawlerTask::getCreatedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())));
+        for (CrawlerTask task : waitingTasks) {
+            if (active.size() >= configuredConcurrency()) break;
+            if (task.getSite().isAccessBlockedAt(LocalTime.now())
+                    || httpClient.protectionState(task.getSite()).coolingDown()) continue;
+            long queueOrder = task.getQueueOrder() == null ? nextQueueOrder() : task.getQueueOrder();
+            submitLegacy(task, queueOrder);
         }
     }
 
@@ -948,8 +982,9 @@ public class CrawlerTaskService {
             try {
                 CrawlerTask task = taskRepository.findById(taskId).orElse(null);
                 if (task != null && task.getStatus() == CrawlerTask.TaskStatus.WAITING
-                        && httpClient.protectionState(task.getSite()).coolingDown()) {
-                    log.info("[采集任务] 网站处于冷却期，任务继续等待: taskId={}, site={}",
+                        && (httpClient.protectionState(task.getSite()).coolingDown()
+                                || task.getSite().isAccessBlockedAt(LocalTime.now()))) {
+                    log.info("[采集任务] 网站处于冷却期或禁访时段，任务继续等待: taskId={}, site={}",
                             taskId, task.getSite().getSiteName());
                     return;
                 }
@@ -982,6 +1017,11 @@ public class CrawlerTaskService {
         synchronized (taskLock(taskId)) {
             task = taskRepository.findById(taskId).orElse(null);
             if (task == null || task.getStatus() != CrawlerTask.TaskStatus.WAITING) return;
+            if (task.getSite().isAccessBlockedAt(LocalTime.now())) {
+                log.info("[采集任务] 命中网站禁访时段，任务继续等待: taskId={}, site={}",
+                        taskId, task.getSite().getSiteName());
+                return;
+            }
             task.setStatus(CrawlerTask.TaskStatus.RUNNING);
             task.setQueueOrder(null);
             task.setStartedAt(task.getStartedAt() == null ? LocalDateTime.now() : task.getStartedAt());

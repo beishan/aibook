@@ -62,6 +62,7 @@ class CrawlerManagementServiceTest {
         when(httpClient.protectionState(any(CrawlerSite.class))).thenReturn(
                 new CrawlerHttpClient.ProtectionState(false, null, null, 0, 0));
         service = new CrawlerManagementService(sites, books,
+                mock(com.aibook.repository.BookRepository.class),
                 chapters, tasks, crawlerLogs, rules,
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class),
                 mock(com.aibook.repository.CrawlerScanResultRepository.class),

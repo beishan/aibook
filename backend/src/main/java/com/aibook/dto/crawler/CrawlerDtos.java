@@ -33,6 +33,10 @@ public final class CrawlerDtos {
             @NotBlank @Size(max = 500) String marker,
             @NotBlank @Pattern(regexp = "FAILED|PENDING_RELEASE") String status) { }
 
+    public record SiteAccessWindowPayload(
+            @NotBlank @Pattern(regexp = "(?:[01]\\d|2[0-3]):[0-5]\\d") String startTime,
+            @NotBlank @Pattern(regexp = "(?:[01]\\d|2[0-3]):[0-5]\\d") String endTime) { }
+
     public record SitePayload(
             @NotBlank String siteName, @Pattern(regexp = "\\s*|[a-zA-Z0-9_-]+") String siteCode,
             @NotBlank String baseUrl, String homeUrl, Boolean enabled,
@@ -45,7 +49,25 @@ public final class CrawlerDtos {
             @Pattern(regexp = "(?i)TXT|EPUB|BOTH") String autoImportFormat,
             @Size(max = 50) List<@Valid ContentMarkerPayload> contentMarkers,
             Boolean respectRobotsTxt,
-            @Pattern(regexp = "#[0-9a-fA-F]{6}") String themeColor) {
+            @Pattern(regexp = "#[0-9a-fA-F]{6}") String themeColor,
+            @Min(100) Integer maxRequestIntervalMillis,
+            @Size(max = 50) List<@NotNull @Valid SiteAccessWindowPayload> blockedAccessWindows) {
+        public SitePayload(
+                String siteName, String siteCode, String baseUrl, String homeUrl,
+                Boolean enabled, Boolean autoScan, Boolean autoCrawl, Boolean autoUpdate,
+                Boolean autoImportLibrary, Integer requestIntervalMillis,
+                Integer randomDelayMillis, Integer maxConcurrency, String encoding,
+                List<ProxyPayload> proxies, Integer scanIntervalMinutes,
+                Integer updateIntervalMinutes, Integer maxDiscoveryPages,
+                String autoImportFormat, List<ContentMarkerPayload> contentMarkers,
+                Boolean respectRobotsTxt, String themeColor) {
+            this(siteName, siteCode, baseUrl, homeUrl, enabled, autoScan, autoCrawl,
+                    autoUpdate, autoImportLibrary, requestIntervalMillis, randomDelayMillis,
+                    maxConcurrency, encoding, proxies, scanIntervalMinutes,
+                    updateIntervalMinutes, maxDiscoveryPages, autoImportFormat,
+                    contentMarkers, respectRobotsTxt, themeColor, null, List.of());
+        }
+
         public SitePayload(
                 String siteName, String siteCode, String baseUrl, String homeUrl,
                 Boolean enabled, Boolean autoScan, Boolean autoCrawl, Boolean autoUpdate,
@@ -59,7 +81,7 @@ public final class CrawlerDtos {
                     autoUpdate, autoImportLibrary, requestIntervalMillis, randomDelayMillis,
                     maxConcurrency, encoding, proxies, scanIntervalMinutes,
                     updateIntervalMinutes, maxDiscoveryPages, autoImportFormat,
-                    contentMarkers, respectRobotsTxt, null);
+                    contentMarkers, respectRobotsTxt, null, null, List.of());
         }
     }
 
@@ -74,7 +96,32 @@ public final class CrawlerDtos {
             LocalDateTime lastScanAt, LocalDateTime lastUpdateAt,
             LocalDateTime lastHealthCheckAt, String healthMessage, LocalDateTime createdAt,
             List<ContentMarkerPayload> contentMarkers, boolean respectRobotsTxt,
-            CrawlerProtectionView protection, String themeColor) {
+            CrawlerProtectionView protection, String themeColor,
+            int maxRequestIntervalMillis, List<SiteAccessWindowPayload> blockedAccessWindows) {
+        public SiteView(Long id, String siteName, String siteCode, String baseUrl,
+                String homeUrl, boolean enabled, boolean autoScan, boolean autoCrawl,
+                boolean autoUpdate, boolean autoImportLibrary, int requestIntervalMillis,
+                int randomDelayMillis, int maxConcurrency, String encoding, String proxy,
+                List<ProxyPayload> proxies, int scanIntervalMinutes,
+                int updateIntervalMinutes, int maxDiscoveryPages, String autoImportFormat,
+                String status, long bookCount, RulePayload rule, Integer ruleVersion,
+                Long activeRuleId, long ruleCount, LocalDateTime lastScanAt,
+                LocalDateTime lastUpdateAt, LocalDateTime lastHealthCheckAt,
+                String healthMessage, LocalDateTime createdAt,
+                List<ContentMarkerPayload> contentMarkers, boolean respectRobotsTxt,
+                CrawlerProtectionView protection, String themeColor) {
+            this(id, siteName, siteCode, baseUrl, homeUrl, enabled, autoScan, autoCrawl,
+                    autoUpdate, autoImportLibrary, requestIntervalMillis, randomDelayMillis,
+                    maxConcurrency, encoding, proxy, proxies, scanIntervalMinutes,
+                    updateIntervalMinutes, maxDiscoveryPages, autoImportFormat, status,
+                    bookCount, rule, ruleVersion, activeRuleId, ruleCount, lastScanAt,
+                    lastUpdateAt, lastHealthCheckAt, healthMessage, createdAt, contentMarkers,
+                    respectRobotsTxt, protection, themeColor,
+                    (int) Math.min(Integer.MAX_VALUE,
+                            (long) requestIntervalMillis + Math.max(0, randomDelayMillis)),
+                    List.of());
+        }
+
         public SiteView(Long id, String siteName, String siteCode, String baseUrl,
                 String homeUrl, boolean enabled, boolean autoScan, boolean autoCrawl,
                 boolean autoUpdate, boolean autoImportLibrary, int requestIntervalMillis,

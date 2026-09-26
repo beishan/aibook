@@ -646,10 +646,22 @@ public class CrawlerManagementService {
         site.setUpdateIntervalMinutes(value(p.updateIntervalMinutes(), 30));
         site.setMaxDiscoveryPages(value(p.maxDiscoveryPages(), 3));
         site.setAutoImportFormat(blank(p.autoImportFormat()) ? "EPUB" : p.autoImportFormat().toUpperCase(Locale.ROOT));
-        site.setRequestIntervalMillis(value(p.requestIntervalMillis(), 1500)); site.setRandomDelayMillis(value(p.randomDelayMillis(), 1000));
+        int minimumRequestInterval = value(p.requestIntervalMillis(), 1500);
+        int maximumRequestInterval = p.maxRequestIntervalMillis() == null
+                ? (int) Math.min(Integer.MAX_VALUE,
+                        (long) minimumRequestInterval + value(p.randomDelayMillis(), 1000))
+                : p.maxRequestIntervalMillis();
+        if (maximumRequestInterval < minimumRequestInterval) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "最长请求间隔不能小于最短请求间隔");
+        }
+        site.setRequestIntervalMillis(minimumRequestInterval);
+        site.setMaxRequestIntervalMillis(maximumRequestInterval);
+        site.setRandomDelayMillis(maximumRequestInterval - minimumRequestInterval);
         site.setMaxConcurrency(value(p.maxConcurrency(), 1));
         site.setRespectRobotsTxt(bool(p.respectRobotsTxt(), true));
         site.setEncoding(blank(p.encoding()) ? "UTF-8" : p.encoding());
+        site.setBlockedAccessWindows(toAccessWindows(p.blockedAccessWindows()));
         applyContentMarkers(site, p.contentMarkers());
         applyProxies(site, p.proxies());
     }
@@ -678,9 +690,12 @@ public class CrawlerManagementService {
         RulePayload rv = r == null ? null : rulePayload(r);
         Optional<CrawlerSiteRuleVersion> active = ruleVersionRepository.findFirstBySiteAndEnabledTrue(s);
         CrawlerHttpClient.ProtectionState protection = httpClient.protectionState(s);
+        int minimumRequestInterval = value(s.getRequestIntervalMillis(), 1500);
+        int maximumRequestInterval = maxRequestInterval(s);
         return new SiteView(s.getId(), s.getSiteName(), s.getSiteCode(), s.getBaseUrl(), s.getHomeUrl(), bool(s.getEnabled(), false),
                 bool(s.getAutoScan(), false), bool(s.getAutoCrawl(), false), bool(s.getAutoUpdate(), false), bool(s.getAutoImportLibrary(), false),
-                value(s.getRequestIntervalMillis(), 1500), value(s.getRandomDelayMillis(), 1000), value(s.getMaxConcurrency(), 1),
+                minimumRequestInterval, maximumRequestInterval - minimumRequestInterval,
+                value(s.getMaxConcurrency(), 1),
                 s.getEncoding(), s.getProxy(), proxyPayloads(s), value(s.getScanIntervalMinutes(), 360),
                 value(s.getUpdateIntervalMinutes(), 30), value(s.getMaxDiscoveryPages(), 3),
                 blank(s.getAutoImportFormat()) ? "EPUB" : s.getAutoImportFormat(), s.getStatus().name(),
@@ -691,7 +706,44 @@ public class CrawlerManagementService {
                 bool(s.getRespectRobotsTxt(), true), new CrawlerProtectionView(
                         protection.coolingDown(), protection.blockedUntil(), protection.reason(),
                         protection.pageUrl(), protection.consecutiveFailures(), protection.adaptiveDelayMillis()),
-                normalizedThemeColor(s.getThemeColor()));
+                normalizedThemeColor(s.getThemeColor()), maximumRequestInterval,
+                toAccessWindowPayloads(s.getBlockedAccessWindows()));
+    }
+
+    private int maxRequestInterval(CrawlerSite site) {
+        int minimum = value(site.getRequestIntervalMillis(), 1500);
+        if (site.getMaxRequestIntervalMillis() != null) {
+            return Math.max(minimum, site.getMaxRequestIntervalMillis());
+        }
+        return (int) Math.min(Integer.MAX_VALUE,
+                (long) minimum + value(site.getRandomDelayMillis(), 1000));
+    }
+
+    private List<CrawlerSiteAccessWindow> toAccessWindows(
+            List<SiteAccessWindowPayload> windows) {
+        if (windows == null || windows.isEmpty()) return new ArrayList<>();
+        return new ArrayList<>(windows.stream().map(window -> {
+            LocalTime start = LocalTime.parse(window.startTime());
+            LocalTime end = LocalTime.parse(window.endTime());
+            int startMinute = start.getHour() * 60 + start.getMinute();
+            int endMinute = end.getHour() * 60 + end.getMinute();
+            if (startMinute == endMinute) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "禁访时段的开始时间和结束时间不能相同");
+            }
+            return new CrawlerSiteAccessWindow(startMinute, endMinute);
+        }).toList());
+    }
+
+    private List<SiteAccessWindowPayload> toAccessWindowPayloads(
+            List<CrawlerSiteAccessWindow> windows) {
+        if (windows == null) return List.of();
+        return windows.stream().map(window -> new SiteAccessWindowPayload(
+                formatMinute(window.getStartMinute()), formatMinute(window.getEndMinute()))).toList();
+    }
+
+    private String formatMinute(int minuteOfDay) {
+        return String.format(Locale.ROOT, "%02d:%02d", minuteOfDay / 60, minuteOfDay % 60);
     }
 
     public RulePayload rulePayload(CrawlerSiteRule r) {

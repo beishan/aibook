@@ -42,7 +42,9 @@ class CrawlerTaskServiceStatusTest {
         CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 chapters, tasks, mock(com.aibook.repository.CrawlerScanResultRepository.class),
-                mock(CrawlerTaskLogRepository.class), management, operationLogs,
+                mock(CrawlerTaskLogRepository.class), management,
+                mock(CrawlerChapterAttemptMetricService.class),
+                operationLogs,
                 mock(CrawlerExportService.class),
                 mock(CrawlerHttpClient.class),
                 List.of(), mock(ApplicationContext.class), mock(com.aibook.service.CrawlerSettingsService.class));
@@ -79,7 +81,9 @@ class CrawlerTaskServiceStatusTest {
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 mock(CrawlerChapterRepository.class), mock(CrawlerTaskRepository.class),
                 mock(com.aibook.repository.CrawlerScanResultRepository.class),
-                mock(CrawlerTaskLogRepository.class), management, mock(OperationLogService.class),
+                mock(CrawlerTaskLogRepository.class), management,
+                mock(CrawlerChapterAttemptMetricService.class),
+                mock(OperationLogService.class),
                 mock(CrawlerExportService.class), mock(CrawlerHttpClient.class), List.of(),
                 mock(ApplicationContext.class), mock(com.aibook.service.CrawlerSettingsService.class));
         try {

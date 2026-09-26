@@ -15,12 +15,14 @@ export interface CrawlerRule {
 }
 export interface CrawlerProxy { name:string; url:string; enabled:boolean }
 export interface CrawlerContentMarker { marker:string; status:'FAILED'|'PENDING_RELEASE' }
+export interface CrawlerSiteAccessWindow { startTime:string; endTime:string }
 export interface CrawlerProtectionState { coolingDown:boolean; blockedUntil?:string; reason?:string; pageUrl?:string; consecutiveFailures:number; adaptiveDelayMillis:number }
 export interface CrawlerRobotsTxt { url:string; statusCode:number; content:string; fetchedAt:string }
 export interface CrawlerSitePayload {
   siteName: string; siteCode: string; baseUrl: string; homeUrl?: string; enabled: boolean
   autoScan: boolean; autoCrawl: boolean; autoUpdate: boolean; autoImportLibrary: boolean
-  requestIntervalMillis: number; randomDelayMillis: number; maxConcurrency: number
+  requestIntervalMillis: number; randomDelayMillis: number; maxRequestIntervalMillis:number
+  blockedAccessWindows:CrawlerSiteAccessWindow[]; maxConcurrency: number
   encoding: string; proxies:CrawlerProxy[]; scanIntervalMinutes:number
   updateIntervalMinutes:number; maxDiscoveryPages:number; autoImportFormat:'TXT'|'EPUB'|'BOTH'; contentMarkers:CrawlerContentMarker[]
   respectRobotsTxt:boolean

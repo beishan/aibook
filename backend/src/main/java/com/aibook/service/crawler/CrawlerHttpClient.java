@@ -22,6 +22,7 @@ import java.nio.charset.Charset;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -611,28 +612,57 @@ public class CrawlerHttpClient {
     }
 
     private void throttle(CrawlerSite site, URI target, RequestTiming timing) throws InterruptedException {
-        long now = System.currentTimeMillis();
         AdaptiveDelay adaptiveDelay = adaptiveDelays.get(site.getId());
         long fixedDelay = Math.max(0, value(site.getRequestIntervalMillis(), 1500));
-        int randomLimit = Math.max(0, value(site.getRandomDelayMillis(), 1000));
-        long randomDelay = randomLimit == 0 ? 0
-                : ThreadLocalRandom.current().nextLong((long) randomLimit + 1);
+        long legacyRandomLimit = Math.max(0, value(site.getRandomDelayMillis(), 1000));
+        long maximumDelay = site.getMaxRequestIntervalMillis() == null
+                ? fixedDelay + legacyRandomLimit
+                : Math.max(fixedDelay, site.getMaxRequestIntervalMillis());
+        long selectedInterval = maximumDelay == fixedDelay
+                ? fixedDelay
+                : ThreadLocalRandom.current().nextLong(fixedDelay, maximumDelay + 1);
+        long randomDelay = selectedInterval - fixedDelay;
         long adaptiveMillis = adaptiveDelay == null ? 0 : adaptiveDelay.current();
-        long interval = fixedDelay + randomDelay + adaptiveMillis;
-        long siteSlot = reserveRequestSlot(
-                siteNextRequests.computeIfAbsent(site.getId(), ignored -> new AtomicLong()), now, interval);
-        long originSlot = reserveRequestSlot(
-                originNextRequests.computeIfAbsent(originKey(target), ignored -> new AtomicLong()), now, interval);
-        long wait = Math.max(siteSlot, originSlot) - now;
-        if (wait > 0) {
-            long sleepStarted = System.nanoTime();
-            try {
-                Thread.sleep(wait);
-            } finally {
-                long actualMillis = elapsedMillis(sleepStarted);
-                if (timing != null) {
-                    timing.addPacingWait(actualMillis, fixedDelay, randomDelay, adaptiveMillis);
+        long interval = selectedInterval + adaptiveMillis;
+
+        while (true) {
+            waitUntilAccessAllowed(site, timing);
+            long now = System.currentTimeMillis();
+            long siteSlot = reserveRequestSlot(
+                    siteNextRequests.computeIfAbsent(site.getId(), ignored -> new AtomicLong()),
+                    now, interval);
+            long originSlot = reserveRequestSlot(
+                    originNextRequests.computeIfAbsent(originKey(target), ignored -> new AtomicLong()),
+                    now, interval);
+            long wait = Math.max(siteSlot, originSlot) - now;
+            if (wait > 0) {
+                long sleepStarted = System.nanoTime();
+                try {
+                    Thread.sleep(wait);
+                } finally {
+                    long actualMillis = elapsedMillis(sleepStarted);
+                    if (timing != null) {
+                        timing.addPacingWait(actualMillis, fixedDelay, randomDelay, adaptiveMillis);
+                    }
                 }
+            }
+            if (!site.isAccessBlockedAt(LocalTime.now())) return;
+        }
+    }
+
+    private void waitUntilAccessAllowed(CrawlerSite site, RequestTiming timing)
+            throws InterruptedException {
+        while (site.isAccessBlockedAt(LocalTime.now())) {
+            LocalDateTime now = LocalDateTime.now();
+            long waitMillis = Duration.ofMinutes(1).toMillis()
+                    - now.getSecond() * 1000L
+                    - now.getNano() / 1_000_000L;
+            long sleepMillis = Math.max(1, waitMillis);
+            long started = System.nanoTime();
+            try {
+                Thread.sleep(sleepMillis);
+            } finally {
+                if (timing != null) timing.addOtherWait(elapsedMillis(started));
             }
         }
     }

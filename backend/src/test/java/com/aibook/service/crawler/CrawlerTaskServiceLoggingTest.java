@@ -113,6 +113,7 @@ class CrawlerTaskServiceLoggingTest {
                 mock(com.aibook.repository.CrawlerScanResultRepository.class),
                 crawlerLogs,
                 mock(CrawlerManagementService.class),
+                mock(CrawlerChapterAttemptMetricService.class),
                 operationLogs,
                 mock(CrawlerExportService.class),
                 mock(CrawlerHttpClient.class),

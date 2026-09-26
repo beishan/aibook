@@ -67,7 +67,9 @@ class CrawlerTaskManagementTest {
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class),
                 mock(CrawlerBookRepository.class), mock(CrawlerChapterRepository.class), tasks,
                 mock(CrawlerScanResultRepository.class), mock(CrawlerTaskLogRepository.class),
-                mock(CrawlerManagementService.class), mock(OperationLogService.class),
+                mock(CrawlerManagementService.class),
+                mock(CrawlerChapterAttemptMetricService.class),
+                mock(OperationLogService.class),
                 mock(CrawlerExportService.class), mock(CrawlerHttpClient.class), List.of(),
                 mock(ApplicationContext.class), settings);
         try {
@@ -141,6 +143,7 @@ class CrawlerTaskManagementTest {
         CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), pages,
                 mock(CrawlerBookRepository.class), mock(CrawlerChapterRepository.class), tasks,
                 mock(CrawlerScanResultRepository.class), mock(CrawlerTaskLogRepository.class), management,
+                mock(CrawlerChapterAttemptMetricService.class),
                 mock(OperationLogService.class), mock(CrawlerExportService.class), http, List.of(parser),
                 mock(ApplicationContext.class), settings);
         try {
@@ -274,6 +277,7 @@ class CrawlerTaskManagementTest {
         CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), pages,
                 mock(CrawlerBookRepository.class), mock(CrawlerChapterRepository.class), tasks,
                 mock(CrawlerScanResultRepository.class), mock(CrawlerTaskLogRepository.class), management,
+                mock(CrawlerChapterAttemptMetricService.class),
                 mock(OperationLogService.class), mock(CrawlerExportService.class), http, List.of(parser),
                 mock(ApplicationContext.class), settings);
         try {
@@ -360,6 +364,7 @@ class CrawlerTaskManagementTest {
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 chapters, tasks, mock(CrawlerScanResultRepository.class),
                 mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
+                mock(CrawlerChapterAttemptMetricService.class),
                 mock(OperationLogService.class), mock(CrawlerExportService.class), http,
                 List.of(parser), mock(ApplicationContext.class), mock(CrawlerSettingsService.class));
         try {
@@ -401,6 +406,7 @@ class CrawlerTaskManagementTest {
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 mock(CrawlerChapterRepository.class), tasks, mock(CrawlerScanResultRepository.class),
                 mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
+                mock(CrawlerChapterAttemptMetricService.class),
                 mock(OperationLogService.class), mock(CrawlerExportService.class), http,
                 List.of(parser), mock(ApplicationContext.class), mock(CrawlerSettingsService.class));
         try {
@@ -444,6 +450,7 @@ class CrawlerTaskManagementTest {
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 chapters, tasks, mock(com.aibook.repository.CrawlerScanResultRepository.class),
                 mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
+                mock(CrawlerChapterAttemptMetricService.class),
                 mock(OperationLogService.class), mock(CrawlerExportService.class), httpClient, List.of(parser),
                 mock(ApplicationContext.class), mock(com.aibook.service.CrawlerSettingsService.class));
         try {
@@ -500,6 +507,7 @@ class CrawlerTaskManagementTest {
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 chapters, tasks, mock(CrawlerScanResultRepository.class),
                 mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
+                mock(CrawlerChapterAttemptMetricService.class),
                 mock(OperationLogService.class), mock(CrawlerExportService.class), httpClient,
                 List.of(parser), mock(ApplicationContext.class),
                 mock(CrawlerSettingsService.class));
@@ -550,6 +558,7 @@ class CrawlerTaskManagementTest {
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 chapters, tasks, mock(com.aibook.repository.CrawlerScanResultRepository.class),
                 mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
+                mock(CrawlerChapterAttemptMetricService.class),
                 mock(OperationLogService.class), mock(CrawlerExportService.class), httpClient, List.of(parser),
                 mock(ApplicationContext.class), mock(com.aibook.service.CrawlerSettingsService.class));
         try {
@@ -699,6 +708,7 @@ class CrawlerTaskManagementTest {
         CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books, chapters, tasks,
                 mock(CrawlerScanResultRepository.class), mock(CrawlerTaskLogRepository.class), management,
+                mock(CrawlerChapterAttemptMetricService.class),
                 mock(OperationLogService.class), mock(CrawlerExportService.class), mock(CrawlerHttpClient.class),
                 List.of(), mock(ApplicationContext.class), mock(CrawlerSettingsService.class));
         try {
@@ -863,7 +873,9 @@ class CrawlerTaskManagementTest {
         CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class), pages,
                 mock(CrawlerBookRepository.class), mock(CrawlerChapterRepository.class), tasks,
                 mock(com.aibook.repository.CrawlerScanResultRepository.class),
-                mock(CrawlerTaskLogRepository.class), management, mock(OperationLogService.class),
+                mock(CrawlerTaskLogRepository.class), management,
+                mock(CrawlerChapterAttemptMetricService.class),
+                mock(OperationLogService.class),
                 mock(CrawlerExportService.class), mock(CrawlerHttpClient.class), List.of(),
                 mock(ApplicationContext.class), mock(com.aibook.service.CrawlerSettingsService.class));
         try {
@@ -922,7 +934,9 @@ class CrawlerTaskManagementTest {
         CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 mock(CrawlerChapterRepository.class), tasks, results, mock(CrawlerTaskLogRepository.class),
-                management, mock(OperationLogService.class),
+                management,
+                mock(CrawlerChapterAttemptMetricService.class),
+                mock(OperationLogService.class),
                 mock(CrawlerExportService.class), http, List.of(parser), mock(ApplicationContext.class),
                 mock(com.aibook.service.CrawlerSettingsService.class));
         try {
@@ -956,7 +970,9 @@ class CrawlerTaskManagementTest {
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 mock(CrawlerChapterRepository.class), tasks,
                 mock(com.aibook.repository.CrawlerScanResultRepository.class), mock(CrawlerTaskLogRepository.class),
-                management, mock(OperationLogService.class),
+                management,
+                mock(CrawlerChapterAttemptMetricService.class),
+                mock(OperationLogService.class),
                 mock(CrawlerExportService.class),
                 mock(CrawlerHttpClient.class), List.of(),
                 mock(ApplicationContext.class), mock(com.aibook.service.CrawlerSettingsService.class));
