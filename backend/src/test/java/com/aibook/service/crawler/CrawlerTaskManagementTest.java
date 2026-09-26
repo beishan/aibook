@@ -442,7 +442,8 @@ class CrawlerTaskManagementTest {
         when(chapters.findByCrawlerBookOrderByChapterIndexAsc(book)).thenReturn(List.of(chapter));
         when(chapters.countByCrawlerBook(book)).thenReturn(1L);
         when(parser.supports(site)).thenReturn(true);
-        when(httpClient.get(site, chapter.getChapterUrl())).thenAnswer(invocation -> {
+        when(httpClient.get(eq(site), eq(chapter.getChapterUrl()), isNull(), isNull(),
+                any(CrawlerHttpClient.RequestTiming.class))).thenAnswer(invocation -> {
             task.setStatus(CrawlerTask.TaskStatus.PAUSED);
             throw new IOException("暂停时请求中断");
         });
@@ -498,7 +499,8 @@ class CrawlerTaskManagementTest {
         when(chapters.countByCrawlerBookAndCrawlStatus(eq(book), any()))
                 .thenAnswer(invocation -> chapter.getCrawlStatus() == invocation.getArgument(1) ? 1L : 0L);
         when(parser.supports(site)).thenReturn(true);
-        when(httpClient.get(site, chapter.getChapterUrl()))
+        when(httpClient.get(eq(site), eq(chapter.getChapterUrl()), isNull(), isNull(),
+                any(CrawlerHttpClient.RequestTiming.class)))
                 .thenReturn(new CrawlerHttpClient.FetchResult("page", 200, 10, null, null));
         when(parser.parseChapter("page", chapter.getChapterUrl(), rule))
                 .thenReturn(new BookCrawlerParser.ParsedContent(
@@ -553,7 +555,9 @@ class CrawlerTaskManagementTest {
         when(chapters.countByCrawlerBook(book)).thenReturn(8L);
         when(parser.supports(site)).thenReturn(true);
         when(httpClient.maxConsecutiveFailures()).thenReturn(5);
-        when(httpClient.get(eq(site), anyString())).thenThrow(new IOException("代理连接失败"));
+        when(httpClient.get(eq(site), anyString(), isNull(), isNull(),
+                any(CrawlerHttpClient.RequestTiming.class)))
+                .thenThrow(new IOException("代理连接失败"));
         CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
                 chapters, tasks, mock(com.aibook.repository.CrawlerScanResultRepository.class),
@@ -566,7 +570,8 @@ class CrawlerTaskManagementTest {
 
             assertThat(task.getStatus()).isEqualTo(CrawlerTask.TaskStatus.FAILED);
             assertThat(task.getErrorMessage()).contains("连续请求失败 5 次", "代理连接失败");
-            verify(httpClient, times(5)).get(eq(site), anyString());
+            verify(httpClient, times(5)).get(eq(site), anyString(), isNull(), isNull(),
+                    any(CrawlerHttpClient.RequestTiming.class));
             assertThat(chaptersToCrawl.subList(0, 5))
                     .allMatch(chapter -> chapter.getCrawlStatus() == CrawlerChapter.CrawlStatus.FAILED);
             assertThat(chaptersToCrawl.subList(5, 8))
