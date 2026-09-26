@@ -6,6 +6,7 @@ import com.aibook.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.*;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,8 @@ public class CrawlerManagementService {
     private final CrawlerBookRepository bookRepository;
     private final CrawlerChapterRepository chapterRepository;
     private final CrawlerTaskRepository taskRepository;
+    @Autowired
+    private CrawlerTaskQueueRepository taskQueueRepository;
     private final CrawlerTaskLogRepository taskLogRepository;
     private final CrawlerSiteRuleVersionRepository ruleVersionRepository;
     private final CrawlerDiscoveryPageRepository discoveryPageRepository;
@@ -46,6 +49,9 @@ public class CrawlerManagementService {
         CrawlerSite site = CrawlerSite.builder().user(user).build();
         apply(site, payload, siteCode);
         site = siteRepository.save(site);
+        if (taskQueueRepository != null) {
+            taskQueueRepository.save(CrawlerTaskQueue.builder().site(site).build());
+        }
         httpClient.refreshSiteConfiguration(site);
         return siteView(site);
     }
@@ -68,6 +74,9 @@ public class CrawlerManagementService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "该网站已有采集数据，不能删除；可先禁用网站");
         discoveryPageRepository.deleteBySite(site);
         ruleVersionRepository.deleteBySite(site);
+        if (taskQueueRepository != null) {
+            taskQueueRepository.deleteBySite(site);
+        }
         siteRepository.delete(site);
         httpClient.removeSiteRuntimeState(id);
     }

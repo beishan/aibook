@@ -176,7 +176,7 @@
     </section>
 
     <section v-else class="panel" role="tabpanel">
-      <div class="section-heading"><div><p class="eyebrow">{{ activeTab === 'failed' ? 'NEEDS ATTENTION' : 'PERSISTENT QUEUE' }}</p><h2>{{ activeTab === 'failed' ? '失败任务' : '采集任务' }}</h2></div><div class="queue-heading-actions"><div v-if="taskQueueSettings" class="queue-runtime"><span><i class="running-dot"/>运行 {{ taskQueueSettings.runningCount }} / {{ taskQueueSettings.maxConcurrentTasks }}</span><button type="button" title="查看运行中、等待中和已暂停任务" @click="openQueuedTasks">任务队列（{{ runningCurrentTaskCount }}/{{ currentCrawlerTasks.length }}）</button></div><el-button v-if="activeTab==='tasks'" @click="openQueueSettings">并行设置</el-button><el-button text :icon="Refresh" @click="refresh">刷新</el-button></div></div>
+      <div class="section-heading"><div><p class="eyebrow">{{ activeTab === 'failed' ? 'NEEDS ATTENTION' : 'PERSISTENT QUEUE' }}</p><h2>{{ activeTab === 'failed' ? '失败任务' : '采集任务' }}</h2></div><div class="queue-heading-actions"><div v-if="taskQueues.length" class="queue-runtime"><span><i class="running-dot"/>运行 {{ totalQueueRunning }} / {{ totalQueueConcurrency }}</span><button type="button" title="查看各网站的队列和任务" @click="openQueuedTasks">任务队列（{{ runningCurrentTaskCount }}/{{ currentCrawlerTasks.length }}）</button></div><el-button v-if="activeTab==='tasks'" @click="openQueueSettings">队列配置</el-button><el-button text :icon="Refresh" @click="refresh">刷新</el-button></div></div>
       <div v-if="activeTab==='tasks'" class="task-filter-toolbar">
         <el-select v-model="taskStatusFilter" clearable placeholder="全部任务状态" aria-label="任务状态筛选" @change="handleTaskStatusFilter">
           <el-option v-for="status in taskStatusOptions" :key="status" :label="statusLabel(status)" :value="status" />
@@ -280,7 +280,7 @@
       <el-form label-position="top" class="discovery-page-form">
         <el-form-item label="发现页名称"><el-input v-model="discoveryPageForm.pageName" maxlength="100" placeholder="例如：热门小说" /></el-form-item>
         <el-form-item label="起始页面 URL"><el-input v-model="discoveryPageForm.pageUrl" placeholder="https://www.chunxiaoge.com/rank/hot/" /><small class="field-hint">扫描会按规则中的“下一页 Selector”持续翻页，直到末页或达到安全上限。</small></el-form-item>
-        <div class="form-grid"><el-form-item label="最多扫描页数"><el-input-number v-model="discoveryPageForm.maxPages" :min="1" :max="500" /></el-form-item><el-form-item label="自动扫描间隔（分钟）"><el-input-number v-model="discoveryPageForm.scanIntervalMinutes" :min="5" :max="10080" :disabled="!discoveryPageForm.autoScanEnabled" /></el-form-item></div>
+        <div class="form-grid"><el-form-item label="最多扫描页数"><el-input-number v-model="discoveryPageForm.maxPages" :min="1" /></el-form-item><el-form-item label="自动扫描间隔（分钟）"><el-input-number v-model="discoveryPageForm.scanIntervalMinutes" :min="5" :max="10080" :disabled="!discoveryPageForm.autoScanEnabled" /></el-form-item></div>
         <el-switch v-model="discoveryPageForm.autoScanEnabled" active-text="开启自动扫描" inactive-text="仅手动扫描" />
         <el-alert type="info" :closable="false" title="自动扫描仅提取书籍到“发现书籍”，不会自动采集正文或加入书库。" />
       </el-form>
@@ -476,15 +476,49 @@
       </div>
     </el-drawer>
 
-    <el-dialog v-model="queueSettingsDialog" title="采集任务并行设置" width="min(520px, 94vw)" append-to-body>
+    <el-dialog v-model="queueOverviewDialog" title="网站任务队列" width="min(860px, 94vw)" append-to-body>
+      <div class="queue-overview-summary">
+        <span><small>队列总数</small><strong>{{ taskQueues.length }}</strong></span>
+        <span><small>正在运行</small><strong>{{ totalQueueRunning }} / {{ totalQueueConcurrency }}</strong></span>
+        <span><small>等待 / 暂停</small><strong>{{ totalQueueWaiting }} / {{ totalQueuePaused }}</strong></span>
+        <span><small>队列总进度</small><strong>{{ totalQueueProgress }}%</strong></span>
+      </div>
+      <div v-if="taskQueues.length" class="site-queue-list">
+        <article v-for="queue in taskQueues" :key="queue.id" class="site-queue-card">
+          <header><div><p class="eyebrow">{{ queue.siteName }}</p><strong>{{ queue.runningCount }} / {{ queue.maxConcurrentTasks }} 个任务运行中</strong></div><el-tag effect="plain">{{ queue.progressPercent }}%</el-tag></header>
+          <el-progress :percentage="queue.progressPercent" :stroke-width="7" :show-text="false" />
+          <div class="site-queue-stats"><span>等待 {{ queue.waitingCount }}</span><span>暂停 {{ queue.pausedCount }}</span><span>间隔 {{ queue.taskIntervalSeconds }} 秒</span></div>
+          <footer><el-button text @click="openQueueSettings(queue)">队列配置</el-button><el-button type="primary" plain @click="openQueueDetails(queue)">查看队列任务</el-button></footer>
+        </article>
+      </div>
+      <el-empty v-else description="还没有任务队列，请先添加采集网站" />
+      <template #footer><el-button :loading="queuedTasksLoading" @click="loadTaskQueues">刷新队列</el-button><el-button @click="openCreateQueue">手动创建队列</el-button><el-button @click="queueOverviewDialog=false">关闭</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="queueSettingsDialog" :title="`${queueSettingsTarget?.siteName || '网站'} · 队列配置`" width="min(520px, 94vw)" append-to-body>
       <div class="queue-settings-content">
-        <div class="queue-settings-summary"><span><small>正在运行</small><strong>{{ taskQueueSettings?.runningCount || 0 }}</strong></span><span><small>等待队列</small><strong>{{ taskQueueSettings?.queuedCount || 0 }}</strong></span></div>
-        <el-form label-position="top"><el-form-item label="最多同时运行任务数"><el-input-number class="queue-limit-stepper" v-model="queueLimit" :min="1" :max="16" :step="1" step-strictly /><small class="field-hint">新任务超过上限后保持等待状态；调低上限时，超出数量的运行任务会保留进度并安全转回等待队列，之后按高、中、低优先级及入队顺序自动继续。</small></el-form-item></el-form>
+        <div class="queue-settings-summary"><span><small>正在运行</small><strong>{{ queueSettingsTarget?.runningCount || 0 }}</strong></span><span><small>等待队列</small><strong>{{ queueSettingsTarget?.waitingCount || 0 }}</strong></span></div>
+        <el-form label-position="top">
+          <el-form-item label="同时运行任务数">
+            <el-input-number class="queue-limit-stepper" v-model="queueLimit" :min="1" :max="16" :step="1" step-strictly />
+            <small class="field-hint">仅影响此网站的任务队列。调低上限时，超出的运行任务会保留进度并转回等待队列。</small>
+          </el-form-item>
+          <el-form-item label="任务启动间隔">
+            <el-input-number v-model="queueIntervalSeconds" :min="0" :max="3600" :step="1" step-strictly />
+            <small class="field-hint">每次启动此队列的新任务后，至少等待指定秒数再启动下一个任务；0 表示不额外等待。</small>
+          </el-form-item>
+        </el-form>
       </div>
       <template #footer><el-button @click="queueSettingsDialog=false">取消</el-button><el-button type="primary" :loading="savingQueueSettings" @click="saveQueueSettings">保存设置</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="queuedTasksDialog" :title="`当前任务 · ${queuedTasks.length}`" width="min(1040px, calc(100vw - 32px))" class="queued-tasks-dialog" append-to-body>
+    <el-dialog v-model="createQueueDialog" title="手动创建网站队列" width="min(480px, 94vw)" append-to-body>
+      <el-form label-position="top"><el-form-item label="采集网站"><el-select v-model="createQueueSiteId" class="queue-site-select" placeholder="选择尚未创建队列的网站"><el-option v-for="site in sitesWithoutQueue" :key="site.id" :label="site.siteName" :value="site.id" /></el-select></el-form-item></el-form>
+      <el-empty v-if="!sitesWithoutQueue.length" :image-size="64" description="所有网站都已有队列" />
+      <template #footer><el-button @click="createQueueDialog=false">取消</el-button><el-button type="primary" :disabled="!createQueueSiteId" :loading="creatingQueue" @click="createQueue">创建队列</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="queuedTasksDialog" :title="`${activeQueue?.siteName || '网站'} · 队列任务 · ${queuedTasks.length}`" width="min(1040px, calc(100vw - 32px))" class="queued-tasks-dialog" append-to-body>
       <div v-if="queuedTasks.some(task=>task.status==='WAITING')" class="queued-order-note"><span class="queue-drag-mark">⠿</span><div><strong>运行中任务固定在最前，等待任务可调整顺序</strong><small>拖动等待任务或聚焦排序按钮后使用上下方向键；需要置顶时可点击“优先”。</small></div></div>
       <el-table v-loading="queuedTasksLoading||queuedTasksReordering||!!queuedTaskPrioritizingId" :data="pagedQueuedTasks" row-key="id" max-height="56vh" class="queued-task-table" :row-class-name="queuedTaskRowClassName">
         <el-table-column label="排序" width="62" align="center"><template #default="{row}"><button type="button" class="queue-drag-handle" :class="{dragging:queuedTaskDraggingId===row.id,disabled:row.status!=='WAITING'}" :disabled="row.status!=='WAITING'||queuedTasksReordering||Boolean(queuedTaskPrioritizingId)||Boolean(queuedTaskCommandId)" :draggable="row.status==='WAITING'&&!queuedTasksReordering&&!queuedTaskPrioritizingId&&!queuedTaskCommandId" :aria-label="row.status==='WAITING'?`拖动排序：${row.bookName||row.discoveryPageName||taskTypeLabel(row.type)}`:'当前状态不可排序'" :title="row.status==='WAITING'?'拖动调整顺序；也可使用上下方向键':'只有等待中的任务可以排序'" @dragstart="startQueuedTaskDrag(row,$event)" @dragenter.prevent="moveDraggedQueuedTask(row)" @dragover.prevent @dragend="finishQueuedTaskDrag" @keydown.up.prevent="moveQueuedTaskByKeyboard(row,-1)" @keydown.down.prevent="moveQueuedTaskByKeyboard(row,1)">⠿</button></template></el-table-column>
@@ -498,7 +532,7 @@
       </el-table>
       <el-empty v-if="!queuedTasksLoading&&!queuedTasks.length" description="当前没有运行、等待或暂停的任务" />
       <div v-if="queuedTasks.length" class="queued-task-pagination"><span>当前显示 {{ pagedQueuedTasks.length }} 项</span><el-pagination v-model:current-page="queuedTaskPage" v-model:page-size="queuedTaskPageSize" :page-sizes="[10,20,50]" :total="queuedTasks.length" layout="total, sizes, prev, pager, next, jumper" background small @size-change="handleQueuedTaskSizeChange" /></div>
-      <template #footer><el-button :loading="queuedTasksLoading" :disabled="queuedTasksReordering" @click="loadQueuedTasks">刷新</el-button><el-button @click="queuedTasksDialog=false">关闭</el-button></template>
+      <template #footer><el-button @click="returnToQueueOverview">返回队列列表</el-button><el-button :loading="queuedTasksLoading" :disabled="queuedTasksReordering" @click="loadQueuedTasks">刷新</el-button><el-button @click="queuedTasksDialog=false">关闭</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="scanResultsDialog" :title="`${scanResultsTask?.discoveryPageName || '发现页'} · 扫描结果`" width="min(920px, 96vw)" append-to-body>
@@ -585,7 +619,7 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, MoreFilled, Plus, Refresh, Search, Star, StarFilled, Tickets, TrendCharts, Upload, VideoPause, VideoPlay, Warning } from '@element-plus/icons-vue'
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElProgress, ElTable, ElTableColumn, ElTag, ElTooltip, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
-import { crawlerApi, type CrawlerBook, type CrawlerChapter, type CrawlerDashboard, type CrawlerDashboardStatistics, type CrawlerDiscoveryPage, type CrawlerDiscoveryPagePayload, type CrawlerLog, type CrawlerRule, type CrawlerRuleExport, type CrawlerRuleTest, type CrawlerRuleVersion, type CrawlerScanResult, type CrawlerSite, type CrawlerSiteConfiguration, type CrawlerSitePayload, type CrawlerTask, type CrawlerTaskQueueSettings } from '@/utils/crawler'
+import { crawlerApi, type CrawlerBook, type CrawlerChapter, type CrawlerDashboard, type CrawlerDashboardStatistics, type CrawlerDiscoveryPage, type CrawlerDiscoveryPagePayload, type CrawlerLog, type CrawlerRule, type CrawlerRuleExport, type CrawlerRuleTest, type CrawlerRuleVersion, type CrawlerScanResult, type CrawlerSite, type CrawlerSiteConfiguration, type CrawlerSitePayload, type CrawlerTask, type CrawlerTaskQueue } from '@/utils/crawler'
 import {
   CRAWLER_POLLING_INTERVAL_OPTIONS,
   usePreferencesStore,
@@ -679,7 +713,18 @@ const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=r
 const taskStatusFilter=ref(''), taskTypeFilter=ref(''), taskFavoriteOnly=ref(false)
 const selectedTasks=ref<CrawlerTask[]>([]), selectedFailedTasks=ref<CrawlerTask[]>([]), taskTableSelectionVersion=ref(0), batchTaskManaging=ref(false), batchTaskAction=ref<'pause'|'resume'|'cancel'|'delete'|'priority'|'resume-all'>()
 const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
-const queueSettingsDialog=ref(false), savingQueueSettings=ref(false), taskQueueSettings=ref<CrawlerTaskQueueSettings>(), queueLimit=ref(4), queuedTasksDialog=ref(false), queuedTasksLoading=ref(false), queuedTasksReordering=ref(false), queuedTaskPrioritizingId=ref<string>(), queuedTaskCommandId=ref<string>(), queuedTaskCommand=ref<'pause'|'resume'|'cancel'>(), queuedTaskDraggingId=ref<string>(), queuedTaskDragStartOrder=ref<string[]>([]), queuedTasks=ref<CrawlerTask[]>([]), queuedTaskPage=ref(1), queuedTaskPageSize=ref(10)
+const queueOverviewDialog=ref(false), queueSettingsDialog=ref(false), createQueueDialog=ref(false), savingQueueSettings=ref(false), creatingQueue=ref(false), taskQueues=ref<CrawlerTaskQueue[]>([]), activeQueue=ref<CrawlerTaskQueue>(), queueSettingsTarget=ref<CrawlerTaskQueue>(), queueLimit=ref(4), queueIntervalSeconds=ref(0), createQueueSiteId=ref<number>(), queuedTasksDialog=ref(false), queuedTasksLoading=ref(false), queuedTasksReordering=ref(false), queuedTaskPrioritizingId=ref<string>(), queuedTaskCommandId=ref<string>(), queuedTaskCommand=ref<'pause'|'resume'|'cancel'>(), queuedTaskDraggingId=ref<string>(), queuedTaskDragStartOrder=ref<string[]>([]), queuedTasks=ref<CrawlerTask[]>([]), queuedTaskPage=ref(1), queuedTaskPageSize=ref(10)
+const totalQueueRunning=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.runningCount,0))
+const totalQueueConcurrency=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.maxConcurrentTasks,0))
+const totalQueueWaiting=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.waitingCount,0))
+const totalQueuePaused=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.pausedCount,0))
+const totalQueueProgress=computed(()=>{
+  const taskCount=taskQueues.value.reduce((total,queue)=>total+queue.activeTaskCount,0)
+  if(!taskCount)return 0
+  const weightedProgress=taskQueues.value.reduce((total,queue)=>total+queue.progressPercent*queue.activeTaskCount,0)
+  return Math.round(weightedProgress/taskCount)
+})
+const sitesWithoutQueue=computed(()=>sites.value.filter(site=>!taskQueues.value.some(queue=>queue.siteId===site.id)))
 const failedTaskLoading=ref(false), failedTaskPage=ref(1), failedTaskPageSize=ref(20), failedTaskTotal=ref(0)
 const ruleTestSite=ref<CrawlerSite>(), ruleTestDraft=ref<CrawlerRule>(), ruleSite=ref<CrawlerSite>(), editingRule=ref<CrawlerRuleVersion>(), ruleTestUrl=ref(''), ruleTestResult=ref<CrawlerRuleTest>(), ruleVersions=ref<CrawlerRuleVersion[]>([]), importInput=ref<HTMLInputElement>(), importMode=ref<'text'|'file'>('text'), importJsonText=ref(''), importFileName=ref('')
 const siteConfigurationImportInput=ref<HTMLInputElement>(), siteConfigurationImportMode=ref<'text'|'file'>('text'), siteConfigurationJsonText=ref(''), siteConfigurationImportFileName=ref('')
@@ -801,7 +846,7 @@ async function renderStatisticsCharts(){
   const funnel=statistics.value.funnel
   init(funnelChartRef.value,{color:[primary,'#7088e8',success,warning],tooltip:{trigger:'item',formatter:'{b}：{c}',backgroundColor:chartCssColor('--surface-elevated','#fff'),borderColor:line,textStyle:{color:chartCssColor('--text-primary','#1d2939')}},series:[{type:'funnel',top:8,bottom:8,left:'8%',width:'84%',minSize:'28%',maxSize:'100%',sort:'descending',gap:3,label:{color:text,fontSize:11,formatter:'{b}  {c}'},labelLine:{lineStyle:{color:line}},itemStyle:{borderColor:chartCssColor('--surface-card','#fff'),borderWidth:2},data:[{name:'已发现',value:funnel.discoveredBooks},{name:'已建任务',value:funnel.taskedBooks},{name:'采集完成',value:funnel.completedBooks},{name:'已入库',value:funnel.importedBooks}]}]})
 }
-async function refresh(){const [dashboardData,siteData]=await Promise.all([crawlerApi.dashboard(),crawlerApi.sites(),loadBooks(),loadTasks(),loadFailedTasks(),loadDiscoveredBooks(),loadTaskQueueSettings(),loadCurrentCrawlerTasks()]);dashboard.value=dashboardData;sites.value=siteData;await loadDiscoveryPages()}
+async function refresh(){const [dashboardData,siteData]=await Promise.all([crawlerApi.dashboard(),crawlerApi.sites(),loadBooks(),loadTasks(),loadFailedTasks(),loadDiscoveredBooks(),loadTaskQueues(),loadCurrentCrawlerTasks()]);dashboard.value=dashboardData;sites.value=siteData;await loadDiscoveryPages()}
 async function loadCurrentCrawlerTasks(){currentCrawlerTasks.value=await crawlerApi.currentTasks()}
 async function loadDiscoveryPages(){const pages=await crawlerApi.discoveryPages();discoveryPagesBySite.value=pages.reduce<Record<number,CrawlerDiscoveryPage[]>>((groups,page)=>{(groups[page.siteId]??=[]).push(page);return groups},{})}
 async function pollCrawlerProgress(){
@@ -814,7 +859,7 @@ async function pollCrawlerProgress(){
     if(hasActiveTask){
       requests.push(crawlerApi.dashboard().then(data=>{dashboard.value=data}))
       requests.push(loadTasks({silent:true}))
-      requests.push(loadTaskQueueSettings())
+      requests.push(loadTaskQueues())
       requests.push(loadCurrentCrawlerTasks())
       if(queuedTasksDialog.value)requests.push(loadQueuedTasks({silent:true}))
       if(activeTab.value==='sites')requests.push(crawlerApi.sites().then(data=>{sites.value=data}))
@@ -869,25 +914,59 @@ async function syncOpenTask(options:LoadOptions={}){
     if(dashboard.value)dashboard.value.recentTasks=dashboard.value.recentTasks.map(task=>task.id===taskId?latest:task)
   }finally{if(!options.silent)taskDetailLoading.value=false}
 }
-async function loadTaskQueueSettings(){
-  const latest=await crawlerApi.taskQueueSettings()
-  taskQueueSettings.value=latest
-  if(!queueSettingsDialog.value&&!savingQueueSettings.value)queueLimit.value=latest.maxConcurrentTasks
+async function loadTaskQueues(){taskQueues.value=await crawlerApi.taskQueues()}
+function openQueueSettings(queue?:CrawlerTaskQueue){
+  if(!queue){queueOverviewDialog.value=true;return}
+  queueSettingsTarget.value=queue
+  queueLimit.value=queue.maxConcurrentTasks
+  queueIntervalSeconds.value=queue.taskIntervalSeconds
+  queueSettingsDialog.value=true
 }
-function openQueueSettings(){if(taskQueueSettings.value)queueLimit.value=taskQueueSettings.value.maxConcurrentTasks;queueSettingsDialog.value=true}
-async function saveQueueSettings(){const previousLimit=taskQueueSettings.value?.maxConcurrentTasks??queueLimit.value;savingQueueSettings.value=true;try{taskQueueSettings.value=await crawlerApi.updateTaskQueueSettings(queueLimit.value);queueLimit.value=taskQueueSettings.value.maxConcurrentTasks;queueSettingsDialog.value=false;message.success(queueLimit.value<previousLimit?`最多同时运行 ${queueLimit.value} 个采集任务，超出任务已转回等待队列`:`最多同时运行 ${queueLimit.value} 个采集任务`);await Promise.all([loadTasks({silent:true}),loadCurrentCrawlerTasks()])}finally{savingQueueSettings.value=false}}
-async function openQueuedTasks(){queuedTasksDialog.value=true;await loadQueuedTasks()}
+async function saveQueueSettings(){
+  const queue=queueSettingsTarget.value
+  if(!queue)return
+  savingQueueSettings.value=true
+  try{
+    const updated=await crawlerApi.updateTaskQueue(queue.siteId,{maxConcurrentTasks:queueLimit.value,taskIntervalSeconds:queueIntervalSeconds.value})
+    taskQueues.value=taskQueues.value.map(item=>item.siteId===updated.siteId?updated:item)
+    queueSettingsDialog.value=false
+    message.success(`${updated.siteName} 队列配置已保存`)
+    await Promise.all([loadTasks({silent:true}),loadCurrentCrawlerTasks(),loadTaskQueues()])
+  }catch(error:any){
+    message.error(error.response?.data?.message||'队列配置保存失败')
+  }finally{
+    savingQueueSettings.value=false
+  }
+}
+async function openQueuedTasks(){queueOverviewDialog.value=true;await loadTaskQueues()}
+async function openQueueDetails(queue:CrawlerTaskQueue){activeQueue.value=queue;queueOverviewDialog.value=false;queuedTasksDialog.value=true;queuedTaskPage.value=1;await loadQueuedTasks()}
+async function returnToQueueOverview(){queuedTasksDialog.value=false;queueOverviewDialog.value=true;await loadTaskQueues()}
+function openCreateQueue(){createQueueSiteId.value=sitesWithoutQueue.value[0]?.id;createQueueDialog.value=true}
+async function createQueue(){
+  if(!createQueueSiteId.value||creatingQueue.value)return
+  creatingQueue.value=true
+  try{
+    await crawlerApi.createTaskQueue(createQueueSiteId.value)
+    await loadTaskQueues()
+    createQueueDialog.value=false
+    message.success('网站队列已创建')
+  }catch(error:any){
+    message.error(error.response?.data?.message||'网站队列创建失败')
+  }finally{
+    creatingQueue.value=false
+  }
+}
 function currentTaskStatusRank(task:CrawlerTask){return task.status==='RUNNING'?0:task.status==='WAITING'?1:task.status==='PAUSED'?2:3}
 function orderCurrentTasks(items:CrawlerTask[]){return items.map((task,index)=>({task,index})).sort((left,right)=>currentTaskStatusRank(left.task)-currentTaskStatusRank(right.task)||left.index-right.index).map(item=>item.task)}
 function clampQueuedTaskPage(){queuedTaskPage.value=Math.min(queuedTaskPage.value,Math.max(1,Math.ceil(queuedTasks.value.length/queuedTaskPageSize.value)))}
 function handleQueuedTaskSizeChange(){queuedTaskPage.value=1;clampQueuedTaskPage()}
-async function loadQueuedTasks(options:LoadOptions={}){if(options.silent&&(queuedTaskDraggingId.value||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value))return;if(!options.silent)queuedTasksLoading.value=true;try{queuedTasks.value=orderCurrentTasks(await crawlerApi.currentTasks());clampQueuedTaskPage()}finally{if(!options.silent)queuedTasksLoading.value=false}}
+async function loadQueuedTasks(options:LoadOptions={}){if(options.silent&&(queuedTaskDraggingId.value||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value))return;if(!options.silent)queuedTasksLoading.value=true;try{queuedTasks.value=orderCurrentTasks(await crawlerApi.currentTasks(activeQueue.value?.siteId));clampQueuedTaskPage()}finally{if(!options.silent)queuedTasksLoading.value=false}}
 async function openQueuedTask(task:CrawlerTask){queuedTasksDialog.value=false;await openTask(task)}
-async function prioritizeQueuedTask(task:CrawlerTask){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value||batchTaskManaging.value)return;queuedTaskPrioritizingId.value=task.id;try{await crawlerApi.prioritizeQueuedTask(task.id);message.success(`“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”已移到等待队列首位`);await Promise.all([loadQueuedTasks(),loadTasks({silent:true}),loadTaskQueueSettings()])}catch(error:any){message.error(error.response?.data?.message||'任务优先调整失败');await loadQueuedTasks()}finally{queuedTaskPrioritizingId.value=undefined}}
-async function commandCurrentTask(task:CrawlerTask,command:'pause'|'resume'|'cancel'){if(queuedTaskCommandId.value||queuedTasksReordering.value||queuedTaskPrioritizingId.value)return;queuedTaskCommandId.value=task.id;queuedTaskCommand.value=command;const actionLabel={pause:'暂停',resume:'继续',cancel:'取消'}[command];try{await crawlerApi.taskCommand(task.id,command);message.success(`“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”已${actionLabel}`);const [dashboardData]=await Promise.all([crawlerApi.dashboard(),loadQueuedTasks(),loadTasks({silent:true}),loadFailedTasks({silent:true}),loadTaskQueueSettings()]);dashboard.value=dashboardData}catch(error:any){message.error(error.response?.data?.message||`任务${actionLabel}失败，请稍后重试`);await loadQueuedTasks()}finally{queuedTaskCommandId.value=undefined;queuedTaskCommand.value=undefined}}
+async function prioritizeQueuedTask(task:CrawlerTask){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value||batchTaskManaging.value)return;queuedTaskPrioritizingId.value=task.id;try{await crawlerApi.prioritizeQueuedTask(task.id);message.success(`“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”已移到等待队列首位`);await Promise.all([loadQueuedTasks(),loadTasks({silent:true}),loadTaskQueues()])}catch(error:any){message.error(error.response?.data?.message||'任务优先调整失败');await loadQueuedTasks()}finally{queuedTaskPrioritizingId.value=undefined}}
+async function commandCurrentTask(task:CrawlerTask,command:'pause'|'resume'|'cancel'){if(queuedTaskCommandId.value||queuedTasksReordering.value||queuedTaskPrioritizingId.value)return;queuedTaskCommandId.value=task.id;queuedTaskCommand.value=command;const actionLabel={pause:'暂停',resume:'继续',cancel:'取消'}[command];try{await crawlerApi.taskCommand(task.id,command);message.success(`“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”已${actionLabel}`);const [dashboardData]=await Promise.all([crawlerApi.dashboard(),loadQueuedTasks(),loadTasks({silent:true}),loadFailedTasks({silent:true}),loadTaskQueues()]);dashboard.value=dashboardData}catch(error:any){message.error(error.response?.data?.message||`任务${actionLabel}失败，请稍后重试`);await loadQueuedTasks()}finally{queuedTaskCommandId.value=undefined;queuedTaskCommand.value=undefined}}
 function startQueuedTaskDrag(task:CrawlerTask,event:DragEvent){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskCommandId.value){event.preventDefault();return}queuedTaskDraggingId.value=task.id;queuedTaskDragStartOrder.value=queuedTasks.value.filter(item=>item.status==='WAITING').map(item=>item.id);if(event.dataTransfer){event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',task.id)}}
 function moveDraggedQueuedTask(target:CrawlerTask){const sourceIndex=queuedTasks.value.findIndex(item=>item.id===queuedTaskDraggingId.value),targetIndex=queuedTasks.value.findIndex(item=>item.id===target.id);if(sourceIndex<0||targetIndex<0||sourceIndex===targetIndex||target.status!=='WAITING'||queuedTasks.value[sourceIndex].status!=='WAITING'||queuedTasks.value[sourceIndex].priority!==target.priority)return;const next=[...queuedTasks.value],[source]=next.splice(sourceIndex,1);next.splice(targetIndex,0,source);queuedTasks.value=next}
-async function persistQueuedTaskOrder(){queuedTasksReordering.value=true;try{await crawlerApi.reorderQueuedTasks(queuedTasks.value.filter(task=>task.status==='WAITING').map(task=>task.id));message.success('等待队列顺序已更新');await loadQueuedTasks()}catch(error:any){message.error(error.response?.data?.message||'队列排序保存失败');await loadQueuedTasks()}finally{queuedTasksReordering.value=false}}
+async function persistQueuedTaskOrder(){queuedTasksReordering.value=true;try{await crawlerApi.reorderQueuedTasks(queuedTasks.value.filter(task=>task.status==='WAITING').map(task=>task.id),activeQueue.value?.siteId);message.success('等待队列顺序已更新');await loadQueuedTasks()}catch(error:any){message.error(error.response?.data?.message||'队列排序保存失败');await loadQueuedTasks()}finally{queuedTasksReordering.value=false}}
 async function finishQueuedTaskDrag(){const currentOrder=queuedTasks.value.filter(task=>task.status==='WAITING').map(task=>task.id);const changed=queuedTaskDragStartOrder.value.join(',')!==currentOrder.join(',');queuedTaskDraggingId.value=undefined;queuedTaskDragStartOrder.value=[];if(changed)await persistQueuedTaskOrder()}
 async function moveQueuedTaskByKeyboard(task:CrawlerTask,direction:-1|1){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskCommandId.value)return;const index=queuedTasks.value.findIndex(item=>item.id===task.id),target=index+direction;if(index<0||target<0||target>=queuedTasks.value.length||queuedTasks.value[target].status!=='WAITING')return;if(queuedTasks.value[target].priority!==task.priority)return message.warning('跨优先级排序请先修改任务优先级');const next=[...queuedTasks.value];[next[index],next[target]]=[next[target],next[index]];queuedTasks.value=next;await persistQueuedTaskOrder()}
 function queuedTaskRowClassName({row}:{row:CrawlerTask}){return row.id===queuedTaskDraggingId.value?'queued-task-row-dragging':''}
@@ -1334,7 +1413,128 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 .task-scan-progress{display:grid;gap:5px}.task-scan-progress>small{color:var(--text-tertiary);font-size:10px}.task-scan-summary{display:flex;flex-wrap:wrap;gap:5px;color:var(--text-secondary);font-size:11px}.task-scan-summary>*{padding:2px 6px;border-radius:99px;font-style:normal;font-weight:700}.task-scan-summary b{background:var(--success-alpha-15);color:var(--success)}.task-scan-summary i{background:var(--primary-alpha-10);color:var(--primary)}.task-scan-summary em{background:color-mix(in srgb,var(--warning) 15%,transparent);color:var(--warning)}.task-scan-summary strong{background:color-mix(in srgb,var(--danger) 10%,transparent);color:var(--danger)}.scan-result-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:16px}.scan-result-summary span{display:grid;gap:3px;padding:12px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-elevated)}.scan-result-summary small{color:var(--text-tertiary);font-size:10px}.scan-result-summary strong{font-size:20px}.scan-results-table a{color:var(--primary)}.scan-results-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;color:var(--text-tertiary);font-size:12px}@media(max-width:640px){.scan-result-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.scan-results-pagination{align-items:flex-start;flex-direction:column}}
 .crawler-book-metadata{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}.crawler-book-metadata>span{display:grid;gap:4px;padding:11px 13px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-elevated)}.crawler-book-metadata small{color:var(--text-tertiary);font-size:10px}.crawler-book-metadata .metadata-tag-row{grid-column:1/-1}.metadata-tags{display:flex;flex-wrap:wrap;gap:6px}.test-result>.metadata-tags{margin-top:14px}@media(max-width:520px){.crawler-book-metadata{grid-template-columns:minmax(0,1fr)}.crawler-book-metadata .metadata-tag-row{grid-column:auto}}
 :deep(.task-open){display:flex;width:100%;min-width:0;align-items:center;gap:8px;margin:0;padding:5px 0;appearance:none;border:0;background:transparent;color:var(--text-primary);font:inherit;text-align:left;cursor:pointer}:deep(.task-open strong){overflow:hidden;min-width:0;text-overflow:ellipsis;white-space:nowrap}:deep(.task-site-mark){display:inline-grid;width:22px;height:22px;flex:0 0 22px;place-items:center;border:1px solid color-mix(in srgb,var(--primary) 22%,var(--border-color-light));border-radius:7px;background:var(--primary-alpha-10);color:var(--primary);font-size:11px;font-weight:800}:deep(.task-open:hover strong){color:var(--primary)}:deep(.task-open:focus-visible){outline:2px solid var(--primary);outline-offset:2px;border-radius:6px}.task-detail-content{display:grid;gap:16px}.task-detail-hero{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:18px;border-radius:18px;background:var(--primary-alpha-10)}.task-detail-hero h2{overflow:hidden;margin-bottom:4px;text-overflow:ellipsis;white-space:nowrap}.task-detail-hero>div:nth-child(2)>p:last-child{color:var(--text-secondary);font-size:12px}.task-detail-mark{position:relative;display:grid;width:72px;height:72px;place-items:center;border:7px solid var(--surface-card);border-radius:50%;background:var(--surface-elevated);box-shadow:var(--shadow-sm)}.task-detail-mark>span{position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:var(--text-tertiary)}.task-detail-mark>span.state-running{background:var(--success);box-shadow:0 0 0 5px var(--success-alpha-15);animation:live-pulse 1.8s ease-out infinite}.task-detail-mark>span.state-failed{background:var(--danger)}.task-detail-mark>span.state-paused,.task-detail-mark>span.state-partial_success{background:var(--warning)}.task-progress-card{display:grid;gap:11px;padding:16px;border:1px solid var(--border-color-light);border-radius:15px;background:var(--surface-elevated)}.task-progress-card>div{display:flex;align-items:center;justify-content:space-between}.task-progress-card>p{color:var(--text-secondary);font-size:12px}.task-stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.task-stat-grid>span{display:grid;gap:3px;padding:12px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-card)}.task-stat-grid small,.task-detail-list span{color:var(--text-tertiary);font-size:10px}.task-stat-grid strong{font-size:20px}.task-detail-list{overflow:hidden;border:1px solid var(--border-color-light);border-radius:14px}.task-detail-list>div{display:grid;grid-template-columns:130px minmax(0,1fr);gap:12px;padding:11px 14px;border-bottom:1px solid var(--border-color-light)}.task-detail-list>div:last-child{border-bottom:0}.task-detail-list strong{overflow-wrap:anywhere;font-size:12px}.task-detail-actions{display:flex;flex-wrap:wrap;gap:8px;padding-top:4px}.task-detail-actions .el-button{margin-left:0}@media(max-width:520px){.task-detail-hero{grid-template-columns:auto minmax(0,1fr)}.task-detail-hero>.el-tag{grid-column:1/-1;justify-self:start}.task-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.task-detail-list>div{grid-template-columns:90px minmax(0,1fr)}}@media(prefers-reduced-motion:reduce){.task-detail-mark>span.state-running{animation:none}}
-.queue-heading-actions{display:flex;align-items:center;gap:10px}.queue-runtime{display:flex;gap:8px}.queue-runtime span,.queue-runtime button{box-sizing:border-box;display:flex;min-height:32px;align-items:center;gap:7px;padding:7px 12px;border:0;border-radius:99px;background:var(--surface-elevated);color:var(--text-secondary);font-family:inherit;font-size:12px;font-weight:700;line-height:1}.queue-runtime button{border:1px solid var(--border-color-light);cursor:pointer;transition:border-color .18s ease,color .18s ease,background .18s ease}.queue-runtime button:hover{border-color:var(--primary);background:var(--primary-alpha-10);color:var(--primary)}.queue-runtime button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}.running-dot{width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 0 3px var(--success-alpha-15)}.queue-settings-content{display:grid;gap:18px}.queue-settings-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.queue-settings-summary span{display:grid;gap:4px;padding:14px;border:1px solid var(--border-color-light);border-radius:13px;background:var(--surface-elevated)}.queue-settings-summary small{color:var(--text-tertiary);font-size:10px}.queue-settings-summary strong{font-size:24px}.queue-limit-stepper{width:min(300px,100%);height:64px}.queue-limit-stepper :deep(.el-input){height:64px}.queue-limit-stepper :deep(.el-input__wrapper){padding-right:64px;padding-left:64px;border-radius:8px;background:var(--surface-card);box-shadow:0 0 0 1px var(--border-color) inset}.queue-limit-stepper :deep(.el-input__inner){height:64px;color:var(--text-primary);font-size:25px;font-weight:500}.queue-limit-stepper :deep(.el-input-number__decrease),.queue-limit-stepper :deep(.el-input-number__increase){width:64px;height:62px;border-color:var(--border-color);background:var(--surface-elevated);color:var(--text-secondary);font-size:25px}.queue-limit-stepper :deep(.el-input-number__decrease){border-radius:8px 0 0 8px}.queue-limit-stepper :deep(.el-input-number__increase){border-radius:0 8px 8px 0}.queue-limit-stepper :deep(.el-input-number__decrease:hover),.queue-limit-stepper :deep(.el-input-number__increase:hover){background:var(--primary-alpha-10);color:var(--primary)}.queue-limit-stepper :deep(.el-input-number__decrease.is-disabled),.queue-limit-stepper :deep(.el-input-number__increase.is-disabled){color:var(--text-tertiary)}.queued-order-note{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:11px 13px;border:1px solid var(--primary-alpha-20);border-radius:13px;background:var(--primary-alpha-10)}.queue-drag-mark{display:grid;flex:0 0 32px;height:32px;place-items:center;border-radius:9px;background:var(--surface-card);color:var(--primary);font-size:20px}.queued-order-note div{display:grid;gap:2px}.queued-order-note strong{font-size:12px}.queued-order-note small{color:var(--text-secondary);font-size:11px}.queue-drag-handle{display:grid;width:34px;height:34px;margin:auto;place-items:center;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--text-tertiary);cursor:grab;font-size:20px;line-height:1;transition:color .18s ease,background .18s ease,border-color .18s ease,opacity .18s ease}.queue-drag-handle:hover,.queue-drag-handle:focus-visible{border-color:var(--primary-alpha-20);outline:none;background:var(--primary-alpha-10);color:var(--primary)}.queue-drag-handle:active,.queue-drag-handle.dragging{cursor:grabbing;opacity:.45}.queue-drag-handle.disabled{cursor:not-allowed;opacity:.3}:deep(.queued-task-row-dragging td.el-table__cell){background:var(--primary-alpha-10)!important}.queue-task-link{display:flex;width:100%;min-height:34px;align-items:center;padding:4px 0;border:0;background:transparent;color:var(--text-primary);font:inherit;text-align:left;cursor:pointer}.queue-task-link strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.queue-task-link:hover strong{color:var(--primary)}.queue-task-link:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:6px}.queued-task-actions{display:inline-flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--border-color-light);border-radius:13px;background:color-mix(in srgb,var(--surface-elevated) 88%,transparent);box-shadow:0 3px 10px color-mix(in srgb,var(--text-primary) 5%,transparent);white-space:nowrap}.queued-task-actions :deep(.el-button){height:28px;margin-left:0;padding:5px 10px;border-color:transparent;background:transparent;font-size:11px;font-weight:700;transition:background .18s ease,color .18s ease,box-shadow .18s ease}.queued-task-actions :deep(.queued-task-action-details),.queued-task-actions :deep(.queued-task-action-resume),.queued-task-actions :deep(.queued-task-action-prioritize){background:var(--primary-alpha-10);color:var(--primary)}.queued-task-actions :deep(.queued-task-action-details:hover),.queued-task-actions :deep(.queued-task-action-details:focus-visible),.queued-task-actions :deep(.queued-task-action-resume:hover),.queued-task-actions :deep(.queued-task-action-resume:focus-visible),.queued-task-actions :deep(.queued-task-action-prioritize:hover),.queued-task-actions :deep(.queued-task-action-prioritize:focus-visible){background:var(--primary);color:#fff;box-shadow:0 4px 10px color-mix(in srgb,var(--primary) 22%,transparent)}.queued-task-actions :deep(.queued-task-action-pause){color:var(--text-secondary)}.queued-task-actions :deep(.queued-task-action-pause:hover),.queued-task-actions :deep(.queued-task-action-pause:focus-visible){background:var(--surface-card);color:var(--text-primary)}.queued-task-actions :deep(.queued-task-action-cancel){color:var(--danger)}.queued-task-actions :deep(.queued-task-action-cancel:hover),.queued-task-actions :deep(.queued-task-action-cancel:focus-visible){background:color-mix(in srgb,var(--danger) 10%,transparent);color:var(--danger)}.queued-task-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 2px 0;color:var(--text-tertiary);font-size:12px}.queued-task-pagination :deep(.el-pagination){min-width:0}@media(max-width:720px){.queue-heading-actions{align-items:flex-end;flex-direction:column}.queue-runtime{order:2}.queued-order-note{align-items:flex-start}.queued-task-pagination{align-items:flex-start;flex-direction:column}.queued-task-pagination :deep(.el-pagination){flex-wrap:wrap;justify-content:flex-start}}@media(max-width:520px){.queue-runtime{width:100%}.queue-runtime span,.queue-runtime button{flex:1;justify-content:center}}
+.queue-heading-actions{display:flex;align-items:center;gap:10px}.queue-runtime{display:flex;gap:8px}.queue-runtime span,.queue-runtime button{box-sizing:border-box;display:flex;min-height:32px;align-items:center;gap:7px;padding:7px 12px;border:0;border-radius:99px;background:var(--surface-elevated);color:var(--text-secondary);font-family:inherit;font-size:12px;font-weight:700;line-height:1}.queue-runtime button{border:1px solid var(--border-color-light);cursor:pointer;transition:border-color .18s ease,color .18s ease,background .18s ease}.queue-runtime button:hover{border-color:var(--primary);background:var(--primary-alpha-10);color:var(--primary)}.queue-runtime button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}.running-dot{width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 0 3px var(--success-alpha-15)}.queue-settings-content{display:grid;gap:18px}.queue-settings-content :deep(.el-form-item){display:grid;justify-items:start}.queue-settings-content :deep(.el-form-item__content){display:grid;justify-items:start;gap:9px}.queue-settings-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.queue-settings-summary span{display:grid;gap:4px;padding:14px;border:1px solid var(--border-color-light);border-radius:13px;background:var(--surface-elevated)}.queue-settings-summary small{color:var(--text-tertiary);font-size:10px}.queue-settings-summary strong{font-size:24px}.queue-limit-stepper{width:min(300px,100%);height:64px}.queue-limit-stepper :deep(.el-input){height:64px}.queue-limit-stepper :deep(.el-input__wrapper){padding-right:64px;padding-left:64px;border-radius:8px;background:var(--surface-card);box-shadow:0 0 0 1px var(--border-color) inset}.queue-limit-stepper :deep(.el-input__inner){height:64px;color:var(--text-primary);font-size:25px;font-weight:500}.queue-limit-stepper :deep(.el-input-number__decrease),.queue-limit-stepper :deep(.el-input-number__increase){width:64px;height:62px;border-color:var(--border-color);background:var(--surface-elevated);color:var(--text-secondary);font-size:25px}.queue-limit-stepper :deep(.el-input-number__decrease){border-radius:8px 0 0 8px}.queue-limit-stepper :deep(.el-input-number__increase){border-radius:0 8px 8px 0}.queue-limit-stepper :deep(.el-input-number__decrease:hover),.queue-limit-stepper :deep(.el-input-number__increase:hover){background:var(--primary-alpha-10);color:var(--primary)}.queue-limit-stepper :deep(.el-input-number__decrease.is-disabled),.queue-limit-stepper :deep(.el-input-number__increase.is-disabled){color:var(--text-tertiary)}
+.queue-overview-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.queue-overview-summary span {
+  display: grid;
+  gap: 5px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 14px;
+  background: var(--surface-elevated);
+}
+
+.queue-overview-summary small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.queue-overview-summary strong {
+  color: var(--text-primary);
+  font-size: 21px;
+}
+
+.site-queue-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  max-height: 56vh;
+  overflow: auto;
+  padding: 2px;
+}
+
+.site-queue-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 16px;
+  background: var(--surface-card);
+}
+
+.site-queue-card header,
+.site-queue-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.site-queue-card header > div {
+  display: grid;
+  gap: 5px;
+}
+
+.site-queue-card header strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.site-queue-card .eyebrow {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.site-queue-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.site-queue-card footer {
+  justify-content: flex-end;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color-light);
+}
+
+.queue-site-select {
+  width: 100%;
+}
+
+.queue-settings-content :deep(.el-form-item) {
+  display: grid;
+  justify-items: start;
+}
+
+.queue-settings-content :deep(.el-form-item__content) {
+  display: grid;
+  justify-items: start;
+  gap: 9px;
+}
+
+@media (max-width: 720px) {
+  .site-queue-list {
+    grid-template-columns: 1fr;
+  }
+
+  .queue-overview-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .queue-overview-summary span {
+    min-width: 0;
+  }
+
+  .queue-overview-summary strong {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .queue-overview-summary {
+    grid-template-columns: 1fr;
+  }
+}
+.queued-order-note{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:11px 13px;border:1px solid var(--primary-alpha-20);border-radius:13px;background:var(--primary-alpha-10)}.queue-drag-mark{display:grid;flex:0 0 32px;height:32px;place-items:center;border-radius:9px;background:var(--surface-card);color:var(--primary);font-size:20px}.queued-order-note div{display:grid;gap:2px}.queued-order-note strong{font-size:12px}.queued-order-note small{color:var(--text-secondary);font-size:11px}.queue-drag-handle{display:grid;width:34px;height:34px;margin:auto;place-items:center;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--text-tertiary);cursor:grab;font-size:20px;line-height:1;transition:color .18s ease,background .18s ease,border-color .18s ease,opacity .18s ease}.queue-drag-handle:hover,.queue-drag-handle:focus-visible{border-color:var(--primary-alpha-20);outline:none;background:var(--primary-alpha-10);color:var(--primary)}.queue-drag-handle:active,.queue-drag-handle.dragging{cursor:grabbing;opacity:.45}.queue-drag-handle.disabled{cursor:not-allowed;opacity:.3}:deep(.queued-task-row-dragging td.el-table__cell){background:var(--primary-alpha-10)!important}.queue-task-link{display:flex;width:100%;min-height:34px;align-items:center;padding:4px 0;border:0;background:transparent;color:var(--text-primary);font:inherit;text-align:left;cursor:pointer}.queue-task-link strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.queue-task-link:hover strong{color:var(--primary)}.queue-task-link:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:6px}.queued-task-actions{display:inline-flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--border-color-light);border-radius:13px;background:color-mix(in srgb,var(--surface-elevated) 88%,transparent);box-shadow:0 3px 10px color-mix(in srgb,var(--text-primary) 5%,transparent);white-space:nowrap}.queued-task-actions :deep(.el-button){height:28px;margin-left:0;padding:5px 10px;border-color:transparent;background:transparent;font-size:11px;font-weight:700;transition:background .18s ease,color .18s ease,box-shadow .18s ease}.queued-task-actions :deep(.queued-task-action-details),.queued-task-actions :deep(.queued-task-action-resume),.queued-task-actions :deep(.queued-task-action-prioritize){background:var(--primary-alpha-10);color:var(--primary)}.queued-task-actions :deep(.queued-task-action-details:hover),.queued-task-actions :deep(.queued-task-action-details:focus-visible),.queued-task-actions :deep(.queued-task-action-resume:hover),.queued-task-actions :deep(.queued-task-action-resume:focus-visible),.queued-task-actions :deep(.queued-task-action-prioritize:hover),.queued-task-actions :deep(.queued-task-action-prioritize:focus-visible){background:var(--primary);color:#fff;box-shadow:0 4px 10px color-mix(in srgb,var(--primary) 22%,transparent)}.queued-task-actions :deep(.queued-task-action-pause){color:var(--text-secondary)}.queued-task-actions :deep(.queued-task-action-pause:hover),.queued-task-actions :deep(.queued-task-action-pause:focus-visible){background:var(--surface-card);color:var(--text-primary)}.queued-task-actions :deep(.queued-task-action-cancel){color:var(--danger)}.queued-task-actions :deep(.queued-task-action-cancel:hover),.queued-task-actions :deep(.queued-task-action-cancel:focus-visible){background:color-mix(in srgb,var(--danger) 10%,transparent);color:var(--danger)}.queued-task-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 2px 0;color:var(--text-tertiary);font-size:12px}.queued-task-pagination :deep(.el-pagination){min-width:0}@media(max-width:720px){.queue-heading-actions{align-items:flex-end;flex-direction:column}.queue-runtime{order:2}.queued-order-note{align-items:flex-start}.queued-task-pagination{align-items:flex-start;flex-direction:column}.queued-task-pagination :deep(.el-pagination){flex-wrap:wrap;justify-content:flex-start}.site-queue-list{grid-template-columns:1fr}.queue-overview-summary{grid-template-columns:1fr}.queue-overview-summary strong{font-size:18px}}@media(max-width:520px){.queue-runtime{width:100%}.queue-runtime span,.queue-runtime button{flex:1;justify-content:center}}
 .muted-text{color:var(--text-tertiary);font-size:11px}
 .task-filter-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:12px 14px;border:1px solid var(--border-color-light);border-radius:14px;background:var(--surface-elevated)}.task-filter-toolbar :deep(.el-select){width:210px}.task-filter-toolbar .el-button{margin-left:0}@media(max-width:520px){.task-filter-toolbar{align-items:stretch;flex-direction:column}.task-filter-toolbar :deep(.el-select),.task-filter-toolbar .el-button{width:100%}}
 .task-batch-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px;padding:11px 12px;border:1px solid color-mix(in srgb,var(--primary) 28%,var(--border-color-light));border-radius:15px;background:linear-gradient(105deg,var(--primary-alpha-10),color-mix(in srgb,var(--surface-elevated) 94%,var(--primary) 6%));box-shadow:0 8px 24px color-mix(in srgb,var(--primary) 8%,transparent)}.task-batch-summary{display:flex;min-width:0;align-items:center;gap:10px}.task-batch-summary>span{display:grid;width:36px;height:36px;flex:0 0 36px;place-items:center;border-radius:11px;background:var(--primary);color:#fff;font-size:14px;font-weight:800;box-shadow:0 6px 14px color-mix(in srgb,var(--primary) 25%,transparent)}.task-batch-summary>div{display:grid;min-width:0;gap:2px}.task-batch-summary strong{font-size:12px}.task-batch-summary small{overflow:hidden;color:var(--text-secondary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.task-batch-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:7px}.task-batch-actions .el-button{margin-left:0}.task-batch-rise-enter-active,.task-batch-rise-leave-active{transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.2,1)}.task-batch-rise-enter-from,.task-batch-rise-leave-to{opacity:0;transform:translateY(-8px)}@media(max-width:760px){.task-batch-bar{align-items:stretch;flex-direction:column}.task-batch-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.task-batch-actions :deep(.el-dropdown),.task-batch-actions :deep(.el-button){width:100%}}@media(max-width:440px){.task-batch-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(prefers-reduced-motion:reduce){.task-batch-rise-enter-active,.task-batch-rise-leave-active{transition:none}}

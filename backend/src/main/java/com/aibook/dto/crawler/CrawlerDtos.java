@@ -68,7 +68,7 @@ public final class CrawlerDtos {
             @NotBlank @Size(max = 1000) String pageUrl,
             Boolean autoScanEnabled,
             @Min(5) @Max(10080) Integer scanIntervalMinutes,
-            @Min(1) @Max(500) Integer maxPages) { }
+            @Min(1) Integer maxPages) { }
     public record DiscoveryPageView(Long id, Long siteId, String pageName, String pageUrl,
             boolean autoScanEnabled, int scanIntervalMinutes, int maxPages,
             LocalDateTime lastScanAt, LocalDateTime createdAt) { }
@@ -91,6 +91,16 @@ public final class CrawlerDtos {
     public record TaskQueueOrderRequest(@NotEmpty List<@NotBlank String> taskIds) { }
     public record TaskQueueSettingsRequest(@NotNull @Min(1) @Max(16) Integer maxConcurrentTasks) { }
     public record TaskQueueSettingsView(int maxConcurrentTasks, int runningCount, int queuedCount) { }
+    public record TaskQueuePayload(
+            @NotNull @Min(1) @Max(16) Integer maxConcurrentTasks,
+            @NotNull @Min(0) @Max(3600) Integer taskIntervalSeconds) { }
+    public record TaskQueueCreateRequest(@NotNull Long siteId) { }
+    public record TaskQueueView(
+            Long id, Long siteId, String siteName,
+            int maxConcurrentTasks, int taskIntervalSeconds,
+            int runningCount, int waitingCount, int pausedCount,
+            int activeTaskCount, int progressPercent,
+            LocalDateTime lastTaskStartedAt) { }
     public record BatchBookRequest(@NotEmpty List<@NotNull Long> bookIds) { }
     public record BatchBookStatusRequest(
             @NotEmpty @Size(max = 200) List<@NotNull Long> bookIds,

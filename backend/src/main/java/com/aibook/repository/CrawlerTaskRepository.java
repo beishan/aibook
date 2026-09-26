@@ -69,6 +69,7 @@ public interface CrawlerTaskRepository extends JpaRepository<CrawlerTask, String
             Pageable pageable);
     List<CrawlerTask> findByUserAndStatusInOrderByCreatedAtDesc(
             User user, Collection<CrawlerTask.TaskStatus> statuses);
+    List<CrawlerTask> findByStatusOrderByQueueOrderAsc(CrawlerTask.TaskStatus status);
     List<CrawlerTask> findByStatusIn(Collection<CrawlerTask.TaskStatus> statuses);
     long countByUserAndStatus(User user, CrawlerTask.TaskStatus status);
     boolean existsBySiteAndTypeAndStatusIn(CrawlerSite site, CrawlerTask.TaskType type, Collection<CrawlerTask.TaskStatus> statuses);

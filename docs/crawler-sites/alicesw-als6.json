@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "type": "AIBOOK_CRAWLER_SITE",
+  "site": {
+    "siteName": "爱丽丝书屋（als6）",
+    "siteCode": "alicesw_als6",
+    "baseUrl": "https://xn--vcsx64d.als6.sbs",
+    "homeUrl": "https://xn--vcsx64d.als6.sbs/",
+    "enabled": true,
+    "autoScan": false,
+    "autoCrawl": false,
+    "autoUpdate": false,
+    "autoImportLibrary": false,
+    "requestIntervalMillis": 2000,
+    "randomDelayMillis": 1000,
+    "maxConcurrency": 1,
+    "encoding": "UTF-8",
+    "proxies": [],
+    "scanIntervalMinutes": 360,
+    "updateIntervalMinutes": 60,
+    "maxDiscoveryPages": 20,
+    "autoImportFormat": "EPUB",
+    "contentMarkers": [],
+    "respectRobotsTxt": true
+  },
+  "rules": [
+    {
+      "version": 1,
+      "changeSummary": "原创专区、书籍详情、完整目录和章节正文规则",
+      "enabled": true,
+      "rule": {
+        "discoveryItemSelector": ".rec_rullist > ul",
+        "discoveryUrlSelector": "li.two > a[href^=/novel/]",
+        "discoveryTitleSelector": "li.two > a",
+        "discoveryAuthorSelector": "li.four",
+        "discoveryCoverSelector": "",
+        "discoveryCategorySelector": "li.sev > span > a",
+        "discoveryLatestChapterSelector": "li.three > a",
+        "discoveryNextPageSelector": ".pages_bottom .pagination a:contains(下一页)",
+        "titleSelector": "#detail-box .novel_title",
+        "authorSelector": "#detail-box .novel_info p:first-child > a",
+        "coverSelector": "#detail-box .pic img::data-src",
+        "descriptionSelector": "#detail-box .jianjie > p",
+        "categorySelector": "#detail-box .novel_info p:nth-child(2) > a",
+        "tagsSelector": "#detail-box .tags_list > a",
+        "statusSelector": "#detail-box .novel_info p:nth-child(5)",
+        "latestChapterSelector": "#detail-box .novel_info p:nth-child(6) > a",
+        "chapterListUrlSelector": "#detail-box .book_newchap a[href^=/other/chapters/id/]",
+        "chapterItemSelector": ".mu_contain .mulu_list > li",
+        "chapterTitleSelector": ":scope",
+        "chapterUrlSelector": "a[href^=/book/]",
+        "contentTitleSelector": "#j_chapterBox .j_chapterName",
+        "contentSelector": "#j_chapterBox .read-content",
+        "removeSelectors": "#user_ad, .user_img_ad, .user_text_ad",
+        "xpathRemoveSelectors": "",
+        "stringReplacementsJson": "",
+        "regexReplacementsJson": "",
+        "removeBlankLines": true,
+        "saveOriginalHtml": false,
+        "minChapterLength": 100
+      }
+    }
+  ],
+  "discoveryPages": [
+    {
+      "pageName": "原创专区",
+      "pageUrl": "https://xn--vcsx64d.als6.sbs/original.html",
+      "autoScanEnabled": false,
+      "scanIntervalMinutes": 360,
+      "maxPages": 20
+    },
+    {
+      "pageName": "都市小说",
+      "pageUrl": "https://xn--vcsx64d.als6.sbs/lists/64.html?page=1",
+      "autoScanEnabled": false,
+      "scanIntervalMinutes": 360,
+      "maxPages": 156
+    }
+  ]
+}

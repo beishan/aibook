@@ -136,15 +136,18 @@ public class CrawlerController {
             @RequestParam(defaultValue = "false") boolean favoriteOnly) {
         return managementService.tasks(user(auth), page, size, failedOnly, status, type, favoriteOnly);
     }
-    @GetMapping("/tasks/queued") public List<TaskView> queuedTasks(Authentication auth) {
-        return taskService.queuedTasks(user(auth));
+    @GetMapping("/tasks/queued") public List<TaskView> queuedTasks(
+            Authentication auth, @RequestParam(required = false) Long siteId) {
+        return taskService.queuedTasks(user(auth), siteId);
     }
-    @GetMapping("/tasks/current") public List<TaskView> currentTasks(Authentication auth) {
-        return taskService.currentTasks(user(auth));
+    @GetMapping("/tasks/current") public List<TaskView> currentTasks(
+            Authentication auth, @RequestParam(required = false) Long siteId) {
+        return taskService.currentTasks(user(auth), siteId);
     }
     @PutMapping("/tasks/queued/order") public List<TaskView> reorderQueuedTasks(
-            Authentication auth, @Valid @RequestBody TaskQueueOrderRequest request) {
-        return taskService.reorderQueuedTasks(user(auth), request.taskIds());
+            Authentication auth, @RequestParam(required = false) Long siteId,
+            @Valid @RequestBody TaskQueueOrderRequest request) {
+        return taskService.reorderQueuedTasks(user(auth), siteId, request.taskIds());
     }
     @PutMapping("/tasks/queued/{id}/prioritize") public List<TaskView> prioritizeQueuedTask(
             Authentication auth, @PathVariable String id) {
@@ -164,6 +167,18 @@ public class CrawlerController {
     @PutMapping("/tasks/queue-settings") @PreAuthorize("hasRole('ADMIN')")
     public TaskQueueSettingsView updateQueueSettings(@Valid @RequestBody TaskQueueSettingsRequest request) {
         return taskService.updateQueueSettings(request.maxConcurrentTasks());
+    }
+    @GetMapping("/tasks/queues") public List<TaskQueueView> taskQueues(Authentication auth) {
+        return taskService.taskQueues(user(auth));
+    }
+    @PostMapping("/tasks/queues") @ResponseStatus(HttpStatus.CREATED)
+    public TaskQueueView createTaskQueue(Authentication auth, @Valid @RequestBody TaskQueueCreateRequest request) {
+        return taskService.createTaskQueue(user(auth), request.siteId());
+    }
+    @PutMapping("/tasks/queues/{siteId}") @PreAuthorize("hasRole('ADMIN')")
+    public TaskQueueView updateTaskQueue(Authentication auth, @PathVariable Long siteId,
+            @Valid @RequestBody TaskQueuePayload request) {
+        return taskService.updateTaskQueue(user(auth), siteId, request);
     }
     @GetMapping("/tasks/{id}/scan-results") public Page<ScanBookResultView> scanResults(
             Authentication auth, @PathVariable String id,
