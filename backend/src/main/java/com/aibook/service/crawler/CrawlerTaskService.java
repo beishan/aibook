@@ -834,7 +834,7 @@ public class CrawlerTaskService {
         for (CrawlerTaskQueue queue : queues) {
             Long siteId = queue.getSite().getId();
             queuesBySite.put(siteId, queue);
-            if (httpClient.protectionState(queue.getSite()).coolingDown()) {
+            if (isCoolingDown(queue.getSite())) {
                 coolingDownSites.add(siteId);
             }
         }
@@ -904,7 +904,7 @@ public class CrawlerTaskService {
         for (CrawlerTask task : waitingTasks) {
             if (active.size() >= configuredConcurrency()) break;
             if (task.getSite().isAccessBlockedAt(LocalTime.now())
-                    || httpClient.protectionState(task.getSite()).coolingDown()) continue;
+                    || isCoolingDown(task.getSite())) continue;
             long queueOrder = task.getQueueOrder() == null ? nextQueueOrder() : task.getQueueOrder();
             submitLegacy(task, queueOrder);
         }
@@ -982,7 +982,7 @@ public class CrawlerTaskService {
             try {
                 CrawlerTask task = taskRepository.findById(taskId).orElse(null);
                 if (task != null && task.getStatus() == CrawlerTask.TaskStatus.WAITING
-                        && (httpClient.protectionState(task.getSite()).coolingDown()
+                        && (isCoolingDown(task.getSite())
                                 || task.getSite().isAccessBlockedAt(LocalTime.now()))) {
                     log.info("[采集任务] 网站处于冷却期或禁访时段，任务继续等待: taskId={}, site={}",
                             taskId, task.getSite().getSiteName());
@@ -1683,6 +1683,11 @@ public class CrawlerTaskService {
     private boolean ownedBy(CrawlerTask task, User user) { return task.getUser() == user || (user.getId() != null && Objects.equals(task.getUser().getId(), user.getId())); }
     private int priorityRank(CrawlerTask.Priority priority) { return switch (priority) { case HIGH -> 0; case NORMAL -> 1; case LOW -> 2; }; }
     private CrawlerBook.DiscoveryStatus discoveryStatus(CrawlerBook book) { return book.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : book.getDiscoveryStatus(); }
+    private boolean isCoolingDown(CrawlerSite site) {
+        CrawlerHttpClient.ProtectionState protection = httpClient.protectionState(site);
+        return protection != null && protection.coolingDown();
+    }
+
     private int value(Integer value, int fallback) { return value == null ? fallback : value; }
 
     static final class RequestFailureGuard {
