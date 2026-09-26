@@ -16,6 +16,7 @@ export interface CrawlerRule {
 export interface CrawlerProxy { name:string; url:string; enabled:boolean }
 export interface CrawlerContentMarker { marker:string; status:'FAILED'|'PENDING_RELEASE' }
 export interface CrawlerProtectionState { coolingDown:boolean; blockedUntil?:string; reason?:string; pageUrl?:string; consecutiveFailures:number; adaptiveDelayMillis:number }
+export interface CrawlerRobotsTxt { url:string; statusCode:number; content:string; fetchedAt:string }
 export interface CrawlerSitePayload {
   siteName: string; siteCode: string; baseUrl: string; homeUrl?: string; enabled: boolean
   autoScan: boolean; autoCrawl: boolean; autoUpdate: boolean; autoImportLibrary: boolean
@@ -60,6 +61,8 @@ export const crawlerApi = {
   updateSite: (id:number, data:CrawlerSitePayload) => api.put<CrawlerSite>(`/api/crawler/sites/${id}`, data).then(r => r.data),
   deleteSite: (id:number) => api.delete(`/api/crawler/sites/${id}`),
   resetSiteProtection: (id:number) => api.post<CrawlerSite>(`/api/crawler/sites/${id}/protection/reset`).then(r => r.data),
+  refreshRobotsTxt: (id:number) =>
+    api.post<CrawlerRobotsTxt>(`/api/crawler/sites/${id}/robots-txt/refresh`).then(r => r.data),
   exportSiteConfiguration: (id:number) => api.get<CrawlerSiteConfiguration>(`/api/crawler/sites/${id}/configuration`).then(r => r.data),
   importSiteConfiguration: (data:CrawlerSiteConfiguration) => api.post<CrawlerSite>('/api/crawler/sites/configuration/import', data).then(r => r.data),
   crawlUrl: (siteId:number, url:string) => api.post<CrawlerTask>(`/api/crawler/sites/${siteId}/crawl`, { url }).then(r => r.data),

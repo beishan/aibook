@@ -43,6 +43,10 @@ public class CrawlerController {
     @PutMapping("/sites/{id}") public SiteView updateSite(Authentication auth, @PathVariable Long id, @Valid @RequestBody SitePayload payload) { return managementService.updateSite(user(auth), id, payload); }
     @DeleteMapping("/sites/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteSite(Authentication auth, @PathVariable Long id) { managementService.deleteSite(user(auth), id); }
     @PostMapping("/sites/{id}/protection/reset") public SiteView resetSiteProtection(Authentication auth, @PathVariable Long id) { return managementService.resetSiteProtection(user(auth), id); }
+    @PostMapping("/sites/{id}/robots-txt/refresh")
+    public RobotsTxtView refreshRobotsTxt(Authentication auth, @PathVariable Long id) {
+        return managementService.refreshRobotsTxt(user(auth), id);
+    }
     @GetMapping("/sites/{id}/configuration") public SiteConfigurationPayload exportSiteConfiguration(Authentication auth, @PathVariable Long id) { return siteConfigurationService.exportConfiguration(user(auth), id); }
     @PostMapping("/sites/configuration/import") @ResponseStatus(HttpStatus.CREATED) public SiteView importSiteConfiguration(Authentication auth, @Valid @RequestBody SiteConfigurationPayload payload) { return siteConfigurationService.importConfiguration(user(auth), payload); }
     @PostMapping("/sites/{id}/crawl") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView crawl(Authentication auth, @PathVariable Long id, @Valid @RequestBody ManualCrawlRequest request) { return taskService.start(user(auth), id, request.url()); }

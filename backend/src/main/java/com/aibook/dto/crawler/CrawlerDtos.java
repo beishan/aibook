@@ -67,6 +67,8 @@ public final class CrawlerDtos {
         }
     }
 
+    public record RobotsTxtView(String url, int statusCode, String content, Instant fetchedAt) { }
+
     public record ManualCrawlRequest(@NotBlank String url) { }
     public record DiscoveryPagePayload(
             @NotBlank @Size(max = 100) String pageName,

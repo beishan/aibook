@@ -91,6 +91,13 @@ public class CrawlerManagementService {
         return siteView(site);
     }
 
+    public RobotsTxtView refreshRobotsTxt(User user, Long id) {
+        CrawlerHttpClient.RobotsTxtSnapshot snapshot = httpClient.refreshRobotsTxt(
+                ownedSite(user, id));
+        return new RobotsTxtView(snapshot.url(), snapshot.statusCode(),
+                snapshot.content(), snapshot.fetchedAt());
+    }
+
     public CrawlerSite ownedSite(User user, Long id) {
         return siteRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集网站不存在"));

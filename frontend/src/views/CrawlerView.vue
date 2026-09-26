@@ -290,7 +290,51 @@
           <section class="site-form-section"><header><span>01</span><div><h3>基本信息</h3><p>网站身份和访问入口</p></div></header><div class="form-grid"><el-form-item label="网站名称" prop="siteName"><el-input v-model="siteForm.siteName" /></el-form-item><el-form-item label="唯一编码（选填）"><el-input v-model="siteForm.siteCode" placeholder="留空时根据网站域名自动生成" /><small class="field-hint">仅支持字母、数字、下划线和连字符</small></el-form-item></div><div class="form-grid"><el-form-item label="根地址" prop="baseUrl"><el-input v-model="siteForm.baseUrl" placeholder="https://example.com" /></el-form-item><el-form-item label="首页地址"><el-input v-model="siteForm.homeUrl" placeholder="留空时使用根地址" /></el-form-item></div><el-form-item label="字符编码"><el-select v-model="siteForm.encoding"><el-option label="UTF-8" value="UTF-8"/><el-option label="GBK" value="GBK"/><el-option label="GB18030" value="GB18030"/></el-select></el-form-item></section>
         </div>
         <div v-show="activeSiteTab==='request'" id="site-editor-panel-request" class="site-tab-panel" role="tabpanel" aria-labelledby="site-editor-tab-request">
-          <section class="site-form-section"><header><span>02</span><div><h3>站点访问节奏</h3><p>控制当前网站的访问频率和并发</p></div></header><div class="form-grid"><el-form-item label="请求间隔（ms）"><el-input-number v-model="siteForm.requestIntervalMillis" :min="100" :step="100" /></el-form-item><el-form-item label="随机延迟（ms）"><el-input-number v-model="siteForm.randomDelayMillis" :min="0" :step="100" /></el-form-item></div><el-form-item label="最大并发"><el-input-number v-model="siteForm.maxConcurrency" :min="1" :max="8" /></el-form-item><el-form-item label="robots.txt 策略"><el-switch v-model="siteForm.respectRobotsTxt" active-text="遵守 robots.txt" inactive-text="忽略 robots.txt" /></el-form-item><el-alert type="warning" :closable="false" title="默认遵守网站的 robots.txt；关闭前请确认已获得目标网站授权。" /><el-alert type="info" :closable="false" title="请求超时、失败重试和请求头已统一迁移到“系统设置 → 爬虫设置”。" /></section>
+          <section class="site-form-section">
+            <header class="section-with-action">
+              <span>02</span>
+              <div>
+                <h3>站点访问节奏</h3>
+                <p>控制当前网站的访问频率和并发</p>
+              </div>
+              <el-button
+                v-if="editingSite"
+                :icon="Refresh"
+                :loading="robotsTxtLoading"
+                @click="openRobotsTxt"
+              >
+                查看 robots.txt
+              </el-button>
+            </header>
+            <div class="form-grid">
+              <el-form-item label="请求间隔（ms）">
+                <el-input-number v-model="siteForm.requestIntervalMillis" :min="100" :step="100" />
+              </el-form-item>
+              <el-form-item label="随机延迟（ms）">
+                <el-input-number v-model="siteForm.randomDelayMillis" :min="0" :step="100" />
+              </el-form-item>
+            </div>
+            <el-form-item label="最大并发">
+              <el-input-number v-model="siteForm.maxConcurrency" :min="1" :max="8" />
+            </el-form-item>
+            <el-form-item label="robots.txt 策略">
+              <el-switch
+                v-model="siteForm.respectRobotsTxt"
+                active-text="遵守 robots.txt"
+                inactive-text="忽略 robots.txt"
+              />
+            </el-form-item>
+            <el-alert
+              type="warning"
+              :closable="false"
+              title="默认遵守网站的 robots.txt；关闭前请确认已获得目标网站授权。"
+            />
+            <el-alert
+              type="info"
+              :closable="false"
+              title="请求超时、失败重试和请求头已统一迁移到“系统设置 → 爬虫设置”。"
+            />
+          </section>
         </div>
         <div v-show="activeSiteTab==='validation'" id="site-editor-panel-validation" class="site-tab-panel" role="tabpanel" aria-labelledby="site-editor-tab-validation">
           <section class="site-form-section"><header class="section-with-action"><span>04</span><div><h3>正文特征</h3><p>为每条特征指定命中后的章节状态</p></div><el-button :icon="Plus" :disabled="siteForm.contentMarkers.length>=50" @click="addContentMarker">添加特征</el-button></header><div v-if="siteForm.contentMarkers.length" class="marker-list"><el-form-item v-for="(_,index) in siteForm.contentMarkers" :key="index" :prop="`contentMarkers.${index}.marker`" :rules="contentMarkerRules" :label="`特征 ${index+1}`"><div class="marker-row"><el-input v-model="siteForm.contentMarkers[index].marker" maxlength="500" show-word-limit placeholder="例如：以下内容为VIP专属，升级会员即可继续阅读"/><el-select v-model="siteForm.contentMarkers[index].status" class="marker-status" aria-label="命中后的正文状态"><el-option label="采集失败" value="FAILED"/><el-option label="待开放" value="PENDING_RELEASE"/></el-select><el-button text type="danger" @click="removeContentMarker(index)">删除</el-button></div></el-form-item></div><el-empty v-else :image-size="48" description="未配置正文特征" /><el-alert type="info" :closable="false" title="采用忽略大小写的包含匹配；“待开放”章节不计为失败，整本书仍可采集成功和入库。" /></section>
@@ -304,6 +348,52 @@
         </div>
       </el-form>
       <template #footer><el-button @click="siteDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveSite">保存网站</el-button></template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="robotsTxtDialog"
+      :title="`${editingSite?.siteName || '采集网站'} · robots.txt`"
+      width="min(760px, 94vw)"
+      append-to-body
+      destroy-on-close
+    >
+      <div class="robots-txt-dialog-body">
+        <el-alert
+          v-if="robotsTxtError"
+          class="robots-txt-error"
+          type="error"
+          :closable="false"
+          :title="robotsTxtError"
+        />
+        <div v-if="robotsTxtView" class="robots-txt-toolbar">
+          <span class="robots-txt-url">{{ robotsTxtView.url }}</span>
+          <el-tag :type="robotsTxtView.statusCode >= 400 ? 'warning' : 'success'">
+            HTTP {{ robotsTxtView.statusCode }}
+          </el-tag>
+        </div>
+        <el-skeleton v-if="robotsTxtLoading && !robotsTxtView" :rows="8" animated />
+        <template v-else-if="robotsTxtView">
+          <pre class="robots-txt-content">{{ robotsTxtView.content || '（robots.txt 内容为空）' }}</pre>
+          <p class="robots-txt-fetched-at">获取时间：{{ formatTime(robotsTxtView.fetchedAt) }}</p>
+        </template>
+        <el-empty
+          v-else-if="!robotsTxtLoading && !robotsTxtError"
+          :image-size="56"
+          description="暂无 robots.txt 内容"
+        />
+      </div>
+      <template #footer>
+        <el-button @click="robotsTxtDialog = false">关闭</el-button>
+        <el-button
+          type="primary"
+          :icon="Refresh"
+          :loading="robotsTxtLoading"
+          :disabled="!editingSite"
+          @click="refreshRobotsTxt"
+        >
+          重新获取
+        </el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="discoveryManagerDialog" :title="`${discoveryManagerSite?.siteName || ''} · 发现页管理`" width="min(820px, 96vw)" append-to-body destroy-on-close>
@@ -706,7 +796,27 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, MoreFilled, Plus, Refresh, Search, Star, StarFilled, Tickets, TrendCharts, Upload, VideoPause, VideoPlay, Warning } from '@element-plus/icons-vue'
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElProgress, ElTable, ElTableColumn, ElTag, ElTooltip, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
-import { crawlerApi, type CrawlerBook, type CrawlerChapter, type CrawlerDashboard, type CrawlerDashboardStatistics, type CrawlerDiscoveryPage, type CrawlerDiscoveryPagePayload, type CrawlerLog, type CrawlerRule, type CrawlerRuleExport, type CrawlerRuleTest, type CrawlerRuleVersion, type CrawlerScanResult, type CrawlerSite, type CrawlerSiteConfiguration, type CrawlerSitePayload, type CrawlerTask, type CrawlerTaskQueue } from '@/utils/crawler'
+import {
+  crawlerApi,
+  type CrawlerBook,
+  type CrawlerChapter,
+  type CrawlerDashboard,
+  type CrawlerDashboardStatistics,
+  type CrawlerDiscoveryPage,
+  type CrawlerDiscoveryPagePayload,
+  type CrawlerLog,
+  type CrawlerRobotsTxt,
+  type CrawlerRule,
+  type CrawlerRuleExport,
+  type CrawlerRuleTest,
+  type CrawlerRuleVersion,
+  type CrawlerScanResult,
+  type CrawlerSite,
+  type CrawlerSiteConfiguration,
+  type CrawlerSitePayload,
+  type CrawlerTask,
+  type CrawlerTaskQueue,
+} from '@/utils/crawler'
 import {
   CRAWLER_POLLING_INTERVAL_OPTIONS,
   usePreferencesStore,
@@ -931,6 +1041,10 @@ const bookImportStatusOptions=[{value:'NOT_IMPORTED',label:'未入库'},{value:'
 const managedBookSortOptions=[{value:'CREATED_DESC',label:'创建时间：最新优先'},{value:'CREATED_ASC',label:'创建时间：最早优先'},{value:'CRAWL_STARTED_DESC',label:'开始爬取：最新优先'},{value:'CRAWL_STARTED_ASC',label:'开始爬取：最早优先'},{value:'LAST_CRAWL_DESC',label:'完成爬取：最新优先'},{value:'LAST_CRAWL_ASC',label:'完成爬取：最早优先'},{value:'BOOK_NAME_ASC',label:'书名：正序'},{value:'BOOK_NAME_DESC',label:'书名：倒序'}]
 const siteEditorTabs:{key:SiteEditorTab;label:string;description:string}[]=[{key:'basic',label:'基本信息',description:'身份与入口'},{key:'request',label:'请求访问',description:'频率与请求头'},{key:'validation',label:'内容校验',description:'正文特征'},{key:'proxy',label:'代理配置',description:'站点代理'},{key:'automation',label:'运行设置',description:'任务范围'}]
 const activeSiteTab=ref<SiteEditorTab>('basic')
+const robotsTxtDialog = ref(false)
+const robotsTxtLoading = ref(false)
+const robotsTxtView = ref<CrawlerRobotsTxt>()
+const robotsTxtError = ref('')
 const tabs=computed(()=>[{key:'overview' as const,label:'采集概览',icon:DataAnalysis,count:0},{key:'statistics' as const,label:'采集统计',icon:TrendCharts,count:0},{key:'sites' as const,label:'采集网站',icon:Connection,count:sites.value.length},{key:'discovered' as const,label:'发现书籍',icon:Tickets,count:discoveredTotal.value},{key:'books' as const,label:'采集书籍',icon:Collection,count:bookTotal.value},{key:'tasks' as const,label:'采集任务',icon:List,count:taskTotal.value},{key:'failed' as const,label:'失败任务',icon:Warning,count:failedTaskTotal.value}])
 const activeIndex=computed(()=>tabs.value.findIndex(t=>t.key===activeTab.value))
 const selectedTaskRows=computed(()=>activeTab.value==='failed'?selectedFailedTasks.value:selectedTasks.value)
@@ -1264,7 +1378,32 @@ function hideBrokenCover(event:Event){(event.target as HTMLImageElement).style.d
 async function handleDiscoverySizeChange(){discoveryPage.value=1;await loadDiscoveredBooks()}
 async function applyDiscoveryFilters(){discoveryPage.value=1;await loadDiscoveredBooks()}
 async function resetDiscoveryFilters(){discoveryKeyword.value='';discoverySiteId.value=undefined;discoveryFavoriteOnly.value=false;discoverySort.value='DISCOVER_TIME_DESC';discoveryPage.value=1;await loadDiscoveredBooks()}
+async function openRobotsTxt(){
+  if(!editingSite.value)return
+  robotsTxtView.value=undefined
+  robotsTxtError.value=''
+  robotsTxtDialog.value=true
+  await refreshRobotsTxt()
+}
+
+async function refreshRobotsTxt(){
+  const siteId=editingSite.value?.id
+  if(!siteId)return
+  robotsTxtLoading.value=true
+  robotsTxtError.value=''
+  try{
+    robotsTxtView.value=await crawlerApi.refreshRobotsTxt(siteId)
+  }catch{
+    robotsTxtError.value='获取 robots.txt 失败，请稍后重试'
+  }finally{
+    robotsTxtLoading.value=false
+  }
+}
+
 function openSite(site?:CrawlerSite){
+  robotsTxtDialog.value=false
+  robotsTxtView.value=undefined
+  robotsTxtError.value=''
   editingSite.value=site
   activeSiteTab.value='basic'
   const defaults=emptySite()
@@ -1889,5 +2028,50 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   line-height: 1.55;
   overflow-wrap: anywhere;
   word-break: break-all;
+}
+
+.robots-txt-dialog-body {
+  min-height: 220px;
+}
+
+.robots-txt-error {
+  margin-bottom: 12px;
+}
+
+.robots-txt-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.robots-txt-url {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.robots-txt-content {
+  max-height: min(55vh, 620px);
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.robots-txt-fetched-at {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 </style>

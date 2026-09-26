@@ -137,6 +137,70 @@ public class CrawlerHttpClient {
         throw last == null ? new IllegalStateException("请求失败") : last;
     }
 
+    public RobotsTxtSnapshot refreshRobotsTxt(CrawlerSite site) {
+        CrawlerRequestSettings settings = requestSettings();
+        ensureCircuitClosed(site);
+        URI baseUri = validateSiteUrl(site, site.getBaseUrl());
+        URI robotsUri;
+        try {
+            robotsUri = new URI(baseUri.getScheme(), null, baseUri.getHost(), baseUri.getPort(),
+                    "/robots.txt", null, null);
+            List<String> proxies = proxyUrls(site);
+            String proxyUrl = proxies.isEmpty() ? null : proxies.getFirst();
+            TimedResponse timed = sendFollowingSafeRedirects(
+                    site, robotsUri, null, null, proxyUrl, settings);
+            Instant fetchedAt = Instant.now();
+            int statusCode = timed.response().statusCode();
+            String content = new String(timed.response().body(),
+                    Charset.forName(defaultString(site.getEncoding(), "UTF-8")));
+            cacheRefreshedRobotsPolicy(site, robotsUri, timed.response(), content,
+                    settings, fetchedAt, timed.pageUrl());
+            return new RobotsTxtSnapshot(
+                    timed.pageUrl().toString(), statusCode, content, fetchedAt);
+        } catch (ResponseStatusException exception) {
+            throw exception;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "获取 robots.txt 时请求被中断", exception);
+        } catch (Exception exception) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "获取 robots.txt 失败，请检查网络配置后重试", exception);
+        }
+    }
+
+    private void cacheRefreshedRobotsPolicy(CrawlerSite site, URI target,
+            NetworkResponse response, String content, CrawlerRequestSettings settings,
+            Instant fetchedAt, URI pageUrl) {
+        int statusCode = response.statusCode();
+        CrawlerRobotsPolicy policy;
+        Instant expiresAt;
+        String contentType = response.headers().firstValue("Content-Type")
+                .orElse("").toLowerCase(Locale.ROOT);
+        String normalizedContent = content.stripLeading().toLowerCase(Locale.ROOT);
+        boolean htmlResponse = contentType.contains("text/html")
+                || normalizedContent.startsWith("<!doctype html")
+                || normalizedContent.startsWith("<html");
+        if (statusCode >= 200 && statusCode < 300 && !htmlResponse) {
+            policy = CrawlerRobotsPolicy.parse(content, productToken(settings.userAgent()));
+            expiresAt = fetchedAt.plus(Duration.ofMinutes(settings.robotsCacheMinutes()));
+        } else if (statusCode == 404 || statusCode == 410) {
+            policy = CrawlerRobotsPolicy.ALLOW_ALL;
+            expiresAt = fetchedAt.plus(Duration.ofMinutes(settings.robotsCacheMinutes()));
+        } else {
+            policy = CrawlerRobotsPolicy.DISALLOW_ALL;
+            expiresAt = fetchedAt.plus(Duration.ofMinutes(settings.robotsErrorCacheMinutes()));
+            if (statusCode == 429 || statusCode == 503) {
+                long retryDelay = retryAfterMillis(response.headers(), fetchedAt)
+                        .orElse(Duration.ofMinutes(settings.robotsErrorCacheMinutes()).toMillis());
+                Instant blockedUntil = fetchedAt.plusMillis(Math.max(1000L, retryDelay));
+                expiresAt = blockedUntil;
+                openCircuitUntil(site, blockedUntil, "robots.txt 要求稍后重试", pageUrl.toString());
+            }
+        }
+        robotsCache.put(robotsKey(site, target), new RobotsCacheEntry(policy, expiresAt));
+    }
+
     private TimedResponse sendFollowingSafeRedirects(CrawlerSite site, URI original, String etag,
             String lastModified, String proxyUrl, CrawlerRequestSettings settings) throws Exception {
         AdjustableConcurrencyGate gate = concurrencyGates.computeIfAbsent(site.getId(),
@@ -572,6 +636,8 @@ public class CrawlerHttpClient {
     private int value(Integer value, int fallback) { return value == null ? fallback : value; }
     private String defaultString(String value, String fallback) { return value == null || value.isBlank() ? fallback : value; }
     public record FetchResult(String html, int statusCode, long durationMillis, String etag, String lastModified) { }
+    public record RobotsTxtSnapshot(
+            String url, int statusCode, String content, Instant fetchedAt) { }
     private record TimedResponse(NetworkResponse response, long durationMillis, URI pageUrl) { }
     private record NetworkResponse(int statusCode, HttpHeaders headers, byte[] body) { }
     private record RobotsCacheEntry(CrawlerRobotsPolicy policy, Instant expiresAt) { }
