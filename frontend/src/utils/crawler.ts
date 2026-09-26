@@ -15,7 +15,7 @@ export interface CrawlerRule {
 }
 export interface CrawlerProxy { name:string; url:string; enabled:boolean }
 export interface CrawlerContentMarker { marker:string; status:'FAILED'|'PENDING_RELEASE' }
-export interface CrawlerProtectionState { coolingDown:boolean; blockedUntil?:string; reason?:string; consecutiveFailures:number; adaptiveDelayMillis:number }
+export interface CrawlerProtectionState { coolingDown:boolean; blockedUntil?:string; reason?:string; pageUrl?:string; consecutiveFailures:number; adaptiveDelayMillis:number }
 export interface CrawlerSitePayload {
   siteName: string; siteCode: string; baseUrl: string; homeUrl?: string; enabled: boolean
   autoScan: boolean; autoCrawl: boolean; autoUpdate: boolean; autoImportLibrary: boolean
@@ -50,7 +50,7 @@ export interface PageResult<T> { content:T[]; totalElements:number; totalPages:n
 export interface CrawlerDiscoveryQuery { page:number; size:number; keyword?:string; siteId?:number; favoriteOnly?:boolean; sort:string }
 export interface CrawlerBookQuery { page:number; size:number; keyword?:string; siteId?:number; crawlStatus?:string; importStatus?:string; favoriteOnly?:boolean; sort:string }
 export interface CrawlerChapterQuery { page:number; size:number; sort:'INDEX_ASC'|'INDEX_DESC'|'CREATED_DESC' }
-export interface CrawlerTaskQuery { page:number; size:number; failedOnly?:boolean; status?:string; type?:string; favoriteOnly?:boolean }
+export interface CrawlerTaskQuery { page:number; size:number; failedOnly?:boolean; status?:string; type?:string; favoriteOnly?:boolean; siteId?:number; priority?:string; createdAfter?:string; createdBefore?:string }
 
 export const crawlerApi = {
   dashboard: () => api.get<CrawlerDashboard>('/api/crawler/dashboard').then(r => r.data),

@@ -85,7 +85,8 @@ public class CrawlerHttpClient {
                             ? detectSoftBlock(html) : Optional.empty();
                     if (softBlock.isPresent()) {
                         increaseAdaptiveDelay(site, settings.adaptiveDelayMaxMillis(), settings.adaptiveDelayMaxMillis());
-                        openCircuit(site, Duration.ofSeconds(settings.accessDeniedCooldownSeconds()), "检测到疑似反爬验证页：" + softBlock.get());
+                        openCircuit(site, Duration.ofSeconds(settings.accessDeniedCooldownSeconds()),
+                                "检测到疑似反爬验证页：" + softBlock.get(), timed.pageUrl().toString());
                         throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                                 "检测到疑似反爬验证页（" + softBlock.get() + "），已暂停该站点请求");
                     }
@@ -96,7 +97,8 @@ public class CrawlerHttpClient {
                 }
                 if (Set.of(401, 403, 451).contains(response.statusCode())) {
                     increaseAdaptiveDelay(site, settings.adaptiveDelayMaxMillis(), settings.adaptiveDelayMaxMillis());
-                    openCircuit(site, Duration.ofSeconds(settings.accessDeniedCooldownSeconds()), "源站拒绝访问（HTTP " + response.statusCode() + "）");
+                    openCircuit(site, Duration.ofSeconds(settings.accessDeniedCooldownSeconds()),
+                            "源站拒绝访问（HTTP " + response.statusCode() + "）", timed.pageUrl().toString());
                     throw new ResponseStatusException(HttpStatusCode.valueOf(response.statusCode()),
                             "源站拒绝访问（HTTP " + response.statusCode() + "），已暂停该站点请求且不会切换代理重试");
                 }
@@ -110,7 +112,7 @@ public class CrawlerHttpClient {
                     OptionalLong requestedDelay = retryAfterMillis(response.headers(), Instant.now());
                     retryDelay = requestedDelay.orElse(retryDelay);
                     openCircuitUntil(site, Instant.now().plusMillis(Math.max(1000L, retryDelay)),
-                            "源站要求降低请求频率（HTTP 429）");
+                            "源站要求降低请求频率（HTTP 429）", timed.pageUrl().toString());
                     if (retryDelay > settings.maxInlineRetryDelayMillis()) break;
                 }
                 increaseAdaptiveDelay(site, retryDelay, settings.adaptiveDelayMaxMillis());
@@ -184,7 +186,7 @@ public class CrawlerHttpClient {
             }
             duration += (System.nanoTime() - started) / 1_000_000;
             if (!Set.of(301, 302, 303, 307, 308).contains(response.statusCode())) {
-                return new TimedResponse(response, duration);
+                return new TimedResponse(response, duration, current);
             }
             String location = response.headers().firstValue("Location")
                     .orElseThrow(() -> new IllegalStateException("源站重定向缺少 Location"));
@@ -269,8 +271,10 @@ public class CrawlerHttpClient {
         String reason = state != null && state.reason() != null
                 ? state.reason() : site.getCrawlerBlockReason();
         AdaptiveDelay adaptive = adaptiveDelays.get(site.getId());
+        String pageUrl = state != null && state.pageUrl() != null
+                ? state.pageUrl() : site.getCrawlerBlockUrl();
         return new ProtectionState(blockedUntil != null && blockedUntil.isAfter(Instant.now()),
-                blockedUntil, reason, state == null ? 0 : state.failures(),
+                blockedUntil, reason, pageUrl, state == null ? 0 : state.failures(),
                 adaptive == null ? 0 : adaptive.current());
     }
 
@@ -278,7 +282,7 @@ public class CrawlerHttpClient {
         circuitStates.remove(site.getId());
         adaptiveDelays.remove(site.getId());
         siteNextRequests.remove(site.getId());
-        persistProtection(site, null, null);
+        persistProtection(site, null, null, null);
     }
 
     private void enforceRobots(CrawlerSite site, URI target, CrawlerRequestSettings settings) throws Exception {
@@ -332,7 +336,8 @@ public class CrawlerHttpClient {
                 Instant blockedUntil = now.plusMillis(Math.max(1000L, delay));
                 robotsCache.put(robotsKey(site, target),
                         new RobotsCacheEntry(CrawlerRobotsPolicy.DISALLOW_ALL, blockedUntil));
-                openCircuitUntil(site, blockedUntil, "robots.txt 要求稍后重试");
+                openCircuitUntil(site, blockedUntil, "robots.txt 要求稍后重试",
+                        timed.pageUrl().toString());
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                         "robots.txt 要求稍后重试，站点请求已进入冷却期");
             }
@@ -439,7 +444,8 @@ public class CrawlerHttpClient {
                 && (state == null || state.blockedUntil() == null
                 || site.getCrawlerBlockedUntil().isAfter(state.blockedUntil()))) {
             state = new CircuitState(state == null ? 0 : state.failures(),
-                    site.getCrawlerBlockedUntil(), site.getCrawlerBlockReason());
+                    site.getCrawlerBlockedUntil(), site.getCrawlerBlockReason(),
+                    site.getCrawlerBlockUrl());
             circuitStates.put(site.getId(), state);
         }
         if (state == null) return;
@@ -451,7 +457,7 @@ public class CrawlerHttpClient {
         }
         if (blockedUntil != null) {
             circuitStates.remove(site.getId(), state);
-            persistProtection(site, null, null);
+            persistProtection(site, null, null, null);
         }
     }
 
@@ -469,32 +475,36 @@ public class CrawlerHttpClient {
                     : current == null ? null : current.blockedUntil();
             return new CircuitState(failures, blockedUntil,
                     blockedUntil == null ? current == null ? null : current.reason()
-                            : "连续请求失败达到保护阈值");
+                            : "连续请求失败达到保护阈值",
+                    current == null ? null : current.pageUrl());
         });
         CircuitState state = circuitStates.get(site.getId());
         if (state != null && state.blockedUntil() != null) {
-            persistProtection(site, state.blockedUntil(), state.reason());
+            persistProtection(site, state.blockedUntil(), state.reason(), state.pageUrl());
         }
     }
 
-    private void openCircuit(CrawlerSite site, Duration duration, String reason) {
-        openCircuitUntil(site, Instant.now().plus(duration), reason);
+    private void openCircuit(CrawlerSite site, Duration duration, String reason, String pageUrl) {
+        openCircuitUntil(site, Instant.now().plus(duration), reason, pageUrl);
     }
 
-    private void openCircuitUntil(CrawlerSite site, Instant blockedUntil, String reason) {
+    private void openCircuitUntil(CrawlerSite site, Instant blockedUntil, String reason, String pageUrl) {
         CircuitState state = circuitStates.compute(site.getId(), (ignored, current) -> new CircuitState(
                 current == null ? 1 : current.failures() + 1,
                 current == null || current.blockedUntil() == null
                         || blockedUntil.isAfter(current.blockedUntil()) ? blockedUntil : current.blockedUntil(),
-                reason == null ? current == null ? null : current.reason() : reason));
-        persistProtection(site, state.blockedUntil(), state.reason());
+                reason == null ? current == null ? null : current.reason() : reason,
+                pageUrl == null ? current == null ? null : current.pageUrl() : pageUrl));
+        persistProtection(site, state.blockedUntil(), state.reason(), state.pageUrl());
     }
 
-    private void persistProtection(CrawlerSite site, Instant blockedUntil, String reason) {
+    private void persistProtection(CrawlerSite site, Instant blockedUntil, String reason, String pageUrl) {
         site.setCrawlerBlockedUntil(blockedUntil);
         site.setCrawlerBlockReason(reason);
+        site.setCrawlerBlockUrl(pageUrl);
         if (site.getId() != null) {
             crawlerSiteRepository.updateCrawlerProtection(site.getId(), blockedUntil, reason);
+            crawlerSiteRepository.updateCrawlerProtectionUrl(site.getId(), pageUrl);
         }
     }
 
@@ -562,13 +572,18 @@ public class CrawlerHttpClient {
     private int value(Integer value, int fallback) { return value == null ? fallback : value; }
     private String defaultString(String value, String fallback) { return value == null || value.isBlank() ? fallback : value; }
     public record FetchResult(String html, int statusCode, long durationMillis, String etag, String lastModified) { }
-    private record TimedResponse(NetworkResponse response, long durationMillis) { }
+    private record TimedResponse(NetworkResponse response, long durationMillis, URI pageUrl) { }
     private record NetworkResponse(int statusCode, HttpHeaders headers, byte[] body) { }
     private record RobotsCacheEntry(CrawlerRobotsPolicy policy, Instant expiresAt) { }
-    private record CircuitState(int failures, Instant blockedUntil, String reason) { }
+    private record CircuitState(int failures, Instant blockedUntil, String reason, String pageUrl) { }
     private record HttpClientKey(int timeoutMillis, String proxyUrl) { }
-    record ProtectionState(boolean coolingDown, Instant blockedUntil, String reason,
-            int consecutiveFailures, long adaptiveDelayMillis) { }
+    record ProtectionState(boolean coolingDown, Instant blockedUntil, String reason, String pageUrl,
+            int consecutiveFailures, long adaptiveDelayMillis) {
+        ProtectionState(boolean coolingDown, Instant blockedUntil, String reason,
+                int consecutiveFailures, long adaptiveDelayMillis) {
+            this(coolingDown, blockedUntil, reason, null, consecutiveFailures, adaptiveDelayMillis);
+        }
+    }
 
     static final class AdaptiveDelay {
         private long delayMillis;

@@ -26,4 +26,10 @@ public interface CrawlerSiteRepository extends JpaRepository<CrawlerSite, Long> 
             + "s.crawlerBlockReason = :reason where s.id = :siteId")
     int updateCrawlerProtection(@Param("siteId") Long siteId,
             @Param("blockedUntil") Instant blockedUntil, @Param("reason") String reason);
+
+    @Modifying
+    @Transactional
+    @Query("update CrawlerSite s set s.crawlerBlockUrl = :pageUrl where s.id = :siteId")
+    int updateCrawlerProtectionUrl(@Param("siteId") Long siteId,
+            @Param("pageUrl") String pageUrl);
 }

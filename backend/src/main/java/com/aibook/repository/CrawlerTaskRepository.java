@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.time.LocalDateTime;
 import java.util.*;
 
 public interface CrawlerTaskRepository extends JpaRepository<CrawlerTask, String> {
@@ -35,6 +36,45 @@ public interface CrawlerTaskRepository extends JpaRepository<CrawlerTask, String
     Page<CrawlerTask> findByUserAndTypeRunningFirst(
             @Param("user") User user,
             @Param("type") CrawlerTask.TaskType type,
+            @Param("runningStatus") CrawlerTask.TaskStatus runningStatus,
+            Pageable pageable);
+    @Query(value = """
+            select t from CrawlerTask t
+            left join t.crawlerBook book
+            where t.user = :user
+              and (:siteId is null or t.site.id = :siteId)
+              and (:type is null or t.type = :type)
+              and (:status is null or t.status = :status)
+              and (:priority is null or t.priority = :priority)
+              and (:createdAfter is null or t.createdAt >= :createdAfter)
+              and (:createdBefore is null or t.createdAt <= :createdBefore)
+              and (:favoriteOnly = false or book.favorite = true)
+              and (:failedOnly = false or t.status in :failedStatuses)
+            order by case when t.status = :runningStatus then 0 else 1 end, t.createdAt desc
+            """, countQuery = """
+            select count(t) from CrawlerTask t
+            left join t.crawlerBook book
+            where t.user = :user
+              and (:siteId is null or t.site.id = :siteId)
+              and (:type is null or t.type = :type)
+              and (:status is null or t.status = :status)
+              and (:priority is null or t.priority = :priority)
+              and (:createdAfter is null or t.createdAt >= :createdAfter)
+              and (:createdBefore is null or t.createdAt <= :createdBefore)
+              and (:favoriteOnly = false or book.favorite = true)
+              and (:failedOnly = false or t.status in :failedStatuses)
+            """)
+    Page<CrawlerTask> findFilteredTasks(
+            @Param("user") User user,
+            @Param("siteId") Long siteId,
+            @Param("type") CrawlerTask.TaskType type,
+            @Param("status") CrawlerTask.TaskStatus status,
+            @Param("priority") CrawlerTask.Priority priority,
+            @Param("createdAfter") LocalDateTime createdAfter,
+            @Param("createdBefore") LocalDateTime createdBefore,
+            @Param("favoriteOnly") boolean favoriteOnly,
+            @Param("failedOnly") boolean failedOnly,
+            @Param("failedStatuses") Collection<CrawlerTask.TaskStatus> failedStatuses,
             @Param("runningStatus") CrawlerTask.TaskStatus runningStatus,
             Pageable pageable);
     Page<CrawlerTask> findByUserAndStatusInOrderByCreatedAtDesc(

@@ -409,6 +409,28 @@ public class CrawlerManagementService {
 
     @Transactional(readOnly = true)
     public Page<TaskView> tasks(
+            User user, int page, int size, boolean failedOnly, String status, String type,
+            boolean favoriteOnly, Long siteId, String priority,
+            LocalDateTime createdAfter, LocalDateTime createdBefore) {
+        if (siteId == null && (priority == null || priority.isBlank())
+                && createdAfter == null && createdBefore == null) {
+            return tasks(user, page, size, failedOnly, status, type, favoriteOnly);
+        }
+        if (createdAfter != null && createdBefore != null && createdAfter.isAfter(createdBefore)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "开始时间不能晚于结束时间");
+        }
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        List<CrawlerTask.TaskStatus> failedStatuses = List.of(
+                CrawlerTask.TaskStatus.FAILED, CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
+        Page<CrawlerTask> tasks = taskRepository.findFilteredTasks(
+                user, siteId, parseTaskType(type), parseTaskStatus(status), parseTaskPriority(priority),
+                createdAfter, createdBefore, favoriteOnly, failedOnly, failedStatuses,
+                CrawlerTask.TaskStatus.RUNNING, pageable);
+        return tasks.map(this::taskView);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TaskView> tasks(
             User user, int page, int size, boolean failedOnly, String status, String type) {
         return tasks(user, page, size, failedOnly, status, type, false);
     }
@@ -428,6 +450,15 @@ public class CrawlerManagementService {
             return CrawlerTask.TaskType.valueOf(type.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "任务类型无效");
+        }
+    }
+
+    private CrawlerTask.Priority parseTaskPriority(String priority) {
+        if (priority == null || priority.isBlank()) return null;
+        try {
+            return CrawlerTask.Priority.valueOf(priority.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "任务优先级无效");
         }
     }
 
@@ -597,7 +628,7 @@ public class CrawlerManagementService {
                 s.getLastHealthCheckAt(), s.getHealthMessage(), s.getCreatedAt(), contentMarkers(s),
                 bool(s.getRespectRobotsTxt(), true), new CrawlerProtectionView(
                         protection.coolingDown(), protection.blockedUntil(), protection.reason(),
-                        protection.consecutiveFailures(), protection.adaptiveDelayMillis()));
+                        protection.pageUrl(), protection.consecutiveFailures(), protection.adaptiveDelayMillis()));
     }
 
     public RulePayload rulePayload(CrawlerSiteRule r) {

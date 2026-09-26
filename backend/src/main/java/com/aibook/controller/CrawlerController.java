@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.data.domain.Page;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -133,8 +134,15 @@ public class CrawlerController {
             @RequestParam(defaultValue = "false") boolean failedOnly,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String type,
-            @RequestParam(defaultValue = "false") boolean favoriteOnly) {
-        return managementService.tasks(user(auth), page, size, failedOnly, status, type, favoriteOnly);
+            @RequestParam(defaultValue = "false") boolean favoriteOnly,
+            @RequestParam(required = false) Long siteId,
+            @RequestParam(required = false) String priority,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    java.time.LocalDateTime createdAfter,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    java.time.LocalDateTime createdBefore) {
+        return managementService.tasks(user(auth), page, size, failedOnly, status, type,
+                favoriteOnly, siteId, priority, createdAfter, createdBefore);
     }
     @GetMapping("/tasks/queued") public List<TaskView> queuedTasks(
             Authentication auth, @RequestParam(required = false) Long siteId) {

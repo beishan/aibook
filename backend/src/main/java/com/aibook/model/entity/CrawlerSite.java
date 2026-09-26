@@ -57,6 +57,7 @@ public class CrawlerSite {
     @Column(columnDefinition = "TEXT") private String healthMessage;
     private Instant crawlerBlockedUntil;
     @Column(length = 500) private String crawlerBlockReason;
+    @Column(columnDefinition = "TEXT") private String crawlerBlockUrl;
     @OneToOne(mappedBy = "site", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private CrawlerSiteRule rule;
     @CreationTimestamp private LocalDateTime createdAt;

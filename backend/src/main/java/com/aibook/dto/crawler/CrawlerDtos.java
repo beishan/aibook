@@ -60,7 +60,12 @@ public final class CrawlerDtos {
             CrawlerProtectionView protection) { }
 
     public record CrawlerProtectionView(boolean coolingDown, Instant blockedUntil, String reason,
-            int consecutiveFailures, long adaptiveDelayMillis) { }
+            String pageUrl, int consecutiveFailures, long adaptiveDelayMillis) {
+        public CrawlerProtectionView(boolean coolingDown, Instant blockedUntil, String reason,
+                int consecutiveFailures, long adaptiveDelayMillis) {
+            this(coolingDown, blockedUntil, reason, null, consecutiveFailures, adaptiveDelayMillis);
+        }
+    }
 
     public record ManualCrawlRequest(@NotBlank String url) { }
     public record DiscoveryPagePayload(

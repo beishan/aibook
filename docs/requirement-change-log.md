@@ -22,6 +22,26 @@
 
 ## 变更记录
 
+### REQ-20260926-006 查看站点保护触发的具体页面
+
+- 需求时间：2026-09-26
+- 完成时间：2026-09-26
+- 状态：部分完成
+- 需求内容：采集网站卡片显示站点保护冷却时，允许查看触发保护的具体页面地址。
+- 完成情况：反爬验证页、源站拒绝访问、HTTP 429 和 robots.txt 限流现在会记录最终响应页面 URL；网站卡片提供详情窗口展示完整 URL、保护原因和冷却结束时间。数据库由 Hibernate `ddl-auto: update` 自动增加页面地址字段。应用版本更新至 `1.45.52`。代码已交付，但后端编译未通过本机 javac 环境检查。
+- 主要改动：扩展 `CrawlerSite` 和保护状态 DTO；在 `CrawlerHttpClient` 捕获响应最终地址并持久化；更新 `CrawlerSiteRepository`、`CrawlerManagementService` 及 `CrawlerView.vue`。
+- 验证结果：前端 Vite 生产构建通过，`git diff --check` 通过。`mvn -DskipTests clean compile` 在编译 361 个源文件时由 javac 报“unknown compilation problem”；未运行测试。
+
+### REQ-20260926-005 任务队列弹窗增加队列配置与任务分页页签
+
+- 需求时间：2026-09-26
+- 完成时间：2026-09-26
+- 状态：部分完成
+- 需求内容：任务队列弹窗下半部分改为“队列配置”页签，并新增“任务队列”页签，集中查看所有任务；提供队列、时间、优先级等筛选，并使用分页列表。
+- 完成情况：弹窗已拆分为“队列配置”和“任务队列”页签；任务页签使用服务端分页，可按网站队列、创建时间、优先级、状态和类型筛选，并复用任务列表操作。应用版本更新至 `1.45.51`。功能代码已交付，后端编译仍受本机 javac 返回“unknown compilation problem”影响，尚未确认通过。
+- 主要改动：更新 `CrawlerView.vue` 和采集任务 API 查询参数；扩展 `CrawlerController`、`CrawlerManagementService` 与 `CrawlerTaskRepository` 实现服务端筛选分页；同步 `frontend/package.json`、`frontend/package-lock.json`。
+- 验证结果：前端 Vite 生产构建通过，`git diff --check` 通过。`mvn -DskipTests clean compile` 在编译 361 个源文件时由 javac 报“unknown compilation problem”；`vue-tsc` 因 1.8.27 与已安装 TypeScript 不兼容而无法启动。未运行测试。
+
 ### REQ-20260926-004 按采集网站拆分任务队列
 
 - 需求时间：2026-09-26

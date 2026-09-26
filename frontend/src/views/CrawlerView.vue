@@ -62,7 +62,12 @@
         <article v-for="site in sites" :key="site.id" class="site-card">
           <div class="site-top"><span class="site-mark">{{ site.siteName.slice(0, 1) }}</span><div><h3>{{ site.siteName }}</h3><a :href="site.homeUrl || site.baseUrl" target="_blank">{{ site.baseUrl }}</a></div><el-tag :type="site.status==='RULE_ERROR'?'danger':!site.ruleVersion?'warning':site.enabled?'success':'info'">{{ site.status==='RULE_ERROR'?'规则异常':!site.ruleVersion?'待配置规则':site.enabled?'启用':'停用' }}</el-tag></div>
           <div class="site-stats"><span><b>{{ site.bookCount }}</b> 本书</span><span><b>{{ site.requestIntervalMillis }}</b> ms 间隔</span><span><b>{{ site.maxConcurrency }}</b> 并发</span></div>
-          <div v-if="hasSiteProtection(site)" class="site-protection" :class="{cooling:site.protection.coolingDown}"><div><strong>{{ site.protection.coolingDown ? '站点保护冷却中' : '请求节奏正在恢复' }}</strong><span>{{ site.protection.reason || '近期请求失败，系统已自动降低访问频率' }}</span></div><small v-if="site.protection.coolingDown&&site.protection.blockedUntil">恢复时间 {{ formatTime(site.protection.blockedUntil) }}</small><small v-else>附加延迟 {{ site.protection.adaptiveDelayMillis }} ms · 连续失败 {{ site.protection.consecutiveFailures }} 次</small></div>
+          <div v-if="hasSiteProtection(site)" class="site-protection" :class="{cooling:site.protection.coolingDown}">
+            <div class="site-protection-message"><strong>{{ site.protection.coolingDown ? '站点保护冷却中' : '请求节奏正在恢复' }}</strong><span>{{ site.protection.reason || '近期请求失败，系统已自动降低访问频率' }}</span></div>
+            <el-button text size="small" type="warning" @click="openSiteProtectionDetails(site)">详情</el-button>
+            <small v-if="site.protection.coolingDown&&site.protection.blockedUntil">恢复时间 {{ formatTime(site.protection.blockedUntil) }}</small>
+            <small v-else>附加延迟 {{ site.protection.adaptiveDelayMillis }} ms · 连续失败 {{ site.protection.consecutiveFailures }} 次</small>
+          </div>
           <p class="health-line" :class="{error:site.status==='RULE_ERROR'}">{{ site.ruleVersion ? `生效规则 v${site.ruleVersion}` : '暂无生效规则' }} · 共 {{ site.ruleCount }} 个版本</p>
           <footer><el-button v-if="hasSiteProtection(site)" text type="warning" @click="resetSiteProtection(site)">解除保护</el-button><el-button type="primary" plain @click="openDiscoveryPages(site)">发现页管理（{{ discoveryPagesBySite[site.id]?.length || 0 }}）</el-button><el-button type="primary" plain @click="openRuleManager(site)">规则管理</el-button><el-button text :icon="Download" @click="exportSiteConfiguration(site)">导出配置</el-button><el-button text @click="openSite(site)">编辑网站</el-button><el-button text @click="openCrawl(site.id)">采集 URL</el-button><el-button text type="danger" @click="removeSite(site)">删除</el-button></footer>
         </article>
@@ -234,6 +239,25 @@
       <div v-if="activeTab === 'tasks'&&taskTotal" class="list-pagination"><span>当前显示 {{ tasks.length }} 项</span><el-pagination v-model:current-page="taskPage" v-model:page-size="taskPageSize" :page-sizes="[20,50,100]" :total="taskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadTasks()" @size-change="handleTaskSizeChange" /></div>
       <div v-if="activeTab === 'failed'&&failedTaskTotal" class="list-pagination"><span>当前显示 {{ failedTasks.length }} 项</span><el-pagination v-model:current-page="failedTaskPage" v-model:page-size="failedTaskPageSize" :page-sizes="[20,50,100]" :total="failedTaskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadFailedTasks()" @size-change="handleFailedTaskSizeChange" /></div>
     </section>
+
+    <el-dialog v-model="siteProtectionDialog" :title="`${protectionDetailSite?.siteName || '站点'} · 保护详情`" width="min(680px, 94vw)" append-to-body>
+      <div v-if="protectionDetailSite" class="site-protection-detail">
+        <div class="site-protection-detail-item">
+          <span>保护原因</span>
+          <strong>{{ protectionDetailSite.protection.reason || '近期请求失败，系统已自动降低访问频率' }}</strong>
+        </div>
+        <div class="site-protection-detail-item">
+          <span>检测页面</span>
+          <a v-if="protectionDetailSite.protection.pageUrl" :href="protectionDetailSite.protection.pageUrl" target="_blank" rel="noopener noreferrer">{{ protectionDetailSite.protection.pageUrl }}</a>
+          <p v-else>此保护记录没有保存具体页面地址。新的保护事件会记录触发页面。</p>
+        </div>
+        <div v-if="protectionDetailSite.protection.blockedUntil" class="site-protection-detail-item">
+          <span>冷却结束时间</span>
+          <strong>{{ formatTime(protectionDetailSite.protection.blockedUntil) }}</strong>
+        </div>
+      </div>
+      <template #footer><el-button @click="siteProtectionDialog=false">关闭</el-button></template>
+    </el-dialog>
 
     <el-dialog v-model="siteDialog" :title="editingSite ? '编辑采集网站' : '新增采集网站'" width="min(860px, 96vw)" top="5vh" class="site-editor-dialog" append-to-body destroy-on-close>
       <el-form ref="siteFormRef" :model="siteForm" :rules="siteFormRules" label-position="top" class="site-form site-editor-form" scroll-to-error>
@@ -476,23 +500,64 @@
       </div>
     </el-drawer>
 
-    <el-dialog v-model="queueOverviewDialog" title="网站任务队列" width="min(860px, 94vw)" append-to-body>
-      <div class="queue-overview-summary">
-        <span><small>队列总数</small><strong>{{ taskQueues.length }}</strong></span>
-        <span><small>正在运行</small><strong>{{ totalQueueRunning }} / {{ totalQueueConcurrency }}</strong></span>
-        <span><small>等待 / 暂停</small><strong>{{ totalQueueWaiting }} / {{ totalQueuePaused }}</strong></span>
-        <span><small>队列总进度</small><strong>{{ totalQueueProgress }}%</strong></span>
-      </div>
-      <div v-if="taskQueues.length" class="site-queue-list">
-        <article v-for="queue in taskQueues" :key="queue.id" class="site-queue-card">
-          <header><div><p class="eyebrow">{{ queue.siteName }}</p><strong>{{ queue.runningCount }} / {{ queue.maxConcurrentTasks }} 个任务运行中</strong></div><el-tag effect="plain">{{ queue.progressPercent }}%</el-tag></header>
-          <el-progress :percentage="queue.progressPercent" :stroke-width="7" :show-text="false" />
-          <div class="site-queue-stats"><span>等待 {{ queue.waitingCount }}</span><span>暂停 {{ queue.pausedCount }}</span><span>间隔 {{ queue.taskIntervalSeconds }} 秒</span></div>
-          <footer><el-button text @click="openQueueSettings(queue)">队列配置</el-button><el-button type="primary" plain @click="openQueueDetails(queue)">查看队列任务</el-button></footer>
-        </article>
-      </div>
-      <el-empty v-else description="还没有任务队列，请先添加采集网站" />
-      <template #footer><el-button :loading="queuedTasksLoading" @click="loadTaskQueues">刷新队列</el-button><el-button @click="openCreateQueue">手动创建队列</el-button><el-button @click="queueOverviewDialog=false">关闭</el-button></template>
+    <el-dialog v-model="queueOverviewDialog" title="任务队列" width="min(1180px, 96vw)" append-to-body>
+      <el-tabs v-model="queuePopupTab" class="queue-popup-tabs" @tab-change="handleQueuePopupTabChange">
+        <el-tab-pane label="队列配置" name="config">
+          <div class="queue-overview-summary">
+            <span><small>队列总数</small><strong>{{ taskQueues.length }}</strong></span>
+            <span><small>正在运行</small><strong>{{ totalQueueRunning }} / {{ totalQueueConcurrency }}</strong></span>
+            <span><small>等待 / 暂停</small><strong>{{ totalQueueWaiting }} / {{ totalQueuePaused }}</strong></span>
+            <span><small>队列总进度</small><strong>{{ totalQueueProgress }}%</strong></span>
+          </div>
+          <div v-if="taskQueues.length" class="site-queue-list">
+            <article v-for="queue in taskQueues" :key="queue.id" class="site-queue-card">
+              <header><div><p class="eyebrow">{{ queue.siteName }}</p><strong>{{ queue.runningCount }} / {{ queue.maxConcurrentTasks }} 个任务运行中</strong></div><el-tag effect="plain">{{ queue.progressPercent }}%</el-tag></header>
+              <el-progress :percentage="queue.progressPercent" :stroke-width="7" :show-text="false" />
+              <div class="site-queue-stats"><span>等待 {{ queue.waitingCount }}</span><span>暂停 {{ queue.pausedCount }}</span><span>间隔 {{ queue.taskIntervalSeconds }} 秒</span></div>
+              <footer><el-button text @click="openQueueSettings(queue)">配置</el-button><el-button type="primary" plain @click="openQueueDetails(queue)">查看任务</el-button></footer>
+            </article>
+          </div>
+          <el-empty v-else description="还没有任务队列，请先添加采集网站" />
+        </el-tab-pane>
+        <el-tab-pane label="任务队列" name="tasks">
+          <div class="queue-task-filters">
+            <el-select v-model="queueTaskSiteId" clearable placeholder="全部队列" @change="applyQueueTaskFilters">
+              <el-option v-for="site in sites" :key="site.id" :label="site.siteName" :value="site.id" />
+            </el-select>
+            <el-select v-model="queueTaskStatus" clearable placeholder="全部状态" @change="applyQueueTaskFilters">
+              <el-option v-for="status in taskStatusOptions" :key="status" :label="statusLabel(status)" :value="status" />
+            </el-select>
+            <el-select v-model="queueTaskType" clearable placeholder="全部类型" @change="applyQueueTaskFilters">
+              <el-option v-for="type in taskTypeOptions" :key="type" :label="taskTypeLabel(type)" :value="type" />
+            </el-select>
+            <el-select v-model="queueTaskPriority" clearable placeholder="全部优先级" @change="applyQueueTaskFilters">
+              <el-option v-for="item in taskPriorityOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+            <el-date-picker v-model="queueTaskCreatedRange" type="datetimerange" value-format="YYYY-MM-DDTHH:mm:ss" range-separator="至" start-placeholder="开始时间" end-placeholder="结束时间" clearable @change="applyQueueTaskFilters" />
+            <el-button @click="resetQueueTaskFilters">重置</el-button>
+            <el-button type="primary" :loading="queueTaskLoading" @click="loadQueueTabTasks">查询</el-button>
+          </div>
+          <TaskTable
+            :tasks="queueTabTasks"
+            :loading="queueTaskLoading"
+            :prioritizing-task-id="queueTaskPrioritizingId"
+            @open="openTask"
+            @command="runQueueTabTaskCommand"
+            @edit="openTaskEditor"
+            @delete="removeQueueTabTask"
+            @scan-results="openScanResults"
+            @toggle-favorite="toggleQueueTabTaskFavorite"
+            @book-lists="openTaskBookLists"
+            @prioritize="prioritizeQueueTabTask"
+          />
+          <el-empty v-if="!queueTaskLoading && !queueTabTasks.length" description="没有符合条件的任务" />
+          <div v-if="queueTabTaskTotal" class="queue-task-pagination">
+            <span>共 {{ queueTabTaskTotal }} 项</span>
+            <el-pagination v-model:current-page="queueTabTaskPage" v-model:page-size="queueTabTaskPageSize" :page-sizes="[10,20,50]" :total="queueTabTaskTotal" layout="total, sizes, prev, pager, next, jumper" background small @current-change="loadQueueTabTasks" @size-change="handleQueueTabTaskSizeChange" />
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+      <template #footer><el-button v-if="queuePopupTab==='config'" :loading="queuedTasksLoading" @click="loadTaskQueues">刷新队列</el-button><el-button v-if="queuePopupTab==='config'" @click="openCreateQueue">手动创建队列</el-button><el-button v-else :loading="queueTaskLoading" @click="loadQueueTabTasks">刷新任务</el-button><el-button @click="queueOverviewDialog=false">关闭</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="queueSettingsDialog" :title="`${queueSettingsTarget?.siteName || '网站'} · 队列配置`" width="min(520px, 94vw)" append-to-body>
@@ -637,7 +702,7 @@ interface BookListOption { id:number; name:string; description?:string }
 type TaskMoreCommand='scan-results'|'book-lists'|'edit'|'resume'|'delete'
 type TaskMoreAction={command:TaskMoreCommand;label:string;danger?:boolean;divided?:boolean}
 
-const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true},selectable:{type:Boolean,default:false},showFailureReason:{type:Boolean,default:false},prioritizingTaskId:{type:String,default:''},batchManaging:{type:Boolean,default:false}}, emits:['open','command','edit','delete','scan-results','selection-change','toggle-favorite','book-lists','prioritize'], setup(props,{emit}) {
+const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true},loading:{type:Boolean,default:false},selectable:{type:Boolean,default:false},showFailureReason:{type:Boolean,default:false},prioritizingTaskId:{type:String,default:''},batchManaging:{type:Boolean,default:false}}, emits:['open','command','edit','delete','scan-results','selection-change','toggle-favorite','book-lists','prioritize'], setup(props,{emit}) {
   const moreActions=(row:CrawlerTask):TaskMoreAction[]=>[
     row.type==='SITE_SCAN'?{command:'scan-results',label:'扫描结果'}:null,
     row.bookId?{command:'book-lists',label:'加入书单'}:null,
@@ -649,7 +714,7 @@ const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask
     if(command==='resume')emit('command',row,'resume')
     else emit(command,row)
   }
-  return () => h(ElTable,{data:props.tasks,rowKey:'id',class:'data-table',onSelectionChange:(rows:CrawlerTask[])=>emit('selection-change',rows)},()=>[
+  return () => h(ElTable,{data:props.tasks,loading:props.loading,rowKey:'id',class:'data-table',onSelectionChange:(rows:CrawlerTask[])=>emit('selection-change',rows)},()=>[
   props.selectable?h(ElTableColumn,{type:'selection',width:48,reserveSelection:true,fixed:'left'}):null,
   h(ElTableColumn,{label:'收藏',width:58,fixed:'left',align:'center'},{default:({row}:{row:CrawlerTask})=>row.bookId?h(ElButton,{size:'small',circle:true,icon:row.favorite?StarFilled:Star,class:['favorite-action','row-hover-action',row.favorite?'is-favorite':''],'aria-label':row.favorite?'取消收藏':'加入收藏',title:row.favorite?'取消收藏':'加入收藏',onClick:(event:MouseEvent)=>{event.stopPropagation();emit('toggle-favorite',row)}}):null}),
   h(ElTableColumn,{label:'任务',minWidth:240,fixed:'left'},{default:({row}:{row:CrawlerTask})=>h('div',{class:'task-open',role:'button',tabindex:0,onClick:()=>emit('open',row),onKeydown:(event:KeyboardEvent)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();emit('open',row)}}},[row.siteName?h('span',{class:'task-site-mark',title:row.siteName,'aria-label':`来源网站：${row.siteName}`},row.siteName.slice(0,1)):null,h('strong',{title:row.bookName||row.discoveryPageName||taskTypeLabel(row.type)},row.bookName||row.discoveryPageName||taskTypeLabel(row.type))])}),
@@ -700,7 +765,7 @@ const activeTab=ref<TabKey>('overview'), dashboard=ref<CrawlerDashboard>(), site
 const statistics=ref<CrawlerDashboardStatistics>(), statisticsLoading=ref(false), statisticsDays=ref<StatisticsDays>(30)
 const chapterTrendChartRef=ref<HTMLElement>(), taskCountChartRef=ref<HTMLElement>(), bookTrendChartRef=ref<HTMLElement>(), successfulBooksChartRef=ref<HTMLElement>(), successRateChartRef=ref<HTMLElement>(), siteContributionChartRef=ref<HTMLElement>(), funnelChartRef=ref<HTMLElement>()
 const currentCrawlerTasks=ref<CrawlerTask[]>([]), submittingBookTaskIds=ref(new Set<number>())
-const siteDialog=ref(false), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'|'metadata'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), chapterDetail=ref<{title:string;url:string;content:string;errorMessage:string}>(), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
+const siteDialog=ref(false), siteProtectionDialog=ref(false), protectionDetailSite=ref<CrawlerSite>(), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'|'metadata'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), chapterDetail=ref<{title:string;url:string;content:string;errorMessage:string}>(), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
 const chapterReaderSurface=ref<HTMLElement>(), chapterReaderActive=ref<CrawlerChapter>(), chapterReaderChapters=ref<CrawlerChapter[]>([]), chapterReaderBookId=ref<number>(), chapterReaderLoading=ref(false), chapterReaderSettingsOpen=ref(false)
 const discoveryPagesBySite=ref<Record<number,CrawlerDiscoveryPage[]>>({})
 const discoveryMetadataRefreshing=ref(false)
@@ -713,7 +778,7 @@ const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=r
 const taskStatusFilter=ref(''), taskTypeFilter=ref(''), taskFavoriteOnly=ref(false)
 const selectedTasks=ref<CrawlerTask[]>([]), selectedFailedTasks=ref<CrawlerTask[]>([]), taskTableSelectionVersion=ref(0), batchTaskManaging=ref(false), batchTaskAction=ref<'pause'|'resume'|'cancel'|'delete'|'priority'|'resume-all'>()
 const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
-const queueOverviewDialog=ref(false), queueSettingsDialog=ref(false), createQueueDialog=ref(false), savingQueueSettings=ref(false), creatingQueue=ref(false), taskQueues=ref<CrawlerTaskQueue[]>([]), activeQueue=ref<CrawlerTaskQueue>(), queueSettingsTarget=ref<CrawlerTaskQueue>(), queueLimit=ref(4), queueIntervalSeconds=ref(0), createQueueSiteId=ref<number>(), queuedTasksDialog=ref(false), queuedTasksLoading=ref(false), queuedTasksReordering=ref(false), queuedTaskPrioritizingId=ref<string>(), queuedTaskCommandId=ref<string>(), queuedTaskCommand=ref<'pause'|'resume'|'cancel'>(), queuedTaskDraggingId=ref<string>(), queuedTaskDragStartOrder=ref<string[]>([]), queuedTasks=ref<CrawlerTask[]>([]), queuedTaskPage=ref(1), queuedTaskPageSize=ref(10)
+const queueOverviewDialog=ref(false), queuePopupTab=ref<'config'|'tasks'>('config'), queueSettingsDialog=ref(false), createQueueDialog=ref(false), savingQueueSettings=ref(false), creatingQueue=ref(false), taskQueues=ref<CrawlerTaskQueue[]>([]), activeQueue=ref<CrawlerTaskQueue>(), queueSettingsTarget=ref<CrawlerTaskQueue>(), queueLimit=ref(4), queueIntervalSeconds=ref(0), createQueueSiteId=ref<number>(), queueTaskLoading=ref(false), queueTabTasks=ref<CrawlerTask[]>([]), queueTabTaskTotal=ref(0), queueTabTaskPage=ref(1), queueTabTaskPageSize=ref(20), queueTabTaskSiteId=ref<number>(), queueTaskStatus=ref(''), queueTaskType=ref(''), queueTaskPriority=ref(''), queueTaskCreatedRange=ref<[string,string]>(), queueTaskPrioritizingId=ref<string>(), queuedTasksDialog=ref(false), queuedTasksLoading=ref(false), queuedTasksReordering=ref(false), queuedTaskPrioritizingId=ref<string>(), queuedTaskCommandId=ref<string>(), queuedTaskCommand=ref<'pause'|'resume'|'cancel'>(), queuedTaskDraggingId=ref<string>(), queuedTaskDragStartOrder=ref<string[]>([]), queuedTasks=ref<CrawlerTask[]>([]), queuedTaskPage=ref(1), queuedTaskPageSize=ref(10)
 const totalQueueRunning=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.runningCount,0))
 const totalQueueConcurrency=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.maxConcurrentTasks,0))
 const totalQueueWaiting=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.waitingCount,0))
@@ -916,7 +981,7 @@ async function syncOpenTask(options:LoadOptions={}){
 }
 async function loadTaskQueues(){taskQueues.value=await crawlerApi.taskQueues()}
 function openQueueSettings(queue?:CrawlerTaskQueue){
-  if(!queue){queueOverviewDialog.value=true;return}
+  if(!queue){queuePopupTab.value='config';queueOverviewDialog.value=true;return}
   queueSettingsTarget.value=queue
   queueLimit.value=queue.maxConcurrentTasks
   queueIntervalSeconds.value=queue.taskIntervalSeconds
@@ -938,8 +1003,27 @@ async function saveQueueSettings(){
     savingQueueSettings.value=false
   }
 }
-async function openQueuedTasks(){queueOverviewDialog.value=true;await loadTaskQueues()}
-async function openQueueDetails(queue:CrawlerTaskQueue){activeQueue.value=queue;queueOverviewDialog.value=false;queuedTasksDialog.value=true;queuedTaskPage.value=1;await loadQueuedTasks()}
+async function openQueuedTasks(){queuePopupTab.value='config';queueOverviewDialog.value=true;await loadTaskQueues()}
+async function openQueueDetails(queue:CrawlerTaskQueue){queueTaskSiteId.value=queue.siteId;queueTabTaskPage.value=1;if(queuePopupTab.value==='tasks')await loadQueueTabTasks();else queuePopupTab.value='tasks'}
+async function handleQueuePopupTabChange(tab:string){if(tab==='tasks')await loadQueueTabTasks()}
+async function loadQueueTabTasks(){
+  queueTaskLoading.value=true
+  try{
+    const [createdAfter,createdBefore]=queueTaskCreatedRange.value||[]
+    const result=await crawlerApi.tasks({page:queueTabTaskPage.value-1,size:queueTabTaskPageSize.value,siteId:queueTaskSiteId.value,status:queueTaskStatus.value||undefined,type:queueTaskType.value||undefined,priority:queueTaskPriority.value||undefined,createdAfter,createdBefore})
+    const lastPage=Math.max(1,result.totalPages)
+    if(queueTabTaskPage.value>lastPage){queueTabTaskPage.value=lastPage;return await loadQueueTabTasks()}
+    queueTabTasks.value=result.content
+    queueTabTaskTotal.value=result.totalElements
+  }finally{queueTaskLoading.value=false}
+}
+async function applyQueueTaskFilters(){queueTabTaskPage.value=1;await loadQueueTabTasks()}
+async function resetQueueTaskFilters(){queueTaskSiteId.value=undefined;queueTaskStatus.value='';queueTaskType.value='';queueTaskPriority.value='';queueTaskCreatedRange.value=undefined;await applyQueueTaskFilters()}
+async function handleQueueTabTaskSizeChange(){queueTabTaskPage.value=1;await loadQueueTabTasks()}
+async function prioritizeQueueTabTask(task:CrawlerTask){if(task.status!=='WAITING'||queueTaskPrioritizingId.value)return;queueTaskPrioritizingId.value=task.id;try{await crawlerApi.prioritizeQueuedTask(task.id);message.success(`“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”已移到等待队列首位`);await Promise.all([loadQueueTabTasks(),loadTasks({silent:true}),loadTaskQueues()])}catch(error:any){message.error(error.response?.data?.message||'任务优先调整失败');await loadQueueTabTasks()}finally{queueTaskPrioritizingId.value=undefined}}
+async function runQueueTabTaskCommand(task:CrawlerTask,command:'pause'|'resume'|'cancel'){await runTaskCommand(task,command)}
+async function removeQueueTabTask(task:CrawlerTask){await removeTask(task);await loadQueueTabTasks()}
+async function toggleQueueTabTaskFavorite(task:CrawlerTask){await toggleTaskFavorite(task);await loadQueueTabTasks()}
 async function returnToQueueOverview(){queuedTasksDialog.value=false;queueOverviewDialog.value=true;await loadTaskQueues()}
 function openCreateQueue(){createQueueSiteId.value=sitesWithoutQueue.value[0]?.id;createQueueDialog.value=true}
 async function createQueue(){
@@ -1113,6 +1197,7 @@ function removeContentMarker(index:number){siteForm.contentMarkers.splice(index,
 function setActiveProxy(index:number,enabled:boolean){siteForm.proxies.forEach((proxy,current)=>{proxy.enabled=enabled&&current===index})}
 async function removeSite(site:CrawlerSite){if(await confirm(`确定删除采集网站“${site.siteName}”吗？`)){await crawlerApi.deleteSite(site.id);message.success('采集网站已删除');await refresh()}}
 function hasSiteProtection(site:CrawlerSite){return site.protection.coolingDown||site.protection.adaptiveDelayMillis>0||site.protection.consecutiveFailures>0}
+function openSiteProtectionDetails(site:CrawlerSite){protectionDetailSite.value=site;siteProtectionDialog.value=true}
 async function resetSiteProtection(site:CrawlerSite){if(!await confirm(`确定解除“${site.siteName}”的请求保护吗？请先确认源站已允许恢复访问。`))return;const updated=await crawlerApi.resetSiteProtection(site.id);sites.value=sites.value.map(item=>item.id===site.id?updated:item);message.success('站点请求保护已解除')}
 async function exportSiteConfiguration(site:CrawlerSite){const data=await crawlerApi.exportSiteConfiguration(site.id);downloadJson(data,`${site.siteCode}-site-config.json`);message.success('网站全部配置已导出')}
 function openSiteConfigurationImport(){siteConfigurationImportMode.value='text';siteConfigurationJsonText.value='';siteConfigurationImportFileName.value='';siteConfigurationImportDialog.value=true}
@@ -1278,9 +1363,9 @@ async function submitImport(){
 }
 async function openTask(task:CrawlerTask){selectedTask.value=task;taskDrawer.value=true;await syncOpenTask()}
 async function openTaskBook(task:CrawlerTask){if(!task.bookId)return;const book=await crawlerApi.book(task.bookId);taskDrawer.value=false;await openBook(book)}
-async function runTaskCommand(task:CrawlerTask,command:'pause'|'resume'|'cancel'){const updated=await crawlerApi.taskCommand(task.id,command);if(selectedTask.value?.id===updated.id)selectedTask.value=updated;await refresh();if(taskDrawer.value&&selectedTask.value?.id===updated.id)await syncOpenTask({silent:true})}
+async function runTaskCommand(task:CrawlerTask,command:'pause'|'resume'|'cancel'){const updated=await crawlerApi.taskCommand(task.id,command);if(selectedTask.value?.id===updated.id)selectedTask.value=updated;await refresh();if(queueOverviewDialog.value&&queuePopupTab.value==='tasks')await loadQueueTabTasks();if(taskDrawer.value&&selectedTask.value?.id===updated.id)await syncOpenTask({silent:true})}
 function openTaskEditor(task:CrawlerTask){editingTask.value=task;taskPriority.value=(task.priority as 'LOW'|'NORMAL'|'HIGH')||'NORMAL';taskEditDialog.value=true}
-async function saveTask(){if(!editingTask.value)return;savingTask.value=true;try{const updated=await crawlerApi.updateTask(editingTask.value.id,taskPriority.value);if(selectedTask.value?.id===updated.id)selectedTask.value=updated;taskEditDialog.value=false;message.success('任务优先级已更新');await refresh()}finally{savingTask.value=false}}
+async function saveTask(){if(!editingTask.value)return;savingTask.value=true;try{const updated=await crawlerApi.updateTask(editingTask.value.id,taskPriority.value);if(selectedTask.value?.id===updated.id)selectedTask.value=updated;taskEditDialog.value=false;message.success('任务优先级已更新');await refresh();if(queueOverviewDialog.value&&queuePopupTab.value==='tasks')await loadQueueTabTasks()}finally{savingTask.value=false}}
 async function removeTask(task:CrawlerTask){if(!await confirm(`确定删除“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”的任务记录吗？关联书籍和章节不会被删除。`))return;await crawlerApi.deleteTask(task.id);if(selectedTask.value?.id===task.id){taskDrawer.value=false;selectedTask.value=undefined}message.success('任务记录已删除');await refresh()}
 async function loadChapterReaderIndex(bookId:number){
   if(chapterReaderBookId.value===bookId&&chapterReaderChapters.value.length===chapterTotal.value)return
@@ -1419,6 +1504,53 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 16px;
+}
+
+.queue-popup-tabs :deep(.el-tabs__content) {
+  min-height: 320px;
+}
+
+.queue-task-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.queue-task-filters :deep(.el-select) {
+  width: 150px;
+}
+
+.queue-task-filters :deep(.el-date-editor) {
+  width: min(360px, 100%);
+}
+
+.queue-task-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 14px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .queue-task-filters > * {
+    flex: 1 1 145px;
+    min-width: 0;
+  }
+
+  .queue-task-filters :deep(.el-select),
+  .queue-task-filters :deep(.el-date-editor) {
+    width: 100%;
+  }
+
+  .queue-task-pagination {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 .queue-overview-summary span {
@@ -1584,5 +1716,50 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 :deep(.task-action-prioritize:focus-visible) {
   background: var(--primary-alpha-10);
   color: var(--primary);
+}
+
+.site-protection-message {
+  flex: 1 1 auto;
+}
+
+.site-protection > .el-button {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.site-protection-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.site-protection-detail-item {
+  display: grid;
+  gap: 6px;
+  padding: 13px 15px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+}
+
+.site-protection-detail-item > span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.site-protection-detail-item > strong,
+.site-protection-detail-item > p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.site-protection-detail-item > a {
+  color: var(--primary);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }
 </style>
