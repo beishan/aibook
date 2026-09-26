@@ -147,7 +147,7 @@ public final class CrawlerDtos {
             boolean favorite, List<Long> bookListIds,
             Long libraryBookId, LocalDateTime discoverTime,
             LocalDateTime lastCrawlStartedAt, LocalDateTime lastCrawlTime,
-            LocalDateTime createdAt) { }
+            LocalDateTime createdAt, boolean suspectedDuplicate) { }
 
     public record ChapterView(Long id, int chapterIndex, String chapterName, String chapterUrl,
             int wordCount, String crawlStatus, String accessStatus, int retryCount,

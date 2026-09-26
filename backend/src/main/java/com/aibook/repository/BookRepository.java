@@ -9,6 +9,7 @@ import com.aibook.repository.projections.BookStatisticsProjections.BookCategoryC
 import com.aibook.repository.projections.BookStatisticsProjections.BookFormatCount;
 import com.aibook.repository.projections.BookStatisticsProjections.BookRatingCount;
 import com.aibook.repository.projections.BookStatisticsProjections.BookStatusCount;
+import com.aibook.repository.projections.BookTitleMatchProjection;
 import java.util.List;
 import java.util.Optional;
 import java.time.LocalDateTime;
@@ -124,6 +125,14 @@ public interface BookRepository extends JpaRepository<Book, Long> {
            "LOWER(b.isbn) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(b.description) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND" + LIBRARY_VISIBLE)
     Page<Book> searchByKeyword(@Param("user") User user, @Param("keyword") String keyword, Pageable pageable);
+
+    /** Non-deleted library books matching a set of normalized titles. */
+    @Query("SELECT lower(trim(b.title)) AS normalizedTitle, b.id AS recordId "
+            + "FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL "
+            + "AND lower(trim(b.title)) IN :normalizedTitles")
+    List<BookTitleMatchProjection> findTitleMatchesByUser(
+            @Param("user") User user,
+            @Param("normalizedTitles") List<String> normalizedTitles);
 
     /** 版本导入候选：同名书籍优先，其余可通过书名、作者或 ISBN 浏览搜索。 */
     @Query(

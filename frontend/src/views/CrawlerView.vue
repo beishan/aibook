@@ -99,7 +99,20 @@
             >采集</el-button>
           </template>
         </el-table-column>
-        <el-table-column label="书籍" min-width="260"><template #default="{row}"><div class="book-cell"><div class="mini-cover">{{ row.bookName.slice(0,1) }}</div><div><strong>{{ row.bookName }}</strong><p>{{ row.author || '未知作者' }} · {{ row.siteName }}</p></div></div></template></el-table-column>
+        <el-table-column label="书籍" min-width="260">
+          <template #default="{row}">
+            <div class="book-cell">
+              <div class="mini-cover">{{ row.bookName.slice(0,1) }}</div>
+              <div>
+                <div class="discovery-book-title">
+                  <strong>{{ row.bookName }}</strong>
+                  <el-tag v-if="row.suspectedDuplicate" size="small" type="warning">疑似重复</el-tag>
+                </div>
+                <p>{{ row.author || '未知作者' }} · {{ row.siteName }}</p>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="发现页" width="160"><template #default="{row}"><el-tag v-if="row.discoveryPageName" size="small" effect="plain">{{ row.discoveryPageName }}</el-tag><span v-else class="muted-text">站点首页 / 未记录</span></template></el-table-column>
         <el-table-column label="分类 / 标签" min-width="190"><template #default="{row}"><div class="crawler-book-tag-list table-tags"><el-tag v-if="row.category" size="small" type="info" effect="plain">{{ row.category }}</el-tag><el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag><span v-if="!row.category&&!row.tags?.length">暂无</span></div></template></el-table-column>
         <el-table-column prop="latestChapter" label="最新章节" min-width="180" />
@@ -119,7 +132,13 @@
                 <template #dropdown><el-dropdown-menu><el-dropdown-item command="details">详细信息</el-dropdown-item><el-dropdown-item command="book-lists">加入书单</el-dropdown-item><el-dropdown-item command="website">查看网站</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(book)">刷新分类标签</el-dropdown-item><el-dropdown-item command="blacklist" divided class="danger-dropdown-item">加入黑名单</el-dropdown-item></el-dropdown-menu></template>
               </el-dropdown>
             </div>
-            <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><span class="discovery-source-badge" :title="book.siteName">{{ book.siteName }}</span><el-checkbox class="discovery-card-check" :model-value="isDiscoverySelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleDiscoverySelection(book,Boolean($event))"/></div>
+            <div class="discovery-card-cover">
+              <span>{{ book.bookName.slice(0,1) }}</span>
+              <img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/>
+              <el-tag v-if="book.suspectedDuplicate" class="discovery-duplicate-badge" size="small" type="warning">疑似重复</el-tag>
+              <span class="discovery-source-badge" :title="book.siteName">{{ book.siteName }}</span>
+              <el-checkbox class="discovery-card-check" :model-value="isDiscoverySelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleDiscoverySelection(book,Boolean($event))"/>
+            </div>
             <div v-if="book.category||book.tags?.length" class="discovery-card-body discovery-card-category crawler-book-tag-list"><el-tag v-if="book.category" size="small" type="info" effect="plain">{{ book.category }}</el-tag><el-tag v-for="tag in book.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></div>
           </article>
         </div>
@@ -540,6 +559,7 @@
           <el-alert v-if="queueTaskError" class="queue-task-error" type="error" :closable="false" :title="queueTaskError" />
           <TaskTable
             v-if="queuePopupTab==='tasks'"
+            ref="queueTaskTableRef"
             :tasks="queueTabTasks"
             :loading="queueTaskLoading"
             :prioritizing-task-id="queueTaskPrioritizingId"
@@ -704,7 +724,22 @@ interface BookListOption { id:number; name:string; description?:string }
 type TaskMoreCommand='scan-results'|'book-lists'|'edit'|'resume'|'delete'
 type TaskMoreAction={command:TaskMoreCommand;label:string;danger?:boolean;divided?:boolean}
 
-const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true},loading:{type:Boolean,default:false},selectable:{type:Boolean,default:false},showFailureReason:{type:Boolean,default:false},prioritizingTaskId:{type:String,default:''},batchManaging:{type:Boolean,default:false}}, emits:['open','command','edit','delete','scan-results','selection-change','toggle-favorite','book-lists','prioritize'], setup(props,{emit}) {
+const TaskTable = defineComponent({
+  props: {
+    tasks: { type: Array as () => CrawlerTask[], required: true },
+    loading: { type: Boolean, default: false },
+    selectable: { type: Boolean, default: false },
+    showFailureReason: { type: Boolean, default: false },
+    prioritizingTaskId: { type: String, default: '' },
+    batchManaging: { type: Boolean, default: false },
+  },
+  emits: [
+    'open', 'command', 'edit', 'delete', 'scan-results',
+    'selection-change', 'toggle-favorite', 'book-lists', 'prioritize',
+  ],
+  setup(props, { emit, expose }) {
+  const tableRef = ref<InstanceType<typeof ElTable>>()
+  expose({ refreshLayout: () => tableRef.value?.doLayout() })
   const moreActions=(row:CrawlerTask):TaskMoreAction[]=>[
     row.type==='SITE_SCAN'?{command:'scan-results',label:'扫描结果'}:null,
     row.bookId?{command:'book-lists',label:'加入书单'}:null,
@@ -716,7 +751,17 @@ const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask
     if(command==='resume')emit('command',row,'resume')
     else emit(command,row)
   }
-  return () => h(ElTable,{data:props.tasks,loading:props.loading,rowKey:'id',class:'data-table',onSelectionChange:(rows:CrawlerTask[])=>emit('selection-change',rows)},()=>[
+  return () => h(
+    ElTable,
+    {
+      ref: tableRef,
+      data: props.tasks,
+      loading: props.loading,
+      rowKey: 'id',
+      class: 'data-table',
+      onSelectionChange: (rows: CrawlerTask[]) => emit('selection-change', rows),
+    },
+    () => [
   props.selectable?h(ElTableColumn,{type:'selection',width:48,reserveSelection:true,fixed:'left'}):null,
   h(ElTableColumn,{label:'收藏',width:58,fixed:'left',align:'center'},{default:({row}:{row:CrawlerTask})=>row.bookId?h(ElButton,{size:'small',circle:true,icon:row.favorite?StarFilled:Star,class:['favorite-action','row-hover-action',row.favorite?'is-favorite':''],'aria-label':row.favorite?'取消收藏':'加入收藏',title:row.favorite?'取消收藏':'加入收藏',onClick:(event:MouseEvent)=>{event.stopPropagation();emit('toggle-favorite',row)}}):null}),
   h(ElTableColumn,{label:'任务',minWidth:240,fixed:'left'},{default:({row}:{row:CrawlerTask})=>h('div',{class:'task-open',role:'button',tabindex:0,onClick:()=>emit('open',row),onKeydown:(event:KeyboardEvent)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();emit('open',row)}}},[row.siteName?h('span',{class:'task-site-mark',title:row.siteName,'aria-label':`来源网站：${row.siteName}`},row.siteName.slice(0,1)):null,h('strong',{title:row.bookName||row.discoveryPageName||taskTypeLabel(row.type)},row.bookName||row.discoveryPageName||taskTypeLabel(row.type))])}),
@@ -749,7 +794,10 @@ const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask
       }):null,
     ])
   }})
-]) }})
+    ],
+  )
+  },
+})
 
 type TabKey='overview'|'statistics'|'sites'|'discovered'|'books'|'tasks'|'failed'
 type ChapterSort='indexAsc'|'indexDesc'|'createdDesc'
@@ -780,7 +828,42 @@ const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=r
 const taskStatusFilter=ref(''), taskTypeFilter=ref(''), taskFavoriteOnly=ref(false)
 const selectedTasks=ref<CrawlerTask[]>([]), selectedFailedTasks=ref<CrawlerTask[]>([]), taskTableSelectionVersion=ref(0), batchTaskManaging=ref(false), batchTaskAction=ref<'pause'|'resume'|'cancel'|'delete'|'priority'|'resume-all'>()
 const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
-const queueOverviewDialog=ref(false), queuePopupTab=ref<'config'|'tasks'>('config'), queueSettingsDialog=ref(false), createQueueDialog=ref(false), savingQueueSettings=ref(false), creatingQueue=ref(false), taskQueues=ref<CrawlerTaskQueue[]>([]), activeQueue=ref<CrawlerTaskQueue>(), queueSettingsTarget=ref<CrawlerTaskQueue>(), queueLimit=ref(4), queueIntervalSeconds=ref(0), createQueueSiteId=ref<number>(), queueTaskLoading=ref(false), queueTaskError=ref(''), queueTabTasks=ref<CrawlerTask[]>([]), queueTabTaskTotal=ref(0), queueTabTaskPage=ref(1), queueTabTaskPageSize=ref(20), queueTabTaskSiteId=ref<number>(), queueTaskStatus=ref(''), queueTaskType=ref(''), queueTaskPriority=ref(''), queueTaskCreatedRange=ref<[string,string]>(), queueTaskPrioritizingId=ref<string>(), queuedTasksDialog=ref(false), queuedTasksLoading=ref(false), queuedTasksReordering=ref(false), queuedTaskPrioritizingId=ref<string>(), queuedTaskCommandId=ref<string>(), queuedTaskCommand=ref<'pause'|'resume'|'cancel'>(), queuedTaskDraggingId=ref<string>(), queuedTaskDragStartOrder=ref<string[]>([]), queuedTasks=ref<CrawlerTask[]>([]), queuedTaskPage=ref(1), queuedTaskPageSize=ref(10)
+const queueOverviewDialog = ref(false)
+const queuePopupTab = ref<'config' | 'tasks'>('config')
+const queueSettingsDialog = ref(false)
+const createQueueDialog = ref(false)
+const savingQueueSettings = ref(false)
+const creatingQueue = ref(false)
+const taskQueues = ref<CrawlerTaskQueue[]>([])
+const activeQueue = ref<CrawlerTaskQueue>()
+const queueSettingsTarget = ref<CrawlerTaskQueue>()
+const queueLimit = ref(4)
+const queueIntervalSeconds = ref(0)
+const createQueueSiteId = ref<number>()
+const queueTaskLoading = ref(false)
+const queueTaskError = ref('')
+const queueTaskTableRef = ref<{ refreshLayout: () => void }>()
+const queueTabTasks = ref<CrawlerTask[]>([])
+const queueTabTaskTotal = ref(0)
+const queueTabTaskPage = ref(1)
+const queueTabTaskPageSize = ref(20)
+const queueTabTaskSiteId = ref<number>()
+const queueTaskStatus = ref('')
+const queueTaskType = ref('')
+const queueTaskPriority = ref('')
+const queueTaskCreatedRange = ref<[string, string]>()
+const queueTaskPrioritizingId = ref<string>()
+const queuedTasksDialog = ref(false)
+const queuedTasksLoading = ref(false)
+const queuedTasksReordering = ref(false)
+const queuedTaskPrioritizingId = ref<string>()
+const queuedTaskCommandId = ref<string>()
+const queuedTaskCommand = ref<'pause' | 'resume' | 'cancel'>()
+const queuedTaskDraggingId = ref<string>()
+const queuedTaskDragStartOrder = ref<string[]>([])
+const queuedTasks = ref<CrawlerTask[]>([])
+const queuedTaskPage = ref(1)
+const queuedTaskPageSize = ref(10)
 const totalQueueRunning=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.runningCount,0))
 const totalQueueConcurrency=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.maxConcurrentTasks,0))
 const totalQueueWaiting=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.waitingCount,0))
@@ -792,7 +875,16 @@ const totalQueueProgress=computed(()=>{
   return Math.round(weightedProgress/taskCount)
 })
 const sitesWithoutQueue=computed(()=>sites.value.filter(site=>!taskQueues.value.some(queue=>queue.siteId===site.id)))
-watch(queuePopupTab,tab=>{if(tab==='tasks'&&queueOverviewDialog.value)void loadQueueTabTasks()})
+let queueTabTaskRequestId = 0
+watch(
+  queuePopupTab,
+  tab => {
+    if (tab === 'tasks' && queueOverviewDialog.value) {
+      void loadQueueTabTasks()
+    }
+  },
+  { flush: 'post' },
+)
 const failedTaskLoading=ref(false), failedTaskPage=ref(1), failedTaskPageSize=ref(20), failedTaskTotal=ref(0)
 const ruleTestSite=ref<CrawlerSite>(), ruleTestDraft=ref<CrawlerRule>(), ruleSite=ref<CrawlerSite>(), editingRule=ref<CrawlerRuleVersion>(), ruleTestUrl=ref(''), ruleTestResult=ref<CrawlerRuleTest>(), ruleVersions=ref<CrawlerRuleVersion[]>([]), importInput=ref<HTMLInputElement>(), importMode=ref<'text'|'file'>('text'), importJsonText=ref(''), importFileName=ref('')
 const siteConfigurationImportInput=ref<HTMLInputElement>(), siteConfigurationImportMode=ref<'text'|'file'>('text'), siteConfigurationJsonText=ref(''), siteConfigurationImportFileName=ref('')
@@ -1021,20 +1113,25 @@ function openQueuedTasks(){
 }
 async function openQueueDetails(queue:CrawlerTaskQueue){queueTaskSiteId.value=queue.siteId;queueTaskStatus.value='';queueTaskType.value='';queueTaskPriority.value='';queueTaskCreatedRange.value=undefined;queueTabTaskPage.value=1;if(queuePopupTab.value==='tasks')await loadQueueTabTasks();else queuePopupTab.value='tasks'}
 async function loadQueueTabTasks(){
+  const requestId=++queueTabTaskRequestId
   queueTaskLoading.value=true
   queueTaskError.value=''
   try{
     const [createdAfter,createdBefore]=queueTaskCreatedRange.value||[]
     const result=await crawlerApi.tasks({page:queueTabTaskPage.value-1,size:queueTabTaskPageSize.value,siteId:queueTaskSiteId.value,status:queueTaskStatus.value||undefined,type:queueTaskType.value||undefined,priority:queueTaskPriority.value||undefined,createdAfter,createdBefore})
+    if(requestId!==queueTabTaskRequestId)return
     const lastPage=Math.max(1,result.totalPages)
     if(queueTabTaskPage.value>lastPage){queueTabTaskPage.value=lastPage;return await loadQueueTabTasks()}
     queueTabTasks.value=result.content
     queueTabTaskTotal.value=result.totalElements
+    await nextTick()
+    if(requestId===queueTabTaskRequestId)queueTaskTableRef.value?.refreshLayout()
   }catch(error:any){
+    if(requestId!==queueTabTaskRequestId)return
     queueTaskError.value=error.response?.data?.message||'任务列表加载失败，请点击刷新重试'
     queueTabTasks.value=[]
     queueTabTaskTotal.value=0
-  }finally{queueTaskLoading.value=false}
+  }finally{if(requestId===queueTabTaskRequestId)queueTaskLoading.value=false}
 }
 async function applyQueueTaskFilters(){queueTabTaskPage.value=1;await loadQueueTabTasks()}
 async function resetQueueTaskFilters(){queueTaskSiteId.value=undefined;queueTaskStatus.value='';queueTaskType.value='';queueTaskPriority.value='';queueTaskCreatedRange.value=undefined;await applyQueueTaskFilters()}
@@ -1273,11 +1370,20 @@ function handleCrawlerBookCardMore(command:string,book:CrawlerBook){if(command==
 function handleCrawlerBookTableMore(command:string,book:CrawlerBook){if(command==='book-lists')void openCrawlerBookLists(book);else if(command==='updates')void checkUpdates(book);else if(command==='metadata')void refreshBookMetadata(book);else if(command==='trial')void startTrial(book);else if(command==='generate')void generate(book)}
 
 function applyCrawlerBookUpdate(updated:CrawlerBook){
+  const updatedDiscoveryBook=(book:CrawlerBook)=>({
+    ...updated,
+    suspectedDuplicate:book.suspectedDuplicate??updated.suspectedDuplicate,
+  })
   books.value=books.value.map(book=>book.id===updated.id?updated:book)
-  discoveredBooks.value=discoveredBooks.value.map(book=>book.id===updated.id?updated:book)
+  discoveredBooks.value=discoveredBooks.value.map(book=>book.id===updated.id?updatedDiscoveryBook(book):book)
   selectedBooks.value=selectedBooks.value.map(book=>book.id===updated.id?updated:book)
-  selectedDiscoveries.value=selectedDiscoveries.value.map(book=>book.id===updated.id?updated:book)
-  if(selectedBook.value?.id===updated.id)selectedBook.value=updated
+  selectedDiscoveries.value=selectedDiscoveries.value.map(book=>book.id===updated.id?updatedDiscoveryBook(book):book)
+  if(selectedBook.value?.id===updated.id){
+    selectedBook.value={
+      ...updated,
+      suspectedDuplicate:selectedBook.value.suspectedDuplicate??updated.suspectedDuplicate,
+    }
+  }
   const applyTask=(task:CrawlerTask)=>task.bookId===updated.id?{...task,favorite:updated.favorite}:task
   tasks.value=tasks.value.map(applyTask);failedTasks.value=failedTasks.value.map(applyTask);currentCrawlerTasks.value=currentCrawlerTasks.value.map(applyTask);queuedTasks.value=queuedTasks.value.map(applyTask)
   if(selectedTask.value?.bookId===updated.id)selectedTask.value=applyTask(selectedTask.value)
@@ -1472,6 +1578,9 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 .discovery-card{position:relative;contain:layout paint style;content-visibility:auto;contain-intrinsic-size:250px;border-radius:var(--radius-lg)}
 .discovery-card:hover{transform:translateY(-4px)}
 .discovery-card-cover{height:170px;font-size:38px}
+.discovery-book-title{display:flex;min-width:0;align-items:center;gap:6px}
+.discovery-book-title strong{min-width:0;flex:0 1 auto}
+.discovery-duplicate-badge{position:absolute;top:8px;left:8px;z-index:3}
 .discovery-card-check{top:8px;right:8px;width:27px;height:27px;border-radius:8px}
 .discovery-card-body{gap:8px;padding:10px 11px}
 .discovery-card-title{display:grid;gap:5px}

@@ -3,6 +3,7 @@ package com.aibook.service.crawler;
 import com.aibook.dto.crawler.CrawlerDtos.*;
 import com.aibook.model.entity.*;
 import com.aibook.repository.*;
+import com.aibook.repository.projections.BookTitleMatchProjection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.net.URI;
 import java.time.*;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +29,7 @@ public class CrawlerManagementService {
             CrawlerBook.CrawlStatus.UPDATING);
     private final CrawlerSiteRepository siteRepository;
     private final CrawlerBookRepository bookRepository;
+    private final BookRepository libraryBookRepository;
     private final CrawlerChapterRepository chapterRepository;
     private final CrawlerTaskRepository taskRepository;
     @Autowired
@@ -214,9 +217,60 @@ public class CrawlerManagementService {
         String normalizedKeyword = blank(keyword) ? "" : keyword.trim();
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
                 discoverySort(sort));
-        return bookRepository.searchDiscoveredBooks(user, CrawlerBook.DiscoveryStatus.ACTIVE,
-                CrawlerBook.CrawlStatus.DISCOVERED, normalizedKeyword, siteId, favoriteOnly, pageable)
-                .map(this::bookView);
+        Page<CrawlerBook> discoveredBooks = bookRepository.searchDiscoveredBooks(
+                user, CrawlerBook.DiscoveryStatus.ACTIVE,
+                CrawlerBook.CrawlStatus.DISCOVERED, normalizedKeyword, siteId, favoriteOnly, pageable);
+        Set<Long> suspectedDuplicateIds = findSuspectedDuplicateBookIds(
+                user, discoveredBooks.getContent());
+        return discoveredBooks.map(book -> bookView(book, suspectedDuplicateIds.contains(book.getId())));
+    }
+
+    private Set<Long> findSuspectedDuplicateBookIds(User user, List<CrawlerBook> discoveredBooks) {
+        Set<String> normalizedTitles = discoveredBooks.stream()
+                .map(book -> normalizeBookTitle(book.getBookName()))
+                .filter(title -> !title.isEmpty())
+                .collect(Collectors.toSet());
+        if (normalizedTitles.isEmpty()) return Set.of();
+
+        Map<String, Set<Long>> crawlerBookIdsByTitle = indexTitleMatches(
+                bookRepository.findTitleMatchesByUser(user, normalizedTitles));
+        Map<String, Set<Long>> libraryBookIdsByTitle = indexTitleMatches(
+                libraryBookRepository.findTitleMatchesByUser(user, List.copyOf(normalizedTitles)));
+        Set<Long> duplicateIds = new HashSet<>();
+
+        for (CrawlerBook book : discoveredBooks) {
+            String normalizedTitle = normalizeBookTitle(book.getBookName());
+            if (normalizedTitle.isEmpty()) continue;
+
+            boolean hasOtherCrawlerBook = crawlerBookIdsByTitle
+                    .getOrDefault(normalizedTitle, Set.of())
+                    .stream()
+                    .anyMatch(recordId -> !Objects.equals(recordId, book.getId()));
+            Long linkedLibraryBookId = book.getLibraryBook() == null
+                    ? null : book.getLibraryBook().getId();
+            boolean hasOtherLibraryBook = libraryBookIdsByTitle
+                    .getOrDefault(normalizedTitle, Set.of())
+                    .stream()
+                    .anyMatch(recordId -> !Objects.equals(recordId, linkedLibraryBookId));
+
+            if (hasOtherCrawlerBook || hasOtherLibraryBook) {
+                duplicateIds.add(book.getId());
+            }
+        }
+        return duplicateIds;
+    }
+
+    private Map<String, Set<Long>> indexTitleMatches(List<BookTitleMatchProjection> matches) {
+        Map<String, Set<Long>> recordIdsByTitle = new HashMap<>();
+        for (BookTitleMatchProjection match : matches) {
+            recordIdsByTitle.computeIfAbsent(match.getNormalizedTitle(), ignored -> new HashSet<>())
+                    .add(match.getRecordId());
+        }
+        return recordIdsByTitle;
+    }
+
+    private String normalizeBookTitle(String title) {
+        return title == null ? "" : title.trim().toLowerCase(Locale.ROOT);
     }
 
     @Transactional
@@ -641,7 +695,26 @@ public class CrawlerManagementService {
                 r.getXpathRemoveSelectors(), r.getStringReplacementsJson(), bool(r.getRemoveBlankLines(), true), bool(r.getSaveOriginalHtml(), false));
     }
 
-    public BookView bookView(CrawlerBook b) { return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(), b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(), b.getCoverUrl(), b.getDescription(), b.getCategory(), splitTags(b.getTags()), b.getBookStatus(), b.getLatestChapter(), b.getDiscoveryPageId(), b.getDiscoveryPageName(), value(b.getChapterCount(), 0), value(b.getCrawledChapterCount(), 0), value(b.getPendingReleaseChapterCount(), 0), value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(), (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : b.getDiscoveryStatus()).name(), b.getImportStatus().name(), !Boolean.FALSE.equals(b.getAutoUpdateEnabled()), !Boolean.FALSE.equals(b.getAutoSyncLibrary()), Boolean.TRUE.equals(b.getFavorite()), b.getBookLists().stream().map(BookList::getId).toList(), b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(), b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt()); }
+    public BookView bookView(CrawlerBook book) {
+        return bookView(book, false);
+    }
+
+    private BookView bookView(CrawlerBook b, boolean suspectedDuplicate) {
+        return new BookView(b.getId(), b.getSite().getId(), b.getSite().getSiteName(),
+                b.getExternalBookId(), b.getBookUrl(), b.getBookName(), b.getAuthor(),
+                b.getCoverUrl(), b.getDescription(), b.getCategory(), splitTags(b.getTags()),
+                b.getBookStatus(), b.getLatestChapter(), b.getDiscoveryPageId(),
+                b.getDiscoveryPageName(), value(b.getChapterCount(), 0),
+                value(b.getCrawledChapterCount(), 0), value(b.getPendingReleaseChapterCount(), 0),
+                value(b.getFailedChapterCount(), 0), b.getCrawlStatus().name(),
+                (b.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE
+                        : b.getDiscoveryStatus()).name(),
+                b.getImportStatus().name(), !Boolean.FALSE.equals(b.getAutoUpdateEnabled()),
+                !Boolean.FALSE.equals(b.getAutoSyncLibrary()), Boolean.TRUE.equals(b.getFavorite()),
+                b.getBookLists().stream().map(BookList::getId).toList(),
+                b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(),
+                b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt(), suspectedDuplicate);
+    }
 
     private List<String> splitTags(String value) {
         if (blank(value)) return List.of();

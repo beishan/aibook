@@ -1,6 +1,7 @@
 package com.aibook.repository;
 
 import com.aibook.model.entity.*;
+import com.aibook.repository.projections.BookTitleMatchProjection;
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
@@ -78,6 +79,15 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
             CrawlerBook.CrawlStatus crawlStatus, String keyword, Long siteId, Pageable pageable) {
         return searchDiscoveredBooks(user, discoveryStatus, crawlStatus, keyword, siteId, false, pageable);
     }
+    @Query("""
+            select lower(trim(b.bookName)) as normalizedTitle, b.id as recordId
+            from CrawlerBook b
+            where b.site.user = :user
+              and lower(trim(b.bookName)) in :normalizedTitles
+            """)
+    List<BookTitleMatchProjection> findTitleMatchesByUser(
+            @Param("user") User user,
+            @Param("normalizedTitles") Collection<String> normalizedTitles);
     long countBySiteUser(User user);
     long countBySite(CrawlerSite site);
     boolean existsBySite(CrawlerSite site);
