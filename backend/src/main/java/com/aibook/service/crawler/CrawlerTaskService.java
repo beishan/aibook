@@ -819,7 +819,14 @@ public class CrawlerTaskService {
         if (queues.isEmpty()) return;
         applyConcurrencyLimit(configuredQueueConcurrency());
         Map<Long, CrawlerTaskQueue> queuesBySite = new HashMap<>();
-        for (CrawlerTaskQueue queue : queues) queuesBySite.put(queue.getSite().getId(), queue);
+        Set<Long> coolingDownSites = new HashSet<>();
+        for (CrawlerTaskQueue queue : queues) {
+            Long siteId = queue.getSite().getId();
+            queuesBySite.put(siteId, queue);
+            if (httpClient.protectionState(queue.getSite()).coolingDown()) {
+                coolingDownSites.add(siteId);
+            }
+        }
 
         Map<Long, Integer> scheduledBySite = new HashMap<>();
         activeTaskSites.values().forEach(siteId -> scheduledBySite.merge(siteId, 1, Integer::sum));
@@ -831,9 +838,11 @@ public class CrawlerTaskService {
         LocalDateTime now = LocalDateTime.now();
 
         for (CrawlerTask task : waitingTasks) {
-            CrawlerTaskQueue queue = queuesBySite.get(task.getSite().getId());
+            Long siteId = task.getSite().getId();
+            if (coolingDownSites.contains(siteId)) continue;
+            CrawlerTaskQueue queue = queuesBySite.get(siteId);
             if (queue == null) continue;
-            int siteActive = scheduledBySite.getOrDefault(task.getSite().getId(), 0);
+            int siteActive = scheduledBySite.getOrDefault(siteId, 0);
             if (siteActive >= value(queue.getMaxConcurrentTasks(), 1)) continue;
             int intervalSeconds = value(queue.getTaskIntervalSeconds(), 0);
             LocalDateTime lastStarted = queue.getLastTaskStartedAt();
@@ -847,7 +856,7 @@ public class CrawlerTaskService {
             queue.setLastTaskStartedAt(now);
             taskQueueRepository.save(queue);
             activeTaskSites.put(task.getId(), task.getSite().getId());
-            scheduledBySite.put(task.getSite().getId(), siteActive + 1);
+            scheduledBySite.put(siteId, siteActive + 1);
             try {
                 executor.execute(new CrawlerJob(task.getId(), task.getPriority(), queueOrder,
                         jobSequence.incrementAndGet()));
@@ -934,6 +943,13 @@ public class CrawlerTaskService {
             Thread worker = Thread.currentThread();
             runningThreads.put(taskId, worker);
             try {
+                CrawlerTask task = taskRepository.findById(taskId).orElse(null);
+                if (task != null && task.getStatus() == CrawlerTask.TaskStatus.WAITING
+                        && httpClient.protectionState(task.getSite()).coolingDown()) {
+                    log.info("[采集任务] 网站处于冷却期，任务继续等待: taskId={}, site={}",
+                            taskId, task.getSite().getSiteName());
+                    return;
+                }
                 CrawlerTaskService.this.run(taskId);
             } finally {
                 runningThreads.remove(taskId, worker);
