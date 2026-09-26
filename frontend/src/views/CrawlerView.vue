@@ -519,7 +519,7 @@
           </div>
           <el-empty v-else description="还没有任务队列，请先添加采集网站" />
         </el-tab-pane>
-        <el-tab-pane label="任务队列" name="tasks" lazy>
+        <el-tab-pane label="任务队列" name="tasks">
           <div class="queue-task-filters">
             <el-select v-model="queueTaskSiteId" clearable placeholder="全部队列" @change="applyQueueTaskFilters">
               <el-option v-for="site in sites" :key="site.id" :label="site.siteName" :value="site.id" />
@@ -539,7 +539,7 @@
           </div>
           <el-alert v-if="queueTaskError" class="queue-task-error" type="error" :closable="false" :title="queueTaskError" />
           <TaskTable
-            ref="queueTaskTableRef"
+            v-if="queuePopupTab==='tasks'"
             :tasks="queueTabTasks"
             :loading="queueTaskLoading"
             :prioritizing-task-id="queueTaskPrioritizingId"
@@ -704,9 +704,7 @@ interface BookListOption { id:number; name:string; description?:string }
 type TaskMoreCommand='scan-results'|'book-lists'|'edit'|'resume'|'delete'
 type TaskMoreAction={command:TaskMoreCommand;label:string;danger?:boolean;divided?:boolean}
 
-const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true},loading:{type:Boolean,default:false},selectable:{type:Boolean,default:false},showFailureReason:{type:Boolean,default:false},prioritizingTaskId:{type:String,default:''},batchManaging:{type:Boolean,default:false}}, emits:['open','command','edit','delete','scan-results','selection-change','toggle-favorite','book-lists','prioritize'], setup(props,{emit,expose}) {
-  const tableRef=ref<InstanceType<typeof ElTable>>()
-  expose({refreshLayout:()=>tableRef.value?.doLayout()})
+const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask[],required:true},loading:{type:Boolean,default:false},selectable:{type:Boolean,default:false},showFailureReason:{type:Boolean,default:false},prioritizingTaskId:{type:String,default:''},batchManaging:{type:Boolean,default:false}}, emits:['open','command','edit','delete','scan-results','selection-change','toggle-favorite','book-lists','prioritize'], setup(props,{emit}) {
   const moreActions=(row:CrawlerTask):TaskMoreAction[]=>[
     row.type==='SITE_SCAN'?{command:'scan-results',label:'扫描结果'}:null,
     row.bookId?{command:'book-lists',label:'加入书单'}:null,
@@ -718,7 +716,7 @@ const TaskTable = defineComponent({ props:{ tasks:{type:Array as ()=>CrawlerTask
     if(command==='resume')emit('command',row,'resume')
     else emit(command,row)
   }
-  return () => h(ElTable,{ref:tableRef,data:props.tasks,loading:props.loading,rowKey:'id',class:'data-table',onSelectionChange:(rows:CrawlerTask[])=>emit('selection-change',rows)},()=>[
+  return () => h(ElTable,{data:props.tasks,loading:props.loading,rowKey:'id',class:'data-table',onSelectionChange:(rows:CrawlerTask[])=>emit('selection-change',rows)},()=>[
   props.selectable?h(ElTableColumn,{type:'selection',width:48,reserveSelection:true,fixed:'left'}):null,
   h(ElTableColumn,{label:'收藏',width:58,fixed:'left',align:'center'},{default:({row}:{row:CrawlerTask})=>row.bookId?h(ElButton,{size:'small',circle:true,icon:row.favorite?StarFilled:Star,class:['favorite-action','row-hover-action',row.favorite?'is-favorite':''],'aria-label':row.favorite?'取消收藏':'加入收藏',title:row.favorite?'取消收藏':'加入收藏',onClick:(event:MouseEvent)=>{event.stopPropagation();emit('toggle-favorite',row)}}):null}),
   h(ElTableColumn,{label:'任务',minWidth:240,fixed:'left'},{default:({row}:{row:CrawlerTask})=>h('div',{class:'task-open',role:'button',tabindex:0,onClick:()=>emit('open',row),onKeydown:(event:KeyboardEvent)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();emit('open',row)}}},[row.siteName?h('span',{class:'task-site-mark',title:row.siteName,'aria-label':`来源网站：${row.siteName}`},row.siteName.slice(0,1)):null,h('strong',{title:row.bookName||row.discoveryPageName||taskTypeLabel(row.type)},row.bookName||row.discoveryPageName||taskTypeLabel(row.type))])}),
@@ -782,7 +780,7 @@ const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=r
 const taskStatusFilter=ref(''), taskTypeFilter=ref(''), taskFavoriteOnly=ref(false)
 const selectedTasks=ref<CrawlerTask[]>([]), selectedFailedTasks=ref<CrawlerTask[]>([]), taskTableSelectionVersion=ref(0), batchTaskManaging=ref(false), batchTaskAction=ref<'pause'|'resume'|'cancel'|'delete'|'priority'|'resume-all'>()
 const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
-const queueOverviewDialog=ref(false), queuePopupTab=ref<'config'|'tasks'>('config'), queueSettingsDialog=ref(false), createQueueDialog=ref(false), savingQueueSettings=ref(false), creatingQueue=ref(false), taskQueues=ref<CrawlerTaskQueue[]>([]), activeQueue=ref<CrawlerTaskQueue>(), queueSettingsTarget=ref<CrawlerTaskQueue>(), queueLimit=ref(4), queueIntervalSeconds=ref(0), createQueueSiteId=ref<number>(), queueTaskLoading=ref(false), queueTaskError=ref(''), queueTaskTableRef=ref<{refreshLayout:()=>void}>(), queueTabTasks=ref<CrawlerTask[]>([]), queueTabTaskTotal=ref(0), queueTabTaskPage=ref(1), queueTabTaskPageSize=ref(20), queueTabTaskSiteId=ref<number>(), queueTaskStatus=ref(''), queueTaskType=ref(''), queueTaskPriority=ref(''), queueTaskCreatedRange=ref<[string,string]>(), queueTaskPrioritizingId=ref<string>(), queuedTasksDialog=ref(false), queuedTasksLoading=ref(false), queuedTasksReordering=ref(false), queuedTaskPrioritizingId=ref<string>(), queuedTaskCommandId=ref<string>(), queuedTaskCommand=ref<'pause'|'resume'|'cancel'>(), queuedTaskDraggingId=ref<string>(), queuedTaskDragStartOrder=ref<string[]>([]), queuedTasks=ref<CrawlerTask[]>([]), queuedTaskPage=ref(1), queuedTaskPageSize=ref(10)
+const queueOverviewDialog=ref(false), queuePopupTab=ref<'config'|'tasks'>('config'), queueSettingsDialog=ref(false), createQueueDialog=ref(false), savingQueueSettings=ref(false), creatingQueue=ref(false), taskQueues=ref<CrawlerTaskQueue[]>([]), activeQueue=ref<CrawlerTaskQueue>(), queueSettingsTarget=ref<CrawlerTaskQueue>(), queueLimit=ref(4), queueIntervalSeconds=ref(0), createQueueSiteId=ref<number>(), queueTaskLoading=ref(false), queueTaskError=ref(''), queueTabTasks=ref<CrawlerTask[]>([]), queueTabTaskTotal=ref(0), queueTabTaskPage=ref(1), queueTabTaskPageSize=ref(20), queueTabTaskSiteId=ref<number>(), queueTaskStatus=ref(''), queueTaskType=ref(''), queueTaskPriority=ref(''), queueTaskCreatedRange=ref<[string,string]>(), queueTaskPrioritizingId=ref<string>(), queuedTasksDialog=ref(false), queuedTasksLoading=ref(false), queuedTasksReordering=ref(false), queuedTaskPrioritizingId=ref<string>(), queuedTaskCommandId=ref<string>(), queuedTaskCommand=ref<'pause'|'resume'|'cancel'>(), queuedTaskDraggingId=ref<string>(), queuedTaskDragStartOrder=ref<string[]>([]), queuedTasks=ref<CrawlerTask[]>([]), queuedTaskPage=ref(1), queuedTaskPageSize=ref(10)
 const totalQueueRunning=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.runningCount,0))
 const totalQueueConcurrency=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.maxConcurrentTasks,0))
 const totalQueueWaiting=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.waitingCount,0))
@@ -1008,7 +1006,19 @@ async function saveQueueSettings(){
     savingQueueSettings.value=false
   }
 }
-async function openQueuedTasks(){queuePopupTab.value='config';queueTaskSiteId.value=undefined;queueTaskStatus.value='';queueTaskType.value='';queueTaskPriority.value='';queueTaskCreatedRange.value=undefined;queueTabTaskPage.value=1;queueOverviewDialog.value=true;await loadTaskQueues()}
+function openQueuedTasks(){
+  queueOverviewDialog.value=true
+  queuePopupTab.value='config'
+  queueTaskSiteId.value=undefined
+  queueTaskStatus.value=''
+  queueTaskType.value=''
+  queueTaskPriority.value=''
+  queueTaskCreatedRange.value=undefined
+  queueTabTaskPage.value=1
+  void loadTaskQueues().catch((error:any)=>{
+    message.error(error.response?.data?.message||'队列刷新失败，请稍后重试')
+  })
+}
 async function openQueueDetails(queue:CrawlerTaskQueue){queueTaskSiteId.value=queue.siteId;queueTaskStatus.value='';queueTaskType.value='';queueTaskPriority.value='';queueTaskCreatedRange.value=undefined;queueTabTaskPage.value=1;if(queuePopupTab.value==='tasks')await loadQueueTabTasks();else queuePopupTab.value='tasks'}
 async function loadQueueTabTasks(){
   queueTaskLoading.value=true
@@ -1020,8 +1030,6 @@ async function loadQueueTabTasks(){
     if(queueTabTaskPage.value>lastPage){queueTabTaskPage.value=lastPage;return await loadQueueTabTasks()}
     queueTabTasks.value=result.content
     queueTabTaskTotal.value=result.totalElements
-    await nextTick()
-    queueTaskTableRef.value?.refreshLayout()
   }catch(error:any){
     queueTaskError.value=error.response?.data?.message||'任务列表加载失败，请点击刷新重试'
     queueTabTasks.value=[]
