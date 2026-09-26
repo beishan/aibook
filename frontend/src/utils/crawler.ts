@@ -24,14 +24,15 @@ export interface CrawlerSitePayload {
   encoding: string; proxies:CrawlerProxy[]; scanIntervalMinutes:number
   updateIntervalMinutes:number; maxDiscoveryPages:number; autoImportFormat:'TXT'|'EPUB'|'BOTH'; contentMarkers:CrawlerContentMarker[]
   respectRobotsTxt:boolean
+  themeColor?:string
 }
-export interface CrawlerSite extends CrawlerSitePayload { id: number; status: string; bookCount: number; proxy?:string; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string; protection:CrawlerProtectionState }
+export interface CrawlerSite extends CrawlerSitePayload { id: number; themeColor:string; status: string; bookCount: number; proxy?:string; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string; protection:CrawlerProtectionState }
 export interface CrawlerDiscoveryPagePayload { pageName:string; pageUrl:string; autoScanEnabled:boolean; scanIntervalMinutes:number; maxPages:number }
 export interface CrawlerDiscoveryPage extends CrawlerDiscoveryPagePayload { id:number; siteId:number; lastScanAt?:string; createdAt:string }
-export interface CrawlerBook { id:number; siteId:number; siteName:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; tags:string[]; bookStatus?:string; latestChapter?:string; discoveryPageId?:number; discoveryPageName?:string; chapterCount:number; crawledChapterCount:number; pendingReleaseChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; autoUpdateEnabled:boolean; autoSyncLibrary:boolean; favorite:boolean; bookListIds:number[]; libraryBookId?:number; discoverTime:string; lastCrawlStartedAt?:string; lastCrawlTime?:string; createdAt?:string; suspectedDuplicate?:boolean }
-export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; discoveryPageId?:number; discoveryPageName?:string; scanMaxPages?:number; scannedPageCount:number; progressPercent:number; bookId?:number; bookName?:string; favorite:boolean; totalCount:number; successCount:number; newBookCount:number; duplicateCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
+export interface CrawlerBook { id:number; siteId:number; siteName:string; siteThemeColor?:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; tags:string[]; bookStatus?:string; latestChapter?:string; discoveryPageId?:number; discoveryPageName?:string; chapterCount:number; crawledChapterCount:number; pendingReleaseChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; autoUpdateEnabled:boolean; autoSyncLibrary:boolean; favorite:boolean; bookListIds:number[]; libraryBookId?:number; discoverTime:string; lastCrawlStartedAt?:string; lastCrawlTime?:string; createdAt?:string; suspectedDuplicate?:boolean }
+export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; siteThemeColor?:string; discoveryPageId?:number; discoveryPageName?:string; scanMaxPages?:number; scannedPageCount:number; progressPercent:number; bookId?:number; bookName?:string; favorite:boolean; totalCount:number; successCount:number; newBookCount:number; duplicateCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
 export interface CrawlerTaskQueueSettings { maxConcurrentTasks:number; runningCount:number; queuedCount:number }
-export interface CrawlerTaskQueue { id:number; siteId:number; siteName:string; maxConcurrentTasks:number; taskIntervalSeconds:number; runningCount:number; waitingCount:number; pausedCount:number; activeTaskCount:number; progressPercent:number; lastTaskStartedAt?:string }
+export interface CrawlerTaskQueue { id:number; siteId:number; siteName:string; siteThemeColor?:string; maxConcurrentTasks:number; taskIntervalSeconds:number; runningCount:number; waitingCount:number; pausedCount:number; activeTaskCount:number; progressPercent:number; lastTaskStartedAt?:string }
 export interface CrawlerScanResult { id:number; bookId?:number; bookName:string; bookUrl:string; resultStatus:'NEW'|'DUPLICATE'|'BLACKLISTED'|'FAILED'; errorMessage?:string; createdAt:string }
 export interface CrawlerChapter { id:number; chapterIndex:number; chapterName:string; chapterUrl:string; wordCount:number; crawlStatus:string; accessStatus:string; retryCount:number; errorMessage?:string; crawlTime?:string; createdAt?:string }
 export interface CrawlerChapterFocus { chapter:CrawlerChapter; page:number }
@@ -42,6 +43,37 @@ export interface CrawlerDailyStatistics { date:string; newChapters:number; succe
 export interface CrawlerSiteContribution { siteId:number; siteName:string; newBooks:number; newChapters:number }
 export interface CrawlerFunnel { discoveredBooks:number; taskedBooks:number; completedBooks:number; importedBooks:number }
 export interface CrawlerDashboardStatistics { days:number; daily:CrawlerDailyStatistics[]; siteContributions:CrawlerSiteContribution[]; funnel:CrawlerFunnel }
+export interface CrawlerChapterAttemptDaily {
+  date:string
+  attempts:number
+  collectionMillis:number
+  fixedWaitMillis:number
+  randomWaitMillis:number
+  otherWaitMillis:number
+  totalElapsedMillis:number
+}
+export interface CrawlerChapterAttempt {
+  id:number
+  taskId?:string
+  siteName:string
+  siteThemeColor?:string
+  bookName:string
+  chapterName:string
+  chapterIndex?:number
+  attemptStartedAt:string
+  attemptFinishedAt:string
+  collectionMillis:number
+  fixedWaitMillis:number
+  randomWaitMillis:number
+  otherWaitMillis:number
+  totalElapsedMillis:number
+  outcome:string
+}
+export interface CrawlerChapterAttemptStatistics {
+  days:number
+  daily:CrawlerChapterAttemptDaily[]
+  attempts:PageResult<CrawlerChapterAttempt>
+}
 export interface CrawlerRuleTest { success:boolean; title?:string; author?:string; description?:string; coverUrl?:string; category?:string; tags:string[]; bookStatus?:string; chapterListUrl?:string; chapterCount:number; sampleChapter?:string; contentLength:number; contentPreview?:string; durationMillis:number; errorMessage?:string }
 export interface CrawlerRuleVersion { id:number; version:number; changeSummary:string; enabled:boolean; rule:CrawlerRule; createdAt:string; updatedAt?:string }
 export interface CrawlerRuleSave { version:number; changeSummary:string; rule:CrawlerRule; enabled:boolean }
@@ -56,6 +88,10 @@ export interface CrawlerTaskQuery { page:number; size:number; failedOnly?:boolea
 export const crawlerApi = {
   dashboard: () => api.get<CrawlerDashboard>('/api/crawler/dashboard').then(r => r.data),
   dashboardStatistics: (days:7|30|90) => api.get<CrawlerDashboardStatistics>('/api/crawler/dashboard/statistics',{params:{days}}).then(r => r.data),
+  chapterAttemptStatistics: (days:7|30|90, page:number, size=20) =>
+    api.get<CrawlerChapterAttemptStatistics>('/api/crawler/dashboard/chapter-attempts', {
+      params:{days, page, size},
+    }).then(r => r.data),
   sites: () => api.get<CrawlerSite[]>('/api/crawler/sites').then(r => r.data),
   createSite: (data:CrawlerSitePayload) => api.post<CrawlerSite>('/api/crawler/sites', data).then(r => r.data),
   updateSite: (id:number, data:CrawlerSitePayload) => api.put<CrawlerSite>(`/api/crawler/sites/${id}`, data).then(r => r.data),

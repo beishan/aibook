@@ -637,6 +637,7 @@ public class CrawlerManagementService {
 
     private void apply(CrawlerSite site, SitePayload p, String siteCode) {
         site.setSiteName(p.siteName().trim()); site.setSiteCode(siteCode); site.setBaseUrl(trimSlash(p.baseUrl()));
+        site.setThemeColor(normalizedThemeColor(p.themeColor()));
         site.setHomeUrl(blank(p.homeUrl()) ? trimSlash(p.baseUrl()) : p.homeUrl().trim());
         site.setEnabled(bool(p.enabled(), false));
         site.setAutoScan(false); site.setAutoCrawl(false); site.setAutoUpdate(false);
@@ -689,7 +690,8 @@ public class CrawlerManagementService {
                 s.getLastHealthCheckAt(), s.getHealthMessage(), s.getCreatedAt(), contentMarkers(s),
                 bool(s.getRespectRobotsTxt(), true), new CrawlerProtectionView(
                         protection.coolingDown(), protection.blockedUntil(), protection.reason(),
-                        protection.pageUrl(), protection.consecutiveFailures(), protection.adaptiveDelayMillis()));
+                        protection.pageUrl(), protection.consecutiveFailures(), protection.adaptiveDelayMillis()),
+                normalizedThemeColor(s.getThemeColor()));
     }
 
     public RulePayload rulePayload(CrawlerSiteRule r) {
@@ -720,7 +722,8 @@ public class CrawlerManagementService {
                 !Boolean.FALSE.equals(b.getAutoSyncLibrary()), Boolean.TRUE.equals(b.getFavorite()),
                 b.getBookLists().stream().map(BookList::getId).toList(),
                 b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(),
-                b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt(), suspectedDuplicate);
+                b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt(),
+                suspectedDuplicate, normalizedThemeColor(b.getSite().getThemeColor()));
     }
 
     private List<String> splitTags(String value) {
@@ -729,7 +732,13 @@ public class CrawlerManagementService {
                 .filter(tag -> !tag.isBlank()).distinct().toList();
     }
     public ChapterView chapterView(CrawlerChapter c) { return new ChapterView(c.getId(), c.getChapterIndex(), c.getChapterName(), c.getChapterUrl(), value(c.getWordCount(), 0), c.getCrawlStatus().name(), c.getAccessStatus().name(), value(c.getRetryCount(), 0), c.getErrorMessage(), c.getCrawlTime(), c.getCreatedAt()); }
-    public TaskView taskView(CrawlerTask t) { return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(), t.getSite().getId(), t.getSite().getSiteName(), t.getDiscoveryPageId(), t.getDiscoveryPageName(), t.getScanMaxPages(), value(t.getScannedPageCount(), 0), taskProgressPercent(t), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(), t.getCrawlerBook() != null && Boolean.TRUE.equals(t.getCrawlerBook().getFavorite()), value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0), value(t.getNewBookCount(), 0), value(t.getDuplicateCount(), 0), value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(), t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(), t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt()); }
+    public TaskView taskView(CrawlerTask t) { return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(), t.getSite().getId(), t.getSite().getSiteName(), t.getDiscoveryPageId(), t.getDiscoveryPageName(), t.getScanMaxPages(), value(t.getScannedPageCount(), 0), taskProgressPercent(t), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(), t.getCrawlerBook() != null && Boolean.TRUE.equals(t.getCrawlerBook().getFavorite()), value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0), value(t.getNewBookCount(), 0), value(t.getDuplicateCount(), 0), value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(), t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(), t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt(), normalizedThemeColor(t.getSite().getThemeColor())); }
+
+    private String normalizedThemeColor(String color) {
+        return color != null && color.matches("#[0-9a-fA-F]{6}")
+                ? color.toUpperCase(Locale.ROOT)
+                : CrawlerSite.DEFAULT_THEME_COLOR;
+    }
 
     private int taskProgressPercent(CrawlerTask task) {
         if (task.getType() == CrawlerTask.TaskType.SITE_SCAN) {

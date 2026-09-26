@@ -52,6 +52,75 @@
         <article class="statistics-card"><header><div><h3>采集成功率</h3><p>成功任务占已结束任务比例</p></div><strong>{{ statisticsSuccessRate }}%</strong></header><div ref="successRateChartRef" class="statistics-chart" role="img" aria-label="每日采集任务成功率折线图"/></article>
         <article class="statistics-card"><header><div><h3>来源网站贡献</h3><p>周期内新增内容最多的前五个网站</p></div></header><div ref="siteContributionChartRef" class="statistics-chart" role="img" aria-label="来源网站新增书籍和章节贡献横向柱状图"/></article>
         <article class="statistics-card"><header><div><h3>采集转化漏斗</h3><p>累计发现、建任务、完成与入库</p></div></header><div ref="funnelChartRef" class="statistics-chart" role="img" aria-label="采集书籍转化漏斗图"/></article>
+        <article class="statistics-card statistics-card-wide attempt-statistics-card">
+          <header>
+            <div>
+              <h3>章节采集耗时</h3>
+              <p>按天展示每次尝试的平均耗时；限速等待按固定与随机配置比例拆分，其他等待含并发门控与重试退避</p>
+            </div>
+            <div class="statistics-summary">
+              <span>记录 <b>{{ chapterAttemptStatistics?.attempts.totalElements || 0 }}</b> 次</span>
+              <span>保留 180 天</span>
+            </div>
+          </header>
+          <div ref="chapterAttemptChartRef" class="statistics-chart statistics-chart-large" role="img" aria-label="每日章节采集平均耗时拆分图" />
+          <el-table
+            :data="chapterAttemptStatistics?.attempts.content || []"
+            class="data-table attempt-data-table"
+            empty-text="此时间范围内还没有章节采集记录"
+            row-key="id"
+          >
+            <el-table-column label="开始时间" min-width="150">
+              <template #default="{ row }">{{ formatAttemptTimestamp(row.attemptStartedAt) }}</template>
+            </el-table-column>
+            <el-table-column label="网站" min-width="150">
+              <template #default="{ row }">
+                <SiteSourceTag :name="row.siteName" :color="row.siteThemeColor" />
+              </template>
+            </el-table-column>
+            <el-table-column label="书籍 / 章节" min-width="210" show-overflow-tooltip>
+              <template #default="{ row }">
+                <div class="attempt-chapter-cell">
+                  <strong>{{ row.bookName }}</strong>
+                  <span>{{ row.chapterIndex ? `第 ${row.chapterIndex} 章 · ` : '' }}{{ row.chapterName }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="采集" width="100" align="right">
+              <template #default="{ row }">{{ formatAttemptDuration(row.collectionMillis) }}</template>
+            </el-table-column>
+            <el-table-column label="固定等待" width="100" align="right">
+              <template #default="{ row }">{{ formatAttemptDuration(row.fixedWaitMillis) }}</template>
+            </el-table-column>
+            <el-table-column label="随机等待" width="100" align="right">
+              <template #default="{ row }">{{ formatAttemptDuration(row.randomWaitMillis) }}</template>
+            </el-table-column>
+            <el-table-column label="其他等待" width="100" align="right">
+              <template #default="{ row }">{{ formatAttemptDuration(row.otherWaitMillis) }}</template>
+            </el-table-column>
+            <el-table-column label="总耗时" width="100" align="right">
+              <template #default="{ row }">{{ formatAttemptDuration(row.totalElapsedMillis) }}</template>
+            </el-table-column>
+            <el-table-column label="结果" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag size="small" :type="attemptOutcomeType(row.outcome)">
+                  {{ attemptOutcomeLabel(row.outcome) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-if="chapterAttemptStatistics?.attempts.totalElements" class="attempt-pagination">
+            <span>共 {{ chapterAttemptStatistics.attempts.totalElements }} 次尝试</span>
+            <el-pagination
+              :current-page="chapterAttemptPage + 1"
+              :page-size="chapterAttemptPageSize"
+              :total="chapterAttemptStatistics.attempts.totalElements"
+              :pager-count="5"
+              layout="prev, pager, next"
+              @current-change="loadChapterAttemptPage"
+            />
+          </div>
+        </article>
       </div>
       <el-empty v-else-if="!statisticsLoading" description="暂无采集统计数据" />
     </section>
@@ -60,7 +129,7 @@
       <div class="section-heading"><div><p class="eyebrow">SOURCES</p><h2>采集网站</h2></div><div class="site-heading-actions"><el-button :icon="Upload" @click="openSiteConfigurationImport">导入配置</el-button><el-button type="primary" :icon="Plus" @click="openSite()">新增网站</el-button></div></div>
       <div v-if="sites.length" class="site-grid">
         <article v-for="site in sites" :key="site.id" class="site-card">
-          <div class="site-top"><span class="site-mark">{{ site.siteName.slice(0, 1) }}</span><div><h3>{{ site.siteName }}</h3><a :href="site.homeUrl || site.baseUrl" target="_blank">{{ site.baseUrl }}</a></div><el-tag :type="site.status==='RULE_ERROR'?'danger':!site.ruleVersion?'warning':site.enabled?'success':'info'">{{ site.status==='RULE_ERROR'?'规则异常':!site.ruleVersion?'待配置规则':site.enabled?'启用':'停用' }}</el-tag></div>
+          <div class="site-top"><span class="site-mark" :style="{ '--site-theme-color': siteThemeColor(site.themeColor) }">{{ site.siteName.slice(0, 1) }}</span><div><h3>{{ site.siteName }}</h3><a :href="site.homeUrl || site.baseUrl" target="_blank">{{ site.baseUrl }}</a></div><el-tag :type="site.status==='RULE_ERROR'?'danger':!site.ruleVersion?'warning':site.enabled?'success':'info'">{{ site.status==='RULE_ERROR'?'规则异常':!site.ruleVersion?'待配置规则':site.enabled?'启用':'停用' }}</el-tag></div>
           <div class="site-stats"><span><b>{{ site.bookCount }}</b> 本书</span><span><b>{{ site.requestIntervalMillis }}</b> ms 间隔</span><span><b>{{ site.maxConcurrency }}</b> 并发</span></div>
           <div v-if="hasSiteProtection(site)" class="site-protection" :class="{cooling:site.protection.coolingDown}">
             <div class="site-protection-message"><strong>{{ site.protection.coolingDown ? '站点保护冷却中' : '请求节奏正在恢复' }}</strong><span>{{ site.protection.reason || '近期请求失败，系统已自动降低访问频率' }}</span></div>
@@ -108,7 +177,10 @@
                   <strong>{{ row.bookName }}</strong>
                   <el-tag v-if="row.suspectedDuplicate" size="small" type="warning">疑似重复</el-tag>
                 </div>
-                <p>{{ row.author || '未知作者' }} · {{ row.siteName }}</p>
+                <p class="book-source-line">
+                  <span>{{ row.author || '未知作者' }}</span>
+                  <SiteSourceTag :name="row.siteName" :color="row.siteThemeColor" />
+                </p>
               </div>
             </div>
           </template>
@@ -136,7 +208,11 @@
               <span>{{ book.bookName.slice(0,1) }}</span>
               <img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/>
               <el-tag v-if="book.suspectedDuplicate" class="discovery-duplicate-badge" size="small" type="warning">疑似重复</el-tag>
-              <span class="discovery-source-badge" :title="book.siteName">{{ book.siteName }}</span>
+              <SiteSourceTag
+                class="discovery-source-badge"
+                :name="book.siteName"
+                :color="book.siteThemeColor"
+              />
               <el-checkbox class="discovery-card-check" :model-value="isDiscoverySelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleDiscoverySelection(book,Boolean($event))"/>
             </div>
             <div v-if="book.category||book.tags?.length" class="discovery-card-body discovery-card-category crawler-book-tag-list"><el-tag v-if="book.category" size="small" type="info" effect="plain">{{ book.category }}</el-tag><el-tag v-for="tag in book.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></div>
@@ -168,7 +244,20 @@
       <el-table v-if="bookViewMode==='table'" ref="bookTableRef" v-loading="bookLoading" :data="books" row-key="id" @selection-change="selectedBooks=$event" @row-click="handleBookTableRowClick" class="data-table">
         <el-table-column type="selection" width="48" reserve-selection fixed="left" />
         <el-table-column label="收藏" width="58" fixed="left" align="center"><template #default="{row}"><el-button size="small" circle :icon="row.favorite?StarFilled:Star" class="favorite-action row-hover-action" :class="{'is-favorite':row.favorite}" :aria-label="row.favorite?'取消收藏':'加入收藏'" :title="row.favorite?'取消收藏':'加入收藏'" @click.stop="toggleFavorite(row)"/></template></el-table-column>
-        <el-table-column label="书籍" min-width="260"><template #default="{row}"><div class="book-cell"><div class="mini-cover">{{ row.bookName.slice(0,1) }}</div><div><strong>{{ row.bookName }}</strong><p>{{ row.author || '未知作者' }} · {{ row.siteName }}</p></div></div></template></el-table-column>
+        <el-table-column label="书籍" min-width="280">
+          <template #default="{ row }">
+            <div class="book-cell">
+              <div class="mini-cover">{{ row.bookName.slice(0, 1) }}</div>
+              <div>
+                <strong>{{ row.bookName }}</strong>
+                <p class="book-source-line">
+                  <span>{{ row.author || '未知作者' }}</span>
+                  <SiteSourceTag :name="row.siteName" :color="row.siteThemeColor" />
+                </p>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="分类 / 标签" min-width="210"><template #default="{row}"><div class="crawler-book-tag-list table-tags"><el-tag v-if="row.category" size="small" type="info" effect="plain">{{ row.category }}</el-tag><el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag><span v-if="!row.category&&!row.tags?.length">暂无</span></div></template></el-table-column>
         <el-table-column label="进度 / 采集结果" min-width="250"><template #default="{row}"><div v-if="isBookCompleted(row)" class="book-crawl-result table-result"><div><span>采集结果</span><strong>采集完成</strong></div><small>正文 {{ row.crawledChapterCount }} · 待开放 {{ row.pendingReleaseChapterCount }} · 失败 {{ row.failedChapterCount }}</small><el-button text type="primary" size="small" @click.stop="openBook(row)">采集结果详情</el-button></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(row)}" :percentage="progress(row)" :stroke-width="7" /><small>正文 {{ row.crawledChapterCount }}，待开放 {{ row.pendingReleaseChapterCount }} / 共 {{ row.chapterCount }} 章</small></template></template></el-table-column>
         <el-table-column label="状态" width="140"><template #default="{row}"><button class="status-editor" type="button" title="人工修改采集状态" @click.stop="openStatusEditor(row)"><el-tag :type="statusType(row.crawlStatus)">{{ statusLabel(row.crawlStatus) }}</el-tag><small>修改</small></button></template></el-table-column>
@@ -191,7 +280,7 @@
               </el-dropdown>
             </div>
             <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><div class="crawler-book-cover-badges"><el-tag :type="statusType(book.crawlStatus)" effect="dark" size="small">{{ statusLabel(book.crawlStatus) }}</el-tag><el-tag v-if="book.importStatus==='IMPORTED'" type="success" effect="dark" size="small">已入库</el-tag></div><el-checkbox class="discovery-card-check crawler-book-card-check" :model-value="isBookSelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleBookSelection(book,Boolean($event))"/></div>
-            <div class="discovery-card-body crawler-book-card-body"><div class="discovery-card-title"><div><button type="button" class="crawler-book-title-button" :title="book.bookName" @click.stop="openBook(book)">{{ book.bookName }}</button><p>{{ book.author || '未知作者' }}</p></div><el-tag v-if="book.category" size="small" effect="plain">{{ book.category }}</el-tag></div><div v-if="book.tags?.length" class="crawler-book-tag-list"><el-tag v-for="tag in book.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></div><dl><div><dt>来源网站</dt><dd>{{ book.siteName }}</dd></div></dl><div v-if="isBookCompleted(book)" class="book-crawl-result card-result"><div><span>采集结果</span><strong>采集完成</strong></div><small>正文 {{ book.crawledChapterCount }} · 待开放 {{ book.pendingReleaseChapterCount }} · 失败 {{ book.failedChapterCount }}</small><el-button text type="primary" size="small" @click.stop="openBook(book)">采集结果详情</el-button></div><div v-else class="crawler-book-progress"><div><span>采集进度</span><strong>正文 {{ book.crawledChapterCount }} · 待开放 {{ book.pendingReleaseChapterCount }} / 共 {{ book.chapterCount }} 章</strong></div><el-progress :class="{'crawler-running-progress':isBookRunning(book)}" :percentage="progress(book)" :stroke-width="7" /></div></div>
+            <div class="discovery-card-body crawler-book-card-body"><div class="discovery-card-title"><div><button type="button" class="crawler-book-title-button" :title="book.bookName" @click.stop="openBook(book)">{{ book.bookName }}</button><p>{{ book.author || '未知作者' }}</p></div><el-tag v-if="book.category" size="small" effect="plain">{{ book.category }}</el-tag></div><div v-if="book.tags?.length" class="crawler-book-tag-list"><el-tag v-for="tag in book.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></div><dl><div><dt>来源网站</dt><dd><SiteSourceTag :name="book.siteName" :color="book.siteThemeColor" /></dd></div></dl><div v-if="isBookCompleted(book)" class="book-crawl-result card-result"><div><span>采集结果</span><strong>采集完成</strong></div><small>正文 {{ book.crawledChapterCount }} · 待开放 {{ book.pendingReleaseChapterCount }} · 失败 {{ book.failedChapterCount }}</small><el-button text type="primary" size="small" @click.stop="openBook(book)">采集结果详情</el-button></div><div v-else class="crawler-book-progress"><div><span>采集进度</span><strong>正文 {{ book.crawledChapterCount }} · 待开放 {{ book.pendingReleaseChapterCount }} / 共 {{ book.chapterCount }} 章</strong></div><el-progress :class="{'crawler-running-progress':isBookRunning(book)}" :percentage="progress(book)" :stroke-width="7" /></div></div>
           </article>
         </div>
       </div>
@@ -287,7 +376,59 @@
           </div>
         </div>
         <div v-show="activeSiteTab==='basic'" id="site-editor-panel-basic" class="site-tab-panel" role="tabpanel" aria-labelledby="site-editor-tab-basic">
-          <section class="site-form-section"><header><span>01</span><div><h3>基本信息</h3><p>网站身份和访问入口</p></div></header><div class="form-grid"><el-form-item label="网站名称" prop="siteName"><el-input v-model="siteForm.siteName" /></el-form-item><el-form-item label="唯一编码（选填）"><el-input v-model="siteForm.siteCode" placeholder="留空时根据网站域名自动生成" /><small class="field-hint">仅支持字母、数字、下划线和连字符</small></el-form-item></div><div class="form-grid"><el-form-item label="根地址" prop="baseUrl"><el-input v-model="siteForm.baseUrl" placeholder="https://example.com" /></el-form-item><el-form-item label="首页地址"><el-input v-model="siteForm.homeUrl" placeholder="留空时使用根地址" /></el-form-item></div><el-form-item label="字符编码"><el-select v-model="siteForm.encoding"><el-option label="UTF-8" value="UTF-8"/><el-option label="GBK" value="GBK"/><el-option label="GB18030" value="GB18030"/></el-select></el-form-item></section>
+          <section class="site-form-section">
+            <header>
+              <span>01</span>
+              <div>
+                <h3>基本信息</h3>
+                <p>网站身份、访问入口和来源标识</p>
+              </div>
+            </header>
+            <div class="form-grid">
+              <el-form-item label="网站名称" prop="siteName">
+                <el-input v-model="siteForm.siteName" />
+              </el-form-item>
+              <el-form-item label="唯一编码（选填）">
+                <el-input
+                  v-model="siteForm.siteCode"
+                  placeholder="留空时根据网站域名自动生成"
+                />
+                <small class="field-hint">仅支持字母、数字、下划线和连字符</small>
+              </el-form-item>
+            </div>
+            <div class="form-grid">
+              <el-form-item label="根地址" prop="baseUrl">
+                <el-input v-model="siteForm.baseUrl" placeholder="https://example.com" />
+              </el-form-item>
+              <el-form-item label="首页地址">
+                <el-input v-model="siteForm.homeUrl" placeholder="留空时使用根地址" />
+              </el-form-item>
+            </div>
+            <div class="form-grid">
+              <el-form-item label="字符编码">
+                <el-select v-model="siteForm.encoding">
+                  <el-option label="UTF-8" value="UTF-8" />
+                  <el-option label="GBK" value="GBK" />
+                  <el-option label="GB18030" value="GB18030" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="来源主题色" prop="themeColor">
+                <div class="site-theme-color-control">
+                  <el-color-picker
+                    v-model="siteForm.themeColor"
+                    color-format="hex"
+                    :predefine="siteThemeColorOptions"
+                    aria-label="选择网站来源主题色"
+                  />
+                  <SiteSourceTag
+                    :name="siteForm.siteName.trim() || '来源网站'"
+                    :color="siteForm.themeColor"
+                  />
+                  <small class="field-hint">显示在该网站的任务和书籍来源标识上</small>
+                </div>
+              </el-form-item>
+            </div>
+          </section>
         </div>
         <div v-show="activeSiteTab==='request'" id="site-editor-panel-request" class="site-tab-panel" role="tabpanel" aria-labelledby="site-editor-tab-request">
           <section class="site-form-section">
@@ -548,7 +689,7 @@
 
     <el-dialog v-model="taskEditDialog" title="修改采集任务" width="min(520px, 94vw)" append-to-body>
       <div v-if="editingTask" class="task-edit-content">
-        <div class="task-edit-summary"><span>{{ taskTypeLabel(editingTask.type) }}</span><div><strong>{{ editingTask.bookName || editingTask.discoveryPageName || editingTask.siteName }}</strong><p>{{ editingTask.siteName }} · {{ statusLabel(editingTask.status) }}</p></div></div>
+        <div class="task-edit-summary"><span>{{ taskTypeLabel(editingTask.type) }}</span><div><strong>{{ editingTask.bookName || editingTask.discoveryPageName || editingTask.siteName }}</strong><p class="book-source-line"><SiteSourceTag :name="editingTask.siteName" :color="editingTask.siteThemeColor" /><span>{{ statusLabel(editingTask.status) }}</span></p></div></div>
         <div><p class="field-label">任务优先级</p><div class="priority-segment" role="radiogroup" aria-label="任务优先级" @keydown="handlePriorityKey"><span class="priority-indicator" :style="{transform:`translateX(${taskPriorityIndex*100}%)`}"/><button v-for="item in taskPriorityOptions" :key="item.value" type="button" role="radio" :aria-checked="taskPriority===item.value" :tabindex="taskPriority===item.value?0:-1" :class="{active:taskPriority===item.value}" @click="taskPriority=item.value">{{ item.label }}</button></div></div>
         <el-alert v-if="editingTask.status==='FAILED'" type="info" :closable="false" title="失败任务保存后不会自动执行；新优先级将在后续重新采集时使用。" />
         <el-alert v-else type="info" :closable="false" title="等待中的任务保存后会立即按新优先级重新排队；暂停任务将在恢复时使用新优先级。" />
@@ -567,7 +708,7 @@
             :width="72"
             :stroke-width="7"
           />
-          <div><p class="eyebrow">{{ selectedTask.id }}</p><h2>{{ selectedTask.bookName || selectedTask.discoveryPageName || selectedTask.siteName }}</h2><p>{{ selectedTask.siteName }} · {{ taskTypeLabel(selectedTask.type) }}</p></div>
+          <div><p class="eyebrow">{{ selectedTask.id }}</p><h2>{{ selectedTask.bookName || selectedTask.discoveryPageName || selectedTask.siteName }}</h2><p class="book-source-line"><SiteSourceTag :name="selectedTask.siteName" :color="selectedTask.siteThemeColor" /><span>{{ taskTypeLabel(selectedTask.type) }}</span></p></div>
           <el-tag :type="statusType(selectedTask.status)" effect="light">{{ statusLabel(selectedTask.status) }}</el-tag>
         </header>
 
@@ -620,7 +761,7 @@
           </div>
           <div v-if="taskQueues.length" class="site-queue-list">
             <article v-for="queue in taskQueues" :key="queue.id" class="site-queue-card">
-              <header><div><p class="eyebrow">{{ queue.siteName }}</p><strong>{{ queue.runningCount }} / {{ queue.maxConcurrentTasks }} 个任务运行中</strong></div><el-tag effect="plain">{{ queue.progressPercent }}%</el-tag></header>
+              <header><div><p class="eyebrow"><SiteSourceTag :name="queue.siteName" :color="queue.siteThemeColor" /></p><strong>{{ queue.runningCount }} / {{ queue.maxConcurrentTasks }} 个任务运行中</strong></div><el-tag effect="plain">{{ queue.progressPercent }}%</el-tag></header>
               <el-progress :percentage="queue.progressPercent" :stroke-width="7" :show-text="false" />
               <div class="site-queue-stats"><span>等待 {{ queue.waitingCount }}</span><span>暂停 {{ queue.pausedCount }}</span><span>间隔 {{ queue.taskIntervalSeconds }} 秒</span></div>
               <footer><el-button text @click="openQueueSettings(queue)">配置</el-button><el-button type="primary" plain @click="openQueueDetails(queue)">查看任务</el-button></footer>
@@ -700,7 +841,7 @@
       <el-table v-loading="queuedTasksLoading||queuedTasksReordering||!!queuedTaskPrioritizingId" :data="pagedQueuedTasks" row-key="id" max-height="56vh" class="queued-task-table" :row-class-name="queuedTaskRowClassName">
         <el-table-column label="排序" width="62" align="center"><template #default="{row}"><button type="button" class="queue-drag-handle" :class="{dragging:queuedTaskDraggingId===row.id,disabled:row.status!=='WAITING'}" :disabled="row.status!=='WAITING'||queuedTasksReordering||Boolean(queuedTaskPrioritizingId)||Boolean(queuedTaskCommandId)" :draggable="row.status==='WAITING'&&!queuedTasksReordering&&!queuedTaskPrioritizingId&&!queuedTaskCommandId" :aria-label="row.status==='WAITING'?`拖动排序：${row.bookName||row.discoveryPageName||taskTypeLabel(row.type)}`:'当前状态不可排序'" :title="row.status==='WAITING'?'拖动调整顺序；也可使用上下方向键':'只有等待中的任务可以排序'" @dragstart="startQueuedTaskDrag(row,$event)" @dragenter.prevent="moveDraggedQueuedTask(row)" @dragover.prevent @dragend="finishQueuedTaskDrag" @keydown.up.prevent="moveQueuedTaskByKeyboard(row,-1)" @keydown.down.prevent="moveQueuedTaskByKeyboard(row,1)">⠿</button></template></el-table-column>
         <el-table-column type="index" label="#" width="54" :index="index=>index+(queuedTaskPage-1)*queuedTaskPageSize+1" />
-        <el-table-column label="任务" min-width="250"><template #default="{row}"><button type="button" class="queue-task-link" @dragenter.prevent="moveDraggedQueuedTask(row)" @click="openQueuedTask(row)"><strong>{{ row.bookName || row.discoveryPageName || taskTypeLabel(row.type) }}</strong></button></template></el-table-column>
+        <el-table-column label="任务" min-width="280"><template #default="{row}"><button type="button" class="queue-task-link" @dragenter.prevent="moveDraggedQueuedTask(row)" @click="openQueuedTask(row)"><SiteSourceTag :name="row.siteName" :color="row.siteThemeColor" /><strong>{{ row.bookName || row.discoveryPageName || taskTypeLabel(row.type) }}</strong></button></template></el-table-column>
         <el-table-column label="任务类型" width="120"><template #default="{row}">{{ taskTypeLabel(row.type) }}</template></el-table-column>
         <el-table-column label="状态" width="90"><template #default="{row}"><el-tag :type="statusType(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
         <el-table-column label="优先级" width="90"><template #default="{row}"><el-tag :type="priorityType(row.priority)" effect="plain">{{ priorityLabel(row.priority) }}</el-tag></template></el-table-column>
@@ -727,7 +868,7 @@
 
     <el-drawer v-model="bookDrawer" size="min(760px, 96vw)" :title="selectedBook?.bookName || '采集书籍详情'" class="book-detail-drawer">
       <div v-if="selectedBook" class="book-drawer-content">
-        <div class="book-summary"><div class="large-cover">{{ selectedBook.bookName.slice(0,1) }}</div><div><h2>{{ selectedBook.bookName }}</h2><p>{{ selectedBook.author || '未知作者' }} · {{ selectedBook.siteName }}</p><div v-if="isBookCompleted(selectedBook)" class="book-crawl-result drawer-result"><div><span>采集结果详情</span><strong>采集完成</strong></div><small>正文 {{ selectedBook.crawledChapterCount }} 章 · 待开放 {{ selectedBook.pendingReleaseChapterCount }} 章 · 失败 {{ selectedBook.failedChapterCount }} 章</small></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(selectedBook)}" :percentage="progress(selectedBook)"/><small>正文 {{ selectedBook.crawledChapterCount }} / {{ selectedBook.chapterCount }} 章，待开放 {{ selectedBook.pendingReleaseChapterCount }}，失败 {{ selectedBook.failedChapterCount }}</small></template></div></div>
+        <div class="book-summary"><div class="large-cover">{{ selectedBook.bookName.slice(0,1) }}</div><div><h2>{{ selectedBook.bookName }}</h2><p class="book-source-line"><span>{{ selectedBook.author || '未知作者' }}</span><SiteSourceTag :name="selectedBook.siteName" :color="selectedBook.siteThemeColor" /></p><div v-if="isBookCompleted(selectedBook)" class="book-crawl-result drawer-result"><div><span>采集结果详情</span><strong>采集完成</strong></div><small>正文 {{ selectedBook.crawledChapterCount }} 章 · 待开放 {{ selectedBook.pendingReleaseChapterCount }} 章 · 失败 {{ selectedBook.failedChapterCount }} 章</small></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(selectedBook)}" :percentage="progress(selectedBook)"/><small>正文 {{ selectedBook.crawledChapterCount }} / {{ selectedBook.chapterCount }} 章，待开放 {{ selectedBook.pendingReleaseChapterCount }}，失败 {{ selectedBook.failedChapterCount }}</small></template></div></div>
         <div class="crawler-book-metadata"><span><small>来源状态</small><strong>{{ selectedBook.bookStatus || '未识别' }}</strong></span><span><small>分类</small><strong>{{ selectedBook.category || '未分类' }}</strong></span><span class="metadata-tag-row"><small>标签</small><span v-if="selectedBook.tags?.length" class="metadata-tags"><el-tag v-for="tag in selectedBook.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></span><strong v-else>无</strong></span></div>
         <div v-if="selectedBook.libraryBookId" class="library-sync-control"><div><strong>自动同步到书库</strong><p>检查更新或续采成功后，自动发布为同一本书的新版本。</p></div><el-switch :model-value="selectedBook.autoSyncLibrary" @change="toggleLibrarySync(selectedBook,Boolean($event))" /></div>
         <div class="drawer-actions"><el-button size="small" circle :icon="selectedBook.favorite?StarFilled:Star" class="favorite-action" :class="{'is-favorite':selectedBook.favorite}" :aria-label="selectedBook.favorite?'取消收藏':'加入收藏'" :title="selectedBook.favorite?'取消收藏':'加入收藏'" @click="toggleFavorite(selectedBook)"/><el-button @click="openCrawlerBookLists(selectedBook)">加入书单</el-button><el-button :disabled="isBookTaskActive(selectedBook)" @click="continueCrawl(selectedBook)">{{ isBookTaskActive(selectedBook)?'任务中':'继续采集' }}</el-button><el-button :disabled="isBookTaskActive(selectedBook)" @click="refreshBookMetadata(selectedBook)">刷新分类标签</el-button><el-button :disabled="!selectedBook.failedChapterCount" @click="retryFailures(selectedBook)">重试失败</el-button><el-button @click="openStatusEditor(selectedBook)">修改状态</el-button><el-button type="primary" plain :disabled="!selectedBook.crawledChapterCount" @click="startTrial(selectedBook)">临时试读</el-button><el-button type="primary" @click="generate(selectedBook)">生成 TXT + EPUB</el-button><el-button type="primary" plain @click="importBook(selectedBook)">{{ selectedBook.importStatus==='IMPORTED'?'立即同步书库':'入库' }}</el-button></div>
@@ -763,7 +904,7 @@
           <section ref="chapterReaderSurface" class="chapter-reader-surface" :style="chapterReaderArticleStyle">
             <div v-if="chapterReaderLoading" class="chapter-reader-state" role="status"><i/><p>正在展开书页…</p></div>
             <article v-else>
-              <p class="chapter-reader-kicker">{{ selectedBook?.author || '未知作者' }} · {{ selectedBook?.siteName }}</p>
+              <p class="chapter-reader-kicker"><span>{{ selectedBook?.author || '未知作者' }}</span><SiteSourceTag :name="selectedBook?.siteName || '来源网站'" :color="selectedBook?.siteThemeColor" /></p>
               <div class="chapter-reader-rule"><span>◆</span></div>
               <p v-for="(paragraph,index) in chapterReaderParagraphs" :key="index" class="chapter-reader-paragraph">{{ paragraph }}</p>
               <p v-if="!chapterReaderParagraphs.length" class="chapter-reader-empty">{{ chapterDetail?.errorMessage || '本章暂无可阅读正文' }}</p>
@@ -796,10 +937,12 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, MoreFilled, Plus, Refresh, Search, Star, StarFilled, Tickets, TrendCharts, Upload, VideoPause, VideoPlay, Warning } from '@element-plus/icons-vue'
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElProgress, ElTable, ElTableColumn, ElTag, ElTooltip, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
+import SiteSourceTag from '@/components/SiteSourceTag.vue'
 import {
   crawlerApi,
   type CrawlerBook,
   type CrawlerChapter,
+  type CrawlerChapterAttemptStatistics,
   type CrawlerDashboard,
   type CrawlerDashboardStatistics,
   type CrawlerDiscoveryPage,
@@ -874,7 +1017,7 @@ const TaskTable = defineComponent({
     () => [
   props.selectable?h(ElTableColumn,{type:'selection',width:48,reserveSelection:true,fixed:'left'}):null,
   h(ElTableColumn,{label:'收藏',width:58,fixed:'left',align:'center'},{default:({row}:{row:CrawlerTask})=>row.bookId?h(ElButton,{size:'small',circle:true,icon:row.favorite?StarFilled:Star,class:['favorite-action','row-hover-action',row.favorite?'is-favorite':''],'aria-label':row.favorite?'取消收藏':'加入收藏',title:row.favorite?'取消收藏':'加入收藏',onClick:(event:MouseEvent)=>{event.stopPropagation();emit('toggle-favorite',row)}}):null}),
-  h(ElTableColumn,{label:'任务',minWidth:240,fixed:'left'},{default:({row}:{row:CrawlerTask})=>h('div',{class:'task-open',role:'button',tabindex:0,onClick:()=>emit('open',row),onKeydown:(event:KeyboardEvent)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();emit('open',row)}}},[row.siteName?h('span',{class:'task-site-mark',title:row.siteName,'aria-label':`来源网站：${row.siteName}`},row.siteName.slice(0,1)):null,h('strong',{title:row.bookName||row.discoveryPageName||taskTypeLabel(row.type)},row.bookName||row.discoveryPageName||taskTypeLabel(row.type))])}),
+  h(ElTableColumn,{label:'任务',minWidth:240,fixed:'left'},{default:({row}:{row:CrawlerTask})=>h('div',{class:'task-open',role:'button',tabindex:0,onClick:()=>emit('open',row),onKeydown:(event:KeyboardEvent)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();emit('open',row)}}},[row.siteName?h('span',{class:'task-site-mark',style:{'--site-theme-color':siteThemeColor(row.siteThemeColor)},title:row.siteName,'aria-label':`来源网站：${row.siteName}`},row.siteName.slice(0,1)):null,h('strong',{title:row.bookName||row.discoveryPageName||taskTypeLabel(row.type)},row.bookName||row.discoveryPageName||taskTypeLabel(row.type))])}),
   h(ElTableColumn,{label:'任务类型',width:120},{default:({row}:{row:CrawlerTask})=>taskTypeLabel(row.type)}),
   h(ElTableColumn,{label:'进度 / 扫描结果',minWidth:300},{default:({row}:{row:CrawlerTask})=>row.status==='SUCCESS'&&row.type==='SITE_SCAN'?h('div',{class:'task-scan-progress task-scan-completed'},[h('div',{class:'task-success-progress'},[h('strong','✓ 已完成'),h('span',`扫描 ${row.scannedPageCount} 页，发现 ${row.totalCount} 本`)]),h('div',{class:'task-scan-summary'},[h('i',`新增 ${row.newBookCount}`),h('em',`重复 ${row.duplicateCount}`),row.failedCount?h('strong',`失败 ${row.failedCount}`):null])]):row.status==='SUCCESS'?h('div',{class:'task-success-progress'},[h('strong','✓ 已完成'),h('span',`成功处理 ${row.successCount} 项`)]):row.type==='SITE_SCAN'?h('div',{class:'task-scan-progress'},[h(ElProgress,{class:row.status==='RUNNING'?'crawler-running-progress':undefined,percentage:scanTaskPercentage(row),strokeWidth:7}),h('small',scanTaskProgressText(row)),h('div',{class:'task-scan-summary'},[`扫描到 ${row.totalCount}`,h('b',`成功 ${row.successCount}`),h('i',`新增 ${row.newBookCount}`),h('em',`重复 ${row.duplicateCount}`),row.failedCount?h('strong',`失败 ${row.failedCount}`):null])]):h(ElProgress,{class:row.status==='RUNNING'?'crawler-running-progress':undefined,percentage:row.totalCount?Math.round(row.successCount/row.totalCount*100):0,strokeWidth:7})}),
   h(ElTableColumn,{label:'状态',width:130},{default:({row}:{row:CrawlerTask})=>h(ElTag,{type:statusType(row.status)},()=>statusLabel(row.status))}),
@@ -923,7 +1066,17 @@ const {crawlerFollowCurrentChapter:followCurrentChapter,crawlerChapterPageSize:c
 const pollingIntervalOptions=CRAWLER_POLLING_INTERVAL_OPTIONS
 const activeTab=ref<TabKey>('overview'), dashboard=ref<CrawlerDashboard>(), sites=ref<CrawlerSite[]>([]), books=ref<CrawlerBook[]>([]), discoveredBooks=ref<CrawlerBook[]>([]), tasks=ref<CrawlerTask[]>([]), failedTasks=ref<CrawlerTask[]>([])
 const statistics=ref<CrawlerDashboardStatistics>(), statisticsLoading=ref(false), statisticsDays=ref<StatisticsDays>(30)
-const chapterTrendChartRef=ref<HTMLElement>(), taskCountChartRef=ref<HTMLElement>(), bookTrendChartRef=ref<HTMLElement>(), successfulBooksChartRef=ref<HTMLElement>(), successRateChartRef=ref<HTMLElement>(), siteContributionChartRef=ref<HTMLElement>(), funnelChartRef=ref<HTMLElement>()
+const chapterAttemptStatistics = ref<CrawlerChapterAttemptStatistics>()
+const chapterAttemptPage = ref(0)
+const chapterAttemptPageSize = 20
+const chapterTrendChartRef = ref<HTMLElement>()
+const taskCountChartRef = ref<HTMLElement>()
+const bookTrendChartRef = ref<HTMLElement>()
+const successfulBooksChartRef = ref<HTMLElement>()
+const successRateChartRef = ref<HTMLElement>()
+const siteContributionChartRef = ref<HTMLElement>()
+const funnelChartRef = ref<HTMLElement>()
+const chapterAttemptChartRef = ref<HTMLElement>()
 const currentCrawlerTasks=ref<CrawlerTask[]>([]), submittingBookTaskIds=ref(new Set<number>())
 const siteDialog=ref(false), siteProtectionDialog=ref(false), protectionDetailSite=ref<CrawlerSite>(), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'|'metadata'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), chapterDetail=ref<{title:string;url:string;content:string;errorMessage:string}>(), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
 const chapterReaderSurface=ref<HTMLElement>(), chapterReaderActive=ref<CrawlerChapter>(), chapterReaderChapters=ref<CrawlerChapter[]>([]), chapterReaderBookId=ref<number>(), chapterReaderLoading=ref(false), chapterReaderSettingsOpen=ref(false)
@@ -1007,11 +1160,15 @@ const importFormatOptions=[{value:'STRUCTURED',label:'结构化章节',descripti
 const crawlForm=reactive<{siteId?:number;url:string}>({url:''})
 const discoveryPageForm=reactive<CrawlerDiscoveryPagePayload>({pageName:'',pageUrl:'',autoScanEnabled:false,scanIntervalMinutes:360,maxPages:50})
 const emptyRule=():CrawlerRule=>({discoveryItemSelector:'',discoveryUrlSelector:'a',discoveryTitleSelector:'.title',discoveryAuthorSelector:'',discoveryCoverSelector:'',discoveryCategorySelector:'',discoveryLatestChapterSelector:'',discoveryNextPageSelector:'',titleSelector:'',authorSelector:'',descriptionSelector:'',categorySelector:'',tagsSelector:'',statusSelector:'',chapterListUrlSelector:'',chapterItemSelector:'',chapterTitleSelector:':scope',chapterUrlSelector:'a',contentTitleSelector:'h1',contentSelector:'',removeSelectors:'',xpathRemoveSelectors:'',stringReplacementsJson:'',regexReplacementsJson:'',removeBlankLines:true,saveOriginalHtml:false,minChapterLength:100})
-const emptySite=():CrawlerSitePayload=>({siteName:'',siteCode:'',baseUrl:'',homeUrl:'',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',requestIntervalMillis:1500,randomDelayMillis:1000,maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[],contentMarkers:[]})
+const siteThemeColorOptions=['#286D63','#365F9A','#8F4D2E','#6F5598','#805B17','#2D6C89','#8A4058','#586D31']
+function siteThemeColor(color?:string):string {
+  return color && /^#[\da-fA-F]{6}$/.test(color) ? color : '#286D63'
+}
+const emptySite=():CrawlerSitePayload=>({siteName:'',siteCode:'',baseUrl:'',homeUrl:'',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',requestIntervalMillis:1500,randomDelayMillis:1000,maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[],contentMarkers:[],themeColor:'#286D63'})
 const siteConfigurationTemplate:CrawlerSiteConfiguration={
   schemaVersion:1,
   type:'AIBOOK_CRAWLER_SITE',
-  site:{siteName:'示例小说站',siteCode:'example_novel',baseUrl:'https://www.example.com',homeUrl:'https://www.example.com',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,requestIntervalMillis:1500,randomDelayMillis:1000,maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[{name:'备用代理',url:'http://127.0.0.1:7890',enabled:false}],scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',contentMarkers:[{marker:'以下内容为VIP专属，升级会员即可继续阅读',status:'PENDING_RELEASE'},{marker:'Access Denied',status:'FAILED'}]},
+  site:{siteName:'示例小说站',siteCode:'example_novel',baseUrl:'https://www.example.com',homeUrl:'https://www.example.com',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,requestIntervalMillis:1500,randomDelayMillis:1000,maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[{name:'备用代理',url:'http://127.0.0.1:7890',enabled:false}],scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',contentMarkers:[{marker:'以下内容为VIP专属，升级会员即可继续阅读',status:'PENDING_RELEASE'},{marker:'Access Denied',status:'FAILED'}],themeColor:'#365F9A'},
   rules:[{version:1,changeSummary:'初始规则',enabled:true,rule:{discoveryItemSelector:'.book-list .book',discoveryUrlSelector:'a.book-link',discoveryTitleSelector:'.title',discoveryAuthorSelector:'.author',discoveryCoverSelector:'img.cover::data-src',discoveryCategorySelector:'.category',discoveryLatestChapterSelector:'.latest',discoveryNextPageSelector:'a.next',titleSelector:'h1.book-title',authorSelector:'.author',coverSelector:'img.cover::data-src',descriptionSelector:'#intro',categorySelector:'.book-meta .category',tagsSelector:'.book-meta .tags a',statusSelector:'.book-meta .status',latestChapterSelector:'.latest',chapterListUrlSelector:'a.catalog',chapterItemSelector:'#chapter-list a',chapterTitleSelector:':scope',chapterUrlSelector:':scope',contentTitleSelector:'h1',contentSelector:'#content',removeSelectors:'.ads, .navigation',xpathRemoveSelectors:'',stringReplacementsJson:'',regexReplacementsJson:'',removeBlankLines:true,saveOriginalHtml:false,minChapterLength:100}}],
   discoveryPages:[{pageName:'热门小说',pageUrl:'https://www.example.com/rank/hot',autoScanEnabled:false,scanIntervalMinutes:360,maxPages:50}],
 }
@@ -1093,9 +1250,83 @@ watch(activeTab,async value=>{if(value==='statistics'&&statistics.value){await n
 function restartPolling(){if(timer)window.clearInterval(timer);timer=window.setInterval(()=>{void pollCrawlerProgress()},pollingIntervalSeconds.value*1000)}
 function setPollingInterval(value:number){if(!pollingIntervalOptions.includes(value as CrawlerPollingIntervalSeconds))return;preferencesStore.setCrawlerPollingIntervalSeconds(value);restartPolling();void pollCrawlerProgress()}
 async function refreshOverview(){await Promise.all([refresh(),loadCrawlerStatistics()])}
-async function setStatisticsDays(days:StatisticsDays){if(statisticsDays.value===days)return;statisticsDays.value=days;await loadCrawlerStatistics()}
+async function setStatisticsDays(days:StatisticsDays) {
+  if (statisticsDays.value === days) return
+  statisticsDays.value = days
+  chapterAttemptPage.value = 0
+  await loadCrawlerStatistics()
+}
 function handleStatisticsRangeKey(event:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();let index=statisticsRangeIndex.value;if(event.key==='ArrowRight')index=(index+1)%statisticsRangeOptions.length;else if(event.key==='ArrowLeft')index=(index-1+statisticsRangeOptions.length)%statisticsRangeOptions.length;else index=event.key==='Home'?0:statisticsRangeOptions.length-1;void setStatisticsDays(statisticsRangeOptions[index]);requestAnimationFrame(()=>document.querySelectorAll<HTMLButtonElement>('.statistics-range button')[index]?.focus())}
-async function loadCrawlerStatistics(options:{silent?:boolean}={}){if(!options.silent)statisticsLoading.value=true;try{statistics.value=await crawlerApi.dashboardStatistics(statisticsDays.value);if(activeTab.value==='statistics'){await nextTick();await renderStatisticsCharts()}}catch(error:any){if(!options.silent)message.error(error.response?.data?.message||'采集统计加载失败')}finally{if(!options.silent)statisticsLoading.value=false}}
+async function loadCrawlerStatistics(options:{silent?:boolean} = {}) {
+  if (!options.silent) statisticsLoading.value = true
+  try {
+    const [dashboardStats, attemptStats] = await Promise.all([
+      crawlerApi.dashboardStatistics(statisticsDays.value),
+      crawlerApi.chapterAttemptStatistics(
+        statisticsDays.value,
+        chapterAttemptPage.value,
+        chapterAttemptPageSize,
+      ),
+    ])
+    statistics.value = dashboardStats
+    chapterAttemptStatistics.value = attemptStats
+    if (activeTab.value === 'statistics') {
+      await nextTick()
+      await renderStatisticsCharts()
+    }
+  } catch (error:any) {
+    if (!options.silent) {
+      message.error(error.response?.data?.message || '采集统计加载失败')
+    }
+  } finally {
+    if (!options.silent) statisticsLoading.value = false
+  }
+}
+
+async function loadChapterAttemptPage(page:number) {
+  chapterAttemptPage.value = page - 1
+  try {
+    chapterAttemptStatistics.value = await crawlerApi.chapterAttemptStatistics(
+      statisticsDays.value,
+      chapterAttemptPage.value,
+      chapterAttemptPageSize,
+    )
+  } catch (error:any) {
+    message.error(error.response?.data?.message || '章节采集耗时加载失败')
+  }
+}
+
+function formatAttemptDuration(milliseconds:number) {
+  return milliseconds >= 1000
+    ? `${(milliseconds / 1000).toFixed(2)} 秒`
+    : `${milliseconds} 毫秒`
+}
+
+function formatAttemptTimestamp(value?:string) {
+  return value ? value.replace('T', ' ').slice(0, 19) : '—'
+}
+
+function attemptOutcomeLabel(outcome:string) {
+  const labels:Record<string, string> = {
+    SUCCESS: '成功',
+    UNCHANGED: '未变化',
+    PENDING_RELEASE: '待开放',
+    FAILED: '失败',
+    INTERRUPTED: '中断',
+  }
+  return labels[outcome] || outcome
+}
+
+function attemptOutcomeType(outcome:string) {
+  const types:Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
+    SUCCESS: 'success',
+    UNCHANGED: 'info',
+    PENDING_RELEASE: 'warning',
+    FAILED: 'danger',
+    INTERRUPTED: 'info',
+  }
+  return types[outcome] || 'info'
+}
 function disposeStatisticsCharts(){statisticsCharts.forEach(chart=>chart.dispose());statisticsCharts=[]}
 function resizeStatisticsCharts(){statisticsCharts.forEach(chart=>chart.resize())}
 function chartCssColor(name:string,fallback:string){return getComputedStyle(document.documentElement).getPropertyValue(name).trim()||fallback}
@@ -1119,6 +1350,32 @@ async function renderStatisticsCharts(){
   init(siteContributionChartRef.value,{color:[primary,warning],tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:chartCssColor('--surface-elevated','#fff'),borderColor:line,textStyle:{color:chartCssColor('--text-primary','#1d2939')}},legend:{top:0,right:0,textStyle:{color:text,fontSize:11}},grid:{left:92,right:16,top:38,bottom:18},xAxis:{type:'value',minInterval:1,...axis},yAxis:{type:'category',data:sites.map(item=>item.siteName),...axis,axisLabel:{color:text,fontSize:10,width:76,overflow:'truncate'}},series:[{name:'新增章节',type:'bar',barMaxWidth:13,data:sites.map(item=>item.newChapters),itemStyle:{borderRadius:[0,5,5,0]}},{name:'新增书籍',type:'bar',barMaxWidth:13,data:sites.map(item=>item.newBooks),itemStyle:{borderRadius:[0,5,5,0]}}]})
   const funnel=statistics.value.funnel
   init(funnelChartRef.value,{color:[primary,'#7088e8',success,warning],tooltip:{trigger:'item',formatter:'{b}：{c}',backgroundColor:chartCssColor('--surface-elevated','#fff'),borderColor:line,textStyle:{color:chartCssColor('--text-primary','#1d2939')}},series:[{type:'funnel',top:8,bottom:8,left:'8%',width:'84%',minSize:'28%',maxSize:'100%',sort:'descending',gap:3,label:{color:text,fontSize:11,formatter:'{b}  {c}'},labelLine:{lineStyle:{color:line}},itemStyle:{borderColor:chartCssColor('--surface-card','#fff'),borderWidth:2},data:[{name:'已发现',value:funnel.discoveredBooks},{name:'已建任务',value:funnel.taskedBooks},{name:'采集完成',value:funnel.completedBooks},{name:'已入库',value:funnel.importedBooks}]}]})
+  const attemptDaily=chapterAttemptStatistics.value?.daily||[]
+  const attemptDates=attemptDaily.map(item=>item.date.slice(5).replace('-','/'))
+  const attemptSeries=[
+    {name:'采集',key:'collectionMillis',color:primary},
+    {name:'固定等待',key:'fixedWaitMillis',color:warning},
+    {name:'随机等待',key:'randomWaitMillis',color:success},
+    {name:'其他等待',key:'otherWaitMillis',color:danger},
+  ]
+  init(chapterAttemptChartRef.value,{
+    color:attemptSeries.map(item=>item.color),
+    tooltip:{...tooltip,formatter:(items:any[])=>{
+      const date=items?.[0]?.axisValue||''
+      const dayIndex=items?.[0]?.dataIndex??-1
+      const attemptCount=attemptDaily[dayIndex]?.attempts||0
+      const lines=items.map(item=>`${item.marker}${item.seriesName}：${Number(item.value).toFixed(2)} 秒`)
+      return `${date} · ${attemptCount} 次尝试<br/>${lines.join('<br/>')}`
+    }},
+    legend:{top:0,right:0,textStyle:{color:text,fontSize:11}},
+    grid:{left:54,right:18,top:38,bottom:28},
+    xAxis:{type:'category',data:attemptDates,boundaryGap:true,...axis,axisLabel:{...axis.axisLabel,interval:statisticsDays.value===90?9:statisticsDays.value===30?3:0}},
+    yAxis:{type:'value',min:0,axisLabel:{color:text,fontSize:10,formatter:'{value}s'},axisLine:axis.axisLine,axisTick:axis.axisTick,splitLine:axis.splitLine},
+    series:[
+      ...attemptSeries.map(item=>({name:item.name,type:'bar',stack:'duration',barMaxWidth:18,data:attemptDaily.map(day=>day[item.key as keyof typeof day] as number/1000),itemStyle:{borderRadius:[3,3,0,0]}})),
+      {name:'总耗时',type:'line',smooth:true,symbol:'circle',symbolSize:5,data:attemptDaily.map(day=>day.totalElapsedMillis/1000),lineStyle:{width:2}},
+    ],
+  })
 }
 async function refresh(){const [dashboardData,siteData]=await Promise.all([crawlerApi.dashboard(),crawlerApi.sites(),loadBooks(),loadTasks(),loadFailedTasks(),loadDiscoveredBooks(),loadTaskQueues(),loadCurrentCrawlerTasks()]);dashboard.value=dashboardData;sites.value=siteData;await loadDiscoveryPages()}
 async function loadCurrentCrawlerTasks(){currentCrawlerTasks.value=await crawlerApi.currentTasks()}
@@ -2073,5 +2330,131 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   margin: 10px 0 0;
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.attempt-statistics-card {
+  display: grid;
+  gap: 12px;
+}
+
+.attempt-data-table {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.attempt-chapter-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.attempt-chapter-cell strong,
+.attempt-chapter-cell span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attempt-chapter-cell strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.attempt-chapter-cell span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.attempt-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .attempt-pagination {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+.attempt-pagination :deep(.el-pagination) {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+
+.site-theme-color-control {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.site-theme-color-control .field-hint {
+  flex-basis: 100%;
+  margin-top: -4px;
+}
+
+.book-source-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.discovery-card-cover :deep(.discovery-source-badge) {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 3;
+  max-width: calc(100% - 50px);
+}
+
+.site-mark {
+  border: 1px solid color-mix(
+    in srgb,
+    var(--site-theme-color) 36%,
+    var(--border-color-light)
+  );
+  background: color-mix(in srgb, var(--site-theme-color) 16%, var(--surface-card));
+  color: color-mix(in srgb, var(--site-theme-color) 88%, var(--text-primary));
+}
+
+:deep(.task-site-mark) {
+  border-color: color-mix(
+    in srgb,
+    var(--site-theme-color) 40%,
+    var(--border-color-light)
+  );
+  background: color-mix(in srgb, var(--site-theme-color) 13%, var(--surface-card));
+  color: color-mix(in srgb, var(--site-theme-color) 92%, var(--text-primary));
+}
+
+.queue-task-link :deep(.site-source-tag) {
+  max-width: 120px;
+  flex: 0 1 auto;
+  margin-right: 8px;
+}
+
+.task-detail-hero .book-source-line {
+  margin-top: 5px;
+}
+
+.chapter-reader-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.chapter-reader-kicker :deep(.site-source-tag) {
+  letter-spacing: normal;
 }
 </style>

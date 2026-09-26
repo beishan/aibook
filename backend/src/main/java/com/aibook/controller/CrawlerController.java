@@ -31,12 +31,21 @@ public class CrawlerController {
     private final CrawlerRuleHealthService ruleHealthService;
     private final CrawlerDiscoveryPageService discoveryPageService;
     private final CrawlerSiteConfigurationService siteConfigurationService;
+    private final CrawlerChapterAttemptMetricService chapterAttemptMetricService;
     private final CrawlerChapterRepository chapterRepository;
 
     @GetMapping("/dashboard") public DashboardView dashboard(Authentication auth) { return managementService.dashboard(user(auth)); }
     @GetMapping("/dashboard/statistics") public DashboardStatisticsView dashboardStatistics(
             Authentication auth, @RequestParam(defaultValue = "30") int days) {
         return managementService.dashboardStatistics(user(auth), days);
+    }
+    @GetMapping("/dashboard/chapter-attempts")
+    public ChapterAttemptStatisticsView chapterAttemptStatistics(
+            Authentication auth,
+            @RequestParam(defaultValue = "30") int days,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return chapterAttemptMetricService.statistics(user(auth), days, page, size);
     }
     @GetMapping("/sites") public List<SiteView> sites(Authentication auth) { return managementService.sites(user(auth)); }
     @PostMapping("/sites") @ResponseStatus(HttpStatus.CREATED) public SiteView createSite(Authentication auth, @Valid @RequestBody SitePayload payload) { return managementService.createSite(user(auth), payload); }

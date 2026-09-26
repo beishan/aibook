@@ -34,7 +34,10 @@
         <div v-if="loading" class="reader-state" role="status"><span class="spinner"/><p>正在展开书页…</p></div>
         <div v-else-if="loadError" class="reader-state error-state" role="alert"><b>章节暂时无法打开</b><p>{{ loadError }}</p><button type="button" @click="reload">重新加载</button></div>
         <article v-else :style="articleStyle">
-          <p class="chapter-kicker">{{ book?.author || '未知作者' }} · {{ book?.siteName }}</p>
+          <p class="chapter-kicker">
+            <span>{{ book?.author || '未知作者' }}</span>
+            <SiteSourceTag :name="book?.siteName || '来源网站'" :color="book?.siteThemeColor" />
+          </p>
           <h1>{{ activeChapter?.chapterName }}</h1>
           <div class="chapter-rule"><span>◆</span></div>
           <p v-for="(paragraph,index) in paragraphs" :key="index" class="body-paragraph">{{ paragraph }}</p>
@@ -66,6 +69,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { crawlerApi, type CrawlerBook, type CrawlerChapter } from '@/utils/crawler'
+import SiteSourceTag from '@/components/SiteSourceTag.vue'
 
 type ReaderTheme='paper'|'light'|'night'
 const route=useRoute(),router=useRouter()
@@ -132,4 +136,15 @@ onBeforeUnmount(()=>{document.removeEventListener('keydown',handleKeydown);docum
 .panel-slide-enter-active,.panel-slide-leave-active,.panel-slide-right-enter-active,.panel-slide-right-leave-active{transition:transform .24s ease,opacity .2s ease}.panel-slide-enter-from,.panel-slide-leave-to{transform:translateX(-100%);opacity:0}.panel-slide-right-enter-from,.panel-slide-right-leave-to{transform:translateX(100%);opacity:0}
 @media(max-width:760px){.reader-bar{grid-template-columns:38px minmax(0,1fr) auto;padding:9px 10px;gap:8px}.reader-tools{gap:3px}.icon-action{width:34px;height:34px}.reader-tools .icon-action:last-child{display:none}.trial-badge{display:none}.temporary-notice{justify-content:flex-start;padding-left:14px}.toc-panel,.settings-panel{position:absolute;inset:0 auto 0 0;height:100%;box-sizing:border-box}.settings-panel{right:0;left:auto}.reading-surface article{width:calc(100% - 34px);padding:48px 0 120px}.chapter-navigation{right:10px;bottom:10px;left:10px;width:calc(100% - 20px);grid-template-columns:82px minmax(90px,1fr) 82px;gap:6px}.chapter-navigation button small{display:none}}
 @media(prefers-reduced-motion:reduce){.theme-segment span,.progress-track i,.panel-slide-enter-active,.panel-slide-leave-active,.panel-slide-right-enter-active,.panel-slide-right-leave-active{transition:none}.spinner{animation:none}}
+ .chapter-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.chapter-kicker :deep(.site-source-tag) {
+  letter-spacing: normal;
+  text-transform: none;
+}
 </style>

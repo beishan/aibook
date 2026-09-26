@@ -49,6 +49,7 @@ public class CrawlerTaskService {
     private final CrawlerScanResultRepository scanResultRepository;
     private final CrawlerTaskLogRepository taskLogRepository;
     private final CrawlerManagementService managementService;
+    private final CrawlerChapterAttemptMetricService chapterAttemptMetricService;
     private final OperationLogService operationLogService;
     private final CrawlerExportService exportService;
     private final CrawlerHttpClient httpClient;
@@ -148,7 +149,9 @@ public class CrawlerTaskService {
                 .mapToInt(this::progress).average().orElse(0));
         return new TaskQueueView(queue.getId(), queue.getSite().getId(), queue.getSite().getSiteName(),
                 value(queue.getMaxConcurrentTasks(), 1), value(queue.getTaskIntervalSeconds(), 0),
-                running, waiting, paused, tasks.size(), progress, queue.getLastTaskStartedAt());
+                running, waiting, paused, tasks.size(), progress, queue.getLastTaskStartedAt(),
+                queue.getSite().getThemeColor() == null ? CrawlerSite.DEFAULT_THEME_COLOR
+                        : queue.getSite().getThemeColor());
     }
 
     private void yieldRunningTasksAbove(int limit) {
@@ -1116,14 +1119,20 @@ public class CrawlerTaskService {
                     + "；章节：" + chapter.getChapterName() + "；地址：" + chapter.getChapterUrl());
             Exception requestFailure = null;
             boolean requestSucceeded = false;
+            CrawlerHttpClient.RequestTiming requestTiming = new CrawlerHttpClient.RequestTiming();
+            LocalDateTime attemptStartedAt = LocalDateTime.now();
+            long attemptStartedNanos = System.nanoTime();
+            String attemptOutcome = "FAILED";
             try {
                 CrawlerHttpClient.FetchResult response = recheckCompleted
-                        ? httpClient.get(site, chapter.getChapterUrl(), chapter.getSourceEtag(), chapter.getSourceLastModified())
-                        : httpClient.get(site, chapter.getChapterUrl());
+                        ? httpClient.get(site, chapter.getChapterUrl(), chapter.getSourceEtag(),
+                                chapter.getSourceLastModified(), requestTiming)
+                        : httpClient.get(site, chapter.getChapterUrl(), null, null, requestTiming);
                 requestSucceeded = true;
                 requestFailureGuard.success();
                 CrawlerTask afterFetch = runningTask(task.getId());
                 if (afterFetch == null) {
+                    attemptOutcome = "INTERRUPTED";
                     if (!hadParsedContent) {
                         chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
                         chapterRepository.save(chapter);
@@ -1133,6 +1142,7 @@ public class CrawlerTaskService {
                 task = afterFetch;
                 durationTotal += response.durationMillis(); requests++;
                 if (response.statusCode() == 304) {
+                    attemptOutcome = "UNCHANGED";
                     chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.COMPLETED);
                     chapter.setCrawlTime(LocalDateTime.now()); chapter.setErrorMessage(null); chapterRepository.save(chapter);
                     if (recheckCompleted) refreshUpdateCounts(book, task, ++updateSuccess, updateFailed, pending.size(), durationTotal, requests);
@@ -1146,6 +1156,7 @@ public class CrawlerTaskService {
                 BookCrawlerParser.ParsedContent parsed = parser.parseChapter(response.html(), chapter.getChapterUrl(), rule);
                 ContentMarkerMatch contentMarker = matchedContentMarker(site, parsed.content());
                 if (contentMarker != null && contentMarker.status() == ContentMarkerStatus.PENDING_RELEASE) {
+                    attemptOutcome = "PENDING_RELEASE";
                     if (parsed.title() != null && !parsed.title().isBlank()) {
                         chapter.setChapterName(parsed.title());
                     }
@@ -1185,6 +1196,7 @@ public class CrawlerTaskService {
                 chapter.setWordCount(parsed.content().replaceAll("\\s+", "").length()); chapter.setCrawlTime(LocalDateTime.now()); chapter.setErrorMessage(null);
                 boolean suspected = chapter.getWordCount() < value(rule.getMinChapterLength(), 100);
                 chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.COMPLETED);
+                attemptOutcome = "SUCCESS";
                 if (suspected) {
                     log.warn("[采集任务] 章节内容疑似异常: taskId={}, book={}, progress={}/{} ({}%), chapter={}, chars={}, durationMs={}, preview=\"{}\"",
                             task.getId(), bookName(book), current, task.getTotalCount(), percentage(current, task.getTotalCount()),
@@ -1202,6 +1214,7 @@ public class CrawlerTaskService {
                 }
             } catch (Exception exception) {
                 if (shuttingDown || isStopRequested(task.getId())) {
+                    attemptOutcome = "INTERRUPTED";
                     if (!hadParsedContent) {
                         chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
                         chapter.setErrorMessage(null);
@@ -1218,6 +1231,24 @@ public class CrawlerTaskService {
                 recordCrawlerDetail(task, hadParsedContent ? "章节更新失败（已保留原内容）" : "章节采集失败",
                         "进度：" + current + "/" + task.getTotalCount() + "；章节：" + chapter.getChapterName()
                                 + "；原因：" + chapter.getErrorMessage());
+            } finally {
+                LocalDateTime attemptFinishedAt = LocalDateTime.now();
+                long totalElapsedMillis = Math.max(0,
+                        (System.nanoTime() - attemptStartedNanos) / 1_000_000);
+                long fixedWaitMillis = requestTiming.fixedWaitMillis();
+                long randomWaitMillis = requestTiming.randomWaitMillis();
+                long otherWaitMillis = requestTiming.otherWaitMillis();
+                long collectionMillis = Math.max(0, totalElapsedMillis - fixedWaitMillis
+                        - randomWaitMillis - otherWaitMillis);
+                try {
+                    chapterAttemptMetricService.record(
+                            task.getUser(), task, chapter, attemptStartedAt, attemptFinishedAt,
+                            collectionMillis, fixedWaitMillis, randomWaitMillis,
+                            otherWaitMillis, totalElapsedMillis, attemptOutcome);
+                } catch (Exception metricException) {
+                    log.warn("[采集统计] 保存章节耗时记录失败: taskId={}, chapterId={}",
+                            task.getId(), chapter.getId(), metricException);
+                }
             }
             chapterRepository.save(chapter);
             if (recheckCompleted) {

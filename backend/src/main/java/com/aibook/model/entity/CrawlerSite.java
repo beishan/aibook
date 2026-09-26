@@ -17,6 +17,8 @@ import java.time.Instant;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CrawlerSite {
+    public static final String DEFAULT_THEME_COLOR = "#286D63";
+
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @ManyToOne(fetch = FetchType.EAGER, optional = false)
@@ -24,6 +26,9 @@ public class CrawlerSite {
     private User user;
     @Column(nullable = false, length = 100)
     private String siteName;
+    @Column(name = "theme_color", length = 7)
+    @Builder.Default
+    private String themeColor = DEFAULT_THEME_COLOR;
     @Column(name = "site_code", nullable = false, length = 80)
     private String siteCode;
     @Column(nullable = false, length = 1000)

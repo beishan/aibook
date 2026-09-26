@@ -58,10 +58,15 @@ public class CrawlerHttpClient {
     }
 
     public FetchResult get(CrawlerSite site, String url, String etag, String lastModified) throws Exception {
+        return get(site, url, etag, lastModified, null);
+    }
+
+    public FetchResult get(CrawlerSite site, String url, String etag, String lastModified,
+            RequestTiming timing) throws Exception {
         URI uri = validateSiteUrl(site, url);
         CrawlerRequestSettings settings = requestSettings();
         ensureCircuitClosed(site);
-        enforceRobots(site, uri, settings);
+        enforceRobots(site, uri, settings, timing);
         List<String> proxies = proxyUrls(site);
         int attempts = Math.max(1, settings.retryCount() + 1);
         int proxyIndex = 0;
@@ -71,7 +76,7 @@ public class CrawlerHttpClient {
             try {
                 String proxyUrl = proxies.isEmpty() ? null : proxies.get(proxyIndex % proxies.size());
                 TimedResponse timed = sendFollowingSafeRedirects(
-                        site, uri, etag, lastModified, proxyUrl, settings);
+                        site, uri, etag, lastModified, proxyUrl, settings, timing);
                 NetworkResponse response = timed.response();
                 if (response.statusCode() == 304) {
                     recordSuccess(site);
@@ -127,7 +132,7 @@ public class CrawlerHttpClient {
             } catch (Exception exception) {
                 last = exception;
             }
-            if (attempt + 1 < attempts) Thread.sleep(retryDelay);
+            if (attempt + 1 < attempts) sleepOther(retryDelay, timing);
         }
         if (last instanceof IOException) {
             increaseAdaptiveDelay(site, retryBackoffMillis(Math.max(0, attempts - 1),
@@ -203,30 +208,39 @@ public class CrawlerHttpClient {
 
     private TimedResponse sendFollowingSafeRedirects(CrawlerSite site, URI original, String etag,
             String lastModified, String proxyUrl, CrawlerRequestSettings settings) throws Exception {
+        return sendFollowingSafeRedirects(site, original, etag, lastModified,
+                proxyUrl, settings, null);
+    }
+
+    private TimedResponse sendFollowingSafeRedirects(CrawlerSite site, URI original, String etag,
+            String lastModified, String proxyUrl, CrawlerRequestSettings settings,
+            RequestTiming timing) throws Exception {
         AdjustableConcurrencyGate gate = concurrencyGates.computeIfAbsent(site.getId(),
                 ignored -> new AdjustableConcurrencyGate());
-        gate.acquire(Math.max(1, value(site.getMaxConcurrency(), 1)), site.getUpdatedAt());
+        acquireWithTiming(gate, Math.max(1, value(site.getMaxConcurrency(), 1)),
+                site.getUpdatedAt(), timing);
         try {
             return sendFollowingSafeRedirectsWithinGate(
-                    site, original, etag, lastModified, proxyUrl, settings);
+                    site, original, etag, lastModified, proxyUrl, settings, timing);
         } finally {
             gate.release();
         }
     }
 
     private TimedResponse sendFollowingSafeRedirectsWithinGate(CrawlerSite site, URI original, String etag,
-            String lastModified, String proxyUrl, CrawlerRequestSettings settings) throws Exception {
+            String lastModified, String proxyUrl, CrawlerRequestSettings settings,
+            RequestTiming timing) throws Exception {
         URI current = original;
         long duration = 0;
         for (int redirects = 0; redirects <= settings.maxRedirects(); redirects++) {
             String origin = originKey(current);
             AdjustableConcurrencyGate originGate = originConcurrencyGates.computeIfAbsent(
                     origin, ignored -> new AdjustableConcurrencyGate());
-            originGate.acquire(settings.maxOriginConcurrency(), null);
+            acquireWithTiming(originGate, settings.maxOriginConcurrency(), null, timing);
             NetworkResponse response;
             long started = System.nanoTime();
             try {
-                throttle(site, current);
+                throttle(site, current, timing);
                 HttpRequest.Builder request = HttpRequest.newBuilder(current)
                         .timeout(Duration.ofMillis(settings.timeoutMillis()))
                         .GET().header("Accept", "text/html,application/xhtml+xml")
@@ -349,7 +363,8 @@ public class CrawlerHttpClient {
         persistProtection(site, null, null, null);
     }
 
-    private void enforceRobots(CrawlerSite site, URI target, CrawlerRequestSettings settings) throws Exception {
+    private void enforceRobots(CrawlerSite site, URI target, CrawlerRequestSettings settings,
+            RequestTiming timing) throws Exception {
         if (Boolean.FALSE.equals(site.getRespectRobotsTxt())) return;
         if ("/robots.txt".equals(target.getPath())) return;
         String key = robotsKey(site, target);
@@ -360,7 +375,7 @@ public class CrawlerHttpClient {
             synchronized (lock) {
                 cached = robotsCache.get(key);
                 if (cached == null || !cached.expiresAt().isAfter(now)) {
-                    cached = fetchRobotsPolicy(site, target, settings, now);
+                    cached = fetchRobotsPolicy(site, target, settings, now, timing);
                     robotsCache.put(key, cached);
                 }
             }
@@ -372,13 +387,15 @@ public class CrawlerHttpClient {
     }
 
     private RobotsCacheEntry fetchRobotsPolicy(
-            CrawlerSite site, URI target, CrawlerRequestSettings settings, Instant now) throws Exception {
+            CrawlerSite site, URI target, CrawlerRequestSettings settings, Instant now,
+            RequestTiming timing) throws Exception {
         URI robotsUri = new URI(target.getScheme(), null, target.getHost(), target.getPort(),
                 "/robots.txt", null, null);
         List<String> proxies = proxyUrls(site);
         String proxyUrl = proxies.isEmpty() ? null : proxies.getFirst();
         try {
-            TimedResponse timed = sendFollowingSafeRedirects(site, robotsUri, null, null, proxyUrl, settings);
+            TimedResponse timed = sendFollowingSafeRedirects(
+                    site, robotsUri, null, null, proxyUrl, settings, timing);
             int status = timed.response().statusCode();
             if (status >= 200 && status < 300) {
                 Charset charset = Charset.forName(defaultString(site.getEncoding(), "UTF-8"));
@@ -593,19 +610,54 @@ public class CrawlerHttpClient {
                 8, 5, 4, 60000, 900, 3600, 360, 15, true, "", "", "{}") : settings;
     }
 
-    private void throttle(CrawlerSite site, URI target) throws InterruptedException {
+    private void throttle(CrawlerSite site, URI target, RequestTiming timing) throws InterruptedException {
         long now = System.currentTimeMillis();
         AdaptiveDelay adaptiveDelay = adaptiveDelays.get(site.getId());
-        long interval = value(site.getRequestIntervalMillis(), 1500) +
-                (value(site.getRandomDelayMillis(), 1000) == 0 ? 0
-                        : ThreadLocalRandom.current().nextInt(value(site.getRandomDelayMillis(), 1000) + 1))
-                + (adaptiveDelay == null ? 0 : adaptiveDelay.current());
+        long fixedDelay = Math.max(0, value(site.getRequestIntervalMillis(), 1500));
+        int randomLimit = Math.max(0, value(site.getRandomDelayMillis(), 1000));
+        long randomDelay = randomLimit == 0 ? 0
+                : ThreadLocalRandom.current().nextLong((long) randomLimit + 1);
+        long adaptiveMillis = adaptiveDelay == null ? 0 : adaptiveDelay.current();
+        long interval = fixedDelay + randomDelay + adaptiveMillis;
         long siteSlot = reserveRequestSlot(
                 siteNextRequests.computeIfAbsent(site.getId(), ignored -> new AtomicLong()), now, interval);
         long originSlot = reserveRequestSlot(
                 originNextRequests.computeIfAbsent(originKey(target), ignored -> new AtomicLong()), now, interval);
         long wait = Math.max(siteSlot, originSlot) - now;
-        if (wait > 0) Thread.sleep(wait);
+        if (wait > 0) {
+            long sleepStarted = System.nanoTime();
+            try {
+                Thread.sleep(wait);
+            } finally {
+                long actualMillis = elapsedMillis(sleepStarted);
+                if (timing != null) {
+                    timing.addPacingWait(actualMillis, fixedDelay, randomDelay, adaptiveMillis);
+                }
+            }
+        }
+    }
+
+    private void acquireWithTiming(AdjustableConcurrencyGate gate, int limit,
+            LocalDateTime updatedAt, RequestTiming timing) throws InterruptedException {
+        long started = System.nanoTime();
+        try {
+            gate.acquire(limit, updatedAt);
+        } finally {
+            if (timing != null) timing.addOtherWait(elapsedMillis(started));
+        }
+    }
+
+    private void sleepOther(long requestedMillis, RequestTiming timing) throws InterruptedException {
+        long started = System.nanoTime();
+        try {
+            Thread.sleep(requestedMillis);
+        } finally {
+            if (timing != null) timing.addOtherWait(elapsedMillis(started));
+        }
+    }
+
+    private long elapsedMillis(long startedNanos) {
+        return Math.max(0, (System.nanoTime() - startedNanos) / 1_000_000);
     }
 
     static long reserveRequestSlot(AtomicLong gate, long now, long interval) {
@@ -636,6 +688,47 @@ public class CrawlerHttpClient {
     private int value(Integer value, int fallback) { return value == null ? fallback : value; }
     private String defaultString(String value, String fallback) { return value == null || value.isBlank() ? fallback : value; }
     public record FetchResult(String html, int statusCode, long durationMillis, String etag, String lastModified) { }
+
+    public static final class RequestTiming {
+        private long fixedWaitMillis;
+        private long randomWaitMillis;
+        private long otherWaitMillis;
+
+        private void addPacingWait(long elapsedMillis, long fixed, long random, long adaptive) {
+            long configuredTotal = fixed + random + adaptive;
+            if (configuredTotal <= 0) {
+                addOtherWait(elapsedMillis);
+                return;
+            }
+            long fixedPart = elapsedMillis * fixed / configuredTotal;
+            long randomPart = elapsedMillis * random / configuredTotal;
+            long otherPart = elapsedMillis - fixedPart - randomPart;
+            if (adaptive == 0 && fixed + random > 0) {
+                if (fixed >= random) fixedPart += otherPart;
+                else randomPart += otherPart;
+                otherPart = 0;
+            }
+            fixedWaitMillis += fixedPart;
+            randomWaitMillis += randomPart;
+            otherWaitMillis += otherPart;
+        }
+
+        private void addOtherWait(long elapsedMillis) {
+            otherWaitMillis += Math.max(0, elapsedMillis);
+        }
+
+        public long fixedWaitMillis() {
+            return fixedWaitMillis;
+        }
+
+        public long randomWaitMillis() {
+            return randomWaitMillis;
+        }
+
+        public long otherWaitMillis() {
+            return otherWaitMillis;
+        }
+    }
     public record RobotsTxtSnapshot(
             String url, int statusCode, String content, Instant fetchedAt) { }
     private record TimedResponse(NetworkResponse response, long durationMillis, URI pageUrl) { }

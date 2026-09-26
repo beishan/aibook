@@ -44,7 +44,24 @@ public final class CrawlerDtos {
             @Min(1) @Max(50) Integer maxDiscoveryPages,
             @Pattern(regexp = "(?i)TXT|EPUB|BOTH") String autoImportFormat,
             @Size(max = 50) List<@Valid ContentMarkerPayload> contentMarkers,
-            Boolean respectRobotsTxt) { }
+            Boolean respectRobotsTxt,
+            @Pattern(regexp = "#[0-9a-fA-F]{6}") String themeColor) {
+        public SitePayload(
+                String siteName, String siteCode, String baseUrl, String homeUrl,
+                Boolean enabled, Boolean autoScan, Boolean autoCrawl, Boolean autoUpdate,
+                Boolean autoImportLibrary, Integer requestIntervalMillis,
+                Integer randomDelayMillis, Integer maxConcurrency, String encoding,
+                List<ProxyPayload> proxies, Integer scanIntervalMinutes,
+                Integer updateIntervalMinutes, Integer maxDiscoveryPages,
+                String autoImportFormat, List<ContentMarkerPayload> contentMarkers,
+                Boolean respectRobotsTxt) {
+            this(siteName, siteCode, baseUrl, homeUrl, enabled, autoScan, autoCrawl,
+                    autoUpdate, autoImportLibrary, requestIntervalMillis, randomDelayMillis,
+                    maxConcurrency, encoding, proxies, scanIntervalMinutes,
+                    updateIntervalMinutes, maxDiscoveryPages, autoImportFormat,
+                    contentMarkers, respectRobotsTxt, null);
+        }
+    }
 
     public record SiteView(Long id, String siteName, String siteCode, String baseUrl, String homeUrl,
             boolean enabled, boolean autoScan, boolean autoCrawl, boolean autoUpdate,
@@ -57,7 +74,28 @@ public final class CrawlerDtos {
             LocalDateTime lastScanAt, LocalDateTime lastUpdateAt,
             LocalDateTime lastHealthCheckAt, String healthMessage, LocalDateTime createdAt,
             List<ContentMarkerPayload> contentMarkers, boolean respectRobotsTxt,
-            CrawlerProtectionView protection) { }
+            CrawlerProtectionView protection, String themeColor) {
+        public SiteView(Long id, String siteName, String siteCode, String baseUrl,
+                String homeUrl, boolean enabled, boolean autoScan, boolean autoCrawl,
+                boolean autoUpdate, boolean autoImportLibrary, int requestIntervalMillis,
+                int randomDelayMillis, int maxConcurrency, String encoding, String proxy,
+                List<ProxyPayload> proxies, int scanIntervalMinutes,
+                int updateIntervalMinutes, int maxDiscoveryPages, String autoImportFormat,
+                String status, long bookCount, RulePayload rule, Integer ruleVersion,
+                Long activeRuleId, long ruleCount, LocalDateTime lastScanAt,
+                LocalDateTime lastUpdateAt, LocalDateTime lastHealthCheckAt,
+                String healthMessage, LocalDateTime createdAt,
+                List<ContentMarkerPayload> contentMarkers, boolean respectRobotsTxt,
+                CrawlerProtectionView protection) {
+            this(id, siteName, siteCode, baseUrl, homeUrl, enabled, autoScan, autoCrawl,
+                    autoUpdate, autoImportLibrary, requestIntervalMillis, randomDelayMillis,
+                    maxConcurrency, encoding, proxy, proxies, scanIntervalMinutes,
+                    updateIntervalMinutes, maxDiscoveryPages, autoImportFormat, status,
+                    bookCount, rule, ruleVersion, activeRuleId, ruleCount, lastScanAt,
+                    lastUpdateAt, lastHealthCheckAt, healthMessage, createdAt, contentMarkers,
+                    respectRobotsTxt, protection, com.aibook.model.entity.CrawlerSite.DEFAULT_THEME_COLOR);
+        }
+    }
 
     public record CrawlerProtectionView(boolean coolingDown, Instant blockedUntil, String reason,
             String pageUrl, int consecutiveFailures, long adaptiveDelayMillis) {
@@ -107,7 +145,7 @@ public final class CrawlerDtos {
             int maxConcurrentTasks, int taskIntervalSeconds,
             int runningCount, int waitingCount, int pausedCount,
             int activeTaskCount, int progressPercent,
-            LocalDateTime lastTaskStartedAt) { }
+            LocalDateTime lastTaskStartedAt, String siteThemeColor) { }
     public record BatchBookRequest(@NotEmpty List<@NotNull Long> bookIds) { }
     public record BatchBookStatusRequest(
             @NotEmpty @Size(max = 200) List<@NotNull Long> bookIds,
@@ -149,7 +187,7 @@ public final class CrawlerDtos {
             boolean favorite, List<Long> bookListIds,
             Long libraryBookId, LocalDateTime discoverTime,
             LocalDateTime lastCrawlStartedAt, LocalDateTime lastCrawlTime,
-            LocalDateTime createdAt, boolean suspectedDuplicate) { }
+            LocalDateTime createdAt, boolean suspectedDuplicate, String siteThemeColor) { }
 
     public record ChapterView(Long id, int chapterIndex, String chapterName, String chapterUrl,
             int wordCount, String crawlStatus, String accessStatus, int retryCount,
@@ -170,7 +208,7 @@ public final class CrawlerDtos {
             int totalCount, int successCount, int newBookCount,
             int duplicateCount, int failedCount, int waitingCount, String currentChapter,
             long averageRequestMillis, String errorMessage, LocalDateTime startedAt,
-            LocalDateTime finishedAt, LocalDateTime createdAt) { }
+            LocalDateTime finishedAt, LocalDateTime createdAt, String siteThemeColor) { }
 
     public record ExportView(Long id, String format, long fileSize, String fileHash,
             LocalDateTime createdAt) { }
@@ -192,4 +230,19 @@ public final class CrawlerDtos {
 
     public record DashboardStatisticsView(int days, List<DailyStatisticsView> daily,
             List<SiteContributionView> siteContributions, CrawlerFunnelView funnel) { }
+
+    public record ChapterAttemptDailyView(LocalDate date, long attempts,
+            long collectionMillis, long fixedWaitMillis, long randomWaitMillis,
+            long otherWaitMillis, long totalElapsedMillis) { }
+
+    public record ChapterAttemptView(Long id, String taskId, String siteName,
+            String siteThemeColor,
+            String bookName, String chapterName, Integer chapterIndex,
+            LocalDateTime attemptStartedAt, LocalDateTime attemptFinishedAt,
+            long collectionMillis, long fixedWaitMillis, long randomWaitMillis,
+            long otherWaitMillis, long totalElapsedMillis, String outcome) { }
+
+    public record ChapterAttemptStatisticsView(int days,
+            List<ChapterAttemptDailyView> daily,
+            org.springframework.data.domain.Page<ChapterAttemptView> attempts) { }
 }

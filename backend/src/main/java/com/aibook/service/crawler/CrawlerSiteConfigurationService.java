@@ -37,7 +37,7 @@ public class CrawlerSiteConfigurationService {
                 view.requestIntervalMillis(), view.randomDelayMillis(), view.maxConcurrency(),
                 view.encoding(), view.proxies(), view.scanIntervalMinutes(),
                 view.updateIntervalMinutes(), view.maxDiscoveryPages(), view.autoImportFormat(),
-                view.contentMarkers(), view.respectRobotsTxt());
+                view.contentMarkers(), view.respectRobotsTxt(), view.themeColor());
         List<RuleSaveRequest> rules = managementService.rules(user, siteId).stream()
                 .map(this::rulePayload).toList();
         List<DiscoveryPagePayload> discoveryPages = discoveryPageService.pages(user, siteId).stream()
