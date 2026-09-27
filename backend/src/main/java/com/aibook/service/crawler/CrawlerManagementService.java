@@ -6,9 +6,11 @@ import com.aibook.repository.*;
 import com.aibook.repository.projections.BookTitleMatchProjection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.*;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -483,10 +485,51 @@ public class CrawlerManagementService {
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
         List<CrawlerTask.TaskStatus> failedStatuses = List.of(
                 CrawlerTask.TaskStatus.FAILED, CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
-        Page<CrawlerTask> tasks = taskRepository.findFilteredTasks(
-                user, siteId, parseTaskType(type), parseTaskStatus(status), parseTaskPriority(priority),
-                createdAfter, createdBefore, favoriteOnly, failedOnly, failedStatuses,
-                CrawlerTask.TaskStatus.RUNNING, pageable);
+        CrawlerTask.TaskType taskType = parseTaskType(type);
+        CrawlerTask.TaskStatus taskStatus = parseTaskStatus(status);
+        CrawlerTask.Priority taskPriority = parseTaskPriority(priority);
+        Specification<CrawlerTask> filters = (root, query, criteriaBuilder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(criteriaBuilder.equal(root.get("user"), user));
+            if (siteId != null) {
+                predicates.add(criteriaBuilder.equal(root.get("site").get("id"), siteId));
+            }
+            if (taskType != null) {
+                predicates.add(criteriaBuilder.equal(root.get("type"), taskType));
+            }
+            if (taskStatus != null) {
+                predicates.add(criteriaBuilder.equal(root.get("status"), taskStatus));
+            }
+            if (taskPriority != null) {
+                predicates.add(criteriaBuilder.equal(root.get("priority"), taskPriority));
+            }
+            if (createdAfter != null) {
+                predicates.add(criteriaBuilder.greaterThanOrEqualTo(
+                        root.<LocalDateTime>get("createdAt"), createdAfter));
+            }
+            if (createdBefore != null) {
+                predicates.add(criteriaBuilder.lessThanOrEqualTo(
+                        root.<LocalDateTime>get("createdAt"), createdBefore));
+            }
+            if (favoriteOnly) {
+                predicates.add(criteriaBuilder.isTrue(
+                        root.join("crawlerBook", jakarta.persistence.criteria.JoinType.LEFT)
+                                .<Boolean>get("favorite")));
+            }
+            if (failedOnly) {
+                predicates.add(root.get("status").in(failedStatuses));
+            }
+            if (query.getResultType() != Long.class && query.getResultType() != long.class) {
+                query.orderBy(
+                        criteriaBuilder.asc(criteriaBuilder.<Integer>selectCase()
+                                .when(criteriaBuilder.equal(
+                                        root.get("status"), CrawlerTask.TaskStatus.RUNNING), 0)
+                                .otherwise(1)),
+                        criteriaBuilder.desc(root.get("createdAt")));
+            }
+            return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
+        };
+        Page<CrawlerTask> tasks = taskRepository.findAll(filters, pageable);
         return tasks.map(this::taskView);
     }
 
