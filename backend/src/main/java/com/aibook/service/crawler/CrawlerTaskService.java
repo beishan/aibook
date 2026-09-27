@@ -405,6 +405,31 @@ public class CrawlerTaskService {
         return managementService.taskView(createBookTask(user, book, CrawlerTask.TaskType.BOOK_CONTENT));
     }
 
+    @Transactional
+    public TaskView retryChapter(User user, Long bookId, Long chapterId) {
+        CrawlerBook book = managementService.ownedBook(user, bookId);
+        requireEnabled(book.getSite());
+        requireRule(book.getSite());
+        ensureNoActiveTask(book);
+        CrawlerChapter chapter = chapterRepository.findById(chapterId)
+                .filter(value -> Objects.equals(value.getCrawlerBook().getId(), book.getId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集章节不存在"));
+        if (chapter.getCrawlStatus() != CrawlerChapter.CrawlStatus.FAILED
+                && chapter.getCrawlStatus() != CrawlerChapter.CrawlStatus.CONTENT_SUSPECTED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "只有采集失败的章节可以单独重试");
+        }
+        book.setCrawlStatus(CrawlerBook.CrawlStatus.WAITING);
+        bookRepository.save(book);
+        CrawlerTask task = createAndSubmit(user, book.getSite(), book,
+                CrawlerTask.TaskType.BOOK_CONTENT, chapter.getId());
+        task.setCurrentChapter(chapter.getChapterName());
+        task.setTotalCount(1);
+        task.setWaitingCount(1);
+        task = taskRepository.save(task);
+        recordCrawlerEvent(task, "指定章节重试任务已创建", "章节：" + chapter.getChapterName());
+        return managementService.taskView(task);
+    }
+
     public TaskView scanSite(User user, Long siteId) {
         CrawlerSite site = managementService.ownedSite(user, siteId);
         requireEnabled(site);
@@ -705,8 +730,14 @@ public class CrawlerTaskService {
 
     private CrawlerTask createAndSubmit(
             User user, CrawlerSite site, CrawlerBook book, CrawlerTask.TaskType type) {
+        return createAndSubmit(user, site, book, type, null);
+    }
+
+    private CrawlerTask createAndSubmit(
+            User user, CrawlerSite site, CrawlerBook book, CrawlerTask.TaskType type,
+            Long targetChapterId) {
         CrawlerTask.CrawlerTaskBuilder builder = CrawlerTask.builder().user(user).site(site).crawlerBook(book)
-                .type(type).priority(CrawlerTask.Priority.HIGH);
+                .type(type).priority(CrawlerTask.Priority.HIGH).targetChapterId(targetChapterId);
         if (type == CrawlerTask.TaskType.SITE_SCAN) {
             builder.scanStartUrl(site.getHomeUrl() == null || site.getHomeUrl().isBlank()
                             ? site.getBaseUrl() : site.getHomeUrl())
@@ -1114,12 +1145,16 @@ public class CrawlerTaskService {
             BookCrawlerParser parser, boolean recheckCompleted) throws Exception {
         task = runningTask(task.getId());
         if (task == null) return;
+        Long targetChapterId = task.getTargetChapterId();
         List<CrawlerChapter> pending = chapterRepository.findByCrawlerBookOrderByChapterIndexAsc(book).stream()
                 .filter(ch -> ch.getCrawlStatus() != CrawlerChapter.CrawlStatus.IGNORED
-                        && (recheckCompleted || ch.getCrawlStatus() != CrawlerChapter.CrawlStatus.COMPLETED)).toList();
-        task.setTotalCount((int) chapterRepository.countByCrawlerBook(book));
-        task.setSuccessCount(recheckCompleted ? 0 : (int) chapterRepository.countByCrawlerBookAndCrawlStatus(
-                book, CrawlerChapter.CrawlStatus.COMPLETED));
+                        && (recheckCompleted || ch.getCrawlStatus() != CrawlerChapter.CrawlStatus.COMPLETED)
+                        && (targetChapterId == null || Objects.equals(ch.getId(), targetChapterId))).toList();
+        task.setTotalCount(targetChapterId == null
+                ? (int) chapterRepository.countByCrawlerBook(book) : pending.size());
+        task.setSuccessCount(targetChapterId != null || recheckCompleted ? 0
+                : (int) chapterRepository.countByCrawlerBookAndCrawlStatus(
+                        book, CrawlerChapter.CrawlStatus.COMPLETED));
         task.setFailedCount(0);
         task.setWaitingCount(pending.size());
         task = saveProgressIfRunning(task);
@@ -1147,6 +1182,7 @@ public class CrawlerTaskService {
             task = saveProgressIfRunning(task);
             if (task == null) return;
             boolean hadParsedContent = hasParsedContent(chapter);
+            chapter.setErrorMessage(null);
             if (!hadParsedContent) {
                 chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.CRAWLING);
                 chapterRepository.save(chapter);
@@ -1186,7 +1222,8 @@ public class CrawlerTaskService {
                     chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.COMPLETED);
                     chapter.setCrawlTime(LocalDateTime.now()); chapter.setErrorMessage(null); chapterRepository.save(chapter);
                     if (recheckCompleted) refreshUpdateCounts(book, task, ++updateSuccess, updateFailed, pending.size(), durationTotal, requests);
-                    else refreshCounts(book, task, durationTotal, requests);
+                    else refreshContentCounts(book, task, targetChapterId, chapter,
+                            durationTotal, requests);
                     log.info("[采集任务] 章节未变化: taskId={}, book={}, progress={}/{} ({}%), chapter={}, httpStatus=304",
                             task.getId(), bookName(book), finishedCount(task), task.getTotalCount(), progress(task), chapter.getChapterName());
                     recordCrawlerDetail(task, "章节未变化", progressDetails(task)
@@ -1219,7 +1256,8 @@ public class CrawlerTaskService {
                         refreshUpdateCounts(book, task, ++updateSuccess, updateFailed,
                                 pending.size(), durationTotal, requests);
                     } else {
-                        refreshCounts(book, task, durationTotal, requests);
+                        refreshContentCounts(book, task, targetChapterId, chapter,
+                                durationTotal, requests);
                     }
                     continue;
                 }
@@ -1264,7 +1302,10 @@ public class CrawlerTaskService {
                 }
                 if (!requestSucceeded) requestFailure = exception;
                 chapter.setRetryCount(value(chapter.getRetryCount(), 0) + 1); chapter.setErrorMessage(userMessage(exception));
-                chapter.setCrawlStatus(hadParsedContent ? CrawlerChapter.CrawlStatus.COMPLETED : CrawlerChapter.CrawlStatus.FAILED);
+                chapter.setCrawlStatus(targetChapterId != null
+                        ? CrawlerChapter.CrawlStatus.FAILED
+                        : hadParsedContent ? CrawlerChapter.CrawlStatus.COMPLETED
+                        : CrawlerChapter.CrawlStatus.FAILED);
                 log.warn("[采集任务] 章节采集失败: taskId={}, book={}, progress={}/{} ({}%), chapter={}, reason={}",
                         task.getId(), bookName(book), current, task.getTotalCount(), percentage(current, task.getTotalCount()),
                         chapter.getChapterName(), chapter.getErrorMessage());
@@ -1294,15 +1335,24 @@ public class CrawlerTaskService {
             if (recheckCompleted) {
                 if (chapter.getErrorMessage() == null) updateSuccess++; else updateFailed++;
                 refreshUpdateCounts(book, task, updateSuccess, updateFailed, pending.size(), durationTotal, requests);
-            } else refreshCounts(book, task, durationTotal, requests);
+            } else refreshContentCounts(book, task, targetChapterId, chapter,
+                    durationTotal, requests);
             if (requestFailure != null) requestFailureGuard.failure(requestFailure);
         }
-        if (!recheckCompleted) refreshCounts(book, task, durationTotal, requests);
+        if (!recheckCompleted) {
+            CrawlerChapter targetChapter = targetChapterId == null || pending.isEmpty()
+                    ? null : pending.get(0);
+            refreshContentCounts(book, task, targetChapterId, targetChapter,
+                    durationTotal, requests);
+        }
         task = runningTask(task.getId());
         if (task == null) return;
         int contentFailed = book.getFailedChapterCount();
-        int taskFailed = recheckCompleted ? task.getFailedCount() : contentFailed;
-        task.setStatus(taskFailed == 0 ? CrawlerTask.TaskStatus.SUCCESS : CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
+        int taskFailed = targetChapterId != null || recheckCompleted
+                ? task.getFailedCount() : contentFailed;
+        task.setStatus(taskFailed == 0 ? CrawlerTask.TaskStatus.SUCCESS
+                : targetChapterId != null ? CrawlerTask.TaskStatus.FAILED
+                : CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
         task.setFinishedAt(LocalDateTime.now()); task.setCurrentChapter(null);
         task = finishIfRunning(task);
         if (task == null) return;
@@ -1487,6 +1537,27 @@ public class CrawlerTaskService {
         task.setAverageRequestMillis(requests == 0 ? 0 : totalDuration / requests); saveProgressIfRunning(task);
     }
 
+    private void refreshContentCounts(CrawlerBook book, CrawlerTask task, Long targetChapterId,
+            CrawlerChapter targetChapter, long totalDuration, int requests) {
+        if (targetChapterId == null) {
+            refreshCounts(book, task, totalDuration, requests);
+            return;
+        }
+        refreshBookCounts(book);
+        CrawlerChapter.CrawlStatus status = targetChapter == null
+                ? CrawlerChapter.CrawlStatus.NOT_CRAWLED : targetChapter.getCrawlStatus();
+        boolean succeeded = status == CrawlerChapter.CrawlStatus.COMPLETED
+                || status == CrawlerChapter.CrawlStatus.PENDING_RELEASE;
+        boolean failed = status == CrawlerChapter.CrawlStatus.FAILED
+                || status == CrawlerChapter.CrawlStatus.CONTENT_SUSPECTED;
+        task.setTotalCount(1);
+        task.setSuccessCount(succeeded ? 1 : 0);
+        task.setFailedCount(failed ? 1 : 0);
+        task.setWaitingCount(succeeded || failed ? 0 : 1);
+        task.setAverageRequestMillis(requests == 0 ? 0 : totalDuration / requests);
+        saveProgressIfRunning(task);
+    }
+
     private void refreshUpdateCounts(CrawlerBook book, CrawlerTask task, int success, int failed,
             int total, long totalDuration, int requests) {
         refreshBookCounts(book);
@@ -1523,8 +1594,16 @@ public class CrawlerTaskService {
                 task.setFinishedAt(LocalDateTime.now()); taskRepository.save(task);
                 if (task.getCrawlerBook() != null
                         && task.getType() != CrawlerTask.TaskType.BOOK_METADATA) {
-                    task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.FAILED);
-                    bookRepository.save(task.getCrawlerBook());
+                    CrawlerBook book = task.getCrawlerBook();
+                    if (task.getTargetChapterId() != null) {
+                        refreshBookCounts(book);
+                        book.setCrawlStatus(book.getFailedChapterCount() == 0
+                                ? CrawlerBook.CrawlStatus.COMPLETED
+                                : CrawlerBook.CrawlStatus.PARTIAL_SUCCESS);
+                    } else {
+                        book.setCrawlStatus(CrawlerBook.CrawlStatus.FAILED);
+                    }
+                    bookRepository.save(book);
                 }
                 recordCrawlerEvent(task, "采集任务失败", "原因：" + message);
             });

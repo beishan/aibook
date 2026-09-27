@@ -128,6 +128,7 @@ export const crawlerApi = {
   chapter: (bookId:number, chapterId:number) => api.get<{title:string;url:string;content:string;errorMessage:string}>(`/api/crawler/books/${bookId}/chapters/${chapterId}`).then(r => r.data),
   continueBook: (bookId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/continue`).then(r => r.data),
   retryFailures: (bookId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/retry-failures`).then(r => r.data),
+  retryChapter: (bookId:number, chapterId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/chapters/${chapterId}/retry`).then(r => r.data),
   checkUpdates: (bookId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/check-updates`).then(r => r.data),
   refreshMetadata: (bookId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/refresh-metadata`).then(r => r.data),
   setBookStatus: (bookId:number, status:string, autoUpdateEnabled:boolean) => api.put<CrawlerBook>(`/api/crawler/books/${bookId}/crawl-status`, {status,autoUpdateEnabled}).then(r => r.data),

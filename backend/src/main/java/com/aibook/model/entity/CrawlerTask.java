@@ -16,6 +16,7 @@ public class CrawlerTask {
     @ManyToOne(fetch = FetchType.EAGER, optional = false) @JoinColumn(name = "user_id", nullable = false) private User user;
     @ManyToOne(fetch = FetchType.EAGER, optional = false) @JoinColumn(name = "site_id", nullable = false) private CrawlerSite site;
     @ManyToOne(fetch = FetchType.EAGER) @JoinColumn(name = "crawler_book_id") private CrawlerBook crawlerBook;
+    private Long targetChapterId;
     private Long discoveryPageId;
     @Column(length = 100) private String discoveryPageName;
     @Column(length = 1000) private String scanStartUrl;

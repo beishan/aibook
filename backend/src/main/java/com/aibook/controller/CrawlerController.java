@@ -120,6 +120,12 @@ public class CrawlerController {
     }
     @PostMapping("/books/{id}/continue") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView continueBook(Authentication auth, @PathVariable Long id) { return taskService.continueBook(user(auth), id); }
     @PostMapping("/books/{id}/retry-failures") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView retryFailures(Authentication auth, @PathVariable Long id) { return taskService.retryFailures(user(auth), id); }
+    @PostMapping("/books/{bookId}/chapters/{chapterId}/retry")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public TaskView retryChapter(Authentication auth, @PathVariable Long bookId,
+            @PathVariable Long chapterId) {
+        return taskService.retryChapter(user(auth), bookId, chapterId);
+    }
     @PostMapping("/books/{id}/check-updates") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView checkUpdates(Authentication auth, @PathVariable Long id) { return taskService.checkUpdates(user(auth), id); }
     @PostMapping("/books/{id}/refresh-metadata") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView refreshMetadata(Authentication auth, @PathVariable Long id) { return taskService.refreshMetadata(user(auth), id); }
     @PutMapping("/books/{id}/crawl-status") public BookView crawlStatus(Authentication auth, @PathVariable Long id, @Valid @RequestBody BookCrawlStatusRequest request) { return taskService.setBookStatus(user(auth), id, CrawlerBook.CrawlStatus.valueOf(request.status()), request.autoUpdateEnabled()); }

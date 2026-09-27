@@ -944,7 +944,47 @@
         <div class="book-detail-tabs" role="tablist" aria-label="书籍采集详情" @keydown="handleBookDetailTabKey"><span class="book-detail-tab-indicator" :style="{transform:`translateX(${bookDetailTabIndex*100}%)`}"/><button v-for="item in bookDetailTabs" :key="item.value" type="button" role="tab" :aria-selected="bookDetailTab===item.value" :tabindex="bookDetailTab===item.value?0:-1" :class="{active:bookDetailTab===item.value}" @click="bookDetailTab=item.value"><span>{{ item.label }}</span><b>{{ item.value==='chapters'?chapterTotal:crawlerLogs.length }}</b></button></div>
         <section v-show="bookDetailTab==='chapters'" class="drawer-detail-panel chapter-progress-panel" role="tabpanel">
           <div class="chapter-list-heading"><div><p class="eyebrow">CHAPTER INDEX</p><h3>章节进度</h3></div><div class="chapter-heading-tools"><label class="chapter-follow" :class="{active:followCurrentChapter}"><strong>跟随采集</strong><el-switch :model-value="followCurrentChapter" aria-label="自动跟随当前采集章节" @change="setFollowCurrentChapter(Boolean($event))" /></label><div class="chapter-sort" :class="{disabled:followCurrentChapter}" role="tablist" aria-label="章节排序方式" @keydown="handleChapterSortKey"><span class="chapter-sort-indicator" :style="{transform:`translateX(${chapterSortIndex*100}%)`}"/><button v-for="item in chapterSortOptions" :key="item.value" type="button" role="tab" :disabled="followCurrentChapter" :aria-selected="chapterSort===item.value" :tabindex="chapterSort===item.value?0:-1" :class="{active:chapterSort===item.value}" @click="changeChapterSort(item.value)">{{ item.label }}</button></div></div></div>
-          <el-table v-loading="chapterLoading" :data="chapters" height="100%" class="chapters-table" :row-class-name="chapterRowClassName" @row-click="openChapter"><el-table-column prop="chapterIndex" label="#" width="65"/><el-table-column label="章节" min-width="220"><template #default="{row}"><div class="chapter-name-cell"><span>{{ row.chapterName }}</span><em v-if="row.id===currentCrawlingChapter?.id"><i/>当前采集</em></div></template></el-table-column><el-table-column prop="wordCount" label="字数" width="90"/><el-table-column label="状态" width="120"><template #default="{row}"><el-tag :type="statusType(row.crawlStatus)">{{ statusLabel(row.crawlStatus) }}</el-tag></template></el-table-column></el-table>
+          <el-table
+            v-loading="chapterLoading"
+            :data="chapters"
+            height="100%"
+            class="chapters-table"
+            :row-class-name="chapterRowClassName"
+            @row-click="openChapter"
+          >
+            <el-table-column prop="chapterIndex" label="#" width="65" />
+            <el-table-column label="章节" min-width="220">
+              <template #default="{ row }">
+                <div class="chapter-name-cell">
+                  <span>{{ row.chapterName }}</span>
+                  <em v-if="row.id === currentCrawlingChapter?.id"><i />当前采集</em>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="wordCount" label="字数" width="90" />
+            <el-table-column label="状态" width="120">
+              <template #default="{ row }">
+                <el-tag :type="statusType(row.crawlStatus)">
+                  {{ statusLabel(row.crawlStatus) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="118" fixed="right">
+              <template #default="{ row }">
+                <el-button
+                  v-if="['FAILED', 'CONTENT_SUSPECTED'].includes(row.crawlStatus)"
+                  size="small"
+                  type="primary"
+                  plain
+                  :loading="retryingChapterId === row.id"
+                  :disabled="isBookTaskActive(selectedBook) || Boolean(retryingChapterId)"
+                  @click.stop="retryChapter(row)"
+                >
+                  重新采集
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
           <div v-if="chapterTotal" class="chapter-pagination"><span>第 {{ chapterPage }} / {{ Math.max(1,Math.ceil(chapterTotal/chapterPageSize)) }} 页 · 共 {{ chapterTotal }} 章</span><el-pagination v-model:current-page="chapterPage" :page-size="chapterPageSize" :page-sizes="[20,50,100]" :total="chapterTotal" layout="sizes, prev, pager, next" background small @current-change="loadChapterPage" @size-change="handleChapterSizeChange" /></div>
         </section>
         <section v-show="bookDetailTab==='logs'" class="drawer-detail-panel realtime-log-panel" role="tabpanel">
@@ -1154,7 +1194,7 @@ const discoveryMetadataRefreshing=ref(false)
 const bookLoading=ref(false), bookPage=ref(1), bookPageSize=ref(20), bookTotal=ref(0)
 const bookTableRef=ref<InstanceType<typeof ElTable>>()
 const bookSiteId=ref<number>(), bookCrawlStatus=ref(''), bookImportStatus=ref(''), bookFavoriteOnly=ref(false), bookSort=ref('CREATED_DESC')
-const chapterLoading=ref(false), chapterPage=ref(1), chapterTotal=ref(0)
+const chapterLoading=ref(false), chapterPage=ref(1), chapterTotal=ref(0), retryingChapterId=ref<number>()
 const currentCrawlingChapter=ref<CrawlerChapter>()
 const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=ref(0)
 const taskStatusFilter=ref(''), taskTypeFilter=ref(''), taskFavoriteOnly=ref(false)
@@ -1179,7 +1219,7 @@ const queueTabTasks = ref<CrawlerTask[]>([])
 const queueTabTaskTotal = ref(0)
 const queueTabTaskPage = ref(1)
 const queueTabTaskPageSize = ref(20)
-const queueTabTaskSiteId = ref<number>()
+const queueTaskSiteId = ref<number>()
 const queueTaskStatus = ref('')
 const queueTaskType = ref('')
 const queueTaskPriority = ref('')
@@ -1957,6 +1997,25 @@ async function openBook(book:CrawlerBook){selectedBook.value=book;chapters.value
 function startTrial(book:CrawlerBook){if(!book.crawledChapterCount)return;void router.push({name:'CrawlerTrialReader',params:{id:book.id}})}
 async function continueCrawl(book:CrawlerBook){if(isBookTaskActive(book))return;setBookTaskSubmitting(book.id,true);try{const task=await crawlerApi.continueBook(book.id);currentCrawlerTasks.value=[task,...currentCrawlerTasks.value.filter(item=>item.id!==task.id)];message.success('续采任务已创建');await refresh()}finally{setBookTaskSubmitting(book.id,false)}}
 async function retryFailures(book:CrawlerBook){await crawlerApi.retryFailures(book.id);message.success('失败章节已进入重试队列');await refresh()}
+async function retryChapter(chapter: CrawlerChapter) {
+  const book = selectedBook.value
+  if (!book || isBookTaskActive(book)) return
+
+  retryingChapterId.value = chapter.id
+  try {
+    const task = await crawlerApi.retryChapter(book.id, chapter.id)
+    currentCrawlerTasks.value = [
+      task,
+      ...currentCrawlerTasks.value.filter(item => item.id !== task.id),
+    ]
+    message.success(`“${chapter.chapterName}”的重试任务已创建`)
+    await syncOpenBookProgress({ silent: true })
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '指定章节重试任务创建失败')
+  } finally {
+    retryingChapterId.value = undefined
+  }
+}
 async function checkUpdates(book:CrawlerBook){await crawlerApi.checkUpdates(book.id);message.success('增量更新检查已创建');await refresh()}
 async function refreshBookMetadata(book:CrawlerBook){if(isBookTaskActive(book))return;setBookTaskSubmitting(book.id,true);try{const task=await crawlerApi.refreshMetadata(book.id);currentCrawlerTasks.value=[task,...currentCrawlerTasks.value.filter(item=>item.id!==task.id)];message.success('分类和标签刷新任务已创建');await refresh()}catch(error:any){message.error(error.response?.data?.message||'分类和标签刷新任务创建失败')}finally{setBookTaskSubmitting(book.id,false)}}
 function openStatusEditor(book:CrawlerBook){statusBook.value=book;manualStatus.value=manualStatusOptions.some(item=>item.value===book.crawlStatus)?book.crawlStatus:'COMPLETED';statusDialog.value=true}
