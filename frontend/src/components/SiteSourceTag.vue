@@ -17,11 +17,11 @@ const props = withDefaults(defineProps<{
   name:string
   color?:string
 }>(), {
-  color: '#286D63',
+  color: '#009688',
 })
 
 const safeThemeColor = computed(() =>
-  /^#[0-9a-fA-F]{6}$/.test(props.color || '') ? props.color : '#286D63',
+  /^#[0-9a-fA-F]{6}$/.test(props.color || '') ? props.color : '#009688',
 )
 </script>
 

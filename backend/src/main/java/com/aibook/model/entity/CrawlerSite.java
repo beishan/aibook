@@ -20,7 +20,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CrawlerSite {
-    public static final String DEFAULT_THEME_COLOR = "#286D63";
+    public static final String DEFAULT_THEME_COLOR = "#009688";
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
