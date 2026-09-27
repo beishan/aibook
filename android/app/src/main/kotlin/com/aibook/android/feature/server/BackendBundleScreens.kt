@@ -121,9 +121,29 @@ fun BackendCollectionScreen(
     }
     val formatFilter = BackendFormatFilter.entries.getOrElse(formatFilterIndex) { BackendFormatFilter.ALL }
     val visibleBooks = filterBackendBooks(state.books, query, formatFilter, shelfFilter, state.shelfBookIds)
+    val hasActiveFilter = query.isNotBlank() || formatFilter != BackendFormatFilter.ALL || shelfFilter != 0
+    val shouldPrefetchFilteredResults = section == ServerLibrarySection.ALL &&
+        hasActiveFilter && visibleBooks.size < 12 && state.hasMore && !state.isLoading &&
+        !state.isLoadingMore && state.loadMoreErrorMessage == null
+    LaunchedEffect(
+        section,
+        query,
+        formatFilter,
+        shelfFilter,
+        state.books.size,
+        state.hasMore,
+        state.isLoading,
+        state.isLoadingMore,
+        state.loadMoreErrorMessage
+    ) {
+        if (shouldPrefetchFilteredResults) viewModel.loadNextPage()
+    }
     val collectionState = when {
         state.isLoading -> BookCollectionState.Loading
         state.errorMessage != null -> BookCollectionState.Error(state.errorMessage.orEmpty())
+        visibleBooks.isEmpty() && state.isLoadingMore -> BookCollectionState.Loading
+        visibleBooks.isEmpty() && section == ServerLibrarySection.ALL && state.loadMoreErrorMessage != null ->
+            BookCollectionState.Error("继续加载失败：${state.loadMoreErrorMessage}")
         visibleBooks.isEmpty() -> BookCollectionState.Empty(
             if (query.isNotBlank() || formatFilter != BackendFormatFilter.ALL || shelfFilter != 0) "没有匹配的云端书籍"
             else if (section == ServerLibrarySection.FAVORITES) "暂未收藏书籍"
@@ -196,7 +216,15 @@ fun BackendCollectionScreen(
                 columns = columns,
                 listMode = showList,
                 onBookClick = { it.id.toLongOrNull()?.let(onBookClick) },
-                onRetry = viewModel::refresh
+                onRetry = if (section == ServerLibrarySection.ALL && state.hasMore) {
+                    viewModel::loadNextPage
+                } else {
+                    viewModel::refresh
+                },
+                onLoadMore = if (section == ServerLibrarySection.ALL) viewModel::loadNextPage else null,
+                hasMore = state.hasMore,
+                isLoadingMore = state.isLoadingMore,
+                loadMoreErrorMessage = state.loadMoreErrorMessage
             )
         }
     }

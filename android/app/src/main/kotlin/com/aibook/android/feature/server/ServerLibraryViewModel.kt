@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aibook.android.core.data.repository.ServerRepository
 import com.aibook.android.core.network.api.dto.BookDTO
 import com.aibook.android.core.network.api.dto.BookListDTO
+import com.aibook.android.core.network.api.dto.BookPage
 import com.aibook.android.di.ServiceLocator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 
 enum class ServerLibrarySection(val label: String) {
     ALL("书籍列表"),
@@ -34,7 +36,11 @@ data class ServerLibraryUiState(
     val selectedListId: Long? = null,
     val isLoggedIn: Boolean = false,
     val isLoading: Boolean = true,
+    val isLoadingMore: Boolean = false,
+    val currentPage: Int = 0,
+    val hasMore: Boolean = false,
     val errorMessage: String? = null,
+    val loadMoreErrorMessage: String? = null,
     val actionMessage: String? = null
 )
 
@@ -43,6 +49,8 @@ class ServerLibraryViewModel(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ServerLibraryUiState())
     val uiState: StateFlow<ServerLibraryUiState> = _uiState.asStateFlow()
+    private val paginationMutex = Mutex()
+    private var loadGeneration = 0
 
     private fun verifyLogin(onLoggedIn: () -> Unit) {
         if (CloudMockData.enabled) {
@@ -167,32 +175,74 @@ class ServerLibraryViewModel(
             }
             return
         }
+        val section = _uiState.value.section
+        val generation = ++loadGeneration
+        _uiState.update {
+            it.copy(
+                books = emptyList(),
+                shelfBookIds = if (section == ServerLibrarySection.ALL) emptySet() else it.shelfBookIds,
+                currentPage = 0,
+                hasMore = false,
+                isLoading = true,
+                isLoadingMore = false,
+                errorMessage = null,
+                loadMoreErrorMessage = null
+            )
+        }
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val shelfResult = serverRepository.getShelf()
-            val shelfIds = shelfResult.getOrNull()
+            val shelfResult = if (section == ServerLibrarySection.ALL) null else serverRepository.getShelf()
+            if (_uiState.value.section != section || loadGeneration != generation) return@launch
+            val shelfIds = shelfResult?.getOrNull()
                 ?.let { shelf -> shelf.ungroupedBooks + shelf.groups.flatMap { it.books } }
                 ?.mapNotNull { it.id }
                 ?.toSet()
                 .orEmpty()
 
-            when (_uiState.value.section) {
-                ServerLibrarySection.ALL -> loadBooks(
-                    serverRepository.getAllBooks(),
-                    shelfIds
+            when (section) {
+                ServerLibrarySection.ALL -> loadRecentPage(
+                    serverRepository.getBooks(page = 0, size = RECENT_PAGE_SIZE),
+                    requestedPage = 0,
+                    append = false,
+                    generation = generation
                 )
                 ServerLibrarySection.FAVORITES -> loadBooks(
                     serverRepository.getAllFavoriteBooks(),
                     shelfIds
                 )
                 ServerLibrarySection.SHELF -> loadBooks(
-                    shelfResult.map { shelf ->
+                    checkNotNull(shelfResult).map { shelf ->
                         (shelf.ungroupedBooks + shelf.groups.flatMap { it.books })
                             .distinctBy { it.id }
                     },
                     shelfIds
                 )
                 ServerLibrarySection.LISTS -> loadBookLists(shelfIds)
+            }
+        }
+    }
+
+    fun loadNextPage() {
+        viewModelScope.launch {
+            if (!paginationMutex.tryLock()) return@launch
+            try {
+                val state = _uiState.value
+                if (state.section != ServerLibrarySection.ALL || state.isLoading ||
+                    state.isLoadingMore || !state.hasMore
+                ) {
+                    return@launch
+                }
+
+                val nextPage = state.currentPage + 1
+                val generation = loadGeneration
+                _uiState.update { it.copy(isLoadingMore = true, loadMoreErrorMessage = null) }
+                loadRecentPage(
+                    serverRepository.getBooks(page = nextPage, size = RECENT_PAGE_SIZE),
+                    requestedPage = nextPage,
+                    append = true,
+                    generation = generation
+                )
+            } finally {
+                paginationMutex.unlock()
             }
         }
     }
@@ -270,6 +320,46 @@ class ServerLibraryViewModel(
         }
     }
 
+    private fun loadRecentPage(
+        result: Result<BookPage>,
+        requestedPage: Int,
+        append: Boolean,
+        generation: Int
+    ) {
+        result.onSuccess { page ->
+            _uiState.update { state ->
+                if (state.section != ServerLibrarySection.ALL || loadGeneration != generation) {
+                    return@update state
+                }
+                val books = if (append) {
+                    (state.books + page.content).distinctBy { Triple(it.id, it.title, it.author) }
+                } else {
+                    page.content
+                }
+                state.copy(
+                    books = books,
+                    currentPage = requestedPage,
+                    hasMore = !page.last && page.content.isNotEmpty(),
+                    isLoading = false,
+                    isLoadingMore = false,
+                    errorMessage = null,
+                    loadMoreErrorMessage = null
+                )
+            }
+        }.onFailure { error ->
+            _uiState.update { state ->
+                if (state.section != ServerLibrarySection.ALL || loadGeneration != generation) {
+                    return@update state
+                }
+                if (append) {
+                    state.copy(isLoadingMore = false, loadMoreErrorMessage = error.readableMessage())
+                } else {
+                    state.copy(isLoading = false, errorMessage = error.readableMessage())
+                }
+            }
+        }
+    }
+
     private suspend fun loadBookLists(shelfIds: Set<Long>) {
         serverRepository.getBookLists().onSuccess { lists ->
             val selectedId = _uiState.value.selectedListId?.takeIf { id -> lists.any { it.id == id } }
@@ -306,6 +396,8 @@ class ServerLibraryViewModel(
     private fun Throwable.readableMessage(): String = message ?: "服务暂时不可用"
 
     companion object {
+        private const val RECENT_PAGE_SIZE = 24
+
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as Application

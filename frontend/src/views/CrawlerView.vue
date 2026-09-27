@@ -828,12 +828,30 @@
             <span><small>等待 / 暂停</small><strong>{{ totalQueueWaiting }} / {{ totalQueuePaused }}</strong></span>
             <span><small>队列总进度</small><strong>{{ totalQueueProgress }}%</strong></span>
           </div>
-          <div v-if="taskQueues.length" class="site-queue-list">
-            <article v-for="queue in taskQueues" :key="queue.id" class="site-queue-card">
-              <header><div><p class="eyebrow"><SiteSourceTag :name="queue.siteName" :color="queue.siteThemeColor" /></p><strong>{{ queue.runningCount }} / {{ queue.maxConcurrentTasks }} 个任务运行中</strong></div><el-tag effect="plain">{{ queue.progressPercent }}%</el-tag></header>
-              <el-progress :percentage="queue.progressPercent" :stroke-width="7" :show-text="false" />
-              <div class="site-queue-stats"><span>等待 {{ queue.waitingCount }}</span><span>暂停 {{ queue.pausedCount }}</span><span>间隔 {{ queue.taskIntervalSeconds }} 秒</span></div>
-              <footer><el-button text @click="openQueueSettings(queue)">配置</el-button><el-button type="primary" plain @click="openQueueDetails(queue)">查看任务</el-button></footer>
+          <div v-if="taskQueues.length" class="site-queue-list" role="list">
+            <article
+              v-for="queue in taskQueues"
+              :key="queue.id"
+              class="site-queue-row"
+              role="listitem"
+            >
+              <div class="site-queue-identity">
+                <SiteSourceTag :name="queue.siteName" :color="queue.siteThemeColor" />
+                <small>运行中 {{ queue.runningCount }} / {{ queue.maxConcurrentTasks }}</small>
+              </div>
+              <div class="site-queue-metrics">
+                <span><small>等待</small><strong>{{ queue.waitingCount }}</strong></span>
+                <span><small>暂停</small><strong>{{ queue.pausedCount }}</strong></span>
+                <span><small>任务间隔</small><strong>{{ queue.taskIntervalSeconds }} 秒</strong></span>
+              </div>
+              <div class="site-queue-progress">
+                <div><small>队列进度</small><strong>{{ queue.progressPercent }}%</strong></div>
+                <el-progress :percentage="queue.progressPercent" :stroke-width="7" :show-text="false" />
+              </div>
+              <div class="site-queue-actions">
+                <el-button text @click="openQueueSettings(queue)">配置</el-button>
+                <el-button type="primary" plain @click="openQueueDetails(queue)">查看任务</el-button>
+              </div>
             </article>
           </div>
           <el-empty v-else description="还没有任务队列，请先添加采集网站" />
@@ -2293,58 +2311,91 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 
 .site-queue-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
   max-height: 56vh;
   overflow: auto;
-  padding: 2px;
-}
-
-.site-queue-card {
-  display: grid;
-  gap: 14px;
-  padding: 16px;
   border: 1px solid var(--border-color-light);
-  border-radius: 16px;
+  border-radius: 14px;
   background: var(--surface-card);
 }
 
-.site-queue-card header,
-.site-queue-card footer {
-  display: flex;
+.site-queue-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.1fr) minmax(245px, 1.6fr) minmax(130px, 0.9fr) auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border-color-light);
+  transition: background-color 160ms ease;
+}
+
+.site-queue-row:last-child {
+  border-bottom: 0;
+}
+
+.site-queue-row:hover {
+  background: var(--surface-elevated);
+}
+
+.site-queue-identity {
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+  gap: 6px;
+}
+
+.site-queue-identity small,
+.site-queue-metrics small,
+.site-queue-progress small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.site-queue-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
-.site-queue-card header > div {
+.site-queue-metrics span {
   display: grid;
-  gap: 5px;
+  gap: 4px;
 }
 
-.site-queue-card header strong {
+.site-queue-metrics strong {
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
-.site-queue-card .eyebrow {
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: 10px;
+.site-queue-progress {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
 }
 
-.site-queue-stats {
+.site-queue-progress > div {
   display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  color: var(--text-secondary);
-  font-size: 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.site-queue-card footer {
+.site-queue-progress strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.site-queue-actions {
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-color-light);
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.site-queue-actions :deep(.el-button) {
+  margin-left: 0;
 }
 
 .queue-site-select {
@@ -2363,8 +2414,19 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 }
 
 @media (max-width: 720px) {
-  .site-queue-list {
-    grid-template-columns: 1fr;
+  .site-queue-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px 16px;
+  }
+
+  .site-queue-metrics,
+  .site-queue-progress {
+    grid-column: 1 / -1;
+  }
+
+  .site-queue-actions {
+    grid-column: 2;
+    grid-row: 1;
   }
 
   .queue-overview-summary {
@@ -2383,6 +2445,25 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 @media (max-width: 480px) {
   .queue-overview-summary {
     grid-template-columns: 1fr;
+  }
+
+  .site-queue-row {
+    padding: 12px;
+  }
+
+  .site-queue-metrics {
+    gap: 8px;
+  }
+
+  .site-queue-actions :deep(.el-button) {
+    padding-right: 7px;
+    padding-left: 7px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-queue-row {
+    transition: none;
   }
 }
 .queued-order-note{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:11px 13px;border:1px solid var(--primary-alpha-20);border-radius:13px;background:var(--primary-alpha-10)}.queue-drag-mark{display:grid;flex:0 0 32px;height:32px;place-items:center;border-radius:9px;background:var(--surface-card);color:var(--primary);font-size:20px}.queued-order-note div{display:grid;gap:2px}.queued-order-note strong{font-size:12px}.queued-order-note small{color:var(--text-secondary);font-size:11px}.queue-drag-handle{display:grid;width:34px;height:34px;margin:auto;place-items:center;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--text-tertiary);cursor:grab;font-size:20px;line-height:1;transition:color .18s ease,background .18s ease,border-color .18s ease,opacity .18s ease}.queue-drag-handle:hover,.queue-drag-handle:focus-visible{border-color:var(--primary-alpha-20);outline:none;background:var(--primary-alpha-10);color:var(--primary)}.queue-drag-handle:active,.queue-drag-handle.dragging{cursor:grabbing;opacity:.45}.queue-drag-handle.disabled{cursor:not-allowed;opacity:.3}:deep(.queued-task-row-dragging td.el-table__cell){background:var(--primary-alpha-10)!important}.queue-task-link{display:flex;width:100%;min-height:34px;align-items:center;padding:4px 0;border:0;background:transparent;color:var(--text-primary);font:inherit;text-align:left;cursor:pointer}.queue-task-link strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.queue-task-link:hover strong{color:var(--primary)}.queue-task-link:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:6px}.queued-task-actions{display:inline-flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--border-color-light);border-radius:13px;background:color-mix(in srgb,var(--surface-elevated) 88%,transparent);box-shadow:0 3px 10px color-mix(in srgb,var(--text-primary) 5%,transparent);white-space:nowrap}.queued-task-actions :deep(.el-button){height:28px;margin-left:0;padding:5px 10px;border-color:transparent;background:transparent;font-size:11px;font-weight:700;transition:background .18s ease,color .18s ease,box-shadow .18s ease}.queued-task-actions :deep(.queued-task-action-details),.queued-task-actions :deep(.queued-task-action-resume),.queued-task-actions :deep(.queued-task-action-prioritize){background:var(--primary-alpha-10);color:var(--primary)}.queued-task-actions :deep(.queued-task-action-details:hover),.queued-task-actions :deep(.queued-task-action-details:focus-visible),.queued-task-actions :deep(.queued-task-action-resume:hover),.queued-task-actions :deep(.queued-task-action-resume:focus-visible),.queued-task-actions :deep(.queued-task-action-prioritize:hover),.queued-task-actions :deep(.queued-task-action-prioritize:focus-visible){background:var(--primary);color:#fff;box-shadow:0 4px 10px color-mix(in srgb,var(--primary) 22%,transparent)}.queued-task-actions :deep(.queued-task-action-pause){color:var(--text-secondary)}.queued-task-actions :deep(.queued-task-action-pause:hover),.queued-task-actions :deep(.queued-task-action-pause:focus-visible){background:var(--surface-card);color:var(--text-primary)}.queued-task-actions :deep(.queued-task-action-cancel){color:var(--danger)}.queued-task-actions :deep(.queued-task-action-cancel:hover),.queued-task-actions :deep(.queued-task-action-cancel:focus-visible){background:color-mix(in srgb,var(--danger) 10%,transparent);color:var(--danger)}.queued-task-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 2px 0;color:var(--text-tertiary);font-size:12px}.queued-task-pagination :deep(.el-pagination){min-width:0}@media(max-width:720px){.queue-heading-actions{align-items:flex-end;flex-direction:column}.queue-runtime{order:2}.queued-order-note{align-items:flex-start}.queued-task-pagination{align-items:flex-start;flex-direction:column}.queued-task-pagination :deep(.el-pagination){flex-wrap:wrap;justify-content:flex-start}.site-queue-list{grid-template-columns:1fr}.queue-overview-summary{grid-template-columns:1fr}.queue-overview-summary strong{font-size:18px}}@media(max-width:520px){.queue-runtime{width:100%}.queue-runtime span,.queue-runtime button{flex:1;justify-content:center}}

@@ -14,21 +14,29 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.collect
 
 enum class BookSourceType { LOCAL, OPDS, BACKEND }
 
@@ -67,6 +75,10 @@ fun BookCollectionScreen(
     listMode: Boolean = false,
     onBookClick: (CollectionBook) -> Unit,
     onRetry: (() -> Unit)? = null,
+    onLoadMore: (() -> Unit)? = null,
+    hasMore: Boolean = false,
+    isLoadingMore: Boolean = false,
+    loadMoreErrorMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
     when (state) {
@@ -75,13 +87,43 @@ fun BookCollectionScreen(
         is BookCollectionState.Error -> CollectionMessage(modifier) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
                 Text(state.message, color = DesignTokens.SoftText)
-                onRetry?.let { retry -> Button(onClick = retry) { Text("重新加载") } }
+                onRetry?.let { retry ->
+                    Button(
+                        onClick = retry,
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 0.dp,
+                            focusedElevation = 0.dp,
+                            hoveredElevation = 0.dp,
+                            disabledElevation = 0.dp
+                        )
+                    ) {
+                        Text("重新加载")
+                    }
+                }
             }
         }
         is BookCollectionState.Content -> if (listMode) {
-            BookList(state.books, onBookClick, modifier)
+            BookList(
+                books = state.books,
+                onBookClick = onBookClick,
+                modifier = modifier,
+                onLoadMore = onLoadMore,
+                hasMore = hasMore,
+                isLoadingMore = isLoadingMore,
+                loadMoreErrorMessage = loadMoreErrorMessage
+            )
         } else {
-            BookGrid(state.books, columns, onBookClick, modifier)
+            BookGrid(
+                books = state.books,
+                columns = columns,
+                onBookClick = onBookClick,
+                modifier = modifier,
+                onLoadMore = onLoadMore,
+                hasMore = hasMore,
+                isLoadingMore = isLoadingMore,
+                loadMoreErrorMessage = loadMoreErrorMessage
+            )
         }
     }
 }
@@ -91,10 +133,32 @@ fun BookGrid(
     books: List<CollectionBook>,
     columns: Int = 3,
     onBookClick: (CollectionBook) -> Unit,
+    onLoadMore: (() -> Unit)? = null,
+    hasMore: Boolean = false,
+    isLoadingMore: Boolean = false,
+    loadMoreErrorMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
+    val gridState = rememberLazyGridState()
+    LaunchedEffect(gridState, books.size, hasMore, isLoadingMore, loadMoreErrorMessage, onLoadMore) {
+        if (
+            onLoadMore == null || !hasMore || isLoadingMore || loadMoreErrorMessage != null
+        ) {
+            return@LaunchedEffect
+        }
+        snapshotFlow {
+            gridState.layoutInfo.visibleItemsInfo
+                .lastOrNull { it.index < books.size }
+                ?.index ?: -1
+        }.collect { lastVisibleBookIndex ->
+            if (books.isNotEmpty() && lastVisibleBookIndex >= books.size - 6) {
+                onLoadMore()
+            }
+        }
+    }
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
+        state = gridState,
         modifier = modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
         verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16)
@@ -113,6 +177,11 @@ fun BookGrid(
                 book.progress?.let { WarmProgress(it) }
             }
         }
+        if (onLoadMore != null && (isLoadingMore || loadMoreErrorMessage != null)) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                LoadMoreFooter(isLoadingMore, loadMoreErrorMessage, onLoadMore)
+            }
+        }
     }
 }
 
@@ -120,11 +189,63 @@ fun BookGrid(
 fun BookList(
     books: List<CollectionBook>,
     onBookClick: (CollectionBook) -> Unit,
+    onLoadMore: (() -> Unit)? = null,
+    hasMore: Boolean = false,
+    isLoadingMore: Boolean = false,
+    loadMoreErrorMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
-    LazyColumn(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(listState, books.size, hasMore, isLoadingMore, loadMoreErrorMessage, onLoadMore) {
+        if (
+            onLoadMore == null || !hasMore || isLoadingMore || loadMoreErrorMessage != null
+        ) {
+            return@LaunchedEffect
+        }
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+            .collect { lastVisibleBookIndex ->
+                if (books.isNotEmpty() && lastVisibleBookIndex >= books.size - 6) {
+                    onLoadMore()
+                }
+            }
+    }
+    LazyColumn(
+        state = listState,
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)
+    ) {
         items(books, key = { "${it.source.type}-${it.source.sourceId}-${it.id}" }) { book ->
             BookListItem(book, onClick = { onBookClick(book) })
+        }
+        if (onLoadMore != null && (isLoadingMore || loadMoreErrorMessage != null)) {
+            item { LoadMoreFooter(isLoadingMore, loadMoreErrorMessage, onLoadMore) }
+        }
+    }
+}
+
+@Composable
+private fun LoadMoreFooter(
+    isLoading: Boolean,
+    errorMessage: String?,
+    onRetry: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = DesignTokens.Space12),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                color = DesignTokens.Accent,
+                modifier = Modifier.padding(DesignTokens.Space8)
+            )
+        } else if (errorMessage != null) {
+            TextButton(onClick = onRetry) {
+                Text(
+                    text = "加载失败，点击重试：$errorMessage"
+                )
+            }
         }
     }
 }
