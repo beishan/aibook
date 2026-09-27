@@ -414,17 +414,33 @@
               </el-form-item>
               <el-form-item label="来源主题色" prop="themeColor">
                 <div class="site-theme-color-control">
-                  <el-color-picker
-                    v-model="siteForm.themeColor"
-                    color-format="hex"
-                    :predefine="siteThemeColorOptions"
-                    aria-label="选择网站来源主题色"
-                  />
-                  <SiteSourceTag
-                    :name="siteForm.siteName.trim() || '来源网站'"
-                    :color="siteForm.themeColor"
-                  />
-                  <small class="field-hint">显示在该网站的任务和书籍来源标识上</small>
+                  <div class="site-theme-color-toolbar">
+                    <el-color-picker
+                      v-model="siteForm.themeColor"
+                      color-format="hex"
+                      :predefine="siteThemeColorOptions"
+                      aria-label="自定义网站来源主题色"
+                    />
+                    <SiteSourceTag
+                      :name="siteForm.siteName.trim() || '来源网站'"
+                      :color="siteForm.themeColor"
+                    />
+                    <span class="field-hint">显示在该网站的任务和书籍来源标识上</span>
+                  </div>
+                  <div class="site-theme-color-presets" role="group" aria-label="标准来源主题色">
+                    <button
+                      v-for="color in siteThemeColors"
+                      :key="color.value"
+                      type="button"
+                      class="site-theme-color-swatch"
+                      :class="{ 'is-selected': siteForm.themeColor.toUpperCase() === color.value }"
+                      :style="{ '--swatch-color': color.value }"
+                      :aria-label="`选择${color.label}`"
+                      :aria-pressed="siteForm.themeColor.toUpperCase() === color.value"
+                      :title="color.label"
+                      @click="siteForm.themeColor = color.value"
+                    />
+                  </div>
                 </div>
               </el-form-item>
             </div>
@@ -1213,7 +1229,33 @@ const importFormatOptions=[{value:'STRUCTURED',label:'结构化章节',descripti
 const crawlForm=reactive<{siteId?:number;url:string}>({url:''})
 const discoveryPageForm=reactive<CrawlerDiscoveryPagePayload>({pageName:'',pageUrl:'',autoScanEnabled:false,scanIntervalMinutes:360,maxPages:50})
 const emptyRule=():CrawlerRule=>({discoveryItemSelector:'',discoveryUrlSelector:'a',discoveryTitleSelector:'.title',discoveryAuthorSelector:'',discoveryCoverSelector:'',discoveryCategorySelector:'',discoveryLatestChapterSelector:'',discoveryNextPageSelector:'',titleSelector:'',authorSelector:'',descriptionSelector:'',categorySelector:'',tagsSelector:'',statusSelector:'',chapterListUrlSelector:'',chapterItemSelector:'',chapterTitleSelector:':scope',chapterUrlSelector:'a',contentTitleSelector:'h1',contentSelector:'',removeSelectors:'',xpathRemoveSelectors:'',stringReplacementsJson:'',regexReplacementsJson:'',removeBlankLines:true,saveOriginalHtml:false,minChapterLength:100})
-const siteThemeColorOptions=['#286D63','#365F9A','#8F4D2E','#6F5598','#805B17','#2D6C89','#8A4058','#586D31']
+const siteThemeColors = [
+  { label: '松柏绿', value: '#286D63' },
+  { label: '群青蓝', value: '#365F9A' },
+  { label: '赤陶棕', value: '#8F4D2E' },
+  { label: '桔梗紫', value: '#6F5598' },
+  { label: '琥珀棕', value: '#805B17' },
+  { label: '湖水蓝', value: '#2D6C89' },
+  { label: '莓果红', value: '#8A4058' },
+  { label: '苔藓绿', value: '#586D31' },
+  { label: '砖瓦红', value: '#C44747' },
+  { label: '柿子橙', value: '#D96B3B' },
+  { label: '金盏黄', value: '#BD8A19' },
+  { label: '森林绿', value: '#3D7A4A' },
+  { label: '松石青', value: '#2D9282' },
+  { label: '海岸蓝', value: '#4D8CBB' },
+  { label: '靛青蓝', value: '#4456A6' },
+  { label: '紫罗兰', value: '#8B5BA5' },
+  { label: '牡丹红', value: '#AD4C88' },
+  { label: '暖陶红', value: '#A45B47' },
+  { label: '石板蓝', value: '#647783' },
+  { label: '橄榄绿', value: '#60764A' },
+  { label: '珊瑚红', value: '#C95662' },
+  { label: '海松青', value: '#427D72' },
+  { label: '咖啡棕', value: '#785D45' },
+  { label: '灰紫色', value: '#6D6BA8' },
+]
+const siteThemeColorOptions = siteThemeColors.map(color => color.value)
 function siteThemeColor(color?:string):string {
   return color && /^#[\da-fA-F]{6}$/.test(color) ? color : '#286D63'
 }
@@ -2457,6 +2499,11 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 }
 
 .site-theme-color-control {
+  display: grid;
+  gap: 11px;
+}
+
+.site-theme-color-toolbar {
   display: flex;
   min-height: 40px;
   align-items: center;
@@ -2464,9 +2511,58 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   gap: 10px;
 }
 
-.site-theme-color-control .field-hint {
-  flex-basis: 100%;
-  margin-top: -4px;
+.site-theme-color-presets {
+  display: grid;
+  width: fit-content;
+  max-width: 100%;
+  grid-template-columns: repeat(12, 28px);
+  gap: 9px;
+  padding: 3px;
+}
+
+.site-theme-color-swatch {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 2px solid var(--surface-card);
+  border-radius: 50%;
+  outline: 1px solid var(--border-color);
+  background: var(--swatch-color);
+  cursor: pointer;
+  transition: transform 140ms ease, outline-color 140ms ease;
+}
+
+.site-theme-color-swatch:hover {
+  transform: scale(1.12);
+}
+
+.site-theme-color-swatch.is-selected {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.site-theme-color-swatch:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+@media (max-width: 560px) {
+  .site-theme-color-presets {
+    grid-template-columns: repeat(8, 28px);
+    gap: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-theme-color-swatch {
+    transition: none;
+  }
+}
+
+.site-theme-color-toolbar .field-hint {
+  margin: 0;
 }
 
 .book-source-line {
