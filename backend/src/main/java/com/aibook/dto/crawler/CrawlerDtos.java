@@ -51,7 +51,25 @@ public final class CrawlerDtos {
             Boolean respectRobotsTxt,
             @Pattern(regexp = "#[0-9a-fA-F]{6}") String themeColor,
             @Min(100) Integer maxRequestIntervalMillis,
-            @Size(max = 50) List<@NotNull @Valid SiteAccessWindowPayload> blockedAccessWindows) {
+            @Size(max = 50) List<@NotNull @Valid SiteAccessWindowPayload> blockedAccessWindows,
+            @Min(1) @Max(100) Integer cooldownFailureThreshold) {
+        public SitePayload(
+                String siteName, String siteCode, String baseUrl, String homeUrl,
+                Boolean enabled, Boolean autoScan, Boolean autoCrawl, Boolean autoUpdate,
+                Boolean autoImportLibrary, Integer requestIntervalMillis,
+                Integer randomDelayMillis, Integer maxConcurrency, String encoding,
+                List<ProxyPayload> proxies, Integer scanIntervalMinutes,
+                Integer updateIntervalMinutes, Integer maxDiscoveryPages,
+                String autoImportFormat, List<ContentMarkerPayload> contentMarkers,
+                Boolean respectRobotsTxt, String themeColor, Integer maxRequestIntervalMillis,
+                List<SiteAccessWindowPayload> blockedAccessWindows) {
+            this(siteName, siteCode, baseUrl, homeUrl, enabled, autoScan, autoCrawl,
+                    autoUpdate, autoImportLibrary, requestIntervalMillis, randomDelayMillis,
+                    maxConcurrency, encoding, proxies, scanIntervalMinutes, updateIntervalMinutes,
+                    maxDiscoveryPages, autoImportFormat, contentMarkers, respectRobotsTxt,
+                    themeColor, maxRequestIntervalMillis, blockedAccessWindows, null);
+        }
+
         public SitePayload(
                 String siteName, String siteCode, String baseUrl, String homeUrl,
                 Boolean enabled, Boolean autoScan, Boolean autoCrawl, Boolean autoUpdate,
@@ -65,7 +83,7 @@ public final class CrawlerDtos {
                     autoUpdate, autoImportLibrary, requestIntervalMillis, randomDelayMillis,
                     maxConcurrency, encoding, proxies, scanIntervalMinutes,
                     updateIntervalMinutes, maxDiscoveryPages, autoImportFormat,
-                    contentMarkers, respectRobotsTxt, themeColor, null, List.of());
+                    contentMarkers, respectRobotsTxt, themeColor, null, List.of(), null);
         }
 
         public SitePayload(
@@ -81,7 +99,7 @@ public final class CrawlerDtos {
                     autoUpdate, autoImportLibrary, requestIntervalMillis, randomDelayMillis,
                     maxConcurrency, encoding, proxies, scanIntervalMinutes,
                     updateIntervalMinutes, maxDiscoveryPages, autoImportFormat,
-                    contentMarkers, respectRobotsTxt, null, null, List.of());
+                    contentMarkers, respectRobotsTxt, null, null, List.of(), null);
         }
     }
 
@@ -97,7 +115,8 @@ public final class CrawlerDtos {
             LocalDateTime lastHealthCheckAt, String healthMessage, LocalDateTime createdAt,
             List<ContentMarkerPayload> contentMarkers, boolean respectRobotsTxt,
             CrawlerProtectionView protection, String themeColor,
-            int maxRequestIntervalMillis, List<SiteAccessWindowPayload> blockedAccessWindows) {
+            int maxRequestIntervalMillis, List<SiteAccessWindowPayload> blockedAccessWindows,
+            int cooldownFailureThreshold) {
         public SiteView(Long id, String siteName, String siteCode, String baseUrl,
                 String homeUrl, boolean enabled, boolean autoScan, boolean autoCrawl,
                 boolean autoUpdate, boolean autoImportLibrary, int requestIntervalMillis,
@@ -119,7 +138,7 @@ public final class CrawlerDtos {
                     respectRobotsTxt, protection, themeColor,
                     (int) Math.min(Integer.MAX_VALUE,
                             (long) requestIntervalMillis + Math.max(0, randomDelayMillis)),
-                    List.of());
+                    List.of(), 5);
         }
 
         public SiteView(Long id, String siteName, String siteCode, String baseUrl,
@@ -244,6 +263,9 @@ public final class CrawlerDtos {
 
     public record CrawlerLogView(
             Long id, String description, String details, LocalDateTime createdAt) { }
+
+    public record SiteActivityView(Long id, String eventType, String taskId,
+            LocalDateTime createdAt, String description, String details) { }
 
     public record ScanBookResultView(Long id, Long bookId, String bookName, String bookUrl,
             String resultStatus, String errorMessage, LocalDateTime createdAt) { }

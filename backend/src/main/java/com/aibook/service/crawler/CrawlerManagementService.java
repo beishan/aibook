@@ -36,6 +36,8 @@ public class CrawlerManagementService {
     private final CrawlerTaskRepository taskRepository;
     @Autowired
     private CrawlerTaskQueueRepository taskQueueRepository;
+    @Autowired
+    private CrawlerSiteActivityRepository siteActivityRepository;
     private final CrawlerTaskLogRepository taskLogRepository;
     private final CrawlerSiteRuleVersionRepository ruleVersionRepository;
     private final CrawlerDiscoveryPageRepository discoveryPageRepository;
@@ -46,6 +48,16 @@ public class CrawlerManagementService {
 
     @Transactional(readOnly = true)
     public List<SiteView> sites(User user) { return siteRepository.findByUserOrderByCreatedAtDesc(user).stream().map(this::siteView).toList(); }
+
+    @Transactional(readOnly = true)
+    public Page<SiteActivityView> siteActivities(User user, Long id, int page, int size) {
+        CrawlerSite site = ownedSite(user, id);
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(100, Math.max(1, size)));
+        return siteActivityRepository.findBySiteOrderByCreatedAtDescIdDesc(site, pageable)
+                .map(activity -> new SiteActivityView(
+                        activity.getId(), activity.getEventType().name(), activity.getTaskId(),
+                        activity.getCreatedAt(), activity.getDescription(), activity.getDetails()));
+    }
 
     @Transactional
     public SiteView createSite(User user, SitePayload payload) {
@@ -81,6 +93,9 @@ public class CrawlerManagementService {
         ruleVersionRepository.deleteBySite(site);
         if (taskQueueRepository != null) {
             taskQueueRepository.deleteBySite(site);
+        }
+        if (siteActivityRepository != null) {
+            siteActivityRepository.deleteBySite(site);
         }
         siteRepository.delete(site);
         httpClient.removeSiteRuntimeState(id);
@@ -701,6 +716,7 @@ public class CrawlerManagementService {
         site.setRequestIntervalMillis(minimumRequestInterval);
         site.setMaxRequestIntervalMillis(maximumRequestInterval);
         site.setRandomDelayMillis(maximumRequestInterval - minimumRequestInterval);
+        site.setCooldownFailureThreshold(value(p.cooldownFailureThreshold(), 5));
         site.setMaxConcurrency(value(p.maxConcurrency(), 1));
         site.setRespectRobotsTxt(bool(p.respectRobotsTxt(), true));
         site.setEncoding(blank(p.encoding()) ? "UTF-8" : p.encoding());
@@ -750,7 +766,8 @@ public class CrawlerManagementService {
                         protection.coolingDown(), protection.blockedUntil(), protection.reason(),
                         protection.pageUrl(), protection.consecutiveFailures(), protection.adaptiveDelayMillis()),
                 normalizedThemeColor(s.getThemeColor()), maximumRequestInterval,
-                toAccessWindowPayloads(s.getBlockedAccessWindows()));
+                toAccessWindowPayloads(s.getBlockedAccessWindows()),
+                httpClient.cooldownFailureThreshold(s));
     }
 
     private int maxRequestInterval(CrawlerSite site) {

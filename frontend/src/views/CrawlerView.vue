@@ -138,6 +138,9 @@
             <small v-else>附加延迟 {{ site.protection.adaptiveDelayMillis }} ms · 连续失败 {{ site.protection.consecutiveFailures }} 次</small>
           </div>
           <p class="health-line" :class="{error:site.status==='RULE_ERROR'}">{{ site.ruleVersion ? `生效规则 v${site.ruleVersion}` : '暂无生效规则' }} · 共 {{ site.ruleCount }} 个版本</p>
+          <div class="site-activity-action-row">
+            <el-button type="primary" plain @click="openSiteActivities(site)">查看网站行为记录</el-button>
+          </div>
           <footer><el-button v-if="hasSiteProtection(site)" text type="warning" @click="resetSiteProtection(site)">解除保护</el-button><el-button type="primary" plain @click="openDiscoveryPages(site)">发现页管理（{{ discoveryPagesBySite[site.id]?.length || 0 }}）</el-button><el-button type="primary" plain @click="openRuleManager(site)">规则管理</el-button><el-button text :icon="Download" @click="exportSiteConfiguration(site)">导出配置</el-button><el-button text @click="openSite(site)">编辑网站</el-button><el-button text @click="openCrawl(site.id)">采集 URL</el-button><el-button text type="danger" @click="removeSite(site)">删除</el-button></footer>
         </article>
       </div>
@@ -524,9 +527,24 @@
               <el-empty v-else :image-size="44" description="未设置禁访时段" />
               <small class="field-hint">按服务端本地时间判断，精确到分钟；支持跨午夜时段，例如 23:00 至 02:00。</small>
             </section>
-            <el-form-item label="最大并发">
-              <el-input-number v-model="siteForm.maxConcurrency" :min="1" :max="8" />
-            </el-form-item>
+            <div class="form-grid">
+              <el-form-item label="连续失败多少次后进入冷却">
+                <el-input-number
+                  v-model="siteForm.cooldownFailureThreshold"
+                  :min="1"
+                  :max="100"
+                  controls-position="right"
+                />
+                <small class="field-hint">
+                  单次请求完成重试后仍失败才计数；成功请求会清零。
+                  验证码、拒绝访问和 429 等明确限制仍会立即冷却；
+                  普通冷却时长沿用系统爬虫设置。
+                </small>
+              </el-form-item>
+              <el-form-item label="最大并发">
+                <el-input-number v-model="siteForm.maxConcurrency" :min="1" :max="8" />
+              </el-form-item>
+            </div>
             <el-form-item label="robots.txt 策略">
               <el-switch
                 v-model="siteForm.respectRobotsTxt"
@@ -940,7 +958,7 @@
       <template #footer><el-button @click="returnToQueueOverview">返回队列列表</el-button><el-button :loading="queuedTasksLoading" :disabled="queuedTasksReordering" @click="loadQueuedTasks">刷新</el-button><el-button @click="queuedTasksDialog=false">关闭</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="scanResultsDialog" :title="`${scanResultsTask?.discoveryPageName || '发现页'} · 扫描结果`" width="min(920px, 96vw)" append-to-body>
+    <el-dialog v-model="scanResultsDialog" :title="`${scanResultsTask?.discoveryPageName || scanResultsTask?.siteName || '采集网站'} · 扫描结果`" width="min(920px, 96vw)" append-to-body>
       <div v-if="scanResultsTask" class="scan-result-summary"><span><small>扫描到</small><strong>{{ scanResultsTask.totalCount }}</strong></span><span><small>成功</small><strong>{{ scanResultsTask.successCount }}</strong></span><span><small>新增</small><strong>{{ scanResultsTask.newBookCount }}</strong></span><span><small>重复</small><strong>{{ scanResultsTask.duplicateCount }}</strong></span><span><small>失败</small><strong>{{ scanResultsTask.failedCount }}</strong></span></div>
       <el-table v-loading="scanResultsLoading" :data="scanResults" max-height="52vh" class="scan-results-table">
         <el-table-column prop="bookName" label="书籍" min-width="220" show-overflow-tooltip />
@@ -951,6 +969,83 @@
       <el-empty v-if="!scanResultsLoading&&!scanResults.length" description="任务尚未产生书籍扫描结果" />
       <div v-if="scanResultsTotal" class="scan-results-pagination"><span>共 {{ scanResultsTotal }} 条</span><el-pagination v-model:current-page="scanResultsPage" v-model:page-size="scanResultsPageSize" :page-sizes="[20,50,100]" :total="scanResultsTotal" layout="sizes, prev, pager, next" background small @current-change="loadScanResults" @size-change="handleScanResultSizeChange" /></div>
       <template #footer><el-button @click="scanResultsDialog=false">关闭</el-button></template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="siteActivityDialog"
+      :title="`${siteActivitySite?.siteName || '采集网站'} · 行为记录`"
+      width="min(1080px, 96vw)"
+      append-to-body
+      class="site-activity-dialog"
+    >
+      <div class="site-activity-intro">
+        <span>ACTIVITY LEDGER</span>
+        <p>查看扫描结果、源站访问限制和书籍采集状态。访问限制会附带保护原因与预计恢复时间。</p>
+      </div>
+      <el-table
+        v-loading="siteActivityLoading"
+        :data="siteActivities"
+        row-key="id"
+        max-height="56vh"
+        class="site-activity-table"
+      >
+        <el-table-column label="行为类型" width="150">
+          <template #default="{ row }">
+            <el-tag :type="siteActivityType(row.eventType)" effect="light">
+              {{ siteActivityLabel(row.eventType) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="时间" width="170">
+          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column label="行为描述" min-width="210" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.description }}</template>
+        </el-table-column>
+        <el-table-column label="详情信息" min-width="300">
+          <template #default="{ row }">
+            <p class="site-activity-details" :title="row.details || ''">
+              {{ row.details || '暂无补充详情' }}
+            </p>
+          </template>
+        </el-table-column>
+        <el-table-column label="结果" width="130" fixed="right" align="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.eventType === 'DISCOVERY_SCAN' && row.taskId"
+              text
+              type="primary"
+              :loading="siteActivityScanTaskId === row.taskId"
+              @click="openActivityScanResults(row)"
+            >
+              查看扫描结果
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty
+        v-if="!siteActivityLoading && !siteActivities.length"
+        :image-size="72"
+        description="暂无行为记录；完成扫描或采集后，关键结果会显示在这里"
+      />
+      <div v-if="siteActivityTotal" class="site-activity-pagination">
+        <span>共 {{ siteActivityTotal }} 条行为记录</span>
+        <el-pagination
+          v-model:current-page="siteActivityPage"
+          v-model:page-size="siteActivityPageSize"
+          :page-sizes="[10, 20, 50]"
+          :total="siteActivityTotal"
+          layout="sizes, prev, pager, next"
+          background
+          small
+          @current-change="loadSiteActivities"
+          @size-change="handleSiteActivitySizeChange"
+        />
+      </div>
+      <template #footer>
+        <el-button :loading="siteActivityLoading" @click="loadSiteActivities">刷新</el-button>
+        <el-button @click="siteActivityDialog = false">关闭</el-button>
+      </template>
     </el-dialog>
 
     <el-drawer v-model="bookDrawer" size="min(760px, 96vw)" :title="selectedBook?.bookName || '采集书籍详情'" class="book-detail-drawer">
@@ -1082,6 +1177,7 @@ import {
   type CrawlerRuleVersion,
   type CrawlerScanResult,
   type CrawlerSite,
+  type CrawlerSiteActivity,
   type CrawlerSiteConfiguration,
   type CrawlerSitePayload,
   type CrawlerTask,
@@ -1218,6 +1314,10 @@ const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=r
 const taskStatusFilter=ref(''), taskTypeFilter=ref(''), taskFavoriteOnly=ref(false)
 const selectedTasks=ref<CrawlerTask[]>([]), selectedFailedTasks=ref<CrawlerTask[]>([]), taskTableSelectionVersion=ref(0), batchTaskManaging=ref(false), batchTaskAction=ref<'pause'|'resume'|'cancel'|'delete'|'priority'|'resume-all'>()
 const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
+const siteActivityDialog=ref(false), siteActivityLoading=ref(false), siteActivitySite=ref<CrawlerSite>()
+const siteActivities=ref<CrawlerSiteActivity[]>([]), siteActivityPage=ref(1), siteActivityPageSize=ref(20)
+const siteActivityTotal=ref(0), siteActivityScanTaskId=ref<string>()
+let siteActivityRequestSequence=0
 const queueOverviewDialog = ref(false)
 const queuePopupTab = ref<'config' | 'tasks'>('config')
 const queueSettingsDialog = ref(false)
@@ -1341,11 +1441,11 @@ const siteThemeColorOptions = siteThemeColors.map(color => color.value)
 function siteThemeColor(color?:string):string {
   return color && /^#[\da-fA-F]{6}$/.test(color) ? color : '#009688'
 }
-const emptySite=():CrawlerSitePayload=>({siteName:'',siteCode:'',baseUrl:'',homeUrl:'',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',requestIntervalMillis:1500,randomDelayMillis:1000,maxRequestIntervalMillis:2500,blockedAccessWindows:[],maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[],contentMarkers:[],themeColor:'#009688'})
+const emptySite=():CrawlerSitePayload=>({siteName:'',siteCode:'',baseUrl:'',homeUrl:'',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',requestIntervalMillis:1500,randomDelayMillis:1000,maxRequestIntervalMillis:2500,blockedAccessWindows:[],cooldownFailureThreshold:5,maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[],contentMarkers:[],themeColor:'#009688'})
 const siteConfigurationTemplate:CrawlerSiteConfiguration={
   schemaVersion:1,
   type:'AIBOOK_CRAWLER_SITE',
-  site:{siteName:'示例小说站',siteCode:'example_novel',baseUrl:'https://www.example.com',homeUrl:'https://www.example.com',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,requestIntervalMillis:1500,randomDelayMillis:1000,maxRequestIntervalMillis:2500,blockedAccessWindows:[],maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[{name:'备用代理',url:'http://127.0.0.1:7890',enabled:false}],scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',contentMarkers:[{marker:'以下内容为VIP专属，升级会员即可继续阅读',status:'PENDING_RELEASE'},{marker:'Access Denied',status:'FAILED'}],themeColor:'#2196F3'},
+  site:{siteName:'示例小说站',siteCode:'example_novel',baseUrl:'https://www.example.com',homeUrl:'https://www.example.com',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,requestIntervalMillis:1500,randomDelayMillis:1000,maxRequestIntervalMillis:2500,blockedAccessWindows:[],cooldownFailureThreshold:5,maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[{name:'备用代理',url:'http://127.0.0.1:7890',enabled:false}],scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',contentMarkers:[{marker:'以下内容为VIP专属，升级会员即可继续阅读',status:'PENDING_RELEASE'},{marker:'Access Denied',status:'FAILED'}],themeColor:'#2196F3'},
   rules:[{version:1,changeSummary:'初始规则',enabled:true,rule:{discoveryItemSelector:'.book-list .book',discoveryUrlSelector:'a.book-link',discoveryTitleSelector:'.title',discoveryAuthorSelector:'.author',discoveryCoverSelector:'img.cover::data-src',discoveryCategorySelector:'.category',discoveryLatestChapterSelector:'.latest',discoveryNextPageSelector:'a.next',titleSelector:'h1.book-title',authorSelector:'.author',coverSelector:'img.cover::data-src',descriptionSelector:'#intro',categorySelector:'.book-meta .category',tagsSelector:'.book-meta .tags a',statusSelector:'.book-meta .status',latestChapterSelector:'.latest',chapterListUrlSelector:'a.catalog',chapterItemSelector:'#chapter-list a',chapterTitleSelector:':scope',chapterUrlSelector:':scope',contentTitleSelector:'h1',contentSelector:'#content',removeSelectors:'.ads, .navigation',xpathRemoveSelectors:'',stringReplacementsJson:'',regexReplacementsJson:'',removeBlankLines:true,saveOriginalHtml:false,minChapterLength:100}}],
   discoveryPages:[{pageName:'热门小说',pageUrl:'https://www.example.com/rank/hot',autoScanEnabled:false,scanIntervalMinutes:360,maxPages:50}],
 }
@@ -1790,6 +1890,81 @@ async function manageSelectedTasks(action:'pause'|'resume'|'cancel'|'delete'|'pr
   }catch(error:any){message.error(error.response?.data?.message||'批量操作失败，请刷新后重试')}
   finally{batchTaskManaging.value=false;batchTaskAction.value=undefined}
 }
+function openSiteActivities(site:CrawlerSite) {
+  siteActivitySite.value = site
+  siteActivityPage.value = 1
+  siteActivities.value = []
+  siteActivityTotal.value = 0
+  siteActivityDialog.value = true
+  void loadSiteActivities()
+}
+
+async function loadSiteActivities() {
+  const site = siteActivitySite.value
+  if (!site) return
+
+  const requestSequence = ++siteActivityRequestSequence
+  siteActivityLoading.value = true
+  try {
+    const result = await crawlerApi.siteActivities(
+      site.id,
+      siteActivityPage.value - 1,
+      siteActivityPageSize.value,
+    )
+    if (requestSequence !== siteActivityRequestSequence) return
+    siteActivities.value = result.content
+    siteActivityTotal.value = result.totalElements
+  } catch (error: any) {
+    if (requestSequence === siteActivityRequestSequence) {
+      message.error(error.response?.data?.message || '网站行为记录加载失败')
+    }
+  } finally {
+    if (requestSequence === siteActivityRequestSequence) {
+      siteActivityLoading.value = false
+    }
+  }
+}
+
+async function handleSiteActivitySizeChange() {
+  siteActivityPage.value = 1
+  await loadSiteActivities()
+}
+
+async function openActivityScanResults(activity: CrawlerSiteActivity) {
+  if (!activity.taskId || siteActivityScanTaskId.value) return
+  siteActivityScanTaskId.value = activity.taskId
+  try {
+    const task = await crawlerApi.task(activity.taskId)
+    await openScanResults(task)
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '扫描结果加载失败')
+  } finally {
+    siteActivityScanTaskId.value = undefined
+  }
+}
+
+function siteActivityLabel(eventType: CrawlerSiteActivity['eventType']): string {
+  return {
+    DISCOVERY_SCAN: '发现页扫描',
+    ACCESS_LIMITED: '访问受限',
+    BOOK_CRAWL_COMPLETED: '书籍采集完成',
+    BOOK_CRAWL_PARTIAL: '采集部分完成',
+    TASK_FAILED: '任务失败',
+  }[eventType]
+}
+
+function siteActivityType(
+  eventType: CrawlerSiteActivity['eventType'],
+): 'success' | 'warning' | 'info' | 'danger' | 'primary' {
+  return {
+    DISCOVERY_SCAN: 'primary',
+    ACCESS_LIMITED: 'danger',
+    BOOK_CRAWL_COMPLETED: 'success',
+    BOOK_CRAWL_PARTIAL: 'warning',
+    TASK_FAILED: 'danger',
+  }[eventType] as 'success' | 'warning' | 'info' | 'danger' | 'primary'
+}
+
 async function openScanResults(task:CrawlerTask){scanResultsTask.value=task;scanResults.value=[];scanResultsPage.value=1;scanResultsTotal.value=0;scanResultsDialog.value=true;await loadScanResults()}
 async function loadScanResults(){if(!scanResultsTask.value)return;scanResultsLoading.value=true;try{const result=await crawlerApi.scanResults(scanResultsTask.value.id,scanResultsPage.value-1,scanResultsPageSize.value);scanResults.value=result.content;scanResultsTotal.value=result.totalElements}finally{scanResultsLoading.value=false}}
 async function handleScanResultSizeChange(){scanResultsPage.value=1;await loadScanResults()}
@@ -2848,6 +3023,60 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   padding: 0;
 }
 
+.site-activity-action-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.site-activity-intro {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 16px;
+  padding: 12px 15px;
+  border: 1px solid var(--border-color-light);
+  border-left: 3px solid var(--primary);
+  border-radius: 12px;
+  background: linear-gradient(100deg, var(--primary-alpha-10), var(--surface-elevated) 48%);
+}
+
+.site-activity-intro > span {
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.site-activity-intro > p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.site-activity-details {
+  display: -webkit-box;
+  max-height: 4.8em;
+  margin: 0;
+  overflow: auto;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+}
+
+.site-activity-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
 @media (max-width: 520px) {
   .blocked-window-editor > header {
     align-items: flex-start;
@@ -2862,6 +3091,11 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   .blocked-window-row > .el-button {
     grid-column: 1 / -1;
     justify-self: end;
+  }
+
+  .site-activity-pagination {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

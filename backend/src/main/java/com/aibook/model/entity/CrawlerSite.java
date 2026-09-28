@@ -49,6 +49,7 @@ public class CrawlerSite {
     @Builder.Default private String autoImportFormat = "EPUB";
     @Builder.Default private Integer requestIntervalMillis = 1500;
     @Builder.Default private Integer randomDelayMillis = 1000;
+    @Builder.Default private Integer cooldownFailureThreshold = 5;
     private Integer maxRequestIntervalMillis;
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "crawler_site_blocked_windows",

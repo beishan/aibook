@@ -109,7 +109,9 @@ public class CrawlerHttpClient {
                             "源站拒绝访问（HTTP " + response.statusCode() + "），已暂停该站点请求且不会切换代理重试");
                 }
                 if (response.statusCode() != 429 && response.statusCode() < 500) {
-                    recordFailure(site, settings.maxConsecutiveFailures(), settings.circuitCooldownSeconds());
+                    recordFailure(site,
+                            cooldownFailureThreshold(site, settings.maxConsecutiveFailures()),
+                            settings.circuitCooldownSeconds());
                     throw new ResponseStatusException(HttpStatusCode.valueOf(response.statusCode()),
                             "源站返回 HTTP " + response.statusCode() + "，该响应不会自动重试");
                 }
@@ -139,7 +141,9 @@ public class CrawlerHttpClient {
             increaseAdaptiveDelay(site, retryBackoffMillis(Math.max(0, attempts - 1),
                     settings.retryBackoffMaxMillis()), settings.adaptiveDelayMaxMillis());
         }
-        recordFailure(site, settings.maxConsecutiveFailures(), settings.circuitCooldownSeconds());
+        recordFailure(site,
+                cooldownFailureThreshold(site, settings.maxConsecutiveFailures()),
+                settings.circuitCooldownSeconds());
         throw last == null ? new IllegalStateException("请求失败") : last;
     }
 
@@ -564,6 +568,15 @@ public class CrawlerHttpClient {
         if (state != null && state.blockedUntil() != null) {
             persistProtection(site, state.blockedUntil(), state.reason(), state.pageUrl());
         }
+    }
+
+    int cooldownFailureThreshold(CrawlerSite site) {
+        return cooldownFailureThreshold(site, requestSettings().maxConsecutiveFailures());
+    }
+
+    private int cooldownFailureThreshold(CrawlerSite site, int defaultThreshold) {
+        return site.getCooldownFailureThreshold() == null
+                ? defaultThreshold : Math.max(1, site.getCooldownFailureThreshold());
     }
 
     private void openCircuit(CrawlerSite site, Duration duration, String reason, String pageUrl) {

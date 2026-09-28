@@ -47,6 +47,8 @@ public class CrawlerTaskService {
     private final CrawlerTaskRepository taskRepository;
     @Autowired
     private CrawlerTaskQueueRepository taskQueueRepository;
+    @Autowired
+    private CrawlerSiteActivityRepository siteActivityRepository;
     private final CrawlerScanResultRepository scanResultRepository;
     private final CrawlerTaskLogRepository taskLogRepository;
     private final CrawlerManagementService managementService;
@@ -1137,6 +1139,7 @@ public class CrawlerTaskService {
         } catch (Exception exception) {
             if (shuttingDown || isStopRequested(taskId)) return;
             log.warn("采集任务 {} 失败", taskId, exception);
+            recordSiteAccessRestriction(task, exception);
             fail(taskId, userMessage(exception));
         }
     }
@@ -1300,6 +1303,7 @@ public class CrawlerTaskService {
                     }
                     return;
                 }
+                recordSiteAccessRestriction(task, exception);
                 if (!requestSucceeded) requestFailure = exception;
                 chapter.setRetryCount(value(chapter.getRetryCount(), 0) + 1); chapter.setErrorMessage(userMessage(exception));
                 chapter.setCrawlStatus(targetChapterId != null
@@ -1379,6 +1383,19 @@ public class CrawlerTaskService {
                 progress(task), task.getFailedCount(), task.getAverageRequestMillis());
         recordCrawlerEvent(task, "采集任务完毕", progressDetails(task) + "；状态：" + task.getStatus()
                 + "；失败：" + task.getFailedCount() + "；平均请求耗时：" + task.getAverageRequestMillis() + "ms");
+        CrawlerSiteActivity.EventType activityType = task.getStatus() == CrawlerTask.TaskStatus.SUCCESS
+                ? CrawlerSiteActivity.EventType.BOOK_CRAWL_COMPLETED
+                : task.getStatus() == CrawlerTask.TaskStatus.PARTIAL_SUCCESS
+                        ? CrawlerSiteActivity.EventType.BOOK_CRAWL_PARTIAL
+                        : CrawlerSiteActivity.EventType.TASK_FAILED;
+        String activityDescription = task.getStatus() == CrawlerTask.TaskStatus.SUCCESS
+                ? "书籍采集完成：" + bookName(book)
+                : task.getStatus() == CrawlerTask.TaskStatus.PARTIAL_SUCCESS
+                        ? "书籍采集部分完成：" + bookName(book)
+                        : "书籍采集失败：" + bookName(book);
+        recordSiteActivity(task.getSite(), activityType, task.getId(), activityDescription,
+                "任务状态：" + task.getStatus() + "；" + progressDetails(task)
+                        + "；成功：" + task.getSuccessCount() + "；失败：" + task.getFailedCount());
     }
 
     private void mergeChapters(CrawlerBook book, List<BookCrawlerParser.ParsedChapter> parsed) {
@@ -1516,7 +1533,14 @@ public class CrawlerTaskService {
         recordCrawlerEvent(task, task.getDiscoveryPageName() == null ? "网站扫描完毕" : "发现页扫描完毕",
                 "扫描页数：" + pages + "；扫描到：" + task.getTotalCount() + "；成功：" + succeeded
                         + "；新增：" + newBooks + "；重复：" + duplicates + "；失败：" + failed
-                + "；后续采集需人工触发");
+                        + "；后续采集需人工触发");
+        String activityDescription = task.getDiscoveryPageName() == null
+                ? site.getSiteName() + " 网站扫描完成"
+                : task.getDiscoveryPageName() + " 发现页扫描完成";
+        recordSiteActivity(site, CrawlerSiteActivity.EventType.DISCOVERY_SCAN, task.getId(),
+                activityDescription, "扫描页数：" + pages + "；扫描到：" + task.getTotalCount()
+                        + "；成功：" + succeeded + "；新增：" + newBooks + "；重复：" + duplicates
+                        + "；失败：" + failed + "；扫描结果可查看逐书明细");
     }
 
     private void saveScanResult(CrawlerTask task, Long bookId, String bookName, String bookUrl,
@@ -1606,6 +1630,23 @@ public class CrawlerTaskService {
                     bookRepository.save(book);
                 }
                 recordCrawlerEvent(task, "采集任务失败", "原因：" + message);
+                if (task.getType() == CrawlerTask.TaskType.SITE_SCAN) {
+                    String scanDescription = task.getDiscoveryPageName() == null
+                            ? "网站扫描中断" : task.getDiscoveryPageName() + " 发现页扫描中断";
+                    recordSiteActivity(task.getSite(), CrawlerSiteActivity.EventType.DISCOVERY_SCAN,
+                            task.getId(), scanDescription,
+                            "扫描页数：" + value(task.getScannedPageCount(), 0)
+                                    + "；发现条目：" + value(task.getTotalCount(), 0)
+                                    + "；成功：" + value(task.getSuccessCount(), 0)
+                                    + "；新增：" + value(task.getNewBookCount(), 0)
+                                    + "；重复：" + value(task.getDuplicateCount(), 0)
+                                    + "；失败：" + value(task.getFailedCount(), 0)
+                                    + "；状态：失败；原因：" + message
+                                    + "；已保存的扫描结果可查看逐书明细");
+                }
+                recordSiteActivity(task.getSite(), CrawlerSiteActivity.EventType.TASK_FAILED,
+                        task.getId(), "任务失败：" + task.getSite().getSiteName(),
+                        "任务类型：" + task.getType() + "；原因：" + message);
             });
         }
     }
@@ -1794,6 +1835,65 @@ public class CrawlerTaskService {
             + value(task.getTotalCount(), 0) + "（" + progress(task) + "%）"; }
     private int percentage(int finished, int total) { return total <= 0 ? 0 : Math.min(100, Math.max(0, (int) Math.round(finished * 100.0 / total))); }
     private String bookName(CrawlerBook book) { return book == null || book.getBookName() == null || book.getBookName().isBlank() ? "-" : book.getBookName(); }
+
+    private void recordSiteAccessRestriction(CrawlerTask task, Exception exception) {
+        if (task == null || task.getSite() == null || siteActivityRepository == null) return;
+        CrawlerHttpClient.ProtectionState protection = httpClient.protectionState(task.getSite());
+        String errorMessage = userMessage(exception);
+        String normalizedMessage = errorMessage.toLowerCase(Locale.ROOT);
+        boolean restrictionDetected = protection != null && protection.coolingDown()
+                || List.of("验证码", "人机验证", "反爬", "拒绝访问", "http 429",
+                        "robots.txt 不允许", "访问过于频繁", "已暂停该站点请求")
+                        .stream().anyMatch(normalizedMessage::contains);
+        if (!restrictionDetected) return;
+
+        String reason = protection != null && protection.coolingDown()
+                && protection.reason() != null && !protection.reason().isBlank()
+                ? protection.reason() : errorMessage;
+        StringBuilder details = new StringBuilder("任务类型：").append(task.getType())
+                .append("；书籍：").append(bookName(task.getCrawlerBook()))
+                .append("；限制原因：").append(reason);
+        if (protection != null && protection.blockedUntil() != null) {
+            details.append("；预计解除时间：").append(protection.blockedUntil());
+        }
+        String pageUrl = protection == null ? null : protection.pageUrl();
+        if ((pageUrl == null || pageUrl.isBlank())
+                && task.getScanStartUrl() != null && !task.getScanStartUrl().isBlank()) {
+            pageUrl = task.getScanStartUrl();
+        }
+        if ((pageUrl == null || pageUrl.isBlank()) && task.getCrawlerBook() != null) {
+            pageUrl = task.getCrawlerBook().getBookUrl();
+        }
+        if (pageUrl != null && !pageUrl.isBlank()) {
+            details.append("；受限地址：").append(pageUrl);
+        }
+        if (task.getCurrentChapter() != null && !task.getCurrentChapter().isBlank()) {
+            details.append("；执行位置：").append(task.getCurrentChapter());
+        }
+        recordSiteActivity(task.getSite(), CrawlerSiteActivity.EventType.ACCESS_LIMITED,
+                task.getId(), "访问受限：" + task.getSite().getSiteName(), details.toString());
+    }
+
+    private void recordSiteActivity(CrawlerSite site, CrawlerSiteActivity.EventType eventType,
+            String taskId, String description, String details) {
+        if (siteActivityRepository == null || site == null || site.getId() == null) return;
+        try {
+            if (taskId != null && siteActivityRepository.existsByTaskIdAndEventType(taskId, eventType)) {
+                return;
+            }
+            siteActivityRepository.save(CrawlerSiteActivity.builder()
+                    .site(site)
+                    .eventType(eventType)
+                    .taskId(taskId)
+                    .description(shortText(description, 500))
+                    .details(details)
+                    .build());
+        } catch (Exception exception) {
+            log.warn("[采集网站] 保存行为记录失败: siteId={}, taskId={}, eventType={}",
+                    site.getId(), taskId, eventType, exception);
+        }
+    }
+
     private void recordCrawlerEvent(CrawlerTask task, String event, String details) {
         recordCrawlerLog(task, event, details);
         try {

@@ -48,6 +48,12 @@ public class CrawlerController {
         return chapterAttemptMetricService.statistics(user(auth), days, page, size);
     }
     @GetMapping("/sites") public List<SiteView> sites(Authentication auth) { return managementService.sites(user(auth)); }
+    @GetMapping("/sites/{id}/activities")
+    public Page<SiteActivityView> siteActivities(Authentication auth, @PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return managementService.siteActivities(user(auth), id, page, size);
+    }
     @PostMapping("/sites") @ResponseStatus(HttpStatus.CREATED) public SiteView createSite(Authentication auth, @Valid @RequestBody SitePayload payload) { return managementService.createSite(user(auth), payload); }
     @PutMapping("/sites/{id}") public SiteView updateSite(Authentication auth, @PathVariable Long id, @Valid @RequestBody SitePayload payload) { return managementService.updateSite(user(auth), id, payload); }
     @DeleteMapping("/sites/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteSite(Authentication auth, @PathVariable Long id) { managementService.deleteSite(user(auth), id); }
