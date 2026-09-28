@@ -336,15 +336,16 @@ class CrawlerHttpClientTest {
         }
     }
 
-    @Test void opensSiteCircuitAfterConfiguredConsecutiveFailures() throws Exception {
+    @Test void opensSiteCircuitAfterSiteConfiguredConsecutiveFailures() throws Exception {
         AtomicInteger targetRequests = new AtomicInteger();
         HttpServer server = server("User-agent: *\nAllow: /\n", exchange -> {
             targetRequests.incrementAndGet();
             respond(exchange, 503, "unavailable");
         });
         try {
-            CrawlerHttpClient httpClient = configuredClient(0, 2);
+            CrawlerHttpClient httpClient = configuredClient(0, 3);
             CrawlerSite localSite = localSite(server, 14L);
+            localSite.setCooldownFailureThreshold(2);
             String url = localSite.getBaseUrl() + "/chapter/1";
 
             assertThrows(IllegalStateException.class, () -> httpClient.get(localSite, url));
