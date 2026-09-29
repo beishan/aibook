@@ -218,6 +218,31 @@ public class CrawlerController {
             @Valid @RequestBody TaskQueuePayload request) {
         return taskService.updateTaskQueue(user(auth), queueId, request);
     }
+    @GetMapping("/tasks/queues/proxy-options")
+    public List<QueueProxyOptionView> queueProxyOptions() {
+        return taskService.queueProxyOptions();
+    }
+    @GetMapping("/tasks/queues/{queueId}/executors")
+    public List<QueueExecutorView> queueExecutors(Authentication auth, @PathVariable Long queueId) {
+        return taskService.queueExecutors(user(auth), queueId);
+    }
+    @PostMapping("/tasks/queues/{queueId}/executors")
+    @ResponseStatus(HttpStatus.CREATED)
+    public QueueExecutorView createQueueExecutor(Authentication auth, @PathVariable Long queueId,
+            @RequestBody QueueExecutorPayload request) {
+        return taskService.createQueueExecutor(user(auth), queueId, request);
+    }
+    @PutMapping("/tasks/queues/{queueId}/executors/{executorId}")
+    public QueueExecutorView updateQueueExecutor(Authentication auth, @PathVariable Long queueId,
+            @PathVariable Long executorId, @RequestBody QueueExecutorPayload request) {
+        return taskService.updateQueueExecutor(user(auth), queueId, executorId, request);
+    }
+    @DeleteMapping("/tasks/queues/{queueId}/executors/{executorId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteQueueExecutor(Authentication auth, @PathVariable Long queueId,
+            @PathVariable Long executorId) {
+        taskService.deleteQueueExecutor(user(auth), queueId, executorId);
+    }
     @PutMapping("/tasks/{id}/queue")
     public TaskView assignTaskQueue(Authentication auth, @PathVariable String id,
             @Valid @RequestBody TaskQueueAssignmentRequest request) {

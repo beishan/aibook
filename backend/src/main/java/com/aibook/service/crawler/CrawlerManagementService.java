@@ -46,6 +46,7 @@ public class CrawlerManagementService {
     private final BookListRepository bookListRepository;
     private final ObjectMapper objectMapper;
     private final CrawlerHttpClient httpClient;
+    private final CrawlerQueueExecutorService queueExecutorService;
 
     @Transactional(readOnly = true)
     public List<SiteView> sites(User user) { return siteRepository.findByUserOrderByCreatedAtDesc(user).stream().map(this::siteView).toList(); }
@@ -68,7 +69,10 @@ public class CrawlerManagementService {
         apply(site, payload, siteCode);
         site = siteRepository.save(site);
         if (taskQueueRepository != null) {
-            taskQueueRepository.save(CrawlerTaskQueue.builder().site(site).user(user).build());
+            CrawlerTaskQueue queue = taskQueueRepository.save(
+                    CrawlerTaskQueue.builder().site(site).user(user)
+                            .maxConcurrentTasks(1).build());
+            queueExecutorService.ensureQueueExecutors(queue);
         }
         httpClient.refreshSiteConfiguration(site);
         return siteView(site);
@@ -93,6 +97,8 @@ public class CrawlerManagementService {
         discoveryPageRepository.deleteBySite(site);
         ruleVersionRepository.deleteBySite(site);
         if (taskQueueRepository != null) {
+            taskQueueRepository.findBySite(site)
+                    .ifPresent(queue -> queueExecutorService.deleteQueueData(queue.getId()));
             taskQueueRepository.deleteBySite(site);
         }
         if (siteActivityRepository != null) {
