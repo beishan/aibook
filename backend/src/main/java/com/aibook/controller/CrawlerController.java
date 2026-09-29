@@ -161,26 +161,27 @@ public class CrawlerController {
             @RequestParam(required = false) String type,
             @RequestParam(defaultValue = "false") boolean favoriteOnly,
             @RequestParam(required = false) Long siteId,
+            @RequestParam(required = false) Long queueId,
             @RequestParam(required = false) String priority,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
                     java.time.LocalDateTime createdAfter,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
                     java.time.LocalDateTime createdBefore) {
         return managementService.tasks(user(auth), page, size, failedOnly, status, type,
-                favoriteOnly, siteId, priority, createdAfter, createdBefore);
+                favoriteOnly, siteId, queueId, priority, createdAfter, createdBefore);
     }
     @GetMapping("/tasks/queued") public List<TaskView> queuedTasks(
-            Authentication auth, @RequestParam(required = false) Long siteId) {
-        return taskService.queuedTasks(user(auth), siteId);
+            Authentication auth, @RequestParam(required = false) Long queueId) {
+        return taskService.queuedTasks(user(auth), queueId);
     }
     @GetMapping("/tasks/current") public List<TaskView> currentTasks(
-            Authentication auth, @RequestParam(required = false) Long siteId) {
-        return taskService.currentTasks(user(auth), siteId);
+            Authentication auth, @RequestParam(required = false) Long queueId) {
+        return taskService.currentTasks(user(auth), queueId);
     }
     @PutMapping("/tasks/queued/order") public List<TaskView> reorderQueuedTasks(
-            Authentication auth, @RequestParam(required = false) Long siteId,
+            Authentication auth, @RequestParam(required = false) Long queueId,
             @Valid @RequestBody TaskQueueOrderRequest request) {
-        return taskService.reorderQueuedTasks(user(auth), siteId, request.taskIds());
+        return taskService.reorderQueuedTasks(user(auth), queueId, request.taskIds());
     }
     @PutMapping("/tasks/queued/{id}/prioritize") public List<TaskView> prioritizeQueuedTask(
             Authentication auth, @PathVariable String id) {
@@ -204,14 +205,48 @@ public class CrawlerController {
     @GetMapping("/tasks/queues") public List<TaskQueueView> taskQueues(Authentication auth) {
         return taskService.taskQueues(user(auth));
     }
+    @PutMapping("/tasks/queues/order") public List<TaskQueueView> reorderTaskQueues(Authentication auth,
+            @Valid @RequestBody TaskQueueReorderRequest request) {
+        return taskService.reorderTaskQueues(user(auth), request.queueIds());
+    }
     @PostMapping("/tasks/queues") @ResponseStatus(HttpStatus.CREATED)
     public TaskQueueView createTaskQueue(Authentication auth, @Valid @RequestBody TaskQueueCreateRequest request) {
-        return taskService.createTaskQueue(user(auth), request.siteId());
+        return taskService.createTaskQueue(user(auth), request.siteId(), request.queueName());
     }
-    @PutMapping("/tasks/queues/{siteId}") @PreAuthorize("hasRole('ADMIN')")
-    public TaskQueueView updateTaskQueue(Authentication auth, @PathVariable Long siteId,
+    @PutMapping("/tasks/queues/{queueId}")
+    public TaskQueueView updateTaskQueue(Authentication auth, @PathVariable Long queueId,
             @Valid @RequestBody TaskQueuePayload request) {
-        return taskService.updateTaskQueue(user(auth), siteId, request);
+        return taskService.updateTaskQueue(user(auth), queueId, request);
+    }
+    @GetMapping("/tasks/queues/proxy-options")
+    public List<QueueProxyOptionView> queueProxyOptions() {
+        return taskService.queueProxyOptions();
+    }
+    @GetMapping("/tasks/queues/{queueId}/executors")
+    public List<QueueExecutorView> queueExecutors(Authentication auth, @PathVariable Long queueId) {
+        return taskService.queueExecutors(user(auth), queueId);
+    }
+    @PostMapping("/tasks/queues/{queueId}/executors")
+    @ResponseStatus(HttpStatus.CREATED)
+    public QueueExecutorView createQueueExecutor(Authentication auth, @PathVariable Long queueId,
+            @RequestBody QueueExecutorPayload request) {
+        return taskService.createQueueExecutor(user(auth), queueId, request);
+    }
+    @PutMapping("/tasks/queues/{queueId}/executors/{executorId}")
+    public QueueExecutorView updateQueueExecutor(Authentication auth, @PathVariable Long queueId,
+            @PathVariable Long executorId, @RequestBody QueueExecutorPayload request) {
+        return taskService.updateQueueExecutor(user(auth), queueId, executorId, request);
+    }
+    @DeleteMapping("/tasks/queues/{queueId}/executors/{executorId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteQueueExecutor(Authentication auth, @PathVariable Long queueId,
+            @PathVariable Long executorId) {
+        taskService.deleteQueueExecutor(user(auth), queueId, executorId);
+    }
+    @PutMapping("/tasks/{id}/queue")
+    public TaskView assignTaskQueue(Authentication auth, @PathVariable String id,
+            @Valid @RequestBody TaskQueueAssignmentRequest request) {
+        return taskService.assignTaskQueue(user(auth), id, request.queueId());
     }
     @GetMapping("/tasks/{id}/scan-results") public Page<ScanBookResultView> scanResults(
             Authentication auth, @PathVariable String id,

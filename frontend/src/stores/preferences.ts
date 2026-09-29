@@ -16,7 +16,7 @@ export type LibraryViewMode = 'card' | 'compact-card' | 'list'
 export type CrawlerDiscoveryViewMode = 'table' | 'card'
 export type CrawlerBookViewMode = 'table' | 'card'
 export const CRAWLER_POLLING_INTERVAL_OPTIONS = [1, 3, 5, 10, 30] as const
-export type CrawlerPollingIntervalSeconds = (typeof CRAWLER_POLLING_INTERVAL_OPTIONS)[number]
+export type CrawlerPollingIntervalSeconds = number
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 export const LIBRARY_PAGE_SIZE_OPTIONS = [10, 30, 50, 100, 200] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
@@ -167,7 +167,9 @@ const isCrawlerPollingIntervalSeconds = (
   value: unknown,
 ): value is CrawlerPollingIntervalSeconds =>
   typeof value === 'number'
-  && CRAWLER_POLLING_INTERVAL_OPTIONS.includes(value as CrawlerPollingIntervalSeconds)
+  && Number.isInteger(value)
+  && value >= 1
+  && value <= 3600
 
 const isCrawlerDiscoveryViewMode = (value: unknown): value is CrawlerDiscoveryViewMode =>
   value === 'table' || value === 'card'

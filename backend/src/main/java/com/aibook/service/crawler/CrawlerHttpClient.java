@@ -8,6 +8,7 @@ import com.aibook.service.ProxySettingsService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
@@ -42,6 +43,8 @@ public class CrawlerHttpClient {
 
     private final ObjectMapper objectMapper;
     private final ProxySettingsService proxySettingsService;
+    @Autowired
+    private CrawlerQueueExecutorService queueExecutorService;
     private final CrawlerSettingsService crawlerSettingsService;
     private final CrawlerSiteRepository crawlerSiteRepository;
     private final Map<Long, AtomicLong> siteNextRequests = new ConcurrentHashMap<>();
@@ -68,6 +71,9 @@ public class CrawlerHttpClient {
         CrawlerRequestSettings settings = requestSettings();
         ensureCircuitClosed(site);
         enforceRobots(site, uri, settings, timing);
+        if (queueExecutorService != null && queueExecutorService.hasBoundExecutor()) {
+            return getThroughQueueExecutor(site, uri, etag, lastModified, settings, timing);
+        }
         List<String> proxies = proxyUrls(site);
         int attempts = Math.max(1, settings.retryCount() + 1);
         int proxyIndex = 0;
@@ -145,6 +151,69 @@ public class CrawlerHttpClient {
                 cooldownFailureThreshold(site, settings.maxConsecutiveFailures()),
                 settings.circuitCooldownSeconds());
         throw last == null ? new IllegalStateException("请求失败") : last;
+    }
+
+    private FetchResult getThroughQueueExecutor(CrawlerSite site, URI uri,
+            String etag, String lastModified, CrawlerRequestSettings settings,
+            RequestTiming timing) throws Exception {
+        List<CrawlerQueueExecutorService.ProxyCandidate> candidates =
+                queueExecutorService.availableCandidates(site);
+        if (candidates.isEmpty()) {
+            throw new NoAvailableQueueProxyException("当前队列的执行器没有可用代理，任务等待代理恢复");
+        }
+        for (CrawlerQueueExecutorService.ProxyCandidate candidate : candidates) {
+            try {
+                TimedResponse timed = sendFollowingSafeRedirects(site, uri, etag,
+                        lastModified, candidate.url(), settings, timing);
+                NetworkResponse response = timed.response();
+                if (response.statusCode() == 304) {
+                    recordSuccess(site);
+                    return new FetchResult("", 304, timed.durationMillis(), etag, lastModified);
+                }
+                if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    validateContentType(response);
+                    Charset charset = Charset.forName(defaultString(site.getEncoding(), "UTF-8"));
+                    String html = new String(response.body(), charset);
+                    Optional<String> challenge = settings.softBlockDetectionEnabled()
+                            ? detectSoftBlock(html) : Optional.empty();
+                    if (challenge.isPresent()) {
+                        queueExecutorService.coolBoundProxy(candidate, site,
+                                "检测到疑似反爬验证页：" + challenge.get(), 0);
+                        continue;
+                    }
+                    recordSuccess(site);
+                    return new FetchResult(html, response.statusCode(), timed.durationMillis(),
+                            response.headers().firstValue("ETag").orElse(null),
+                            response.headers().firstValue("Last-Modified").orElse(null));
+                }
+                if (Set.of(401, 403, 429, 451).contains(response.statusCode())) {
+                    long retryAfter = response.statusCode() == 429
+                            ? retryAfterMillis(response.headers(), Instant.now()).orElse(0) / 1000
+                            : 0;
+                    queueExecutorService.coolBoundProxy(candidate, site,
+                            "源站限制访问（HTTP " + response.statusCode() + "）", retryAfter);
+                    continue;
+                }
+                if (response.statusCode() >= 500) {
+                    queueExecutorService.coolBoundProxyForNetworkFailure(candidate,
+                            "源站返回 HTTP " + response.statusCode());
+                    continue;
+                }
+                recordFailure(site, cooldownFailureThreshold(site,
+                        settings.maxConsecutiveFailures()), settings.circuitCooldownSeconds());
+                throw new ResponseStatusException(HttpStatusCode.valueOf(response.statusCode()),
+                        "源站返回 HTTP " + response.statusCode());
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw exception;
+            } catch (ResponseStatusException exception) {
+                throw exception;
+            } catch (IOException exception) {
+                queueExecutorService.coolBoundProxyForNetworkFailure(candidate,
+                        "代理连接失败：" + exception.getClass().getSimpleName());
+            }
+        }
+        throw new NoAvailableQueueProxyException("当前队列的执行器代理均不可用或处于冷却期，任务等待代理恢复");
     }
 
     public RobotsTxtSnapshot refreshRobotsTxt(CrawlerSite site) {
@@ -396,6 +465,9 @@ public class CrawlerHttpClient {
             RequestTiming timing) throws Exception {
         URI robotsUri = new URI(target.getScheme(), null, target.getHost(), target.getPort(),
                 "/robots.txt", null, null);
+        if (queueExecutorService != null && queueExecutorService.hasBoundExecutor()) {
+            return fetchRobotsThroughQueue(site, robotsUri, settings, now, timing);
+        }
         List<String> proxies = proxyUrls(site);
         String proxyUrl = proxies.isEmpty() ? null : proxies.getFirst();
         try {
@@ -428,6 +500,8 @@ public class CrawlerHttpClient {
                         "robots.txt 要求稍后重试，站点请求已进入冷却期");
             }
             throw new IllegalStateException("robots.txt 返回 HTTP " + status);
+        } catch (NoAvailableQueueProxyException exception) {
+            throw exception;
         } catch (ResponseStatusException exception) {
             throw exception;
         } catch (Exception exception) {
@@ -437,6 +511,49 @@ public class CrawlerHttpClient {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "暂时无法确认 robots.txt 访问策略，已暂停目标请求", exception);
         }
+    }
+
+    private RobotsCacheEntry fetchRobotsThroughQueue(CrawlerSite site, URI robotsUri,
+            CrawlerRequestSettings settings, Instant now, RequestTiming timing) throws Exception {
+        List<CrawlerQueueExecutorService.ProxyCandidate> candidates =
+                queueExecutorService.availableCandidates(site);
+        for (CrawlerQueueExecutorService.ProxyCandidate candidate : candidates) {
+            try {
+                TimedResponse timed = sendFollowingSafeRedirects(site, robotsUri,
+                        null, null, candidate.url(), settings, timing);
+                int status = timed.response().statusCode();
+                if (status >= 200 && status < 300) {
+                    Charset charset = Charset.forName(defaultString(site.getEncoding(), "UTF-8"));
+                    String body = new String(timed.response().body(), charset);
+                    return new RobotsCacheEntry(CrawlerRobotsPolicy.parse(body,
+                            productToken(settings.userAgent())),
+                            now.plus(Duration.ofMinutes(settings.robotsCacheMinutes())));
+                }
+                if (status == 404 || status == 410) {
+                    return new RobotsCacheEntry(CrawlerRobotsPolicy.ALLOW_ALL,
+                            now.plus(Duration.ofMinutes(settings.robotsCacheMinutes())));
+                }
+                if (Set.of(401, 403, 429, 451).contains(status)) {
+                    long delay = status == 429
+                            ? retryAfterMillis(timed.response().headers(), now).orElse(0) / 1000
+                            : 0;
+                    queueExecutorService.coolBoundProxy(candidate, site,
+                            "robots.txt 返回 HTTP " + status, delay);
+                    continue;
+                }
+                if (status >= 500) {
+                    queueExecutorService.coolBoundProxyForNetworkFailure(candidate,
+                            "robots.txt 返回 HTTP " + status);
+                    continue;
+                }
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                        "无法确认 robots.txt 访问策略（HTTP " + status + "）");
+            } catch (IOException exception) {
+                queueExecutorService.coolBoundProxyForNetworkFailure(candidate,
+                        "robots.txt 代理连接失败");
+            }
+        }
+        throw new NoAvailableQueueProxyException("当前队列没有可用于检查 robots.txt 的代理");
     }
 
     private String productToken(String configuredUserAgent) {
@@ -779,6 +896,12 @@ public class CrawlerHttpClient {
     private record RobotsCacheEntry(CrawlerRobotsPolicy policy, Instant expiresAt) { }
     private record CircuitState(int failures, Instant blockedUntil, String reason, String pageUrl) { }
     private record HttpClientKey(int timeoutMillis, String proxyUrl) { }
+
+    public static class NoAvailableQueueProxyException extends Exception {
+        public NoAvailableQueueProxyException(String message) {
+            super(message);
+        }
+    }
     record ProtectionState(boolean coolingDown, Instant blockedUntil, String reason, String pageUrl,
             int consecutiveFailures, long adaptiveDelayMillis) {
         ProtectionState(boolean coolingDown, Instant blockedUntil, String reason,

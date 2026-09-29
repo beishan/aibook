@@ -1,6 +1,7 @@
 package com.aibook.dto.crawler;
 
 import com.aibook.model.entity.CrawlerTask;
+import com.aibook.model.entity.CrawlerQueueExecutor;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.time.Instant;
@@ -205,10 +206,35 @@ public final class CrawlerDtos {
     public record TaskQueuePayload(
             @NotNull @Min(1) @Max(16) Integer maxConcurrentTasks,
             @NotNull @Min(0) @Max(3600) Integer taskIntervalSeconds,
-            Boolean enabled) { }
-    public record TaskQueueCreateRequest(@NotNull Long siteId) { }
+            @Size(max = 100) String queueName) { }
+    public record TaskQueueCreateRequest(Long siteId, @Size(max = 100) String queueName) { }
+    public record TaskQueueReorderRequest(@NotEmpty List<@NotNull Long> queueIds) { }
+    public record TaskQueueAssignmentRequest(@NotNull Long queueId) { }
+    public record QueueExecutorProxyPayload(
+            @NotNull Long proxyConfigId,
+            @Min(10) @Max(604800) Integer cooldownSeconds) { }
+    public record QueueExecutorPayload(
+            @NotBlank @Size(max = 100) String name,
+            @Size(max = 500) String description,
+            Boolean enabled,
+            @NotNull CrawlerQueueExecutor.ProxyMode proxyMode,
+            @NotNull CrawlerQueueExecutor.SelectionStrategy selectionStrategy,
+            @Min(10) @Max(604800) Integer defaultProxyCooldownSeconds,
+            @Valid List<@NotNull QueueExecutorProxyPayload> proxies) { }
+    public record QueueExecutorProxyView(
+            Long proxyConfigId, String proxyName, int sortOrder,
+            Integer cooldownSeconds, java.time.Instant coolingUntil,
+            boolean available) { }
+    public record QueueExecutorView(
+            Long id, Long queueId, String name, String description,
+            boolean defaultExecutor, boolean enabled, String proxyMode, String selectionStrategy,
+            Integer defaultProxyCooldownSeconds,
+            List<QueueExecutorProxyView> proxies,
+            int availableProxyCount, java.time.Instant nextAvailableAt) { }
+    public record QueueProxyOptionView(
+            Long id, String name, boolean effectiveEnabled) { }
     public record TaskQueueView(
-            Long id, Long siteId, String siteName, boolean enabled,
+            Long id, Long siteId, String siteName, String queueName,
             int maxConcurrentTasks, int taskIntervalSeconds,
             int runningCount, int waitingCount, int pausedCount,
             int activeTaskCount, int progressPercent,
@@ -278,7 +304,8 @@ public final class CrawlerDtos {
             int totalCount, int successCount, int newBookCount,
             int duplicateCount, int failedCount, int waitingCount, String currentChapter,
             long averageRequestMillis, String errorMessage, LocalDateTime startedAt,
-            LocalDateTime finishedAt, LocalDateTime createdAt, String siteThemeColor) { }
+            LocalDateTime finishedAt, LocalDateTime createdAt, String siteThemeColor,
+            Long queueId) { }
 
     public record ExportView(Long id, String format, long fileSize, String fileHash,
             LocalDateTime createdAt) { }

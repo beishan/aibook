@@ -6,6 +6,7 @@ import com.aibook.repository.*;
 import com.aibook.repository.projections.BookTitleMatchProjection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +46,8 @@ public class CrawlerManagementService {
     private final BookListRepository bookListRepository;
     private final ObjectMapper objectMapper;
     private final CrawlerHttpClient httpClient;
+    @Autowired
+    private CrawlerQueueExecutorService queueExecutorService;
 
     @Transactional(readOnly = true)
     public List<SiteView> sites(User user) { return siteRepository.findByUserOrderByCreatedAtDesc(user).stream().map(this::siteView).toList(); }
@@ -67,7 +70,10 @@ public class CrawlerManagementService {
         apply(site, payload, siteCode);
         site = siteRepository.save(site);
         if (taskQueueRepository != null) {
-            taskQueueRepository.save(CrawlerTaskQueue.builder().site(site).build());
+            CrawlerTaskQueue queue = taskQueueRepository.save(
+                    CrawlerTaskQueue.builder().site(site).user(user)
+                            .maxConcurrentTasks(1).build());
+            queueExecutorService.ensureQueueExecutors(queue);
         }
         httpClient.refreshSiteConfiguration(site);
         return siteView(site);
@@ -92,6 +98,8 @@ public class CrawlerManagementService {
         discoveryPageRepository.deleteBySite(site);
         ruleVersionRepository.deleteBySite(site);
         if (taskQueueRepository != null) {
+            taskQueueRepository.findBySite(site)
+                    .ifPresent(queue -> queueExecutorService.deleteQueueData(queue.getId()));
             taskQueueRepository.deleteBySite(site);
         }
         if (siteActivityRepository != null) {
@@ -490,7 +498,16 @@ public class CrawlerManagementService {
             User user, int page, int size, boolean failedOnly, String status, String type,
             boolean favoriteOnly, Long siteId, String priority,
             LocalDateTime createdAfter, LocalDateTime createdBefore) {
-        if (siteId == null && (priority == null || priority.isBlank())
+        return tasks(user, page, size, failedOnly, status, type, favoriteOnly, siteId, null,
+                priority, createdAfter, createdBefore);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TaskView> tasks(
+            User user, int page, int size, boolean failedOnly, String status, String type,
+            boolean favoriteOnly, Long siteId, Long queueId, String priority,
+            LocalDateTime createdAfter, LocalDateTime createdBefore) {
+        if (siteId == null && queueId == null && (priority == null || priority.isBlank())
                 && createdAfter == null && createdBefore == null) {
             return tasks(user, page, size, failedOnly, status, type, favoriteOnly);
         }
@@ -508,6 +525,19 @@ public class CrawlerManagementService {
             predicates.add(criteriaBuilder.equal(root.get("user"), user));
             if (siteId != null) {
                 predicates.add(criteriaBuilder.equal(root.get("site").get("id"), siteId));
+            }
+            if (queueId != null) {
+                CrawlerTaskQueue queue = taskQueueRepository.findById(queueId).orElse(null);
+                Predicate assignedQueue = criteriaBuilder.equal(
+                        root.join("queue", JoinType.LEFT).get("id"), queueId);
+                if (queue != null && queue.getSite() != null) {
+                    predicates.add(criteriaBuilder.or(assignedQueue,
+                            criteriaBuilder.and(criteriaBuilder.isNull(root.get("queue")),
+                                    criteriaBuilder.equal(root.get("site").get("id"),
+                                            queue.getSite().getId()))));
+                } else {
+                    predicates.add(assignedQueue);
+                }
             }
             if (taskType != null) {
                 predicates.add(criteriaBuilder.equal(root.get("type"), taskType));
@@ -844,7 +874,21 @@ public class CrawlerManagementService {
                 .filter(tag -> !tag.isBlank()).distinct().toList();
     }
     public ChapterView chapterView(CrawlerChapter c) { return new ChapterView(c.getId(), c.getChapterIndex(), c.getChapterName(), c.getChapterUrl(), value(c.getWordCount(), 0), c.getCrawlStatus().name(), c.getAccessStatus().name(), value(c.getRetryCount(), 0), c.getErrorMessage(), c.getCrawlTime(), c.getCreatedAt()); }
-    public TaskView taskView(CrawlerTask t) { return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(), t.getSite().getId(), t.getSite().getSiteName(), t.getDiscoveryPageId(), t.getDiscoveryPageName(), t.getScanMaxPages(), value(t.getScannedPageCount(), 0), taskProgressPercent(t), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(), t.getCrawlerBook() != null && Boolean.TRUE.equals(t.getCrawlerBook().getFavorite()), value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0), value(t.getNewBookCount(), 0), value(t.getDuplicateCount(), 0), value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(), t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(), t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt(), normalizedThemeColor(t.getSite().getThemeColor())); }
+    public TaskView taskView(CrawlerTask t) {
+        return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(),
+                t.getSite().getId(), t.getSite().getSiteName(), t.getDiscoveryPageId(),
+                t.getDiscoveryPageName(), t.getScanMaxPages(), value(t.getScannedPageCount(), 0),
+                taskProgressPercent(t), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(),
+                t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(),
+                t.getCrawlerBook() != null && Boolean.TRUE.equals(t.getCrawlerBook().getFavorite()),
+                value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0),
+                value(t.getNewBookCount(), 0), value(t.getDuplicateCount(), 0),
+                value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(),
+                t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(),
+                t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt(),
+                normalizedThemeColor(t.getSite().getThemeColor()),
+                t.getQueue() == null ? null : t.getQueue().getId());
+    }
 
     private String normalizedThemeColor(String color) {
         return color != null && color.matches("#[0-9a-fA-F]{6}")

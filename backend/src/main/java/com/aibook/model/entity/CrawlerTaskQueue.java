@@ -6,7 +6,7 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-/** Persistent per-site task queue and dispatch policy. */
+/** Persistent per-site or free task queue and dispatch policy. */
 @Entity
 @Table(name = "crawler_task_queues", uniqueConstraints =
         @UniqueConstraint(name = "uk_crawler_task_queue_site", columnNames = "site_id"))
@@ -20,9 +20,16 @@ public class CrawlerTaskQueue {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(fetch = FetchType.EAGER, optional = false)
-    @JoinColumn(name = "site_id", nullable = false)
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "site_id")
     private CrawlerSite site;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "user_id")
+    private User user;
+
+    @Column(length = 100)
+    private String queueName;
 
     @Builder.Default
     private Integer maxConcurrentTasks = 4;
@@ -30,8 +37,7 @@ public class CrawlerTaskQueue {
     @Builder.Default
     private Integer taskIntervalSeconds = 0;
 
-    @Builder.Default
-    private Boolean enabled = true;
+    private Integer sortOrder;
 
     private LocalDateTime lastTaskStartedAt;
 

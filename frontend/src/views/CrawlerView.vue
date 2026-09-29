@@ -26,7 +26,7 @@
         </article>
       </div>
       <div class="section-heading"><div><p class="eyebrow">LIVE QUEUE</p><h2>最近任务</h2></div><el-button text :icon="Refresh" @click="refreshOverview">刷新</el-button></div>
-      <TaskTable :tasks="dashboard?.recentTasks || []" @open="openTask" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" @scan-results="openScanResults" />
+      <TaskTable :tasks="dashboard?.recentTasks || []" @open="openTask" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" @scan-results="openScanResults" @queue="openTaskQueueDialog" />
     </section>
 
     <section v-else-if="activeTab === 'statistics'" v-loading="statisticsLoading" class="panel crawler-statistics" role="tabpanel" aria-labelledby="crawler-statistics-title">
@@ -343,6 +343,7 @@
           @scan-results="openScanResults"
           @toggle-favorite="toggleTaskFavorite"
           @book-lists="openTaskBookLists"
+          @queue="openTaskQueueDialog"
         />
       </div>
       <el-empty v-if="activeTab === 'tasks'&&!taskLoading&&!tasks.length" :description="taskStatusFilter||taskTypeFilter||taskFavoriteOnly?'暂无符合筛选条件的采集任务':'暂无采集任务'" />
@@ -827,6 +828,7 @@
 
         <el-alert v-if="selectedTask.errorMessage" type="error" :closable="false" title="任务错误" :description="selectedTask.errorMessage" show-icon />
         <div class="task-detail-actions">
+          <el-button @click="openTaskQueueDialog(selectedTask)">调整所在队列</el-button>
           <el-button v-if="selectedTask.bookId" @click="openTaskBook(selectedTask)">查看采集书籍</el-button>
           <el-button v-if="selectedTask.type==='SITE_SCAN'" @click="openScanResults(selectedTask)">查看扫描结果</el-button>
           <el-button v-if="['WAITING','PAUSED','FAILED'].includes(selectedTask.status)" @click="openTaskEditor(selectedTask)">修改优先级</el-button>
@@ -846,16 +848,34 @@
             <span><small>等待 / 暂停</small><strong>{{ totalQueueWaiting }} / {{ totalQueuePaused }}</strong></span>
             <span><small>队列总进度</small><strong>{{ totalQueueProgress }}%</strong></span>
           </div>
-          <div v-if="taskQueues.length" class="site-queue-list" role="list">
+          <p v-if="taskQueues.length > 1" class="site-queue-order-hint">拖动每行左侧的 ⠿ 调整队列顺序，修改会自动保存。</p>
+          <div v-if="taskQueues.length" class="site-queue-list" role="list" :aria-busy="queueOrderSaving">
             <article
               v-for="queue in taskQueues"
               :key="queue.id"
               class="site-queue-row"
+              :class="{ 'is-dragging': queueDraggingId === queue.id }"
               role="listitem"
+              @dragenter.prevent="moveDraggedQueue(queue)"
+              @dragover.prevent
             >
+              <button
+                type="button"
+                class="site-queue-drag-handle"
+                :class="{ dragging: queueDraggingId === queue.id }"
+                :disabled="queueOrderSaving"
+                :draggable="!queueOrderSaving"
+                :aria-label="`拖动调整${queueDisplayName(queue)}队列位置`"
+                title="拖动调整队列顺序，也可用上下方向键"
+                @dragstart="startQueueDrag(queue, $event)"
+                @dragend="finishQueueDrag"
+                @keydown.up.prevent="moveQueueByKeyboard(queue, -1)"
+                @keydown.down.prevent="moveQueueByKeyboard(queue, 1)"
+              >⠿</button>
               <div class="site-queue-identity">
-                <SiteSourceTag :name="queue.siteName" :color="queue.siteThemeColor" />
-                <el-tag v-if="queue.enabled === false" type="info" size="small">执行器已禁用</el-tag>
+                <SiteSourceTag v-if="queue.siteName" :name="queue.siteName" :color="queue.siteThemeColor" />
+                <el-tag v-else effect="plain">自由队列</el-tag>
+                <strong v-if="!queue.siteName">{{ queue.queueName }}</strong>
                 <small>运行中 {{ queue.runningCount }} / {{ queue.maxConcurrentTasks }}</small>
               </div>
               <div class="site-queue-metrics">
@@ -873,11 +893,11 @@
               </div>
             </article>
           </div>
-          <el-empty v-else description="还没有任务队列，请先添加采集网站" />
+          <el-empty v-else description="还没有任务队列，可以创建网站队列或自由队列" />
         </el-tab-pane>
         <el-tab-pane label="任务队列" name="tasks">
           <div class="queue-task-filters">
-            <el-select v-model="queueTaskSiteId" clearable placeholder="全部队列" @change="applyQueueTaskFilters">
+            <el-select v-model="queueTaskSiteId" clearable placeholder="全部来源网站" @change="applyQueueTaskFilters">
               <el-option v-for="site in sites" :key="site.id" :label="site.siteName" :value="site.id" />
             </el-select>
             <el-select v-model="queueTaskStatus" clearable placeholder="全部状态" @change="applyQueueTaskFilters">
@@ -908,6 +928,7 @@
             @toggle-favorite="toggleQueueTabTaskFavorite"
             @book-lists="openTaskBookLists"
             @prioritize="prioritizeQueueTabTask"
+            @queue="openTaskQueueDialog"
           />
           <el-empty v-if="!queueTaskLoading && !queueTaskError && !queueTabTasks.length" description="没有符合条件的任务" />
           <div v-if="queueTabTaskTotal" class="queue-task-pagination">
@@ -919,17 +940,17 @@
       <template #footer><el-button v-if="queuePopupTab==='config'" :loading="queuedTasksLoading" @click="loadTaskQueues">刷新队列</el-button><el-button v-if="queuePopupTab==='config'" @click="openCreateQueue">手动创建队列</el-button><el-button v-else :loading="queueTaskLoading" @click="loadQueueTabTasks">刷新任务</el-button><el-button @click="queueOverviewDialog=false">关闭</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="queueSettingsDialog" :title="`${queueSettingsTarget?.siteName || '网站'} · 队列配置`" width="min(520px, 94vw)" append-to-body>
+    <el-dialog v-model="queueSettingsDialog" :title="`${queueSettingsTarget ? queueDisplayName(queueSettingsTarget) : '队列'} · 队列配置`" width="min(520px, 94vw)" append-to-body>
       <div class="queue-settings-content">
         <div class="queue-settings-summary"><span><small>正在运行</small><strong>{{ queueSettingsTarget?.runningCount || 0 }}</strong></span><span><small>等待队列</small><strong>{{ queueSettingsTarget?.waitingCount || 0 }}</strong></span></div>
         <el-form label-position="top">
-          <el-form-item label="执行器状态">
-            <el-switch v-model="queueEnabled" active-text="启用" inactive-text="禁用" />
-            <small class="field-hint">禁用后不再启动此网站的新任务；正在运行的任务会继续，等待任务会保留。</small>
+          <el-form-item v-if="queueSettingsTarget && !queueSettingsTarget.siteId" label="队列名称">
+            <el-input v-model="queueName" maxlength="100" show-word-limit />
           </el-form-item>
           <el-form-item label="同时运行任务数">
-            <el-input-number class="queue-limit-stepper" v-model="queueLimit" :min="1" :max="16" :step="1" step-strictly />
-            <small class="field-hint">仅影响此网站的任务队列。调低上限时，超出的运行任务会保留进度并转回等待队列。</small>
+            <strong>{{ queueSettingsTarget?.maxConcurrentTasks ?? 0 }} 个可用执行器</strong>
+            <small class="field-hint">每个执行器同时运行一个任务。手动增减执行器后，并发数会自动更新。</small>
+            <el-button @click="openQueueExecutors">管理执行器</el-button>
           </el-form-item>
           <el-form-item label="任务启动间隔">
             <el-input-number v-model="queueIntervalSeconds" :min="0" :max="3600" :step="1" step-strictly />
@@ -940,13 +961,146 @@
       <template #footer><el-button @click="queueSettingsDialog=false">取消</el-button><el-button type="primary" :loading="savingQueueSettings" @click="saveQueueSettings">保存设置</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="createQueueDialog" title="手动创建网站队列" width="min(480px, 94vw)" append-to-body>
-      <el-form label-position="top"><el-form-item label="采集网站"><el-select v-model="createQueueSiteId" class="queue-site-select" placeholder="选择尚未创建队列的网站"><el-option v-for="site in sitesWithoutQueue" :key="site.id" :label="site.siteName" :value="site.id" /></el-select></el-form-item></el-form>
-      <el-empty v-if="!sitesWithoutQueue.length" :image-size="64" description="所有网站都已有队列" />
-      <template #footer><el-button @click="createQueueDialog=false">取消</el-button><el-button type="primary" :disabled="!createQueueSiteId" :loading="creatingQueue" @click="createQueue">创建队列</el-button></template>
+    <el-dialog
+      v-model="queueExecutorsDialog"
+      :title="`${queueSettingsTarget ? queueDisplayName(queueSettingsTarget) : '队列'} · 执行器`"
+      width="min(700px, 96vw)"
+      append-to-body
+    >
+      <p class="field-hint">启用的执行器各占一个并发槽位。禁用后不会接收新任务，已运行任务会继续完成。</p>
+      <div v-loading="queueExecutorsLoading" class="queue-executor-list">
+        <article v-for="item in queueExecutors" :key="item.id" class="queue-executor-card">
+          <div>
+            <strong>{{ item.name }}</strong>
+            <el-tag v-if="item.defaultExecutor" size="small" effect="plain">默认</el-tag>
+            <el-tag v-if="item.enabled === false" type="info" size="small">已禁用</el-tag>
+            <p>{{ item.description || '暂无描述' }}</p>
+            <small>
+              {{ item.proxyMode === 'DEFAULT' ? '默认代理' : `${item.proxies.length} 个指定代理` }}
+              · {{ item.selectionStrategy === 'RANDOM' ? '随机' : '按顺序' }}
+              · 当前可用 {{ item.availableProxyCount }} 个
+            </small>
+            <small v-for="proxy in item.proxies" :key="proxy.proxyConfigId">
+              {{ proxy.proxyName }}：{{ proxy.available ? '可用' : proxy.coolingUntil
+                ? `冷却至 ${formatTime(proxy.coolingUntil)}` : '已停用或不可用' }}
+            </small>
+            <small v-if="item.nextAvailableAt">最近恢复：{{ formatTime(item.nextAvailableAt) }}</small>
+          </div>
+          <div class="queue-executor-actions">
+            <el-button size="small" @click="editQueueExecutor(item)">编辑</el-button>
+            <el-button
+              v-if="!item.defaultExecutor"
+              size="small"
+              type="danger"
+              plain
+              @click="removeQueueExecutor(item)"
+            >删除</el-button>
+          </div>
+        </article>
+      </div>
+      <template #footer>
+        <el-button @click="queueExecutorsDialog=false">关闭</el-button>
+        <el-button type="primary" :disabled="queueExecutors.length >= 16" @click="addQueueExecutor">添加执行器</el-button>
+      </template>
     </el-dialog>
 
-    <el-dialog v-model="queuedTasksDialog" :title="`${activeQueue?.siteName || '网站'} · 队列任务 · ${queuedTasks.length}`" width="min(1040px, calc(100vw - 32px))" class="queued-tasks-dialog" append-to-body>
+    <el-dialog
+      v-model="queueExecutorEditorDialog"
+      :title="editingQueueExecutor ? '编辑执行器' : '添加执行器'"
+      width="min(620px, 96vw)"
+      append-to-body
+    >
+      <el-form label-position="top">
+        <el-form-item label="执行器状态">
+          <el-switch
+            v-model="queueExecutorForm.enabled"
+            active-text="启用"
+            inactive-text="禁用"
+          />
+          <small class="field-hint">禁用后不会分配新任务；执行中的任务会继续完成。</small>
+        </el-form-item>
+        <el-form-item label="名称">
+          <el-input v-model="queueExecutorForm.name" maxlength="100" show-word-limit />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="queueExecutorForm.description" type="textarea" maxlength="500" show-word-limit />
+        </el-form-item>
+        <el-form-item label="代理配置">
+          <el-select v-model="queueExecutorForm.proxyMode">
+            <el-option label="默认代理配置" value="DEFAULT" />
+            <el-option label="指定代理" value="SELECTED" />
+          </el-select>
+          <small class="field-hint">默认配置优先使用网站代理；未配置时使用全局采集代理。</small>
+        </el-form-item>
+        <el-form-item label="代理选用顺序">
+          <el-select v-model="queueExecutorForm.selectionStrategy">
+            <el-option label="按顺序" value="ORDERED" />
+            <el-option label="随机" value="RANDOM" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="queueExecutorForm.proxyMode === 'DEFAULT'" label="代理冷却时间（秒）">
+          <el-input-number v-model="queueExecutorForm.defaultProxyCooldownSeconds" :min="10" :max="604800" />
+          <small class="field-hint">留空时使用网站访问受限冷却时间。</small>
+        </el-form-item>
+        <template v-else>
+          <el-form-item label="选择代理">
+            <el-select v-model="selectedQueueProxyIds" multiple filterable placeholder="选择一个或多个代理">
+              <el-option
+                v-for="proxy in queueProxyOptions"
+                :key="proxy.id"
+                :label="`${proxy.name}${proxy.effectiveEnabled ? '' : '（已停用）'}`"
+                :value="proxy.id"
+              />
+            </el-select>
+          </el-form-item>
+          <div v-for="(proxy, index) in queueExecutorForm.proxies" :key="proxy.proxyConfigId" class="queue-executor-proxy-row">
+            <span>{{ queueProxyOptions.find(item => item.id === proxy.proxyConfigId)?.name || '已删除的代理' }}</span>
+            <el-input-number v-model="proxy.cooldownSeconds" :min="10" :max="604800" placeholder="默认冷却" />
+            <el-button :disabled="index === 0" @click="moveQueueProxy(index, -1)">上移</el-button>
+            <el-button :disabled="index === queueExecutorForm.proxies.length - 1" @click="moveQueueProxy(index, 1)">下移</el-button>
+          </div>
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="queueExecutorEditorDialog=false">取消</el-button>
+        <el-button type="primary" :loading="savingQueueExecutor" @click="saveQueueExecutor">保存执行器</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="createQueueDialog" title="手动创建队列" width="min(480px, 94vw)" append-to-body>
+      <el-form label-position="top">
+        <el-form-item label="队列类型">
+          <el-select v-model="createQueueType" class="queue-site-select">
+            <el-option label="来源网站队列" value="site" />
+            <el-option label="自由队列" value="free" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="createQueueType==='site'" label="采集网站">
+          <el-select v-model="createQueueSiteId" class="queue-site-select" placeholder="选择尚未创建队列的网站">
+            <el-option v-for="site in sitesWithoutQueue" :key="site.id" :label="site.siteName" :value="site.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-else label="队列名称">
+          <el-input v-model="createQueueName" maxlength="100" show-word-limit placeholder="例如：待处理任务" />
+        </el-form-item>
+      </el-form>
+      <el-empty v-if="createQueueType==='site' && !sitesWithoutQueue.length" :image-size="64" description="所有网站都已有队列，可以创建自由队列" />
+      <template #footer><el-button @click="createQueueDialog=false">取消</el-button><el-button type="primary" :disabled="createQueueType==='site' ? !createQueueSiteId : !createQueueName.trim()" :loading="creatingQueue" @click="createQueue">创建队列</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="taskQueueDialog" title="调整任务队列" width="min(480px, 94vw)" append-to-body>
+      <el-form label-position="top">
+        <el-form-item label="目标队列">
+          <el-select v-model="taskQueueSelection" class="queue-site-select" placeholder="选择队列">
+            <el-option v-for="queue in taskQueues" :key="queue.id" :label="queueDisplayName(queue)" :value="queue.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <el-alert v-if="queueMoveTask?.status==='RUNNING'" type="info" :closable="false" title="正在运行的任务会在当前执行结束后进入所选队列。" />
+      <template #footer><el-button @click="taskQueueDialog=false">取消</el-button><el-button type="primary" :loading="savingTaskQueue" :disabled="!taskQueueSelection" @click="saveTaskQueueAssignment">保存</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="queuedTasksDialog" :title="`${activeQueue ? queueDisplayName(activeQueue) : '任务'} · 队列任务 · ${queuedTasks.length}`" width="min(1040px, calc(100vw - 32px))" class="queued-tasks-dialog" append-to-body>
       <div v-if="queuedTasks.some(task=>task.status==='WAITING')" class="queued-order-note"><span class="queue-drag-mark">⠿</span><div><strong>运行中任务固定在最前，等待任务可调整顺序</strong><small>拖动等待任务或聚焦排序按钮后使用上下方向键；需要置顶时可点击“优先”。</small></div></div>
       <el-table v-loading="queuedTasksLoading||queuedTasksReordering||!!queuedTaskPrioritizingId" :data="pagedQueuedTasks" row-key="id" max-height="56vh" class="queued-task-table" :row-class-name="queuedTaskRowClassName">
         <el-table-column label="排序" width="62" align="center"><template #default="{row}"><button type="button" class="queue-drag-handle" :class="{dragging:queuedTaskDraggingId===row.id,disabled:row.status!=='WAITING'}" :disabled="row.status!=='WAITING'||queuedTasksReordering||Boolean(queuedTaskPrioritizingId)||Boolean(queuedTaskCommandId)" :draggable="row.status==='WAITING'&&!queuedTasksReordering&&!queuedTaskPrioritizingId&&!queuedTaskCommandId" :aria-label="row.status==='WAITING'?`拖动排序：${row.bookName||row.discoveryPageName||taskTypeLabel(row.type)}`:'当前状态不可排序'" :title="row.status==='WAITING'?'拖动调整顺序；也可使用上下方向键':'只有等待中的任务可以排序'" @dragstart="startQueuedTaskDrag(row,$event)" @dragenter.prevent="moveDraggedQueuedTask(row)" @dragover.prevent @dragend="finishQueuedTaskDrag" @keydown.up.prevent="moveQueuedTaskByKeyboard(row,-1)" @keydown.down.prevent="moveQueuedTaskByKeyboard(row,1)">⠿</button></template></el-table-column>
@@ -1187,11 +1341,13 @@ import {
   type CrawlerSitePayload,
   type CrawlerTask,
   type CrawlerTaskQueue,
+  type CrawlerQueueExecutor,
+  type CrawlerQueueExecutorPayload,
+  type CrawlerQueueProxyOption,
 } from '@/utils/crawler'
 import {
   CRAWLER_POLLING_INTERVAL_OPTIONS,
   usePreferencesStore,
-  type CrawlerPollingIntervalSeconds,
   type ReaderContentWidth,
   type ReaderSettings,
 } from '@/stores/preferences'
@@ -1202,7 +1358,7 @@ import api from '@/utils/api'
 
 interface BookListOption { id:number; name:string; description?:string }
 
-type TaskMoreCommand='scan-results'|'book-lists'|'edit'|'resume'|'delete'
+type TaskMoreCommand='scan-results'|'book-lists'|'edit'|'resume'|'delete'|'queue'
 type TaskMoreAction={command:TaskMoreCommand;label:string;danger?:boolean;divided?:boolean}
 
 const TaskTable = defineComponent({
@@ -1216,7 +1372,7 @@ const TaskTable = defineComponent({
   },
   emits: [
     'open', 'command', 'edit', 'delete', 'scan-results',
-    'selection-change', 'toggle-favorite', 'book-lists', 'prioritize',
+    'selection-change', 'toggle-favorite', 'book-lists', 'prioritize', 'queue',
   ],
   setup(props, { emit, expose }) {
   const tableRef = ref<InstanceType<typeof ElTable>>()
@@ -1226,6 +1382,7 @@ const TaskTable = defineComponent({
     row.bookId?{command:'book-lists',label:'加入书单'}:null,
     row.status==='FAILED'?{command:'resume',label:'继续'}:null,
     ['WAITING','PAUSED','FAILED'].includes(row.status)?{command:'edit',label:'修改'}:null,
+    {command:'queue',label:'调整队列'},
     row.status!=='RUNNING'?{command:'delete',label:'删除',danger:true,divided:true}:null,
   ].filter((action):action is TaskMoreAction=>Boolean(action))
   const handleMoreCommand=(row:CrawlerTask,command:TaskMoreCommand)=>{
@@ -1291,7 +1448,7 @@ type StatisticsDays=7|30|90
 const router=useRouter()
 const preferencesStore=usePreferencesStore()
 const {crawlerFollowCurrentChapter:followCurrentChapter,crawlerChapterPageSize:chapterPageSize,crawlerDiscoveryViewMode:discoveryViewMode,crawlerBookViewMode:bookViewMode,crawlerPollingIntervalSeconds:pollingIntervalSeconds,readerSettings}=storeToRefs(preferencesStore)
-const pollingIntervalOptions=CRAWLER_POLLING_INTERVAL_OPTIONS
+const pollingIntervalOptions = ref<number[]>([...CRAWLER_POLLING_INTERVAL_OPTIONS])
 const activeTab=ref<TabKey>('overview'), dashboard=ref<CrawlerDashboard>(), sites=ref<CrawlerSite[]>([]), books=ref<CrawlerBook[]>([]), discoveredBooks=ref<CrawlerBook[]>([]), tasks=ref<CrawlerTask[]>([]), failedTasks=ref<CrawlerTask[]>([])
 const statistics=ref<CrawlerDashboardStatistics>(), statisticsLoading=ref(false), statisticsDays=ref<StatisticsDays>(30)
 const chapterAttemptStatistics = ref<CrawlerChapterAttemptStatistics>()
@@ -1326,16 +1483,50 @@ let siteActivityRequestSequence=0
 const queueOverviewDialog = ref(false)
 const queuePopupTab = ref<'config' | 'tasks'>('config')
 const queueSettingsDialog = ref(false)
+const queueExecutorsDialog = ref(false)
+const queueExecutorEditorDialog = ref(false)
+const queueExecutorsLoading = ref(false)
+const savingQueueExecutor = ref(false)
+const queueExecutors = ref<CrawlerQueueExecutor[]>([])
+const queueProxyOptions = ref<CrawlerQueueProxyOption[]>([])
+const editingQueueExecutor = ref<CrawlerQueueExecutor>()
+const queueExecutorForm = ref<CrawlerQueueExecutorPayload>({
+  name: '',
+  description: '',
+  enabled: true,
+  proxyMode: 'DEFAULT',
+  selectionStrategy: 'ORDERED',
+  defaultProxyCooldownSeconds: null,
+  proxies: [],
+})
+const selectedQueueProxyIds = computed({
+  get: () => queueExecutorForm.value.proxies.map(item => item.proxyConfigId),
+  set: (ids: number[]) => {
+    const existing = new Map(queueExecutorForm.value.proxies.map(item => [item.proxyConfigId, item]))
+    queueExecutorForm.value.proxies = ids.map(id => existing.get(id) || {
+      proxyConfigId: id,
+      cooldownSeconds: null,
+    })
+  },
+})
 const createQueueDialog = ref(false)
+const taskQueueDialog = ref(false)
 const savingQueueSettings = ref(false)
+const savingTaskQueue = ref(false)
 const creatingQueue = ref(false)
 const taskQueues = ref<CrawlerTaskQueue[]>([])
+const queueOrderSaving = ref(false)
+const queueDraggingId = ref<number>()
+const queueDragStartOrder = ref<number[]>([])
 const activeQueue = ref<CrawlerTaskQueue>()
 const queueSettingsTarget = ref<CrawlerTaskQueue>()
-const queueLimit = ref(4)
+const queueName = ref('')
 const queueIntervalSeconds = ref(0)
-const queueEnabled = ref(true)
+const createQueueType = ref<'site'|'free'>('site')
+const createQueueName = ref('')
 const createQueueSiteId = ref<number>()
+const queueMoveTask = ref<CrawlerTask>()
+const taskQueueSelection = ref<number>()
 const queueTaskLoading = ref(false)
 const queueTaskError = ref('')
 const queueTaskTableRef = ref<{ refreshLayout: () => void }>()
@@ -1344,6 +1535,7 @@ const queueTabTaskTotal = ref(0)
 const queueTabTaskPage = ref(1)
 const queueTabTaskPageSize = ref(20)
 const queueTaskSiteId = ref<number>()
+const queueTaskQueueId = ref<number>()
 const queueTaskStatus = ref('')
 const queueTaskType = ref('')
 const queueTaskPriority = ref('')
@@ -1524,14 +1716,30 @@ const statisticsTaskTotals=computed(()=>statistics.value?.daily.reduce((totals,i
 const statisticsSuccessRate=computed(()=>statisticsTaskTotals.value.finished?Math.round(statisticsTaskTotals.value.successful/statisticsTaskTotals.value.finished*100):0)
 let timer:number|undefined
 let progressPolling=false
+let statisticsRequestSequence=0
 let chapterRequestSequence=0
 let chapterReaderRequestSequence=0
 let statisticsCharts:import('echarts').ECharts[]=[]
-onMounted(async()=>{document.addEventListener('keydown',handleChapterReaderKeydown);window.addEventListener('resize',resizeStatisticsCharts);await preferencesStore.hydrate();await Promise.all([refresh(),loadCrawlerStatistics()]);restartPolling()})
+onMounted(async()=>{document.addEventListener('keydown',handleChapterReaderKeydown);window.addEventListener('resize',resizeStatisticsCharts);await preferencesStore.hydrate();await loadPollingIntervalOptions();await Promise.all([refresh(),loadCrawlerStatistics()]);restartPolling()})
 onUnmounted(()=>{if(timer)window.clearInterval(timer);document.removeEventListener('keydown',handleChapterReaderKeydown);window.removeEventListener('resize',resizeStatisticsCharts);disposeStatisticsCharts()})
-watch(activeTab,async value=>{if(value==='statistics'&&statistics.value){await nextTick();await renderStatisticsCharts()}})
+watch(activeTab, value => {
+  if (value === 'statistics') void loadCrawlerStatistics()
+})
 function restartPolling(){if(timer)window.clearInterval(timer);timer=window.setInterval(()=>{void pollCrawlerProgress()},pollingIntervalSeconds.value*1000)}
-function setPollingInterval(value:number){if(!pollingIntervalOptions.includes(value as CrawlerPollingIntervalSeconds))return;preferencesStore.setCrawlerPollingIntervalSeconds(value);restartPolling();void pollCrawlerProgress()}
+async function loadPollingIntervalOptions() {
+  try {
+    const configuredOptions = await crawlerApi.crawlerPollingIntervalOptions()
+    if (!configuredOptions.length) return
+    pollingIntervalOptions.value = configuredOptions
+    if (!configuredOptions.includes(pollingIntervalSeconds.value)) {
+      const fallback = configuredOptions.includes(3) ? 3 : configuredOptions[0]
+      preferencesStore.setCrawlerPollingIntervalSeconds(fallback)
+    }
+  } catch {
+    // Keep the built-in options available if the server cannot be reached.
+  }
+}
+function setPollingInterval(value:number){if(!pollingIntervalOptions.value.includes(value))return;preferencesStore.setCrawlerPollingIntervalSeconds(value);restartPolling();void pollCrawlerProgress()}
 async function refreshOverview(){await Promise.all([refresh(),loadCrawlerStatistics()])}
 async function setStatisticsDays(days:StatisticsDays) {
   if (statisticsDays.value === days) return
@@ -1541,6 +1749,7 @@ async function setStatisticsDays(days:StatisticsDays) {
 }
 function handleStatisticsRangeKey(event:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();let index=statisticsRangeIndex.value;if(event.key==='ArrowRight')index=(index+1)%statisticsRangeOptions.length;else if(event.key==='ArrowLeft')index=(index-1+statisticsRangeOptions.length)%statisticsRangeOptions.length;else index=event.key==='Home'?0:statisticsRangeOptions.length-1;void setStatisticsDays(statisticsRangeOptions[index]);requestAnimationFrame(()=>document.querySelectorAll<HTMLButtonElement>('.statistics-range button')[index]?.focus())}
 async function loadCrawlerStatistics(options:{silent?:boolean} = {}) {
+  const requestSequence = ++statisticsRequestSequence
   if (!options.silent) statisticsLoading.value = true
   try {
     const [dashboardStats, attemptStats] = await Promise.all([
@@ -1551,6 +1760,7 @@ async function loadCrawlerStatistics(options:{silent?:boolean} = {}) {
         chapterAttemptPageSize,
       ),
     ])
+    if (requestSequence !== statisticsRequestSequence) return
     statistics.value = dashboardStats
     chapterAttemptStatistics.value = attemptStats
     if (activeTab.value === 'statistics') {
@@ -1558,11 +1768,13 @@ async function loadCrawlerStatistics(options:{silent?:boolean} = {}) {
       await renderStatisticsCharts()
     }
   } catch (error:any) {
-    if (!options.silent) {
+    if (requestSequence === statisticsRequestSequence && !options.silent) {
       message.error(error.response?.data?.message || '采集统计加载失败')
     }
   } finally {
-    if (!options.silent) statisticsLoading.value = false
+    if (requestSequence === statisticsRequestSequence && !options.silent) {
+      statisticsLoading.value = false
+    }
   }
 }
 
@@ -1728,13 +1940,65 @@ async function syncOpenTask(options:LoadOptions={}){
     if(dashboard.value)dashboard.value.recentTasks=dashboard.value.recentTasks.map(task=>task.id===taskId?latest:task)
   }finally{if(!options.silent)taskDetailLoading.value=false}
 }
-async function loadTaskQueues(){taskQueues.value=await crawlerApi.taskQueues()}
+async function loadTaskQueues(force = false) {
+  const queues = await crawlerApi.taskQueues()
+  if (force || (!queueOrderSaving.value && !queueDraggingId.value)) taskQueues.value = queues
+}
+function startQueueDrag(queue: CrawlerTaskQueue, event: DragEvent) {
+  if (queueOrderSaving.value) {
+    event.preventDefault()
+    return
+  }
+  queueDraggingId.value = queue.id
+  queueDragStartOrder.value = taskQueues.value.map(item => item.id)
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(queue.id))
+  }
+}
+function moveDraggedQueue(target: CrawlerTaskQueue) {
+  const sourceIndex = taskQueues.value.findIndex(item => item.id === queueDraggingId.value)
+  const targetIndex = taskQueues.value.findIndex(item => item.id === target.id)
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return
+  const next = [...taskQueues.value]
+  const [source] = next.splice(sourceIndex, 1)
+  next.splice(targetIndex, 0, source)
+  taskQueues.value = next
+}
+async function saveQueueOrder() {
+  queueOrderSaving.value = true
+  try {
+    taskQueues.value = await crawlerApi.reorderTaskQueues(taskQueues.value.map(queue => queue.id))
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '队列排序保存失败')
+    await loadTaskQueues(true)
+  } finally {
+    queueOrderSaving.value = false
+  }
+}
+async function finishQueueDrag() {
+  const changed = queueDragStartOrder.value.join(',') !== taskQueues.value.map(queue => queue.id).join(',')
+  queueDraggingId.value = undefined
+  queueDragStartOrder.value = []
+  if (changed) await saveQueueOrder()
+}
+async function moveQueueByKeyboard(queue: CrawlerTaskQueue, direction: -1 | 1) {
+  if (queueOrderSaving.value) return
+  const index = taskQueues.value.findIndex(item => item.id === queue.id)
+  const target = index + direction
+  if (index < 0 || target < 0 || target >= taskQueues.value.length) return
+  const next = [...taskQueues.value]
+  const moved = next[index]
+  next[index] = next[target]
+  next[target] = moved
+  taskQueues.value = next
+  await saveQueueOrder()
+}
 function openQueueSettings(queue?:CrawlerTaskQueue){
   if(!queue){queuePopupTab.value='config';queueOverviewDialog.value=true;return}
   queueSettingsTarget.value=queue
-  queueLimit.value=queue.maxConcurrentTasks
+  queueName.value=queue.queueName || ''
   queueIntervalSeconds.value=queue.taskIntervalSeconds
-  queueEnabled.value=queue.enabled !== false
   queueSettingsDialog.value=true
 }
 async function saveQueueSettings(){
@@ -1742,14 +2006,10 @@ async function saveQueueSettings(){
   if(!queue)return
   savingQueueSettings.value=true
   try{
-    const updated=await crawlerApi.updateTaskQueue(queue.siteId,{
-      maxConcurrentTasks:queueLimit.value,
-      taskIntervalSeconds:queueIntervalSeconds.value,
-      enabled:queueEnabled.value,
-    })
-    taskQueues.value=taskQueues.value.map(item=>item.siteId===updated.siteId?updated:item)
+    const updated=await crawlerApi.updateTaskQueue(queue.id,{maxConcurrentTasks:queue.maxConcurrentTasks,taskIntervalSeconds:queueIntervalSeconds.value,queueName:queue.siteId ? undefined : queueName.value})
+    taskQueues.value=taskQueues.value.map(item=>item.id===updated.id?updated:item)
     queueSettingsDialog.value=false
-    message.success(`${updated.siteName} 队列配置已保存`)
+    message.success(`${queueDisplayName(updated)} 队列配置已保存`)
     await Promise.all([loadTasks({silent:true}),loadCurrentCrawlerTasks(),loadTaskQueues()])
   }catch(error:any){
     message.error(error.response?.data?.message||'队列配置保存失败')
@@ -1757,10 +2017,111 @@ async function saveQueueSettings(){
     savingQueueSettings.value=false
   }
 }
+async function openQueueExecutors() {
+  const queue = queueSettingsTarget.value
+  if (!queue) return
+  queueExecutorsDialog.value = true
+  queueExecutorsLoading.value = true
+  try {
+    const [executors, proxies] = await Promise.all([
+      crawlerApi.queueExecutors(queue.id),
+      crawlerApi.queueProxyOptions(),
+    ])
+    queueExecutors.value = executors
+    queueProxyOptions.value = proxies
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '执行器配置加载失败')
+  } finally {
+    queueExecutorsLoading.value = false
+  }
+}
+
+function addQueueExecutor() {
+  editingQueueExecutor.value = undefined
+  queueExecutorForm.value = {
+    name: `执行器 ${queueExecutors.value.length + 1}`,
+    description: '',
+    enabled: true,
+    proxyMode: 'DEFAULT',
+    selectionStrategy: 'ORDERED',
+    defaultProxyCooldownSeconds: null,
+    proxies: [],
+  }
+  queueExecutorEditorDialog.value = true
+}
+
+function editQueueExecutor(item: CrawlerQueueExecutor) {
+  editingQueueExecutor.value = item
+  queueExecutorForm.value = {
+    name: item.name,
+    description: item.description || '',
+    enabled: item.enabled !== false,
+    proxyMode: item.proxyMode,
+    selectionStrategy: item.selectionStrategy,
+    defaultProxyCooldownSeconds: item.defaultProxyCooldownSeconds,
+    proxies: item.proxies.map(proxy => ({
+      proxyConfigId: proxy.proxyConfigId,
+      cooldownSeconds: proxy.cooldownSeconds,
+    })),
+  }
+  queueExecutorEditorDialog.value = true
+}
+
+function moveQueueProxy(index: number, direction: -1 | 1) {
+  const next = [...queueExecutorForm.value.proxies]
+  const target = index + direction
+  if (target < 0 || target >= next.length) return
+  ;[next[index], next[target]] = [next[target], next[index]]
+  queueExecutorForm.value.proxies = next
+}
+
+async function saveQueueExecutor() {
+  const queue = queueSettingsTarget.value
+  if (!queue) return
+  const payload = queueExecutorForm.value
+  if (!payload.name.trim()) {
+    message.error('请填写执行器名称')
+    return
+  }
+  if (payload.proxyMode === 'SELECTED' && !payload.proxies.length) {
+    message.error('请至少选择一个代理')
+    return
+  }
+  savingQueueExecutor.value = true
+  try {
+    if (editingQueueExecutor.value) {
+      await crawlerApi.updateQueueExecutor(queue.id, editingQueueExecutor.value.id, payload)
+    } else {
+      await crawlerApi.createQueueExecutor(queue.id, payload)
+    }
+    queueExecutorEditorDialog.value = false
+    message.success('执行器配置已保存')
+    await Promise.all([openQueueExecutors(), loadTaskQueues()])
+    queueSettingsTarget.value = taskQueues.value.find(item => item.id === queue.id)
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '执行器配置保存失败')
+  } finally {
+    savingQueueExecutor.value = false
+  }
+}
+
+async function removeQueueExecutor(item: CrawlerQueueExecutor) {
+  const queue = queueSettingsTarget.value
+  if (!queue || !await confirm(`确定删除执行器“${item.name}”吗？`)) return
+  try {
+    await crawlerApi.deleteQueueExecutor(queue.id, item.id)
+    message.success('执行器已删除')
+    await Promise.all([openQueueExecutors(), loadTaskQueues()])
+    queueSettingsTarget.value = taskQueues.value.find(entry => entry.id === queue.id)
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '删除执行器失败')
+  }
+}
 function openQueuedTasks(){
   queueOverviewDialog.value=true
   queuePopupTab.value='config'
   queueTaskSiteId.value=undefined
+  queueTaskQueueId.value=undefined
   queueTaskStatus.value=''
   queueTaskType.value=''
   queueTaskPriority.value=''
@@ -1770,14 +2131,14 @@ function openQueuedTasks(){
     message.error(error.response?.data?.message||'队列刷新失败，请稍后重试')
   })
 }
-async function openQueueDetails(queue:CrawlerTaskQueue){queueTaskSiteId.value=queue.siteId;queueTaskStatus.value='';queueTaskType.value='';queueTaskPriority.value='';queueTaskCreatedRange.value=undefined;queueTabTaskPage.value=1;if(queuePopupTab.value==='tasks')await loadQueueTabTasks();else queuePopupTab.value='tasks'}
+async function openQueueDetails(queue:CrawlerTaskQueue){queueTaskQueueId.value=queue.id;queueTaskSiteId.value=undefined;queueTaskStatus.value='';queueTaskType.value='';queueTaskPriority.value='';queueTaskCreatedRange.value=undefined;queueTabTaskPage.value=1;if(queuePopupTab.value==='tasks')await loadQueueTabTasks();else queuePopupTab.value='tasks'}
 async function loadQueueTabTasks(){
   const requestId=++queueTabTaskRequestId
   queueTaskLoading.value=true
   queueTaskError.value=''
   try{
     const [createdAfter,createdBefore]=queueTaskCreatedRange.value||[]
-    const result=await crawlerApi.tasks({page:queueTabTaskPage.value-1,size:queueTabTaskPageSize.value,siteId:queueTaskSiteId.value,status:queueTaskStatus.value||undefined,type:queueTaskType.value||undefined,priority:queueTaskPriority.value||undefined,createdAfter,createdBefore})
+    const result=await crawlerApi.tasks({page:queueTabTaskPage.value-1,size:queueTabTaskPageSize.value,siteId:queueTaskSiteId.value,queueId:queueTaskQueueId.value,status:queueTaskStatus.value||undefined,type:queueTaskType.value||undefined,priority:queueTaskPriority.value||undefined,createdAfter,createdBefore})
     if(requestId!==queueTabTaskRequestId)return
     const lastPage=Math.max(1,result.totalPages)
     if(queueTabTaskPage.value>lastPage){queueTabTaskPage.value=lastPage;return await loadQueueTabTasks()}
@@ -1800,32 +2161,59 @@ async function runQueueTabTaskCommand(task:CrawlerTask,command:'pause'|'resume'|
 async function removeQueueTabTask(task:CrawlerTask){await removeTask(task);await loadQueueTabTasks()}
 async function toggleQueueTabTaskFavorite(task:CrawlerTask){await toggleTaskFavorite(task);await loadQueueTabTasks()}
 async function returnToQueueOverview(){queuedTasksDialog.value=false;queueOverviewDialog.value=true;await loadTaskQueues()}
-function openCreateQueue(){createQueueSiteId.value=sitesWithoutQueue.value[0]?.id;createQueueDialog.value=true}
+function openCreateQueue(){createQueueType.value='site';createQueueSiteId.value=sitesWithoutQueue.value[0]?.id;createQueueName.value=`自由队列 ${taskQueues.value.filter(queue=>!queue.siteId).length+1}`;createQueueDialog.value=true}
 async function createQueue(){
-  if(!createQueueSiteId.value||creatingQueue.value)return
+  if(creatingQueue.value)return
+  if(createQueueType.value==='site'&&!createQueueSiteId.value)return
+  if(createQueueType.value==='free'&&!createQueueName.value.trim())return
   creatingQueue.value=true
   try{
-    await crawlerApi.createTaskQueue(createQueueSiteId.value)
+    const queue=await crawlerApi.createTaskQueue(createQueueType.value==='site'?createQueueSiteId.value:undefined,createQueueType.value==='free'?createQueueName.value.trim():undefined)
     await loadTaskQueues()
     createQueueDialog.value=false
-    message.success('网站队列已创建')
+    message.success(`${queueDisplayName(queue)}已创建`)
   }catch(error:any){
-    message.error(error.response?.data?.message||'网站队列创建失败')
+    message.error(error.response?.data?.message||'队列创建失败')
   }finally{
     creatingQueue.value=false
   }
+}
+
+function queueDisplayName(queue:CrawlerTaskQueue){return queue.siteName || queue.queueName || '自由队列'}
+async function openTaskQueueDialog(task:CrawlerTask){
+  if(!taskQueues.value.length)await loadTaskQueues()
+  queueMoveTask.value=task
+  taskQueueSelection.value=task.queueId || taskQueues.value.find(queue=>queue.siteId===task.siteId)?.id
+  taskQueueDialog.value=true
+}
+async function saveTaskQueueAssignment(){
+  const task=queueMoveTask.value,queueId=taskQueueSelection.value
+  if(!task||!queueId||savingTaskQueue.value)return
+  savingTaskQueue.value=true
+  try{
+    const updated=await crawlerApi.assignTaskQueue(task.id,queueId)
+    tasks.value=tasks.value.map(item=>item.id===updated.id?updated:item)
+    failedTasks.value=failedTasks.value.map(item=>item.id===updated.id?updated:item)
+    if(dashboard.value)dashboard.value.recentTasks=dashboard.value.recentTasks.map(item=>item.id===updated.id?updated:item)
+    if(selectedTask.value?.id===updated.id)selectedTask.value=updated
+    taskQueueDialog.value=false
+    message.success('任务队列已调整')
+    await Promise.all([loadTaskQueues(),loadTasks({silent:true}),loadFailedTasks({silent:true}),loadQueueTabTasks(),loadQueuedTasks({silent:true})])
+  }catch(error:any){
+    message.error(error.response?.data?.message||'任务队列调整失败')
+  }finally{savingTaskQueue.value=false}
 }
 function currentTaskStatusRank(task:CrawlerTask){return task.status==='RUNNING'?0:task.status==='WAITING'?1:task.status==='PAUSED'?2:3}
 function orderCurrentTasks(items:CrawlerTask[]){return items.map((task,index)=>({task,index})).sort((left,right)=>currentTaskStatusRank(left.task)-currentTaskStatusRank(right.task)||left.index-right.index).map(item=>item.task)}
 function clampQueuedTaskPage(){queuedTaskPage.value=Math.min(queuedTaskPage.value,Math.max(1,Math.ceil(queuedTasks.value.length/queuedTaskPageSize.value)))}
 function handleQueuedTaskSizeChange(){queuedTaskPage.value=1;clampQueuedTaskPage()}
-async function loadQueuedTasks(options:LoadOptions={}){if(options.silent&&(queuedTaskDraggingId.value||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value))return;if(!options.silent)queuedTasksLoading.value=true;try{queuedTasks.value=orderCurrentTasks(await crawlerApi.currentTasks(activeQueue.value?.siteId));clampQueuedTaskPage()}finally{if(!options.silent)queuedTasksLoading.value=false}}
+async function loadQueuedTasks(options:LoadOptions={}){if(options.silent&&(queuedTaskDraggingId.value||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value))return;if(!options.silent)queuedTasksLoading.value=true;try{queuedTasks.value=orderCurrentTasks(await crawlerApi.currentTasks(activeQueue.value?.id));clampQueuedTaskPage()}finally{if(!options.silent)queuedTasksLoading.value=false}}
 async function openQueuedTask(task:CrawlerTask){queuedTasksDialog.value=false;await openTask(task)}
 async function prioritizeQueuedTask(task:CrawlerTask){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value||batchTaskManaging.value)return;queuedTaskPrioritizingId.value=task.id;try{await crawlerApi.prioritizeQueuedTask(task.id);message.success(`“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”已移到等待队列首位`);await Promise.all([loadQueuedTasks(),loadTasks({silent:true}),loadTaskQueues()])}catch(error:any){message.error(error.response?.data?.message||'任务优先调整失败');await loadQueuedTasks()}finally{queuedTaskPrioritizingId.value=undefined}}
 async function commandCurrentTask(task:CrawlerTask,command:'pause'|'resume'|'cancel'){if(queuedTaskCommandId.value||queuedTasksReordering.value||queuedTaskPrioritizingId.value)return;queuedTaskCommandId.value=task.id;queuedTaskCommand.value=command;const actionLabel={pause:'暂停',resume:'继续',cancel:'取消'}[command];try{await crawlerApi.taskCommand(task.id,command);message.success(`“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”已${actionLabel}`);const [dashboardData]=await Promise.all([crawlerApi.dashboard(),loadQueuedTasks(),loadTasks({silent:true}),loadFailedTasks({silent:true}),loadTaskQueues()]);dashboard.value=dashboardData}catch(error:any){message.error(error.response?.data?.message||`任务${actionLabel}失败，请稍后重试`);await loadQueuedTasks()}finally{queuedTaskCommandId.value=undefined;queuedTaskCommand.value=undefined}}
 function startQueuedTaskDrag(task:CrawlerTask,event:DragEvent){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskCommandId.value){event.preventDefault();return}queuedTaskDraggingId.value=task.id;queuedTaskDragStartOrder.value=queuedTasks.value.filter(item=>item.status==='WAITING').map(item=>item.id);if(event.dataTransfer){event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',task.id)}}
 function moveDraggedQueuedTask(target:CrawlerTask){const sourceIndex=queuedTasks.value.findIndex(item=>item.id===queuedTaskDraggingId.value),targetIndex=queuedTasks.value.findIndex(item=>item.id===target.id);if(sourceIndex<0||targetIndex<0||sourceIndex===targetIndex||target.status!=='WAITING'||queuedTasks.value[sourceIndex].status!=='WAITING'||queuedTasks.value[sourceIndex].priority!==target.priority)return;const next=[...queuedTasks.value],[source]=next.splice(sourceIndex,1);next.splice(targetIndex,0,source);queuedTasks.value=next}
-async function persistQueuedTaskOrder(){queuedTasksReordering.value=true;try{await crawlerApi.reorderQueuedTasks(queuedTasks.value.filter(task=>task.status==='WAITING').map(task=>task.id),activeQueue.value?.siteId);message.success('等待队列顺序已更新');await loadQueuedTasks()}catch(error:any){message.error(error.response?.data?.message||'队列排序保存失败');await loadQueuedTasks()}finally{queuedTasksReordering.value=false}}
+async function persistQueuedTaskOrder(){queuedTasksReordering.value=true;try{await crawlerApi.reorderQueuedTasks(queuedTasks.value.filter(task=>task.status==='WAITING').map(task=>task.id),activeQueue.value?.id);message.success('等待队列顺序已更新');await loadQueuedTasks()}catch(error:any){message.error(error.response?.data?.message||'队列排序保存失败');await loadQueuedTasks()}finally{queuedTasksReordering.value=false}}
 async function finishQueuedTaskDrag(){const currentOrder=queuedTasks.value.filter(task=>task.status==='WAITING').map(task=>task.id);const changed=queuedTaskDragStartOrder.value.join(',')!==currentOrder.join(',');queuedTaskDraggingId.value=undefined;queuedTaskDragStartOrder.value=[];if(changed)await persistQueuedTaskOrder()}
 async function moveQueuedTaskByKeyboard(task:CrawlerTask,direction:-1|1){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskCommandId.value)return;const index=queuedTasks.value.findIndex(item=>item.id===task.id),target=index+direction;if(index<0||target<0||target>=queuedTasks.value.length||queuedTasks.value[target].status!=='WAITING')return;if(queuedTasks.value[target].priority!==task.priority)return message.warning('跨优先级排序请先修改任务优先级');const next=[...queuedTasks.value];[next[index],next[target]]=[next[target],next[index]];queuedTasks.value=next;await persistQueuedTaskOrder()}
 function queuedTaskRowClassName({row}:{row:CrawlerTask}){return row.id===queuedTaskDraggingId.value?'queued-task-row-dragging':''}
@@ -2504,9 +2892,15 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   background: var(--surface-card);
 }
 
+.site-queue-order-hint {
+  margin: 0 0 10px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
 .site-queue-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1.1fr) minmax(245px, 1.6fr) minmax(130px, 0.9fr) auto;
+  grid-template-columns: 28px minmax(150px, 1.1fr) minmax(245px, 1.6fr) minmax(130px, 0.9fr) auto;
   align-items: center;
   gap: 18px;
   padding: 13px 16px;
@@ -2520,6 +2914,41 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 
 .site-queue-row:hover {
   background: var(--surface-elevated);
+}
+
+.site-queue-row.is-dragging {
+  opacity: 0.55;
+}
+
+.site-queue-drag-handle {
+  display: grid;
+  width: 28px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: grab;
+  font-size: 19px;
+  touch-action: none;
+}
+
+.site-queue-drag-handle:hover,
+.site-queue-drag-handle:focus-visible {
+  border-color: var(--border-color-light);
+  background: var(--surface-card);
+  color: var(--primary);
+  outline: none;
+}
+
+.site-queue-drag-handle:active {
+  cursor: grabbing;
+}
+
+.site-queue-drag-handle:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .site-queue-identity {
@@ -2598,10 +3027,57 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   justify-items: start;
   gap: 9px;
 }
+.queue-executor-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.queue-executor-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 12px;
+  background: var(--surface-card);
+}
+.queue-executor-card > div:first-child {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.queue-executor-card p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+.queue-executor-card small {
+  color: var(--text-tertiary);
+}
+.queue-executor-actions,
+.queue-executor-proxy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.queue-executor-proxy-row {
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color-light);
+}
+.queue-executor-proxy-row span {
+  min-width: 110px;
+}
+@media (max-width: 600px) {
+  .queue-executor-card,
+  .queue-executor-proxy-row {
+    flex-wrap: wrap;
+  }
+}
 
 @media (max-width: 720px) {
   .site-queue-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
     gap: 12px 16px;
   }
 
@@ -2611,7 +3087,7 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   }
 
   .site-queue-actions {
-    grid-column: 2;
+    grid-column: 3;
     grid-row: 1;
   }
 

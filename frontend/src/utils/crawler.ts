@@ -40,9 +40,41 @@ export interface CrawlerSiteActivity {
 export interface CrawlerDiscoveryPagePayload { pageName:string; pageUrl:string; autoScanEnabled:boolean; scanIntervalMinutes:number; maxPages:number }
 export interface CrawlerDiscoveryPage extends CrawlerDiscoveryPagePayload { id:number; siteId:number; lastScanAt?:string; createdAt:string }
 export interface CrawlerBook { id:number; siteId:number; siteName:string; siteThemeColor?:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; tags:string[]; bookStatus?:string; latestChapter?:string; discoveryPageId?:number; discoveryPageName?:string; chapterCount:number; crawledChapterCount:number; pendingReleaseChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; autoUpdateEnabled:boolean; autoSyncLibrary:boolean; favorite:boolean; bookListIds:number[]; libraryBookId?:number; discoverTime:string; lastCrawlStartedAt?:string; lastCrawlTime?:string; createdAt?:string; suspectedDuplicate?:boolean }
-export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; siteThemeColor?:string; discoveryPageId?:number; discoveryPageName?:string; scanMaxPages?:number; scannedPageCount:number; progressPercent:number; bookId?:number; bookName?:string; favorite:boolean; totalCount:number; successCount:number; newBookCount:number; duplicateCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
+export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; siteThemeColor?:string; queueId?:number|null; discoveryPageId?:number; discoveryPageName?:string; scanMaxPages?:number; scannedPageCount:number; progressPercent:number; bookId?:number; bookName?:string; favorite:boolean; totalCount:number; successCount:number; newBookCount:number; duplicateCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
 export interface CrawlerTaskQueueSettings { maxConcurrentTasks:number; runningCount:number; queuedCount:number }
-export interface CrawlerTaskQueue { id:number; siteId:number; siteName:string; siteThemeColor?:string; enabled:boolean; maxConcurrentTasks:number; taskIntervalSeconds:number; runningCount:number; waitingCount:number; pausedCount:number; activeTaskCount:number; progressPercent:number; lastTaskStartedAt?:string }
+export interface CrawlerTaskQueue { id:number; siteId:number|null; siteName?:string|null; queueName?:string|null; siteThemeColor?:string; maxConcurrentTasks:number; taskIntervalSeconds:number; runningCount:number; waitingCount:number; pausedCount:number; activeTaskCount:number; progressPercent:number; lastTaskStartedAt?:string }
+export interface CrawlerQueueExecutorProxy {
+  proxyConfigId:number
+  proxyName:string
+  sortOrder:number
+  cooldownSeconds:number|null
+  coolingUntil:string|null
+  available:boolean
+}
+export interface CrawlerQueueExecutor {
+  id:number
+  queueId:number
+  name:string
+  description:string|null
+  defaultExecutor:boolean
+  enabled:boolean
+  proxyMode:'DEFAULT'|'SELECTED'
+  selectionStrategy:'ORDERED'|'RANDOM'
+  defaultProxyCooldownSeconds:number|null
+  proxies:CrawlerQueueExecutorProxy[]
+  availableProxyCount:number
+  nextAvailableAt:string|null
+}
+export interface CrawlerQueueExecutorPayload {
+  name:string
+  description:string
+  enabled:boolean
+  proxyMode:'DEFAULT'|'SELECTED'
+  selectionStrategy:'ORDERED'|'RANDOM'
+  defaultProxyCooldownSeconds:number|null
+  proxies:{proxyConfigId:number;cooldownSeconds:number|null}[]
+}
+export interface CrawlerQueueProxyOption { id:number; name:string; effectiveEnabled:boolean }
 export interface CrawlerScanResult { id:number; bookId?:number; bookName:string; bookUrl:string; resultStatus:'NEW'|'DUPLICATE'|'BLACKLISTED'|'FAILED'; errorMessage?:string; createdAt:string }
 export interface CrawlerChapter { id:number; chapterIndex:number; chapterName:string; chapterUrl:string; wordCount:number; crawlStatus:string; accessStatus:string; retryCount:number; errorMessage?:string; crawlTime?:string; createdAt?:string }
 export interface CrawlerChapterFocus { chapter:CrawlerChapter; page:number }
@@ -93,10 +125,11 @@ export interface PageResult<T> { content:T[]; totalElements:number; totalPages:n
 export interface CrawlerDiscoveryQuery { page:number; size:number; keyword?:string; siteId?:number; favoriteOnly?:boolean; sort:string }
 export interface CrawlerBookQuery { page:number; size:number; keyword?:string; siteId?:number; crawlStatus?:string; importStatus?:string; favoriteOnly?:boolean; sort:string }
 export interface CrawlerChapterQuery { page:number; size:number; sort:'INDEX_ASC'|'INDEX_DESC'|'CREATED_DESC' }
-export interface CrawlerTaskQuery { page:number; size:number; failedOnly?:boolean; status?:string; type?:string; favoriteOnly?:boolean; siteId?:number; priority?:string; createdAfter?:string; createdBefore?:string }
+export interface CrawlerTaskQuery { page:number; size:number; failedOnly?:boolean; status?:string; type?:string; favoriteOnly?:boolean; siteId?:number; queueId?:number; priority?:string; createdAfter?:string; createdBefore?:string }
 
 export const crawlerApi = {
   dashboard: () => api.get<CrawlerDashboard>('/api/crawler/dashboard').then(r => r.data),
+  crawlerPollingIntervalOptions: () => api.get<number[]>('/api/crawler-settings/polling-interval-options').then(r => r.data),
   dashboardStatistics: (days:7|30|90) => api.get<CrawlerDashboardStatistics>('/api/crawler/dashboard/statistics',{params:{days}}).then(r => r.data),
   chapterAttemptStatistics: (days:7|30|90, page:number, size=20) =>
     api.get<CrawlerChapterAttemptStatistics>('/api/crawler/dashboard/chapter-attempts', {
@@ -156,11 +189,18 @@ export const crawlerApi = {
   importBook: (bookId:number, formats:string[]) => api.post<{bookId:number}>(`/api/crawler/books/${bookId}/import`, { formats }).then(r => r.data),
   tasks: (params:CrawlerTaskQuery) => api.get<PageResult<CrawlerTask>>('/api/crawler/tasks', { params }).then(r => r.data),
   taskQueues: () => api.get<CrawlerTaskQueue[]>('/api/crawler/tasks/queues').then(r => r.data),
-  createTaskQueue: (siteId:number) => api.post<CrawlerTaskQueue>('/api/crawler/tasks/queues',{siteId}).then(r => r.data),
-  updateTaskQueue: (siteId:number, settings:{maxConcurrentTasks:number;taskIntervalSeconds:number;enabled:boolean}) => api.put<CrawlerTaskQueue>(`/api/crawler/tasks/queues/${siteId}`,settings).then(r => r.data),
-  queuedTasks: (siteId?:number) => api.get<CrawlerTask[]>('/api/crawler/tasks/queued',{params:siteId?{siteId}:undefined}).then(r => r.data),
-  currentTasks: (siteId?:number) => api.get<CrawlerTask[]>('/api/crawler/tasks/current',{params:siteId?{siteId}:undefined}).then(r => r.data),
-  reorderQueuedTasks: (taskIds:string[],siteId?:number) => api.put<CrawlerTask[]>('/api/crawler/tasks/queued/order',{taskIds},{params:siteId?{siteId}:undefined}).then(r => r.data),
+  reorderTaskQueues: (queueIds:number[]) => api.put<CrawlerTaskQueue[]>('/api/crawler/tasks/queues/order',{queueIds}).then(r=>r.data),
+  createTaskQueue: (siteId?:number,queueName?:string) => api.post<CrawlerTaskQueue>('/api/crawler/tasks/queues',{siteId,queueName}).then(r => r.data),
+  updateTaskQueue: (queueId:number, settings:{maxConcurrentTasks:number;taskIntervalSeconds:number;queueName?:string}) => api.put<CrawlerTaskQueue>(`/api/crawler/tasks/queues/${queueId}`,settings).then(r => r.data),
+  queueProxyOptions: () => api.get<CrawlerQueueProxyOption[]>('/api/crawler/tasks/queues/proxy-options').then(r => r.data),
+  queueExecutors: (queueId:number) => api.get<CrawlerQueueExecutor[]>(`/api/crawler/tasks/queues/${queueId}/executors`).then(r => r.data),
+  createQueueExecutor: (queueId:number,payload:CrawlerQueueExecutorPayload) => api.post<CrawlerQueueExecutor>(`/api/crawler/tasks/queues/${queueId}/executors`,payload).then(r => r.data),
+  updateQueueExecutor: (queueId:number,executorId:number,payload:CrawlerQueueExecutorPayload) => api.put<CrawlerQueueExecutor>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}`,payload).then(r => r.data),
+  deleteQueueExecutor: (queueId:number,executorId:number) => api.delete(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}`),
+  queuedTasks: (queueId?:number) => api.get<CrawlerTask[]>('/api/crawler/tasks/queued',{params:queueId?{queueId}:undefined}).then(r => r.data),
+  currentTasks: (queueId?:number) => api.get<CrawlerTask[]>('/api/crawler/tasks/current',{params:queueId?{queueId}:undefined}).then(r => r.data),
+  reorderQueuedTasks: (taskIds:string[],queueId?:number) => api.put<CrawlerTask[]>('/api/crawler/tasks/queued/order',{taskIds},{params:queueId?{queueId}:undefined}).then(r => r.data),
+  assignTaskQueue: (taskId:string,queueId:number) => api.put<CrawlerTask>(`/api/crawler/tasks/${taskId}/queue`,{queueId}).then(r=>r.data),
   prioritizeQueuedTask: (id:string) => api.put<CrawlerTask[]>(`/api/crawler/tasks/queued/${id}/prioritize`).then(r => r.data),
   task: (id:string) => api.get<CrawlerTask>(`/api/crawler/tasks/${id}`).then(r => r.data),
   taskQueueSettings: () => api.get<CrawlerTaskQueueSettings>('/api/crawler/tasks/queue-settings').then(r => r.data),

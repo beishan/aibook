@@ -12,6 +12,8 @@ public interface CrawlerTaskQueueRepository extends JpaRepository<CrawlerTaskQue
 
     List<CrawlerTaskQueue> findBySite_UserOrderBySite_SiteNameAsc(User user);
 
+    List<CrawlerTaskQueue> findBySite_UserOrderBySortOrderAscSite_SiteNameAsc(User user);
+
     Optional<CrawlerTaskQueue> findBySiteIdAndSiteUserId(Long siteId, Long userId);
 
     void deleteBySite(CrawlerSite site);
