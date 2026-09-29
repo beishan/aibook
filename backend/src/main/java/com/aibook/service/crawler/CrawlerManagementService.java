@@ -46,7 +46,8 @@ public class CrawlerManagementService {
     private final BookListRepository bookListRepository;
     private final ObjectMapper objectMapper;
     private final CrawlerHttpClient httpClient;
-    private final CrawlerQueueExecutorService queueExecutorService;
+    @Autowired
+    private CrawlerQueueExecutorService queueExecutorService;
 
     @Transactional(readOnly = true)
     public List<SiteView> sites(User user) { return siteRepository.findByUserOrderByCreatedAtDesc(user).stream().map(this::siteView).toList(); }

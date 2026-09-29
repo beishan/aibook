@@ -59,7 +59,8 @@ public class CrawlerTaskService {
     private final OperationLogService operationLogService;
     private final CrawlerExportService exportService;
     private final CrawlerHttpClient httpClient;
-    private final CrawlerQueueExecutorService queueExecutorService;
+    @Autowired
+    private CrawlerQueueExecutorService queueExecutorService;
     private final List<BookCrawlerParser> parsers;
     private final ApplicationContext applicationContext;
     private final CrawlerSettingsService crawlerSettingsService;
@@ -92,7 +93,10 @@ public class CrawlerTaskService {
     }
 
     public synchronized TaskQueueSettingsView updateQueueSettings(Integer limit) {
-        crawlerSettingsService.updateMaxConcurrentTasks(limit);
+        int normalized = crawlerSettingsService.updateMaxConcurrentTasks(limit);
+        if (taskQueueRepository == null) {
+            yieldRunningTasksAbove(normalized);
+        }
         applyConcurrencyLimit(configuredQueueConcurrency());
         dispatchWaitingTasks();
         return queueSettings();
@@ -1896,12 +1900,14 @@ public class CrawlerTaskService {
 
     @EventListener(ApplicationReadyEvent.class)
     public void recoverInterruptedTasks() {
-        for (CrawlerSite site : siteRepository.findAll()) {
-            taskQueueRepository.findBySite(site).orElseGet(() -> taskQueueRepository.save(
-                    CrawlerTaskQueue.builder().site(site).user(site.getUser())
-                            .maxConcurrentTasks(1).build()));
+        if (taskQueueRepository != null) {
+            for (CrawlerSite site : siteRepository.findAll()) {
+                taskQueueRepository.findBySite(site).orElseGet(() -> taskQueueRepository.save(
+                        CrawlerTaskQueue.builder().site(site).user(site.getUser())
+                                .maxConcurrentTasks(1).build()));
+            }
+            taskQueueRepository.findAll().forEach(queueExecutorService::ensureQueueExecutors);
         }
-        taskQueueRepository.findAll().forEach(queueExecutorService::ensureQueueExecutors);
         applyConcurrencyLimit(configuredQueueConcurrency());
         List<CrawlerTask> interruptedTasks = new ArrayList<>(taskRepository.findByStatusIn(
                 List.of(CrawlerTask.TaskStatus.RUNNING, CrawlerTask.TaskStatus.WAITING)));

@@ -8,6 +8,7 @@ import com.aibook.service.ProxySettingsService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
@@ -42,7 +43,8 @@ public class CrawlerHttpClient {
 
     private final ObjectMapper objectMapper;
     private final ProxySettingsService proxySettingsService;
-    private final CrawlerQueueExecutorService queueExecutorService;
+    @Autowired
+    private CrawlerQueueExecutorService queueExecutorService;
     private final CrawlerSettingsService crawlerSettingsService;
     private final CrawlerSiteRepository crawlerSiteRepository;
     private final Map<Long, AtomicLong> siteNextRequests = new ConcurrentHashMap<>();
@@ -69,7 +71,7 @@ public class CrawlerHttpClient {
         CrawlerRequestSettings settings = requestSettings();
         ensureCircuitClosed(site);
         enforceRobots(site, uri, settings, timing);
-        if (queueExecutorService.hasBoundExecutor()) {
+        if (queueExecutorService != null && queueExecutorService.hasBoundExecutor()) {
             return getThroughQueueExecutor(site, uri, etag, lastModified, settings, timing);
         }
         List<String> proxies = proxyUrls(site);
@@ -463,7 +465,7 @@ public class CrawlerHttpClient {
             RequestTiming timing) throws Exception {
         URI robotsUri = new URI(target.getScheme(), null, target.getHost(), target.getPort(),
                 "/robots.txt", null, null);
-        if (queueExecutorService.hasBoundExecutor()) {
+        if (queueExecutorService != null && queueExecutorService.hasBoundExecutor()) {
             return fetchRobotsThroughQueue(site, robotsUri, settings, now, timing);
         }
         List<String> proxies = proxyUrls(site);

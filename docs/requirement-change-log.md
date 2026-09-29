@@ -22,6 +22,16 @@
 
 ## 变更记录
 
+### REQ-20260929-006 修复执行器配置后的后端测试编译
+
+- 需求时间：2026-09-29
+- 完成时间：2026-09-29
+- 状态：部分完成
+- 需求内容：修复新增队列执行器依赖后，爬虫后端测试直接构造服务实例导致的构造参数不匹配。
+- 完成情况：将本次新增的执行器服务依赖改为 Spring 字段注入，保留测试使用的原有构造参数；同时兼容无队列仓储的旧调度测试路径。应用版本更新至 `1.45.83`。
+- 主要改动：调整 `CrawlerTaskService`、`CrawlerManagementService` 和 `CrawlerHttpClient` 的新依赖注入方式，并为未注入 HTTP 客户端提供旧式无队列请求路径。
+- 验证结果：`mvn -B clean test-compile` 通过；`CrawlerTaskServiceLoggingTest`、`CrawlerTaskServiceStatusTest`、`CrawlerTaskManagementTest`、`CrawlerManagementServiceTest` 共 63 项通过。`CrawlerHttpClientTest` 因沙箱禁止本地 socket 绑定无法运行；全量 `mvn test -B` 在本机 JDK 26 的 `CoverControllerTest` 处以进程退出码 134 中止，未得到全量测试结果。
+
 ### REQ-20260929-005 任务队列执行器与队列级代理冷却
 
 - 需求时间：2026-09-29
