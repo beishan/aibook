@@ -133,6 +133,9 @@ public class CrawlerTaskService {
         int previousLimit = queue.getMaxConcurrentTasks();
         queue.setMaxConcurrentTasks(payload.maxConcurrentTasks());
         queue.setTaskIntervalSeconds(payload.taskIntervalSeconds());
+        if (payload.enabled() != null) {
+            queue.setEnabled(payload.enabled());
+        }
         taskQueueRepository.save(queue);
         if (payload.maxConcurrentTasks() < previousLimit) {
             yieldRunningTasksForQueue(siteId, payload.maxConcurrentTasks());
@@ -151,6 +154,7 @@ public class CrawlerTaskService {
         int progress = tasks.isEmpty() ? 0 : (int) Math.round(tasks.stream()
                 .mapToInt(this::progress).average().orElse(0));
         return new TaskQueueView(queue.getId(), queue.getSite().getId(), queue.getSite().getSiteName(),
+                isQueueEnabled(queue),
                 value(queue.getMaxConcurrentTasks(), 1), value(queue.getTaskIntervalSeconds(), 0),
                 running, waiting, paused, tasks.size(), progress, queue.getLastTaskStartedAt(),
                 queue.getSite().getThemeColor() == null ? CrawlerSite.DEFAULT_THEME_COLOR
@@ -847,8 +851,15 @@ public class CrawlerTaskService {
         }
         List<CrawlerTaskQueue> queues = taskQueueRepository.findAll();
         if (queues.isEmpty()) return configuredConcurrency();
-        long total = queues.stream().mapToLong(queue -> value(queue.getMaxConcurrentTasks(), 1)).sum();
+        long total = queues.stream()
+                .mapToLong(queue -> value(queue.getMaxConcurrentTasks(), 1))
+                .sum();
         return (int) Math.max(1, Math.min(Integer.MAX_VALUE, total));
+    }
+
+    private boolean isQueueEnabled(CrawlerTaskQueue queue) {
+        // Treat null from rows created before this field existed as enabled.
+        return !Boolean.FALSE.equals(queue.getEnabled());
     }
 
     @Scheduled(fixedDelayString = "${crawler.task-queue-dispatch-delay-ms:500}", initialDelay = 1000)
@@ -894,6 +905,7 @@ public class CrawlerTaskService {
             if (coolingDownSites.contains(siteId)) continue;
             CrawlerTaskQueue queue = queuesBySite.get(siteId);
             if (queue == null) continue;
+            if (!isQueueEnabled(queue)) continue;
             int siteActive = scheduledBySite.getOrDefault(siteId, 0);
             if (siteActive >= value(queue.getMaxConcurrentTasks(), 1)) continue;
             int intervalSeconds = value(queue.getTaskIntervalSeconds(), 0);

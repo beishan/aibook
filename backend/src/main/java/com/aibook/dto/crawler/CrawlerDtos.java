@@ -204,10 +204,11 @@ public final class CrawlerDtos {
     public record TaskQueueSettingsView(int maxConcurrentTasks, int runningCount, int queuedCount) { }
     public record TaskQueuePayload(
             @NotNull @Min(1) @Max(16) Integer maxConcurrentTasks,
-            @NotNull @Min(0) @Max(3600) Integer taskIntervalSeconds) { }
+            @NotNull @Min(0) @Max(3600) Integer taskIntervalSeconds,
+            Boolean enabled) { }
     public record TaskQueueCreateRequest(@NotNull Long siteId) { }
     public record TaskQueueView(
-            Long id, Long siteId, String siteName,
+            Long id, Long siteId, String siteName, boolean enabled,
             int maxConcurrentTasks, int taskIntervalSeconds,
             int runningCount, int waitingCount, int pausedCount,
             int activeTaskCount, int progressPercent,

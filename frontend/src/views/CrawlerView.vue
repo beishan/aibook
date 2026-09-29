@@ -855,6 +855,7 @@
             >
               <div class="site-queue-identity">
                 <SiteSourceTag :name="queue.siteName" :color="queue.siteThemeColor" />
+                <el-tag v-if="queue.enabled === false" type="info" size="small">执行器已禁用</el-tag>
                 <small>运行中 {{ queue.runningCount }} / {{ queue.maxConcurrentTasks }}</small>
               </div>
               <div class="site-queue-metrics">
@@ -922,6 +923,10 @@
       <div class="queue-settings-content">
         <div class="queue-settings-summary"><span><small>正在运行</small><strong>{{ queueSettingsTarget?.runningCount || 0 }}</strong></span><span><small>等待队列</small><strong>{{ queueSettingsTarget?.waitingCount || 0 }}</strong></span></div>
         <el-form label-position="top">
+          <el-form-item label="执行器状态">
+            <el-switch v-model="queueEnabled" active-text="启用" inactive-text="禁用" />
+            <small class="field-hint">禁用后不再启动此网站的新任务；正在运行的任务会继续，等待任务会保留。</small>
+          </el-form-item>
           <el-form-item label="同时运行任务数">
             <el-input-number class="queue-limit-stepper" v-model="queueLimit" :min="1" :max="16" :step="1" step-strictly />
             <small class="field-hint">仅影响此网站的任务队列。调低上限时，超出的运行任务会保留进度并转回等待队列。</small>
@@ -1329,6 +1334,7 @@ const activeQueue = ref<CrawlerTaskQueue>()
 const queueSettingsTarget = ref<CrawlerTaskQueue>()
 const queueLimit = ref(4)
 const queueIntervalSeconds = ref(0)
+const queueEnabled = ref(true)
 const createQueueSiteId = ref<number>()
 const queueTaskLoading = ref(false)
 const queueTaskError = ref('')
@@ -1728,6 +1734,7 @@ function openQueueSettings(queue?:CrawlerTaskQueue){
   queueSettingsTarget.value=queue
   queueLimit.value=queue.maxConcurrentTasks
   queueIntervalSeconds.value=queue.taskIntervalSeconds
+  queueEnabled.value=queue.enabled !== false
   queueSettingsDialog.value=true
 }
 async function saveQueueSettings(){
@@ -1735,7 +1742,11 @@ async function saveQueueSettings(){
   if(!queue)return
   savingQueueSettings.value=true
   try{
-    const updated=await crawlerApi.updateTaskQueue(queue.siteId,{maxConcurrentTasks:queueLimit.value,taskIntervalSeconds:queueIntervalSeconds.value})
+    const updated=await crawlerApi.updateTaskQueue(queue.siteId,{
+      maxConcurrentTasks:queueLimit.value,
+      taskIntervalSeconds:queueIntervalSeconds.value,
+      enabled:queueEnabled.value,
+    })
     taskQueues.value=taskQueues.value.map(item=>item.siteId===updated.siteId?updated:item)
     queueSettingsDialog.value=false
     message.success(`${updated.siteName} 队列配置已保存`)

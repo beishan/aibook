@@ -30,6 +30,9 @@ public class CrawlerTaskQueue {
     @Builder.Default
     private Integer taskIntervalSeconds = 0;
 
+    @Builder.Default
+    private Boolean enabled = true;
+
     private LocalDateTime lastTaskStartedAt;
 
     @CreationTimestamp
