@@ -36,7 +36,6 @@ public class UserService implements UserDetailsService {
             Set.of(10, 30, 50, 100, 200);
     private static final Set<Integer> AUTHOR_PAGE_SIZES = Set.of(10, 20, 50);
     private static final Set<Integer> CRAWLER_CHAPTER_PAGE_SIZES = Set.of(20, 50, 100);
-    private static final Set<Integer> CRAWLER_POLLING_INTERVAL_SECONDS = Set.of(1, 3, 5, 10, 30);
     private static final Set<String> CRAWLER_DISCOVERY_VIEW_MODES = Set.of("table", "card");
     private static final Set<String> CRAWLER_BOOK_VIEW_MODES = Set.of("table", "card");
     private static final Set<String> READER_APPEARANCES =
@@ -161,8 +160,7 @@ public class UserService implements UserDetailsService {
             user.setCrawlerFollowCurrentChapter(request.getCrawlerFollowCurrentChapter());
         }
         if (request.getCrawlerPollingIntervalSeconds() != null) {
-            requireAllowed("采集自动刷新频率", request.getCrawlerPollingIntervalSeconds(),
-                    CRAWLER_POLLING_INTERVAL_SECONDS);
+            requireRange("采集自动刷新频率", request.getCrawlerPollingIntervalSeconds(), 1, 3600);
             user.setCrawlerPollingIntervalSeconds(request.getCrawlerPollingIntervalSeconds());
         }
         if (request.getCrawlerChapterPageSize() != null) {

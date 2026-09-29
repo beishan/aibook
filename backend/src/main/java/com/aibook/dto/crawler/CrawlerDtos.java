@@ -204,10 +204,13 @@ public final class CrawlerDtos {
     public record TaskQueueSettingsView(int maxConcurrentTasks, int runningCount, int queuedCount) { }
     public record TaskQueuePayload(
             @NotNull @Min(1) @Max(16) Integer maxConcurrentTasks,
-            @NotNull @Min(0) @Max(3600) Integer taskIntervalSeconds) { }
-    public record TaskQueueCreateRequest(@NotNull Long siteId) { }
+            @NotNull @Min(0) @Max(3600) Integer taskIntervalSeconds,
+            @Size(max = 100) String queueName) { }
+    public record TaskQueueCreateRequest(Long siteId, @Size(max = 100) String queueName) { }
+    public record TaskQueueReorderRequest(@NotEmpty List<@NotNull Long> queueIds) { }
+    public record TaskQueueAssignmentRequest(@NotNull Long queueId) { }
     public record TaskQueueView(
-            Long id, Long siteId, String siteName,
+            Long id, Long siteId, String siteName, String queueName,
             int maxConcurrentTasks, int taskIntervalSeconds,
             int runningCount, int waitingCount, int pausedCount,
             int activeTaskCount, int progressPercent,
@@ -277,7 +280,8 @@ public final class CrawlerDtos {
             int totalCount, int successCount, int newBookCount,
             int duplicateCount, int failedCount, int waitingCount, String currentChapter,
             long averageRequestMillis, String errorMessage, LocalDateTime startedAt,
-            LocalDateTime finishedAt, LocalDateTime createdAt, String siteThemeColor) { }
+            LocalDateTime finishedAt, LocalDateTime createdAt, String siteThemeColor,
+            Long queueId) { }
 
     public record ExportView(Long id, String format, long fileSize, String fileHash,
             LocalDateTime createdAt) { }

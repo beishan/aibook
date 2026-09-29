@@ -462,6 +462,10 @@
       <ProxySettingsPanel scope="crawler" />
     </div>
 
+    <div v-if="isAdmin && activeTab === 'crawler-refresh-options'" class="tab-content">
+      <CrawlerPollingIntervalSettingsPanel />
+    </div>
+
     <!-- 用户管理（仅管理员） -->
     <div v-if="isAdmin && activeTab === 'users'" class="tab-content">
       <UserManagementPanel />
@@ -657,6 +661,7 @@ import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
 import RandomCoverLibraryPanel from '@/components/RandomCoverLibraryPanel.vue'
 import ReaderBackgroundManagementPanel from '@/components/ReaderBackgroundManagementPanel.vue'
 import ProxySettingsPanel from '@/components/ProxySettingsPanel.vue'
+import CrawlerPollingIntervalSettingsPanel from '@/components/CrawlerPollingIntervalSettingsPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useCategoryStore } from '@/stores/category'
@@ -888,9 +893,10 @@ const tabGroups = computed(() => [
       { key: 'logs', label: '操作日志', icon: '📋' },
     ],
   },
-  {
+    {
     label: '系统',
     items: [
+      ...(isAdmin.value ? [{ key: 'crawler-refresh-options', label: '爬虫自动刷新', icon: '⟳' }] : []),
       ...(isAdmin.value ? [{ key: 'website', label: '网站设置', icon: '🌐' }] : []),
       ...(isAdmin.value ? [{ key: 'backups', label: '数据备份', icon: '💾' }] : []),
       { key: 'info', label: '系统信息', icon: 'ℹ️' },
