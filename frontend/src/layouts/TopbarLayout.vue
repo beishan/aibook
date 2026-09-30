@@ -100,6 +100,7 @@ const showDropdown = ref(false)
 const menuItems = [
   { path: '/', icon: '🏠', title: '首页' },
   { path: '/books', icon: '📚', title: '书库' },
+  { path: '/rewrite', icon: '✎', title: '重写' },
   { path: '/shelf', icon: '📖', title: '书架' },
   { path: '/text-repair', icon: '🔧', title: '内容修复' },
   { path: '/format-conversion', icon: '🔄', title: '格式转换' },

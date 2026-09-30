@@ -4,10 +4,13 @@ import com.aibook.dto.BookTocItemDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.BookVersion;
 import com.aibook.model.entity.LibraryChapter;
+import com.aibook.model.entity.RewriteChapter;
+import com.aibook.model.entity.RewriteProject;
 import com.aibook.repository.LibraryChapterRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +21,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /** Provides file-free, immutable library publications backed by chapter rows. */
@@ -27,6 +31,11 @@ public class StructuredPublicationService {
 
     private final LibraryChapterRepository chapterRepository;
     private final ObjectMapper objectMapper;
+    @Autowired(required = false)
+    private RewriteService rewriteService;
+
+    private record ChapterEntry(Long id, int index, String key, String title,
+                                String content, String contentHash) { }
 
     public boolean supports(BookVersion version) {
         return version != null && "structured".equalsIgnoreCase(version.getFormat());
@@ -35,17 +44,17 @@ public class StructuredPublicationService {
     @Transactional(readOnly = true)
     public Map<String, String> processedContent(BookVersion version) {
         requireStructured(version);
-        List<LibraryChapter> chapters = chapters(version);
+        List<ChapterEntry> chapters = chapters(version);
         StringBuilder text = new StringBuilder();
         List<Map<String, Object>> chapterInfo = new ArrayList<>(chapters.size());
-        for (LibraryChapter chapter : chapters) {
+        for (ChapterEntry chapter : chapters) {
             if (!text.isEmpty()) text.append("\n\n");
             int start = text.length();
-            text.append(chapter.getTitle()).append("\n\n")
-                    .append(formatChapterContent(chapter.getContent()));
+            text.append(chapter.title()).append("\n\n")
+                    .append(formatChapterContent(chapter.content()));
             chapterInfo.add(Map.of(
-                    "key", chapter.getChapterKey(),
-                    "title", chapter.getTitle(),
+                    "key", chapter.key(),
+                    "title", chapter.title(),
                     "startIndex", start,
                     "endIndex", text.length()));
         }
@@ -62,9 +71,9 @@ public class StructuredPublicationService {
     public List<BookTocItemDTO> tableOfContents(BookVersion version) {
         requireStructured(version);
         return chapters(version).stream().map(chapter -> BookTocItemDTO.builder()
-                .index(chapter.getChapterIndex())
-                .title(chapter.getTitle())
-                .href("chapter:" + chapter.getId())
+                .index(chapter.index())
+                .title(chapter.title())
+                .href("chapter:" + chapter.id())
                 .depth(0)
                 .build()).toList();
     }
@@ -76,12 +85,12 @@ public class StructuredPublicationService {
                 .map(chapter -> {
                     Map<String, Object> link = new LinkedHashMap<>();
                     link.put("href", "/api/books/" + book.getId()
-                            + "/structured/chapters/" + chapter.getId()
+                            + "/structured/chapters/" + chapter.id()
                             + "?versionId=" + version.getId());
                     link.put("type", "text/plain; charset=UTF-8");
-                    link.put("title", chapter.getTitle());
-                    link.put("properties", Map.of("chapterKey", chapter.getChapterKey(),
-                            "position", chapter.getChapterIndex()));
+                    link.put("title", chapter.title());
+                    link.put("properties", Map.of("chapterKey", chapter.key(),
+                            "position", chapter.index()));
                     return link;
                 }).toList();
         Map<String, Object> metadata = new LinkedHashMap<>();
@@ -104,20 +113,39 @@ public class StructuredPublicationService {
     @Transactional(readOnly = true)
     public Map<String, Object> chapter(BookVersion version, Long chapterId) {
         requireStructured(version);
-        LibraryChapter chapter = chapterRepository.findByIdAndBookVersion(chapterId, version)
+        ChapterEntry chapter = chapters(version).stream()
+                .filter(item -> Objects.equals(item.id(), chapterId)).findFirst()
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "章节不存在"));
         return Map.of(
-                "id", chapter.getId(),
-                "key", chapter.getChapterKey(),
-                "index", chapter.getChapterIndex(),
-                "title", chapter.getTitle(),
-                "content", chapter.getContent(),
-                "contentHash", chapter.getContentHash());
+                "id", chapter.id(),
+                "key", chapter.key(),
+                "index", chapter.index(),
+                "title", chapter.title(),
+                "content", chapter.content(),
+                "contentHash", chapter.contentHash());
     }
 
-    private List<LibraryChapter> chapters(BookVersion version) {
-        return chapterRepository.findByBookVersionOrderByChapterIndexAsc(version);
+    private List<ChapterEntry> chapters(BookVersion version) {
+        RewriteProject project = rewriteService == null ? null
+                : rewriteService.projectForVersion(version);
+        if (project != null && project.getStatus() != RewriteProject.Status.COMPLETED) {
+            List<RewriteChapter> draft = rewriteService.readableChapters(project);
+            List<ChapterEntry> result = new ArrayList<>(draft.size());
+            for (int index = 0; index < draft.size(); index++) {
+                RewriteChapter chapter = draft.get(index);
+                result.add(new ChapterEntry(chapter.getId(), index,
+                        "rewrite:" + project.getId() + ":" + chapter.getId(),
+                        chapter.getTitle(), chapter.getContent(),
+                        "revision:" + chapter.getRevision()));
+            }
+            return result;
+        }
+        return chapterRepository.findByBookVersionOrderByChapterIndexAsc(version).stream()
+                .map(chapter -> new ChapterEntry(chapter.getId(), chapter.getChapterIndex(),
+                        chapter.getChapterKey(), chapter.getTitle(), chapter.getContent(),
+                        chapter.getContentHash()))
+                .toList();
     }
 
     /**

@@ -172,7 +172,7 @@ const preferencesStore = usePreferencesStore()
 const dockIconStore = useDockIconStore()
 const bookStore = useBookStore()
 
-const isReaderRoute = computed(() => ['Reader', 'CrawlerTrialReader'].includes(String(route.name)))
+const isReaderRoute = computed(() => ['Reader', 'CrawlerTrialReader', 'RewriteEditor'].includes(String(route.name)))
 
 const showUserMenu = ref(false)
 const showTrashMenu = ref(false)
@@ -182,6 +182,7 @@ const dockScales = ref<number[]>([])
 const menuItems: Array<{ path: string; icon: DockIconName; title: string }> = [
   { path: '/', icon: 'home', title: '首页' },
   { path: '/books', icon: 'library', title: '书库' },
+  { path: '/rewrite', icon: 'rewrite', title: '重写' },
   { path: '/shelf', icon: 'shelf', title: '书架' },
   { path: '/text-repair', icon: 'repair', title: '内容修复' },
   { path: '/format-conversion', icon: 'conversion', title: '格式转换' },

@@ -57,6 +57,13 @@
         <path d="M14.5 17h4M26.5 14h6" stroke="#fff" stroke-width="1.2" stroke-linecap="round" opacity=".5" />
       </g>
 
+      <g v-else-if="name === 'rewrite'" :filter="`url(#${gradientPrefix}-shadow)`">
+        <path d="M11 13h36a5 5 0 0 1 5 5v35H16a5 5 0 0 1-5-5Z" :fill="`url(#${gradientPrefix}-paper)`" stroke="#765a2e" stroke-width="1.8" />
+        <path d="M17 22h23M17 29h19M17 36h15" stroke="#9e865c" stroke-width="2" stroke-linecap="round" />
+        <path d="m27 49 4-10L49 21l6 6-18 18Z" :fill="`url(#${gradientPrefix}-green)`" stroke="#174d39" stroke-width="1.6" />
+        <path d="m49 21 3-3a3 3 0 0 1 4 0l2 2a3 3 0 0 1 0 4l-3 3" :fill="`url(#${gradientPrefix}-metal)`" stroke="#765a2e" stroke-width="1.4" />
+      </g>
+
       <g v-else-if="name === 'shelf'" :filter="`url(#${gradientPrefix}-shadow)`">
         <path d="M7.5 19.5c10-3.3 18.2-.7 24.5 5.5v30c-6.6-5.4-14.8-7.4-24.5-4.4Z" :fill="`url(#${gradientPrefix}-paper)`" stroke="#765a2e" stroke-width="1.5" stroke-linejoin="round" />
         <path d="M56.5 19.5C46.5 16.2 38.3 18.8 32 25v30c6.6-5.4 14.8-7.4 24.5-4.4Z" :fill="`url(#${gradientPrefix}-paper)`" stroke="#765a2e" stroke-width="1.5" stroke-linejoin="round" />
@@ -123,10 +130,10 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance } from 'vue'
-import { Collection, Connection, Delete, DeleteFilled, Histogram, HomeFilled, Reading, Setting, Tools, Switch } from '@element-plus/icons-vue'
+import { Collection, Connection, Delete, DeleteFilled, EditPen, Histogram, HomeFilled, Reading, Setting, Tools, Switch } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
 
-export type DockIconName = 'home' | 'library' | 'shelf' | 'repair' | 'conversion' | 'crawler' | 'statistics' | 'settings' | 'trashEmpty' | 'trashFull'
+export type DockIconName = 'home' | 'library' | 'rewrite' | 'shelf' | 'repair' | 'conversion' | 'crawler' | 'statistics' | 'settings' | 'trashEmpty' | 'trashFull'
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
 
 const props = defineProps<{
@@ -138,6 +145,7 @@ const props = defineProps<{
 const minimalIcons: Record<DockIconName, Component> = {
   home: HomeFilled,
   library: Collection,
+  rewrite: EditPen,
   shelf: Reading,
   repair: Tools,
   conversion: Switch,

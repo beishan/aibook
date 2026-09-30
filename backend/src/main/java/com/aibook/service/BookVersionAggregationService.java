@@ -15,10 +15,14 @@ import com.aibook.repository.BookVersionIdentityProjection;
 import com.aibook.repository.BookmarkRepository;
 import com.aibook.repository.BookScanSourceRepository;
 import com.aibook.repository.ReadingProgressRepository;
+import com.aibook.repository.RewriteProjectRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.text.Normalizer;
 import java.time.LocalDateTime;
@@ -48,6 +52,9 @@ public class BookVersionAggregationService {
     private final BookHighlightRepository bookHighlightRepository;
     private final BookListRepository bookListRepository;
     private final BookScanSourceRepository bookScanSourceRepository;
+
+    @Autowired(required = false)
+    private RewriteProjectRepository rewriteProjectRepository;
 
     public RebuildPlan buildPlan(Long userId) {
         List<BookVersionIdentityProjection> identities =
@@ -99,6 +106,10 @@ public class BookVersionAggregationService {
         Book duplicate = byId.get(duplicateId);
         if (primary == null || duplicate == null) {
             return 0;
+        }
+        if (rewriteProjectRepository != null && rewriteProjectRepository.existsByBook(duplicate)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "源书籍存在重写项目，暂不能合并到其他书籍");
         }
 
         bookVersionService.ensurePrimaryVersion(primary);

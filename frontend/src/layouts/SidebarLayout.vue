@@ -153,6 +153,7 @@ import {
   Switch,
   Connection,
   DataAnalysis,
+  EditPen,
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
@@ -168,6 +169,7 @@ const showMobileMenu = ref(false)
 const menuItems = [
   { path: '/', icon: House, title: '首页' },
   { path: '/books', icon: Collection, title: '书库' },
+  { path: '/rewrite', icon: EditPen, title: '书籍重写' },
   { path: '/shelf', icon: Reading, title: '书架' },
   { path: '/text-repair', icon: Tools, title: '内容修复' },
   { path: '/format-conversion', icon: Switch, title: '格式转换' },

@@ -25,7 +25,8 @@
           <button
             class="btn"
             type="button"
-            :disabled="downloadingBook || !selectedVersionId"
+            :disabled="downloadingBook || !selectedVersionId || selectedVersionFormat === 'structured'"
+            :title="selectedVersionFormat === 'structured' ? '结构化版本导出将在第三阶段提供' : '下载当前版本'"
             @click="handleDownloadBook"
           >
             <span aria-hidden="true">⇩</span>
@@ -330,6 +331,9 @@
             <p>格式或内容不同的版本会分别保存阅读进度。</p>
           </div>
           <div class="version-header-actions">
+            <button class="btn" type="button" :disabled="!selectedVersionId" @click="openRewrite">
+              <span>✎</span><span>重写此版本</span>
+            </button>
             <button
               class="btn"
               type="button"
@@ -360,6 +364,10 @@
             <div class="version-format">{{ version.format === 'structured' ? '在线章节' : version.format.toUpperCase() }}</div>
             <div class="version-content">
               <strong>{{ version.displayName }}</strong>
+              <small v-if="version.rewriteProjectId">
+                {{ rewriteStatusLabel(version.rewriteStatus) }}
+                · 源版本 #{{ version.sourceVersionId }}
+              </small>
               <span>
                 {{ formatFileSize(version.fileSize) }}
                 <template v-if="version.chapterCount != null">
@@ -368,6 +376,12 @@
               </span>
             </div>
             <span v-if="version.primaryVersion" class="version-primary-badge">原始版本</span>
+            <button
+              v-if="version.rewriteProjectId && version.rewriteStatus !== 'COMPLETED'"
+              class="btn"
+              type="button"
+              @click.stop="router.push(`/rewrite/${version.rewriteProjectId}`)"
+            >继续重写</button>
             <span v-if="version.id === selectedVersionId" class="version-selected-badge">
               当前选择
             </span>
@@ -1062,6 +1076,9 @@ interface BookVersion {
   fileHash?: string
   primaryVersion: boolean
   chapterCount?: number
+  rewriteProjectId?: number
+  rewriteStatus?: string
+  sourceVersionId?: number
   createdAt?: string
 }
 
@@ -1142,6 +1159,12 @@ const selectedVersion = computed(() =>
 const selectedVersionFormat = computed(() =>
   selectedVersion.value?.format || book.value?.format || '',
 )
+const rewriteStatusLabel = (status?: string) => ({
+  ACTIVE: '重写中',
+  PAUSED: '重写已暂停',
+  ARCHIVED: '重写已归档',
+  COMPLETED: '重写已完成',
+}[status || ''] || '重写版本')
 const metadataSourceSummary = computed(() => {
   const sources = book.value?.metadataSources as Record<string, string> | undefined
   if (!sources) return ''
@@ -1362,6 +1385,17 @@ const openFormatConversion = () => {
   router.push({
     path: '/format-conversion',
     query: { bookId: String(book.value.id), versionId: String(selectedVersionId.value) },
+  })
+}
+
+const openRewrite = () => {
+  if (!book.value || !selectedVersionId.value) return
+  router.push({
+    path: '/rewrite',
+    query: {
+      bookId: String(book.value.id),
+      versionId: String(selectedVersionId.value),
+    },
   })
 }
 

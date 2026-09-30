@@ -9,10 +9,12 @@ import com.aibook.repository.BookVersionRepository;
 import com.aibook.repository.ReadingProgressRepository;
 import com.aibook.repository.ReadingDailyActivityRepository;
 import com.aibook.repository.LibraryChapterRepository;
+import com.aibook.repository.RewriteProjectRepository;
 import com.aibook.repository.VersionReadingProgressRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -45,6 +47,8 @@ public class BookVersionService {
     private final VersionReadingProgressRepository versionProgressRepository;
     private final ReadingDailyActivityRepository dailyActivityRepository;
     private final LibraryChapterRepository libraryChapterRepository;
+    @Autowired(required = false)
+    private RewriteProjectRepository rewriteProjectRepository;
     private final TxtParserService txtParserService;
     private final ObjectMapper objectMapper;
 
@@ -227,6 +231,11 @@ public class BookVersionService {
         if (Boolean.TRUE.equals(version.getPrimaryVersion())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "原始版本不能删除");
         }
+        if (rewriteProjectRepository != null
+                && rewriteProjectRepository.existsBySourceVersionOrRewriteVersion(version, version)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "该版本关联重写项目，暂不能单独删除");
+        }
         dailyActivityRepository.deleteByVersionId(version.getId());
         versionProgressRepository.deleteByVersion(version);
         libraryChapterRepository.deleteByBookVersion(version);
@@ -249,6 +258,8 @@ public class BookVersionService {
     }
 
     public com.aibook.dto.BookVersionDTO toDTO(BookVersion version) {
+        var rewriteProject = rewriteProjectRepository == null ? null
+                : rewriteProjectRepository.findByRewriteVersion(version).orElse(null);
         return com.aibook.dto.BookVersionDTO.builder()
                 .id(version.getId())
                 .displayName(version.getDisplayName())
@@ -257,6 +268,10 @@ public class BookVersionService {
                 .fileHash(version.getFileHash())
                 .primaryVersion(version.getPrimaryVersion())
                 .chapterCount(version.getChapterCount())
+                .rewriteProjectId(rewriteProject == null ? null : rewriteProject.getId())
+                .rewriteStatus(rewriteProject == null ? null : rewriteProject.getStatus().name())
+                .sourceVersionId(rewriteProject == null ? null
+                        : rewriteProject.getSourceVersion().getId())
                 .createdAt(version.getCreatedAt())
                 .build();
     }

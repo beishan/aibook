@@ -160,6 +160,7 @@ const bookStore = useBookStore()
 const navigationIconItems: Array<{ icon: DockIconName; label: string }> = [
   { icon: 'home', label: '首页' },
   { icon: 'library', label: '书库' },
+  { icon: 'rewrite', label: '重写' },
   { icon: 'shelf', label: '书架' },
   { icon: 'repair', label: '修复' },
   { icon: 'conversion', label: '转换' },

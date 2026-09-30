@@ -13,6 +13,8 @@ import com.aibook.model.entity.User;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookVersionRepository;
 import com.aibook.repository.LibraryChapterRepository;
+import com.aibook.repository.RewriteProjectRepository;
+import com.aibook.model.entity.RewriteProject;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -25,6 +27,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -47,6 +50,9 @@ public class BookVersionImportService {
     private final LibraryChapterRepository chapterRepository;
     private final BookVersionService versionService;
     private final BookVersionAggregationService aggregationService;
+
+    @Autowired(required = false)
+    private RewriteProjectRepository rewriteProjectRepository;
 
     @Value("${upload.path:./uploads}")
     private String uploadPath;
@@ -148,6 +154,12 @@ public class BookVersionImportService {
     }
 
     private void copyVersion(Book target, BookVersion source) {
+        RewriteProject rewrite = rewriteProjectRepository == null ? null
+                : rewriteProjectRepository.findByRewriteVersion(source).orElse(null);
+        if (rewrite != null && rewrite.getStatus() != RewriteProject.Status.COMPLETED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "正在重写的版本不能复制到其他书籍，请先完成重写");
+        }
         String sourceId = String.valueOf(source.getId());
         if (versionRepository.existsByBookAndSourceTypeAndSourceId(
                 target, IMPORT_SOURCE_TYPE, sourceId)) {

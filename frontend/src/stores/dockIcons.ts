@@ -10,7 +10,7 @@ import {
 
 export type CustomDockIconName = DockIconName | 'trash'
 const DOCK_ICON_NAMES: CustomDockIconName[] = [
-  'home', 'library', 'shelf', 'repair', 'conversion', 'crawler', 'statistics', 'settings', 'trashEmpty', 'trashFull', 'trash',
+  'home', 'library', 'rewrite', 'shelf', 'repair', 'conversion', 'crawler', 'statistics', 'settings', 'trashEmpty', 'trashFull', 'trash',
 ]
 const SUPPORTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const MAX_ICON_SIZE = 5 * 1024 * 1024
@@ -26,6 +26,7 @@ const ACTIVE_CACHE_USER_KEY = 'aibook.dockIconCacheUserId'
 const emptyIconUrls = (): Record<CustomDockIconName, string> => ({
   home: '',
   library: '',
+  rewrite: '',
   shelf: '',
   repair: '',
   conversion: '',
@@ -42,6 +43,7 @@ export const useDockIconStore = defineStore('dockIcons', () => {
   const uploading = reactive<Record<CustomDockIconName, boolean>>({
     home: false,
     library: false,
+    rewrite: false,
     shelf: false,
     repair: false,
     conversion: false,

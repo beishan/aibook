@@ -37,6 +37,16 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/BookDetailView.vue'),
       },
       {
+        path: 'rewrite',
+        name: 'RewriteList',
+        component: () => import('@/views/RewriteListView.vue'),
+      },
+      {
+        path: 'rewrite/:projectId',
+        name: 'RewriteEditor',
+        component: () => import('@/views/RewriteEditorView.vue'),
+      },
+      {
         path: 'series',
         name: 'Series',
         component: () => import('@/views/SeriesView.vue'),

@@ -13,7 +13,9 @@ import com.aibook.repository.BookListRepository;
 import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookmarkRepository;
 import com.aibook.repository.ReadingProgressRepository;
+import com.aibook.repository.RewriteProjectRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -39,6 +41,8 @@ public class BookService {
     private final BookmarkRepository bookmarkRepository;
     private final BookHighlightRepository bookHighlightRepository;
     private final BookListRepository bookListRepository;
+    @Autowired(required = false)
+    private RewriteProjectRepository rewriteProjectRepository;
     private final CategoryService categoryService;
     private final TagService tagService;
     private final AuthorService authorService;
@@ -287,6 +291,10 @@ public class BookService {
     }
 
     private void purgeDatabaseRecordOnly(Book book) {
+        if (rewriteProjectRepository != null && rewriteProjectRepository.existsByBook(book)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "书籍关联重写项目，请先恢复书籍并删除相关重写项目");
+        }
         readingProgressRepository.deleteByBook(book);
         bookmarkRepository.deleteByBook(book);
         bookHighlightRepository.deleteByBook(book);
