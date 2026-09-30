@@ -179,17 +179,22 @@ const showTrashMenu = ref(false)
 const dockContainerRef = ref<HTMLElement | null>(null)
 const dockScales = ref<number[]>([])
 
-const menuItems: Array<{ path: string; icon: DockIconName; title: string }> = [
-  { path: '/', icon: 'home', title: '首页' },
-  { path: '/books', icon: 'library', title: '书库' },
-  { path: '/rewrite', icon: 'rewrite', title: '重写' },
-  { path: '/shelf', icon: 'shelf', title: '书架' },
-  { path: '/text-repair', icon: 'repair', title: '内容修复' },
-  { path: '/format-conversion', icon: 'conversion', title: '格式转换' },
-  { path: '/crawler', icon: 'crawler', title: '书籍爬虫' },
-  { path: '/statistics', icon: 'statistics', title: '阅读统计' },
-  { path: '/settings', icon: 'settings', title: '设置' },
-]
+const menuRoutes: Record<string, string> = {
+  home: '/',
+  library: '/books',
+  rewrite: '/rewrite',
+  shelf: '/shelf',
+  repair: '/text-repair',
+  conversion: '/format-conversion',
+  crawler: '/crawler',
+  statistics: '/statistics',
+  settings: '/settings',
+}
+
+const menuItems = computed(() => preferencesStore.dockNavigationItems
+  .filter(item => item.enabled)
+  .sort((a, b) => a.order - b.order)
+  .map(item => ({ path: menuRoutes[item.key], icon: item.icon as DockIconName, title: item.title })))
 
 const dockStyle = computed(() => ({
   '--dock-size': `${preferencesStore.dockSize}px`,
@@ -226,7 +231,7 @@ const dockItemStyle = (index: number) => {
 }
 
 const resetDockMagnification = () => {
-  dockScales.value = Array.from({ length: menuItems.length + 2 }, () => 1)
+  dockScales.value = Array.from({ length: menuItems.value.length + 2 }, () => 1)
 }
 
 const handleDockPointerMove = (event: PointerEvent) => {

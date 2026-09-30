@@ -317,6 +317,22 @@ public class User implements UserDetails {
         preference().setDockIconStyle(value);
     }
 
+    public String getDockNavigationSettings() {
+        return preference().getDockNavigationSettings();
+    }
+
+    public void setDockNavigationSettings(String value) {
+        preference().setDockNavigationSettings(value);
+    }
+
+    public String getRewriteSearchRules() {
+        return preference().getRewriteSearchRules();
+    }
+
+    public void setRewriteSearchRules(String value) {
+        preference().setRewriteSearchRules(value);
+    }
+
     public Long getUiFontId() {
         return preference().getUiFontId();
     }

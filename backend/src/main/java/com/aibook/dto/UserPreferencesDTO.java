@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSetter;
 
 import java.util.Map;
+import java.util.List;
 
 /**
  * 用户界面偏好。字体字段记录是否出现在请求 JSON 中，以支持 partial PUT
@@ -33,6 +34,8 @@ public class UserPreferencesDTO {
     private Integer dockMagnification;
     private Integer dockBlur;
     private String dockIconStyle;
+    private List<DockNavigationItemDTO> dockNavigationItems;
+    private List<RewriteSearchRuleDTO> rewriteSearchRules;
     private Long uiFontId;
     private Long readerFontId;
     private ReaderSettingsDTO readerSettings;
@@ -225,6 +228,22 @@ public class UserPreferencesDTO {
         this.dockIconStyle = dockIconStyle;
     }
 
+    public List<DockNavigationItemDTO> getDockNavigationItems() {
+        return dockNavigationItems;
+    }
+
+    public void setDockNavigationItems(List<DockNavigationItemDTO> items) {
+        this.dockNavigationItems = items;
+    }
+
+    public List<RewriteSearchRuleDTO> getRewriteSearchRules() {
+        return rewriteSearchRules;
+    }
+
+    public void setRewriteSearchRules(List<RewriteSearchRuleDTO> rules) {
+        this.rewriteSearchRules = rules;
+    }
+
     public Long getUiFontId() {
         return uiFontId;
     }
@@ -374,6 +393,16 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder dockIconStyle(String dockIconStyle) {
             value.setDockIconStyle(dockIconStyle);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder dockNavigationItems(List<DockNavigationItemDTO> items) {
+            value.setDockNavigationItems(items);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder rewriteSearchRules(List<RewriteSearchRuleDTO> rules) {
+            value.setRewriteSearchRules(rules);
             return this;
         }
 

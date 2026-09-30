@@ -11,7 +11,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
@@ -20,12 +19,13 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "rewrite_chapters")
+@Table(name = "rewrite_memos")
 @Getter
 @Setter
-public class RewriteChapter {
+public class RewriteMemo {
 
-    public enum Status { NOT_STARTED, WRITING, REVIEW, COMPLETED }
+    public enum Type { NOTE, GLOSSARY }
+    public enum State { TODO, DONE }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -35,45 +35,29 @@ public class RewriteChapter {
     @JoinColumn(name = "project_id", nullable = false)
     private RewriteProject project;
 
-    @Column(nullable = false)
-    private Integer sortIndex;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "chapter_id")
+    private RewriteChapter chapter;
 
-    @Column(nullable = false, length = 500)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Type type = Type.NOTE;
+
+    @Column(nullable = false, length = 200)
     private String title;
-
-    @Column(length = 200)
-    private String volumeTitle;
 
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
 
-    @Column(name = "content_format_version")
-    private Integer contentFormatVersion = 0;
-
-    @Column(name = "source_key", length = 500)
-    private String sourceKey;
-
-    @Column(name = "source_title", length = 500)
-    private String sourceTitle;
-
-    @Column(name = "source_content", columnDefinition = "TEXT")
-    private String sourceContent;
-
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private Status status = Status.NOT_STARTED;
+    @Column(nullable = false, length = 20, columnDefinition = "varchar(20) default 'TODO'")
+    private State state = State.TODO;
 
-    @Column(nullable = false)
-    private Long revision = 0L;
+    @Column(columnDefinition = "TEXT default '[]'", nullable = false)
+    private String aliases = "[]";
 
-    @Version
-    private Long rowVersion;
-
-    @Column(nullable = false)
-    private Integer wordCount = 0;
-
-    @Column(nullable = false)
-    private Boolean deleted = false;
+    @Column(name = "anchor_position")
+    private Integer anchorPosition;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

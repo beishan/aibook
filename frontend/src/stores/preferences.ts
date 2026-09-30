@@ -18,6 +18,27 @@ export type CrawlerBookViewMode = 'table' | 'card'
 export const CRAWLER_POLLING_INTERVAL_OPTIONS = [1, 3, 5, 10, 30] as const
 export type CrawlerPollingIntervalSeconds = number
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
+export type DockNavigationKey = 'home' | 'library' | 'rewrite' | 'shelf' | 'repair' | 'conversion' | 'crawler' | 'statistics' | 'settings'
+export type DockNavigationIcon = 'home' | 'library' | 'rewrite' | 'shelf' | 'repair' | 'conversion' | 'crawler' | 'statistics' | 'settings' | 'trashEmpty' | 'trashFull'
+export interface DockNavigationItem {
+  key: DockNavigationKey
+  title: string
+  icon: DockNavigationIcon
+  enabled: boolean
+  order: number
+}
+
+export const DEFAULT_DOCK_NAVIGATION_ITEMS: DockNavigationItem[] = [
+  { key: 'home', title: '首页', icon: 'home', enabled: true, order: 0 },
+  { key: 'library', title: '书库', icon: 'library', enabled: true, order: 1 },
+  { key: 'rewrite', title: '重写', icon: 'rewrite', enabled: true, order: 2 },
+  { key: 'shelf', title: '书架', icon: 'shelf', enabled: true, order: 3 },
+  { key: 'repair', title: '内容修复', icon: 'repair', enabled: true, order: 4 },
+  { key: 'conversion', title: '格式转换', icon: 'conversion', enabled: true, order: 5 },
+  { key: 'crawler', title: '书籍爬虫', icon: 'crawler', enabled: true, order: 6 },
+  { key: 'statistics', title: '阅读统计', icon: 'statistics', enabled: true, order: 7 },
+  { key: 'settings', title: '设置', icon: 'settings', enabled: true, order: 8 },
+]
 export const LIBRARY_PAGE_SIZE_OPTIONS = [10, 30, 50, 100, 200] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
 export const AUTHOR_PAGE_SIZE_OPTIONS = [10, 20, 50] as const
@@ -82,6 +103,7 @@ interface UserPreferences {
   dockMagnification: number | null
   dockBlur: number | null
   dockIconStyle: DockIconStyle | null
+  dockNavigationItems: DockNavigationItem[] | null
   uiFontId: number | null
   readerFontId: number | null
   readerSettings: ReaderSettings | null
@@ -142,6 +164,25 @@ const readLocalNumber = (key: string, fallback: number, min: number, max: number
 
 const isDockIconStyle = (value: unknown): value is DockIconStyle =>
   value === 'minimal' || value === 'skeuomorphic' || value === 'macos26' || value === 'custom'
+
+const isDockNavigationItems = (value: unknown): value is DockNavigationItem[] => {
+  if (!Array.isArray(value) || value.length !== DEFAULT_DOCK_NAVIGATION_ITEMS.length) return false
+  const keys = new Set<string>()
+  const orders = new Set<number>()
+  return value.every((item: any) => {
+    if (!item || typeof item !== 'object'
+        || !DEFAULT_DOCK_NAVIGATION_ITEMS.some(defaultItem => defaultItem.key === item.key)
+        || keys.has(item.key)
+        || typeof item.title !== 'string' || !item.title.trim() || item.title.length > 30
+        || !['home', 'library', 'rewrite', 'shelf', 'repair', 'conversion', 'crawler', 'statistics', 'settings', 'trashEmpty', 'trashFull'].includes(item.icon)
+        || typeof item.enabled !== 'boolean'
+        || !Number.isInteger(item.order) || item.order < 0 || item.order >= value.length
+        || orders.has(item.order)) return false
+    keys.add(item.key)
+    orders.add(item.order)
+    return true
+  }) && keys.size === DEFAULT_DOCK_NAVIGATION_ITEMS.length
+}
 
 const readLocalDockIconStyle = (): DockIconStyle => {
   const saved = localStorage.getItem(DOCK_ICON_STYLE_KEY)
@@ -307,6 +348,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const dockMagnification = ref(readLocalNumber(DOCK_MAGNIFICATION_KEY, DEFAULT_DOCK_MAGNIFICATION, 100, 150))
   const dockBlur = ref(readLocalNumber(DOCK_BLUR_KEY, DEFAULT_DOCK_BLUR, 8, 40))
   const dockIconStyle = ref<DockIconStyle>(readLocalDockIconStyle())
+  const dockNavigationItems = ref<DockNavigationItem[]>(DEFAULT_DOCK_NAVIGATION_ITEMS.map(item => ({ ...item })))
   const uiFontId = ref<number | null>(null)
   const readerFontId = ref<number | null>(null)
   const readerSettings = ref<ReaderSettings>(
@@ -498,6 +540,23 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (syncRemote) persistRemote({ dockIconStyle: value })
   }
 
+  const setDockNavigationItems = (value: DockNavigationItem[], syncRemote = true) => {
+    if (!isDockNavigationItems(value)) return
+    dockNavigationItems.value = [...value].sort((a, b) => a.order - b.order)
+      .map(item => ({ ...item }))
+    if (syncRemote) persistRemote({ dockNavigationItems: dockNavigationItems.value })
+  }
+
+  const saveDockNavigationItems = async (value: DockNavigationItem[]) => {
+    if (!isDockNavigationItems(value)) throw new Error('Dock 导航配置无效')
+    await api.put('/api/user/preferences', { dockNavigationItems: value })
+    setDockNavigationItems(value, false)
+  }
+
+  const resetDockNavigationItems = () => {
+    setDockNavigationItems(DEFAULT_DOCK_NAVIGATION_ITEMS.map(item => ({ ...item })))
+  }
+
   const resetDockAppearance = () => {
     setDockSize(DEFAULT_DOCK_SIZE, false)
     setDockOpacity(DEFAULT_DOCK_OPACITY, false)
@@ -665,6 +724,13 @@ export const usePreferencesStore = defineStore('preferences', () => {
       if (isDockIconStyle(data.dockIconStyle)) setDockIconStyle(data.dockIconStyle, false)
       else missingPreferences.dockIconStyle = dockIconStyle.value
 
+      if (isDockNavigationItems(data.dockNavigationItems)) {
+        setDockNavigationItems(data.dockNavigationItems, false)
+      } else {
+        setDockNavigationItems(DEFAULT_DOCK_NAVIGATION_ITEMS, false)
+        missingPreferences.dockNavigationItems = dockNavigationItems.value
+      }
+
       setUiFontId(Number.isInteger(data.uiFontId) ? data.uiFontId : null, false)
       setReaderFontId(
         Number.isInteger(data.readerFontId) ? data.readerFontId : null,
@@ -691,6 +757,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   const resetHydration = () => {
     hydrated.value = false
+    dockNavigationItems.value = DEFAULT_DOCK_NAVIGATION_ITEMS.map(item => ({ ...item }))
     if (readerSettingsSaveTimer) {
       clearTimeout(readerSettingsSaveTimer)
       readerSettingsSaveTimer = null
@@ -717,6 +784,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     dockMagnification,
     dockBlur,
     dockIconStyle,
+    dockNavigationItems,
     uiFontId,
     readerFontId,
     readerSettings,
@@ -743,6 +811,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setDockMagnification,
     setDockBlur,
     setDockIconStyle,
+    setDockNavigationItems,
+    saveDockNavigationItems,
+    resetDockNavigationItems,
     resetDockAppearance,
     setUiFontId,
     setReaderFontId,

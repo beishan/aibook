@@ -65,6 +65,8 @@ public class RewriteProject {
     private Status status = Status.ACTIVE;
 
     private Long currentChapterId;
+    @Column(name = "current_chapter_position")
+    private Integer currentChapterPosition = 0;
     private Integer incompleteCount;
     private LocalDateTime completedAt;
 

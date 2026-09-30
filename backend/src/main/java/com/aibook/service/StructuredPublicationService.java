@@ -9,7 +9,6 @@ import com.aibook.model.entity.RewriteProject;
 import com.aibook.repository.LibraryChapterRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -26,16 +25,31 @@ import java.util.stream.Collectors;
 
 /** Provides file-free, immutable library publications backed by chapter rows. */
 @Service
-@RequiredArgsConstructor
 public class StructuredPublicationService {
 
     private final LibraryChapterRepository chapterRepository;
     private final ObjectMapper objectMapper;
+    private final RewriteContentCodec contentCodec;
     @Autowired(required = false)
     private RewriteService rewriteService;
 
+    @Autowired
+    public StructuredPublicationService(LibraryChapterRepository chapterRepository,
+                                       ObjectMapper objectMapper,
+                                       RewriteContentCodec contentCodec) {
+        this.chapterRepository = chapterRepository;
+        this.objectMapper = objectMapper;
+        this.contentCodec = contentCodec;
+    }
+
+    public StructuredPublicationService(LibraryChapterRepository chapterRepository,
+                                       ObjectMapper objectMapper) {
+        this(chapterRepository, objectMapper, new RewriteContentCodec(objectMapper));
+    }
+
     private record ChapterEntry(Long id, int index, String key, String title,
-                                String content, String contentHash) { }
+                                String content, String contentHash,
+                                int contentFormatVersion) { }
 
     public boolean supports(BookVersion version) {
         return version != null && "structured".equalsIgnoreCase(version.getFormat());
@@ -47,11 +61,33 @@ public class StructuredPublicationService {
         List<ChapterEntry> chapters = chapters(version);
         StringBuilder text = new StringBuilder();
         List<Map<String, Object>> chapterInfo = new ArrayList<>(chapters.size());
+        List<Map<String, String>> readerBlocks = new ArrayList<>();
         for (ChapterEntry chapter : chapters) {
             if (!text.isEmpty()) text.append("\n\n");
             int start = text.length();
-            text.append(chapter.title()).append("\n\n")
-                    .append(formatChapterContent(chapter.content()));
+            text.append(chapter.title()).append("\n\n");
+            readerBlocks.add(Map.of("text", chapter.title(),
+                    "html", "<h1>" + escapeHtml(chapter.title()) + "</h1>"));
+            if (chapter.contentFormatVersion() == 1) {
+                List<Map<String, String>> blocks = contentCodec.renderedBlocks(chapter.content());
+                boolean hasBodyBlock = false;
+                for (Map<String, String> block : blocks) {
+                    if (hasBodyBlock) text.append("\n\n");
+                    text.append(block.get("text"));
+                    readerBlocks.add(block);
+                    hasBodyBlock = true;
+                }
+            } else {
+                String body = formatChapterContent(chapter.content());
+                text.append(body);
+                if (!body.isBlank()) {
+                    Arrays.stream(body.split("\\n\\s*\\n+"))
+                            .map(String::trim).filter(value -> !value.isEmpty())
+                            .forEach(value -> readerBlocks.add(Map.of("text", value,
+                                    "html", "<p>" + escapeHtml(value).replace("\n", "<br>")
+                                            + "</p>")));
+                }
+            }
             chapterInfo.add(Map.of(
                     "key", chapter.key(),
                     "title", chapter.title(),
@@ -60,7 +96,8 @@ public class StructuredPublicationService {
         }
         try {
             return Map.of("text", text.toString(),
-                    "chapterInfo", objectMapper.writeValueAsString(chapterInfo));
+                    "chapterInfo", objectMapper.writeValueAsString(chapterInfo),
+                    "chapterBlocks", objectMapper.writeValueAsString(readerBlocks));
         } catch (JsonProcessingException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "结构化目录生成失败", exception);
@@ -117,12 +154,20 @@ public class StructuredPublicationService {
                 .filter(item -> Objects.equals(item.id(), chapterId)).findFirst()
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "章节不存在"));
+        String plainText = chapter.contentFormatVersion() == 1
+                ? contentCodec.plainText(chapter.content()) : chapter.content();
+        String renderedHtml = chapter.contentFormatVersion() == 1
+                ? contentCodec.renderedBlocks(chapter.content()).stream()
+                        .map(block -> block.get("html")).collect(Collectors.joining())
+                : "<p>" + escapeHtml(formatChapterContent(chapter.content()))
+                        .replace("\n", "<br>") + "</p>";
         return Map.of(
                 "id", chapter.id(),
                 "key", chapter.key(),
                 "index", chapter.index(),
                 "title", chapter.title(),
-                "content", chapter.content(),
+                "content", plainText,
+                "contentHtml", renderedHtml,
                 "contentHash", chapter.contentHash());
     }
 
@@ -137,14 +182,15 @@ public class StructuredPublicationService {
                 result.add(new ChapterEntry(chapter.getId(), index,
                         "rewrite:" + project.getId() + ":" + chapter.getId(),
                         chapter.getTitle(), chapter.getContent(),
-                        "revision:" + chapter.getRevision()));
+                        "revision:" + chapter.getRevision(),
+                        Objects.requireNonNullElse(chapter.getContentFormatVersion(), 0)));
             }
             return result;
         }
         return chapterRepository.findByBookVersionOrderByChapterIndexAsc(version).stream()
                 .map(chapter -> new ChapterEntry(chapter.getId(), chapter.getChapterIndex(),
                         chapter.getChapterKey(), chapter.getTitle(), chapter.getContent(),
-                        chapter.getContentHash()))
+                        chapter.getContentHash(), contentCodec.isDocument(chapter.getContent()) ? 1 : 0))
                 .toList();
     }
 
@@ -167,6 +213,11 @@ public class StructuredPublicationService {
                 .map(String::trim)
                 .filter(value -> !value.isEmpty())
                 .collect(Collectors.joining("\n\n"));
+    }
+
+    private String escapeHtml(String value) {
+        return value.replace("&", "&amp;").replace("<", "&lt;")
+                .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;");
     }
 
     private void requireStructured(BookVersion version) {

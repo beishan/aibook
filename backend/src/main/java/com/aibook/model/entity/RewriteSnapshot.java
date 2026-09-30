@@ -17,32 +17,32 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "rewrite_revisions", uniqueConstraints =
-        @UniqueConstraint(name = "uk_rewrite_revision_chapter_number",
-                columnNames = {"chapter_id", "revision_number"}))
+@Table(name = "rewrite_snapshots", uniqueConstraints =
+        @UniqueConstraint(name = "uk_rewrite_snapshot_number",
+                columnNames = {"project_id", "snapshot_number"}))
 @Getter
 @Setter
-public class RewriteRevision {
+public class RewriteSnapshot {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "chapter_id", nullable = false)
-    private RewriteChapter chapter;
+    @JoinColumn(name = "project_id", nullable = false)
+    private RewriteProject project;
 
-    @Column(name = "revision_number", nullable = false)
-    private Long revisionNumber;
+    @Column(name = "snapshot_number", nullable = false)
+    private Long snapshotNumber;
 
-    @Column(columnDefinition = "TEXT", nullable = false)
-    private String content;
+    @Column(nullable = false, length = 200)
+    private String name;
 
-    @Column(name = "content_format_version")
-    private Integer contentFormatVersion = 0;
+    @Column(name = "snapshot_content", columnDefinition = "TEXT", nullable = false)
+    private String snapshotContent;
 
-    @Column(nullable = false, length = 30)
-    private String reason;
+    @Column(nullable = false, columnDefinition = "BOOLEAN NOT NULL DEFAULT FALSE")
+    private boolean automatic;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

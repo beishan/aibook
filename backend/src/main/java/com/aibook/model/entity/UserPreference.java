@@ -93,6 +93,10 @@ public class UserPreference {
     private Integer dockBlur;
     @Column(name = "dock_icon_style")
     private String dockIconStyle;
+    @Column(name = "dock_navigation_settings", columnDefinition = "TEXT")
+    private String dockNavigationSettings;
+    @Column(name = "rewrite_search_rules", columnDefinition = "TEXT default '[]'")
+    private String rewriteSearchRules = "[]";
     @Column(name = "ui_font_id")
     private Long uiFontId;
     @Column(name = "reader_font_id")

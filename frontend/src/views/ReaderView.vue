@@ -293,6 +293,13 @@
               <div v-if="isChapterTitle(paragraph)" class="chapter-title" :id="'chapter-' + getOriginalIndex(localIndex)" :data-reader-index="getOriginalIndex(localIndex)">
                 {{ paragraph }}
               </div>
+              <div
+                v-else-if="richReaderBlocks[getOriginalIndex(localIndex)]"
+                :id="'para-' + getOriginalIndex(localIndex)"
+                :data-reader-index="getOriginalIndex(localIndex)"
+                class="reader-rich-block"
+                v-html="richReaderBlocks[getOriginalIndex(localIndex)]"
+              />
               <p v-else :id="'para-' + getOriginalIndex(localIndex)" :data-reader-index="getOriginalIndex(localIndex)">{{ paragraph }}</p>
             </template>
           </div>
@@ -836,6 +843,7 @@ const loading = ref(true)
 const downloadingBook = ref(false)
 const loadError = ref('')
 const content = ref<string[]>([])
+const richReaderBlocks = ref<string[]>([])
 const htmlContent = ref('')
 const progress = ref(0)
 const showSettings = ref(false)
@@ -1564,6 +1572,7 @@ const retryLoadBook = async () => {
   loading.value = true
   loadError.value = ''
   content.value = []
+  richReaderBlocks.value = []
   scrollRenderLimit.value = SCROLL_RENDER_BATCH_SIZE
   htmlContent.value = ''
   pdfSource.value = null
@@ -2317,6 +2326,18 @@ const loadTextContent = async () => {
     if (response.ok) {
       const data = await response.json()
       content.value = splitTextIntoParagraphs(data.text)
+      richReaderBlocks.value = []
+      if (data.chapterBlocks) {
+        try {
+          const blocks = JSON.parse(data.chapterBlocks) as Array<{ text: string; html: string }>
+          richReaderBlocks.value = content.value.map((paragraph, index) => {
+            const candidate = blocks[index]
+            return candidate?.text?.trim() === paragraph.trim() ? candidate.html : ''
+          })
+        } catch {
+          richReaderBlocks.value = []
+        }
+      }
       enableLargeTextPerformanceMode()
 
       if (data.chapterInfo && data.chapterInfo !== '[]') {
@@ -2342,6 +2363,7 @@ const loadTextContent = async () => {
       )
       const text = await rawResponse.text()
       content.value = splitTextIntoParagraphs(text)
+      richReaderBlocks.value = []
       enableLargeTextPerformanceMode()
       tocItems.value = parseChapters(content.value)
     }
@@ -4328,6 +4350,30 @@ onBeforeUnmount(() => {
   font-size: 1.05em;
   color: inherit;
 }
+
+.reader-rich-block {
+  margin-bottom: v-bind('settings.paragraphSpacing + "px"');
+  line-height: 1.9;
+  font-size: 1.05em;
+  color: inherit;
+}
+
+.reader-rich-block :deep(p) {
+  margin: 0 0 v-bind('settings.paragraphSpacing + "px"');
+  text-indent: v-bind('settings.textIndent ? "2em" : "0"');
+  line-height: inherit;
+}
+
+.reader-rich-block :deep(blockquote) {
+  margin: 1em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.reader-rich-block :deep(ul),
+.reader-rich-block :deep(ol) { padding-left: 1.6em; }
+.reader-rich-block :deep(hr) { width: 30%; margin: 1.5em auto; border: 0; border-top: 1px solid var(--border-color); }
 
 .reader-text p::first-letter {
   font-size: 1.1em;

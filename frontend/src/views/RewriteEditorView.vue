@@ -9,6 +9,11 @@
       <div class="header-actions">
         <span class="save-indicator" :class="saveState">{{ saveLabel }}</span>
         <el-button :disabled="!chapter || !editable" @click="saveNow">保存</el-button>
+        <el-button @click="openQuickJump">快速跳转 <kbd>⌘/Ctrl P</kbd></el-button>
+        <el-button @click="openSearch">查找与替换</el-button>
+        <el-button @click="openSnapshots">整书快照</el-button>
+        <el-button @click="openMemos">项目资料</el-button>
+        <el-button @click="exportOpen = true">导出</el-button>
         <el-button :disabled="!chapter" @click="toggleSource">{{ showSource ? '收起原文' : '原文对照' }}</el-button>
         <el-button :disabled="!chapter" @click="openHistory">历史记录</el-button>
         <el-button :disabled="!project" @click="openReader">阅读预览</el-button>
@@ -40,21 +45,47 @@
           </div>
         </div>
         <p class="sidebar-progress">已完成 {{ project.completedCount }}/{{ project.chapterCount }} 章 · {{ project.progress }}%</p>
+        <div v-if="editable" class="selection-tools">
+          <el-button link @click="toggleSelectionMode">{{ selectionMode ? '退出批量选择' : '批量操作' }}</el-button>
+          <template v-if="selectionMode">
+            <el-button link @click="selectAllChapters">{{ selectedChapterIds.length === chapters.length ? '取消全选' : '全选' }}</el-button>
+            <span v-if="selectedChapterIds.length">已选 {{ selectedChapterIds.length }} 章</span>
+            <el-button v-if="selectedChapterIds.length" link @click="bulkSetStatus('COMPLETED')">标记完成</el-button>
+            <el-button v-if="selectedChapterIds.length" link @click="bulkSetStatus('REVIEW')">设为待复查</el-button>
+            <el-button v-if="selectedChapterIds.length" link @click="bulkSetVolume">移动到卷</el-button>
+            <el-button v-if="selectedChapterIds.length" link @click="openRenumber">自动编号</el-button>
+            <el-button v-if="selectedChapterIds.length" link @click="copySelectedChapterContent">复制正文</el-button>
+            <el-button v-if="selectedChapterIds.length" link type="danger" @click="bulkDelete">批量删除</el-button>
+          </template>
+        </div>
         <nav aria-label="重写章节">
           <template v-for="(item, index) in chapters" :key="item.id">
             <strong
               v-if="item.volumeTitle && (index === 0 || item.volumeTitle !== chapters[index - 1].volumeTitle)"
               class="volume-heading"
             >{{ item.volumeTitle }}</strong>
-            <button
-              type="button"
-              class="chapter-link"
-              :class="{ selected: item.id === chapter?.id }"
-              @click="selectChapter(item.id)"
-            >
-              <span class="chapter-title">{{ item.title }}</span>
-              <small>{{ chapterStatusLabel(item.status) }} · {{ item.wordCount }} 字</small>
-            </button>
+            <div class="chapter-row">
+              <input
+                v-if="selectionMode"
+                type="checkbox"
+                :aria-label="`选择章节 ${item.title}`"
+                :checked="selectedChapterIds.includes(item.id)"
+                @click.stop
+                @change="toggleChapterSelection(item.id, ($event.target as HTMLInputElement).checked)"
+              />
+              <button
+                type="button"
+                class="chapter-link"
+                :class="{ selected: item.id === chapter?.id }"
+                @click="selectChapter(item.id)"
+              >
+                <span class="chapter-title">{{ item.title }}</span>
+                <small>
+                  {{ chapterStatusLabel(item.status) }} · {{ item.wordCount }} 字
+                  <span v-if="item.pendingMemoCount"> · 待办 {{ item.pendingMemoCount }}</span>
+                </small>
+              </button>
+            </div>
           </template>
         </nav>
         <div v-if="editable" class="deleted-chapters">
@@ -123,22 +154,59 @@
           <section v-if="showSource" class="source-pane">
             <div class="pane-label">
               <strong>源章节 · {{ chapter.sourceTitle || '无对应原文' }}</strong>
+              <div class="source-actions">
+                <el-button
+                  v-if="chapter.hasSource && !showDiff"
+                  link
+                  @click="copySourceSelection"
+                >复制选中文本</el-button>
+                <el-button
+                  v-if="editable && chapter.hasSource && !showDiff"
+                  link
+                  @click="insertSourceSelection"
+                >插入到光标</el-button>
+                <el-button v-if="chapter.hasSource" link @click="showDiff = !showDiff">
+                  {{ showDiff ? '查看原文' : '查看差异' }}
+                </el-button>
+              </div>
               <el-button v-if="editable && chapter.hasSource" link @click="restoreSource">恢复为原文</el-button>
             </div>
-            <pre>{{ chapter.sourceContent || '这是新增章节，没有对应原文。' }}</pre>
+            <div v-if="showDiff" class="chapter-diff">
+              <p v-if="sourceDiff.truncated">章节较长，当前仅展示原文和工作稿；可用原文对照逐段查看。</p>
+              <div v-for="(line, index) in sourceDiff.lines" :key="index" :class="`diff-line diff-line--${line.kind}`">
+                <span>{{ line.kind === 'added' ? '+' : line.kind === 'removed' ? '−' : ' ' }}</span>
+                <template v-if="line.segments?.length">
+                  <span
+                    v-for="(segment, segmentIndex) in line.segments"
+                    :key="segmentIndex"
+                    :class="`diff-segment--${segment.kind}`"
+                  >{{ segment.text }}</span>
+                </template>
+                <span v-else class="diff-line-text">{{ line.text || ' ' }}</span>
+              </div>
+            </div>
+            <pre v-else ref="sourceTextRef">{{ chapter.sourceContent || '这是新增章节，没有对应原文。' }}</pre>
           </section>
           <section class="draft-pane">
             <div class="pane-label"><strong>重写正文</strong><span>自动保存约 1 秒</span></div>
-            <textarea
-              ref="editorRef"
-              v-model="draftContent"
-              :readonly="!editable"
-              aria-label="章节正文"
-              placeholder="在这里开始重写章节……"
-              spellcheck="false"
-              @input="onContentInput"
-              @keydown="handleEditorKeydown"
-            />
+            <div v-if="editable" class="rich-toolbar" role="toolbar" aria-label="正文格式">
+              <el-button size="small" @click="toggleParagraph">段落</el-button>
+              <el-button size="small" @click="toggleHeading(2)">小标题</el-button>
+              <el-button size="small" :type="editor?.isActive('bold') ? 'primary' : 'default'" @click="toggleMark('bold')"><strong>B</strong></el-button>
+              <el-button size="small" :type="editor?.isActive('italic') ? 'primary' : 'default'" @click="toggleMark('italic')"><em>I</em></el-button>
+              <el-button size="small" :type="editor?.isActive('underline') ? 'primary' : 'default'" @click="toggleMark('underline')"><u>U</u></el-button>
+              <el-button size="small" :type="editor?.isActive('strike') ? 'primary' : 'default'" @click="toggleMark('strike')"><s>S</s></el-button>
+              <el-button size="small" :type="editor?.isActive('link') ? 'primary' : 'default'" @click="editLink">链接</el-button>
+              <el-button size="small" @click="toggleBlock('blockquote')">引用</el-button>
+              <el-button size="small" @click="toggleBlock('bulletList')">无序列表</el-button>
+              <el-button size="small" @click="toggleBlock('orderedList')">有序列表</el-button>
+              <el-button size="small" @click="clearFormatting">清除格式</el-button>
+              <el-button size="small" @click="insertSceneBreak">场景分隔</el-button>
+              <el-button size="small" :disabled="!editor?.can().undo()" @click="editor?.chain().focus().undo().run()">撤销</el-button>
+              <el-button size="small" :disabled="!editor?.can().redo()" @click="editor?.chain().focus().redo().run()">重做</el-button>
+            </div>
+            <EditorContent v-if="editor" :editor="editor" class="rich-editor-surface" />
+            <div v-else class="rich-editor-surface is-readonly" role="textbox" aria-readonly="true">{{ readableDraft }}</div>
           </section>
         </div>
 
@@ -164,7 +232,24 @@
             <small>{{ item.createdAt }}</small>
           </button>
         </div>
-        <pre>{{ historyContent || '选择一条历史记录查看正文' }}</pre>
+        <div class="history-content-panel">
+          <el-button
+            v-if="selectedHistoryRevision !== null"
+            link
+            @click="historyShowDiff = !historyShowDiff"
+          >{{ historyShowDiff ? '查看历史正文' : '与当前正文对比' }}</el-button>
+          <div v-if="historyShowDiff && selectedHistoryRevision !== null" class="history-diff">
+            <p v-if="historyDiff.truncated">正文过长，暂不生成字符差异；可查看历史正文并恢复。</p>
+            <template v-else>
+              <span
+                v-for="(segment, index) in historyDiff.segments"
+                :key="index"
+                :class="`diff-segment--${segment.kind}`"
+              >{{ segment.text }}</span>
+            </template>
+          </div>
+          <pre v-else>{{ historyContent || '选择一条历史记录查看正文' }}</pre>
+        </div>
       </div>
       <template #footer>
         <el-button @click="historyOpen = false">关闭</el-button>
@@ -175,12 +260,252 @@
         >恢复此修订</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="searchOpen" title="查找与替换" width="min(780px, 94vw)">
+      <div class="rewrite-search">
+        <el-input v-model="searchQuery" placeholder="查找正文内容" @keyup.enter="runSearch" />
+        <el-input v-model="replacement" placeholder="替换为" />
+        <div class="search-rule-controls">
+          <el-select
+            v-model="selectedSearchRuleName"
+            clearable
+            placeholder="已保存的规则"
+            @change="applySearchRule"
+          >
+            <el-option v-for="rule in searchRules" :key="rule.name" :label="rule.name" :value="rule.name" />
+          </el-select>
+          <el-button :disabled="!searchQuery" @click="saveSearchRule">保存为规则</el-button>
+          <el-button :disabled="!selectedSearchRuleName" @click="deleteSearchRule">删除规则</el-button>
+        </div>
+        <el-select v-model="searchScope" aria-label="查找范围">
+          <el-option label="整本书" value="BOOK" />
+          <el-option label="当前章节" value="CHAPTER" />
+          <el-option v-if="chapter?.volumeTitle" label="当前卷" value="VOLUME" />
+        </el-select>
+        <div class="rewrite-search-options">
+          <el-checkbox v-model="matchCase">区分大小写</el-checkbox>
+          <el-checkbox v-model="wholeWord">全字匹配</el-checkbox>
+          <el-checkbox v-model="regex">正则表达式</el-checkbox>
+        </div>
+        <div class="rewrite-search-actions">
+          <el-button @click="runSearch">查找</el-button>
+          <el-button type="primary" :disabled="!editable || !searchResult?.totalMatches" @click="applyReplace">
+            全部替换（{{ searchResult?.totalMatches || 0 }}）
+          </el-button>
+        </div>
+        <p v-if="searchResult" class="search-summary">
+          共 {{ searchResult.totalMatches }} 处命中{{ searchResult.truncated ? '，结果已截断' : '' }}
+        </p>
+        <button
+          v-for="item in searchResult?.results || []"
+          :key="item.chapterId"
+          type="button"
+          class="search-result"
+          @click="goToSearchResult(item.chapterId)"
+        >
+          <strong>{{ item.title }} · {{ item.matchCount }} 处</strong>
+          <small v-for="excerpt in item.excerpts" :key="`before-${excerpt}`">原文：{{ excerpt }}</small>
+          <small
+            v-for="(sample, sampleIndex) in item.replacementSamples"
+            :key="`after-${sampleIndex}`"
+            class="replace-preview-sample"
+          >替换后：{{ sample }}</small>
+        </button>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="snapshotsOpen" title="整书快照" width="min(680px, 94vw)">
+      <div class="snapshot-list">
+        <p v-if="!snapshots.length">还没有整书快照。快照会保存当前章节顺序、正文、卷和来源关系。</p>
+        <el-alert
+          :title="`快照占用约 ${formatBytes(snapshotStorage.totalBytes)}；自动恢复点保留最近 ${snapshotStorage.automaticLimit} 个（当前 ${snapshotStorage.automaticCount} 个），命名快照不会自动清理（当前 ${snapshotStorage.namedCount} 个）。`"
+          type="info"
+          :closable="false"
+        />
+        <article v-for="item in snapshots" :key="item.id" class="snapshot-item">
+          <div>
+            <strong>{{ item.name }}</strong>
+            <small>快照 {{ item.number }} · {{ item.createdAt }} · {{ item.automatic ? '自动恢复点' : '命名快照' }}</small>
+          </div>
+          <div class="snapshot-actions">
+            <el-button @click="restoreSnapshot(item)">恢复</el-button>
+            <el-button
+              v-if="!item.automatic"
+              type="danger"
+              plain
+              :disabled="!editable"
+              @click="deleteSnapshot(item)"
+            >删除</el-button>
+          </div>
+        </article>
+      </div>
+      <template #footer>
+        <el-button @click="snapshotsOpen = false">关闭</el-button>
+        <el-button type="primary" :disabled="!editable" @click="createSnapshot">创建快照</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="exportOpen" title="导出已保存内容" width="min(560px, 92vw)">
+      <div class="export-settings">
+        <label>
+          导出格式
+          <el-select v-model="exportFormat">
+            <el-option label="纯文本（TXT）" value="txt" />
+            <el-option label="Markdown（MD）" value="md" />
+            <el-option label="EPUB 3 电子书" value="epub" />
+          </el-select>
+        </label>
+        <el-checkbox v-model="exportIncludeMetadata" :disabled="exportFormat === 'epub'">
+          包含书名和作者
+        </el-checkbox>
+        <span v-if="exportFormat === 'epub'" class="field-hint">
+          EPUB 规范要求在书籍元数据中保留书名和作者。
+        </span>
+        <el-checkbox v-model="exportIncludeChapterTitles">包含章节标题</el-checkbox>
+        <label>
+          章节标题样式
+          <el-select v-model="exportChapterTitleStyle" :disabled="!exportIncludeChapterTitles">
+            <el-option label="使用当前标题" value="ORIGINAL" />
+            <el-option label="第 1 章 · 标题" value="NUMBERED" />
+          </el-select>
+        </label>
+        <label>
+          章节间空行
+          <el-input-number v-model="exportChapterSpacing" :min="1" :max="5" />
+        </label>
+      </div>
+      <el-alert
+        v-if="saveState !== 'saved'"
+        title="当前有未保存修改。导出将使用服务器上最近一次成功保存的内容。"
+        type="warning"
+        :closable="false"
+        show-icon
+      />
+      <template #footer>
+        <el-button @click="exportOpen = false">取消</el-button>
+        <el-button type="primary" @click="downloadExport">下载文件</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="renumberOpen" title="章节自动编号" width="min(620px, 94vw)">
+      <div class="renumber-settings">
+        <el-select v-model="renumberStyle" aria-label="编号格式">
+          <el-option label="第 1 章" value="ARABIC" />
+          <el-option label="第一章" value="CHINESE" />
+          <el-option label="Chapter 1" value="ENGLISH" />
+          <el-option label="001." value="PADDED" />
+        </el-select>
+        <el-input-number v-model="renumberStart" :min="1" :max="9999" controls-position="right" />
+      </div>
+      <p class="field-hint">只替换标题开头可识别的章节编号；无法识别的标题会保留并列出。</p>
+      <div class="renumber-preview">
+        <article v-for="item in renumberPreview" :key="item.id" :class="{ skipped: item.skipped }">
+          <span>{{ item.title }}</span>
+          <span aria-hidden="true">→</span>
+          <strong>{{ item.nextTitle || '无法识别，跳过' }}</strong>
+        </article>
+      </div>
+      <template #footer>
+        <el-button @click="renumberOpen = false">取消</el-button>
+        <el-button type="primary" :disabled="!renumberPreview.some(item => !item.skipped)" @click="applyRenumber">
+          应用编号
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="quickJumpOpen" title="快速跳转" width="min(560px, 92vw)">
+      <div class="quick-jump">
+        <el-input
+          ref="quickJumpInput"
+          v-model="quickJumpQuery"
+          autofocus
+          clearable
+          placeholder="输入章节序号或标题"
+          @keyup.enter="jumpToFirstMatch"
+        />
+        <button
+          v-for="item in quickJumpMatches"
+          :key="item.id"
+          type="button"
+          :class="{ selected: item.id === chapter?.id }"
+          @click="jumpToChapter(item.id)"
+        >
+          <strong>{{ item.sortIndex + 1 }}. {{ item.title }}</strong>
+          <small>{{ item.volumeTitle || '未分卷' }} · {{ item.wordCount }} 字</small>
+        </button>
+        <p v-if="!quickJumpMatches.length" class="field-hint">没有匹配的章节。</p>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="memosOpen" title="重写资料" width="min(720px, 94vw)">
+      <div class="memo-workspace">
+        <div v-if="!memoFormOpen" class="memo-type-control" role="group" aria-label="资料类型">
+          <span :style="{ transform: `translateX(${memoType === 'GLOSSARY' ? '100%' : '0'})` }" />
+          <button :aria-pressed="memoType === 'NOTE'" @click="changeMemoType('NOTE')">备注</button>
+          <button :aria-pressed="memoType === 'GLOSSARY'" @click="changeMemoType('GLOSSARY')">资料条目</button>
+        </div>
+        <div v-if="memoFormOpen" class="memo-form">
+          <el-input v-model="memoTitle" :placeholder="memoType === 'NOTE' ? '备注标题' : '术语或资料名称'" maxlength="200" />
+          <el-input v-model="memoContent" type="textarea" :rows="8" resize="vertical" placeholder="记录正文，不会混入章节内容" />
+          <el-select v-if="memoType === 'NOTE'" v-model="memoState" aria-label="备注处理状态">
+            <el-option label="待处理" value="TODO" />
+            <el-option label="已处理" value="DONE" />
+          </el-select>
+          <el-input
+            v-else
+            v-model="memoAliasesText"
+            placeholder="别名（用逗号分隔，可留空）"
+            maxlength="1100"
+          />
+          <el-select v-model="memoChapterId" clearable placeholder="关联章节（可选）">
+            <el-option v-for="item in chapters" :key="item.id" :label="item.title" :value="item.id" />
+          </el-select>
+          <el-input-number v-model="memoAnchorPosition" :min="0" :max="25000000" controls-position="right" />
+          <span class="field-hint">正文字符位置锚点；不需要定位时留空。</span>
+        </div>
+        <div v-else class="memo-list">
+          <p v-if="!memos.length">还没有{{ memoType === 'NOTE' ? '备注' : '资料条目' }}。</p>
+          <el-input
+            v-if="memos.length"
+            v-model="memoFilterQuery"
+            clearable
+            placeholder="搜索标题、别名和说明"
+          />
+          <article v-for="item in filteredMemos" :key="item.id" class="memo-card">
+            <button type="button" class="memo-entry" @click="editMemo(item)">
+              <strong>{{ item.title }}</strong>
+              <small>
+                {{ item.chapterTitle ? `《${item.chapterTitle}》 · ` : '' }}
+                {{ item.type === 'NOTE' ? (item.state === 'DONE' ? '已处理' : '待处理') : (item.aliases || []).join('、') }}
+              </small>
+              <small>{{ item.content }}</small>
+              <small>{{ item.updatedAt }}</small>
+            </button>
+            <el-button
+              v-if="item.chapterId"
+              link
+              type="primary"
+              @click="goToMemoChapter(item.chapterId!)"
+            >跳转章节</el-button>
+          </article>
+        </div>
+      </div>
+      <template #footer>
+        <el-button v-if="memoFormOpen" @click="memoFormOpen = false">返回列表</el-button>
+        <el-button v-else @click="memosOpen = false">关闭</el-button>
+        <el-button v-if="memoFormOpen && memoEditingId !== null" type="danger" plain @click="deleteMemo">删除</el-button>
+        <el-button v-if="!memoFormOpen" type="primary" :disabled="!editable" @click="editMemo()">新增条目</el-button>
+        <el-button v-else type="primary" :disabled="!editable" @click="saveMemo">保存资料</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { Editor, EditorContent } from '@tiptap/vue-3'
+import StarterKit from '@tiptap/starter-kit'
 import api from '@/utils/api'
 import { confirm, message } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
@@ -210,6 +535,8 @@ interface ChapterSummary {
   revision: number
   hasSource: boolean
   volumeTitle: string
+  contentFormatVersion: number
+  pendingMemoCount?: number
 }
 
 interface ChapterDetail extends ChapterSummary {
@@ -226,19 +553,230 @@ const project = ref<RewriteProject | null>(null)
 const chapters = ref<ChapterSummary[]>([])
 const deletedChapters = ref<ChapterSummary[]>([])
 const chapter = ref<ChapterDetail | null>(null)
-const editorRef = ref<HTMLTextAreaElement | null>(null)
+const editor = shallowRef<Editor | null>(null)
+const sourceTextRef = ref<HTMLElement | null>(null)
 const draftContent = ref('')
 const chapterTitle = ref('')
 const loading = ref(false)
 const showSource = ref(false)
+const showDiff = ref(false)
 const recoveredDraft = ref(false)
 const historyOpen = ref(false)
 const history = ref<Array<{ revision: number; reason: string; createdAt: string }>>([])
 const selectedHistoryRevision = ref<number | null>(null)
 const historyContent = ref('')
+const historyShowDiff = ref(false)
+const searchOpen = ref(false)
+const searchQuery = ref('')
+const replacement = ref('')
+interface RewriteSearchRule {
+  name: string
+  query: string
+  replacement: string
+  scope: 'BOOK' | 'CHAPTER' | 'VOLUME'
+  matchCase: boolean
+  wholeWord: boolean
+  regex: boolean
+}
+const searchRules = ref<RewriteSearchRule[]>([])
+const selectedSearchRuleName = ref('')
+const searchScope = ref<'BOOK' | 'CHAPTER' | 'VOLUME'>('BOOK')
+const matchCase = ref(false)
+const wholeWord = ref(false)
+const regex = ref(false)
+const searchResult = ref<{
+  totalMatches: number
+  truncated: boolean
+  results: Array<{
+    chapterId: number
+    title: string
+    matchCount: number
+    excerpts: string[]
+    replacementSamples: string[]
+  }>
+} | null>(null)
+const snapshotsOpen = ref(false)
+const snapshots = ref<Array<{
+  id: number
+  number: number
+  name: string
+  automatic: boolean
+  createdAt: string
+}>>([])
+const snapshotStorage = ref({
+  totalBytes: 0,
+  automaticCount: 0,
+  automaticLimit: 30,
+  namedCount: 0,
+})
+const exportOpen = ref(false)
+const exportFormat = ref<'txt' | 'md' | 'epub'>('txt')
+const exportIncludeMetadata = ref(true)
+const exportIncludeChapterTitles = ref(true)
+const exportChapterTitleStyle = ref<'ORIGINAL' | 'NUMBERED'>('ORIGINAL')
+const exportChapterSpacing = ref(1)
+const memosOpen = ref(false)
+const memoType = ref<'NOTE' | 'GLOSSARY'>('NOTE')
+const memos = ref<Array<{
+  id: number
+  type: 'NOTE' | 'GLOSSARY'
+  title: string
+  content: string
+  state: 'TODO' | 'DONE'
+  aliases: string[]
+  chapterId: number | null
+  chapterTitle: string
+  anchorPosition: number | null
+  updatedAt: string
+}>>([])
+const memoFormOpen = ref(false)
+const memoFilterQuery = ref('')
+const memoEditingId = ref<number | null>(null)
+const memoTitle = ref('')
+const memoContent = ref('')
+const memoState = ref<'TODO' | 'DONE'>('TODO')
+const memoAliasesText = ref('')
+const memoChapterId = ref<number | undefined>()
+const memoAnchorPosition = ref<number | undefined>()
+const filteredMemos = computed(() => {
+  const query = memoFilterQuery.value.trim().toLocaleLowerCase()
+  if (!query) return memos.value
+  return memos.value.filter(item => [
+    item.title,
+    item.content,
+    ...item.aliases,
+    item.chapterTitle,
+  ].some(value => value.toLocaleLowerCase().includes(query)))
+})
+const selectionMode = ref(false)
+const selectedChapterIds = ref<number[]>([])
+const renumberOpen = ref(false)
+const renumberStyle = ref<'ARABIC' | 'CHINESE' | 'ENGLISH' | 'PADDED'>('ARABIC')
+const renumberStart = ref(1)
+const quickJumpOpen = ref(false)
+const quickJumpQuery = ref('')
+const quickJumpInput = ref()
 const saveState = ref<'saved' | 'dirty' | 'saving' | 'error' | 'conflict'>('saved')
 const editable = computed(() => project.value?.status === 'ACTIVE')
+const readableDraft = computed(() => {
+  try {
+    const document = JSON.parse(draftContent.value)
+    if (document?.type === 'doc') return richDocumentText(document)
+  } catch { /* Legacy chapters remain plain text. */ }
+  return draftContent.value
+})
 const chapterIndex = computed(() => chapters.value.findIndex(item => item.id === chapter.value?.id))
+const selectedChapters = computed(() => chapters.value.filter(item =>
+  selectedChapterIds.value.includes(item.id)))
+const renumberPreview = computed(() => {
+  let number = renumberStart.value
+  return selectedChapters.value.map(item => {
+    const nextTitle = formatRenumberTitle(item.title, number, renumberStyle.value)
+    if (nextTitle !== null) number++
+    return { id: item.id, title: item.title, nextTitle, skipped: nextTitle === null }
+  })
+})
+const quickJumpMatches = computed(() => {
+  const query = quickJumpQuery.value.trim().toLocaleLowerCase()
+  return chapters.value.filter((item, index) => !query
+    || item.title.toLocaleLowerCase().includes(query)
+    || String(index + 1).startsWith(query)).slice(0, 30)
+})
+const sourceDiff = computed(() => {
+  if (!showDiff.value) return { lines: [], truncated: false }
+  const before = (chapter.value?.sourceContent || '').split(/\n\s*\n+/).map(item => item.trim()).filter(Boolean)
+  const after = readableDraft.value.split(/\n\s*\n+/).map(item => item.trim()).filter(Boolean)
+  const totalCharacters = before.reduce((sum, item) => sum + item.length, 0)
+    + after.reduce((sum, item) => sum + item.length, 0)
+  if (before.length > 500 || after.length > 500 || totalCharacters > 500_000) {
+    return { lines: [], truncated: true }
+  }
+  const width = after.length + 1
+  const table = Array.from({ length: before.length + 1 }, () => new Uint16Array(width))
+  for (let i = before.length - 1; i >= 0; i--) {
+    for (let j = after.length - 1; j >= 0; j--) {
+      table[i][j] = before[i] === after[j]
+        ? table[i + 1][j + 1] + 1
+        : Math.max(table[i + 1][j], table[i][j + 1])
+    }
+  }
+  const lines: Array<{ kind: 'same' | 'added' | 'removed'; text: string }> = []
+  let i = 0
+  let j = 0
+  while (i < before.length || j < after.length) {
+    if (i < before.length && j < after.length && before[i] === after[j]) {
+      lines.push({ kind: 'same', text: before[i] })
+      i++
+      j++
+    } else if (i < before.length && (j >= after.length || table[i + 1][j] >= table[i][j + 1])) {
+      lines.push({ kind: 'removed', text: before[i++] })
+    } else if (j < after.length) {
+      lines.push({ kind: 'added', text: after[j++] })
+    }
+  }
+  return { lines: addCharacterDiffSegments(lines), truncated: false }
+})
+const historyDiff = computed(() => {
+  if (!historyContent.value || historyContent.value.length + readableDraft.value.length > 500_000) {
+    return { truncated: Boolean(historyContent.value), segments: [] }
+  }
+  const lines = addCharacterDiffSegments([
+    { kind: 'removed' as const, text: historyContent.value },
+    { kind: 'added' as const, text: readableDraft.value },
+  ])
+  return { truncated: false, segments: lines[0]?.segments || [] }
+})
+
+const addCharacterDiffSegments = (lines: Array<{
+  kind: 'same' | 'added' | 'removed'
+  text: string
+}>) => {
+  const result: Array<{
+    kind: 'same' | 'added' | 'removed'
+    text: string
+    segments?: Array<{ kind: 'same' | 'added' | 'removed'; text: string }>
+  }> = []
+  let index = 0
+  while (index < lines.length) {
+    if (lines[index].kind === 'same') {
+      result.push(lines[index])
+      index++
+      continue
+    }
+    const removed: typeof lines = []
+    const added: typeof lines = []
+    while (index < lines.length && lines[index].kind !== 'same') {
+      if (lines[index].kind === 'removed') removed.push(lines[index])
+      else added.push(lines[index])
+      index++
+    }
+    const pairedCount = Math.min(removed.length, added.length)
+    for (let pair = 0; pair < pairedCount; pair++) {
+      const oldText = removed[pair].text
+      const newText = added[pair].text
+      let prefixLength = 0
+      while (prefixLength < oldText.length && prefixLength < newText.length
+        && oldText[prefixLength] === newText[prefixLength]) prefixLength++
+      let suffixLength = 0
+      while (suffixLength < oldText.length - prefixLength
+        && suffixLength < newText.length - prefixLength
+        && oldText[oldText.length - suffixLength - 1]
+          === newText[newText.length - suffixLength - 1]) suffixLength++
+      result.push({ kind: 'removed', text: oldText, segments: [
+        { kind: 'same', text: oldText.slice(0, prefixLength) },
+        { kind: 'removed', text: oldText.slice(prefixLength, oldText.length - suffixLength) },
+        { kind: 'same', text: suffixLength ? oldText.slice(-suffixLength) : '' },
+      ].filter(segment => segment.text) })
+      result.push({ kind: 'added', text: newText, segments: [
+        { kind: 'same', text: newText.slice(0, prefixLength) },
+        { kind: 'added', text: newText.slice(prefixLength, newText.length - suffixLength) },
+        { kind: 'same', text: suffixLength ? newText.slice(-suffixLength) : '' },
+      ].filter(segment => segment.text) })
+    }
+    result.push(...removed.slice(pairedCount), ...added.slice(pairedCount))
+  }
+  return result
+}
 const chapterStatuses = [
   { key: 'NOT_STARTED', label: '未开始' },
   { key: 'WRITING', label: '重写中' },
@@ -247,11 +785,52 @@ const chapterStatuses = [
 ]
 const chapterStatusIndex = computed(() => Math.max(0,
   chapterStatuses.findIndex(item => item.key === chapter.value?.status)))
+
+const chineseNumber = (value: number) => {
+  const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九']
+  const units = ['', '十', '百', '千']
+  const text = String(value)
+  let result = ''
+  let zeroPending = false
+  for (let index = 0; index < text.length; index++) {
+    const digit = Number(text[index])
+    const unitIndex = text.length - index - 1
+    if (digit === 0) {
+      zeroPending = result.length > 0
+      continue
+    }
+    if (zeroPending) result += '零'
+    zeroPending = false
+    if (!(digit === 1 && unitIndex === 1 && result.length === 0)) result += digits[digit]
+    result += units[unitIndex]
+  }
+  return result
+}
+
+const formatRenumberTitle = (
+  title: string,
+  number: number,
+  style: typeof renumberStyle.value,
+) => {
+  if (number > 9999) return null
+  const prefixPattern = /^(?:第\s*[0-9一二三四五六七八九十百千万零〇两]+\s*[章节回集部篇卷]|Chapter\s+\d+|\d{1,4}[.、:：)）\s_-]+)\s*/i
+  const match = title.match(prefixPattern)
+  if (!match) return null
+  const remainder = title.slice(match[0].length).trimStart()
+  const prefix = {
+    ARABIC: `第${number}章 `,
+    CHINESE: `第${chineseNumber(number)}章 `,
+    ENGLISH: `Chapter ${number} `,
+    PADDED: `${String(number).padStart(3, '0')}. `,
+  }[style]
+  return prefix + remainder
+}
 const saveLabel = computed(() => ({
   saved: '已保存', dirty: '有未保存修改', saving: '正在保存…',
   error: '保存失败', conflict: '版本冲突',
 }[saveState.value]))
 let saveTimer: ReturnType<typeof setTimeout> | undefined
+let cursorSaveTimer: ReturnType<typeof setTimeout> | undefined
 let savingPromise: Promise<boolean> | null = null
 
 const statusLabel = (status: string) => ({
@@ -300,7 +879,136 @@ const loadChapter = async (chapterId: number) => {
     saveState.value = 'dirty'
     recoveredDraft.value = true
   }
+  setEditorDocument(draftContent.value)
+  const projectChapterId = project.value?.currentChapterId
+  const resumePosition = projectChapterId === chapterId
+    ? project.value?.currentChapterPosition || 0
+    : 0
+  if (resumePosition > 0 && editor.value) {
+    const safePosition = Math.min(resumePosition, editor.value.state.doc.content.size)
+    editor.value.commands.setTextSelection(safePosition)
+  }
+  if (projectChapterId !== chapterId) {
+    const { data: updatedProject } = await api.patch(`/api/rewrite/projects/${projectId}`, {
+      currentChapterId: chapterId,
+      currentChapterPosition: 0,
+    })
+    project.value = updatedProject
+  }
+  if (locallySaved !== null && locallySaved !== data.content && data.contentFormatVersion !== 1) {
+    draftContent.value = JSON.stringify(editor.value?.getJSON())
+    storeDraft(chapterId, draftContent.value)
+  }
 }
+
+const plainTextDocument = (text: string) => {
+  const paragraphs = text.replace(/\r\n?/g, '\n').split(/\n\s*\n+/).filter(value => value.length > 0)
+  const content = paragraphs.map(paragraph => ({
+    type: 'paragraph',
+    content: paragraph.split('\n').flatMap((line, index) => [
+      ...(index ? [{ type: 'hardBreak' }] : []),
+      ...(line ? [{ type: 'text', text: line }] : []),
+    ]),
+  }))
+  return { type: 'doc', content: content.length ? content : [{ type: 'paragraph' }] }
+}
+
+const editorDocument = (content: string) => {
+  try {
+    const value = JSON.parse(content)
+    if (value?.type === 'doc' && Array.isArray(value.content)) return value
+  } catch { /* Plain text is converted to paragraphs below. */ }
+  return plainTextDocument(content)
+}
+
+const setEditorDocument = (content: string) => {
+  const document = editorDocument(content)
+  if (editor.value) {
+    editor.value.commands.setContent(document, { emitUpdate: false })
+    editor.value.setEditable(editable.value)
+    return
+  }
+  editor.value = new Editor({
+    extensions: [StarterKit.configure({
+      heading: { levels: [2, 3] },
+      codeBlock: false,
+      link: {
+        autolink: false,
+        linkOnPaste: false,
+        openOnClick: false,
+        isAllowedUri: isSafeEditorHref,
+      },
+      underline: {},
+    })],
+    content: document,
+    editable: editable.value,
+    editorProps: { attributes: {
+      'aria-label': '章节正文',
+      'aria-multiline': 'true',
+      spellcheck: 'false',
+      class: 'tiptap-content',
+    } },
+    onUpdate: ({ editor: activeEditor }) => {
+      draftContent.value = JSON.stringify(activeEditor.getJSON())
+      onContentInput()
+    },
+    onSelectionUpdate: ({ editor: activeEditor }) => {
+      scheduleCurrentPositionSave(activeEditor.state.selection.from)
+    },
+  })
+}
+
+const richDocumentText = (node: any): string => {
+  if (node?.type === 'text') return node.text || ''
+  if (node?.type === 'hardBreak') return '\n'
+  const separator = ['doc', 'blockquote', 'bulletList', 'orderedList'].includes(node?.type) ? '\n\n' : ''
+  return (node?.content || []).map(richDocumentText).join(separator)
+}
+
+const toggleParagraph = () => editor.value?.chain().focus().setParagraph().run()
+const toggleHeading = (level: 2 | 3) => editor.value?.chain().focus().toggleHeading({ level }).run()
+const toggleMark = (mark: 'bold' | 'italic' | 'underline' | 'strike') =>
+  editor.value?.chain().focus().toggleMark(mark).run()
+
+const clearFormatting = () => editor.value?.chain().focus().unsetAllMarks().clearNodes().run()
+
+const isSafeEditorHref = (href: string) => {
+  if (/^#[A-Za-z0-9_.:-]+$/.test(href)) return true
+  if (/^mailto:[^\s@]+@[^\s@]+$/i.test(href)) return true
+  if (!/^https?:\/\//i.test(href)) return false
+  try {
+    const url = new URL(href)
+    return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.host)
+  } catch {
+    return false
+  }
+}
+
+const editLink = () => {
+  if (!editor.value) return
+  if (editor.value.isActive('link')) {
+    const currentHref = editor.value.getAttributes('link').href as string | undefined
+    const href = window.prompt('链接地址（仅支持 http、https、mailto 或书内锚点）', currentHref || '')
+    if (href === null) return
+    if (!href.trim()) {
+      editor.value.chain().focus().extendMarkRange('link').unsetLink().run()
+      return
+    }
+    if (!isSafeEditorHref(href.trim())) return message.warning('链接地址不安全或格式不受支持')
+    editor.value.chain().focus().extendMarkRange('link').setLink({ href: href.trim() }).run()
+    return
+  }
+  const href = window.prompt('链接地址（仅支持 http、https、mailto 或书内锚点）')
+  if (!href?.trim()) return
+  if (!isSafeEditorHref(href.trim())) return message.warning('链接地址不安全或格式不受支持')
+  editor.value.chain().focus().setLink({ href: href.trim() }).run()
+}
+const toggleBlock = (block: 'blockquote' | 'bulletList' | 'orderedList') => {
+  if (block === 'blockquote') editor.value?.chain().focus().toggleBlockquote().run()
+  if (block === 'bulletList') editor.value?.chain().focus().toggleBulletList().run()
+  if (block === 'orderedList') editor.value?.chain().focus().toggleOrderedList().run()
+}
+const insertSceneBreak = () => editor.value?.chain().focus().setHorizontalRule().run()
 
 const reloadChapter = async () => {
   if (!chapter.value) return
@@ -336,7 +1044,7 @@ const saveNow = async (): Promise<boolean> => {
     try {
       const { data } = await api.put(
         `/api/rewrite/projects/${projectId}/chapters/${activeChapter.id}/content`,
-        { content, revision: activeChapter.revision },
+        { content, contentFormatVersion: 1, revision: activeChapter.revision },
         { headers: { 'X-Suppress-Error-Toast': 'true' } },
       )
       if (chapter.value?.id !== activeChapter.id) return true
@@ -371,13 +1079,38 @@ const onContentInput = () => {
   saveTimer = setTimeout(() => { void saveNow() }, 1000)
 }
 
-const selectChapter = async (chapterId: number) => {
-  if (chapter.value?.id === chapterId) return
-  if (!(await saveNow())) return
+const selectChapter = async (chapterId: number): Promise<boolean> => {
+  if (chapter.value?.id === chapterId) return true
+  if (!(await saveNow())) return false
+  await persistCurrentPosition()
   await loadChapter(chapterId)
-  void api.patch(`/api/rewrite/projects/${projectId}`, {
-    currentChapterId: chapterId,
-  }).then(({ data }) => { project.value = data }).catch(() => undefined)
+  return true
+}
+
+const persistCurrentPosition = async (position?: number) => {
+  if (!chapter.value || !project.value || !editor.value) return
+  if (cursorSaveTimer) {
+    clearTimeout(cursorSaveTimer)
+    cursorSaveTimer = undefined
+  }
+  const currentPosition = position ?? editor.value.state.selection.from
+  try {
+    const { data } = await api.patch(`/api/rewrite/projects/${projectId}`, {
+      currentChapterId: chapter.value.id,
+      currentChapterPosition: currentPosition,
+    })
+    project.value = data
+  } catch {
+    // Chapter selection remains usable if cursor preference persistence is offline.
+  }
+}
+
+const scheduleCurrentPositionSave = (position: number) => {
+  if (!editable.value) return
+  if (cursorSaveTimer) clearTimeout(cursorSaveTimer)
+  cursorSaveTimer = setTimeout(() => {
+    void persistCurrentPosition(position)
+  }, 800)
 }
 
 const saveTitle = async () => {
@@ -452,17 +1185,23 @@ const deleteChapter = async () => {
   if (!chapter.value || !editable.value) return
   if (!(await confirm(`删除“${chapter.value.title}”？此操作会从阅读版本移除该章节。`, '删除章节'))) return
   if (!(await saveNow())) return
+  const expectedRevision = chapter.value.revision
   const id = chapter.value.id
-  await api.delete(`/api/rewrite/projects/${projectId}/chapters/${id}`)
+  await api.delete(`/api/rewrite/projects/${projectId}/chapters/${id}`, {
+    params: { revision: expectedRevision },
+  })
   sessionStorage.removeItem(draftKey(id))
   await loadChapters()
   if (chapters.value.length) await loadChapter(chapters.value[0].id)
 }
 
 const restoreDeletedChapter = async (chapterId: number) => {
+  const deletedChapter = deletedChapters.value.find(item => item.id === chapterId)
+  if (!deletedChapter) return
   if (!(await saveNow())) return
   const { data } = await api.post(
     `/api/rewrite/projects/${projectId}/deleted-chapters/${chapterId}/restore`,
+    { revision: deletedChapter.revision },
   )
   await loadChapters()
   await loadChapter(data.id)
@@ -480,13 +1219,34 @@ const moveChapter = async (direction: number) => {
 }
 
 const splitChapter = async () => {
-  if (!chapter.value || !editorRef.value || !(await saveNow())) return
-  const position = editorRef.value.selectionStart
+  if (!chapter.value || !editor.value || !(await saveNow())) return
+  const state = editor.value.state
+  const position = state.doc.textBetween(0, state.selection.from, '\n\n').length
   const newTitle = window.prompt('新章节标题', '新章节')
   if (!newTitle?.trim()) return
+  const request: Record<string, unknown> = {
+    position,
+    newTitle: newTitle.trim(),
+    revision: chapter.value.revision,
+  }
+  if (chapter.value.contentFormatVersion === 1) {
+    const splitAt = state.selection.from
+    request.beforeContent = JSON.stringify(state.doc.copy(state.doc.content.cut(0, splitAt)).toJSON())
+    request.afterContent = JSON.stringify(state.doc.copy(
+      state.doc.content.cut(splitAt, state.doc.content.size),
+    ).toJSON())
+  }
+  const beforeText = chapter.value.contentFormatVersion === 1
+    ? richDocumentText(JSON.parse(String(request.beforeContent)))
+    : chapter.value.content.slice(0, position)
+  const afterText = chapter.value.contentFormatVersion === 1
+    ? richDocumentText(JSON.parse(String(request.afterContent)))
+    : chapter.value.content.slice(position)
+  const preview = `原章节保留约 ${beforeText.length} 字：\n${previewSnippet(beforeText)}\n\n新章节“${newTitle.trim()}”承接约 ${afterText.length} 字：\n${previewSnippet(afterText)}`
+  if (!(await confirm(preview, '拆分预览'))) return
   const { data } = await api.post(
     `/api/rewrite/projects/${projectId}/chapters/${chapter.value.id}/split`,
-    { position, newTitle: newTitle.trim(), revision: chapter.value.revision },
+    request,
   )
   await loadChapters()
   await loadChapter(data.id)
@@ -498,13 +1258,26 @@ const mergeNext = async () => {
   if (!next) return
   const title = window.prompt(`合并“${chapter.value.title}”和“${next.title}”，请输入合并后标题`, chapter.value.title)
   if (!title?.trim()) return
-  if (!(await confirm(`将下一章“${next.title}”合并到当前章节。`, '合并章节'))) return
+  const { data: nextChapter } = await api.get(
+    `/api/rewrite/projects/${projectId}/chapters/${next.id}`,
+  )
+  const nextText = nextChapter.contentFormatVersion === 1
+    ? richDocumentText(JSON.parse(nextChapter.content))
+    : nextChapter.content
+  const mergedLength = readableDraft.value.length + nextText.length
+  const preview = `合并后标题：“${title.trim()}”\n预计正文约 ${mergedLength} 字。\n\n当前章开头：\n${previewSnippet(readableDraft.value)}\n\n下一章开头：\n${previewSnippet(nextText)}`
+  if (!(await confirm(preview, '合并预览'))) return
   const { data } = await api.post(
     `/api/rewrite/projects/${projectId}/chapters/${chapter.value.id}/merge-next`,
     { title: title.trim(), revision: chapter.value.revision },
   )
   await loadChapters()
   await loadChapter(data.id)
+}
+
+const previewSnippet = (value: string, maxLength = 120) => {
+  const compact = value.replace(/\s+/g, ' ').trim()
+  return compact.length > maxLength ? `${compact.slice(0, maxLength)}…` : compact || '（空）'
 }
 
 const restoreSource = async () => {
@@ -517,10 +1290,45 @@ const restoreSource = async () => {
   )
   chapter.value = data
   draftContent.value = data.content
+  setEditorDocument(data.content)
   sessionStorage.removeItem(draftKey(data.id))
   saveState.value = 'saved'
   updateSummary()
   await loadProject()
+}
+
+const selectedSourceText = () => {
+  const selection = window.getSelection()
+  if (!selection || selection.isCollapsed || !sourceTextRef.value
+      || !sourceTextRef.value.contains(selection.anchorNode)
+      || !sourceTextRef.value.contains(selection.focusNode)) {
+    return ''
+  }
+  return selection.toString()
+}
+
+const copySourceSelection = async () => {
+  const selectedText = selectedSourceText()
+  if (!selectedText) return message.warning('请先在原文区域选择文本')
+  try {
+    await navigator.clipboard.writeText(selectedText)
+    message.success('原文选段已复制')
+  } catch {
+    message.error('复制原文选段失败，请检查剪贴板权限')
+  }
+}
+
+const insertSourceSelection = () => {
+  const selectedText = selectedSourceText()
+  if (!selectedText) return message.warning('请先在原文区域选择要插入的文本')
+  if (!editor.value) return
+  const currentSelection = editor.value.state.selection
+  const content = plainTextDocument(selectedText).content
+  editor.value.chain().focus().insertContentAt({
+    from: currentSelection.from,
+    to: currentSelection.to,
+  }, content).run()
+  message.success('原文选段已插入工作稿，可撤销或继续编辑')
 }
 
 const openHistory = async () => {
@@ -535,13 +1343,405 @@ const openHistory = async () => {
   historyOpen.value = true
 }
 
+const openSearch = async () => {
+  if (!(await saveNow())) return
+  searchResult.value = null
+  selectedSearchRuleName.value = ''
+  try {
+    const { data } = await api.get('/api/user/preferences/rewrite-search-rules')
+    searchRules.value = data || []
+  } catch {
+    searchRules.value = []
+  }
+  searchOpen.value = true
+}
+
+const applySearchRule = async (name: string) => {
+  const rule = searchRules.value.find(item => item.name === name)
+  if (!rule) return
+  searchQuery.value = rule.query
+  replacement.value = rule.replacement
+  searchScope.value = rule.scope
+  matchCase.value = rule.matchCase
+  wholeWord.value = rule.wholeWord
+  regex.value = rule.regex
+  searchResult.value = null
+  await runSearch()
+}
+
+const saveSearchRule = async () => {
+  if (!searchQuery.value.trim()) return message.warning('请先填写查找内容')
+  const name = window.prompt('规则名称')?.trim()
+  if (!name) return
+  const existing = searchRules.value.find(item => item.name.toLocaleLowerCase() === name.toLocaleLowerCase())
+  if (existing && !(await confirm(`“${name}”已存在，是否覆盖？`, '保存查找替换规则'))) return
+  const rule: RewriteSearchRule = {
+    name,
+    query: searchQuery.value,
+    replacement: replacement.value,
+    scope: searchScope.value,
+    matchCase: matchCase.value,
+    wholeWord: wholeWord.value,
+    regex: regex.value,
+  }
+  const nextRules = existing
+    ? searchRules.value.map(item => item.name === existing.name ? rule : item)
+    : [...searchRules.value, rule]
+  const { data } = await api.put('/api/user/preferences/rewrite-search-rules', nextRules)
+  searchRules.value = data || []
+  selectedSearchRuleName.value = name
+  message.success('查找替换规则已保存到账户')
+}
+
+const deleteSearchRule = async () => {
+  const name = selectedSearchRuleName.value
+  if (!name || !(await confirm(`删除已保存规则“${name}”？`, '删除查找替换规则'))) return
+  const nextRules = searchRules.value.filter(item => item.name !== name)
+  const { data } = await api.put('/api/user/preferences/rewrite-search-rules', nextRules)
+  searchRules.value = data || []
+  selectedSearchRuleName.value = ''
+  message.success('查找替换规则已删除')
+}
+
+const searchPayload = () => ({
+  query: searchQuery.value,
+  replacement: replacement.value,
+  scope: searchScope.value,
+  chapterId: chapter.value?.id,
+  volumeTitle: chapter.value?.volumeTitle,
+  matchCase: matchCase.value,
+  wholeWord: wholeWord.value,
+  regex: regex.value,
+})
+
+const runSearch = async () => {
+  if (!searchQuery.value) return
+  const { data } = await api.post(`/api/rewrite/projects/${projectId}/search`, searchPayload())
+  searchResult.value = data
+}
+
+const applyReplace = async () => {
+  if (!searchResult.value || !(await saveNow())) return
+  const approved = await confirm(
+    `将在 ${searchResult.value.results.length} 个章节中替换 ${searchResult.value.totalMatches} 处，并为每个改动章节保留历史修订。`,
+    '确认全部替换',
+  )
+  if (!approved) return
+  const revisions = Object.fromEntries(searchResult.value.results.map(item => {
+    const chapterSummary = chapters.value.find(chapterItem => chapterItem.id === item.chapterId)
+    return [item.chapterId, chapterSummary?.revision]
+  }))
+  const { data } = await api.post(`/api/rewrite/projects/${projectId}/replace`, {
+    ...searchPayload(),
+    revisions,
+  })
+  message.success(`已替换 ${data.matches} 处，修改 ${data.changedChapters} 章`)
+  await loadChapters()
+  if (chapter.value && data.chapters.some((item: ChapterSummary) => item.id === chapter.value?.id)) {
+    await loadChapter(chapter.value.id)
+  }
+  await runSearch()
+}
+
+const goToSearchResult = async (chapterId: number) => {
+  if (chapter.value?.id !== chapterId && !(await selectChapter(chapterId))) return
+  searchOpen.value = false
+  editor.value?.commands.focus()
+}
+
+const openSnapshots = async () => {
+  if (!(await saveNow())) return
+  await loadSnapshotInfo()
+  snapshotsOpen.value = true
+}
+
+const loadSnapshotInfo = async () => {
+  const [snapshotResponse, storageResponse] = await Promise.all([
+    api.get(`/api/rewrite/projects/${projectId}/snapshots`),
+    api.get(`/api/rewrite/projects/${projectId}/snapshots/storage`),
+  ])
+  snapshots.value = snapshotResponse.data || []
+  snapshotStorage.value = storageResponse.data
+}
+
+const downloadExport = async () => {
+  if (savingPromise && !(await savingPromise)) return
+  if (saveState.value !== 'saved') {
+    const approved = await confirm(
+      '当前有未保存修改。导出会使用服务器上最近一次成功保存的内容，继续吗？',
+      '导出已保存内容',
+    )
+    if (!approved) return
+    if (saveTimer) clearTimeout(saveTimer)
+  }
+
+  try {
+    const { data } = await api.get(`/api/rewrite/projects/${projectId}/export`, {
+      params: {
+        format: exportFormat.value,
+        includeMetadata: exportIncludeMetadata.value,
+        includeChapterTitles: exportIncludeChapterTitles.value,
+        chapterTitleStyle: exportChapterTitleStyle.value,
+        chapterSpacing: exportChapterSpacing.value,
+      },
+      responseType: 'blob',
+    })
+    const url = URL.createObjectURL(data)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    const baseName = (project.value?.versionName || '重写稿')
+      .replace(/[\\/:*?"<>|]/g, '_')
+      .trim() || '重写稿'
+    anchor.download = `${baseName}.${exportFormat.value}`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    exportOpen.value = false
+    message.success('导出文件已生成')
+  } catch {
+    message.error('导出失败，请稍后重试')
+  }
+}
+
+const createSnapshot = async () => {
+  if (!(await saveNow())) return
+  const name = window.prompt('快照名称', `手动快照 ${new Date().toLocaleString()}`)
+  if (!name?.trim()) return
+  await api.post(`/api/rewrite/projects/${projectId}/snapshots`, { name: name.trim() })
+  await loadSnapshotInfo()
+  message.success('整书快照已保存')
+}
+
+const deleteSnapshot = async (snapshot: { id: number; name: string }) => {
+  if (!(await confirm(`删除命名快照“${snapshot.name}”后无法从此快照恢复。`, '删除快照'))) return
+  await api.delete(`/api/rewrite/projects/${projectId}/snapshots/${snapshot.id}`)
+  await loadSnapshotInfo()
+  message.success('命名快照已删除')
+}
+
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const restoreSnapshot = async (snapshot: { id: number; name: string }) => {
+  if (!(await saveNow())) return
+  const { data: preview } = await api.get(
+    `/api/rewrite/projects/${projectId}/snapshots/${snapshot.id}/preview`,
+  )
+  const approved = await confirm(
+    `恢复“${snapshot.name}”将新增 ${preview.added} 章、移除 ${preview.removed} 章、移动 ${preview.moved} 章，并恢复 ${preview.changed} 章的标题、卷、状态或正文。\n\n新增：${(preview.addedTitles || []).join('、') || '无'}\n移除：${(preview.removedTitles || []).join('、') || '无'}\n\n当前内容会自动保存为恢复前快照。`,
+    '恢复整书快照',
+  )
+  if (!approved) return
+  const { data } = await api.post(
+    `/api/rewrite/projects/${projectId}/snapshots/${snapshot.id}/restore`,
+  )
+  await loadChapters()
+  if (chapters.value.length) await loadChapter(chapters.value[0].id)
+  snapshotsOpen.value = false
+  message.success(`已恢复 ${data.restored} 章，恢复前快照也已保存`)
+}
+
+const openMemos = async () => {
+  await loadMemos()
+  memoFormOpen.value = false
+  memoFilterQuery.value = ''
+  memosOpen.value = true
+}
+
+const goToMemoChapter = async (chapterId: number) => {
+  if (!(await selectChapter(chapterId))) return
+  memosOpen.value = false
+  editor.value?.commands.focus()
+}
+
+const loadMemos = async () => {
+  const { data } = await api.get(`/api/rewrite/projects/${projectId}/memos`, {
+    params: { type: memoType.value },
+  })
+  memos.value = data || []
+}
+
+const changeMemoType = async (type: 'NOTE' | 'GLOSSARY') => {
+  memoType.value = type
+  await loadMemos()
+}
+
+const editMemo = (item?: (typeof memos.value)[number]) => {
+  memoEditingId.value = item?.id ?? null
+  memoTitle.value = item?.title || ''
+  memoContent.value = item?.content || ''
+  memoState.value = item?.state || 'TODO'
+  memoAliasesText.value = item?.aliases?.join('，') || ''
+  memoChapterId.value = item?.chapterId ?? undefined
+  memoAnchorPosition.value = item?.anchorPosition ?? undefined
+  memoFormOpen.value = true
+}
+
+const saveMemo = async () => {
+  if (!memoTitle.value.trim()) return message.warning('请填写标题')
+  const payload = {
+    type: memoType.value,
+    title: memoTitle.value.trim(),
+    content: memoContent.value,
+    state: memoState.value,
+    aliases: memoType.value === 'GLOSSARY'
+      ? memoAliasesText.value.split(/[，,]/).map(alias => alias.trim()).filter(Boolean)
+      : [],
+    chapterId: memoChapterId.value ?? null,
+    anchorPosition: memoAnchorPosition.value ?? null,
+  }
+  if (memoEditingId.value === null) {
+    await api.post(`/api/rewrite/projects/${projectId}/memos`, payload)
+  } else {
+    await api.put(`/api/rewrite/projects/${projectId}/memos/${memoEditingId.value}`, payload)
+  }
+  await loadMemos()
+  await loadChapters()
+  memoFormOpen.value = false
+  message.success('资料已保存，可在其他设备继续查看')
+}
+
+const deleteMemo = async () => {
+  if (memoEditingId.value === null) return
+  if (!(await confirm('删除后无法恢复此资料条目。', '删除资料'))) return
+  await api.delete(`/api/rewrite/projects/${projectId}/memos/${memoEditingId.value}`)
+  await loadMemos()
+  await loadChapters()
+  memoFormOpen.value = false
+}
+
+const toggleSelectionMode = () => {
+  selectionMode.value = !selectionMode.value
+  selectedChapterIds.value = []
+}
+
+const selectAllChapters = () => {
+  selectedChapterIds.value = selectedChapterIds.value.length === chapters.value.length
+    ? [] : chapters.value.map(item => item.id)
+}
+
+const toggleChapterSelection = (chapterId: number, selected: boolean) => {
+  const ids = new Set(selectedChapterIds.value)
+  if (selected) ids.add(chapterId)
+  else ids.delete(chapterId)
+  selectedChapterIds.value = [...ids]
+}
+
+const runBulkAction = async (
+  action: 'STATUS' | 'VOLUME' | 'DELETE' | 'RENUMBER',
+  value: string | null,
+) => {
+  if (!selectedChapterIds.value.length || !(await saveNow())) return
+  const revisions = Object.fromEntries(selectedChapterIds.value.map(id => [
+    id, chapters.value.find(item => item.id === id)?.revision,
+  ]))
+  const { data } = await api.post(`/api/rewrite/projects/${projectId}/chapters/bulk`, {
+    chapterIds: selectedChapterIds.value,
+    action,
+    value,
+    revisions,
+  })
+  const previousChapterId = chapter.value?.id
+  selectedChapterIds.value = []
+  await loadChapters()
+  const nextChapterId = chapters.value.some(item => item.id === previousChapterId)
+    ? previousChapterId : chapters.value[0]?.id
+  if (nextChapterId) await loadChapter(nextChapterId)
+  if (action === 'DELETE' && chapters.value.length === 0) chapter.value = null
+  const skipped = (data.skippedTitles || []) as string[]
+  const resultMessage = skipped.length
+    ? `已编号 ${data.changedCount} 章，${skipped.length} 个标题无法识别并已跳过；恢复点已保存`
+    : `已处理 ${data.changedCount} 章；恢复点已保存`
+  message.success(resultMessage)
+}
+
+const bulkSetStatus = async (status: string) => {
+  await runBulkAction('STATUS', status)
+}
+
+const bulkSetVolume = async () => {
+  const volume = window.prompt('卷名称；留空可移出卷')
+  if (volume === null) return
+  await runBulkAction('VOLUME', volume)
+}
+
+const copySelectedChapterContent = async () => {
+  if (!selectedChapterIds.value.length) return
+  try {
+    const { data } = await api.post<string>(
+      `/api/rewrite/projects/${projectId}/chapters/copy`,
+      { chapterIds: selectedChapterIds.value },
+      { responseType: 'text' },
+    )
+    await navigator.clipboard.writeText(data)
+    message.success(`已复制 ${selectedChapterIds.value.length} 章正文`)
+  } catch {
+    message.error('复制正文失败，请检查剪贴板权限后重试')
+  }
+}
+
+const openRenumber = async () => {
+  if (!(await saveNow())) return
+  renumberStart.value = 1
+  renumberOpen.value = true
+}
+
+const applyRenumber = async () => {
+  const renameCount = renumberPreview.value.filter(item => !item.skipped).length
+  if (!renameCount) return
+  const approved = await confirm(
+    `将按目录顺序为 ${renameCount} 个可识别的章节标题重新编号。操作前会自动保存整书恢复点。`,
+    '应用章节编号',
+  )
+  if (!approved) return
+  await runBulkAction('RENUMBER', `${renumberStyle.value}:${renumberStart.value}`)
+  renumberOpen.value = false
+}
+
+const openQuickJump = async () => {
+  if (!(await saveNow())) return
+  quickJumpQuery.value = ''
+  quickJumpOpen.value = true
+  await nextTick()
+  quickJumpInput.value?.focus?.()
+}
+
+const jumpToChapter = async (chapterId: number) => {
+  if (!(await selectChapter(chapterId))) return
+  quickJumpOpen.value = false
+  editor.value?.commands.focus()
+}
+
+const jumpToFirstMatch = () => {
+  const first = quickJumpMatches.value[0]
+  if (first) void jumpToChapter(first.id)
+}
+
+const bulkDelete = async () => {
+  if (!(await confirm(`将删除所选 ${selectedChapterIds.value.length} 章，整书快照会自动保存以便恢复。`, '批量删除章节'))) return
+  await runBulkAction('DELETE', null)
+}
+
 const showRevision = async (revision: number) => {
   if (!chapter.value) return
   const { data } = await api.get(
     `/api/rewrite/projects/${projectId}/chapters/${chapter.value.id}/revisions/${revision}`,
   )
   selectedHistoryRevision.value = revision
-  historyContent.value = data.content
+  historyShowDiff.value = false
+  if (data.contentFormatVersion === 1) {
+    try {
+      historyContent.value = richDocumentText(JSON.parse(data.content))
+    } catch {
+      historyContent.value = '此修订的富文本内容无法读取。'
+    }
+  } else {
+    historyContent.value = data.content
+  }
 }
 
 const restoreHistory = async () => {
@@ -553,6 +1753,7 @@ const restoreHistory = async () => {
   )
   chapter.value = data
   draftContent.value = data.content
+  setEditorDocument(data.content)
   sessionStorage.removeItem(draftKey(data.id))
   saveState.value = 'saved'
   updateSummary()
@@ -615,7 +1816,9 @@ const handleProjectAction = async (action: string) => {
 }
 
 const copyDraft = async () => {
-  await navigator.clipboard.writeText(draftContent.value)
+  const text = editor.value?.state.doc.textBetween(0, editor.value.state.doc.content.size, '\n\n')
+    || draftContent.value
+  await navigator.clipboard.writeText(text)
   message.success('本地文字已复制')
 }
 
@@ -624,7 +1827,13 @@ const handleEditorKeydown = (event: KeyboardEvent) => {
     event.preventDefault()
     void saveNow()
   }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
+    event.preventDefault()
+    void openQuickJump()
+  }
 }
+
+watch(editable, value => editor.value?.setEditable(value))
 
 const beforeUnload = (event: BeforeUnloadEvent) => {
   if (saveState.value !== 'saved') {
@@ -632,7 +1841,11 @@ const beforeUnload = (event: BeforeUnloadEvent) => {
   }
 }
 
-onBeforeRouteLeave(async () => await saveNow())
+onBeforeRouteLeave(async () => {
+  if (!(await saveNow())) return false
+  await persistCurrentPosition()
+  return true
+})
 onMounted(async () => {
   loading.value = true
   try {
@@ -645,10 +1858,14 @@ onMounted(async () => {
     loading.value = false
   }
   window.addEventListener('beforeunload', beforeUnload)
+  window.addEventListener('keydown', handleEditorKeydown)
 })
 onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
+  if (cursorSaveTimer) clearTimeout(cursorSaveTimer)
   window.removeEventListener('beforeunload', beforeUnload)
+  window.removeEventListener('keydown', handleEditorKeydown)
+  editor.value?.destroy()
 })
 </script>
 
@@ -660,6 +1877,7 @@ onBeforeUnmount(() => {
 .back-link { color: var(--el-color-primary); text-decoration: none; }
 .header-actions, .chapter-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .save-indicator { font-size: 12px; color: var(--text-secondary, #748078); }
+.header-actions kbd { padding: 1px 4px; border: 1px solid var(--el-border-color); border-radius: 4px; font: inherit; font-size: 10px; }
 .save-indicator.dirty, .save-indicator.error, .save-indicator.conflict { color: #bb6b29; }
 .workspace-body { display: grid; grid-template-columns: minmax(210px, 250px) minmax(0, 1fr); gap: 18px; align-items: start; }
 .chapter-sidebar, .editor-panel { border: 1px solid var(--el-border-color-light, #d8dfd9); border-radius: 18px; background: var(--el-bg-color, #fff); }
@@ -667,6 +1885,11 @@ onBeforeUnmount(() => {
 .sidebar-heading { display: flex; align-items: center; justify-content: space-between; }
 .sidebar-progress { margin: 9px 0 18px; font-size: 12px; color: var(--text-secondary, #748078); }
 .chapter-sidebar nav { display: grid; gap: 5px; }
+.chapter-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.chapter-row input { flex: 0 0 auto; accent-color: var(--el-color-primary); }
+.chapter-row .chapter-link { flex: 1; min-width: 0; }
+.selection-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: -8px 0 10px; }
+.selection-tools span { color: var(--text-secondary, #748078); font-size: 11px; }
 .chapter-link { display: grid; gap: 3px; width: 100%; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .chapter-link.selected { background: color-mix(in srgb, var(--el-color-primary) 13%, transparent); }
 .chapter-link:hover { background: color-mix(in srgb, var(--el-color-primary) 8%, transparent); }
@@ -690,9 +1913,25 @@ onBeforeUnmount(() => {
 .writing-surface.comparing { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .source-pane, .draft-pane { min-width: 0; }
 .pane-label { display: flex; justify-content: space-between; align-items: center; min-height: 32px; color: var(--text-secondary, #748078); font-size: 12px; }
-.source-pane pre, .draft-pane textarea { box-sizing: border-box; width: 100%; min-height: 55vh; margin: 0; padding: 22px; border: 1px solid #8883; border-radius: 12px; background: var(--el-fill-color-lighter, #fafbf9); color: inherit; font-family: inherit; font-size: 16px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
+.source-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.source-pane pre, .rich-editor-surface { box-sizing: border-box; width: 100%; min-height: 55vh; margin: 0; padding: 22px; border: 1px solid #8883; border-radius: 12px; background: var(--el-fill-color-lighter, #fafbf9); color: inherit; font-family: inherit; font-size: 16px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
 .source-pane pre { overflow: auto; }
-.draft-pane textarea { resize: vertical; outline-color: var(--el-color-primary); }
+.chapter-diff { box-sizing: border-box; width: 100%; min-height: 55vh; max-height: 70vh; overflow: auto; padding: 14px; border: 1px solid #8883; border-radius: 12px; background: var(--el-fill-color-lighter, #fafbf9); font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.diff-line { padding: 3px 6px; border-radius: 4px; }
+.diff-line > span:first-child { display: inline-block; width: 20px; color: var(--text-tertiary); font-weight: 700; }
+.diff-line-text, .diff-segment--added, .diff-segment--removed { border-radius: 3px; }
+.diff-line--added .diff-line-text, .diff-segment--added { background: color-mix(in srgb, var(--el-color-success) 20%, transparent); }
+.diff-line--removed .diff-line-text, .diff-segment--removed { background: color-mix(in srgb, var(--el-color-danger) 18%, transparent); text-decoration: line-through; }
+.rich-toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; }
+.rich-editor-surface { min-height: 55vh; outline-color: var(--el-color-primary); }
+.rich-editor-surface:focus-within { border-color: var(--el-color-primary); }
+.rich-editor-surface.is-readonly { overflow: auto; }
+.rich-editor-surface :deep(.tiptap-content) { min-height: calc(55vh - 44px); outline: none; white-space: pre-wrap; overflow-wrap: anywhere; }
+.rich-editor-surface :deep(.tiptap-content > :first-child) { margin-top: 0; }
+.rich-editor-surface :deep(.tiptap-content > :last-child) { margin-bottom: 0; }
+.rich-editor-surface :deep(blockquote) { margin: 1em 0; padding-left: 1em; border-left: 3px solid var(--el-border-color); color: var(--text-secondary, #748078); }
+.rich-editor-surface :deep(ul), .rich-editor-surface :deep(ol) { padding-left: 1.6em; }
+.rich-editor-surface :deep(hr) { margin: 1.5em auto; width: 30%; border: 0; border-top: 1px solid var(--el-border-color); }
 .editor-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
 .empty-panel { min-height: 300px; display: grid; place-items: center; }
 .history-dialog { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 14px; min-height: 300px; }
@@ -700,7 +1939,44 @@ onBeforeUnmount(() => {
 .history-list button { display: grid; gap: 4px; padding: 9px; border: 0; border-radius: 9px; background: #8881; color: inherit; text-align: left; cursor: pointer; }
 .history-list button.selected { background: color-mix(in srgb, var(--el-color-primary) 18%, transparent); }
 .history-list small { color: var(--text-secondary, #748078); }
-.history-dialog pre { margin: 0; padding: 16px; max-height: 50vh; overflow: auto; border-radius: 10px; background: var(--el-fill-color-lighter, #fafbf9); white-space: pre-wrap; overflow-wrap: anywhere; }
+.history-content-panel { display: grid; align-content: start; gap: 8px; min-width: 0; }
+.history-dialog pre, .history-diff { box-sizing: border-box; margin: 0; padding: 16px; max-height: 50vh; overflow: auto; border-radius: 10px; background: var(--el-fill-color-lighter, #fafbf9); white-space: pre-wrap; overflow-wrap: anywhere; }
+.rewrite-search { display: grid; gap: 12px; max-height: 65vh; overflow: auto; }
+.search-rule-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.search-rule-controls :deep(.el-select) { min-width: 180px; flex: 1; }
+.rewrite-search-options, .rewrite-search-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.search-summary { margin: 4px 0 0; color: var(--text-secondary, #748078); }
+.search-result { display: grid; gap: 6px; padding: 12px; border: 1px solid #8883; border-radius: 10px; background: var(--el-fill-color-lighter, #fafbf9); color: inherit; text-align: left; cursor: pointer; }
+.search-result small { overflow: hidden; color: var(--text-secondary, #748078); text-overflow: ellipsis; white-space: nowrap; }
+.search-result .replace-preview-sample { color: var(--el-color-success); }
+.snapshot-list { display: grid; gap: 8px; max-height: 60vh; overflow: auto; }
+.snapshot-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid #8883; border-radius: 10px; }
+.snapshot-item div { display: grid; gap: 5px; }
+.snapshot-item small { color: var(--text-secondary, #748078); }
+.snapshot-actions { display: flex !important; grid-auto-flow: column; gap: 4px !important; }
+.export-settings { display: grid; gap: 12px; margin-bottom: 16px; }
+.export-settings label { display: grid; gap: 6px; color: var(--text-secondary, #748078); }
+.export-settings :deep(.el-select) { width: 100%; }
+.renumber-settings { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 12px; }
+.renumber-preview { display: grid; gap: 6px; max-height: 42vh; margin-top: 12px; overflow: auto; }
+.renumber-preview article { display: grid; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr); align-items: center; gap: 8px; padding: 9px; border: 1px solid var(--el-border-color-light); border-radius: 8px; }
+.renumber-preview article span, .renumber-preview article strong { overflow-wrap: anywhere; }
+.renumber-preview article.skipped strong { color: var(--el-color-warning); }
+.quick-jump { display: grid; gap: 7px; max-height: 55vh; overflow: auto; }
+.quick-jump button { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--el-border-color-light); border-radius: 9px; background: var(--el-fill-color-lighter); color: inherit; text-align: left; cursor: pointer; }
+.quick-jump button.selected { border-color: var(--el-color-primary); background: color-mix(in srgb, var(--el-color-primary) 12%, transparent); }
+.quick-jump small { color: var(--text-secondary); }
+.memo-workspace { display: grid; gap: 14px; }
+.memo-type-control { position: relative; display: grid; grid-template-columns: 1fr 1fr; padding: 4px; border-radius: 13px; background: var(--el-fill-color-light); }
+.memo-type-control > span { position: absolute; inset: 4px auto 4px 4px; width: calc((100% - 8px) / 2); border-radius: 10px; background: var(--el-bg-color); box-shadow: 0 2px 8px #0002; transition: transform .25s ease; }
+.memo-type-control button { position: relative; z-index: 1; padding: 9px; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.memo-type-control button[aria-pressed='true'] { font-weight: 700; }
+.memo-list { display: grid; gap: 8px; max-height: 55vh; overflow: auto; }
+.memo-card { display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid #8883; border-radius: 10px; background: var(--el-fill-color-lighter); }
+.memo-entry { display: grid; flex: 1; gap: 5px; min-width: 0; padding: 4px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.memo-list small { overflow: hidden; color: var(--text-secondary, #748078); text-overflow: ellipsis; white-space: nowrap; }
+.memo-form { display: grid; gap: 10px; }
+@media (prefers-reduced-motion: reduce) { .memo-type-control > span { transition: none; } }
 @media (max-width: 820px) { .workspace-body { grid-template-columns: 1fr; } .chapter-sidebar { max-height: 180px; } .writing-surface.comparing { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .chapter-status-slider { transition: none; } }
 </style>

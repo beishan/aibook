@@ -2,12 +2,16 @@ package com.aibook.controller;
 
 import com.aibook.model.entity.RewriteChapter;
 import com.aibook.model.entity.RewriteProject;
+import com.aibook.model.entity.RewriteMemo;
 import com.aibook.model.entity.User;
 import com.aibook.service.RewriteService;
 import com.aibook.service.RewriteService.ChapterOverride;
 import com.aibook.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -23,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/api/rewrite/projects")
@@ -39,12 +44,30 @@ public class RewriteController {
     public record ChapterRequest(String title, String volumeTitle,
                                  RewriteChapter.Status status,
                                  Long revision) { }
-    public record ContentRequest(String content, Long revision) { }
+    public record ContentRequest(String content, Integer contentFormatVersion, Long revision) { }
     public record RevisionRequest(Long revision) { }
     public record CompleteRequest(boolean force) { }
-    public record ProjectRequest(String name, String description, Long currentChapterId) { }
-    public record SplitRequest(int position, String newTitle, Long revision) { }
+    public record ChapterIdsRequest(List<Long> chapterIds) { }
+    public record ProjectRequest(String name, String description, Long currentChapterId,
+                                 Integer currentChapterPosition) { }
+    public record SplitRequest(int position, String newTitle, String beforeContent,
+                               String afterContent, Long revision) { }
     public record MergeRequest(String title, Long revision) { }
+    public record SnapshotRequest(String name) { }
+    public record MemoRequest(RewriteMemo.Type type, String title, String content,
+                             Long chapterId, Integer anchorPosition,
+                             RewriteMemo.State state, List<String> aliases) { }
+    public record BulkChapterRequest(List<Long> chapterIds, String action, String value,
+                                     Map<Long, Long> revisions) { }
+    public record SearchRequest(String query, String scope, Long chapterId,
+                                String volumeTitle, boolean matchCase,
+                                boolean wholeWord, boolean regex,
+                                String replacement, Map<Long, Long> revisions) {
+        RewriteService.SearchOptions options() {
+            return new RewriteService.SearchOptions(query, scope, chapterId, volumeTitle,
+                    matchCase, wholeWord, regex);
+        }
+    }
 
     @GetMapping
     public Page<Map<String, Object>> list(Authentication authentication,
@@ -75,11 +98,29 @@ public class RewriteController {
         return rewriteService.get(user(authentication), projectId);
     }
 
+    @GetMapping("/{projectId}/export")
+    public ResponseEntity<byte[]> export(Authentication authentication,
+            @PathVariable Long projectId,
+            @RequestParam String format,
+            @RequestParam(defaultValue = "true") boolean includeMetadata,
+            @RequestParam(defaultValue = "true") boolean includeChapterTitles,
+            @RequestParam(defaultValue = "ORIGINAL") String chapterTitleStyle,
+            @RequestParam(defaultValue = "1") int chapterSpacing) {
+        RewriteService.ExportFile file = rewriteService.export(user(authentication), projectId,
+                format, includeMetadata, includeChapterTitles, chapterTitleStyle, chapterSpacing);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(file.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(file.filename(), StandardCharsets.UTF_8).build().toString())
+                .body(file.body());
+    }
+
     @PatchMapping("/{projectId}")
     public Map<String, Object> updateProject(Authentication authentication,
             @PathVariable Long projectId, @RequestBody ProjectRequest request) {
         return rewriteService.updateProject(user(authentication), projectId,
-                request.name(), request.description(), request.currentChapterId());
+                request.name(), request.description(), request.currentChapterId(),
+                request.currentChapterPosition());
     }
 
     @GetMapping("/{projectId}/chapters")
@@ -114,13 +155,14 @@ public class RewriteController {
             @PathVariable Long projectId, @PathVariable Long chapterId,
             @RequestBody ContentRequest request) {
         return rewriteService.saveContent(user(authentication), projectId, chapterId,
-                request.content(), request.revision());
+                request.content(), request.contentFormatVersion(), request.revision());
     }
 
     @DeleteMapping("/{projectId}/chapters/{chapterId}")
     public ResponseEntity<Void> deleteChapter(Authentication authentication,
-            @PathVariable Long projectId, @PathVariable Long chapterId) {
-        rewriteService.deleteChapter(user(authentication), projectId, chapterId);
+            @PathVariable Long projectId, @PathVariable Long chapterId,
+            @RequestParam Long revision) {
+        rewriteService.deleteChapter(user(authentication), projectId, chapterId, revision);
         return ResponseEntity.noContent().build();
     }
 
@@ -132,8 +174,10 @@ public class RewriteController {
 
     @PostMapping("/{projectId}/deleted-chapters/{chapterId}/restore")
     public Map<String, Object> restoreDeletedChapter(Authentication authentication,
-            @PathVariable Long projectId, @PathVariable Long chapterId) {
-        return rewriteService.restoreDeletedChapter(user(authentication), projectId, chapterId);
+            @PathVariable Long projectId, @PathVariable Long chapterId,
+            @RequestBody RevisionRequest request) {
+        return rewriteService.restoreDeletedChapter(user(authentication), projectId, chapterId,
+                request.revision());
     }
 
     @DeleteMapping("/{projectId}")
@@ -154,12 +198,112 @@ public class RewriteController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/{projectId}/chapters/copy")
+    public ResponseEntity<String> copyChapterContents(Authentication authentication,
+            @PathVariable Long projectId, @RequestBody ChapterIdsRequest request) {
+        return ResponseEntity.ok(rewriteService.copyChapterContents(user(authentication),
+                projectId, request.chapterIds()));
+    }
+
+    @PostMapping("/{projectId}/chapters/bulk")
+    public Map<String, Object> bulkChapters(Authentication authentication,
+            @PathVariable Long projectId, @RequestBody BulkChapterRequest request) {
+        return rewriteService.bulkChapters(user(authentication), projectId,
+                new RewriteService.BulkRequest(request.chapterIds(), request.action(),
+                        request.value(), request.revisions()));
+    }
+
+    @GetMapping("/{projectId}/snapshots")
+    public List<Map<String, Object>> snapshots(Authentication authentication,
+            @PathVariable Long projectId) {
+        return rewriteService.listSnapshots(user(authentication), projectId);
+    }
+
+    @GetMapping("/{projectId}/snapshots/storage")
+    public Map<String, Object> snapshotStorage(Authentication authentication,
+            @PathVariable Long projectId) {
+        return rewriteService.snapshotStorage(user(authentication), projectId);
+    }
+
+    @PostMapping("/{projectId}/snapshots")
+    public Map<String, Object> createSnapshot(Authentication authentication,
+            @PathVariable Long projectId, @RequestBody SnapshotRequest request) {
+        return rewriteService.createSnapshot(user(authentication), projectId, request.name());
+    }
+
+    @DeleteMapping("/{projectId}/snapshots/{snapshotId}")
+    public ResponseEntity<Void> deleteSnapshot(Authentication authentication,
+            @PathVariable Long projectId, @PathVariable Long snapshotId) {
+        rewriteService.deleteNamedSnapshot(user(authentication), projectId, snapshotId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{projectId}/snapshots/{snapshotId}/preview")
+    public Map<String, Object> previewSnapshotRestore(Authentication authentication,
+            @PathVariable Long projectId, @PathVariable Long snapshotId) {
+        return rewriteService.previewSnapshotRestore(user(authentication), projectId, snapshotId);
+    }
+
+    @PostMapping("/{projectId}/snapshots/{snapshotId}/restore")
+    public Map<String, Object> restoreSnapshot(Authentication authentication,
+            @PathVariable Long projectId, @PathVariable Long snapshotId) {
+        return rewriteService.restoreSnapshot(user(authentication), projectId, snapshotId);
+    }
+
+    @GetMapping("/{projectId}/memos")
+    public List<Map<String, Object>> memos(Authentication authentication,
+            @PathVariable Long projectId,
+            @RequestParam(required = false) RewriteMemo.Type type) {
+        return rewriteService.listMemos(user(authentication), projectId, type);
+    }
+
+    @PostMapping("/{projectId}/memos")
+    public Map<String, Object> createMemo(Authentication authentication,
+            @PathVariable Long projectId, @RequestBody MemoRequest request) {
+        return rewriteService.saveMemo(user(authentication), projectId,
+                new RewriteService.MemoRequest(null, request.type(), request.title(),
+                        request.content(), request.chapterId(), request.anchorPosition(),
+                        request.state(), request.aliases()));
+    }
+
+    @PutMapping("/{projectId}/memos/{memoId}")
+    public Map<String, Object> updateMemo(Authentication authentication,
+            @PathVariable Long projectId, @PathVariable Long memoId,
+            @RequestBody MemoRequest request) {
+        return rewriteService.saveMemo(user(authentication), projectId,
+                new RewriteService.MemoRequest(memoId, request.type(), request.title(),
+                        request.content(), request.chapterId(), request.anchorPosition(),
+                        request.state(), request.aliases()));
+    }
+
+    @DeleteMapping("/{projectId}/memos/{memoId}")
+    public ResponseEntity<Void> deleteMemo(Authentication authentication,
+            @PathVariable Long projectId, @PathVariable Long memoId) {
+        rewriteService.deleteMemo(user(authentication), projectId, memoId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{projectId}/search")
+    public Map<String, Object> search(Authentication authentication,
+            @PathVariable Long projectId, @RequestBody SearchRequest request) {
+        return rewriteService.search(user(authentication), projectId, request.options(),
+                request.replacement());
+    }
+
+    @PostMapping("/{projectId}/replace")
+    public Map<String, Object> replace(Authentication authentication,
+            @PathVariable Long projectId, @RequestBody SearchRequest request) {
+        return rewriteService.replace(user(authentication), projectId, request.options(),
+                request.replacement(), request.revisions());
+    }
+
     @PostMapping("/{projectId}/chapters/{chapterId}/split")
     public Map<String, Object> split(Authentication authentication,
             @PathVariable Long projectId, @PathVariable Long chapterId,
             @RequestBody SplitRequest request) {
         return rewriteService.splitChapter(user(authentication), projectId, chapterId,
-                request.position(), request.newTitle(), request.revision());
+                request.position(), request.newTitle(), request.beforeContent(),
+                request.afterContent(), request.revision());
     }
 
     @PostMapping("/{projectId}/chapters/{chapterId}/merge-next")

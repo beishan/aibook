@@ -139,6 +139,8 @@
             @change="value => updateControl(control.key, value, true)"
           />
         </div>
+
+        <DockNavigationSettingsPanel />
       </div>
     </div>
   </section>
@@ -147,6 +149,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import DockIcon, { type DockIconName, type DockIconStyle } from '@/components/DockIcon.vue'
+import DockNavigationSettingsPanel from '@/components/DockNavigationSettingsPanel.vue'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useDockIconStore } from '@/stores/dockIcons'
 import { useBookStore } from '@/stores/book'
@@ -282,7 +285,8 @@ const updateControl = (key: DockControlKey, value: number | number[], persist: b
 
 const handleReset = () => {
   preferencesStore.resetDockAppearance()
-  message.success('Dock 外观已恢复默认设置')
+  preferencesStore.resetDockNavigationItems()
+  message.success('Dock 外观和导航已恢复默认设置')
 }
 
 const errorMessage = (error: unknown) => {

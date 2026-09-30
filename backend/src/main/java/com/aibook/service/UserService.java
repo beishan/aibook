@@ -2,6 +2,8 @@ package com.aibook.service;
 
 import com.aibook.config.ScanSettings;
 import com.aibook.dto.UserPreferencesDTO;
+import com.aibook.dto.DockNavigationItemDTO;
+import com.aibook.dto.RewriteSearchRuleDTO;
 import com.aibook.model.entity.User;
 import com.aibook.repository.FontAssetRepository;
 import com.aibook.repository.UserRepository;
@@ -16,8 +18,12 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -56,6 +62,12 @@ public class UserService implements UserDetailsService {
     private static final int DEFAULT_LIBRARY_PAGE_SIZE = 10;
     private static final Set<String> DOCK_ICON_STYLES =
             Set.of("minimal", "skeuomorphic", "macos26", "custom");
+    private static final Set<String> DOCK_NAV_KEYS = Set.of("home", "library", "rewrite",
+            "shelf", "repair", "conversion", "crawler", "statistics", "settings");
+    private static final Set<String> DOCK_NAV_ICONS = Set.of("home", "library", "rewrite",
+            "shelf", "repair", "conversion", "crawler", "statistics", "settings",
+            "trashEmpty", "trashFull");
+    private static final Set<String> REWRITE_SEARCH_SCOPES = Set.of("BOOK", "CHAPTER", "VOLUME");
     private static final int DEFAULT_DOCK_SIZE = 58;
     private static final int DEFAULT_DOCK_OPACITY = 72;
     private static final int DEFAULT_DOCK_MAGNIFICATION = 128;
@@ -105,6 +117,20 @@ public class UserService implements UserDetailsService {
     public UserPreferencesDTO getPreferences(String username) {
         User user = findByUsername(username);
         return toPreferences(user);
+    }
+
+    public List<RewriteSearchRuleDTO> getRewriteSearchRules(String username) {
+        return readRewriteSearchRules(findByUsername(username).getRewriteSearchRules());
+    }
+
+    @Transactional
+    public List<RewriteSearchRuleDTO> updateRewriteSearchRules(
+            String username, List<RewriteSearchRuleDTO> rules) {
+        User user = findByUsername(username);
+        List<RewriteSearchRuleDTO> normalized = normalizeRewriteSearchRules(rules);
+        user.setRewriteSearchRules(serializeRewriteSearchRules(normalized));
+        userRepository.save(user);
+        return normalized;
     }
 
     @Transactional
@@ -222,6 +248,14 @@ public class UserService implements UserDetailsService {
             requireAllowed("Dock 图标风格", request.getDockIconStyle(), DOCK_ICON_STYLES);
             user.setDockIconStyle(request.getDockIconStyle());
         }
+        if (request.getDockNavigationItems() != null) {
+            user.setDockNavigationSettings(serializeDockNavigationItems(
+                    normalizeDockNavigationItems(request.getDockNavigationItems())));
+        }
+        if (request.getRewriteSearchRules() != null) {
+            user.setRewriteSearchRules(serializeRewriteSearchRules(
+                    normalizeRewriteSearchRules(request.getRewriteSearchRules())));
+        }
         if (request.hasUiFontId()) {
             validateFont(request.getUiFontId());
             user.setUiFontId(request.getUiFontId());
@@ -272,10 +306,126 @@ public class UserService implements UserDetailsService {
                 .dockBlur(defaultIfNull(user.getDockBlur(), DEFAULT_DOCK_BLUR))
                 .dockIconStyle(defaultIfBlank(
                         user.getDockIconStyle(), DEFAULT_DOCK_ICON_STYLE))
+                .dockNavigationItems(readDockNavigationItems(user.getDockNavigationSettings()))
+                .rewriteSearchRules(readRewriteSearchRules(user.getRewriteSearchRules()))
                 .uiFontId(activeFontId(user.getUiFontId()))
                 .readerFontId(activeFontId(user.getReaderFontId()))
                 .readerSettings(readReaderSettings(user.getReaderSettings()))
                 .build();
+    }
+
+    private List<RewriteSearchRuleDTO> normalizeRewriteSearchRules(
+            List<RewriteSearchRuleDTO> rules) {
+        if (rules == null || rules.size() > 50) {
+            throw new IllegalArgumentException("最多保存 50 条查找替换规则");
+        }
+        Set<String> names = new java.util.HashSet<>();
+        List<RewriteSearchRuleDTO> normalized = new ArrayList<>();
+        for (RewriteSearchRuleDTO rule : rules) {
+            if (rule == null || rule.name() == null || rule.query() == null
+                    || rule.name().isBlank() || rule.name().length() > 60
+                    || rule.query().isBlank() || rule.query().length() > 100
+                    || Objects.requireNonNullElse(rule.replacement(), "").length() > 10_000) {
+                throw new IllegalArgumentException("规则名称和查找内容不能为空且不超过限制");
+            }
+            String name = rule.name().strip();
+            if (!names.add(name.toLowerCase(Locale.ROOT))) {
+                throw new IllegalArgumentException("查找替换规则名称不能重复");
+            }
+            String scope = Objects.requireNonNullElse(rule.scope(), "BOOK").toUpperCase(Locale.ROOT);
+            requireAllowed("查找范围", scope, REWRITE_SEARCH_SCOPES);
+            normalized.add(new RewriteSearchRuleDTO(name, rule.query(),
+                    Objects.requireNonNullElse(rule.replacement(), ""), scope,
+                    Boolean.TRUE.equals(rule.matchCase()), Boolean.TRUE.equals(rule.wholeWord()),
+                    Boolean.TRUE.equals(rule.regex())));
+        }
+        return List.copyOf(normalized);
+    }
+
+    private String serializeRewriteSearchRules(List<RewriteSearchRuleDTO> rules) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(rules);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("无法保存查找替换规则", exception);
+        }
+    }
+
+    private List<RewriteSearchRuleDTO> readRewriteSearchRules(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        try {
+            List<RewriteSearchRuleDTO> rules = OBJECT_MAPPER.readValue(
+                    value, new TypeReference<>() { });
+            return normalizeRewriteSearchRules(rules);
+        } catch (Exception exception) {
+            return List.of();
+        }
+    }
+
+    private List<DockNavigationItemDTO> normalizeDockNavigationItems(
+            List<DockNavigationItemDTO> items) {
+        if (items == null || items.size() != DOCK_NAV_KEYS.size()) {
+            throw new IllegalArgumentException("Dock 导航必须包含全部内置项目");
+        }
+        Set<String> keys = new java.util.HashSet<>();
+        Set<Integer> positions = new java.util.HashSet<>();
+        List<DockNavigationItemDTO> normalized = new ArrayList<>();
+        for (int index = 0; index < items.size(); index++) {
+            DockNavigationItemDTO item = items.get(index);
+            if (item == null || !DOCK_NAV_KEYS.contains(item.getKey())
+                    || !keys.add(item.getKey())) {
+                throw new IllegalArgumentException("Dock 导航项目无效或重复");
+            }
+            String title = item.getTitle();
+            if (title == null || title.isBlank() || title.length() > 30) {
+                throw new IllegalArgumentException("Dock 导航名称不能为空且不超过 30 字");
+            }
+            if (!DOCK_NAV_ICONS.contains(item.getIcon())) {
+                throw new IllegalArgumentException("Dock 图标类型无效");
+            }
+            int order = item.getOrder() == null ? index : item.getOrder();
+            if (order < 0 || order >= items.size() || !positions.add(order)) {
+                throw new IllegalArgumentException("Dock 导航顺序无效");
+            }
+            normalized.add(new DockNavigationItemDTO(item.getKey(), title.strip(), item.getIcon(),
+                    item.getEnabled() == null || item.getEnabled(), order));
+        }
+        if (!keys.equals(DOCK_NAV_KEYS)) throw new IllegalArgumentException("Dock 导航项目不完整");
+        normalized.sort(Comparator.comparing(DockNavigationItemDTO::getOrder));
+        for (int index = 0; index < normalized.size(); index++) {
+            normalized.get(index).setOrder(index);
+        }
+        return normalized;
+    }
+
+    private String serializeDockNavigationItems(List<DockNavigationItemDTO> items) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(items);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("无法保存 Dock 导航设置", exception);
+        }
+    }
+
+    private List<DockNavigationItemDTO> readDockNavigationItems(String value) {
+        if (value == null || value.isBlank()) return defaultDockNavigationItems();
+        try {
+            List<DockNavigationItemDTO> items = OBJECT_MAPPER.readValue(value, new TypeReference<>() { });
+            return normalizeDockNavigationItems(items);
+        } catch (Exception exception) {
+            return defaultDockNavigationItems();
+        }
+    }
+
+    private List<DockNavigationItemDTO> defaultDockNavigationItems() {
+        return List.of(
+                new DockNavigationItemDTO("home", "首页", "home", true, 0),
+                new DockNavigationItemDTO("library", "书库", "library", true, 1),
+                new DockNavigationItemDTO("rewrite", "重写", "rewrite", true, 2),
+                new DockNavigationItemDTO("shelf", "书架", "shelf", true, 3),
+                new DockNavigationItemDTO("repair", "内容修复", "repair", true, 4),
+                new DockNavigationItemDTO("conversion", "格式转换", "conversion", true, 5),
+                new DockNavigationItemDTO("crawler", "书籍爬虫", "crawler", true, 6),
+                new DockNavigationItemDTO("statistics", "阅读统计", "statistics", true, 7),
+                new DockNavigationItemDTO("settings", "设置", "settings", true, 8));
     }
 
     private int normalizeLibraryPageSize(Integer value, int fallback) {
