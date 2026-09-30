@@ -45,7 +45,8 @@ class TxtToEpubConverterTest {
                 .settingsJson(mapper.writeValueAsString(settings)).build();
         Path output = tempDir.resolve("测试书.epub");
 
-        new TxtToEpubConverter(mapper, new EncodingDetectService()).convert(task, output);
+        new TxtToEpubConverter(mapper, new EncodingDetectService(), new EpubPackageWriter())
+                .convert(task, output);
 
         assertTrue(Files.size(output) > 0);
         try (ZipFile epub = new ZipFile(output.toFile())) {
@@ -77,7 +78,8 @@ class TxtToEpubConverterTest {
                 .settingsJson(mapper.writeValueAsString(new BookConversionUpdateRequest())).build();
         Path output = tempDir.resolve("ignore.epub");
 
-        new TxtToEpubConverter(mapper, new EncodingDetectService()).convert(task, output);
+        new TxtToEpubConverter(mapper, new EncodingDetectService(), new EpubPackageWriter())
+                .convert(task, output);
 
         try (ZipFile epub = new ZipFile(output.toFile())) {
             assertNotNull(epub.getEntry("OEBPS/chapter-0001.xhtml"));
@@ -100,7 +102,8 @@ class TxtToEpubConverterTest {
                 .settingsJson(mapper.writeValueAsString(new BookConversionUpdateRequest())).build();
         Path output = tempDir.resolve("rename.epub");
 
-        new TxtToEpubConverter(mapper, new EncodingDetectService()).convert(task, output);
+        new TxtToEpubConverter(mapper, new EncodingDetectService(), new EpubPackageWriter())
+                .convert(task, output);
 
         try (ZipFile epub = new ZipFile(output.toFile())) {
             String chapter = new String(epub.getInputStream(epub.getEntry("OEBPS/chapter-0001.xhtml"))

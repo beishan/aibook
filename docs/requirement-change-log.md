@@ -22,6 +22,16 @@
 
 ## 变更记录
 
+### REQ-20260930-008 修复 TXT 转 EPUB 测试构造参数
+
+- 需求时间：2026-09-30
+- 完成时间：2026-09-30
+- 状态：部分完成
+- 需求内容：修复后端编译时 `TxtToEpubConverterTest` 使用旧构造函数签名导致的三个编译错误。
+- 完成情况：测试初始化补齐 `EpubPackageWriter` 依赖，与当前生产类构造函数保持一致。应用版本更新至 `1.45.94`。
+- 主要改动：更新 `TxtToEpubConverterTest` 三处对象创建；同步更新 `frontend/package.json` 与 `frontend/package-lock.json` 版本号。
+- 验证结果：`git diff --check` 通过。后端 `mvn -DskipTests test-compile` 未能完成：主源码编译在现有 `UserPreference.rewriteSearchRules` 的 Lombok `@Builder` 初始化值诊断处失败，未到本次测试类错误；随后增量重试报告源码已是最新，但不能作为干净编译通过的依据。未运行测试。
+
 ### REQ-20260930-007 开发书籍重写
 
 - 需求时间：2026-09-30
