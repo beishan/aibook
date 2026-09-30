@@ -490,6 +490,7 @@ public class BookService {
                 .format(book.getFormat())
                 .filePath(book.getFilePath())
                 .sourceType(book.getSourceType() == null ? null : book.getSourceType().name())
+                .sourceSiteName(book.getSourceSiteName())
                 .sourcePath(book.getSourceType() == Book.SourceType.DIRECTORY_SCAN
                         ? book.getFilePath()
                         : null)

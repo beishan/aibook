@@ -8,6 +8,19 @@ import org.springframework.data.repository.query.Param;
 import java.util.*;
 
 public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> {
+    /** 为升级前已入库的采集书籍补齐来源网站名称。 */
+    @Modifying
+    @Query(value = """
+            update books b
+            set source_site_name = s.site_name
+            from crawler_books cb
+            join crawler_sites s on s.id = cb.site_id
+            where cb.library_book_id = b.id
+              and b.source_type = 'CRAWLER'
+              and b.source_site_name is null
+            """, nativeQuery = true)
+    int backfillLibrarySourceSiteNames();
+
     Optional<CrawlerBook> findByIdAndSiteUser(Long id, User user);
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update CrawlerBook b set b.favorite = :favorite where b.id = :id and b.site.user = :user")

@@ -264,6 +264,7 @@
         <el-table-column label="分类 / 标签" min-width="210"><template #default="{row}"><div class="crawler-book-tag-list table-tags"><el-tag v-if="row.category" size="small" type="info" effect="plain">{{ row.category }}</el-tag><el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag><span v-if="!row.category&&!row.tags?.length">暂无</span></div></template></el-table-column>
         <el-table-column label="进度 / 采集结果" min-width="250"><template #default="{row}"><div v-if="isBookCompleted(row)" class="book-crawl-result table-result"><div><span>采集结果</span><strong>采集完成</strong></div><small>正文 {{ row.crawledChapterCount }} · 待开放 {{ row.pendingReleaseChapterCount }} · 失败 {{ row.failedChapterCount }}</small><el-button text type="primary" size="small" @click.stop="openBook(row)">采集结果详情</el-button></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(row)}" :percentage="progress(row)" :stroke-width="7" /><small>正文 {{ row.crawledChapterCount }}，待开放 {{ row.pendingReleaseChapterCount }} / 共 {{ row.chapterCount }} 章</small></template></template></el-table-column>
         <el-table-column label="状态" width="140"><template #default="{row}"><button class="status-editor" type="button" title="人工修改采集状态" @click.stop="openStatusEditor(row)"><el-tag :type="statusType(row.crawlStatus)">{{ statusLabel(row.crawlStatus) }}</el-tag><small>修改</small></button></template></el-table-column>
+        <el-table-column label="入库状态" width="110"><template #default="{row}"><el-tag :type="importStatusType(row.importStatus)" effect="light">{{ importStatusLabel(row.importStatus) }}</el-tag></template></el-table-column>
         <el-table-column label="创建时间" width="154"><template #default="{row}">{{ formatTime(row.createdAt) }}</template></el-table-column>
         <el-table-column label="开始爬取" width="154"><template #default="{row}">{{ row.lastCrawlStartedAt ? formatTime(row.lastCrawlStartedAt) : '暂无记录' }}</template></el-table-column>
         <el-table-column label="失败" width="80" prop="failedChapterCount" />
@@ -282,7 +283,7 @@
                 <template #dropdown><el-dropdown-menu><el-dropdown-item command="details">详细信息</el-dropdown-item><el-dropdown-item command="book-lists">加入书单</el-dropdown-item><el-dropdown-item command="website">查看网站</el-dropdown-item><el-dropdown-item command="updates" divided>检查更新</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(book)">刷新分类标签</el-dropdown-item><el-dropdown-item command="generate">生成文件</el-dropdown-item><el-dropdown-item command="import">{{ book.importStatus==='IMPORTED'?'同步入库':'加入书库' }}</el-dropdown-item><el-dropdown-item command="status">修改状态</el-dropdown-item></el-dropdown-menu></template>
               </el-dropdown>
             </div>
-            <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><div class="crawler-book-cover-badges"><el-tag :type="statusType(book.crawlStatus)" effect="dark" size="small">{{ statusLabel(book.crawlStatus) }}</el-tag><el-tag v-if="book.importStatus==='IMPORTED'" type="success" effect="dark" size="small">已入库</el-tag></div><el-checkbox class="discovery-card-check crawler-book-card-check" :model-value="isBookSelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleBookSelection(book,Boolean($event))"/></div>
+            <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><div class="crawler-book-cover-badges"><el-tag :type="statusType(book.crawlStatus)" effect="dark" size="small">{{ statusLabel(book.crawlStatus) }}</el-tag><el-tag :type="importStatusType(book.importStatus)" effect="dark" size="small">{{ importStatusLabel(book.importStatus) }}</el-tag></div><el-checkbox class="discovery-card-check crawler-book-card-check" :model-value="isBookSelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleBookSelection(book,Boolean($event))"/></div>
             <div class="discovery-card-body crawler-book-card-body"><div class="discovery-card-title"><div><button type="button" class="crawler-book-title-button" :title="book.bookName" @click.stop="openBook(book)">{{ book.bookName }}</button><p>{{ book.author || '未知作者' }}</p></div><el-tag v-if="book.category" size="small" effect="plain">{{ book.category }}</el-tag></div><div v-if="book.tags?.length" class="crawler-book-tag-list"><el-tag v-for="tag in book.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></div><dl><div><dt>来源网站</dt><dd><SiteSourceTag :name="book.siteName" :color="book.siteThemeColor" /></dd></div></dl><div v-if="isBookCompleted(book)" class="book-crawl-result card-result"><div><span>采集结果</span><strong>采集完成</strong></div><small>正文 {{ book.crawledChapterCount }} · 待开放 {{ book.pendingReleaseChapterCount }} · 失败 {{ book.failedChapterCount }}</small><el-button text type="primary" size="small" @click.stop="openBook(book)">采集结果详情</el-button></div><div v-else class="crawler-book-progress"><div><span>采集进度</span><strong>正文 {{ book.crawledChapterCount }} · 待开放 {{ book.pendingReleaseChapterCount }} / 共 {{ book.chapterCount }} 章</strong></div><el-progress :class="{'crawler-running-progress':isBookRunning(book)}" :percentage="progress(book)" :stroke-width="7" /></div></div>
           </article>
         </div>
@@ -1268,7 +1269,7 @@
         </section>
       </div>
     </el-drawer>
-    <el-dialog v-model="chapterDialog" width="min(760px, 94vw)" class="chapter-reader-dialog" :show-close="false" append-to-body destroy-on-close @closed="closeChapterReader">
+    <el-dialog v-model="chapterDialog" width="min(760px, 94vw)" class="chapter-reader-dialog" :show-close="false" :close-on-click-modal="false" :close-on-press-escape="false" append-to-body destroy-on-close @closed="closeChapterReader">
       <div class="chapter-reader" :class="`chapter-reader--${chapterReaderTheme}`">
         <header class="chapter-reader-toolbar">
           <div class="chapter-reader-heading">
@@ -1277,8 +1278,16 @@
           </div>
           <div class="chapter-reader-actions">
             <a v-if="chapterDetail?.url" :href="chapterDetail.url" target="_blank" rel="noopener noreferrer">原始网页 ↗</a>
-            <button type="button" :aria-expanded="chapterReaderSettingsOpen" aria-controls="chapter-reader-settings" @click="chapterReaderSettingsOpen=!chapterReaderSettingsOpen">Aa <span>阅读设置</span></button>
-            <button class="chapter-reader-close" type="button" aria-label="关闭章节阅读" title="关闭" @click="chapterDialog=false">×</button>
+            <template v-if="chapterEditing">
+              <button type="button" @click="cancelChapterEdit">取消编辑</button>
+              <button type="button" :disabled="savingChapter" @click="saveChapterEdit(false)">{{ savingChapter ? '保存中…' : '保存' }}</button>
+              <button v-if="selectedBook?.libraryHasStructuredChapters" type="button" :disabled="savingChapter" @click="saveChapterEdit(true)">{{ savingChapter ? '保存中…' : '保存并同步' }}</button>
+            </template>
+            <template v-else>
+              <button v-if="chapterDetail && !chapterReaderLoading" type="button" @click="beginChapterEdit">编辑</button>
+              <button type="button" :aria-expanded="chapterReaderSettingsOpen" aria-controls="chapter-reader-settings" @click="chapterReaderSettingsOpen=!chapterReaderSettingsOpen">Aa <span>阅读设置</span></button>
+            </template>
+            <button class="chapter-reader-close" type="button" aria-label="关闭章节阅读" title="关闭" @click="requestCloseChapterReader">×</button>
           </div>
         </header>
         <div class="chapter-reader-stage">
@@ -1287,8 +1296,11 @@
             <article v-else>
               <p class="chapter-reader-kicker"><span>{{ selectedBook?.author || '未知作者' }}</span><SiteSourceTag :name="selectedBook?.siteName || '来源网站'" :color="selectedBook?.siteThemeColor" /></p>
               <div class="chapter-reader-rule"><span>◆</span></div>
-              <p v-for="(paragraph,index) in chapterReaderParagraphs" :key="index" class="chapter-reader-paragraph">{{ paragraph }}</p>
-              <p v-if="!chapterReaderParagraphs.length" class="chapter-reader-empty">{{ chapterDetail?.errorMessage || '本章暂无可阅读正文' }}</p>
+              <textarea v-if="chapterEditing" v-model="chapterEditContent" class="chapter-reader-editor" aria-label="编辑章节正文" spellcheck="false" />
+              <template v-else>
+                <p v-for="(paragraph,index) in chapterReaderParagraphs" :key="index" class="chapter-reader-paragraph">{{ paragraph }}</p>
+                <p v-if="!chapterReaderParagraphs.length" class="chapter-reader-empty">{{ chapterDetail?.errorMessage || '本章暂无可阅读正文' }}</p>
+              </template>
             </article>
           </section>
           <Transition name="chapter-settings-slide">
@@ -1303,9 +1315,9 @@
           </Transition>
         </div>
         <footer class="chapter-reader-navigation">
-          <button type="button" :disabled="chapterReaderPosition<=1||chapterReaderLoading" @click="moveChapterReader(-1)"><span>←</span><small>上一章</small></button>
+          <button type="button" :disabled="chapterEditing||chapterReaderPosition<=1||chapterReaderLoading" @click="moveChapterReader(-1)"><span>←</span><small>上一章</small></button>
           <div><span class="chapter-reader-progress"><i :style="{width:`${chapterReaderProgress}%`}"/></span><small>{{ chapterReaderPosition ? `第 ${chapterReaderPosition} 章` : '章节预览' }}</small></div>
-          <button type="button" :disabled="!chapterReaderPosition||chapterReaderPosition>=chapterReaderChapters.length||chapterReaderLoading" @click="moveChapterReader(1)"><small>下一章</small><span>→</span></button>
+          <button type="button" :disabled="chapterEditing||!chapterReaderPosition||chapterReaderPosition>=chapterReaderChapters.length||chapterReaderLoading" @click="moveChapterReader(1)"><small>下一章</small><span>→</span></button>
         </footer>
       </div>
     </el-dialog>
@@ -1464,7 +1476,7 @@ const funnelChartRef = ref<HTMLElement>()
 const chapterAttemptChartRef = ref<HTMLElement>()
 const currentCrawlerTasks=ref<CrawlerTask[]>([]), submittingBookTaskIds=ref(new Set<number>())
 const siteDialog=ref(false), siteProtectionDialog=ref(false), protectionDetailSite=ref<CrawlerSite>(), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'|'metadata'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), chapterDetail=ref<{title:string;url:string;content:string;errorMessage:string}>(), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
-const chapterReaderSurface=ref<HTMLElement>(), chapterReaderActive=ref<CrawlerChapter>(), chapterReaderChapters=ref<CrawlerChapter[]>([]), chapterReaderBookId=ref<number>(), chapterReaderLoading=ref(false), chapterReaderSettingsOpen=ref(false)
+const chapterReaderSurface=ref<HTMLElement>(), chapterReaderActive=ref<CrawlerChapter>(), chapterReaderChapters=ref<CrawlerChapter[]>([]), chapterReaderBookId=ref<number>(), chapterReaderLoading=ref(false), chapterReaderSettingsOpen=ref(false), chapterEditing=ref(false), chapterEditContent=ref(''), savingChapter=ref(false)
 const discoveryPagesBySite=ref<Record<number,CrawlerDiscoveryPage[]>>({})
 const discoveryMetadataRefreshing=ref(false)
 const bookLoading=ref(false), bookPage=ref(1), bookPageSize=ref(20), bookTotal=ref(0)
@@ -1669,7 +1681,7 @@ const taskStatusOptions=['WAITING','RUNNING','PAUSED','SUCCESS','PARTIAL_SUCCESS
 const taskTypeOptions=['SITE_SCAN','BOOK_METADATA','BOOK_CHAPTER_LIST','BOOK_CONTENT','BOOK_UPDATE_CHECK','BOOK_FULL_CRAWL','BOOK_EXPORT','BOOK_IMPORT']
 const discoverySortOptions=[{value:'DISCOVER_TIME_DESC',label:'发现时间：最新优先'},{value:'DISCOVER_TIME_ASC',label:'发现时间：最早优先'},{value:'BOOK_NAME_ASC',label:'书名：正序'},{value:'BOOK_NAME_DESC',label:'书名：倒序'},{value:'AUTHOR_ASC',label:'作者：正序'},{value:'AUTHOR_DESC',label:'作者：倒序'}]
 const managedBookStatusOptions=[{value:'WAITING',label:'等待中'},{value:'CRAWLING_METADATA',label:'采集元数据'},{value:'CRAWLING_CHAPTER_LIST',label:'采集目录'},{value:'CRAWLING_CONTENT',label:'采集正文'},{value:'PARTIAL_SUCCESS',label:'部分成功'},{value:'COMPLETED',label:'已完成'},{value:'FAILED',label:'失败'},{value:'UPDATING',label:'更新中'},{value:'PAUSED',label:'已暂停'}]
-const bookImportStatusOptions=[{value:'NOT_IMPORTED',label:'未入库'},{value:'READY',label:'待入库'},{value:'IMPORTED',label:'已入库'}]
+const bookImportStatusOptions=[{value:'NOT_IMPORTED',label:'未就绪'},{value:'READY',label:'待入库'},{value:'IMPORTED',label:'已入库'}]
 const managedBookSortOptions=[{value:'CREATED_DESC',label:'创建时间：最新优先'},{value:'CREATED_ASC',label:'创建时间：最早优先'},{value:'CRAWL_STARTED_DESC',label:'开始爬取：最新优先'},{value:'CRAWL_STARTED_ASC',label:'开始爬取：最早优先'},{value:'LAST_CRAWL_DESC',label:'完成爬取：最新优先'},{value:'LAST_CRAWL_ASC',label:'完成爬取：最早优先'},{value:'BOOK_NAME_ASC',label:'书名：正序'},{value:'BOOK_NAME_DESC',label:'书名：倒序'}]
 const siteEditorTabs:{key:SiteEditorTab;label:string;description:string}[]=[{key:'basic',label:'基本信息',description:'身份与入口'},{key:'request',label:'请求访问',description:'频率与请求头'},{key:'validation',label:'内容校验',description:'正文特征'},{key:'proxy',label:'代理配置',description:'站点代理'},{key:'automation',label:'运行设置',description:'任务范围'}]
 const activeSiteTab=ref<SiteEditorTab>('basic')
@@ -1695,6 +1707,7 @@ const managedDiscoveryPages=computed(()=>discoveryManagerSite.value?discoveryPag
 const chapterSortIndex=computed(()=>chapterSortOptions.findIndex(item=>item.value===chapterSort.value))
 const chapterReaderPosition=computed(()=>chapterReaderChapters.value.findIndex(item=>item.id===chapterReaderActive.value?.id)+1)
 const chapterReaderProgress=computed(()=>chapterReaderPosition.value&&chapterReaderChapters.value.length?chapterReaderPosition.value/chapterReaderChapters.value.length*100:0)
+const chapterReaderEditDirty=computed(()=>chapterEditing.value&&chapterEditContent.value!==(chapterDetail.value?.content||''))
 const chapterReaderParagraphs=computed(()=>{const text=(chapterDetail.value?.content||'').trim();if(!text)return[];const blocks=text.split(/\r?\n\s*\r?\n+/).map(value=>value.trim()).filter(Boolean);return blocks.length>1?blocks:text.split(/\r?\n/).map(value=>value.trim()).filter(Boolean)})
 const chapterReaderTheme=computed<ChapterReaderTheme>(()=>readerSettings.value.backgroundColor==='#2d2d2d'||readerSettings.value.backgroundColor==='#1a1a2e'?'night':readerSettings.value.backgroundColor==='#ffffff'?'light':'paper')
 const chapterReaderThemeIndex=computed(()=>chapterReaderThemes.findIndex(item=>item.value===chapterReaderTheme.value))
@@ -2687,6 +2700,8 @@ async function selectChapterReader(chapter:CrawlerChapter){
   if(!bookId)return
   const requestSequence=++chapterReaderRequestSequence
   chapterReaderActive.value=chapter
+  chapterEditing.value=false
+  chapterEditContent.value=''
   chapterReaderLoading.value=true
   try{
     const detail=await crawlerApi.chapter(bookId,chapter.id)
@@ -2712,7 +2727,23 @@ async function openChapter(chapter:CrawlerChapter){
   catch(error:any){if(openingSequence!==chapterReaderRequestSequence||!chapterDialog.value)return;chapterDetail.value={title:chapter.chapterName,url:chapter.chapterUrl,content:'',errorMessage:error.response?.data?.message||'章节正文加载失败'};chapterReaderLoading.value=false}
 }
 function moveChapterReader(offset:-1|1){const index=chapterReaderPosition.value-1,target=chapterReaderChapters.value[index+offset];if(target)void selectChapterReader(target)}
-function closeChapterReader(){chapterReaderRequestSequence++;chapterReaderSettingsOpen.value=false;chapterReaderLoading.value=false;chapterDetail.value=undefined;chapterReaderActive.value=undefined}
+function beginChapterEdit(){if(!chapterDetail.value)return;chapterEditContent.value=chapterDetail.value.content||'';chapterEditing.value=true;chapterReaderSettingsOpen.value=false}
+async function cancelChapterEdit(){if(chapterReaderEditDirty.value&&!await confirm('放弃尚未保存的章节修改吗？'))return;chapterEditing.value=false;chapterEditContent.value=chapterDetail.value?.content||''}
+async function saveChapterEdit(syncLibrary:boolean){
+  const bookId=selectedBook.value?.id,chapterId=chapterReaderActive.value?.id
+  if(!bookId||!chapterId||savingChapter.value)return
+  if(syncLibrary&&!selectedBook.value?.libraryHasStructuredChapters)return
+  savingChapter.value=true
+  try{
+    await crawlerApi.saveChapterContent(bookId,chapterId,chapterEditContent.value,syncLibrary)
+    if(chapterDetail.value)chapterDetail.value={...chapterDetail.value,content:chapterEditContent.value,errorMessage:''}
+    chapterEditing.value=false
+    message.success(syncLibrary?'章节已保存并同步到结构化书库版本':'章节内容已保存')
+  }catch(error:any){message.error(error.response?.data?.message||'章节内容保存失败')}
+  finally{savingChapter.value=false}
+}
+async function requestCloseChapterReader(){if(savingChapter.value)return;if(chapterReaderEditDirty.value&&!await confirm('放弃尚未保存的章节修改并关闭阅读吗？'))return;chapterDialog.value=false}
+function closeChapterReader(){chapterReaderRequestSequence++;chapterReaderSettingsOpen.value=false;chapterReaderLoading.value=false;chapterEditing.value=false;chapterEditContent.value='';savingChapter.value=false;chapterDetail.value=undefined;chapterReaderActive.value=undefined}
 function updateChapterReaderSettings(patch:Partial<ReaderSettings>){preferencesStore.setReaderSettings({...readerSettings.value,...patch})}
 function setChapterReaderTheme(theme:ChapterReaderTheme){updateChapterReaderSettings({backgroundColor:theme==='night'?'#2d2d2d':theme==='light'?'#ffffff':'#f5f5dc'})}
 function setChapterReaderWidth(width:ReaderContentWidth){updateChapterReaderSettings({contentWidth:width})}
@@ -2724,6 +2755,8 @@ function isBookTaskActive(book:CrawlerBook){return submittingBookTaskIds.value.h
 function setBookTaskSubmitting(bookId:number,submitting:boolean){const next=new Set(submittingBookTaskIds.value);if(submitting)next.add(bookId);else next.delete(bookId);submittingBookTaskIds.value=next}
 function statusLabel(status:string){return ({WAITING:'等待中',RUNNING:'运行中',PAUSED:'已暂停',SUCCESS:'成功',PARTIAL_SUCCESS:'部分成功',FAILED:'失败',CANCELLED:'已取消',DISCOVERED:'已发现',CRAWLING_METADATA:'解析元信息',CRAWLING_CHAPTER_LIST:'解析目录',CRAWLING_CONTENT:'采集正文',COMPLETED:'已完成',PENDING_RELEASE:'待开放',NOT_CRAWLED:'未采集',CRAWLING:'采集中',CONTENT_SUSPECTED:'内容异常'} as Record<string,string>)[status]||status}
 function statusType(status:string):''|'success'|'warning'|'info'|'danger'{if(['RUNNING','SUCCESS','COMPLETED'].includes(status))return'success';if(['FAILED','CONTENT_SUSPECTED'].includes(status))return'danger';if(['PARTIAL_SUCCESS','PAUSED','PENDING_RELEASE'].includes(status))return'warning';return'info'}
+function importStatusLabel(status?:string){return ({NOT_IMPORTED:'未就绪',READY:'待入库',IMPORTED:'已入库'} as Record<string,string>)[status||'']||'未知'}
+function importStatusType(status?:string):'success'|'warning'|'info'{if(status==='IMPORTED')return'success';if(status==='READY')return'warning';return'info'}
 function priorityLabel(priority:string){return({LOW:'低',NORMAL:'普通',HIGH:'高'} as Record<string,string>)[priority]||priority}
 function priorityType(priority:string):''|'success'|'warning'|'info'|'danger'{return priority==='HIGH'?'warning':priority==='LOW'?'info':''}
 function scanTaskPercentage(task:CrawlerTask){return Math.max(0,Math.min(100,task.progressPercent??(['SUCCESS','PARTIAL_SUCCESS'].includes(task.status)?100:0)))}
@@ -3562,6 +3595,34 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   margin-top: 16px;
   color: var(--text-tertiary);
   font-size: 12px;
+}
+
+.chapter-reader-editor {
+  display: block;
+  width: 100%;
+  min-height: 52vh;
+  box-sizing: border-box;
+  padding: 18px;
+  border: 1px solid var(--reader-line);
+  border-radius: 12px;
+  outline: none;
+  background: var(--reader-solid);
+  color: var(--reader-ink);
+  font-family: var(--chapter-reader-font-family);
+  font-size: var(--chapter-reader-font-size);
+  line-height: var(--chapter-reader-line-height);
+  letter-spacing: .025em;
+  resize: vertical;
+}
+
+.chapter-reader-editor:focus-visible {
+  border-color: var(--reader-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--reader-accent) 18%, transparent);
+}
+
+.chapter-reader-actions button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
 }
 
 @media (max-width: 520px) {

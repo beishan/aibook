@@ -34,6 +34,7 @@ public class BookDTO {
     private String format;
     private String filePath;
     private String sourceType;
+    private String sourceSiteName;
     private String sourcePath;
     private Long fileSize;
     private String language;

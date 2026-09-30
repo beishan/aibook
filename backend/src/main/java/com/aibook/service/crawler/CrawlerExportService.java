@@ -124,6 +124,7 @@ public class CrawlerExportService {
                     .sourceBookStatus(crawlerBook.getBookStatus())
                     .format(format.toLowerCase(Locale.ROOT)).filePath(target.toString()).fileSize(Files.size(target))
                     .fileHash(fileHash).sourceType(Book.SourceType.CRAWLER).user(user)
+                    .sourceSiteName(crawlerBook.getSite().getSiteName())
                     .chapterCount(availableChapterCount).build();
             applyLibraryMetadata(book, crawlerBook, user);
             book.setIsFavorite(Boolean.TRUE.equals(crawlerBook.getFavorite()));
@@ -171,6 +172,7 @@ public class CrawlerExportService {
                 .sourceBookStatus(crawlerBook.getBookStatus())
                 .format("structured").filePath(sourceUri).fileSize(contentSize)
                 .fileHash(sourceHash).sourceType(Book.SourceType.CRAWLER).user(user)
+                .sourceSiteName(crawlerBook.getSite().getSiteName())
                 .chapterCount(chapters.size()).build();
         applyLibraryMetadata(book, crawlerBook, user);
         book.setIsFavorite(Boolean.TRUE.equals(crawlerBook.getFavorite()));
@@ -229,6 +231,44 @@ public class CrawlerExportService {
     @Transactional
     public int syncImportedBook(User user, Long bookId) {
         return syncImportedBook(user, bookId, null);
+    }
+
+    /** 保存人工修订后的采集章节，可选仅发布结构化书库章节版本。 */
+    @Transactional
+    public boolean saveEditedChapterContent(User user, Long bookId, Long chapterId,
+            String content, boolean syncLibrary) {
+        CrawlerBook crawlerBook = managementService.ownedBook(user, bookId);
+        if (managementService.hasActiveTask(crawlerBook)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "采集任务运行期间不能编辑章节，请稍后重试");
+        }
+        CrawlerChapter chapter = chapterRepository.findById(chapterId)
+                .filter(item -> item.getCrawlerBook().getId().equals(crawlerBook.getId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集章节不存在"));
+
+        List<BookVersion> versions = List.of();
+        Book libraryBook = crawlerBook.getLibraryBook();
+        if (syncLibrary) {
+            if (libraryBook == null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "该书尚未加入书库，不能同步");
+            }
+            versions = versionRepository.findByBookOrderByPrimaryVersionDescCreatedAtAsc(libraryBook);
+            boolean hasStructuredVersion = versions.stream().anyMatch(version ->
+                    "structured".equalsIgnoreCase(version.getFormat())
+                            && "CRAWLER".equals(version.getSourceType())
+                            && crawlerBook.getId().toString().equals(version.getSourceId()));
+            if (!hasStructuredVersion) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "该书没有结构化章节版本，不能同步章节内容");
+            }
+        }
+
+        chapter.setContent(content);
+        chapter.setContentHash(sha256(content));
+        chapter.setWordCount(content.replaceAll("\\s+", "").length());
+        chapterRepository.save(chapter);
+
+        if (!syncLibrary) return false;
+        return publishStructuredVersion(crawlerBook, libraryBook, versions);
     }
 
     private int syncImportedBook(User user, Long bookId, Collection<String> selectedFormats) {

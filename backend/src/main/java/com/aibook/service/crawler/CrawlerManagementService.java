@@ -133,6 +133,13 @@ public class CrawlerManagementService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集书籍不存在"));
     }
 
+    public boolean hasActiveTask(CrawlerBook book) {
+        return taskRepository.existsByCrawlerBookAndStatusIn(book, List.of(
+                CrawlerTask.TaskStatus.WAITING,
+                CrawlerTask.TaskStatus.RUNNING,
+                CrawlerTask.TaskStatus.PAUSED));
+    }
+
     public CrawlerTask ownedTask(User user, String id) {
         return taskRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集任务不存在"));
@@ -865,7 +872,9 @@ public class CrawlerManagementService {
                 b.getBookLists().stream().map(BookList::getId).toList(),
                 b.getLibraryBook() == null ? null : b.getLibraryBook().getId(), b.getDiscoverTime(),
                 b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt(),
-                suspectedDuplicate, normalizedThemeColor(b.getSite().getThemeColor()));
+                suspectedDuplicate, normalizedThemeColor(b.getSite().getThemeColor()),
+                b.getLibraryBook() != null
+                        && "structured".equalsIgnoreCase(b.getLibraryBook().getFormat()));
     }
 
     private List<String> splitTags(String value) {

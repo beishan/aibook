@@ -19,6 +19,7 @@ export interface Book {
   format: string
   filePath: string
   sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN' | 'CRAWLER'
+  sourceSiteName?: string
   sourcePath?: string
   fileSize?: number
   language?: string

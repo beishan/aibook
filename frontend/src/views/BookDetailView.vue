@@ -307,7 +307,7 @@
               </div>
               <div>
                 <dt><span aria-hidden="true">▣</span> 来源</dt>
-                <dd>{{ formatSourceType(book.sourceType) }}</dd>
+                <dd>{{ formatSourceType(book.sourceType, book.sourceSiteName) }}</dd>
               </div>
               <div>
                 <dt><span aria-hidden="true">⇩</span> 大小</dt>
@@ -718,7 +718,7 @@
             </div>
             <div class="info-item list-item">
               <span class="info-label">来源</span>
-              <span class="info-value">{{ formatSourceType(book.sourceType) }}</span>
+              <span class="info-value">{{ formatSourceType(book.sourceType, book.sourceSiteName) }}</span>
             </div>
             <div
               v-if="book.sourceType === 'DIRECTORY_SCAN' && book.sourcePath"
@@ -2052,10 +2052,13 @@ const formatFileSize = (bytes?: number) => {
   return `${size.toFixed(2)} ${units[unitIndex]}`
 }
 
-const formatSourceType = (sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN' | 'CRAWLER') => {
+const formatSourceType = (
+  sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN' | 'CRAWLER',
+  sourceSiteName?: string,
+) => {
   if (sourceType === 'UPLOAD') return '上传'
   if (sourceType === 'DIRECTORY_SCAN') return '目录扫描'
-  if (sourceType === 'CRAWLER') return '网站采集'
+  if (sourceType === 'CRAWLER') return sourceSiteName ? `网站采集 · ${sourceSiteName}` : '网站采集'
   return '未知'
 }
 

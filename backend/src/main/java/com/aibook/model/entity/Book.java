@@ -107,6 +107,10 @@ public class Book {
     @Column(name = "source_type")
     private SourceType sourceType;
 
+    /** 采集入库时记录网站名称，避免采集站配置变更后丢失来源说明。 */
+    @Column(name = "source_site_name", length = 100)
+    private String sourceSiteName;
+
     /**
      * 文件大小（字节）
      */

@@ -124,6 +124,14 @@ public class CrawlerController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集章节不存在"));
         Map<String, Object> value = new LinkedHashMap<>(); value.put("id", chapter.getId()); value.put("title", chapter.getChapterName()); value.put("url", chapter.getChapterUrl()); value.put("content", Objects.toString(chapter.getContent(), "")); value.put("errorMessage", Objects.toString(chapter.getErrorMessage(), "")); return value;
     }
+    @PutMapping("/books/{bookId}/chapters/{chapterId}")
+    public Map<String, Object> saveChapterContent(Authentication auth, @PathVariable Long bookId,
+            @PathVariable Long chapterId, @Valid @RequestBody ChapterContentSaveRequest request) {
+        boolean synced = exportService.saveEditedChapterContent(user(auth), bookId, chapterId,
+                request.content(), Boolean.TRUE.equals(request.syncLibrary()));
+        return Map.of("content", request.content(), "synced", Boolean.TRUE.equals(request.syncLibrary()),
+                "versionPublished", synced);
+    }
     @PostMapping("/books/{id}/continue") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView continueBook(Authentication auth, @PathVariable Long id) { return taskService.continueBook(user(auth), id); }
     @PostMapping("/books/{id}/retry-failures") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView retryFailures(Authentication auth, @PathVariable Long id) { return taskService.retryFailures(user(auth), id); }
     @PostMapping("/books/{bookId}/chapters/{chapterId}/retry")

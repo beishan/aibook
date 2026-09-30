@@ -280,7 +280,11 @@ public final class CrawlerDtos {
             boolean favorite, List<Long> bookListIds,
             Long libraryBookId, LocalDateTime discoverTime,
             LocalDateTime lastCrawlStartedAt, LocalDateTime lastCrawlTime,
-            LocalDateTime createdAt, boolean suspectedDuplicate, String siteThemeColor) { }
+            LocalDateTime createdAt, boolean suspectedDuplicate, String siteThemeColor,
+            boolean libraryHasStructuredChapters) { }
+
+    public record ChapterContentSaveRequest(@NotNull @Size(max = 2_000_000) String content,
+            Boolean syncLibrary) { }
 
     public record ChapterView(Long id, int chapterIndex, String chapterName, String chapterUrl,
             int wordCount, String crawlStatus, String accessStatus, int retryCount,
