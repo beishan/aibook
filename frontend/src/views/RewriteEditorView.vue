@@ -2004,7 +2004,14 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.rewrite-workspace { max-width: 1600px; min-height: 75vh; margin: 0 auto; padding: 20px 22px 110px; color: var(--text-primary, #24342d); }
+.rewrite-workspace {
+  --rewrite-editor-height: clamp(280px, calc(100vh - 560px), 640px);
+  max-width: 1600px;
+  min-height: 75vh;
+  margin: 0 auto;
+  padding: 20px 22px 110px;
+  color: var(--text-primary, #24342d);
+}
 .workspace-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; padding: 12px 0 24px; }
 .workspace-header h1 { margin: 8px 0 4px; font-size: 28px; }
 .workspace-header p { margin: 0; color: var(--text-secondary, #748078); }
@@ -2046,7 +2053,7 @@ onBeforeUnmount(() => {
 .writing-surface { display: grid; grid-template-columns: 1fr; gap: 16px; }
 .writing-surface.comparing {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows: auto auto clamp(320px, 55vh, 760px);
+  grid-template-rows: auto auto var(--rewrite-editor-height);
 }
 .source-pane, .draft-pane { min-width: 0; }
 .writing-surface.comparing .source-pane,
@@ -2061,7 +2068,24 @@ onBeforeUnmount(() => {
 .writing-surface.comparing .rich-toolbar { grid-row: 2; }
 .pane-label { display: flex; justify-content: space-between; align-items: center; min-height: 32px; color: var(--text-secondary, #748078); font-size: 12px; }
 .source-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.source-pane pre, .rich-editor-surface { box-sizing: border-box; width: 100%; min-height: 55vh; margin: 0; padding: 22px; border: 1px solid #8883; border-radius: 12px; background: var(--el-fill-color-lighter, #fafbf9); color: inherit; font-family: inherit; font-size: 16px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
+.source-pane pre,
+.rich-editor-surface {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--rewrite-editor-height);
+  min-height: 0;
+  margin: 0;
+  padding: 22px;
+  border: 1px solid #8883;
+  border-radius: 12px;
+  background: var(--el-fill-color-lighter, #fafbf9);
+  color: inherit;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .source-pane pre { overflow: auto; }
 .writing-surface.comparing .source-pane pre,
 .writing-surface.comparing .rich-editor-surface {
@@ -2171,11 +2195,13 @@ onBeforeUnmount(() => {
 .diff-segment--added { border-radius: 3px; background: color-mix(in srgb, var(--el-color-success) 20%, transparent); }
 .diff-segment--removed { border-radius: 3px; background: color-mix(in srgb, var(--el-color-danger) 18%, transparent); text-decoration: line-through; }
 .rich-toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; }
-.rich-editor-surface { min-height: 55vh; outline-color: var(--el-color-primary); }
+.rich-editor-surface {
+  overflow: auto;
+  outline-color: var(--el-color-primary);
+}
 .rich-editor-surface:focus-within { border-color: var(--el-color-primary); }
 .rich-editor-surface.is-readonly { overflow: auto; }
-.rich-editor-surface :deep(.tiptap-content) { min-height: calc(55vh - 44px); outline: none; white-space: pre-wrap; overflow-wrap: anywhere; }
-.writing-surface.comparing .rich-editor-surface :deep(.tiptap-content) { min-height: 100%; }
+.rich-editor-surface :deep(.tiptap-content) { min-height: 100%; outline: none; white-space: pre-wrap; overflow-wrap: anywhere; }
 .rich-editor-surface :deep(.tiptap-content > :first-child) { margin-top: 0; }
 .rich-editor-surface :deep(.tiptap-content > :last-child) { margin-bottom: 0; }
 .rich-editor-surface :deep(blockquote) { margin: 1em 0; padding-left: 1em; border-left: 3px solid var(--el-border-color); color: var(--text-secondary, #748078); }
@@ -2236,8 +2262,6 @@ onBeforeUnmount(() => {
   .writing-surface.comparing .rich-toolbar,
   .writing-surface.comparing .source-pane pre,
   .writing-surface.comparing .rich-editor-surface { grid-row: auto; }
-  .writing-surface.comparing .source-pane pre,
-  .writing-surface.comparing .rich-editor-surface { min-height: 55vh; }
 }
 @media (prefers-reduced-motion: reduce) { .chapter-status-slider { transition: none; } }
 </style>
