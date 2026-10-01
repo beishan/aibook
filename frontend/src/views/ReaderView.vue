@@ -27,8 +27,8 @@
         :style="readerHeaderStyle"
       >
         <button type="button" class="back-btn" @click="goBack">
-          <span class="reader-icon" aria-hidden="true">←</span>
-          <span>返回书库</span>
+          <span class="reader-icon" aria-hidden="true">{{ isQuickWindow ? '×' : '←' }}</span>
+          <span>{{ isQuickWindow ? '关闭小窗' : '返回书库' }}</span>
         </button>
         <div class="reader-title">
           <div class="reader-cover" aria-hidden="true">
@@ -738,6 +738,7 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const isQuickWindow = computed(() => route.query.quickWindow === '1')
 const bookStore = useBookStore()
 const themeStore = useThemeStore()
 const preferencesStore = usePreferencesStore()
@@ -3266,6 +3267,13 @@ const turnNext = () => {
 }
 
 const goBack = () => {
+  if (isQuickWindow.value && window.parent !== window) {
+    window.parent.postMessage(
+      { type: 'aibook:quick-reader-close' },
+      window.location.origin,
+    )
+    return
+  }
   router.back()
 }
 

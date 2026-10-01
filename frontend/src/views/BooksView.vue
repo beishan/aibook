@@ -347,6 +347,7 @@
                 </span>
                 <template #dropdown>
                   <el-dropdown-menu>
+                    <el-dropdown-item command="quick-read">▣ 小窗阅读</el-dropdown-item>
                     <el-dropdown-item command="scrape">✨ 刮削元数据</el-dropdown-item>
                     <el-dropdown-item command="random-cover">🎲 随机封面</el-dropdown-item>
                     <el-dropdown-item command="reparse">🔄 重新解析</el-dropdown-item>
@@ -466,6 +467,7 @@
             <span class="list-action-label">{{ row.onShelf ? '已在书架' : '加入书架' }}</span>
           </button>
           <button class="btn btn-text" @click.stop="$router.push(`/reader/${row.id}`)">阅读</button>
+          <button class="btn btn-text" @click.stop="openQuickReader(row)">小窗阅读</button>
           <button
             class="btn btn-text"
             :disabled="downloadingBookId !== null"
@@ -605,11 +607,32 @@
       @close="showBookMergeDialog = false"
       @complete="handleBookMergeComplete"
     />
+
+    <el-dialog
+      v-model="quickReaderOpen"
+      class="book-quick-reader-dialog"
+      width="min(1280px, 96vw)"
+      top="3vh"
+      :show-close="false"
+      :close-on-click-modal="false"
+      append-to-body
+      destroy-on-close
+      @closed="resetQuickReader"
+    >
+      <iframe
+        v-if="quickReaderOpen && quickReaderSrc"
+        ref="quickReaderFrame"
+        class="book-quick-reader-frame"
+        :src="quickReaderSrc"
+        :title="`小窗阅读：${quickReaderBook?.title || ''}`"
+        allow="fullscreen"
+      />
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { Hide, MoreFilled, View } from '@element-plus/icons-vue'
@@ -683,6 +706,9 @@ const processingBookId = ref<number | null>(null)
 const downloadingBookId = ref<number | null>(null)
 const showVersionRebuildDialog = ref(false)
 const showBookMergeDialog = ref(false)
+const quickReaderOpen = ref(false)
+const quickReaderBook = ref<Book | null>(null)
+const quickReaderFrame = ref<HTMLIFrameElement | null>(null)
 const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 const coversPreparing = ref(false)
 const libraryLoading = computed(() => bookStore.loading || coversPreparing.value)
@@ -705,6 +731,14 @@ const batchTagIds = ref<number[]>([])
 const batchTagMode = ref<'ADD' | 'REMOVE' | 'REPLACE'>('ADD')
 
 const totalPages = computed(() => Math.ceil(bookStore.totalElements / pageSize.value))
+const quickReaderSrc = computed(() => {
+  if (!quickReaderBook.value) return ''
+  return router.resolve({
+    name: 'Reader',
+    params: { id: quickReaderBook.value.id },
+    query: { quickWindow: '1' },
+  }).href
+})
 const pageRangeStart = computed(() => (currentPage.value - 1) * pageSize.value + 1)
 const pageRangeEnd = computed(() =>
   Math.min(currentPage.value * pageSize.value, bookStore.totalElements)
@@ -1097,6 +1131,24 @@ const handleListClick = (bookId: number) => {
   }
 }
 
+const openQuickReader = (book: Book) => {
+  quickReaderBook.value = book
+  quickReaderOpen.value = true
+}
+
+const handleQuickReaderMessage = (event: MessageEvent) => {
+  if (event.origin !== window.location.origin) return
+  if (event.source !== quickReaderFrame.value?.contentWindow) return
+  if (!event.data || typeof event.data !== 'object') return
+  if (event.data.type === 'aibook:quick-reader-close') {
+    quickReaderOpen.value = false
+  }
+}
+
+const resetQuickReader = () => {
+  quickReaderBook.value = null
+}
+
 const handleDelete = async (id: number) => {
   const result = await confirm(
     '确定将这本书移入回收站吗？\n\nNAS 上的原始文件不会被删除或移动，可随时恢复。',
@@ -1114,6 +1166,9 @@ const handleDelete = async (id: number) => {
 
 const handleMoreCommand = async (command: string, book: Book) => {
   switch (command) {
+    case 'quick-read':
+      openQuickReader(book)
+      break
     case 'scrape':
       await handleScrapeBook(book)
       break
@@ -1275,6 +1330,7 @@ watch(
 )
 
 onMounted(async () => {
+  window.addEventListener('message', handleQuickReaderMessage)
   await preferencesStore.hydrate()
   categoryStore.refresh()
   tagStore.fetchTags()
@@ -1284,6 +1340,10 @@ onMounted(async () => {
   } else {
     loadBooks()
   }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('message', handleQuickReaderMessage)
 })
 </script>
 
@@ -2037,6 +2097,42 @@ onMounted(async () => {
 .list-state-button.is-on-shelf {
   color: #166534;
   background: rgba(220, 252, 231, 0.72);
+}
+
+.book-quick-reader-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--surface-card);
+}
+
+:global(.book-quick-reader-dialog.el-dialog) {
+  display: flex;
+  height: 94vh;
+  max-height: 94dvh;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+:global(.book-quick-reader-dialog .el-dialog__header) {
+  display: none;
+}
+
+:global(.book-quick-reader-dialog .el-dialog__body) {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
+}
+
+@media (max-width: 768px) {
+  :global(.book-quick-reader-dialog.el-dialog) {
+    width: calc(100vw - 16px) !important;
+    height: 94dvh;
+    max-height: 94dvh;
+  }
 }
 
 .btn-danger {
