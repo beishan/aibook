@@ -2231,8 +2231,6 @@ onBeforeUnmount(() => {
 }
 
 .diff-review-content :deep(.d2h-code-side-linenumber) {
-  min-width: 46px;
-  width: 46px;
   color: var(--text-secondary, #748078);
 }
 
