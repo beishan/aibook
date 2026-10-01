@@ -150,8 +150,14 @@
           <el-button size="small" @click="reloadChapter">重新加载</el-button>
         </div>
 
-        <div class="writing-surface" :class="{ comparing: showSource }">
-          <section v-if="showSource" class="source-pane">
+        <div
+          class="writing-surface"
+          :class="{
+            comparing: showSource && !showDiff,
+            'diff-review-mode': showDiff,
+          }"
+        >
+          <section v-if="showSource" v-show="!showDiff" class="source-pane">
             <div class="pane-label">
               <strong>源章节 · {{ chapter.sourceTitle || '无对应原文' }}</strong>
               <div class="source-actions">
@@ -165,29 +171,15 @@
                   link
                   @click="insertSourceSelection"
                 >插入到光标</el-button>
-                <el-button v-if="chapter.hasSource" link @click="showDiff = !showDiff">
-                  {{ showDiff ? '查看原文' : '查看差异' }}
+                <el-button v-if="chapter.hasSource" link @click="showDiff = true">
+                  查看差异审阅
                 </el-button>
               </div>
               <el-button v-if="editable && chapter.hasSource" link @click="restoreSource">恢复为原文</el-button>
             </div>
-            <div v-if="showDiff" class="chapter-diff">
-              <p v-if="sourceDiff.truncated">章节较长，当前仅展示原文和工作稿；可用原文对照逐段查看。</p>
-              <div v-for="(line, index) in sourceDiff.lines" :key="index" :class="`diff-line diff-line--${line.kind}`">
-                <span>{{ line.kind === 'added' ? '+' : line.kind === 'removed' ? '−' : ' ' }}</span>
-                <template v-if="line.segments?.length">
-                  <span
-                    v-for="(segment, segmentIndex) in line.segments"
-                    :key="segmentIndex"
-                    :class="`diff-segment--${segment.kind}`"
-                  >{{ segment.text }}</span>
-                </template>
-                <span v-else class="diff-line-text">{{ line.text || ' ' }}</span>
-              </div>
-            </div>
-            <pre v-else ref="sourceTextRef">{{ chapter.sourceContent || '这是新增章节，没有对应原文。' }}</pre>
+            <pre ref="sourceTextRef">{{ chapter.sourceContent || '这是新增章节，没有对应原文。' }}</pre>
           </section>
-          <section class="draft-pane">
+          <section v-show="!showDiff" class="draft-pane">
             <div class="pane-label"><strong>重写正文</strong><span>自动保存约 1 秒</span></div>
             <div v-if="editable" class="rich-toolbar" role="toolbar" aria-label="正文格式">
               <el-button size="small" @click="toggleParagraph">段落</el-button>
@@ -207,6 +199,46 @@
             </div>
             <EditorContent v-if="editor" :editor="editor" class="rich-editor-surface" />
             <div v-else class="rich-editor-surface is-readonly" role="textbox" aria-readonly="true">{{ readableDraft }}</div>
+          </section>
+          <section v-show="showDiff" class="diff-review" aria-label="原文与重写稿差异审阅">
+            <div class="diff-review-toolbar">
+              <div class="diff-review-summary">
+                <strong>差异审阅</strong>
+                <span v-if="!sourceDiff.truncated">
+                  新增 {{ sourceDiff.addedCount }} 段 · 删除 {{ sourceDiff.removedCount }} 段
+                </span>
+              </div>
+              <div class="diff-review-actions">
+                <el-button
+                  size="small"
+                  :disabled="!diffReviewChangeCount"
+                  @click="navigateDiffReview(-1)"
+                >上一处</el-button>
+                <span v-if="diffReviewChangeCount" class="diff-review-position">
+                  {{ diffReviewPosition < 0 ? '未定位' : diffReviewPosition + 1 }}
+                  / {{ diffReviewChangeCount }} 处
+                </span>
+                <el-button
+                  size="small"
+                  :disabled="!diffReviewChangeCount"
+                  @click="navigateDiffReview(1)"
+                >下一处</el-button>
+                <el-button size="small" type="primary" plain @click="showDiff = false">
+                  返回编辑对照
+                </el-button>
+              </div>
+            </div>
+            <div v-if="!sourceDiff.truncated && sourceDiff.changeCount" class="diff-review-column-labels">
+              <strong>原文</strong>
+              <strong>重写正文</strong>
+            </div>
+            <p v-if="sourceDiff.truncated" class="diff-review-message">
+              本章内容超过差异审阅计算上限，请返回原文对照模式查看。
+            </p>
+            <p v-else-if="!sourceDiff.changeCount" class="diff-review-message">
+              原文与重写稿一致，暂无差异。
+            </p>
+            <div v-else ref="diffReviewRef" class="diff-review-content" />
           </section>
         </div>
 
@@ -506,6 +538,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch 
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { Editor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
+import { Diff2HtmlUI } from 'diff2html/lib-esm/ui/js/diff2html-ui-base.js'
+import 'diff2html/bundles/css/diff2html.min.css'
 import api from '@/utils/api'
 import { confirm, message } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
@@ -555,6 +589,10 @@ const deletedChapters = ref<ChapterSummary[]>([])
 const chapter = ref<ChapterDetail | null>(null)
 const editor = shallowRef<Editor | null>(null)
 const sourceTextRef = ref<HTMLElement | null>(null)
+const diffReviewRef = ref<HTMLElement | null>(null)
+const diffReviewRows = ref<HTMLElement[]>([])
+const diffReviewChangeCount = ref(0)
+const diffReviewPosition = ref(-1)
 const draftContent = ref('')
 const chapterTitle = ref('')
 const loading = ref(false)
@@ -683,13 +721,15 @@ const quickJumpMatches = computed(() => {
     || String(index + 1).startsWith(query)).slice(0, 30)
 })
 const sourceDiff = computed(() => {
-  if (!showDiff.value) return { lines: [], truncated: false }
+  if (!showDiff.value) {
+    return { patch: '', truncated: false, changeCount: 0, addedCount: 0, removedCount: 0 }
+  }
   const before = (chapter.value?.sourceContent || '').split(/\n\s*\n+/).map(item => item.trim()).filter(Boolean)
   const after = readableDraft.value.split(/\n\s*\n+/).map(item => item.trim()).filter(Boolean)
   const totalCharacters = before.reduce((sum, item) => sum + item.length, 0)
     + after.reduce((sum, item) => sum + item.length, 0)
   if (before.length > 500 || after.length > 500 || totalCharacters > 500_000) {
-    return { lines: [], truncated: true }
+    return { patch: '', truncated: true, changeCount: 0, addedCount: 0, removedCount: 0 }
   }
   const width = after.length + 1
   const table = Array.from({ length: before.length + 1 }, () => new Uint16Array(width))
@@ -714,8 +754,74 @@ const sourceDiff = computed(() => {
       lines.push({ kind: 'added', text: after[j++] })
     }
   }
-  return { lines: addCharacterDiffSegments(lines), truncated: false }
+  const addedCount = lines.filter(line => line.kind === 'added').length
+  const removedCount = lines.filter(line => line.kind === 'removed').length
+  const oldRange = before.length ? `1,${before.length}` : '0,0'
+  const newRange = after.length ? `1,${after.length}` : '0,0'
+  const patchLines = [
+    '--- a/chapter.txt',
+    '+++ b/chapter.txt',
+    `@@ -${oldRange} +${newRange} @@`,
+    ...lines.map(line => `${line.kind === 'same' ? ' ' : line.kind === 'removed' ? '-' : '+'}${line.text}`),
+  ]
+  return {
+    patch: patchLines.join('\n') + '\n',
+    truncated: false,
+    changeCount: addedCount + removedCount,
+    addedCount,
+    removedCount,
+  }
 })
+const renderDiffReview = async () => {
+  await nextTick()
+  const target = diffReviewRef.value
+  const diff = sourceDiff.value
+  if (!showDiff.value || !target || diff.truncated || !diff.changeCount) return
+
+  const review = new Diff2HtmlUI(target, diff.patch, {
+    outputFormat: 'side-by-side',
+    drawFileList: false,
+    matching: 'words',
+    matchingMaxComparisons: 2500,
+    maxLineSizeInBlockForComparison: 5000,
+    maxLineLengthHighlight: 10000,
+    diffStyle: 'word',
+    synchronisedScroll: true,
+    highlight: false,
+    fileListToggle: false,
+    fileContentToggle: false,
+    stickyFileHeaders: false,
+    smartSelection: false,
+    renderNothingWhenEmpty: true,
+  })
+  review.draw()
+
+  const [oldSide, newSide] = Array.from(target.querySelectorAll('.d2h-file-side-diff'))
+  const oldRows = Array.from(oldSide?.querySelectorAll<HTMLTableRowElement>('tbody tr') || [])
+  const newRows = Array.from(newSide?.querySelectorAll<HTMLTableRowElement>('tbody tr') || [])
+  diffReviewRows.value = oldRows.filter((row, index) =>
+    row.querySelector('.d2h-del, .d2h-ins') || newRows[index]?.querySelector('.d2h-del, .d2h-ins'))
+  diffReviewChangeCount.value = diffReviewRows.value.length
+  diffReviewPosition.value = -1
+}
+const navigateDiffReview = (direction: -1 | 1) => {
+  const rows = diffReviewRows.value
+  const container = diffReviewRef.value
+  if (!rows.length || !container) return
+
+  const baseIndex = diffReviewPosition.value < 0
+    ? direction > 0 ? -1 : 0
+    : diffReviewPosition.value
+  const nextIndex = (baseIndex + direction + rows.length) % rows.length
+  const target = rows[nextIndex]
+  const containerBounds = container.getBoundingClientRect()
+  const targetBounds = target.getBoundingClientRect()
+  const top = container.scrollTop + targetBounds.top - containerBounds.top
+    - (container.clientHeight - targetBounds.height) / 2
+  const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+  container.scrollTo({ top: Math.max(0, top), behavior })
+  diffReviewPosition.value = nextIndex
+}
 const historyDiff = computed(() => {
   if (!historyContent.value || historyContent.value.length + readableDraft.value.length > 500_000) {
     return { truncated: Boolean(historyContent.value), segments: [] }
@@ -831,6 +937,7 @@ const saveLabel = computed(() => ({
 }[saveState.value]))
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 let cursorSaveTimer: ReturnType<typeof setTimeout> | undefined
+let diffReviewRenderTimer: ReturnType<typeof setTimeout> | undefined
 let savingPromise: Promise<boolean> | null = null
 
 const statusLabel = (status: string) => ({
@@ -1761,7 +1868,10 @@ const restoreHistory = async () => {
   await loadProject()
 }
 
-const toggleSource = () => { showSource.value = !showSource.value }
+const toggleSource = () => {
+  showSource.value = !showSource.value
+  if (!showSource.value) showDiff.value = false
+}
 const openReader = async () => {
   if (!project.value || !(await saveNow())) return
   await router.push({ path: `/reader/${project.value.bookId}`,
@@ -1834,6 +1944,25 @@ const handleEditorKeydown = (event: KeyboardEvent) => {
 }
 
 watch(editable, value => editor.value?.setEditable(value))
+watch(
+  [showDiff, () => chapter.value?.sourceContent, readableDraft],
+  ([visible]) => {
+    if (visible) {
+      if (diffReviewRenderTimer) clearTimeout(diffReviewRenderTimer)
+      diffReviewRenderTimer = setTimeout(() => {
+        diffReviewRenderTimer = undefined
+        void renderDiffReview()
+      }, 120)
+      return
+    }
+    if (diffReviewRenderTimer) clearTimeout(diffReviewRenderTimer)
+    diffReviewRenderTimer = undefined
+    diffReviewRows.value = []
+    diffReviewChangeCount.value = 0
+    diffReviewPosition.value = -1
+  },
+  { flush: 'post' },
+)
 
 const beforeUnload = (event: BeforeUnloadEvent) => {
   if (saveState.value !== 'saved') {
@@ -1863,6 +1992,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
   if (cursorSaveTimer) clearTimeout(cursorSaveTimer)
+  if (diffReviewRenderTimer) clearTimeout(diffReviewRenderTimer)
   window.removeEventListener('beforeunload', beforeUnload)
   window.removeEventListener('keydown', handleEditorKeydown)
   editor.value?.destroy()
@@ -1910,23 +2040,138 @@ onBeforeUnmount(() => {
 .chapter-status-control button[aria-pressed='true'] { font-weight: 700; }
 .draft-notice, .conflict-notice { padding: 10px 14px; margin-bottom: 12px; border-radius: 10px; background: #fff1d8; color: #744711; }
 .writing-surface { display: grid; grid-template-columns: 1fr; gap: 16px; }
-.writing-surface.comparing { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.writing-surface.comparing {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto clamp(320px, 55vh, 760px);
+}
 .source-pane, .draft-pane { min-width: 0; }
+.writing-surface.comparing .source-pane,
+.writing-surface.comparing .draft-pane {
+  display: grid;
+  grid-row: 1 / 4;
+  grid-template-rows: subgrid;
+}
+.writing-surface.comparing .source-pane { grid-column: 1; }
+.writing-surface.comparing .draft-pane { grid-column: 2; }
+.writing-surface.comparing .pane-label { grid-row: 1; }
+.writing-surface.comparing .rich-toolbar { grid-row: 2; }
 .pane-label { display: flex; justify-content: space-between; align-items: center; min-height: 32px; color: var(--text-secondary, #748078); font-size: 12px; }
 .source-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .source-pane pre, .rich-editor-surface { box-sizing: border-box; width: 100%; min-height: 55vh; margin: 0; padding: 22px; border: 1px solid #8883; border-radius: 12px; background: var(--el-fill-color-lighter, #fafbf9); color: inherit; font-family: inherit; font-size: 16px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
 .source-pane pre { overflow: auto; }
-.chapter-diff { box-sizing: border-box; width: 100%; min-height: 55vh; max-height: 70vh; overflow: auto; padding: 14px; border: 1px solid #8883; border-radius: 12px; background: var(--el-fill-color-lighter, #fafbf9); font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
-.diff-line { padding: 3px 6px; border-radius: 4px; }
-.diff-line > span:first-child { display: inline-block; width: 20px; color: var(--text-tertiary); font-weight: 700; }
-.diff-line-text, .diff-segment--added, .diff-segment--removed { border-radius: 3px; }
-.diff-line--added .diff-line-text, .diff-segment--added { background: color-mix(in srgb, var(--el-color-success) 20%, transparent); }
-.diff-line--removed .diff-line-text, .diff-segment--removed { background: color-mix(in srgb, var(--el-color-danger) 18%, transparent); text-decoration: line-through; }
+.writing-surface.comparing .source-pane pre,
+.writing-surface.comparing .rich-editor-surface {
+  grid-row: 3;
+  min-height: 0;
+  max-height: none;
+}
+.writing-surface.comparing .rich-editor-surface { overflow: auto; }
+.writing-surface.diff-review-mode {
+  display: block;
+}
+
+.diff-review {
+  min-width: 0;
+}
+
+.diff-review-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.diff-review-summary,
+.diff-review-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.diff-review-summary span,
+.diff-review-position {
+  color: var(--text-secondary, #748078);
+  font-size: 12px;
+}
+
+.diff-review-column-labels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 8px;
+  color: var(--text-secondary, #748078);
+  font-size: 12px;
+}
+
+.diff-review-column-labels strong:last-child {
+  padding-left: 10px;
+}
+
+.diff-review-message {
+  margin: 0;
+  padding: 18px;
+  border: 1px solid var(--el-border-color-light, #d8dfd9);
+  border-radius: 12px;
+  background: var(--el-fill-color-lighter, #fafbf9);
+  color: var(--text-secondary, #748078);
+}
+
+.diff-review-content {
+  max-height: clamp(320px, 55vh, 760px);
+  overflow: auto;
+  border: 1px solid var(--el-border-color-light, #d8dfd9);
+  border-radius: 12px;
+  background: var(--el-bg-color, #fff);
+}
+
+.diff-review-content :deep(.d2h-wrapper) {
+  background: var(--el-bg-color, #fff);
+  color: var(--text-primary, #24342d);
+  font-family: inherit;
+}
+
+.diff-review-content :deep(.d2h-file-header) {
+  display: none;
+}
+
+.diff-review-content :deep(.d2h-file-wrapper) {
+  border: 0;
+}
+
+.diff-review-content :deep(.d2h-file-side-diff) {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.diff-review-content :deep(.d2h-diff-table) {
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.diff-review-content :deep(.d2h-code-side-linenumber) {
+  min-width: 46px;
+  width: 46px;
+  color: var(--text-secondary, #748078);
+}
+
+.diff-review-content :deep(.d2h-code-side-line),
+.diff-review-content :deep(.d2h-code-line-ctn) {
+  white-space: pre;
+}
+
+.diff-review-content :deep(.d2h-code-line-prefix) {
+  user-select: none;
+}
+.diff-segment--added { border-radius: 3px; background: color-mix(in srgb, var(--el-color-success) 20%, transparent); }
+.diff-segment--removed { border-radius: 3px; background: color-mix(in srgb, var(--el-color-danger) 18%, transparent); text-decoration: line-through; }
 .rich-toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; }
 .rich-editor-surface { min-height: 55vh; outline-color: var(--el-color-primary); }
 .rich-editor-surface:focus-within { border-color: var(--el-color-primary); }
 .rich-editor-surface.is-readonly { overflow: auto; }
 .rich-editor-surface :deep(.tiptap-content) { min-height: calc(55vh - 44px); outline: none; white-space: pre-wrap; overflow-wrap: anywhere; }
+.writing-surface.comparing .rich-editor-surface :deep(.tiptap-content) { min-height: 100%; }
 .rich-editor-surface :deep(.tiptap-content > :first-child) { margin-top: 0; }
 .rich-editor-surface :deep(.tiptap-content > :last-child) { margin-bottom: 0; }
 .rich-editor-surface :deep(blockquote) { margin: 1em 0; padding-left: 1em; border-left: 3px solid var(--el-border-color); color: var(--text-secondary, #748078); }
@@ -1977,6 +2222,18 @@ onBeforeUnmount(() => {
 .memo-list small { overflow: hidden; color: var(--text-secondary, #748078); text-overflow: ellipsis; white-space: nowrap; }
 .memo-form { display: grid; gap: 10px; }
 @media (prefers-reduced-motion: reduce) { .memo-type-control > span { transition: none; } }
-@media (max-width: 820px) { .workspace-body { grid-template-columns: 1fr; } .chapter-sidebar { max-height: 180px; } .writing-surface.comparing { grid-template-columns: 1fr; } }
+@media (max-width: 820px) {
+  .workspace-body { grid-template-columns: 1fr; }
+  .chapter-sidebar { max-height: 180px; }
+  .writing-surface.comparing { grid-template-columns: 1fr; grid-template-rows: none; }
+  .writing-surface.comparing .source-pane,
+  .writing-surface.comparing .draft-pane { display: block; grid-column: auto; grid-row: auto; }
+  .writing-surface.comparing .pane-label,
+  .writing-surface.comparing .rich-toolbar,
+  .writing-surface.comparing .source-pane pre,
+  .writing-surface.comparing .rich-editor-surface { grid-row: auto; }
+  .writing-surface.comparing .source-pane pre,
+  .writing-surface.comparing .rich-editor-surface { min-height: 55vh; }
+}
 @media (prefers-reduced-motion: reduce) { .chapter-status-slider { transition: none; } }
 </style>

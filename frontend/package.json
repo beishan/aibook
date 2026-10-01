@@ -1,6 +1,6 @@
 {
   "name": "aibook-frontend",
-  "version": "1.45.94",
+  "version": "1.45.97",
   "description": "汗牛充栋 - 阅读书籍管理系统前端",
   "type": "module",
   "scripts": {
@@ -53,6 +53,7 @@
     "@tiptap/starter-kit": "^3.31.3",
     "@tiptap/vue-3": "^3.31.3",
     "axios": "^1.6.0",
+    "diff2html": "^3.4.56",
     "echarts": "^6.1.0",
     "element-plus": "^2.4.0",
     "epubjs": "^0.3.93",
