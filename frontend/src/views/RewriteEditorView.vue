@@ -1951,13 +1951,27 @@ const handleEditorKeydown = (event: KeyboardEvent) => {
 }
 
 const updateEditorHeight = () => {
-  if (showDiff.value) return
-
   const workspace = rewriteWorkspaceRef.value
-  const editorSurface = draftPaneRef.value?.querySelector<HTMLElement>('.rich-editor-surface')
-  if (!workspace || !editorSurface) return
+  if (!workspace) return
 
   const bottomGap = 24
+  if (showDiff.value) {
+    const diffContent = diffReviewRef.value
+    if (!diffContent) return
+
+    const availableHeight = Math.floor(
+      window.innerHeight - diffContent.getBoundingClientRect().top - bottomGap,
+    )
+    workspace.style.setProperty(
+      '--rewrite-diff-review-height',
+      `${Math.max(0, availableHeight)}px`,
+    )
+    return
+  }
+
+  const editorSurface = draftPaneRef.value?.querySelector<HTMLElement>('.rich-editor-surface')
+  if (!editorSurface) return
+
   const availableHeight = Math.floor(window.innerHeight - editorSurface.getBoundingClientRect().top - bottomGap)
   workspace.style.setProperty('--rewrite-editor-height', `${Math.max(220, availableHeight)}px`)
 }
@@ -2040,6 +2054,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .rewrite-workspace {
   --rewrite-editor-height: clamp(220px, calc(100vh - 380px), 900px);
+  --rewrite-diff-review-height: calc(100vh - 420px);
   max-width: 1600px;
   min-height: 75vh;
   margin: 0 auto;
@@ -2181,9 +2196,10 @@ onBeforeUnmount(() => {
 }
 
 .diff-review-content {
+  box-sizing: border-box;
   position: relative;
   contain: paint;
-  max-height: clamp(320px, 55vh, 760px);
+  height: var(--rewrite-diff-review-height);
   overflow: auto;
   border: 1px solid var(--el-border-color-light, #d8dfd9);
   border-radius: 12px;

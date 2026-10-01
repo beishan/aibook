@@ -96,6 +96,7 @@ public class UserPreference {
     @Column(name = "dock_navigation_settings", columnDefinition = "TEXT")
     private String dockNavigationSettings;
     @Column(name = "rewrite_search_rules", columnDefinition = "TEXT default '[]'")
+    @Builder.Default
     private String rewriteSearchRules = "[]";
     @Column(name = "ui_font_id")
     private Long uiFontId;
