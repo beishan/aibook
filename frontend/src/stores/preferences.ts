@@ -364,7 +364,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     preferences: Partial<UserPreferences>,
     expectedToken = localStorage.getItem('token'),
   ) => {
-    if (!expectedToken) return
+    if (!expectedToken) return Promise.resolve()
 
     saveQueue = saveQueue
       .catch(() => undefined)
@@ -375,6 +375,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
       .catch(error => {
         console.error('Failed to persist user preferences:', error)
       })
+    return saveQueue
   }
 
   const setTheme = (theme: ThemeId, syncRemote = true) => {
@@ -609,6 +610,26 @@ export const usePreferencesStore = defineStore('preferences', () => {
     else persist()
   }
 
+  const flushReaderSettings = () => {
+    if (readerSettingsSaveTimer) {
+      clearTimeout(readerSettingsSaveTimer)
+      readerSettingsSaveTimer = null
+    }
+
+    const accountToken = localStorage.getItem('token')
+    const normalized = normalizeReaderSettings(readerSettings.value)
+    if (!accountToken) {
+      try {
+        localStorage.setItem(READER_SETTINGS_STORAGE_KEY, JSON.stringify(normalized))
+      } catch {
+        // localStorage 不可用时仍保留当前会话内的阅读设置。
+      }
+      return Promise.resolve()
+    }
+
+    return persistRemote({ readerSettings: normalized }, accountToken)
+  }
+
   const hydrate = async (force = false) => {
     if (hydrated.value && !force) return
     if (!localStorage.getItem('token')) return
@@ -818,6 +839,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setUiFontId,
     setReaderFontId,
     setReaderSettings,
+    flushReaderSettings,
     hydrate,
     resetHydration,
   }

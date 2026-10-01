@@ -1031,6 +1031,7 @@ const appearanceOptions: Array<{
 
 const settings = ref<ReaderSettings>({ ...DEFAULT_READER_SETTINGS })
 let readerSettingsReady = false
+let readerSettingsDirty = false
 
 const isPaginationMode = computed(
   () => settings.value.paginationMode || performancePaginationMode.value
@@ -3266,8 +3267,18 @@ const turnNext = () => {
   readerBody?.scrollBy({ top: readerBody.clientHeight * 0.9, behavior: 'smooth' })
 }
 
-const goBack = () => {
+const flushPendingReaderSettings = async () => {
+  if (!readerSettingsReady) return
+  while (readerSettingsDirty) {
+    readerSettingsDirty = false
+    preferencesStore.setReaderSettings(settings.value)
+    await preferencesStore.flushReaderSettings()
+  }
+}
+
+const goBack = async () => {
   if (isQuickWindow.value && window.parent !== window) {
+    await flushPendingReaderSettings()
     window.parent.postMessage(
       { type: 'aibook:quick-reader-close' },
       window.location.origin,
@@ -3394,7 +3405,10 @@ watch(() => settings.value, () => {
       console.warn('[Reader] Failed to apply EPUB settings:', error)
     })
   }
-  if (readerSettingsReady) preferencesStore.setReaderSettings(settings.value)
+  if (readerSettingsReady) {
+    readerSettingsDirty = true
+    preferencesStore.setReaderSettings(settings.value)
+  }
   schedulePaginationLayout()
 }, { deep: true })
 
@@ -3490,6 +3504,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  void flushPendingReaderSettings()
+
   if (paginationLayoutFrame !== null) {
     cancelAnimationFrame(paginationLayoutFrame)
     paginationLayoutFrame = null

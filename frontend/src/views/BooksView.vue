@@ -614,6 +614,7 @@
       :style="quickReaderDialogStyle"
       :show-close="false"
       :close-on-click-modal="false"
+      :close-on-press-escape="false"
       append-to-body
       destroy-on-close
       @closed="resetQuickReader"
@@ -625,6 +626,18 @@
         :src="quickReaderSrc"
         :title="`小窗阅读：${quickReaderBook?.title || ''}`"
         allow="fullscreen"
+      />
+      <button
+        class="book-quick-reader-drag"
+        type="button"
+        aria-label="拖动调整阅读窗口位置，也可使用方向键"
+        title="拖动调整窗口位置"
+        @pointerdown="startQuickReaderMove"
+        @pointermove="updateQuickReaderMove"
+        @pointerup="stopQuickReaderMove"
+        @pointercancel="stopQuickReaderMove"
+        @lostpointercapture="stopQuickReaderMove"
+        @keydown="moveQuickReaderWithKeyboard"
       />
       <button
         class="book-quick-reader-resize"
@@ -721,6 +734,13 @@ const quickReaderOpen = ref(false)
 const quickReaderBook = ref<Book | null>(null)
 const quickReaderFrame = ref<HTMLIFrameElement | null>(null)
 const quickReaderSize = ref({ width: 0, height: 0, left: 0, top: 0 })
+const quickReaderMoveStart = ref<{
+  pointerId: number
+  x: number
+  y: number
+  left: number
+  top: number
+} | null>(null)
 const quickReaderResizeStart = ref<{
   pointerId: number
   x: number
@@ -1185,6 +1205,67 @@ const constrainQuickReaderSize = (width: number, height: number) => {
   }
 }
 
+const constrainQuickReaderPosition = (left: number, top: number) => {
+  const { width, height } = quickReaderSize.value
+  const maxLeft = Math.max(12, window.innerWidth - width - 12)
+  const maxTop = Math.max(12, window.innerHeight - height - 12)
+
+  quickReaderSize.value = {
+    ...quickReaderSize.value,
+    left: Math.round(Math.min(maxLeft, Math.max(12, left))),
+    top: Math.round(Math.min(maxTop, Math.max(12, top))),
+  }
+}
+
+const startQuickReaderMove = (event: PointerEvent) => {
+  if (event.button !== 0 || !quickReaderOpen.value) return
+  const handle = event.currentTarget
+  if (!(handle instanceof HTMLElement)) return
+
+  event.preventDefault()
+  handle.setPointerCapture(event.pointerId)
+  quickReaderMoveStart.value = {
+    pointerId: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    left: quickReaderSize.value.left,
+    top: quickReaderSize.value.top,
+  }
+}
+
+const updateQuickReaderMove = (event: PointerEvent) => {
+  const start = quickReaderMoveStart.value
+  if (!start || event.pointerId !== start.pointerId) return
+  constrainQuickReaderPosition(
+    start.left + event.clientX - start.x,
+    start.top + event.clientY - start.y,
+  )
+}
+
+const stopQuickReaderMove = (event: PointerEvent) => {
+  if (quickReaderMoveStart.value?.pointerId === event.pointerId) {
+    quickReaderMoveStart.value = null
+  }
+}
+
+const moveQuickReaderWithKeyboard = (event: KeyboardEvent) => {
+  const step = event.shiftKey ? 48 : 16
+  const deltas: Record<string, [number, number]> = {
+    ArrowRight: [step, 0],
+    ArrowLeft: [-step, 0],
+    ArrowDown: [0, step],
+    ArrowUp: [0, -step],
+  }
+  const delta = deltas[event.key]
+  if (!delta) return
+
+  event.preventDefault()
+  constrainQuickReaderPosition(
+    quickReaderSize.value.left + delta[0],
+    quickReaderSize.value.top + delta[1],
+  )
+}
+
 const startQuickReaderResize = (event: PointerEvent) => {
   if (event.button !== 0 || !quickReaderOpen.value) return
   const handle = event.currentTarget
@@ -1261,6 +1342,8 @@ const handleQuickReaderMessage = (event: MessageEvent) => {
 
 const resetQuickReader = () => {
   quickReaderBook.value = null
+  quickReaderMoveStart.value = null
+  quickReaderResizeStart.value = null
 }
 
 const handleDelete = async (id: number) => {
@@ -2224,10 +2307,47 @@ onBeforeUnmount(() => {
   background: var(--surface-card);
 }
 
+.book-quick-reader-drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  width: 100%;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 16px 16px 0 0;
+  background: color-mix(in srgb, var(--surface-card, #fff) 92%, var(--text-secondary, #667085));
+  color: var(--text-secondary, #667085);
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.book-quick-reader-drag::before {
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 34px;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+  opacity: 0.45;
+}
+
+.book-quick-reader-drag:focus-visible {
+  outline: 2px solid var(--primary, #409eff);
+  outline-offset: -2px;
+}
+
 :global(.book-quick-reader-dialog.el-dialog) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 0;
+  border-radius: 16px;
 }
 
 :global(.book-quick-reader-dialog .el-dialog__header) {
@@ -2241,6 +2361,7 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow: hidden;
   padding: 0;
+  border-radius: inherit;
 }
 
 .book-quick-reader-resize {
