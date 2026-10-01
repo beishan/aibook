@@ -705,7 +705,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { useBookStore } from '@/stores/book'
 import { useThemeStore } from '@/stores/theme'
 import {
@@ -1032,6 +1032,7 @@ const appearanceOptions: Array<{
 const settings = ref<ReaderSettings>({ ...DEFAULT_READER_SETTINGS })
 let readerSettingsReady = false
 let readerSettingsDirty = false
+let readerSettingsFlushPromise: Promise<unknown> | null = null
 
 const isPaginationMode = computed(
   () => settings.value.paginationMode || performancePaginationMode.value
@@ -2404,6 +2405,8 @@ const setReadingMode = async (mode: ReaderFlowMode) => {
   }
   performancePaginationMode.value = false
   settings.value.paginationMode = mode === 'pagination'
+  await nextTick()
+  await flushPendingReaderSettings(true)
   if (mode === 'pagination') {
     schedulePaginationLayout(textIndex)
     return
@@ -3267,17 +3270,33 @@ const turnNext = () => {
   readerBody?.scrollBy({ top: readerBody.clientHeight * 0.9, behavior: 'smooth' })
 }
 
-const flushPendingReaderSettings = async () => {
+const flushPendingReaderSettings = async (force = false) => {
   if (!readerSettingsReady) return
-  while (readerSettingsDirty) {
+  if (force) readerSettingsDirty = true
+
+  while (readerSettingsDirty || readerSettingsFlushPromise) {
+    if (readerSettingsFlushPromise) {
+      await readerSettingsFlushPromise
+      continue
+    }
+
     readerSettingsDirty = false
     preferencesStore.setReaderSettings(settings.value)
-    await preferencesStore.flushReaderSettings()
+    const flushPromise = preferencesStore.flushReaderSettings()
+    readerSettingsFlushPromise = flushPromise
+    try {
+      await flushPromise
+    } finally {
+      if (readerSettingsFlushPromise === flushPromise) {
+        readerSettingsFlushPromise = null
+      }
+    }
   }
 }
 
 const goBack = async () => {
   if (isQuickWindow.value && window.parent !== window) {
+    await nextTick()
     await flushPendingReaderSettings()
     window.parent.postMessage(
       { type: 'aibook:quick-reader-close' },
@@ -3287,6 +3306,11 @@ const goBack = async () => {
   }
   router.back()
 }
+
+onBeforeRouteLeave(async () => {
+  await nextTick()
+  await flushPendingReaderSettings()
+})
 
 const handleDownload = async () => {
   if (!book.value || downloadingBook.value) return
