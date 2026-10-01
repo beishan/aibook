@@ -2181,6 +2181,8 @@ onBeforeUnmount(() => {
 }
 
 .diff-review-content {
+  position: relative;
+  contain: paint;
   max-height: clamp(320px, 55vh, 760px);
   overflow: auto;
   border: 1px solid var(--el-border-color-light, #d8dfd9);
