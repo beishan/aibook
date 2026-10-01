@@ -357,6 +357,14 @@ public class User implements UserDetails {
         preference().setReaderSettings(value);
     }
 
+    public String getQuickReaderWindow() {
+        return preference().getQuickReaderWindow();
+    }
+
+    public void setQuickReaderWindow(String value) {
+        preference().setQuickReaderWindow(value);
+    }
+
     public Boolean getAllBookCoversHidden() {
         return preference().getAllBookCoversHidden();
     }

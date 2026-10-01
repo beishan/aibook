@@ -47,6 +47,12 @@ export type ReaderAppearance = 'classic' | 'readingRoom' | 'trialReader'
 export type ReaderEpubEngine = 'epubjs' | 'readium'
 export type ReaderContentWidth = 'narrow' | 'medium' | 'wide' | 'wider' | 'full'
 export type ReaderScreenMode = 'single' | 'double'
+export interface QuickReaderWindow {
+  width: number
+  height: number
+  left: number
+  top: number
+}
 
 export interface ReaderSettings {
   appearance: ReaderAppearance
@@ -107,6 +113,7 @@ interface UserPreferences {
   uiFontId: number | null
   readerFontId: number | null
   readerSettings: ReaderSettings | null
+  quickReaderWindow: QuickReaderWindow | null
 }
 
 const LIBRARY_VIEW_MODE_KEY = 'ai-book-view-mode'
@@ -125,7 +132,9 @@ const DOCK_MAGNIFICATION_KEY = 'aibook-dock-magnification'
 const DOCK_BLUR_KEY = 'aibook-dock-blur'
 const DOCK_ICON_STYLE_KEY = 'aibook-dock-icon-style'
 export const READER_SETTINGS_STORAGE_KEY = 'ai-book-reader-settings'
+const QUICK_READER_WINDOW_STORAGE_KEY = 'aibook.quick-reader-window'
 const READER_SETTINGS_SAVE_DELAY_MS = 500
+const QUICK_READER_WINDOW_SAVE_DELAY_MS = 250
 const DEFAULT_LIBRARY_PAGE_SIZE: LibraryPageSize = 10
 const DEFAULT_AUTHOR_PAGE_SIZE: AuthorPageSize = 10
 const DEFAULT_SCAN_THREAD_COUNT = 2
@@ -261,6 +270,25 @@ const normalizedNumber = (value: unknown, fallback: number, min: number, max: nu
   return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : fallback
 }
 
+const isQuickReaderWindow = (value: unknown): value is QuickReaderWindow => {
+  if (!value || typeof value !== 'object') return false
+  const window = value as Partial<QuickReaderWindow>
+  return Number.isInteger(window.width) && window.width! >= 120 && window.width! <= 10000
+    && Number.isInteger(window.height) && window.height! >= 160 && window.height! <= 10000
+    && Number.isInteger(window.left) && window.left! >= 0 && window.left! <= 10000
+    && Number.isInteger(window.top) && window.top! >= 0 && window.top! <= 10000
+}
+
+const readLocalQuickReaderWindow = (): QuickReaderWindow | null => {
+  try {
+    const saved = localStorage.getItem(QUICK_READER_WINDOW_STORAGE_KEY)
+    const parsed = saved ? JSON.parse(saved) : null
+    return isQuickReaderWindow(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 export const normalizeReaderSettings = (value: unknown): ReaderSettings => {
   const source = value && typeof value === 'object' ? value as Partial<ReaderSettings> : {}
   const fontFamily = typeof source.fontFamily === 'string'
@@ -356,9 +384,13 @@ export const usePreferencesStore = defineStore('preferences', () => {
       ? { ...DEFAULT_READER_SETTINGS }
       : readLocalReaderSettings(),
   )
+  const quickReaderWindow = ref<QuickReaderWindow | null>(
+    localStorage.getItem('token') ? null : readLocalQuickReaderWindow(),
+  )
   const hydrated = ref(false)
   let saveQueue: Promise<unknown> = Promise.resolve()
   let readerSettingsSaveTimer: ReturnType<typeof setTimeout> | null = null
+  let quickReaderWindowSaveTimer: ReturnType<typeof setTimeout> | null = null
 
   const persistRemote = (
     preferences: Partial<UserPreferences>,
@@ -630,6 +662,56 @@ export const usePreferencesStore = defineStore('preferences', () => {
     return persistRemote({ readerSettings: normalized }, accountToken)
   }
 
+  const setQuickReaderWindow = (
+    value: QuickReaderWindow,
+    syncRemote = true,
+    debounceRemote = true,
+  ) => {
+    if (!isQuickReaderWindow(value)) return
+    const normalized = { ...value }
+    quickReaderWindow.value = normalized
+    const accountToken = localStorage.getItem('token')
+    if (!accountToken) {
+      try {
+        localStorage.setItem(QUICK_READER_WINDOW_STORAGE_KEY, JSON.stringify(normalized))
+      } catch {
+        // localStorage 不可用时仍保留当前会话内的窗口尺寸与位置。
+      }
+      return
+    }
+    if (!syncRemote) return
+    if (quickReaderWindowSaveTimer) clearTimeout(quickReaderWindowSaveTimer)
+    const persist = () => {
+      quickReaderWindowSaveTimer = null
+      persistRemote({ quickReaderWindow: normalized }, accountToken)
+    }
+    if (debounceRemote) {
+      quickReaderWindowSaveTimer = setTimeout(persist, QUICK_READER_WINDOW_SAVE_DELAY_MS)
+    } else {
+      persist()
+    }
+  }
+
+  const flushQuickReaderWindow = () => {
+    if (quickReaderWindowSaveTimer) {
+      clearTimeout(quickReaderWindowSaveTimer)
+      quickReaderWindowSaveTimer = null
+    }
+
+    const value = quickReaderWindow.value
+    if (!value) return Promise.resolve()
+    const accountToken = localStorage.getItem('token')
+    if (!accountToken) {
+      try {
+        localStorage.setItem(QUICK_READER_WINDOW_STORAGE_KEY, JSON.stringify(value))
+      } catch {
+        // localStorage 不可用时仍保留当前会话内的窗口尺寸与位置。
+      }
+      return Promise.resolve()
+    }
+    return persistRemote({ quickReaderWindow: value }, accountToken)
+  }
+
   const hydrate = async (force = false) => {
     if (hydrated.value && !force) return
     if (!localStorage.getItem('token')) return
@@ -758,6 +840,18 @@ export const usePreferencesStore = defineStore('preferences', () => {
         false
       )
 
+      if (isQuickReaderWindow(data.quickReaderWindow)) {
+        setQuickReaderWindow(data.quickReaderWindow, false)
+      } else {
+        const localWindow = readLocalQuickReaderWindow()
+        if (localWindow) {
+          setQuickReaderWindow(localWindow, false)
+          missingPreferences.quickReaderWindow = localWindow
+        } else {
+          quickReaderWindow.value = null
+        }
+      }
+
       if (data.readerSettings) {
         setReaderSettings(data.readerSettings, false)
       } else {
@@ -783,7 +877,14 @@ export const usePreferencesStore = defineStore('preferences', () => {
       clearTimeout(readerSettingsSaveTimer)
       readerSettingsSaveTimer = null
     }
+    if (quickReaderWindowSaveTimer) {
+      clearTimeout(quickReaderWindowSaveTimer)
+      quickReaderWindowSaveTimer = null
+    }
     readerSettings.value = readLocalReaderSettings()
+    quickReaderWindow.value = localStorage.getItem('token')
+      ? null
+      : readLocalQuickReaderWindow()
     uiFontId.value = null
     readerFontId.value = null
     void useFontStore().applySystemFont(null)
@@ -809,6 +910,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     uiFontId,
     readerFontId,
     readerSettings,
+    quickReaderWindow,
     hydrated,
     setTheme,
     setLibraryViewMode,
@@ -840,6 +942,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setReaderFontId,
     setReaderSettings,
     flushReaderSettings,
+    setQuickReaderWindow,
+    flushQuickReaderWindow,
     hydrate,
     resetHydration,
   }

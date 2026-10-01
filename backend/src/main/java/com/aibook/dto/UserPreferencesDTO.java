@@ -39,6 +39,7 @@ public class UserPreferencesDTO {
     private Long uiFontId;
     private Long readerFontId;
     private ReaderSettingsDTO readerSettings;
+    private QuickReaderWindowDTO quickReaderWindow;
 
     @JsonIgnore
     private boolean uiFontIdPresent;
@@ -272,6 +273,14 @@ public class UserPreferencesDTO {
         this.readerSettings = readerSettings;
     }
 
+    public QuickReaderWindowDTO getQuickReaderWindow() {
+        return quickReaderWindow;
+    }
+
+    public void setQuickReaderWindow(QuickReaderWindowDTO quickReaderWindow) {
+        this.quickReaderWindow = quickReaderWindow;
+    }
+
     @JsonIgnore
     public boolean hasUiFontId() {
         return uiFontIdPresent;
@@ -421,8 +430,63 @@ public class UserPreferencesDTO {
             return this;
         }
 
+        public UserPreferencesDTOBuilder quickReaderWindow(
+                QuickReaderWindowDTO quickReaderWindow) {
+            value.setQuickReaderWindow(quickReaderWindow);
+            return this;
+        }
+
         public UserPreferencesDTO build() {
             return value;
+        }
+    }
+
+    public static class QuickReaderWindowDTO {
+        private Integer width;
+        private Integer height;
+        private Integer left;
+        private Integer top;
+
+        public QuickReaderWindowDTO() {
+        }
+
+        public QuickReaderWindowDTO(Integer width, Integer height, Integer left, Integer top) {
+            this.width = width;
+            this.height = height;
+            this.left = left;
+            this.top = top;
+        }
+
+        public Integer getWidth() {
+            return width;
+        }
+
+        public void setWidth(Integer width) {
+            this.width = width;
+        }
+
+        public Integer getHeight() {
+            return height;
+        }
+
+        public void setHeight(Integer height) {
+            this.height = height;
+        }
+
+        public Integer getLeft() {
+            return left;
+        }
+
+        public void setLeft(Integer left) {
+            this.left = left;
+        }
+
+        public Integer getTop() {
+            return top;
+        }
+
+        public void setTop(Integer top) {
+            this.top = top;
         }
     }
 

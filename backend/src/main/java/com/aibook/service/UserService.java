@@ -268,6 +268,10 @@ public class UserService implements UserDetailsService {
             user.setReaderSettings(serializeReaderSettings(
                     normalizeReaderSettings(request.getReaderSettings())));
         }
+        if (request.getQuickReaderWindow() != null) {
+            user.setQuickReaderWindow(serializeQuickReaderWindow(
+                    normalizeQuickReaderWindow(request.getQuickReaderWindow())));
+        }
 
         return toPreferences(userRepository.save(user));
     }
@@ -311,6 +315,7 @@ public class UserService implements UserDetailsService {
                 .uiFontId(activeFontId(user.getUiFontId()))
                 .readerFontId(activeFontId(user.getReaderFontId()))
                 .readerSettings(readReaderSettings(user.getReaderSettings()))
+                .quickReaderWindow(readQuickReaderWindow(user.getQuickReaderWindow()))
                 .build();
     }
 
@@ -599,6 +604,39 @@ public class UserService implements UserDetailsService {
         try {
             return normalizeReaderSettings(OBJECT_MAPPER.readValue(
                     value, UserPreferencesDTO.ReaderSettingsDTO.class));
+        } catch (JsonProcessingException | IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    private UserPreferencesDTO.QuickReaderWindowDTO normalizeQuickReaderWindow(
+            UserPreferencesDTO.QuickReaderWindowDTO window) {
+        if (window == null) {
+            return null;
+        }
+        requireRange("小窗阅读宽度", requireValue("小窗阅读宽度", window.getWidth()), 120, 10000);
+        requireRange("小窗阅读高度", requireValue("小窗阅读高度", window.getHeight()), 160, 10000);
+        requireRange("小窗阅读左侧位置", requireValue("小窗阅读左侧位置", window.getLeft()), 0, 10000);
+        requireRange("小窗阅读顶部位置", requireValue("小窗阅读顶部位置", window.getTop()), 0, 10000);
+        return window;
+    }
+
+    private String serializeQuickReaderWindow(
+            UserPreferencesDTO.QuickReaderWindowDTO window) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(window);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("无法保存小窗阅读窗口状态", exception);
+        }
+    }
+
+    private UserPreferencesDTO.QuickReaderWindowDTO readQuickReaderWindow(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return normalizeQuickReaderWindow(OBJECT_MAPPER.readValue(
+                    value, UserPreferencesDTO.QuickReaderWindowDTO.class));
         } catch (JsonProcessingException | IllegalArgumentException exception) {
             return null;
         }

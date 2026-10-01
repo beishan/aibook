@@ -697,6 +697,7 @@ const {
   libraryViewMode: viewMode,
   libraryCardPageSize,
   libraryListPageSize,
+  quickReaderWindow,
 } = storeToRefs(preferencesStore)
 
 const pageSize = computed<LibraryPageSize>({
@@ -1178,17 +1179,56 @@ const handleListClick = (bookId: number) => {
 const openQuickReader = (book: Book) => {
   const maxWidth = Math.max(120, window.innerWidth - 24)
   const maxHeight = Math.max(160, window.innerHeight - 24)
-  const width = Math.min(maxWidth, Math.max(Math.min(560, maxWidth), window.innerWidth * 0.96))
-  const height = Math.min(maxHeight, Math.max(Math.min(360, maxHeight), window.innerHeight * 0.94))
+  const defaultWidth = Math.min(
+    maxWidth,
+    Math.max(Math.min(560, maxWidth), window.innerWidth * 0.96),
+  )
+  const defaultHeight = Math.min(
+    maxHeight,
+    Math.max(Math.min(360, maxHeight), window.innerHeight * 0.94),
+  )
+  const minWidth = Math.min(520, maxWidth)
+  const minHeight = Math.min(320, maxHeight)
+  const width = Math.min(
+    maxWidth,
+    Math.max(minWidth, quickReaderWindow.value?.width ?? defaultWidth),
+  )
+  const height = Math.min(
+    maxHeight,
+    Math.max(minHeight, quickReaderWindow.value?.height ?? defaultHeight),
+  )
+  const maxLeft = Math.max(12, window.innerWidth - width - 12)
+  const maxTop = Math.max(12, window.innerHeight - height - 12)
+  const left = Math.min(
+    maxLeft,
+    Math.max(12, quickReaderWindow.value?.left ?? (window.innerWidth - width) / 2),
+  )
+  const top = Math.min(
+    maxTop,
+    Math.max(12, quickReaderWindow.value?.top ?? (window.innerHeight - height) / 2),
+  )
 
   quickReaderSize.value = {
     width: Math.round(width),
     height: Math.round(height),
-    left: Math.round((window.innerWidth - width) / 2),
-    top: Math.round((window.innerHeight - height) / 2),
+    left: Math.round(left),
+    top: Math.round(top),
   }
   quickReaderBook.value = book
   quickReaderOpen.value = true
+}
+
+const saveQuickReaderWindow = (debounceRemote = true) => {
+  preferencesStore.setQuickReaderWindow(
+    {
+      width: Math.round(quickReaderSize.value.width),
+      height: Math.round(quickReaderSize.value.height),
+      left: Math.round(quickReaderSize.value.left),
+      top: Math.round(quickReaderSize.value.top),
+    },
+    true,
+    debounceRemote,
+  )
 }
 
 const constrainQuickReaderSize = (width: number, height: number) => {
@@ -1245,6 +1285,7 @@ const updateQuickReaderMove = (event: PointerEvent) => {
 const stopQuickReaderMove = (event: PointerEvent) => {
   if (quickReaderMoveStart.value?.pointerId === event.pointerId) {
     quickReaderMoveStart.value = null
+    saveQuickReaderWindow()
   }
 }
 
@@ -1264,6 +1305,7 @@ const moveQuickReaderWithKeyboard = (event: KeyboardEvent) => {
     quickReaderSize.value.left + delta[0],
     quickReaderSize.value.top + delta[1],
   )
+  saveQuickReaderWindow()
 }
 
 const startQuickReaderResize = (event: PointerEvent) => {
@@ -1294,6 +1336,7 @@ const updateQuickReaderResize = (event: PointerEvent) => {
 const stopQuickReaderResize = (event: PointerEvent) => {
   if (quickReaderResizeStart.value?.pointerId === event.pointerId) {
     quickReaderResizeStart.value = null
+    saveQuickReaderWindow()
   }
 }
 
@@ -1313,6 +1356,7 @@ const resizeQuickReaderWithKeyboard = (event: KeyboardEvent) => {
     quickReaderSize.value.width + delta[0],
     quickReaderSize.value.height + delta[1],
   )
+  saveQuickReaderWindow()
 }
 
 const handleQuickReaderViewportResize = () => {
@@ -1341,6 +1385,7 @@ const handleQuickReaderMessage = (event: MessageEvent) => {
 }
 
 const resetQuickReader = () => {
+  void preferencesStore.flushQuickReaderWindow()
   quickReaderBook.value = null
   quickReaderMoveStart.value = null
   quickReaderResizeStart.value = null

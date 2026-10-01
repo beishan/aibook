@@ -105,6 +105,8 @@ public class UserPreference {
 
     @Column(name = "reader_settings", columnDefinition = "TEXT")
     private String readerSettings;
+    @Column(name = "quick_reader_window", columnDefinition = "TEXT")
+    private String quickReaderWindow;
     @Column(name = "all_book_covers_hidden")
     private Boolean allBookCoversHidden;
 
