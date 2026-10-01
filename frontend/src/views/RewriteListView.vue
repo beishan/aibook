@@ -348,12 +348,12 @@ watch(filter, () => {
 .rewrite-header h1 { margin: 4px 0 8px; font-size: clamp(28px, 4vw, 40px); }
 .rewrite-header p { margin: 0; color: var(--text-secondary, #728078); }
 .eyebrow { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
-.status-tabs { position: relative; display: flex; width: min(100%, 760px); padding: 4px; border-radius: 15px; background: rgba(128, 145, 135, .15); }
+.status-tabs { position: relative; display: flex; box-sizing: border-box; width: 100%; padding: 4px; border-radius: 15px; background: rgba(128, 145, 135, .15); }
 .status-slider { position: absolute; inset: 4px auto 4px 4px; width: calc((100% - 8px) / 5); border-radius: 11px; background: var(--el-bg-color, #fff); box-shadow: 0 2px 10px #0001; transition: transform .25s ease; }
 .status-tabs button { position: relative; flex: 1 1 0; min-width: 0; border: 0; background: none; padding: 9px 8px; color: inherit; white-space: nowrap; cursor: pointer; }
 .status-tabs button.active { font-weight: 700; }
 .status-tabs button:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: -2px; border-radius: 10px; }
-.project-search { display: flex; gap: 8px; width: min(100%, 760px); margin-top: 16px; }
+.project-search { display: flex; box-sizing: border-box; gap: 8px; width: 100%; margin-top: 16px; }
 .project-search :deep(.el-input) { flex: 1; min-width: 0; }
 .project-grid { min-height: 260px; display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 18px; margin-top: 24px; }
 .project-card { padding: 22px; border: 1px solid var(--el-border-color-light, #d8dfd9); border-radius: 20px; background: var(--el-bg-color, #fff); box-shadow: 0 10px 32px #183b2510; }
