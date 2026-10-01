@@ -205,7 +205,7 @@
               <div class="diff-review-summary">
                 <strong>差异审阅</strong>
                 <span v-if="!sourceDiff.truncated">
-                  新增 {{ sourceDiff.addedCount }} 段 · 删除 {{ sourceDiff.removedCount }} 段
+                  新增 {{ sourceDiff.addedCount }} 行 · 删除 {{ sourceDiff.removedCount }} 行
                 </span>
               </div>
               <div class="diff-review-actions">
@@ -724,11 +724,15 @@ const sourceDiff = computed(() => {
   if (!showDiff.value) {
     return { patch: '', truncated: false, changeCount: 0, addedCount: 0, removedCount: 0 }
   }
-  const before = (chapter.value?.sourceContent || '').split(/\n\s*\n+/).map(item => item.trim()).filter(Boolean)
-  const after = readableDraft.value.split(/\n\s*\n+/).map(item => item.trim()).filter(Boolean)
-  const totalCharacters = before.reduce((sum, item) => sum + item.length, 0)
-    + after.reduce((sum, item) => sum + item.length, 0)
-  if (before.length > 500 || after.length > 500 || totalCharacters > 500_000) {
+  const normalizeLines = (content: string) => {
+    const normalized = content.replace(/\r\n?/g, '\n').replace(/\n$/, '')
+    return normalized ? normalized.split('\n') : []
+  }
+  const before = normalizeLines(chapter.value?.sourceContent || '')
+  const after = normalizeLines(readableDraft.value)
+  const totalCharacters = before.reduce((sum, line) => sum + line.length, 0)
+    + after.reduce((sum, line) => sum + line.length, 0)
+  if (before.length > 2000 || after.length > 2000 || totalCharacters > 500_000) {
     return { patch: '', truncated: true, changeCount: 0, addedCount: 0, removedCount: 0 }
   }
   const width = after.length + 1
@@ -781,7 +785,7 @@ const renderDiffReview = async () => {
   const review = new Diff2HtmlUI(target, diff.patch, {
     outputFormat: 'side-by-side',
     drawFileList: false,
-    matching: 'words',
+    matching: 'none',
     matchingMaxComparisons: 2500,
     maxLineSizeInBlockForComparison: 5000,
     maxLineLengthHighlight: 10000,
