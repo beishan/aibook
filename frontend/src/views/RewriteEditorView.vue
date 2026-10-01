@@ -1,5 +1,5 @@
 <template>
-  <div v-loading="loading" class="rewrite-workspace">
+  <div ref="rewriteWorkspaceRef" v-loading="loading" class="rewrite-workspace">
     <header v-if="project" class="workspace-header">
       <div>
         <router-link to="/rewrite" class="back-link">← 重写项目</router-link>
@@ -179,7 +179,7 @@
             </div>
             <pre ref="sourceTextRef">{{ chapter.sourceContent || '这是新增章节，没有对应原文。' }}</pre>
           </section>
-          <section v-show="!showDiff" class="draft-pane">
+          <section ref="draftPaneRef" v-show="!showDiff" class="draft-pane">
             <div class="pane-label"><strong>重写正文</strong><span>自动保存约 1 秒</span></div>
             <div v-if="editable" class="rich-toolbar" role="toolbar" aria-label="正文格式">
               <el-button size="small" @click="toggleParagraph">段落</el-button>
@@ -583,6 +583,8 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const projectId = Number(route.params.projectId)
+const rewriteWorkspaceRef = ref<HTMLElement | null>(null)
+const draftPaneRef = ref<HTMLElement | null>(null)
 const project = ref<RewriteProject | null>(null)
 const chapters = ref<ChapterSummary[]>([])
 const deletedChapters = ref<ChapterSummary[]>([])
@@ -942,6 +944,7 @@ const saveLabel = computed(() => ({
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 let cursorSaveTimer: ReturnType<typeof setTimeout> | undefined
 let diffReviewRenderTimer: ReturnType<typeof setTimeout> | undefined
+let editorHeightFrame: number | undefined
 let savingPromise: Promise<boolean> | null = null
 
 const statusLabel = (status: string) => ({
@@ -1947,6 +1950,32 @@ const handleEditorKeydown = (event: KeyboardEvent) => {
   }
 }
 
+const updateEditorHeight = () => {
+  if (showDiff.value) return
+
+  const workspace = rewriteWorkspaceRef.value
+  const editorSurface = draftPaneRef.value?.querySelector<HTMLElement>('.rich-editor-surface')
+  if (!workspace || !editorSurface) return
+
+  const bottomGap = 24
+  const availableHeight = Math.floor(window.innerHeight - editorSurface.getBoundingClientRect().top - bottomGap)
+  workspace.style.setProperty('--rewrite-editor-height', `${Math.max(220, availableHeight)}px`)
+}
+
+const scheduleEditorHeightUpdate = () => {
+  if (editorHeightFrame !== undefined) window.cancelAnimationFrame(editorHeightFrame)
+  editorHeightFrame = window.requestAnimationFrame(() => {
+    editorHeightFrame = undefined
+    updateEditorHeight()
+  })
+}
+
+watch(
+  [() => chapter.value?.id, showSource, showDiff, editable, recoveredDraft, () => saveState.value === 'conflict'],
+  scheduleEditorHeightUpdate,
+  { flush: 'post' },
+)
+
 watch(editable, value => editor.value?.setEditable(value))
 watch(
   [showDiff, () => chapter.value?.sourceContent, readableDraft],
@@ -1990,13 +2019,18 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+  window.addEventListener('resize', scheduleEditorHeightUpdate, { passive: true })
   window.addEventListener('beforeunload', beforeUnload)
   window.addEventListener('keydown', handleEditorKeydown)
+  await nextTick()
+  updateEditorHeight()
 })
 onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
   if (cursorSaveTimer) clearTimeout(cursorSaveTimer)
   if (diffReviewRenderTimer) clearTimeout(diffReviewRenderTimer)
+  if (editorHeightFrame !== undefined) window.cancelAnimationFrame(editorHeightFrame)
+  window.removeEventListener('resize', scheduleEditorHeightUpdate)
   window.removeEventListener('beforeunload', beforeUnload)
   window.removeEventListener('keydown', handleEditorKeydown)
   editor.value?.destroy()
@@ -2005,7 +2039,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .rewrite-workspace {
-  --rewrite-editor-height: clamp(280px, calc(100vh - 560px), 640px);
+  --rewrite-editor-height: clamp(220px, calc(100vh - 380px), 900px);
   max-width: 1600px;
   min-height: 75vh;
   margin: 0 auto;
