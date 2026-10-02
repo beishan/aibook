@@ -1761,58 +1761,135 @@ const closestReaderBlock = (node: Node | null) => {
   return element?.closest<HTMLElement>('[data-reader-index]') || null
 }
 
+const textOffsetWithin = (root: HTMLElement, container: Node, offset: number) => {
+  if (container !== root && !root.contains(container)) return null
+
+  const isTextNode = container.nodeType === Node.TEXT_NODE
+  if (!isTextNode && container.nodeType !== Node.ELEMENT_NODE) return null
+
+  const offsetLimit = isTextNode
+    ? container.textContent?.length || 0
+    : container.childNodes.length
+  if (!Number.isInteger(offset) || offset < 0 || offset > offsetLimit) return null
+
+  let textOffset = isTextNode ? offset : 0
+  if (!isTextNode) {
+    for (let index = 0; index < offset; index += 1) {
+      textOffset += container.childNodes[index].textContent?.length || 0
+    }
+  }
+
+  let current: Node | null = container
+  while (current && current !== root) {
+    let sibling = current.previousSibling
+    while (sibling) {
+      textOffset += sibling.textContent?.length || 0
+      sibling = sibling.previousSibling
+    }
+    current = current.parentNode
+  }
+
+  return current === root ? textOffset : null
+}
+
+const textPointWithin = (root: HTMLElement, offset: number) => {
+  if (!Number.isInteger(offset) || offset < 0) return null
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let remaining = offset
+  let node = walker.nextNode() as Text | null
+  while (node) {
+    const length = node.textContent?.length || 0
+    if (length > 0 && remaining <= length) {
+      return { node, offset: remaining }
+    }
+    remaining -= length
+    node = walker.nextNode() as Text | null
+  }
+
+  return null
+}
+
+// `text:` stores legacy first-child offsets; new highlights use paragraph text offsets.
+const legacyTextPointWithin = (root: HTMLElement, offset: number) => {
+  const firstChild = root.firstChild
+  if (!firstChild) return null
+  if (firstChild.nodeType === Node.TEXT_NODE) {
+    return {
+      node: firstChild as Text,
+      offset: Math.min(offset, firstChild.textContent?.length || 0),
+    }
+  }
+  if (firstChild.nodeType === Node.ELEMENT_NODE) {
+    return textPointWithin(firstChild as HTMLElement, offset)
+  }
+  return null
+}
+
 const captureDocumentSelection = () => {
   if (highlightEditor.value || book.value?.format === 'epub') return
-  window.setTimeout(() => {
-    const selection = window.getSelection()
-    if (!selection || selection.isCollapsed || !selection.rangeCount) return
-    const text = selection.toString().replace(/\s+/g, ' ').trim().slice(0, 4000)
-    if (!text) return
-    const range = selection.getRangeAt(0)
-    const reader = document.querySelector<HTMLElement>('.reader-body')
-    if (!reader || !reader.contains(range.commonAncestorContainer)) return
-    if (isTextFormat(book.value?.format)) {
-      const startBlock = closestReaderBlock(range.startContainer)
-      const endBlock = closestReaderBlock(range.endContainer)
-      if (!startBlock || !endBlock) return
-      const startIndex = Number(startBlock.dataset.readerIndex)
-      const endIndex = Number(endBlock.dataset.readerIndex)
-      openHighlightEditor({
-        cfiRange: `text:${startIndex}:${range.startOffset}:${endIndex}:${range.endOffset}`,
-        text,
-        chapter: currentChapterName.value,
-      })
+  const selection = window.getSelection()
+  if (!selection || selection.isCollapsed || !selection.rangeCount) return
+  const text = selection.toString().replace(/\s+/g, ' ').trim().slice(0, 4000)
+  if (!text) return
+
+  const range = selection.getRangeAt(0).cloneRange()
+  const reader = document.querySelector<HTMLElement>('.reader-body')
+  if (!reader || !reader.contains(range.commonAncestorContainer)) return
+
+  let capturedHighlight: Omit<HighlightEditorState, 'note' | 'color'> | null = null
+  if (isTextFormat(book.value?.format)) {
+    const startBlock = closestReaderBlock(range.startContainer)
+    const endBlock = closestReaderBlock(range.endContainer)
+    if (!startBlock || !endBlock) return
+    const startOffset = textOffsetWithin(startBlock, range.startContainer, range.startOffset)
+    const endOffset = textOffsetWithin(endBlock, range.endContainer, range.endOffset)
+    if (startOffset == null || endOffset == null) {
+      message.warning('选区位置已变化，请重新选择需要划线的文字')
       return
     }
-    if (book.value?.format === 'html') {
-      const htmlRoot = document.querySelector<HTMLElement>('.reader-html')
-      if (!htmlRoot || !htmlRoot.contains(range.commonAncestorContainer)) return
-      const beforeStart = document.createRange()
-      beforeStart.selectNodeContents(htmlRoot)
-      beforeStart.setEnd(range.startContainer, range.startOffset)
-      const beforeEnd = document.createRange()
-      beforeEnd.selectNodeContents(htmlRoot)
-      beforeEnd.setEnd(range.endContainer, range.endOffset)
-      openHighlightEditor({
-        cfiRange: `html:${beforeStart.toString().length}:${beforeEnd.toString().length}`,
-        text,
-        chapter: currentChapterName.value || '正文',
-      })
+    const startIndex = Number(startBlock.dataset.readerIndex)
+    const endIndex = Number(endBlock.dataset.readerIndex)
+    capturedHighlight = {
+      cfiRange: `textv2:${startIndex}:${startOffset}:${endIndex}:${endOffset}`,
+      text,
+      chapter: currentChapterName.value,
     }
-  }, 0)
+  } else if (book.value?.format === 'html') {
+    const htmlRoot = document.querySelector<HTMLElement>('.reader-html')
+    if (!htmlRoot || !htmlRoot.contains(range.commonAncestorContainer)) return
+    const startOffset = textOffsetWithin(htmlRoot, range.startContainer, range.startOffset)
+    const endOffset = textOffsetWithin(htmlRoot, range.endContainer, range.endOffset)
+    if (startOffset == null || endOffset == null || endOffset <= startOffset) {
+      message.warning('选区位置已变化，请重新选择需要划线的文字')
+      return
+    }
+    capturedHighlight = {
+      cfiRange: `html:${startOffset}:${endOffset}`,
+      text,
+      chapter: currentChapterName.value || '正文',
+    }
+  }
+
+  const nextHighlight = capturedHighlight
+  if (nextHighlight) {
+    window.setTimeout(() => openHighlightEditor(nextHighlight), 0)
+  }
 }
 
 const textRangeFromLocation = (location: string): Range | null => {
-  const match = /^text:(\d+):(\d+):(\d+):(\d+)$/.exec(location)
+  const match = /^(text|textv2):(\d+):(\d+):(\d+):(\d+)$/.exec(location)
   if (!match) return null
-  const start = document.querySelector<HTMLElement>(`[data-reader-index="${match[1]}"]`)
-  const end = document.querySelector<HTMLElement>(`[data-reader-index="${match[3]}"]`)
-  const startNode = start?.firstChild
-  const endNode = end?.firstChild
-  if (!startNode || !endNode) return null
+  const start = document.querySelector<HTMLElement>(`[data-reader-index="${match[2]}"]`)
+  const end = document.querySelector<HTMLElement>(`[data-reader-index="${match[4]}"]`)
+  if (!start || !end) return null
+  const getTextPoint = match[1] === 'textv2' ? textPointWithin : legacyTextPointWithin
+  const startPoint = getTextPoint(start, Number(match[3]))
+  const endPoint = getTextPoint(end, Number(match[5]))
+  if (!startPoint || !endPoint) return null
   const range = document.createRange()
-  range.setStart(startNode, Math.min(Number(match[2]), startNode.textContent?.length || 0))
-  range.setEnd(endNode, Math.min(Number(match[4]), endNode.textContent?.length || 0))
+  range.setStart(startPoint.node, startPoint.offset)
+  range.setEnd(endPoint.node, endPoint.offset)
   return range
 }
 
@@ -1858,7 +1935,9 @@ const renderDocumentHighlights = () => {
   if (!registry || !HighlightConstructor) return
   const rules: string[] = []
   highlights.value.forEach(highlight => {
-    const range = highlight.cfiRange.startsWith('text:')
+    const isTextRange = highlight.cfiRange.startsWith('text:')
+      || highlight.cfiRange.startsWith('textv2:')
+    const range = isTextRange
       ? textRangeFromLocation(highlight.cfiRange)
       : highlight.cfiRange.startsWith('html:')
         ? htmlRangeFromLocation(highlight.cfiRange)
@@ -2026,7 +2105,7 @@ const handleGotoHighlight = async (highlight: Highlight) => {
     await rendition.display(highlight.cfiRange)
     return
   }
-  const textMatch = /^text:(\d+):/.exec(highlight.cfiRange)
+  const textMatch = /^(?:text|textv2):(\d+):/.exec(highlight.cfiRange)
   if (textMatch) {
     const textIndex = Number(textMatch[1])
     if (isPaginationMode.value) {
@@ -3211,7 +3290,7 @@ const goToSearchResult = async (result: ReaderSearchResult) => {
       await ensureScrollContentRendered(result.paragraphIndex)
     }
     const range = textRangeFromLocation(
-      `text:${result.paragraphIndex}:${result.startOffset || 0}:${result.paragraphIndex}:${result.endOffset || 0}`,
+      `textv2:${result.paragraphIndex}:${result.startOffset || 0}:${result.paragraphIndex}:${result.endOffset || 0}`,
     )
     revealDocumentSearchRange(range)
   } else if (book.value?.format === 'html'
