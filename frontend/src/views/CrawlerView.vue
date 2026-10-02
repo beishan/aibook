@@ -1972,6 +1972,7 @@ async function pollCrawlerProgress(){
       if(queuedTasksDialog.value)requests.push(loadQueuedTasks({silent:true}))
       if(activeTab.value==='sites')requests.push(crawlerApi.sites().then(data=>{sites.value=data}))
       if(activeTab.value==='books')requests.push(loadBooks({silent:true,preserveSelection:true}))
+      if(activeTab.value==='discovered')requests.push(loadDiscoveredBooks({silent:true,preserveSelection:true}))
       if(activeTab.value==='failed')requests.push(loadFailedTasks({silent:true}))
     }
     if(bookDrawer.value)requests.push(syncOpenBookProgress({silent:true}))
@@ -2613,6 +2614,7 @@ async function batchCrawl() {
       loadTasks({ silent: true }),
       loadTaskQueues(),
       loadCurrentCrawlerTasks(),
+      loadDiscoveredBooks({ silent: true, preserveSelection: true }),
     ]).catch(() => undefined)
   } catch (error: any) {
     message.error(error.response?.data?.message || '批量创建采集任务失败')
