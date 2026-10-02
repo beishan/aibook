@@ -77,6 +77,9 @@ public interface CrawlerTaskRepository extends JpaRepository<CrawlerTask, String
     boolean existsBySiteAndTypeAndStatusIn(CrawlerSite site, CrawlerTask.TaskType type, Collection<CrawlerTask.TaskStatus> statuses);
     boolean existsByDiscoveryPageIdAndStatusIn(Long discoveryPageId, Collection<CrawlerTask.TaskStatus> statuses);
     boolean existsByCrawlerBookAndStatusIn(CrawlerBook book, Collection<CrawlerTask.TaskStatus> statuses);
+    @Query("select t.crawlerBook.id from CrawlerTask t where t.crawlerBook.id in :bookIds and t.status in :statuses")
+    List<Long> findActiveBookIds(@Param("bookIds") Collection<Long> bookIds,
+            @Param("statuses") Collection<CrawlerTask.TaskStatus> statuses);
     Optional<CrawlerTask> findFirstByCrawlerBookAndStatusOrderByUpdatedAtDesc(
             CrawlerBook book, CrawlerTask.TaskStatus status);
     @Query("""

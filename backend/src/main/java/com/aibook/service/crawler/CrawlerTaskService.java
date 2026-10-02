@@ -627,12 +627,27 @@ public class CrawlerTaskService {
         return managementService.taskView(createBookTask(user, book, CrawlerTask.TaskType.BOOK_METADATA));
     }
 
+    @Transactional
     public List<TaskView> batchCrawl(User user, List<Long> bookIds) {
         List<CrawlerBook> books = ownedBooks(user, bookIds).stream()
                 .filter(book -> discoveryStatus(book) == CrawlerBook.DiscoveryStatus.ACTIVE).toList();
-        books.forEach(this::ensureNoActiveTask);
-        return books.stream()
-                .map(book -> managementService.taskView(createBookTask(user, book, CrawlerTask.TaskType.BOOK_FULL_CRAWL))).toList();
+        if (books.isEmpty()) return List.of();
+
+        ensureNoActiveTasks(books);
+        Set<Long> validatedSiteIds = new HashSet<>();
+        for (CrawlerBook book : books) {
+            if (validatedSiteIds.add(book.getSite().getId())) {
+                requireEnabled(book.getSite());
+                requireRule(book.getSite());
+            }
+            book.setCrawlStatus(CrawlerBook.CrawlStatus.WAITING);
+        }
+
+        List<CrawlerTask> tasks = books.stream()
+                .map(book -> createBatchCrawlTask(user, book))
+                .toList();
+        submitAfterCommit(tasks.stream().map(CrawlerTask::getId).toList());
+        return tasks.stream().map(managementService::taskView).toList();
     }
 
     public List<TaskView> batchRefreshMetadata(User user, List<Long> bookIds) {
@@ -908,6 +923,21 @@ public class CrawlerTaskService {
         return createAndSubmit(user, book.getSite(), book, type);
     }
 
+    private CrawlerTask createBatchCrawlTask(User user, CrawlerBook book) {
+        CrawlerTask task = taskRepository.save(CrawlerTask.builder()
+                .user(user)
+                .site(book.getSite())
+                .crawlerBook(book)
+                .type(CrawlerTask.TaskType.BOOK_FULL_CRAWL)
+                .priority(CrawlerTask.Priority.HIGH)
+                .build());
+        log.info("[采集任务] 已创建: taskId={}, type={}, priority={}, site={}, book={}",
+                task.getId(), task.getType(), task.getPriority(),
+                task.getSite().getSiteName(), bookName(book));
+        recordCrawlerEvent(task, "任务已创建", "触发方式：人工操作；优先级：" + task.getPriority());
+        return task;
+    }
+
     private void submitAfterCommit(String taskId) {
         if (!TransactionSynchronizationManager.isActualTransactionActive()
                 || !TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -920,6 +950,45 @@ public class CrawlerTaskService {
                 submit(taskId);
             }
         });
+    }
+
+    private void submitAfterCommit(List<String> taskIds) {
+        List<String> ids = List.copyOf(taskIds);
+        if (ids.isEmpty()) return;
+        if (!TransactionSynchronizationManager.isActualTransactionActive()
+                || !TransactionSynchronizationManager.isSynchronizationActive()) {
+            submitBatch(ids);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                submitBatch(ids);
+            }
+        });
+    }
+
+    private void submitBatch(List<String> taskIds) {
+        Map<String, CrawlerTask> tasksById = new HashMap<>();
+        taskRepository.findAllById(taskIds).forEach(task -> tasksById.put(task.getId(), task));
+        List<CrawlerTask> tasks = taskIds.stream()
+                .map(tasksById::get)
+                .filter(Objects::nonNull)
+                .toList();
+        if (tasks.isEmpty()) return;
+
+        for (CrawlerTask task : tasks) {
+            long queueOrder = task.getQueueOrder() == null ? nextQueueOrder() : task.getQueueOrder();
+            task.setQueueOrder(queueOrder);
+            queueOrderSequence.updateAndGet(current -> Math.max(current, queueOrder));
+        }
+        taskRepository.saveAll(tasks);
+
+        if (taskQueueRepository == null) {
+            tasks.forEach(task -> submitLegacy(task, task.getQueueOrder()));
+            return;
+        }
+        dispatchWaitingTasks();
     }
 
     private void submit(String id) {
@@ -1986,13 +2055,23 @@ public class CrawlerTaskService {
     private String externalId(String url) { String path = URI.create(url).getPath().replaceAll("/+$", ""); String id = path.substring(path.lastIndexOf('/') + 1).replaceFirst("\\.[^.]+$", ""); return id.isBlank() ? Integer.toHexString(url.hashCode()) : id; }
     private List<CrawlerBook> ownedBooks(User user, List<Long> ids) {
         LinkedHashSet<Long> unique = new LinkedHashSet<>(ids);
-        List<CrawlerBook> books = unique.stream().map(id -> managementService.ownedBook(user, id)).toList();
-        if (books.size() != unique.size()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "批量书籍参数无效");
-        return books;
+        Map<Long, CrawlerBook> booksById = new HashMap<>();
+        bookRepository.findByIdInAndSiteUser(unique, user)
+                .forEach(book -> booksById.put(book.getId(), book));
+        if (booksById.size() != unique.size()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "采集书籍不存在");
+        }
+        return unique.stream().map(booksById::get).toList();
     }
     private void requireEnabled(CrawlerSite site) { if (!Boolean.TRUE.equals(site.getEnabled())) throw new ResponseStatusException(HttpStatus.CONFLICT, "请先启用该采集网站"); }
     private void requireRule(CrawlerSite site) { if (site.getRule() == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "请先在规则管理中启用一条采集规则"); }
     private void ensureNoActiveTask(CrawlerBook book) { if (taskRepository.existsByCrawlerBookAndStatusIn(book, ACTIVE_STATUSES)) throw new ResponseStatusException(HttpStatus.CONFLICT, "该书已有运行中或暂停的采集任务"); }
+    private void ensureNoActiveTasks(Collection<CrawlerBook> books) {
+        List<Long> bookIds = books.stream().map(CrawlerBook::getId).toList();
+        if (!taskRepository.findActiveBookIds(bookIds, ACTIVE_STATUSES).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "该书已有运行中或暂停的采集任务");
+        }
+    }
     private boolean ownedBy(CrawlerTask task, User user) { return task.getUser() == user || (user.getId() != null && Objects.equals(task.getUser().getId(), user.getId())); }
     private int priorityRank(CrawlerTask.Priority priority) { return switch (priority) { case HIGH -> 0; case NORMAL -> 1; case LOW -> 2; }; }
     private CrawlerBook.DiscoveryStatus discoveryStatus(CrawlerBook book) { return book.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : book.getDiscoveryStatus(); }

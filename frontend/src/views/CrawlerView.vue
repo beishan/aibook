@@ -148,7 +148,75 @@
     </section>
 
     <section v-else-if="activeTab === 'discovered'" class="panel" role="tabpanel">
-      <div class="section-heading discovery-heading"><div><p class="eyebrow">DISCOVERY INBOX</p><h2>发现书籍</h2></div><div class="discovery-heading-actions"><div class="discovery-view-switch" role="tablist" aria-label="发现书籍视图" @keydown="handleDiscoveryViewKey"><span class="discovery-view-indicator" :style="{transform:`translateX(${discoveryViewMode==='card'?100:0}%)`}" aria-hidden="true"/><button type="button" role="tab" :aria-selected="discoveryViewMode==='table'" :tabindex="discoveryViewMode==='table'?0:-1" :class="{active:discoveryViewMode==='table'}" @click="setDiscoveryViewMode('table')">☰ 表格</button><button type="button" role="tab" :aria-selected="discoveryViewMode==='card'" :tabindex="discoveryViewMode==='card'?0:-1" :class="{active:discoveryViewMode==='card'}" @click="setDiscoveryViewMode('card')">▦ 卡片</button></div><div class="batch-actions"><el-button :loading="discoveryMetadataRefreshing" :disabled="!selectedDiscoveries.some(book=>!isBookTaskActive(book))" @click="batchRefreshDiscoveryMetadata">刷新分类标签</el-button><el-button :disabled="!selectedDiscoveries.length||discoveryMetadataRefreshing" @click="batchDiscovery('IGNORED')">忽略</el-button><el-button :disabled="!selectedDiscoveries.length||discoveryMetadataRefreshing" @click="batchDiscovery('BLACKLISTED')">加入黑名单</el-button><el-button type="primary" :disabled="!selectedDiscoveries.length||discoveryMetadataRefreshing" @click="batchCrawl">批量采集</el-button></div></div></div>
+      <div class="section-heading discovery-heading">
+        <div>
+          <p class="eyebrow">DISCOVERY INBOX</p>
+          <h2>发现书籍</h2>
+        </div>
+        <div class="discovery-heading-actions">
+          <div
+            class="discovery-view-switch"
+            role="tablist"
+            aria-label="发现书籍视图"
+            @keydown="handleDiscoveryViewKey"
+          >
+            <span
+              class="discovery-view-indicator"
+              :style="{ transform: `translateX(${discoveryViewMode === 'card' ? 100 : 0}%)` }"
+              aria-hidden="true"
+            />
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="discoveryViewMode === 'table'"
+              :tabindex="discoveryViewMode === 'table' ? 0 : -1"
+              :class="{ active: discoveryViewMode === 'table' }"
+              @click="setDiscoveryViewMode('table')"
+            >
+              ☰ 表格
+            </button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="discoveryViewMode === 'card'"
+              :tabindex="discoveryViewMode === 'card' ? 0 : -1"
+              :class="{ active: discoveryViewMode === 'card' }"
+              @click="setDiscoveryViewMode('card')"
+            >
+              ▦ 卡片
+            </button>
+          </div>
+          <div class="batch-actions">
+            <el-button
+              :loading="discoveryMetadataRefreshing"
+              :disabled="batchDiscoveryCrawling || !selectedDiscoveries.some(book => !isBookTaskActive(book))"
+              @click="batchRefreshDiscoveryMetadata"
+            >
+              刷新分类标签
+            </el-button>
+            <el-button
+              :disabled="!selectedDiscoveries.length || discoveryMetadataRefreshing || batchDiscoveryCrawling"
+              @click="batchDiscovery('IGNORED')"
+            >
+              忽略
+            </el-button>
+            <el-button
+              :disabled="!selectedDiscoveries.length || discoveryMetadataRefreshing || batchDiscoveryCrawling"
+              @click="batchDiscovery('BLACKLISTED')"
+            >
+              加入黑名单
+            </el-button>
+            <el-button
+              type="primary"
+              :loading="batchDiscoveryCrawling"
+              :disabled="!selectedDiscoveries.length || discoveryMetadataRefreshing || batchDiscoveryCrawling"
+              @click="batchCrawl"
+            >
+              批量采集
+            </el-button>
+          </div>
+        </div>
+      </div>
       <div class="discovery-toolbar">
         <el-input v-model="discoveryKeyword" clearable :prefix-icon="Search" placeholder="搜索书名、作者、网站、发现页、编码或最新章节" @keyup.enter="applyDiscoveryFilters" />
         <el-select v-model="discoverySiteId" clearable placeholder="全部采集网站"><el-option v-for="site in sites" :key="site.id" :label="site.siteName" :value="site.id" /></el-select>
@@ -1479,6 +1547,7 @@ const siteDialog=ref(false), siteProtectionDialog=ref(false), protectionDetailSi
 const chapterReaderSurface=ref<HTMLElement>(), chapterReaderActive=ref<CrawlerChapter>(), chapterReaderChapters=ref<CrawlerChapter[]>([]), chapterReaderBookId=ref<number>(), chapterReaderLoading=ref(false), chapterReaderSettingsOpen=ref(false), chapterEditing=ref(false), chapterEditContent=ref(''), savingChapter=ref(false)
 const discoveryPagesBySite=ref<Record<number,CrawlerDiscoveryPage[]>>({})
 const discoveryMetadataRefreshing=ref(false)
+const batchDiscoveryCrawling = ref(false)
 const bookLoading=ref(false), bookPage=ref(1), bookPageSize=ref(20), bookTotal=ref(0)
 const bookTableRef=ref<InstanceType<typeof ElTable>>()
 const bookSiteId=ref<number>(), bookCrawlStatus=ref(''), bookImportStatus=ref(''), bookFavoriteOnly=ref(false), bookSort=ref('CREATED_DESC')
@@ -2524,7 +2593,33 @@ async function crawlDiscovered(book:CrawlerBook){
   }catch(error:any){message.error(error.response?.data?.message||'创建采集任务失败')}
   finally{setBookTaskSubmitting(book.id,false)}
 }
-async function batchCrawl(){await crawlerApi.batchCrawl(selectedDiscoveries.value.map(b=>b.id));message.success(`已创建 ${selectedDiscoveries.value.length} 个采集任务`);await refresh()}
+async function batchCrawl() {
+  if (batchDiscoveryCrawling.value || !selectedDiscoveries.value.length) return
+
+  const selected = [...selectedDiscoveries.value]
+  batchDiscoveryCrawling.value = true
+  try {
+    const createdTasks = await crawlerApi.batchCrawl(selected.map(book => book.id))
+    const taskIds = new Set(createdTasks.map(task => task.id))
+    currentCrawlerTasks.value = [
+      ...createdTasks,
+      ...currentCrawlerTasks.value.filter(task => !taskIds.has(task.id)),
+    ]
+    selectedDiscoveries.value = []
+    message.success(`已创建 ${createdTasks.length} 个采集任务`)
+
+    void Promise.all([
+      crawlerApi.dashboard().then(data => { dashboard.value = data }),
+      loadTasks({ silent: true }),
+      loadTaskQueues(),
+      loadCurrentCrawlerTasks(),
+    ]).catch(() => undefined)
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '批量创建采集任务失败')
+  } finally {
+    batchDiscoveryCrawling.value = false
+  }
+}
 async function batchDiscovery(status:'IGNORED'|'BLACKLISTED',ids=selectedDiscoveries.value.map(b=>b.id)){if(!ids.length)return;await crawlerApi.setDiscoveryStatus(ids,status);message.success(status==='IGNORED'?'已忽略所选书籍':'已加入黑名单，后续扫描不会重新收录');await refresh()}
 function handleDiscoveryCardMore(command:string,book:CrawlerBook){if(command==='details')void openBook(book);else if(command==='book-lists')void openCrawlerBookLists(book);else if(command==='website')window.open(book.bookUrl,'_blank','noopener,noreferrer');else if(command==='metadata')void refreshBookMetadata(book);else if(command==='ignore')void batchDiscovery('IGNORED',[book.id]);else if(command==='blacklist')void batchDiscovery('BLACKLISTED',[book.id])}
 async function batchRefreshDiscoveryMetadata(){

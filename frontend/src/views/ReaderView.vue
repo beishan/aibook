@@ -172,7 +172,11 @@
             </div>
 
             <!-- 目录内容 -->
-            <div v-if="activeTab === 'toc'" class="panel-content">
+            <div
+              v-if="activeTab === 'toc'"
+              ref="tocPanelContent"
+              class="panel-content"
+            >
               <label class="toc-search">
                 <span aria-hidden="true">⌕</span>
                 <input v-model="tocQuery" type="search" placeholder="搜索章节" />
@@ -183,6 +187,7 @@
                   :key="`${item.href || item.index}-${index}`"
                   class="toc-item"
                   :class="{ active: isCurrentTocItem(item) }"
+                  :aria-current="isCurrentTocItem(item) ? 'location' : undefined"
                   :style="item.level ? { paddingLeft: `${14 + item.level * 16}px` } : undefined"
                   @click="goToTocItem(item)"
                 >
@@ -910,6 +915,7 @@ const savedLocator = ref<ReaderLocator | null>(null)
 
 const SEARCH_RESULT_LIMIT = 200
 const searchInput = ref<HTMLInputElement>()
+const tocPanelContent = ref<HTMLElement | null>(null)
 const searchQuery = ref('')
 const searchResults = ref<ReaderSearchResult[]>([])
 const searching = ref(false)
@@ -2309,11 +2315,55 @@ const isChapterTitle = (paragraph: string): boolean => {
  */
 const isCurrentTocItem = (item: Chapter): boolean => {
   if (book.value?.format === 'epub') {
-    return item.href === currentTocHref.value
+    return currentTocHref.value
+      ? item.href === currentTocHref.value
+      : item.title === currentChapterName.value
   }
-  if (book.value?.format === 'pdf') return item.page === pdfCurrentPage.value
+  if (book.value?.format === 'pdf') {
+    const currentItem = [...tocItems.value]
+      .reverse()
+      .find(chapter => chapter.page != null && chapter.page <= pdfCurrentPage.value)
+      || tocItems.value[0]
+    return item === currentItem
+  }
+  if (isTextFormat(book.value?.format)) {
+    const currentTextItem = chapterAtTextIndex(visibleTextIndex()).chapter
+      || tocItems.value[0]
+    if (currentTextItem) return item.index === currentTextItem.index
+  }
   return item.title === currentChapterName.value
 }
+
+const scrollCurrentTocItemIntoView = async () => {
+  await nextTick()
+
+  const panel = tocPanelContent.value
+  const currentItem = panel?.querySelector<HTMLElement>('.toc-item.active')
+  if (!panel || !currentItem) return
+
+  const panelRect = panel.getBoundingClientRect()
+  const itemRect = currentItem.getBoundingClientRect()
+  const visibleTop = panelRect.top + panel.clientTop + 8
+  const visibleBottom = panelRect.top + panel.clientTop + panel.clientHeight - 8
+  let scrollDelta = 0
+
+  if (itemRect.top < visibleTop) {
+    scrollDelta = itemRect.top - visibleTop
+  } else if (itemRect.bottom > visibleBottom) {
+    scrollDelta = itemRect.bottom - visibleBottom
+  }
+
+  if (scrollDelta !== 0) {
+    panel.scrollTo({
+      top: Math.max(0, panel.scrollTop + scrollDelta),
+      behavior: 'smooth',
+    })
+  }
+}
+
+watch([showToc, tocItems], ([isOpen]) => {
+  if (isOpen) void scrollCurrentTocItemIntoView()
+})
 
 const loadTextContent = async () => {
   try {
@@ -2533,6 +2583,13 @@ const handleScroll = () => {
       Math.floor(readerBody.scrollTop / viewportHeight) + 1,
     )
   if (maxScroll > 0 || isProgressiveTextScroll) {
+    if (isTextFormat(book.value?.format)) {
+      const currentTextItem = chapterAtTextIndex(visibleTextIndex()).chapter
+      if (currentTextItem && currentChapterName.value !== currentTextItem.title) {
+        currentChapterName.value = currentTextItem.title
+      }
+    }
+
     const currentProgress = isProgressiveTextScroll
       ? Math.round((visibleTextIndex() / Math.max(1, content.value.length - 1)) * 100)
       : Math.round((readerBody.scrollTop / maxScroll) * 100)

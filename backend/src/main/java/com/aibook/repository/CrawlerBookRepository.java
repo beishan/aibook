@@ -22,6 +22,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
     int backfillLibrarySourceSiteNames();
 
     Optional<CrawlerBook> findByIdAndSiteUser(Long id, User user);
+    List<CrawlerBook> findByIdInAndSiteUser(Collection<Long> ids, User user);
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update CrawlerBook b set b.favorite = :favorite where b.id = :id and b.site.user = :user")
     int updateFavorite(@Param("id") Long id, @Param("user") User user,
