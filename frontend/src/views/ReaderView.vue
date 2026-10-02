@@ -3,6 +3,7 @@
     class="reader-view"
     :class="{
       'fullscreen-mode': isFullscreen,
+      'quick-window-mode': isQuickWindow,
       'reading-room-mode': settings.appearance === 'readingRoom',
       'trial-reader-mode': settings.appearance === 'trialReader',
     }"
@@ -1708,19 +1709,46 @@ const saveHighlight = async () => {
       chapter: editor.chapter,
       note: editor.note,
     }
-    const response = editor.id
-      ? await api.put(`/api/books/${book.value.id}/highlights/${editor.id}`, payload)
-      : await api.post(`/api/books/${book.value.id}/highlights`, payload)
-    const saved = response.data as Highlight
+    const requestOptions = { headers: { 'X-Suppress-Error-Toast': 'true' } }
+    let saved: Highlight
+    try {
+      const response = editor.id
+        ? await api.put(
+          `/api/books/${book.value.id}/highlights/${editor.id}`,
+          payload,
+          requestOptions,
+        )
+        : await api.post(
+          `/api/books/${book.value.id}/highlights`,
+          payload,
+          requestOptions,
+        )
+      saved = response.data as Highlight
+    } catch (error: any) {
+      console.error('[Reader] Failed to save highlight:', error)
+      if (error.response?.status !== 401) {
+        message.error(error.response?.data?.message || error.message || '高亮保存失败')
+      }
+      return
+    }
+
     const existingIndex = highlights.value.findIndex(item => item.id === saved.id)
     if (existingIndex >= 0) highlights.value.splice(existingIndex, 1, saved)
     else highlights.value.unshift(saved)
     highlightEditor.value = null
-    await nextTick()
-    renderAllHighlights()
-    message.success(editor.id ? '批注已更新' : '高亮已保存')
-  } catch {
-    message.error('高亮保存失败')
+    let rendered = true
+    try {
+      await nextTick()
+      renderAllHighlights()
+    } catch (error) {
+      rendered = false
+      console.warn('[Reader] Highlight saved but could not be rendered:', error)
+    }
+    if (rendered) {
+      message.success(editor.id ? '批注已更新' : '高亮已保存')
+    } else {
+      message.warning('高亮已保存，但暂时无法在页面中显示')
+    }
   } finally {
     savingHighlight.value = false
   }
@@ -4522,6 +4550,11 @@ onBeforeUnmount(() => {
 
 /* 两侧翻页区域与按钮 */
 .page-turn-zone {
+  --reader-page-turn-zone-width: clamp(
+    44px,
+    calc((100vw - var(--reader-content-width, 100%)) / 2 + 52px),
+    240px
+  );
   position: absolute;
   top: 0;
   bottom: 0;
@@ -4529,7 +4562,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: clamp(44px, calc((100vw - var(--reader-content-width, 100%)) / 2 + 52px), 240px);
+  width: var(--reader-page-turn-zone-width);
   padding: 0;
   border: 0;
   background: transparent;
@@ -4543,6 +4576,16 @@ onBeforeUnmount(() => {
 
 .page-turn-zone--next {
   right: 0;
+}
+
+@media (min-width: 769px) {
+  .quick-window-mode .page-turn-zone--next {
+    right: clamp(
+      0px,
+      calc((214px - var(--reader-page-turn-zone-width)) / 2),
+      85px
+    );
+  }
 }
 
 .page-turn-zone:disabled {
