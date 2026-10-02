@@ -1972,7 +1972,6 @@ async function pollCrawlerProgress(){
       if(queuedTasksDialog.value)requests.push(loadQueuedTasks({silent:true}))
       if(activeTab.value==='sites')requests.push(crawlerApi.sites().then(data=>{sites.value=data}))
       if(activeTab.value==='books')requests.push(loadBooks({silent:true,preserveSelection:true}))
-      if(activeTab.value==='discovered')requests.push(loadDiscoveredBooks({silent:true,preserveSelection:true}))
       if(activeTab.value==='failed')requests.push(loadFailedTasks({silent:true}))
     }
     if(bookDrawer.value)requests.push(syncOpenBookProgress({silent:true}))
@@ -2590,9 +2589,18 @@ async function crawlDiscovered(book:CrawlerBook){
     const taskIds=new Set(createdTasks.map(task=>task.id))
     currentCrawlerTasks.value=[...createdTasks,...currentCrawlerTasks.value.filter(task=>!taskIds.has(task.id))]
     message.success('采集任务已创建')
-    await refresh()
+    refreshAfterCrawlSubmission()
   }catch(error:any){message.error(error.response?.data?.message||'创建采集任务失败')}
   finally{setBookTaskSubmitting(book.id,false)}
+}
+function refreshAfterCrawlSubmission(){
+  void Promise.all([
+    crawlerApi.dashboard().then(data=>{dashboard.value=data}),
+    loadTasks({silent:true}),
+    loadTaskQueues(),
+    loadCurrentCrawlerTasks(),
+    loadDiscoveredBooks({silent:true,preserveSelection:true}),
+  ]).catch(()=>undefined)
 }
 async function batchCrawl() {
   if (batchDiscoveryCrawling.value || !selectedDiscoveries.value.length) return
@@ -2608,14 +2616,7 @@ async function batchCrawl() {
     ]
     selectedDiscoveries.value = []
     message.success(`已创建 ${createdTasks.length} 个采集任务`)
-
-    void Promise.all([
-      crawlerApi.dashboard().then(data => { dashboard.value = data }),
-      loadTasks({ silent: true }),
-      loadTaskQueues(),
-      loadCurrentCrawlerTasks(),
-      loadDiscoveredBooks({ silent: true, preserveSelection: true }),
-    ]).catch(() => undefined)
+    refreshAfterCrawlSubmission()
   } catch (error: any) {
     message.error(error.response?.data?.message || '批量创建采集任务失败')
   } finally {
