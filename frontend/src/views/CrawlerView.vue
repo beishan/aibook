@@ -2664,6 +2664,14 @@ function applyCrawlerBookUpdate(updated:CrawlerBook){
   if(selectedTask.value?.bookId===updated.id)selectedTask.value=applyTask(selectedTask.value)
   if(dashboard.value)dashboard.value.recentTasks=dashboard.value.recentTasks.map(applyTask)
 }
+function markCrawlerBookImported(book:CrawlerBook,libraryBookId:number){
+  applyCrawlerBookUpdate({
+    ...book,
+    importStatus:'IMPORTED',
+    libraryBookId,
+    autoSyncLibrary:true,
+  })
+}
 async function toggleFavorite(book:CrawlerBook){
   const updated=await crawlerApi.setFavorite(book.id,!book.favorite)
   applyCrawlerBookUpdate(updated)
@@ -2766,11 +2774,27 @@ function openBatchImport(){importTargets.value=[...selectedBooks.value];importFo
 async function submitImport(){
   if(!importTargets.value.length||!importFormats.value.length)return
   const targets=[...importTargets.value]
+  const formats=[...importFormats.value]
   importing.value=true
   try{
-    if(targets.length===1){const book=targets[0],syncing=book.importStatus==='IMPORTED',result=await crawlerApi.importBook(book.id,importFormats.value);importDialog.value=false;message.success(syncing?`所选内容已同步到书库（书籍 ID：${result.bookId}）`:`已通过${importFormats.value.includes('STRUCTURED')?'结构化章节':'文件版本'}加入书库（书籍 ID：${result.bookId}）`);await refresh();return}
+    if(targets.length===1){
+      const book=targets[0],syncing=book.importStatus==='IMPORTED'
+      const result=await crawlerApi.importBook(book.id,formats)
+      markCrawlerBookImported(book,result.bookId)
+      importDialog.value=false
+      message.success(syncing?`所选内容已同步到书库（书籍 ID：${result.bookId}）`:`已通过${formats.includes('STRUCTURED')?'结构化章节':'文件版本'}加入书库（书籍 ID：${result.bookId}）`)
+      await refresh()
+      return
+    }
     let succeeded=0,failed=0,skipped=0
-    for(const book of targets){if(!book.crawledChapterCount){skipped++;continue}try{await crawlerApi.importBook(book.id,importFormats.value);succeeded++}catch{failed++}}
+    for(const book of targets){
+      if(!book.crawledChapterCount){skipped++;continue}
+      try{
+        const result=await crawlerApi.importBook(book.id,formats)
+        markCrawlerBookImported(book,result.bookId)
+        succeeded++
+      }catch{failed++}
+    }
     importDialog.value=false
     const details=[skipped?`无可用正文 ${skipped} 本`:null,failed?`失败 ${failed} 本`:null].filter(Boolean).join('，')
     if(succeeded&&!details)message.success(`已将 ${succeeded} 本书批量加入或同步到书库`)
