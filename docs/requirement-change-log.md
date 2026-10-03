@@ -22,6 +22,28 @@
 
 ## 变更记录
 
+### REQ-20261003-003 完善安卓端的备份恢复、OPDS 和书架操作
+
+- 需求时间：2026-10-03
+- 完成时间：2026-10-03
+- 状态：部分完成
+- 需求内容：根据安卓端未完善项清单，补齐可在现有架构内完成的功能入口和交互。
+- 完成情况：实现本地 ZIP 备份与合并恢复，备份书籍文件、书架、文件夹、阅读进度、书签和划线；补上 OPDS 数据源/目录搜索、目录刷新与回首页；书架文件夹支持搜索、重命名和删除，最近阅读清空需确认；批量书籍可导出到用户选择的目录；书单“重命名/修改描述”入口可聚焦对应编辑框，云端书单菜单可刷新。自动备份及阅读器设置导出仍未实现。PDF 文字选择、高亮、批注和全文搜索尚未接入；调研候选为 Apache-2.0 的 AndroidX PDF `1.0.0-beta01`，需确认是否引入后继续。
+- 主要改动：新增 `LocalBackupManager` 和 Room 批量读取/合并写入；更新安卓设置、OPDS、书架与书单界面；同步应用版本号至 `1.45.122`。
+- 验证结果：`git diff --check` 通过。直接编译时，Gradle 在配置 `:core:mobi` 阶段因 Android Gradle Plugin 的 `NdkLocator` 空指针失败；临时关闭 native build 后再次编译，构建因 Android SDK `platforms/android-36/package.xml` 拒绝访问且 SDK Build-Tools/Platform 许可证未接受而停止，仍未进入 Kotlin 编译。临时改动的 `core/mobi/build.gradle.kts` 已按原字节恢复；未运行测试。
+- 应用版本：`1.45.122`
+
+### REQ-20261003-002 修复安卓云端书籍下载格式被队列拒绝
+
+- 需求时间：2026-10-03
+- 完成时间：2026-10-03
+- 状态：部分完成
+- 需求内容：修复安卓端在云端书籍详情中点击“下载到本地”后无法下载的问题。
+- 完成情况：下载队列改为接受安卓本地支持的书籍格式，结构化书籍仍按 TXT 保存；原先只允许 TXT、EPUB 的限制会让 PDF、MOBI、AZW3、Markdown 和 HTML 书籍无法加入队列。应用版本更新至 `1.45.121`。
+- 主要改动：调整 `DownloadQueueManager.enqueueServer` 的格式校验，并从 `BookFormat` 获取受支持扩展名；同步更新 `frontend/package.json`、`frontend/package-lock.json` 版本号。
+- 验证结果：`git diff --check` 通过。尝试运行 `:app:compileDebugKotlin`，但 Gradle 在配置 `:core:mobi` 时因 Android Gradle Plugin 的 `NdkLocator` 空指针失败，未进入 Kotlin 编译；未运行测试。需在可解析 NDK 的环境中重新编译确认。
+- 应用版本：`1.45.121`
+
 ### REQ-20261003-001 安卓云端登录过期后自动重新登录
 
 - 需求时间：2026-10-03

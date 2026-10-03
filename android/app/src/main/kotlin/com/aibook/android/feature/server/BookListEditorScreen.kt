@@ -44,6 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -155,6 +157,8 @@ fun BookListEditorScreen(
     val state by viewModel.state.collectAsState()
     var confirmDelete by remember { mutableStateOf(false) }
     var syncToServer by remember { mutableStateOf(true) }
+    val nameFocusRequester = remember { FocusRequester() }
+    val descriptionFocusRequester = remember { FocusRequester() }
     LaunchedEffect(listId) { viewModel.load(listId) }
     LaunchedEffect(state.saved, state.deleted) {
         if (state.saved || state.deleted) onDone()
@@ -188,7 +192,7 @@ fun BookListEditorScreen(
                     placeholder = { Text("例如：年度科幻精选") },
                     supportingText = { Text("${state.name.length.coerceAtMost(20)}/20", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.End) },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().focusRequester(nameFocusRequester)
                 )
                 Spacer(Modifier.height(DesignTokens.Space12))
                 EditorFieldLabel(Icons.Default.Edit, "描述")
@@ -200,7 +204,7 @@ fun BookListEditorScreen(
                     placeholder = { Text("记录这个书单的主题或阅读计划") },
                     supportingText = { Text("${state.description.length.coerceAtMost(200)}/200", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.End) },
                     minLines = 4,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().focusRequester(descriptionFocusRequester)
                 )
                 Spacer(Modifier.height(DesignTokens.Space16))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
@@ -227,8 +231,12 @@ fun BookListEditorScreen(
             }
             if (listId != null) {
                 SoftCard {
-                    EditorActionRow("重命名", "修改书单名称", DesignTokens.Accent) {}
-                    EditorActionRow("修改描述", "修改书单的描述信息", DesignTokens.Accent) {}
+                    EditorActionRow("重命名", "修改书单名称", DesignTokens.Accent) {
+                        nameFocusRequester.requestFocus()
+                    }
+                    EditorActionRow("修改描述", "修改书单的描述信息", DesignTokens.Accent) {
+                        descriptionFocusRequester.requestFocus()
+                    }
                     EditorActionRow("删除书单", "删除后将无法恢复，请谨慎操作", DesignTokens.Danger) { confirmDelete = true }
                 }
             }

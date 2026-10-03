@@ -448,6 +448,13 @@ class BookRepository(
         return folder
     }
 
+    suspend fun renameShelfFolder(id: String, name: String) {
+        val current = shelfFolderDao.getById(id) ?: return
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) return
+        shelfFolderDao.insert(current.copy(name = trimmedName))
+    }
+
     suspend fun moveBooksToFolder(ids: Collection<String>, folderId: String?) {
         if (ids.isEmpty()) return
         bookDao.setFolder(ids.toList(), folderId)

@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -15,6 +16,9 @@ interface BookDao {
 
     @Query("SELECT * FROM books ORDER BY lastReadAt DESC, title ASC")
     fun observeAll(): Flow<List<BookEntity>>
+
+    @Query("SELECT * FROM books ORDER BY importedAt ASC, title ASC")
+    suspend fun getAll(): List<BookEntity>
 
     @Query("SELECT * FROM books WHERE shelved = 1 ORDER BY lastReadAt DESC, title ASC")
     fun observeShelved(): Flow<List<BookEntity>>
@@ -48,6 +52,9 @@ interface BookDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(book: BookEntity)
+
+    @Upsert
+    suspend fun upsertAll(books: List<BookEntity>)
 
     @Update
     suspend fun update(book: BookEntity)

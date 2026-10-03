@@ -3,6 +3,7 @@ package com.aibook.android.feature.server
 import android.app.Application
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -302,6 +303,7 @@ fun BackendBooklistsScreen(
     viewModel: ServerLibraryViewModel = viewModel(factory = ServerLibraryViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsState()
+    var showMenu by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { viewModel.selectSection(ServerLibrarySection.LISTS) }
     DesignPage(
         title = "书单",
@@ -309,7 +311,15 @@ fun BackendBooklistsScreen(
         navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
         actions = {
             IconButton(onClick = onCreate) { Icon(Icons.Default.Add, "新建书单") }
-            IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, "更多") }
+            Box {
+                IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "更多") }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("刷新书单") },
+                        onClick = { showMenu = false; viewModel.refresh() }
+                    )
+                }
+            }
         }
     ) {
         CloudMockNotice()

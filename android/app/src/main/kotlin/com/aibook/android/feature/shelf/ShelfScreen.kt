@@ -1,7 +1,14 @@
 package com.aibook.android.feature.shelf
 
 import android.content.Context
+import android.content.ContentResolver
+import android.net.Uri
+import android.provider.DocumentsContract
+import android.webkit.MimeTypeMap
+import android.widget.Toast
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -64,6 +71,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,6 +99,12 @@ import com.aibook.android.ui.design.SoftCard
 import com.aibook.android.ui.design.SectionHeader
 import com.aibook.android.ui.design.SlidingSegmentedControl
 import com.aibook.android.ui.design.WarmProgress
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 @Composable
 fun ShelfScreen(
@@ -130,6 +144,20 @@ fun ShelfScreen(
     val selectedFavorite = state.selectedBooks.isNotEmpty() && state.selectedBooks.all { it.favorite }
     var showMoveDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var booksPendingExport by remember { mutableStateOf<List<LocalBook>>(emptyList()) }
+    val exportFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { folderUri ->
+        val selectedBooks = booksPendingExport
+        booksPendingExport = emptyList()
+        if (folderUri != null && selectedBooks.isNotEmpty()) {
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    exportBooksToFolder(context.contentResolver, folderUri, selectedBooks)
+                }
+                Toast.makeText(context, result, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
     val prefs = remember(context) { ShelfPreferences.preferences(context) }
     var viewMode by remember { mutableIntStateOf(prefs.getInt("reading_view_mode", 0).coerceIn(0, 1)) }
     var showContinueReadingCards by remember {
@@ -180,7 +208,11 @@ fun ShelfScreen(
             onDone = { viewModel.setManagementMode(false) },
             onMove = { showMoveDialog = true },
             onFavorite = { viewModel.setSelectedFavorite(!selectedFavorite) },
-            onRemove = viewModel::removeSelectedFromShelf
+            onRemove = viewModel::removeSelectedFromShelf,
+            onExportSelected = { books ->
+                booksPendingExport = books
+                exportFolderPicker.launch(null)
+            }
         )
         if (showMoveDialog) {
             MoveToFolderDialog(
@@ -482,7 +514,8 @@ private fun ShelfBatchContent(
     onDone: () -> Unit,
     onMove: () -> Unit,
     onFavorite: () -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    onExportSelected: (List<LocalBook>) -> Unit
 ) {
     var showMore by remember { mutableStateOf(false) }
     val hasSelection = selectedIds.isNotEmpty()
@@ -533,7 +566,9 @@ private fun ShelfBatchContent(
         ) {
             BatchToolbarAction(Icons.Default.CreateNewFolder, "加入文件夹", hasSelection, onMove)
             BatchToolbarAction(Icons.Default.FavoriteBorder, "收藏", hasSelection, onFavorite)
-            BatchToolbarAction(Icons.Default.Download, "下载", hasSelection) { }
+            BatchToolbarAction(Icons.Default.Download, "导出", hasSelection) {
+                onExportSelected(books.filter { it.id in selectedIds })
+            }
             BatchToolbarAction(Icons.Default.RemoveCircleOutline, "移出书架", hasSelection, onRemove)
             Box {
                 BatchToolbarAction(Icons.Default.MoreVert, "更多", hasSelection) { showMore = true }
@@ -544,6 +579,107 @@ private fun ShelfBatchContent(
         }
     }
 }
+
+private fun exportBooksToFolder(
+    contentResolver: ContentResolver,
+    folderUri: Uri,
+    books: List<LocalBook>
+): String {
+    runCatching {
+        contentResolver.takePersistableUriPermission(
+            folderUri,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        )
+    }
+
+    var exported = 0
+    val failures = mutableListOf<String>()
+    books.forEach { book ->
+        var destinationUri: Uri? = null
+        try {
+            val extension = book.format.extension
+            val sourceFile = File(book.uri)
+            val shouldBundleMarkdown = book.format == com.aibook.android.core.model.BookFormat.MARKDOWN && sourceFile.isFile
+            val outputExtension = if (shouldBundleMarkdown) "zip" else extension
+            val safeTitle = book.title
+                .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                .trim()
+                .ifBlank { "未命名书籍" }
+            val mimeType = if (shouldBundleMarkdown) {
+                "application/zip"
+            } else {
+                MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+                    ?: "application/octet-stream"
+            }
+            destinationUri = DocumentsContract.createDocument(
+                contentResolver,
+                folderUri,
+                mimeType,
+                "$safeTitle.$outputExtension"
+            ) ?: error("无法在目标文件夹创建文件")
+
+            if (shouldBundleMarkdown) {
+                val output = contentResolver.openOutputStream(destinationUri)
+                    ?: error("无法写入目标文件")
+                ZipOutputStream(output.buffered()).use { zip ->
+                    zip.putNextEntry(ZipEntry("book.${book.format.extension}"))
+                    sourceFile.inputStream().buffered().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                    sourceFile.parentFile?.let { parent ->
+                        collectExportFiles(parent)
+                            .filter { it.canonicalFile != sourceFile.canonicalFile }
+                            .forEach { asset ->
+                                val relativePath = asset.relativeTo(parent).invariantSeparatorsPath
+                                require(isSafeExportPath(relativePath)) { "书籍资源路径无效" }
+                                zip.putNextEntry(ZipEntry(relativePath))
+                                asset.inputStream().buffered().use { it.copyTo(zip) }
+                                zip.closeEntry()
+                            }
+                    }
+                }
+            } else {
+                val input = if (sourceFile.isFile) {
+                    sourceFile.inputStream()
+                } else {
+                    contentResolver.openInputStream(Uri.parse(book.uri))
+                        ?: error("无法读取源文件")
+                }
+                input.use { source ->
+                    contentResolver.openOutputStream(destinationUri, "w")
+                        ?.use { output -> source.copyTo(output) }
+                        ?: error("无法写入目标文件")
+                }
+            }
+            exported++
+        } catch (error: Exception) {
+            destinationUri?.let { runCatching { DocumentsContract.deleteDocument(contentResolver, it) } }
+            failures += "${book.title}: ${error.message ?: "导出失败"}"
+        }
+    }
+
+    return when {
+        failures.isEmpty() -> "已导出 $exported 本书"
+        exported == 0 -> "导出失败：${failures.take(2).joinToString("；")}"
+        else -> "已导出 $exported 本，失败 ${failures.size} 本：${failures.take(2).joinToString("；")}"
+    }
+}
+
+private fun collectExportFiles(directory: File): List<File> = directory.listFiles().orEmpty().flatMap { child ->
+    if (runCatching { child.canonicalFile != child.absoluteFile }.getOrDefault(true)) {
+        emptyList()
+    } else if (child.isDirectory) {
+        collectExportFiles(child)
+    } else if (child.isFile) {
+        listOf(child)
+    } else {
+        emptyList()
+    }
+}
+
+private fun isSafeExportPath(path: String): Boolean =
+    path.isNotBlank() && !path.startsWith('/') && !path.contains('\\') &&
+        path.split('/').none { it.isBlank() || it == "." || it == ".." }
 
 @Composable
 private fun BatchBookCard(book: LocalBook, selected: Boolean, onClick: () -> Unit) {
@@ -566,8 +702,18 @@ private fun BatchBookCard(book: LocalBook, selected: Boolean, onClick: () -> Uni
                 }
             }
             Text(book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
-            Text(book.author ?: "未知作者", maxLines = 1, overflow = TextOverflow.Ellipsis, color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
-            Text(if (book.progress.percent > 0f) "已读 ${(book.progress.percent * 100).toInt()}%" else "未读", color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
+            Text(
+                book.author ?: "未知作者",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = DesignTokens.SoftText,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                if (book.progress.percent > 0f) "已读 ${(book.progress.percent * 100).toInt()}%" else "未读",
+                color = DesignTokens.SoftText,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }

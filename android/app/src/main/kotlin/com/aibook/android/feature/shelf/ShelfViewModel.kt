@@ -264,6 +264,21 @@ class ShelfViewModel(
         viewModelScope.launch { bookRepository.createShelfFolder(trimmed) }
     }
 
+    fun renameFolder(id: String, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch { bookRepository.renameShelfFolder(id, trimmed) }
+    }
+
+    fun deleteFolder(id: String) {
+        viewModelScope.launch {
+            bookRepository.deleteShelfFolder(id)
+            if ((_folderSelection.value as? ShelfFolderSelection.Folder)?.folderId == id) {
+                _folderSelection.value = ShelfFolderSelection.All
+            }
+        }
+    }
+
     fun moveSelectedToFolder(folderId: String?) {
         val ids = _selectedIds.value
         if (ids.isEmpty()) return

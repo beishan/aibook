@@ -92,6 +92,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.content.ContextCompat
 import com.aibook.android.core.model.LocalBook
 import com.aibook.android.core.data.repository.CacheCleanupWorker
+import com.aibook.android.core.data.backup.LocalBackupManager
 import com.aibook.android.di.ServiceLocator
 import com.aibook.android.feature.shelf.ShelfPreferences
 import com.aibook.android.ui.design.DesignPage
@@ -536,26 +537,39 @@ fun ShelfSettingsScreen(onBack: () -> Unit) {
 @Composable
 fun BackupRestoreScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf<String?>(null) }
+    var isWorking by remember { mutableStateOf(false) }
+    var restoreUri by remember { mutableStateOf<Uri?>(null) }
+    var showRestoreConfirmation by remember { mutableStateOf(false) }
+    val backupPreferences = remember(context) {
+        context.getSharedPreferences("backup_restore", Context.MODE_PRIVATE)
+    }
+    val lastBackupAt = backupPreferences.getLong("last_backup_at", 0L)
     val createBackup = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
+        ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
         if (uri != null) {
-            message = runCatching {
-                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
-                    writer.write("""{"app":"汗牛充栋","version":1,"createdAt":${System.currentTimeMillis()}}""")
-                } ?: error("无法打开备份文件")
-                "备份文件已保存"
-            }.getOrElse { "备份失败：${it.message ?: "未知错误"}" }
+            scope.launch {
+                isWorking = true
+                val result = runCatching {
+                    withContext(Dispatchers.IO) { LocalBackupManager.create(context, uri) }
+                }
+                message = result.fold(
+                    onSuccess = { summary ->
+                        backupPreferences.edit().putLong("last_backup_at", System.currentTimeMillis()).apply()
+                        "备份完成：${summary.bookCount} 本书、${summary.bookmarkCount} 个书签、${summary.highlightCount} 条划线"
+                    },
+                    onFailure = { error -> "备份失败：${error.message ?: "未知错误"}" }
+                )
+                isWorking = false
+            }
         }
     }
     val restoreBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            message = runCatching {
-                val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
-                require(content.contains("\"app\":\"汗牛充栋\"")) { "不是有效的汗牛充栋备份文件" }
-                "备份文件校验通过；数据恢复将在确认后执行"
-            }.getOrElse { "恢复失败：${it.message ?: "未知错误"}" }
+            restoreUri = uri
+            showRestoreConfirmation = true
         }
     }
 
@@ -563,36 +577,92 @@ fun BackupRestoreScreen(onBack: () -> Unit) {
         message?.let { SoftCard(color = MaterialTheme.colorScheme.surfaceVariant) { Text(it) } }
         SoftCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
-                Box(Modifier.size(52.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(DesignTokens.RadiusLarge)), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier.size(52.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(DesignTokens.RadiusLarge)),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(Icons.Default.Backup, null, tint = DesignTokens.Accent)
                 }
-                Column { Text("备份", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("书架、阅读记录、书签、设置", color = DesignTokens.SoftText) }
+                Column {
+                    Text("备份", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("本地书籍文件、书架、阅读进度、书签、划线和文件夹", color = DesignTokens.SoftText)
+                }
             }
             Text("上次备份时间", modifier = Modifier.padding(top = DesignTokens.Space16), color = DesignTokens.SoftText)
-            Text("尚未创建备份", color = DesignTokens.Accent)
+            Text(
+                if (lastBackupAt > 0L) {
+                    java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(lastBackupAt))
+                } else "尚未创建备份",
+                color = DesignTokens.Accent
+            )
+            Text(
+                "备份包含书籍文件，文件较多时会占用相应存储空间；云端登录凭据和阅读器设置不会导出。",
+                color = DesignTokens.SoftText,
+                modifier = Modifier.padding(top = DesignTokens.Space8)
+            )
             Button(
-                onClick = { createBackup.launch("ai-book-backup.json") },
+                onClick = { createBackup.launch("ai-book-backup.zip") },
+                enabled = !isWorking,
                 modifier = Modifier.fillMaxWidth().height(54.dp).padding(top = DesignTokens.Space12),
                 colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Accent),
                 elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
-            ) { Text("立即备份") }
+            ) { Text(if (isWorking) "正在处理…" else "立即备份") }
         }
         SoftCard {
             Text("恢复", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("从本地备份文件恢复数据", color = DesignTokens.SoftText, modifier = Modifier.padding(vertical = DesignTokens.Space12))
+            Text(
+                "从 ZIP 备份恢复。恢复会合并书籍、文件夹、阅读进度、书签和划线；相同 ID 的记录会以备份内容覆盖。",
+                color = DesignTokens.SoftText,
+                modifier = Modifier.padding(vertical = DesignTokens.Space12)
+            )
             OutlinedButton(
-                onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain")) },
+                onClick = { restoreBackup.launch(arrayOf("application/zip", "application/octet-stream")) },
+                enabled = !isWorking,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) { Text("选择备份文件") }
         }
         SoftCard {
-            Text("自动备份", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            DetailLine(Icons.Default.History, "自动备份频率", "定期保存阅读数据", trailing = "每 7 天")
-            SwitchLine(Icons.Default.Wifi, "仅在 Wi-Fi 下备份", "节省移动数据", checked = true, showDivider = false, onCheckedChange = {})
+            Text("自动备份暂未开放", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("当前可手动创建 ZIP 备份，并选择任意本地或云端文档目录保存。", color = DesignTokens.SoftText)
         }
-        SoftCard(color = MaterialTheme.colorScheme.surfaceVariant) {
-            DetailLine(Icons.Default.Folder, "备份文件位置", "手机存储/Documents/AI Book", showDivider = false)
-        }
+    }
+
+    if (showRestoreConfirmation) {
+        AlertDialog(
+            onDismissRequest = {
+                showRestoreConfirmation = false
+                restoreUri = null
+            },
+            title = { Text("合并恢复备份？") },
+            text = { Text("备份中的书籍和阅读数据会合并到当前书库；ID 相同的记录将更新为备份版本。此操作不会删除其他书籍。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val uri = restoreUri
+                    showRestoreConfirmation = false
+                    restoreUri = null
+                    if (uri != null) scope.launch {
+                        isWorking = true
+                        val result = runCatching {
+                            withContext(Dispatchers.IO) { LocalBackupManager.restore(context, uri) }
+                        }
+                        message = result.fold(
+                            onSuccess = { summary ->
+                                "恢复完成：${summary.bookCount} 本书、${summary.bookmarkCount} 个书签、${summary.highlightCount} 条划线"
+                            },
+                            onFailure = { error -> "恢复失败：${error.message ?: "未知错误"}" }
+                        )
+                        isWorking = false
+                    }
+                }) { Text("合并恢复") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showRestoreConfirmation = false
+                    restoreUri = null
+                }) { Text("取消") }
+            }
+        )
     }
 }
 

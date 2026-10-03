@@ -250,7 +250,7 @@ class OpdsViewModel(
         }
     }
 
-    fun browse(connection: OpdsConnection, href: String? = null) {
+    fun browse(connection: OpdsConnection, href: String? = null, appendNavigation: Boolean = true) {
         viewModelScope.launch {
             _state.value = _state.value.copy(
                 isLoading = true,
@@ -264,7 +264,11 @@ class OpdsViewModel(
                 _state.value = _state.value.copy(
                     currentFeed = feed,
                     isLoading = false,
-                    navigationStack = if (href != null) _state.value.navigationStack + href else emptyList()
+                    navigationStack = when {
+                        href == null -> emptyList()
+                        appendNavigation -> _state.value.navigationStack + href
+                        else -> _state.value.navigationStack
+                    }
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to browse OPDS connection ${connection.id}", e)
@@ -280,6 +284,15 @@ class OpdsViewModel(
     fun browseLink(href: String) {
         val connection = _state.value.activeConnection ?: return
         browse(connection, href)
+    }
+
+    fun refreshCurrentFeed() {
+        val connection = _state.value.activeConnection ?: return
+        browse(connection, _state.value.navigationStack.lastOrNull(), appendNavigation = false)
+    }
+
+    fun navigateToConnectionRoot() {
+        _state.value.activeConnection?.let { browse(it) }
     }
 
     fun loadNextPage() {

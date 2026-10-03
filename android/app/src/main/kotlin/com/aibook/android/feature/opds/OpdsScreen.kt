@@ -52,6 +52,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -134,6 +136,9 @@ fun OpdsScreen(
         importViewModel.importBooks(uris)
     }
     var openedInitialHref by rememberSaveable(initialConnectionId, initialHref) { mutableStateOf(false) }
+    var searchVisible by rememberSaveable(initialConnectionId, initialHref) { mutableStateOf(false) }
+    var searchQuery by rememberSaveable(initialConnectionId, initialHref) { mutableStateOf("") }
+    var catalogMenuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(initialConnectionId, state.connections) {
         if (initialConnectionId != null && state.activeConnection?.id != initialConnectionId) {
@@ -177,20 +182,57 @@ fun OpdsScreen(
         actions = {
             if (state.currentFeed == null && servicesOnly) {
                 IconButton(onClick = onAddSourceClick) { Icon(Icons.Default.Add, contentDescription = "添加 OPDS 服务") }
-                IconButton(onClick = {}) { Icon(Icons.Default.Search, contentDescription = "搜索 OPDS 服务") }
+                IconButton(onClick = {
+                    searchVisible = !searchVisible
+                    if (!searchVisible) searchQuery = ""
+                }) { Icon(Icons.Default.Search, contentDescription = "搜索 OPDS 服务") }
             } else if (state.currentFeed != null) {
-                IconButton(onClick = {}) { Icon(Icons.Default.Search, contentDescription = "搜索当前目录") }
-                IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, contentDescription = "更多") }
+                IconButton(onClick = {
+                    searchVisible = !searchVisible
+                    if (!searchVisible) searchQuery = ""
+                }) { Icon(Icons.Default.Search, contentDescription = "搜索当前目录") }
+                Box {
+                    IconButton(onClick = { catalogMenuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "更多")
+                    }
+                    DropdownMenu(
+                        expanded = catalogMenuExpanded,
+                        onDismissRequest = { catalogMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("刷新当前目录") },
+                            onClick = { catalogMenuExpanded = false; viewModel.refreshCurrentFeed() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("返回数据源首页") },
+                            onClick = { catalogMenuExpanded = false; viewModel.navigateToConnectionRoot() }
+                        )
+                    }
+                }
             }
         }
     ) {
         if (state.showConnectionForm) {
             ConnectionForm(state, viewModel)
         } else if (state.currentFeed != null) {
-            CatalogBrowser(state, viewModel, onCategoriesClick, onCategoryClick, categoriesOnly, booksOnly)
+            CatalogBrowser(
+                state = state,
+                viewModel = viewModel,
+                onCategoriesClick = onCategoriesClick,
+                onCategoryClick = onCategoryClick,
+                categoriesOnly = categoriesOnly,
+                booksOnly = booksOnly,
+                searchVisible = searchVisible,
+                searchQuery = searchQuery,
+                onSearchQueryChanged = { searchQuery = it },
+                onSearchRequest = { searchVisible = true }
+            )
         } else if (servicesOnly) {
             OpdsServicesHome(
                 state = state,
+                searchVisible = searchVisible,
+                searchQuery = searchQuery,
+                onSearchQueryChanged = { searchQuery = it },
                 onOpen = { connection ->
                     if (onConnectionClick != null) onConnectionClick(connection.id)
                     else viewModel.selectConnection(connection)
@@ -236,9 +278,18 @@ fun OpdsScreen(
 @Composable
 private fun OpdsServicesHome(
     state: OpdsUiState,
+    searchVisible: Boolean,
+    searchQuery: String,
+    onSearchQueryChanged: (String) -> Unit,
     onOpen: (OpdsConnection) -> Unit,
     onRetry: () -> Unit
 ) {
+    val filteredConnections = remember(state.connections, searchQuery) {
+        state.connections.filter { connection ->
+            searchQuery.isBlank() || connection.name.contains(searchQuery, ignoreCase = true) ||
+                connection.baseUrl.contains(searchQuery, ignoreCase = true)
+        }
+    }
     when {
         state.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = DesignTokens.Accent)
@@ -263,7 +314,19 @@ private fun OpdsServicesHome(
             verticalArrangement = Arrangement.spacedBy(DesignTokens.Space16),
             contentPadding = PaddingValues(bottom = DesignTokens.Space24)
         ) {
-            items(state.connections, key = { it.id }) { connection ->
+            if (searchVisible) item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("搜索服务名称或地址") },
+                    singleLine = true
+                )
+            }
+            if (filteredConnections.isEmpty()) item {
+                SoftCard { Text("没有匹配的 OPDS 服务", color = DesignTokens.SoftText) }
+            }
+            items(filteredConnections, key = { it.id }) { connection ->
                 OpdsServicePreviewCard(
                     connection = connection,
                     entries = state.cachedEntries.filter { it.connectionId == connection.id }.take(5),
@@ -1169,12 +1232,24 @@ private fun CatalogBrowser(
     onCategoriesClick: ((String) -> Unit)?,
     onCategoryClick: ((String, String) -> Unit)?,
     categoriesOnly: Boolean,
-    booksOnly: Boolean
+    booksOnly: Boolean,
+    searchVisible: Boolean,
+    searchQuery: String,
+    onSearchQueryChanged: (String) -> Unit,
+    onSearchRequest: () -> Unit
 ) {
     val feed = state.currentFeed ?: return
     val connection = state.activeConnection
-    val categoryEntries = feed.entries.filter { it.acquisitionLink == null && it.alternateLink != null }
-    val bookEntries = feed.entries.filter { it.acquisitionLink != null }
+    val matchingEntries = remember(feed.entries, searchQuery) {
+        feed.entries.filter { entry ->
+            searchQuery.isBlank() || entry.title.contains(searchQuery, ignoreCase = true) ||
+                entry.author.orEmpty().contains(searchQuery, ignoreCase = true) ||
+                entry.summary.orEmpty().contains(searchQuery, ignoreCase = true) ||
+                entry.categories.any { it.contains(searchQuery, ignoreCase = true) }
+        }
+    }
+    val categoryEntries = matchingEntries.filter { it.acquisitionLink == null && it.alternateLink != null }
+    val bookEntries = matchingEntries.filter { it.acquisitionLink != null }
     val availableFormats = remember(bookEntries) { bookEntries.map(::opdsFormatLabel).distinct().sorted() }
     val catalogKey = state.navigationStack.lastOrNull() ?: connection?.baseUrl.orEmpty()
     var selectedFormat by rememberSaveable(catalogKey) { mutableStateOf<String?>(null) }
@@ -1187,13 +1262,25 @@ private fun CatalogBrowser(
     }
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        if (searchVisible) item {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChanged,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("搜索书名、作者或分类") },
+                singleLine = true
+            )
+        }
         if (!categoriesOnly && !booksOnly) item {
             CatalogHeader(connection = connection, feedTitle = feed.title, bookCount = bookEntries.size)
         }
         if (!categoriesOnly && !booksOnly) {
             item {
                 CatalogQuickActions(
-                    onCategories = { connection?.id?.let { onCategoriesClick?.invoke(it) } }
+                    onCategories = { connection?.id?.let { onCategoriesClick?.invoke(it) } },
+                    onLatestUpdates = { sort = OpdsCatalogSort.MODIFIED },
+                    onTitleSort = { sort = OpdsCatalogSort.TITLE },
+                    onSearch = onSearchRequest
                 )
             }
         }
@@ -1210,7 +1297,10 @@ private fun CatalogBrowser(
             }
         }
         if (categoriesOnly && categoryEntries.isEmpty() && !state.isLoading) {
-            item { CatalogEmptyState(hasCategories = false) }
+            item {
+                if (searchQuery.isBlank()) CatalogEmptyState(hasCategories = false)
+                else SoftCard { Text("没有匹配的分类", color = DesignTokens.SoftText) }
+            }
         }
         if (state.isLoading) {
             item {
@@ -1244,7 +1334,8 @@ private fun CatalogBrowser(
         }
         if (!categoriesOnly && displayedEntries.isEmpty()) {
             item {
-                CatalogEmptyState(categoryEntries.isNotEmpty())
+                if (searchQuery.isBlank()) CatalogEmptyState(categoryEntries.isNotEmpty())
+                else SoftCard { Text("没有匹配的书籍", color = DesignTokens.SoftText) }
             }
         } else if (booksOnly) {
             item {
@@ -1323,19 +1414,20 @@ private fun OpdsCategoryRow(title: String, count: Int, onClick: () -> Unit) {
 }
 
 @Composable
-private fun CatalogQuickActions(onCategories: () -> Unit) {
+private fun CatalogQuickActions(
+    onCategories: () -> Unit,
+    onLatestUpdates: () -> Unit,
+    onTitleSort: () -> Unit,
+    onSearch: () -> Unit
+) {
     val actions = listOf(
-        Triple("最近添加", Icons.Default.Schedule, {}),
-        Triple("最新更新", Icons.Default.Refresh, {}),
-        Triple("作者", Icons.Default.Person, {}),
+        Triple("最新更新", Icons.Default.Refresh, onLatestUpdates),
+        Triple("书名排序", Icons.Default.Book, onTitleSort),
         Triple("分类", Icons.Default.FilterList, onCategories),
-        Triple("系列", Icons.Default.Book, {}),
-        Triple("标签", Icons.Default.CheckCircle, {}),
-        Triple("搜索", Icons.Default.Search, {}),
-        Triple("关于", Icons.Default.Info, {})
+        Triple("搜索", Icons.Default.Search, onSearch)
     )
     SoftCard(contentPadding = DesignTokens.Space16) {
-        actions.chunked(4).forEachIndexed { rowIndex, rowActions ->
+        actions.chunked(4).forEach { rowActions ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 rowActions.forEach { (label, icon, action) ->
                     Column(
@@ -1351,7 +1443,6 @@ private fun CatalogQuickActions(onCategories: () -> Unit) {
                     }
                 }
             }
-            if (rowIndex == 0) Spacer(Modifier.height(DesignTokens.Space16))
         }
     }
 }
@@ -1419,14 +1510,15 @@ private fun CatalogHeader(
 @Composable
 private fun CatalogCategoryChips(
     entries: List<OpdsEntry>,
-    onBrowse: (String) -> Unit
+    onBrowse: (String) -> Unit,
+    onClearCategory: () -> Unit
 ) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(horizontal = 0.dp)
     ) {
         item {
-            CatalogChip("全部", selected = true, onClick = {})
+            CatalogChip("全部", selected = true, onClick = onClearCategory)
         }
         items(entries.take(8), key = { it.title }) { entry ->
             CatalogChip(

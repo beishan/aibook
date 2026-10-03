@@ -25,6 +25,7 @@ import com.aibook.android.R
 import com.aibook.android.core.data.db.DownloadTaskEntity
 import com.aibook.android.core.data.repository.DownloadStatus
 import com.aibook.android.core.data.repository.ImportResult
+import com.aibook.android.core.model.BookFormat
 import com.aibook.android.core.network.opds.OpdsFeed
 import com.aibook.android.core.network.opds.OpdsSyncMode
 import com.aibook.android.di.ServiceLocator
@@ -273,9 +274,14 @@ class DownloadQueueManager(private val context: Context) {
     }
 
     suspend fun enqueueServer(bookId: Long, title: String, format: String?): String {
-        val extension = if (format.equals("structured", ignoreCase = true)) "txt"
-        else format?.lowercase()?.takeIf { it in setOf("txt", "epub") }
-            ?: error("当前仅支持下载 TXT、EPUB 和结构化书籍")
+        val normalizedFormat = format
+            ?.substringAfterLast('.')
+            ?.lowercase()
+        val extension = when {
+            normalizedFormat == "structured" -> "txt"
+            normalizedFormat != null && normalizedFormat in SERVER_DOWNLOAD_EXTENSIONS -> normalizedFormat
+            else -> error("云端书籍格式缺失或暂不支持下载")
+        }
         val safeTitle = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "云端书籍-$bookId" }
         return enqueue("server:$bookId", SERVER_CONNECTION_ID, title, bookId.toString(), "$safeTitle.$extension")
     }
@@ -320,6 +326,7 @@ class DownloadQueueManager(private val context: Context) {
 
     companion object {
         const val SERVER_CONNECTION_ID = "SERVER"
+        private val SERVER_DOWNLOAD_EXTENSIONS = BookFormat.entries.map { it.extension }.toSet()
     }
 }
 

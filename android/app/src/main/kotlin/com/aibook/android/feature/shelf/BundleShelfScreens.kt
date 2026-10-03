@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -46,6 +47,9 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -232,6 +236,18 @@ fun ShelfFolderDetailScreen(
     LaunchedEffect(folderId) { viewModel.selectFolder(ShelfFolderSelection.Folder(folderId)) }
     val folder = state.folders.firstOrNull { it.id == folderId }
     val books = state.books.filter { it.folderId == folderId }
+    var query by remember(folderId) { mutableStateOf("") }
+    var searchVisible by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var editedFolderName by remember(folderId, folder?.name) { mutableStateOf(folder?.name.orEmpty()) }
+    val displayedBooks = remember(books, query) {
+        books.filter { book ->
+            query.isBlank() || book.title.contains(query, ignoreCase = true) ||
+                book.author.orEmpty().contains(query, ignoreCase = true)
+        }
+    }
     var viewMode by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = DesignTokens.PagePadding)) {
         Row(
@@ -240,11 +256,39 @@ fun ShelfFolderDetailScreen(
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = {}) { Icon(Icons.Default.Search, "搜索") }
-            IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, "更多") }
+            IconButton(onClick = {
+                searchVisible = !searchVisible
+                if (!searchVisible) query = ""
+            }) { Icon(Icons.Default.Search, "搜索文件夹") }
+            Box {
+                IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "更多") }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("重命名") },
+                        onClick = {
+                            showMenu = false
+                            editedFolderName = folder?.name.orEmpty()
+                            showRenameDialog = true
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("删除文件夹") },
+                        onClick = { showMenu = false; showDeleteDialog = true }
+                    )
+                }
+            }
+        }
+        if (searchVisible) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth().padding(bottom = DesignTokens.Space8),
+                placeholder = { Text("搜索书名或作者") },
+                singleLine = true
+            )
         }
         Text(folder?.name ?: "文件夹", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
-        Text("${books.size} 本", color = DesignTokens.SoftText, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = DesignTokens.Space8))
+        Text("${displayedBooks.size} 本", color = DesignTokens.SoftText, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = DesignTokens.Space8))
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = DesignTokens.Space24),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -266,12 +310,53 @@ fun ShelfFolderDetailScreen(
             )
         }
         if (viewMode == 0) {
-            BundleBookGrid(books, onBookClick, Modifier.weight(1f))
+            BundleBookGrid(displayedBooks, onBookClick, Modifier.weight(1f))
         } else {
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
-                items(books, key = { it.id }) { book -> BundleBookListItem(book) { onBookClick(book.id) } }
+                items(displayedBooks, key = { it.id }) { book -> BundleBookListItem(book) { onBookClick(book.id) } }
             }
         }
+    }
+
+    if (showRenameDialog) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text("重命名文件夹") },
+            text = {
+                OutlinedTextField(
+                    value = editedFolderName,
+                    onValueChange = { editedFolderName = it.take(20) },
+                    label = { Text("文件夹名称") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = editedFolderName.isNotBlank(),
+                    onClick = {
+                        viewModel.renameFolder(folderId, editedFolderName)
+                        showRenameDialog = false
+                    }
+                ) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { showRenameDialog = false }) { Text("取消") } }
+        )
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("删除文件夹？") },
+            text = { Text("文件夹中的书籍会保留在书架，并移到未分类。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteFolder(folderId)
+                    showDeleteDialog = false
+                    onBack()
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("取消") } }
+        )
     }
 }
 
@@ -338,11 +423,21 @@ fun RecentReadingScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val books = state.books.filter { it.lastReadAt != null }.sortedByDescending { it.lastReadAt }
+    var showMenu by remember { mutableStateOf(false) }
+    var confirmClear by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(DesignTokens.PagePadding)) {
         Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
             Text("最近阅读", modifier = Modifier.weight(1f), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, "更多") }
+            Box {
+                IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "更多") }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("清除阅读记录") },
+                        onClick = { showMenu = false; confirmClear = true }
+                    )
+                }
+            }
         }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
             items(books, key = { it.id }) { book ->
@@ -364,13 +459,27 @@ fun RecentReadingScreen(
             }
             if (books.isNotEmpty()) {
                 item {
-                    TextButton(onClick = viewModel::clearReadingHistory, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = { confirmClear = true }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Delete, null)
                         Text("清除全部记录")
                     }
                 }
             }
         }
+    }
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("清除阅读记录？") },
+            text = { Text("会清除最近阅读时间，保留书籍、阅读进度和书签。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearReadingHistory()
+                    confirmClear = false
+                }) { Text("清除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } }
+        )
     }
 }
 
