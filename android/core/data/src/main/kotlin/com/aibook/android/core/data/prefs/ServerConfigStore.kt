@@ -25,6 +25,7 @@ class ServerConfigStore(
     private object Keys {
         val SERVER_URL = stringPreferencesKey("server_url")
         val JWT_TOKEN = stringPreferencesKey("jwt_token")
+        val AUTH_PASSWORD = stringPreferencesKey("auth_password")
         val USERNAME = stringPreferencesKey("username")
         val EMAIL = stringPreferencesKey("email")
         val WIFI_ONLY = booleanPreferencesKey("wifi_only_sync")
@@ -59,17 +60,29 @@ class ServerConfigStore(
         context.serverConfigStore.edit { it[Keys.SERVER_URL] = url }
     }
 
-    suspend fun setAuth(token: String, username: String?, email: String?) {
+    suspend fun setAuth(token: String, username: String?, email: String?, password: String) {
         context.serverConfigStore.edit { prefs ->
             prefs[Keys.JWT_TOKEN] = secretCipher.encrypt(token)
+            prefs[Keys.AUTH_PASSWORD] = secretCipher.encrypt(password)
             if (username != null) prefs[Keys.USERNAME] = username
             if (email != null) prefs[Keys.EMAIL] = email
         }
     }
 
+    suspend fun authCredentials(): AuthCredentials? {
+        val preferences = context.serverConfigStore.data.first()
+        val username = preferences[Keys.USERNAME]?.takeIf(String::isNotBlank) ?: return null
+        val password = preferences[Keys.AUTH_PASSWORD]
+            ?.let { stored -> runCatching { secretCipher.decrypt(stored) }.getOrNull() }
+            ?.takeIf(String::isNotBlank)
+            ?: return null
+        return AuthCredentials(username, password)
+    }
+
     suspend fun clearAuth() {
         context.serverConfigStore.edit { prefs ->
             prefs.remove(Keys.JWT_TOKEN)
+            prefs.remove(Keys.AUTH_PASSWORD)
             prefs.remove(Keys.USERNAME)
             prefs.remove(Keys.EMAIL)
         }
@@ -184,6 +197,11 @@ class ServerConfigStore(
         }
     }
 }
+
+data class AuthCredentials(
+    val username: String,
+    val password: String
+)
 
 data class PendingReadingProgress(
     val bookId: Long,

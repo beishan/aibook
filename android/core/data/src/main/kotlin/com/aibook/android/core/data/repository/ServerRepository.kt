@@ -42,6 +42,8 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.Instant
 import org.json.JSONObject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 
 class ServerRepository(
     private val serverConfigStore: ServerConfigStore,
@@ -55,6 +57,20 @@ class ServerRepository(
     private var cachedServerUrl: String = ""
 
     @Volatile
+    private var cachedUsername: String? = null
+
+    @Volatile
+    private var cachedPassword: String? = null
+
+    @Volatile
+    private var failedRefreshToken: String? = null
+
+    @Volatile
+    private var failedRefreshAtMillis: Long = 0L
+
+    private val authRefreshLock = Any()
+
+    @Volatile
     private var retrofit: Retrofit? = null
 
     @Volatile
@@ -65,6 +81,10 @@ class ServerRepository(
     suspend fun initialize() {
         cachedToken = serverConfigStore.tokenSync()
         cachedServerUrl = serverConfigStore.serverUrl.first()
+        serverConfigStore.authCredentials()?.let { credentials ->
+            cachedUsername = credentials.username
+            cachedPassword = credentials.password
+        }
         if (cachedServerUrl.isNotBlank()) {
             ensureRetrofit()
         }
@@ -91,9 +111,13 @@ class ServerRepository(
         val previousUrl = cachedServerUrl.ifBlank { serverConfigStore.serverUrl.first().trim().trimEnd('/') }
         val serverChanged = previousUrl.isNotBlank() && previousUrl != normalizedUrl
         if (serverChanged) {
-            cachedToken = null
-            serverConfigStore.clearAllPendingReadingProgress()
-            serverConfigStore.clearAuth()
+            synchronized(authRefreshLock) {
+                clearCachedAuth()
+                runBlocking(Dispatchers.IO) {
+                    serverConfigStore.clearAllPendingReadingProgress()
+                    serverConfigStore.clearAuth()
+                }
+            }
         }
         serverConfigStore.setServerUrl(normalizedUrl)
         cachedServerUrl = normalizedUrl
@@ -107,8 +131,7 @@ class ServerRepository(
         return runCatching {
             val api = getAuthApi()
             val response = api.login(LoginRequest(username, password))
-            cachedToken = response.token
-            serverConfigStore.setAuth(response.token, response.username, response.email)
+            saveAuthResponse(response, username, password)
             response
         }
     }
@@ -122,16 +145,132 @@ class ServerRepository(
         return runCatching {
             val api = getAuthApi()
             val response = api.register(RegisterRequest(username, email, password, nickname))
-            cachedToken = response.token
-            serverConfigStore.setAuth(response.token, response.username, response.email)
+            saveAuthResponse(response, username, password)
             response
         }
     }
 
     suspend fun logout() {
+        synchronized(authRefreshLock) {
+            clearCachedAuth()
+            runBlocking(Dispatchers.IO) {
+                serverConfigStore.clearAllPendingReadingProgress()
+                serverConfigStore.clearAuth()
+            }
+        }
+    }
+
+    override fun refreshToken(expiredToken: String): String? = synchronized(authRefreshLock) {
+        val currentToken = cachedToken
+        if (!currentToken.isNullOrBlank() && currentToken != expiredToken) {
+            return@synchronized currentToken
+        }
+
+        val now = System.currentTimeMillis()
+        val refreshIsCoolingDown = failedRefreshToken == expiredToken &&
+            now - failedRefreshAtMillis < REFRESH_RETRY_DELAY_MILLIS
+        if (refreshIsCoolingDown) {
+            return@synchronized null
+        }
+
+        try {
+            val credentials = if (cachedUsername.isNullOrBlank() || cachedPassword.isNullOrBlank()) {
+                runBlocking(Dispatchers.IO) { serverConfigStore.authCredentials() }
+                    ?.also {
+                        cachedUsername = it.username
+                        cachedPassword = it.password
+                    }
+            } else {
+                null
+            }
+            val username = cachedUsername ?: credentials?.username
+            val password = cachedPassword ?: credentials?.password
+            if (username.isNullOrBlank() || password.isNullOrBlank()) {
+                cachedToken = null
+                runBlocking(Dispatchers.IO) { serverConfigStore.clearAuth() }
+                return@synchronized null
+            }
+
+            val url = cachedServerUrl.ifBlank {
+                runBlocking(Dispatchers.IO) { serverConfigStore.serverUrl.first() }
+            }
+            if (url.isBlank()) return@synchronized null
+
+            // This blocking login uses a separate client with no authenticator, so a failed
+            // credential check cannot recursively trigger another automatic login.
+            val authRetrofit = ApiServiceFactory.createRetrofit(url, OkHttpClient())
+            val loginResponse = ApiServiceFactory.createAuthApi(authRetrofit)
+                .loginCall(LoginRequest(username, password))
+                .execute()
+
+            if (!loginResponse.isSuccessful) {
+                loginResponse.errorBody()?.close()
+                if (loginResponse.code() == 401 || loginResponse.code() == 403) {
+                    cachedToken = null
+                    cachedUsername = null
+                    cachedPassword = null
+                    runBlocking(Dispatchers.IO) { serverConfigStore.clearAuth() }
+                } else {
+                    markRefreshFailure(expiredToken)
+                }
+                return@synchronized null
+            }
+
+            val response = loginResponse.body() ?: run {
+                markRefreshFailure(expiredToken)
+                return@synchronized null
+            }
+            cachedToken = response.token
+            cachedUsername = response.username ?: username
+            cachedPassword = password
+            failedRefreshToken = null
+            failedRefreshAtMillis = 0L
+            runBlocking(Dispatchers.IO) {
+                serverConfigStore.setAuth(
+                    response.token,
+                    response.username ?: username,
+                    response.email,
+                    password
+                )
+            }
+            response.token
+        } catch (_: Exception) {
+            markRefreshFailure(expiredToken)
+            null
+        }
+    }
+
+    private suspend fun saveAuthResponse(
+        response: AuthResponse,
+        username: String,
+        password: String
+    ) {
+        synchronized(authRefreshLock) {
+            cachedToken = response.token
+            cachedUsername = response.username ?: username
+            cachedPassword = password
+            failedRefreshToken = null
+            failedRefreshAtMillis = 0L
+        }
+        serverConfigStore.setAuth(
+            response.token,
+            response.username ?: username,
+            response.email,
+            password
+        )
+    }
+
+    private fun clearCachedAuth() {
         cachedToken = null
-        serverConfigStore.clearAllPendingReadingProgress()
-        serverConfigStore.clearAuth()
+        cachedUsername = null
+        cachedPassword = null
+        failedRefreshToken = null
+        failedRefreshAtMillis = 0L
+    }
+
+    private fun markRefreshFailure(expiredToken: String) {
+        failedRefreshToken = expiredToken
+        failedRefreshAtMillis = System.currentTimeMillis()
     }
 
     suspend fun getBooks(page: Int = 0, size: Int = 20): Result<BookPage> {
@@ -528,6 +667,10 @@ class ServerRepository(
 
     private fun String.serverAnnotationId(): Long =
         removePrefix("server:").toLongOrNull() ?: error("云端标注 ID 无效")
+
+    private companion object {
+        const val REFRESH_RETRY_DELAY_MILLIS = 60_000L
+    }
 }
 
 data class ProgressSyncResult(

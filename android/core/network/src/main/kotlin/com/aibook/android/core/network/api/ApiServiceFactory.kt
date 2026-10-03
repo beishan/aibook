@@ -26,6 +26,7 @@ object ApiServiceFactory {
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
             .addInterceptor(AuthInterceptor(tokenProvider))
+            .authenticator(AuthAuthenticator(tokenProvider))
 
         if (enableLogging) {
             builder.addInterceptor(
