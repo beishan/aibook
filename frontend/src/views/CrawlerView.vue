@@ -819,7 +819,7 @@
         <el-alert v-if="importTargets.some(book=>book.crawlStatus!=='COMPLETED')" type="warning" :closable="false" :title="importTargets.length>1?'未完整采集的书籍只会加入已有正文；没有可用正文的书籍会跳过。':'当前书籍尚未完整采集，所选格式只会包含已有正文。'" />
         <el-alert v-else type="info" :closable="false" :title="importTarget?.importStatus==='IMPORTED'?'结构化版本直接同步章节快照；内容未变化时不会重复创建版本。':'结构化章节可直接阅读，不生成书籍文件；TXT/EPUB 仅在额外勾选时生成。'" />
       </div>
-      <template #footer><el-button @click="importDialog=false">取消</el-button><el-button type="primary" :loading="importing" :disabled="!importFormats.length||!importTargets.some(book=>book.crawledChapterCount>0)" @click="submitImport">{{ importTargets.length>1?'确认批量入库':importTarget?.importStatus==='IMPORTED'?'同步所选格式':'确认入库' }}</el-button></template>
+      <template #footer><el-button @click="importDialog=false">取消</el-button><el-button type="primary" :loading="importing" :disabled="!importFormats.length||!importTargets.some(canImportCrawlerBook)" @click="submitImport">{{ importTargets.length>1?'确认批量入库':importTarget?.importStatus==='IMPORTED'?'同步所选格式':'确认入库' }}</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="bookListDialog" :title="`预选书单 · ${bookListTarget?.bookName || ''}`" width="min(560px, 94vw)" append-to-body>
@@ -2771,6 +2771,9 @@ async function toggleLibrarySync(book:CrawlerBook,enabled:boolean){const updated
 async function generate(book:CrawlerBook){if(book.crawlStatus!=='COMPLETED'&&!await confirm(`“${book.bookName}”当前为${statusLabel(book.crawlStatus)}，生成文件将只包含已有正文，是否继续？`))return;await crawlerApi.generate(book.id,['TXT','EPUB']);message.success('已有正文已生成 TXT 与 EPUB，并保留在采集中心')}
 function importBook(book:CrawlerBook){importTargets.value=[book];importFormats.value=['STRUCTURED'];importDialog.value=true}
 function openBatchImport(){importTargets.value=[...selectedBooks.value];importFormats.value=['STRUCTURED'];importDialog.value=true}
+function canImportCrawlerBook(book:CrawlerBook){
+  return book.crawledChapterCount>0||book.importStatus==='READY'||book.importStatus==='IMPORTED'
+}
 async function submitImport(){
   if(!importTargets.value.length||!importFormats.value.length)return
   const targets=[...importTargets.value]
@@ -2787,21 +2790,28 @@ async function submitImport(){
       return
     }
     let succeeded=0,failed=0,skipped=0
+    const failureReasons:string[]=[]
     for(const book of targets){
-      if(!book.crawledChapterCount){skipped++;continue}
+      if(!canImportCrawlerBook(book)){skipped++;continue}
       try{
         const result=await crawlerApi.importBook(book.id,formats)
         markCrawlerBookImported(book,result.bookId)
         succeeded++
-      }catch{failed++}
+      }catch(error:any){
+        failed++
+        const reason=error.response?.data?.message
+        if(reason&&!failureReasons.includes(reason)&&failureReasons.length<3)failureReasons.push(reason)
+      }
     }
     importDialog.value=false
-    const details=[skipped?`无可用正文 ${skipped} 本`:null,failed?`失败 ${failed} 本`:null].filter(Boolean).join('，')
+    const details=[skipped?`无可用正文 ${skipped} 本`:null,failed?`失败 ${failed} 本${failureReasons.length?`（${failureReasons.join('；')}）`:''}`:null].filter(Boolean).join('，')
     if(succeeded&&!details)message.success(`已将 ${succeeded} 本书批量加入或同步到书库`)
     else if(succeeded)message.warning(`已处理 ${succeeded} 本书，${details}`)
     else message.error(`没有书籍成功入库${details?`：${details}`:''}`)
     selectedBooks.value=[]
     await refresh()
+  }catch(error:any){
+    message.error(error.response?.data?.message||'加入书库失败，请稍后重试')
   }finally{importing.value=false}
 }
 async function openTask(task:CrawlerTask){selectedTask.value=task;taskDrawer.value=true;await syncOpenTask()}
