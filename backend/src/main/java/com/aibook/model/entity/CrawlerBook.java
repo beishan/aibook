@@ -1,6 +1,7 @@
 package com.aibook.model.entity;
 
 import jakarta.persistence.*;
+import com.aibook.util.CrawlerCategoryPolicy;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -48,6 +49,11 @@ public class CrawlerBook {
     @Builder.Default private Boolean autoUpdateEnabled = true;
     @Column(nullable = false, columnDefinition = "boolean default true")
     @Builder.Default private Boolean autoSyncLibrary = true;
+    // 独立更新，避免正在采集的旧实体覆盖用户设置。
+    @Column(nullable = false, updatable = false, columnDefinition = "boolean default false")
+    @Builder.Default private Boolean autoImportEnabled = false;
+    @Column(nullable = false, updatable = false, columnDefinition = "varchar(100) default 'STRUCTURED'")
+    @Builder.Default private String autoImportFormats = "STRUCTURED";
     // 收藏由独立更新语句维护，避免长时间运行的采集任务用旧实体快照覆盖用户选择。
     @Column(nullable = false, updatable = false, columnDefinition = "boolean default false")
     @Builder.Default private Boolean favorite = false;
@@ -70,12 +76,12 @@ public class CrawlerBook {
     @UpdateTimestamp private LocalDateTime updatedAt;
 
     @PostLoad
-    @PrePersist
-    @PreUpdate
     private void normalizeDefaults() {
         if (discoveryStatus == null) discoveryStatus = DiscoveryStatus.ACTIVE;
         if (autoUpdateEnabled == null) autoUpdateEnabled = true;
         if (autoSyncLibrary == null) autoSyncLibrary = true;
+        if (autoImportEnabled == null) autoImportEnabled = false;
+        if (autoImportFormats == null || autoImportFormats.isBlank()) autoImportFormats = "STRUCTURED";
         if (favorite == null) favorite = false;
         if (pendingReleaseChapterCount == null) pendingReleaseChapterCount = 0;
     }
@@ -83,4 +89,10 @@ public class CrawlerBook {
     public enum CrawlStatus { DISCOVERED, WAITING, CRAWLING_METADATA, CRAWLING_CHAPTER_LIST, CRAWLING_CONTENT, PARTIAL_SUCCESS, COMPLETED, FAILED, UPDATING, PAUSED }
     public enum DiscoveryStatus { ACTIVE, IGNORED, BLACKLISTED }
     public enum ImportStatus { NOT_IMPORTED, READY, IMPORTED }
+    @PrePersist
+    @PreUpdate
+    private void sanitizeCategory() {
+        normalizeDefaults();
+        category = CrawlerCategoryPolicy.sanitize(bookName, category);
+    }
 }

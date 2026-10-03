@@ -174,7 +174,12 @@ public final class CrawlerDtos {
 
     public record RobotsTxtView(String url, int statusCode, String content, Instant fetchedAt) { }
 
-    public record ManualCrawlRequest(@NotBlank String url) { }
+    public record ManualCrawlRequest(@NotBlank String url, Boolean autoImportEnabled,
+            List<@Pattern(regexp = "(?i)STRUCTURED|TXT|EPUB") String> autoImportFormats) { }
+
+    public record AutoImportRequest(@NotEmpty @Size(max = 1000) List<@NotNull Long> ids,
+            @NotNull Boolean enabled,
+            @NotEmpty List<@Pattern(regexp = "(?i)STRUCTURED|TXT|EPUB") String> formats) { }
     public record DiscoveryPagePayload(
             @NotBlank @Size(max = 100) String pageName,
             @NotBlank @Size(max = 1000) String pageUrl,
@@ -281,7 +286,8 @@ public final class CrawlerDtos {
             Long libraryBookId, LocalDateTime discoverTime,
             LocalDateTime lastCrawlStartedAt, LocalDateTime lastCrawlTime,
             LocalDateTime createdAt, boolean suspectedDuplicate, String siteThemeColor,
-            boolean libraryHasStructuredChapters) { }
+            boolean libraryHasStructuredChapters, boolean autoImportEnabled,
+            List<String> autoImportFormats) { }
 
     public record ChapterContentSaveRequest(@NotNull @Size(max = 2_000_000) String content,
             Boolean syncLibrary) { }

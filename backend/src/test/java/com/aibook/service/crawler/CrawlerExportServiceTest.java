@@ -383,6 +383,24 @@ class CrawlerExportServiceTest {
         verify(crawlerBooks, never()).linkLibraryBook(any(), any(), any(), any());
     }
 
+    @Test
+    void refusesBookTitleCategoryAndPreservesManualLibraryClassification() {
+        User user = User.builder().id(1L).build();
+        CrawlerBook crawlerBook = book(user);
+        crawlerBook.setCategory("《部分采集书》");
+        Book libraryBook = Book.builder().user(user)
+                .category(Category.builder().name("部分采集书").build()).build();
+        CrawlerExportService service = service(mock(CrawlerManagementService.class),
+                mock(CrawlerChapterRepository.class), mock(CrawlerBookExportRepository.class));
+
+        ReflectionTestUtils.invokeMethod(service, "applyLibraryMetadata", libraryBook, crawlerBook, user);
+        assertThat(libraryBook.getCategory()).isNull();
+        libraryBook.setCategory(Category.builder().name("文学").build());
+        ReflectionTestUtils.invokeMethod(service, "applyLibraryMetadata", libraryBook, crawlerBook, user);
+        assertThat(libraryBook.getCategory().getName()).isEqualTo("文学");
+        verifyNoInteractions((CategoryRepository) ReflectionTestUtils.getField(service, "categoryRepository"));
+    }
+
     private CrawlerExportService service(CrawlerManagementService management,
             CrawlerChapterRepository chapters, CrawlerBookExportRepository exports) {
         CrawlerExportService service = new CrawlerExportService(management, chapters, exports,

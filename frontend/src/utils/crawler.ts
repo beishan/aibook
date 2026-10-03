@@ -39,7 +39,44 @@ export interface CrawlerSiteActivity {
 }
 export interface CrawlerDiscoveryPagePayload { pageName:string; pageUrl:string; autoScanEnabled:boolean; scanIntervalMinutes:number; maxPages:number }
 export interface CrawlerDiscoveryPage extends CrawlerDiscoveryPagePayload { id:number; siteId:number; lastScanAt?:string; createdAt:string }
-export interface CrawlerBook { id:number; siteId:number; siteName:string; siteThemeColor?:string; externalBookId:string; bookUrl:string; bookName:string; author?:string; coverUrl?:string; description?:string; category?:string; tags:string[]; bookStatus?:string; latestChapter?:string; discoveryPageId?:number; discoveryPageName?:string; chapterCount:number; crawledChapterCount:number; pendingReleaseChapterCount:number; failedChapterCount:number; crawlStatus:string; discoveryStatus:string; importStatus:string; autoUpdateEnabled:boolean; autoSyncLibrary:boolean; favorite:boolean; bookListIds:number[]; libraryBookId?:number; libraryHasStructuredChapters?:boolean; discoverTime:string; lastCrawlStartedAt?:string; lastCrawlTime?:string; createdAt?:string; suspectedDuplicate?:boolean }
+export interface CrawlerBook {
+  id:number
+  siteId:number
+  siteName:string
+  siteThemeColor?:string
+  externalBookId:string
+  bookUrl:string
+  bookName:string
+  author?:string
+  coverUrl?:string
+  description?:string
+  category?:string
+  tags:string[]
+  bookStatus?:string
+  latestChapter?:string
+  discoveryPageId?:number
+  discoveryPageName?:string
+  chapterCount:number
+  crawledChapterCount:number
+  pendingReleaseChapterCount:number
+  failedChapterCount:number
+  crawlStatus:string
+  discoveryStatus:string
+  importStatus:string
+  autoUpdateEnabled:boolean
+  autoSyncLibrary:boolean
+  autoImportEnabled:boolean
+  autoImportFormats:string[]
+  favorite:boolean
+  bookListIds:number[]
+  libraryBookId?:number
+  libraryHasStructuredChapters?:boolean
+  discoverTime:string
+  lastCrawlStartedAt?:string
+  lastCrawlTime?:string
+  createdAt?:string
+  suspectedDuplicate?:boolean
+}
 export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; siteThemeColor?:string; queueId?:number|null; discoveryPageId?:number; discoveryPageName?:string; scanMaxPages?:number; scannedPageCount:number; progressPercent:number; bookId?:number; bookName?:string; favorite:boolean; totalCount:number; successCount:number; newBookCount:number; duplicateCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
 export interface CrawlerTaskQueueSettings { maxConcurrentTasks:number; runningCount:number; queuedCount:number }
 export interface CrawlerTaskQueue { id:number; siteId:number|null; siteName?:string|null; queueName?:string|null; siteThemeColor?:string; maxConcurrentTasks:number; taskIntervalSeconds:number; runningCount:number; waitingCount:number; pausedCount:number; activeTaskCount:number; progressPercent:number; lastTaskStartedAt?:string }
@@ -148,7 +185,10 @@ export const crawlerApi = {
     api.post<CrawlerRobotsTxt>(`/api/crawler/sites/${id}/robots-txt/refresh`).then(r => r.data),
   exportSiteConfiguration: (id:number) => api.get<CrawlerSiteConfiguration>(`/api/crawler/sites/${id}/configuration`).then(r => r.data),
   importSiteConfiguration: (data:CrawlerSiteConfiguration) => api.post<CrawlerSite>('/api/crawler/sites/configuration/import', data).then(r => r.data),
-  crawlUrl: (siteId:number, url:string) => api.post<CrawlerTask>(`/api/crawler/sites/${siteId}/crawl`, { url }).then(r => r.data),
+  crawlUrl: (siteId:number, url:string, autoImportEnabled?:boolean, autoImportFormats?:string[]) =>
+    api.post<CrawlerTask>(`/api/crawler/sites/${siteId}/crawl`, { url, autoImportEnabled, autoImportFormats }).then(r => r.data),
+  setAutoImport: (ids:number[], enabled:boolean, formats:string[]) =>
+    api.put<CrawlerBook[]>('/api/crawler/books/batch/auto-import', { ids, enabled, formats }).then(r => r.data),
   scanSite: (siteId:number) => api.post<CrawlerTask>(`/api/crawler/sites/${siteId}/scan`).then(r => r.data),
   discoveryPages: () => api.get<CrawlerDiscoveryPage[]>('/api/crawler/discovery-pages').then(r => r.data),
   createDiscoveryPage: (siteId:number,data:CrawlerDiscoveryPagePayload) => api.post<CrawlerDiscoveryPage>(`/api/crawler/sites/${siteId}/discovery-pages`,data).then(r => r.data),
@@ -165,6 +205,14 @@ export const crawlerApi = {
   exportRule: (siteId:number, ruleId:number) => api.get<CrawlerRuleExport>(`/api/crawler/sites/${siteId}/rules/${ruleId}/export`).then(r => r.data),
   importRule: (siteId:number, data:CrawlerRuleExport & {enabled:boolean}) => api.post<CrawlerRuleVersion>(`/api/crawler/sites/${siteId}/rules/import`,data).then(r => r.data),
   books: (params:CrawlerBookQuery) => api.get<PageResult<CrawlerBook>>('/api/crawler/books', { params }).then(r => r.data),
+  previewCategoryCleanup: (data:{siteId?:number;categoryNames:string[];syncLibrary:boolean}) =>
+    api.post<{matchedBooks:number;matchingLibraryBooks:number;samples:{id:number;bookName:string;category:string;siteName:string;matchingLibraryCategory:boolean}[]}>(
+      '/api/crawler/books/categories/cleanup/preview', data, {timeout:120000},
+    ).then(r=>r.data),
+  cleanupCategories: (data:{siteId?:number;categoryNames:string[];syncLibrary:boolean}) =>
+    api.post<{clearedBooks:number;clearedLibraryBooks:number;skippedBooks:number}>(
+      '/api/crawler/books/categories/cleanup', data, {timeout:120000},
+    ).then(r=>r.data),
   book: (bookId:number) => api.get<CrawlerBook>(`/api/crawler/books/${bookId}`).then(r => r.data),
   discoveredBooks: (params:CrawlerDiscoveryQuery) => api.get<PageResult<CrawlerBook>>('/api/crawler/books/discovered', {params}).then(r => r.data),
   chapters: (bookId:number, params:CrawlerChapterQuery) => api.get<PageResult<CrawlerChapter>>(`/api/crawler/books/${bookId}/chapters`, {params}).then(r => r.data),

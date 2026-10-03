@@ -2,6 +2,7 @@ package com.aibook.repository;
 
 import com.aibook.model.entity.*;
 import com.aibook.repository.projections.BookTitleMatchProjection;
+import com.aibook.repository.projections.CrawlerCategoryCleanupCandidate;
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
@@ -9,6 +10,28 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 
 public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> {
+    @Query("""
+            select b.id as id, b.bookName as bookName, b.category as category,
+                   b.site.siteName as siteName, library.id as libraryBookId,
+                   category.id as libraryCategoryId, category.name as libraryCategoryName
+            from CrawlerBook b
+            left join b.libraryBook library on library.deletedAt is null
+            left join library.category category
+            where b.site.user = :user and b.id > :afterId
+              and (:siteId is null or b.site.id = :siteId)
+              and b.category is not null and trim(b.category) <> ''
+            order by b.id
+            """)
+    List<CrawlerCategoryCleanupCandidate> findCategoryCleanupCandidates(
+            @Param("user") User user, @Param("siteId") Long siteId,
+            @Param("afterId") Long afterId, Pageable pageable);
+
+    @Modifying
+    @Query("update CrawlerBook b set b.category = null where b.id = :id "
+            + "and b.site.user = :user and b.category = :originalCategory")
+    int clearCategoryIfUnchanged(@Param("id") Long id, @Param("user") User user,
+            @Param("originalCategory") String originalCategory);
+
     /** 为升级前已入库的采集书籍补齐来源网站名称。 */
     @Modifying
     @Query(value = """
@@ -48,6 +71,11 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
     }
 
     List<CrawlerBook> findByIdInAndSiteUser(Collection<Long> ids, User user);
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update CrawlerBook b set b.autoImportEnabled = :enabled, b.autoImportFormats = :formats "
+            + "where b.id in :ids and b.site.user = :user")
+    int updateAutoImport(@Param("ids") Collection<Long> ids, @Param("user") User user,
+            @Param("enabled") boolean enabled, @Param("formats") String formats);
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update CrawlerBook b set b.favorite = :favorite where b.id = :id and b.site.user = :user")
     int updateFavorite(@Param("id") Long id, @Param("user") User user,

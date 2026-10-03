@@ -4,6 +4,7 @@ import com.aibook.dto.crawler.CrawlerDtos.ExportView;
 import com.aibook.model.entity.*;
 import com.aibook.repository.*;
 import com.aibook.service.OperationLogService;
+import com.aibook.util.CrawlerCategoryPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -93,6 +94,18 @@ public class CrawlerExportService {
     }
 
     @Transactional
+    public Long autoImportCompleted(User user, Long bookId) {
+        CrawlerBook book = crawlerBookRepository.findForLibraryImport(bookId, user)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集书籍不存在"));
+        if (!Boolean.TRUE.equals(book.getAutoImportEnabled())
+                || book.getCrawlStatus() != CrawlerBook.CrawlStatus.COMPLETED) {
+            return null;
+        }
+        return importLibrary(user, bookId,
+                com.aibook.util.CrawlerImportFormats.decode(book.getAutoImportFormats()));
+    }
+
+    @Transactional
     public Long importLibrary(User user, Long bookId, List<String> requestedFormats) {
         CrawlerBook crawlerBook = crawlerBookRepository.findForLibraryImport(bookId, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集书籍不存在"));
@@ -168,19 +181,7 @@ public class CrawlerExportService {
     }
 
     private LinkedHashSet<String> normalizeFormats(Collection<String> requestedFormats) {
-        if (requestedFormats == null || requestedFormats.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请至少选择一种入库格式");
-        }
-        LinkedHashSet<String> formats = new LinkedHashSet<>();
-        for (String requested : requestedFormats) {
-            String format = requested == null ? "" : requested.toUpperCase(Locale.ROOT);
-            if (!Set.of("STRUCTURED", "TXT", "EPUB").contains(format)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "仅支持结构化章节、TXT 或 EPUB 入库");
-            }
-            formats.add(format);
-        }
-        return formats;
+        return new LinkedHashSet<>(com.aibook.util.CrawlerImportFormats.normalize(requestedFormats));
     }
 
     private Long importStructured(User user, CrawlerBook crawlerBook,
@@ -486,7 +487,15 @@ public class CrawlerExportService {
 
     private void applyLibraryMetadata(Book libraryBook, CrawlerBook crawlerBook, User user) {
         libraryBook.setSourceBookStatus(trimToNull(crawlerBook.getBookStatus()));
-        String categoryName = trimToNull(crawlerBook.getCategory());
+        if (CrawlerCategoryPolicy.isBookTitle(
+                crawlerBook.getBookName(), crawlerBook.getCategory())
+                && libraryBook.getCategory() != null
+                && CrawlerCategoryPolicy.normalize(crawlerBook.getCategory()).equals(
+                        CrawlerCategoryPolicy.normalize(libraryBook.getCategory().getName()))) {
+            libraryBook.setCategory(null);
+        }
+        String categoryName = trimToNull(CrawlerCategoryPolicy.sanitize(
+                crawlerBook.getBookName(), crawlerBook.getCategory()));
         if (categoryName != null) {
             Category category = categoryRepository.findFirstByUserAndNameIgnoreCase(user, categoryName)
                     .orElseGet(() -> categoryRepository.save(Category.builder().name(categoryName)

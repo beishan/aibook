@@ -49,6 +49,16 @@ class CrawlerLibraryImportMappingTest {
                         Long.class, CrawlerBook.ImportStatus.class, CrawlerBook.ImportStatus.class)
                         .getAnnotation(Query.class).value();
                 session.createMutationQuery(statusQuery);
+                String candidatesQuery = CrawlerBookRepository.class.getMethod("findCategoryCleanupCandidates",
+                        User.class, Long.class, Long.class, org.springframework.data.domain.Pageable.class)
+                        .getAnnotation(Query.class).value();
+                session.createQuery(candidatesQuery, Object[].class);
+                String clearCrawlerQuery = CrawlerBookRepository.class.getMethod("clearCategoryIfUnchanged",
+                        Long.class, User.class, String.class).getAnnotation(Query.class).value();
+                session.createMutationQuery(clearCrawlerQuery);
+                String clearLibraryQuery = BookRepository.class.getMethod("clearCrawlerCategoryIfUnchanged",
+                        Long.class, User.class, Long.class).getAnnotation(Query.class).value();
+                session.createMutationQuery(clearLibraryQuery);
             }
         } finally {
             StandardServiceRegistryBuilder.destroy(registry);

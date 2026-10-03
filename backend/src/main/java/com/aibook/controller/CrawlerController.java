@@ -1,6 +1,7 @@
 package com.aibook.controller;
 
 import com.aibook.dto.crawler.CrawlerDtos.*;
+import com.aibook.dto.crawler.CrawlerCategoryCleanupDtos;
 import com.aibook.model.entity.*;
 import com.aibook.repository.CrawlerChapterRepository;
 import com.aibook.service.UserService;
@@ -27,6 +28,7 @@ public class CrawlerController {
     private final CrawlerManagementService managementService;
     private final CrawlerTaskService taskService;
     private final CrawlerExportService exportService;
+    private final CrawlerCategoryCleanupService categoryCleanupService;
     private final CrawlerRuleTestService ruleTestService;
     private final CrawlerRuleHealthService ruleHealthService;
     private final CrawlerDiscoveryPageService discoveryPageService;
@@ -64,7 +66,20 @@ public class CrawlerController {
     }
     @GetMapping("/sites/{id}/configuration") public SiteConfigurationPayload exportSiteConfiguration(Authentication auth, @PathVariable Long id) { return siteConfigurationService.exportConfiguration(user(auth), id); }
     @PostMapping("/sites/configuration/import") @ResponseStatus(HttpStatus.CREATED) public SiteView importSiteConfiguration(Authentication auth, @Valid @RequestBody SiteConfigurationPayload payload) { return siteConfigurationService.importConfiguration(user(auth), payload); }
-    @PostMapping("/sites/{id}/crawl") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView crawl(Authentication auth, @PathVariable Long id, @Valid @RequestBody ManualCrawlRequest request) { return taskService.start(user(auth), id, request.url()); }
+    @PostMapping("/sites/{id}/crawl")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public TaskView crawl(Authentication auth, @PathVariable Long id,
+            @Valid @RequestBody ManualCrawlRequest request) {
+        return taskService.start(user(auth), id, request.url(),
+                request.autoImportEnabled(), request.autoImportFormats());
+    }
+
+    @PutMapping("/books/batch/auto-import")
+    public List<BookView> autoImport(Authentication auth,
+            @Valid @RequestBody AutoImportRequest request) {
+        return managementService.setAutoImport(user(auth), request.ids(),
+                request.enabled(), request.formats());
+    }
     @PostMapping("/sites/{id}/scan") @ResponseStatus(HttpStatus.ACCEPTED) public TaskView scan(Authentication auth, @PathVariable Long id) { return taskService.scanSite(user(auth), id); }
     @GetMapping("/discovery-pages") public List<DiscoveryPageView> discoveryPages(Authentication auth) { return discoveryPageService.pages(user(auth)); }
     @GetMapping("/sites/{id}/discovery-pages") public List<DiscoveryPageView> discoveryPages(Authentication auth, @PathVariable Long id) { return discoveryPageService.pages(user(auth), id); }
@@ -152,6 +167,17 @@ public class CrawlerController {
             Authentication auth, @Valid @RequestBody BatchBookStatusRequest request) {
         return taskService.setBookStatuses(user(auth), request.bookIds(),
                 CrawlerBook.CrawlStatus.valueOf(request.status()));
+    }
+    @PostMapping("/books/categories/cleanup/preview")
+    public CrawlerCategoryCleanupDtos.Preview previewCategoryCleanup(Authentication auth,
+            @Valid @RequestBody CrawlerCategoryCleanupDtos.Request request) {
+        return categoryCleanupService.preview(user(auth), request);
+    }
+
+    @PostMapping("/books/categories/cleanup")
+    public CrawlerCategoryCleanupDtos.Result cleanupCategories(Authentication auth,
+            @Valid @RequestBody CrawlerCategoryCleanupDtos.Request request) {
+        return categoryCleanupService.cleanup(user(auth), request);
     }
     @PutMapping("/books/batch/discovery-status") public List<BookView> discoveryStatus(Authentication auth, @Valid @RequestBody DiscoveryStatusRequest request) { return taskService.setDiscoveryStatus(user(auth), request.bookIds(), CrawlerBook.DiscoveryStatus.valueOf(request.status())); }
     @PostMapping("/books/{id}/exports") public List<ExportView> generate(Authentication auth, @PathVariable Long id, @Valid @RequestBody ExportRequest request) { return exportService.generate(user(auth), id, request.formats()); }

@@ -17,6 +17,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -25,6 +26,11 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface BookRepository extends JpaRepository<Book, Long> {
+    @Modifying
+    @Query("update Book b set b.category = null where b.id = :bookId and b.user = :user "
+            + "and b.deletedAt is null and b.category.id = :categoryId")
+    int clearCrawlerCategoryIfUnchanged(@Param("bookId") Long bookId, @Param("user") User user,
+            @Param("categoryId") Long categoryId);
 
     String LIBRARY_VISIBLE = " (NOT EXISTS (SELECT source FROM BookScanSource source "
             + "WHERE source.book = b) OR EXISTS (SELECT source FROM BookScanSource source "

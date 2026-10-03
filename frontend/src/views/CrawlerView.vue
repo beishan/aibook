@@ -187,6 +187,9 @@
             </button>
           </div>
           <div class="batch-actions">
+            <el-button :disabled="!selectedDiscoveries.length" @click="openAutoImport(selectedDiscoveries)">
+              自动入库
+            </el-button>
             <el-button
               :loading="discoveryMetadataRefreshing"
               :disabled="batchDiscoveryCrawling || !selectedDiscoveries.some(book => !isBookTaskActive(book))"
@@ -226,6 +229,14 @@
       </div>
       <el-table v-if="discoveryViewMode==='table'" v-loading="discoveryLoading" :data="discoveredBooks" class="data-table" @selection-change="selectedDiscoveries=$event">
         <el-table-column type="selection" width="48" fixed="left" />
+        <el-table-column label="自动入库" width="110">
+          <template #default="{row}">
+            <el-button size="small" :type="row.autoImportEnabled ? 'primary' : 'default'" plain
+              @click.stop="openAutoImport([row])">
+              {{ row.autoImportEnabled ? '已开启' : '设置' }}
+            </el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="收藏" width="58" fixed="left" align="center"><template #default="{row}"><el-button size="small" circle :icon="row.favorite?StarFilled:Star" class="favorite-action row-hover-action" :class="{'is-favorite':row.favorite}" :aria-label="row.favorite?'取消收藏':'加入收藏'" :title="row.favorite?'取消收藏':'加入收藏'" @click.stop="toggleFavorite(row)"/></template></el-table-column>
         <el-table-column label="快捷操作" width="88" fixed="left" align="center">
           <template #default="{row}">
@@ -305,6 +316,10 @@
         <el-checkbox v-model="bookFavoriteOnly" border @change="applyBookFilters">只看已收藏</el-checkbox>
         <el-button type="primary" :icon="Search" @click="applyBookFilters">查询</el-button>
         <el-button @click="resetBookFilters">重置</el-button>
+        <el-button :disabled="batchBookBusy" @click="openCategoryCleanup">清理异常分类</el-button>
+        <el-button :disabled="!selectedBooks.length || batchBookBusy" @click="openAutoImport(selectedBooks)">
+          批量自动入库
+        </el-button>
       </div>
       <transition name="task-batch-rise">
         <div v-if="selectedBooks.length" class="task-batch-bar book-batch-bar" role="toolbar" aria-label="采集书籍批量修改">
@@ -314,6 +329,14 @@
       </transition>
       <el-table v-if="bookViewMode==='table'" ref="bookTableRef" v-loading="bookLoading" :data="books" row-key="id" @selection-change="selectedBooks=$event" @row-click="handleBookTableRowClick" class="data-table">
         <el-table-column type="selection" width="48" reserve-selection fixed="left" />
+        <el-table-column label="自动入库" width="110">
+          <template #default="{row}">
+            <el-button size="small" :type="row.autoImportEnabled ? 'primary' : 'default'" plain
+              @click.stop="openAutoImport([row])">
+              {{ row.autoImportEnabled ? '已开启' : '设置' }}
+            </el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="收藏" width="58" fixed="left" align="center"><template #default="{row}"><el-button size="small" circle :icon="row.favorite?StarFilled:Star" class="favorite-action row-hover-action" :class="{'is-favorite':row.favorite}" :aria-label="row.favorite?'取消收藏':'加入收藏'" :title="row.favorite?'取消收藏':'加入收藏'" @click.stop="toggleFavorite(row)"/></template></el-table-column>
         <el-table-column label="书籍" min-width="280">
           <template #default="{ row }">
@@ -806,9 +829,95 @@
       <template #footer><el-button @click="ruleTestDialog=false">关闭</el-button><el-button type="primary" :loading="testingRule" @click="runRuleTest">测试详情、目录与正文</el-button></template>
     </el-dialog>
 
+    <el-dialog v-model="autoImportDialog" title="采集完成后自动入库" width="min(560px, 94vw)"
+      append-to-body :close-on-click-modal="!autoImportSaving" :close-on-press-escape="!autoImportSaving"
+      :show-close="!autoImportSaving">
+      <el-form label-position="top" :disabled="autoImportSaving">
+        <p>为选中的 {{ autoImportTargets.length }} 本书籍统一设置；当前正在采集的任务也会读取新设置。</p>
+        <el-form-item label="自动入库">
+          <el-switch v-model="autoImportForm.enabled" />
+        </el-form-item>
+        <el-form-item label="入库格式（可多选）">
+          <el-checkbox-group v-model="autoImportForm.formats" class="format-options">
+            <el-checkbox v-for="option in importFormatOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+        <p>正文采集成功后自动加入书库；已入库书籍按所选格式同步。部分失败或暂停的任务会等待续采成功。设置不会立即入库已完成的书籍。</p>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="autoImportSaving" @click="autoImportDialog=false">取消</el-button>
+        <el-button type="primary" :loading="autoImportSaving" @click="saveAutoImport">保存设置</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="crawlDialog" title="URL 手动采集" width="min(560px, 94vw)" append-to-body>
-      <el-form label-position="top"><el-form-item label="采集网站"><el-select v-model="crawlForm.siteId" placeholder="选择已启用网站"><el-option v-for="site in sites.filter(s=>s.enabled)" :key="site.id" :label="site.siteName" :value="site.id" /></el-select></el-form-item><el-form-item label="书籍详情 URL"><el-input v-model="crawlForm.url" placeholder="https://example.com/book/123/" /></el-form-item></el-form>
+      <el-form label-position="top">
+        <el-form-item label="采集网站">
+          <el-select v-model="crawlForm.siteId" placeholder="选择已启用网站">
+            <el-option v-for="site in sites.filter(s=>s.enabled)" :key="site.id" :label="site.siteName" :value="site.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="书籍详情 URL">
+          <el-input v-model="crawlForm.url" placeholder="https://example.com/book/123/" />
+        </el-form-item>
+        <el-form-item label="采集完成后自动入库">
+          <el-switch v-model="crawlForm.autoImportEnabled" />
+        </el-form-item>
+        <el-form-item v-if="crawlForm.autoImportEnabled" label="自动入库格式（可多选）">
+          <el-checkbox-group v-model="crawlForm.autoImportFormats">
+            <el-checkbox v-for="option in importFormatOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+      </el-form>
       <template #footer><el-button @click="crawlDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="startCrawl">创建采集任务</el-button></template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="categoryCleanupDialog"
+      title="统一清理异常分类"
+      width="min(760px, 94vw)"
+      append-to-body
+      :close-on-click-modal="!categoryCleanupBusy"
+      :close-on-press-escape="!categoryCleanupBusy"
+      :show-close="!categoryCleanupBusy"
+    >
+      <div class="category-cleanup-dialog">
+        <el-alert type="info" :closable="false" title="自动识别分类与书名相同的记录（忽略空格和书名号）。范围覆盖当前账户的采集及发现记录，不受列表搜索、状态筛选或分页限制。" />
+        <el-form label-position="top" :disabled="categoryCleanupBusy">
+          <el-form-item label="网站范围">
+            <el-select v-model="categoryCleanupSiteId" clearable placeholder="全部网站">
+              <el-option v-for="site in sites" :key="site.id" :label="site.siteName" :value="site.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="额外清理的错误分类名称（可选，每行一个，最多 100 个）">
+            <el-input v-model="categoryCleanupNames" type="textarea" :rows="3" placeholder="填入其他错误分类名称；正常分类请不要填写" />
+          </el-form-item>
+          <el-checkbox v-model="categoryCleanupSyncLibrary">同时清理已入库书籍中相同的错误分类</el-checkbox>
+        </el-form>
+        <p>清理后分类为空；书籍和正文会保留。书库中已手动改成其他分类的书籍会保留当前分类，分类目录条目也会保留。</p>
+        <template v-if="categoryCleanupPreview">
+          <el-alert
+            :type="categoryCleanupPreview.matchedBooks?'warning':'success'"
+            :closable="false"
+            :title="`匹配 ${categoryCleanupPreview.matchedBooks} 本采集书籍，${categoryCleanupSyncLibrary?categoryCleanupPreview.matchingLibraryBooks:0} 本书库书籍将同步清理`"
+          />
+          <p v-if="categoryCleanupPreview.matchedBooks>100">下方展示前 100 本样例，确认后会清理该范围内全部匹配记录。</p>
+          <el-table :data="categoryCleanupPreview.samples" max-height="300" row-key="id">
+            <el-table-column prop="bookName" label="书名" min-width="180" />
+            <el-table-column prop="category" label="错误分类" min-width="160" />
+            <el-table-column prop="siteName" label="来源" min-width="100" />
+          </el-table>
+        </template>
+      </div>
+      <template #footer>
+        <el-button :disabled="categoryCleanupBusy" @click="categoryCleanupDialog=false">关闭</el-button>
+        <el-button :loading="categoryCleanupBusy" :disabled="categoryCleanupBusy" @click="previewCategoryCleanup">预览清理范围</el-button>
+        <el-button type="danger" :disabled="categoryCleanupBusy||!categoryCleanupPreview?.matchedBooks" @click="submitCategoryCleanup">确认清理全部匹配记录</el-button>
+      </template>
     </el-dialog>
 
     <el-dialog
@@ -1312,6 +1421,13 @@
       <div v-if="selectedBook" class="book-drawer-content">
         <div class="book-summary"><div class="large-cover">{{ selectedBook.bookName.slice(0,1) }}</div><div><h2>{{ selectedBook.bookName }}</h2><p class="book-source-line"><span>{{ selectedBook.author || '未知作者' }}</span><SiteSourceTag :name="selectedBook.siteName" :color="selectedBook.siteThemeColor" /></p><div v-if="isBookCompleted(selectedBook)" class="book-crawl-result drawer-result"><div><span>采集结果详情</span><strong>采集完成</strong></div><small>正文 {{ selectedBook.crawledChapterCount }} 章 · 待开放 {{ selectedBook.pendingReleaseChapterCount }} 章 · 失败 {{ selectedBook.failedChapterCount }} 章</small></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(selectedBook)}" :percentage="progress(selectedBook)"/><small>正文 {{ selectedBook.crawledChapterCount }} / {{ selectedBook.chapterCount }} 章，待开放 {{ selectedBook.pendingReleaseChapterCount }}，失败 {{ selectedBook.failedChapterCount }}</small></template></div></div>
         <div class="crawler-book-metadata"><span><small>来源状态</small><strong>{{ selectedBook.bookStatus || '未识别' }}</strong></span><span><small>分类</small><strong>{{ selectedBook.category || '未分类' }}</strong></span><span class="metadata-tag-row"><small>标签</small><span v-if="selectedBook.tags?.length" class="metadata-tags"><el-tag v-for="tag in selectedBook.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></span><strong v-else>无</strong></span></div>
+        <div class="library-sync-control">
+          <div>
+            <strong>采集完成后自动入库</strong>
+            <p>{{ selectedBook.autoImportEnabled ? `已开启 · ${selectedBook.autoImportFormats.join(' / ')}` : '未开启；支持结构化章节、EPUB 和 TXT，可多选。' }}</p>
+          </div>
+          <el-button @click="openAutoImport([selectedBook])">设置</el-button>
+        </div>
         <div v-if="selectedBook.libraryBookId" class="library-sync-control"><div><strong>自动同步到书库</strong><p>检查更新或续采成功后，自动发布为同一本书的新版本。</p></div><el-switch :model-value="selectedBook.autoSyncLibrary" @change="toggleLibrarySync(selectedBook,Boolean($event))" /></div>
         <div class="drawer-actions"><el-button size="small" circle :icon="selectedBook.favorite?StarFilled:Star" class="favorite-action" :class="{'is-favorite':selectedBook.favorite}" :aria-label="selectedBook.favorite?'取消收藏':'加入收藏'" :title="selectedBook.favorite?'取消收藏':'加入收藏'" @click="toggleFavorite(selectedBook)"/><el-button @click="openCrawlerBookLists(selectedBook)">加入书单</el-button><el-button :disabled="isBookTaskActive(selectedBook)" @click="continueCrawl(selectedBook)">{{ isBookTaskActive(selectedBook)?'任务中':'继续采集' }}</el-button><el-button :disabled="isBookTaskActive(selectedBook)" @click="refreshBookMetadata(selectedBook)">刷新分类标签</el-button><el-button :disabled="!selectedBook.failedChapterCount" @click="retryFailures(selectedBook)">重试失败</el-button><el-button @click="openStatusEditor(selectedBook)">修改状态</el-button><el-button type="primary" plain :disabled="!selectedBook.crawledChapterCount" @click="startTrial(selectedBook)">临时试读</el-button><el-button type="primary" @click="generate(selectedBook)">生成 TXT + EPUB</el-button><el-button type="primary" plain @click="importBook(selectedBook)">{{ selectedBook.importStatus==='IMPORTED'?'立即同步书库':'入库' }}</el-button></div>
         <div class="book-detail-tabs" role="tablist" aria-label="书籍采集详情" @keydown="handleBookDetailTabKey"><span class="book-detail-tab-indicator" :style="{transform:`translateX(${bookDetailTabIndex*100}%)`}"/><button v-for="item in bookDetailTabs" :key="item.value" type="button" role="tab" :aria-selected="bookDetailTab===item.value" :tabindex="bookDetailTab===item.value?0:-1" :class="{active:bookDetailTab===item.value}" @click="bookDetailTab=item.value"><span>{{ item.label }}</span><b>{{ item.value==='chapters'?chapterTotal:crawlerLogs.length }}</b></button></div>
@@ -1692,13 +1808,55 @@ const ruleTestSite=ref<CrawlerSite>(), ruleTestDraft=ref<CrawlerRule>(), ruleSit
 const siteConfigurationImportInput=ref<HTMLInputElement>(), siteConfigurationImportMode=ref<'text'|'file'>('text'), siteConfigurationJsonText=ref(''), siteConfigurationImportFileName=ref('')
 const importDialog=ref(false), importTargets=ref<CrawlerBook[]>([]), importFormats=ref<string[]>(['STRUCTURED']), importing=ref(false)
 const importFailures=ref<CrawlerImportFailure<CrawlerBook>[]>([])
+const categoryCleanupDialog = ref(false)
+const categoryCleanupBusy = ref(false)
+const categoryCleanupSiteId = ref<number>()
+const categoryCleanupNames = ref('')
+const categoryCleanupSyncLibrary = ref(true)
+const categoryCleanupPreview = ref<Awaited<ReturnType<typeof crawlerApi.previewCategoryCleanup>>>()
+watch([categoryCleanupSiteId, categoryCleanupNames, categoryCleanupSyncLibrary], () => {
+  categoryCleanupPreview.value = undefined
+})
 const importProgress=ref({completed:0,total:0})
 const discoveryFavoriteOnly=ref(false)
 const bookListDialog=ref(false), bookListLoading=ref(false), bookListSaving=ref(false), bookListTarget=ref<CrawlerBook>(), availableBookLists=ref<BookListOption[]>([]), selectedBookListIds=ref<number[]>([])
 const importTarget=computed(()=>importTargets.value.length===1?importTargets.value[0]:undefined)
 const batchBookBusy=computed(()=>Boolean(batchBookAction.value)||batchBookStatusSaving.value||importing.value)
 const importFormatOptions=[{value:'STRUCTURED',label:'结构化章节',description:'推荐：无需生成文件即可入库阅读'},{value:'EPUB',label:'附加 EPUB',description:'供下载与第三方阅读器使用'},{value:'TXT',label:'附加 TXT',description:'通用纯文本备份'}]
-const crawlForm=reactive<{siteId?:number;url:string}>({url:''})
+const crawlForm = reactive<{
+  siteId?:number
+  url:string
+  autoImportEnabled:boolean
+  autoImportFormats:string[]
+}>({url:'', autoImportEnabled:false, autoImportFormats:['STRUCTURED']})
+const autoImportDialog = ref(false)
+const autoImportSaving = ref(false)
+const autoImportTargets = ref<CrawlerBook[]>([])
+const autoImportForm = reactive({enabled:false, formats:['STRUCTURED'] as string[]})
+
+function openAutoImport(targets:CrawlerBook[]) {
+  if (!targets.length) return
+  autoImportTargets.value = [...targets]
+  autoImportForm.enabled = targets.length === 1 ? Boolean(targets[0].autoImportEnabled) : true
+  autoImportForm.formats = targets.length === 1
+    ? [...(targets[0].autoImportFormats || ['STRUCTURED'])] : ['STRUCTURED']
+  autoImportDialog.value = true
+}
+
+async function saveAutoImport() {
+  if (!autoImportForm.formats.length) return message.warning('请至少选择一种入库格式')
+  autoImportSaving.value = true
+  try {
+    const updated = await crawlerApi.setAutoImport(
+      autoImportTargets.value.map(book => book.id), autoImportForm.enabled, autoImportForm.formats,
+    )
+    updated.forEach(applyCrawlerBookUpdate)
+    autoImportDialog.value = false
+    message.success(autoImportForm.enabled ? '已开启采集完成后自动入库' : '已关闭自动入库')
+  } finally {
+    autoImportSaving.value = false
+  }
+}
 const discoveryPageForm=reactive<CrawlerDiscoveryPagePayload>({pageName:'',pageUrl:'',autoScanEnabled:false,scanIntervalMinutes:360,maxPages:50})
 const emptyRule=():CrawlerRule=>({discoveryItemSelector:'',discoveryUrlSelector:'a',discoveryTitleSelector:'.title',discoveryAuthorSelector:'',discoveryCoverSelector:'',discoveryCategorySelector:'',discoveryLatestChapterSelector:'',discoveryNextPageSelector:'',titleSelector:'',authorSelector:'',descriptionSelector:'',categorySelector:'',tagsSelector:'',statusSelector:'',chapterListUrlSelector:'',chapterItemSelector:'',chapterTitleSelector:':scope',chapterUrlSelector:'a',contentTitleSelector:'h1',contentSelector:'',removeSelectors:'',xpathRemoveSelectors:'',stringReplacementsJson:'',regexReplacementsJson:'',removeBlankLines:true,saveOriginalHtml:false,minChapterLength:100})
 const siteThemeColors = [
@@ -2601,7 +2759,23 @@ function openSiteConfigurationImport(){siteConfigurationImportMode.value='text';
 function loadSiteConfigurationTemplate(){siteConfigurationImportMode.value='text';siteConfigurationImportFileName.value='';siteConfigurationJsonText.value=JSON.stringify(siteConfigurationTemplate,null,2);message.success('已载入模板，可直接修改后导入')}
 async function handleSiteConfigurationImportFile(event:Event){const input=event.target as HTMLInputElement,file=input.files?.[0];input.value='';if(!file)return;siteConfigurationImportFileName.value=file.name;siteConfigurationJsonText.value=await file.text()}
 async function submitSiteConfigurationImport(){if(!siteConfigurationJsonText.value.trim())return;let data:CrawlerSiteConfiguration;try{data=JSON.parse(siteConfigurationJsonText.value) as CrawlerSiteConfiguration}catch{return message.error('JSON 字符串格式不正确，请检查后重试')}if(data.type!=='AIBOOK_CRAWLER_SITE'||!data.site?.siteName||!data.site?.baseUrl)return message.error('这不是有效的网站配置 JSON，请使用导出文件或导入模板');savingSiteConfiguration.value=true;try{const created=await crawlerApi.importSiteConfiguration(data);siteConfigurationImportDialog.value=false;message.success(`网站“${created.siteName}”及其全部配置已导入`);await refresh()}finally{savingSiteConfiguration.value=false}}
-async function startCrawl(){if(!crawlForm.siteId||!crawlForm.url)return message.warning('请选择网站并填写书籍 URL');saving.value=true;try{await crawlerApi.crawlUrl(crawlForm.siteId,crawlForm.url);crawlDialog.value=false;activeTab.value='tasks';message.success('采集任务已创建');await refresh()}finally{saving.value=false}}
+async function startCrawl() {
+  if (!crawlForm.siteId || !crawlForm.url) return message.warning('请选择网站并填写书籍 URL')
+  if (crawlForm.autoImportEnabled && !crawlForm.autoImportFormats.length) {
+    return message.warning('请至少选择一种入库格式')
+  }
+  saving.value = true
+  try {
+    await crawlerApi.crawlUrl(crawlForm.siteId, crawlForm.url, crawlForm.autoImportEnabled,
+      crawlForm.autoImportFormats.length ? crawlForm.autoImportFormats : ['STRUCTURED'])
+    crawlDialog.value = false
+    activeTab.value = 'tasks'
+    message.success('采集任务已创建')
+    await refresh()
+  } finally {
+    saving.value = false
+  }
+}
 function openRuleTest(site:CrawlerSite,draft?:CrawlerRule){ruleTestSite.value=site;ruleTestDraft.value=draft?JSON.parse(JSON.stringify(draft)):undefined;ruleTestResult.value=undefined;ruleTestUrl.value='';ruleTestDialog.value=true}
 async function runRuleTest(){if(!ruleTestSite.value||!ruleTestUrl.value)return message.warning('请填写同站点的书籍详情 URL');testingRule.value=true;try{ruleTestResult.value=await crawlerApi.testRule(ruleTestSite.value.id,ruleTestUrl.value,ruleTestDraft.value)}finally{testingRule.value=false}}
 async function checkHealth(site:CrawlerSite){const result=await crawlerApi.checkRule(site.id);if(result.success)message.success('规则健康检查通过');else message.warning(result.errorMessage||'规则健康检查失败');await refresh()}
@@ -2806,6 +2980,44 @@ async function batchRefreshBookMetadata(){
 }
 async function toggleLibrarySync(book:CrawlerBook,enabled:boolean){const updated=await crawlerApi.setLibrarySync(book.id,enabled);books.value=books.value.map(item=>item.id===updated.id?updated:item);if(selectedBook.value?.id===updated.id)selectedBook.value=updated;message.success(enabled?'已开启追更后自动同步书库':'已关闭自动同步，更新只保留在采集中心')}
 async function generate(book:CrawlerBook){if(book.crawlStatus!=='COMPLETED'&&!await confirm(`“${book.bookName}”当前为${statusLabel(book.crawlStatus)}，生成文件将只包含已有正文，是否继续？`))return;await crawlerApi.generate(book.id,['TXT','EPUB']);message.success('已有正文已生成 TXT 与 EPUB，并保留在采集中心')}
+function openCategoryCleanup(){
+  categoryCleanupSiteId.value=bookSiteId.value
+  categoryCleanupNames.value=''
+  categoryCleanupSyncLibrary.value=true
+  categoryCleanupPreview.value=undefined
+  categoryCleanupDialog.value=true
+}
+function categoryCleanupRequest(){
+  return {
+    siteId:categoryCleanupSiteId.value,
+    categoryNames:categoryCleanupNames.value.split(/\r?\n/).map(name=>name.trim()).filter(Boolean),
+    syncLibrary:categoryCleanupSyncLibrary.value,
+  }
+}
+async function previewCategoryCleanup(){
+  if(categoryCleanupBusy.value)return
+  categoryCleanupBusy.value=true
+  try{
+    categoryCleanupPreview.value=await crawlerApi.previewCategoryCleanup(categoryCleanupRequest())
+  }catch{
+    categoryCleanupPreview.value=undefined
+  }finally{categoryCleanupBusy.value=false}
+}
+async function submitCategoryCleanup(){
+  if(categoryCleanupBusy.value||!categoryCleanupPreview.value?.matchedBooks)return
+  categoryCleanupBusy.value=true
+  try{
+    const result=await crawlerApi.cleanupCategories(categoryCleanupRequest())
+    categoryCleanupDialog.value=false
+    message.success(`已清理 ${result.clearedBooks} 本采集书籍、${result.clearedLibraryBooks} 本书库书籍的分类${result.skippedBooks?`，跳过已变化 ${result.skippedBooks} 本`:''}`)
+    try{
+      await refresh()
+      await loadCrawlerStatistics()
+    }catch{message.warning('清理已完成，但列表刷新失败，请手动刷新')}
+  }catch{
+    categoryCleanupPreview.value=undefined
+  }finally{categoryCleanupBusy.value=false}
+}
 function importBook(book:CrawlerBook){
   if(importing.value)return
   importTargets.value=[book]
@@ -3811,6 +4023,14 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
     align-items: flex-start;
     flex-direction: column;
   }
+}
+.category-cleanup-dialog {
+  display: grid;
+  gap: 16px;
+}
+.category-cleanup-dialog > p {
+  margin: 0;
+  color: var(--text-secondary);
 }
 .import-failure-list {
   display: grid;

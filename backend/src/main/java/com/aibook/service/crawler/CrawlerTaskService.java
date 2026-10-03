@@ -525,6 +525,13 @@ public class CrawlerTaskService {
     }
 
     public TaskView start(User user, Long siteId, String url) {
+        return start(user, siteId, url, null, null);
+    }
+
+    public TaskView start(User user, Long siteId, String url, Boolean autoImportEnabled,
+            List<String> autoImportFormats) {
+        List<String> formats = autoImportEnabled == null ? null
+                : com.aibook.util.CrawlerImportFormats.normalize(autoImportFormats);
         CrawlerSite site = managementService.ownedSite(user, siteId);
         if (!Boolean.TRUE.equals(site.getEnabled())) throw new ResponseStatusException(HttpStatus.CONFLICT, "请先启用该采集网站");
         requireRule(site);
@@ -534,6 +541,9 @@ public class CrawlerTaskService {
                 bookRepository.save(CrawlerBook.builder().site(site).externalBookId(externalId)
                         .bookUrl(validated.toString()).bookName("待解析书籍").discoverTime(LocalDateTime.now()).build()));
         book.setBookUrl(validated.toString());
+        if (autoImportEnabled != null) {
+            managementService.setAutoImport(user, List.of(book.getId()), autoImportEnabled, formats);
+        }
         return managementService.taskView(createBookTask(user, book, CrawlerTask.TaskType.BOOK_FULL_CRAWL));
     }
 
@@ -1628,7 +1638,23 @@ public class CrawlerTaskService {
         bookRepository.refreshImportStatus(book.getId(), contentFailed == 0
                 ? CrawlerBook.ImportStatus.READY : CrawlerBook.ImportStatus.NOT_IMPORTED);
         book = bookRepository.findById(book.getId()).orElse(book);
-        if (contentFailed == 0 && book.getLibraryBook() != null && !Boolean.FALSE.equals(book.getAutoSyncLibrary())) {
+        if (contentFailed == 0 && taskFailed == 0 && Boolean.TRUE.equals(book.getAutoImportEnabled())) {
+            try {
+                Long libraryBookId = exportService.autoImportCompleted(task.getUser(), book.getId());
+                if (libraryBookId != null) {
+                    recordCrawlerEvent(task, "自动入库完成", "书库ID：" + libraryBookId
+                            + "；格式：" + book.getAutoImportFormats());
+                }
+            } catch (Exception exception) {
+                task.setStatus(CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
+                task.setErrorMessage("采集完成，但自动入库失败：" + userMessage(exception));
+                taskRepository.save(task);
+                recordCrawlerEvent(task, "自动入库失败", task.getErrorMessage());
+                log.warn("[采集任务] 自动入库失败: taskId={}, bookId={}",
+                        task.getId(), book.getId(), exception);
+            }
+        } else if (contentFailed == 0 && taskFailed == 0 && book.getLibraryBook() != null
+                && !Boolean.FALSE.equals(book.getAutoSyncLibrary())) {
             try {
                 int publishedVersions = exportService.syncImportedBook(task.getUser(), book.getId());
                 recordCrawlerEvent(task, publishedVersions == 0 ? "书库版本无需更新" : "书库版本同步完成",

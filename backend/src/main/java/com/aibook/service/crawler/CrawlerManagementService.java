@@ -25,6 +25,22 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class CrawlerManagementService {
+    @Transactional
+    public List<BookView> setAutoImport(User user, Collection<Long> requestedIds,
+            boolean enabled, List<String> requestedFormats) {
+        List<String> formats = com.aibook.util.CrawlerImportFormats.normalize(requestedFormats);
+        Set<Long> ids = new LinkedHashSet<>(requestedIds);
+        if (ids.isEmpty() || ids.size() > 1000 || ids.contains(null)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请选择 1 至 1000 本书籍");
+        }
+        if (bookRepository.findByIdInAndSiteUser(ids, user).size() != ids.size()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "部分采集书籍不存在或无权操作");
+        }
+        if (bookRepository.updateAutoImport(ids, user, enabled, String.join(",", formats)) != ids.size()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "书籍已发生变化，请刷新后重试");
+        }
+        return bookRepository.findByIdInAndSiteUser(ids, user).stream().map(this::bookView).toList();
+    }
     private static final List<CrawlerBook.CrawlStatus> RUNNING_BOOK_STATUSES = List.of(
             CrawlerBook.CrawlStatus.CRAWLING_METADATA,
             CrawlerBook.CrawlStatus.CRAWLING_CHAPTER_LIST,
@@ -877,7 +893,9 @@ public class CrawlerManagementService {
                 b.getLastCrawlStartedAt(), b.getLastCrawlTime(), b.getCreatedAt(),
                 suspectedDuplicate, normalizedThemeColor(b.getSite().getThemeColor()),
                 b.getLibraryBook() != null
-                        && "structured".equalsIgnoreCase(b.getLibraryBook().getFormat()));
+                        && "structured".equalsIgnoreCase(b.getLibraryBook().getFormat()),
+                Boolean.TRUE.equals(b.getAutoImportEnabled()),
+                com.aibook.util.CrawlerImportFormats.decode(b.getAutoImportFormats()));
     }
 
     private List<String> splitTags(String value) {
