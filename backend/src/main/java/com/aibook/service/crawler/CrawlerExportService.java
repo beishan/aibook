@@ -94,14 +94,34 @@ public class CrawlerExportService {
 
     @Transactional
     public Long importLibrary(User user, Long bookId, List<String> requestedFormats) {
-        CrawlerBook crawlerBook = managementService.ownedBook(user, bookId);
+        CrawlerBook crawlerBook = crawlerBookRepository.findForLibraryImport(bookId, user)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集书籍不存在"));
         List<CrawlerChapter> chapters = availableChapters(crawlerBook);
         int availableChapterCount = chapters.size();
         if (availableChapterCount == 0) throw new ResponseStatusException(
                 HttpStatus.CONFLICT, "书籍还没有可用正文，不能生成或加入书库");
         LinkedHashSet<String> formats = normalizeFormats(requestedFormats);
+        if (crawlerBook.getLibraryBook() == null) {
+            // 旧版采集线程可能清空过关联，按当前账户和采集来源找回已入库版本。
+            List<BookVersion> previousVersions = versionRepository
+                    .findByBookUserAndSourceTypeAndSourceIdOrderByIdDesc(
+                            user, "CRAWLER", bookId.toString());
+            Optional<Book> previousBook = previousVersions.stream().map(BookVersion::getBook)
+                    .filter(book -> book.getDeletedAt() == null).findFirst();
+            if (previousBook.isPresent()) {
+                crawlerBook.setLibraryBook(previousBook.get());
+            } else if (!previousVersions.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "该采集书籍已在回收站，请先恢复书籍后再同步入库");
+            }
+        }
         if (crawlerBook.getLibraryBook() != null) {
+            if (crawlerBook.getLibraryBook().getDeletedAt() != null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "该采集书籍已在回收站，请先恢复书籍后再同步入库");
+            }
             syncImportedBook(user, bookId, formats);
+            persistLibraryLink(user, crawlerBook);
             return crawlerBook.getLibraryBook().getId();
         }
         if (formats.contains("STRUCTURED")) {
@@ -135,7 +155,8 @@ public class CrawlerExportService {
                     .primaryVersion(true).chapterCount(availableChapterCount).sourceType("CRAWLER")
                     .sourceId(crawlerBook.getId().toString()).sourceSite(crawlerBook.getSite().getSiteCode()).sourceUrl(crawlerBook.getBookUrl()).build());
             crawlerBook.setLibraryBook(book); crawlerBook.setImportStatus(CrawlerBook.ImportStatus.IMPORTED);
-            crawlerBook.setAutoSyncLibrary(true); crawlerBookRepository.save(crawlerBook);
+            crawlerBook.setAutoSyncLibrary(true);
+            persistLibraryLink(user, crawlerBook);
             recordOperation(user, crawlerBook, "采集书籍加入书库：" + crawlerBook.getBookName(),
                     "格式：" + String.join(",", formats) + "；可用章节：" + availableChapterCount + "/"
                             + value(crawlerBook.getChapterCount()) + "；书库ID：" + book.getId());
@@ -189,13 +210,22 @@ public class CrawlerExportService {
         crawlerBook.setLibraryBook(book);
         crawlerBook.setImportStatus(CrawlerBook.ImportStatus.IMPORTED);
         crawlerBook.setAutoSyncLibrary(true);
-        crawlerBookRepository.save(crawlerBook);
+        persistLibraryLink(user, crawlerBook);
         formats.stream().filter(format -> !"STRUCTURED".equals(format))
                 .forEach(format -> addSecondaryVersion(crawlerBook, format));
         recordOperation(user, crawlerBook, "采集书籍结构化入库：" + crawlerBook.getBookName(),
                 "未生成主阅读文件；可用章节：" + chapters.size() + "/"
                         + value(crawlerBook.getChapterCount()) + "；书库ID：" + book.getId());
         return book.getId();
+    }
+
+    private void persistLibraryLink(User user, CrawlerBook crawlerBook) {
+        crawlerBook.setImportStatus(CrawlerBook.ImportStatus.IMPORTED);
+        crawlerBookRepository.save(crawlerBook);
+        if (crawlerBookRepository.linkLibraryBook(crawlerBook.getId(), user,
+                crawlerBook.getLibraryBook(), CrawlerBook.ImportStatus.IMPORTED) != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "书籍入库关联保存失败，请重试");
+        }
     }
 
     private void addSecondaryVersion(CrawlerBook crawlerBook, String format) {

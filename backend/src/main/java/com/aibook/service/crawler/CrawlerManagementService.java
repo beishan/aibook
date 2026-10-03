@@ -453,6 +453,9 @@ public class CrawlerManagementService {
             book.setImportStatus(book.getLibraryBook() == null ? CrawlerBook.ImportStatus.READY : CrawlerBook.ImportStatus.IMPORTED);
         } else if (failed > 0) book.setCrawlStatus(CrawlerBook.CrawlStatus.PARTIAL_SUCCESS);
         bookRepository.save(book);
+        if (total > 0 && completed + pendingRelease == total) {
+            bookRepository.refreshImportStatus(book.getId(), CrawlerBook.ImportStatus.READY);
+        }
     }
 
     @Transactional(readOnly = true)

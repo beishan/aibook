@@ -5,6 +5,7 @@ import com.aibook.repository.projections.BookTitleMatchProjection;
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 
 public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> {
@@ -22,6 +23,30 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
     int backfillLibrarySourceSiteNames();
 
     Optional<CrawlerBook> findByIdAndSiteUser(Long id, User user);
+    @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select b from CrawlerBook b where b.id = :id and b.site.user = :user")
+    Optional<CrawlerBook> findForLibraryImport(@Param("id") Long id, @Param("user") User user);
+
+    @Transactional
+    @Modifying(flushAutomatically = true)
+    @Query("update CrawlerBook b set b.libraryBook = :libraryBook, b.importStatus = :status "
+            + "where b.id = :id and b.site.user = :user")
+    int linkLibraryBook(@Param("id") Long id, @Param("user") User user,
+            @Param("libraryBook") Book libraryBook, @Param("status") CrawlerBook.ImportStatus status);
+
+    @Transactional
+    @Modifying(flushAutomatically = true)
+    @Query("update CrawlerBook b set b.importStatus = "
+            + "case when b.libraryBook is null then :unimportedStatus else :importedStatus end "
+            + "where b.id = :id")
+    int updateImportStatus(@Param("id") Long id,
+            @Param("unimportedStatus") CrawlerBook.ImportStatus unimportedStatus,
+            @Param("importedStatus") CrawlerBook.ImportStatus importedStatus);
+
+    default int refreshImportStatus(Long id, CrawlerBook.ImportStatus unimportedStatus) {
+        return updateImportStatus(id, unimportedStatus, CrawlerBook.ImportStatus.IMPORTED);
+    }
+
     List<CrawlerBook> findByIdInAndSiteUser(Collection<Long> ids, User user);
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update CrawlerBook b set b.favorite = :favorite where b.id = :id and b.site.user = :user")

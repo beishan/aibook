@@ -59,8 +59,13 @@ public class CrawlerBook {
     @Builder.Default private List<BookList> bookLists = new ArrayList<>();
     @Enumerated(EnumType.STRING) @Builder.Default private CrawlStatus crawlStatus = CrawlStatus.DISCOVERED;
     @Enumerated(EnumType.STRING) @Builder.Default private DiscoveryStatus discoveryStatus = DiscoveryStatus.ACTIVE;
-    @Enumerated(EnumType.STRING) @Builder.Default private ImportStatus importStatus = ImportStatus.NOT_IMPORTED;
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "library_book_id") private Book libraryBook;
+    // 入库状态和关联通过独立更新语句维护，防止采集工作线程用旧快照覆盖入库结果。
+    @Enumerated(EnumType.STRING)
+    @Column(updatable = false)
+    @Builder.Default private ImportStatus importStatus = ImportStatus.NOT_IMPORTED;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "library_book_id", updatable = false)
+    private Book libraryBook;
     @CreationTimestamp private LocalDateTime createdAt;
     @UpdateTimestamp private LocalDateTime updatedAt;
 

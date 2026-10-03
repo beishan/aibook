@@ -209,6 +209,9 @@ class CrawlerExportServiceTest {
         BookVersionRepository versions = mock(BookVersionRepository.class);
         Map<String, CrawlerBookExport> savedExports = new HashMap<>();
         List<BookVersion> savedVersions = new ArrayList<>();
+        when(crawlerBooks.findForLibraryImport(3L, user)).thenReturn(Optional.of(crawlerBook));
+        when(crawlerBooks.linkLibraryBook(eq(3L), eq(user), any(Book.class),
+                eq(CrawlerBook.ImportStatus.IMPORTED))).thenReturn(1);
         when(management.ownedBook(user, 3L)).thenReturn(crawlerBook);
         when(chapters.findByCrawlerBookOrderByChapterIndexAsc(crawlerBook)).thenReturn(List.of(chapter));
         when(exports.findByCrawlerBookAndFormat(eq(crawlerBook), anyString()))
@@ -278,6 +281,11 @@ class CrawlerExportServiceTest {
         AtomicReference<Book> savedBook = new AtomicReference<>();
         AtomicReference<BookVersion> savedVersion = new AtomicReference<>();
         AtomicReference<List<LibraryChapter>> snapshot = new AtomicReference<>();
+        crawlerBook.setCrawledChapterCount(0);
+        crawlerBook.setImportStatus(CrawlerBook.ImportStatus.READY);
+        when(crawlerBooks.findForLibraryImport(3L, user)).thenReturn(Optional.of(crawlerBook));
+        when(crawlerBooks.linkLibraryBook(eq(3L), eq(user), any(Book.class),
+                eq(CrawlerBook.ImportStatus.IMPORTED))).thenReturn(1);
         when(management.ownedBook(user, 3L)).thenReturn(crawlerBook);
         when(chapters.findByCrawlerBookOrderByChapterIndexAsc(crawlerBook))
                 .thenReturn(List.of(first, second));
@@ -307,6 +315,72 @@ class CrawlerExportServiceTest {
         assertThat(snapshot.get()).extracting(LibraryChapter::getChapterIndex)
                 .containsExactly(0, 1);
         verifyNoInteractions(exports);
+    }
+
+    @Test
+    void recoversLostLibraryLinkAndRepeatedImportDoesNotCreateDuplicateVersions() {
+        User user = User.builder().id(1L).username("owner").build();
+        CrawlerBook crawlerBook = book(user);
+        crawlerBook.setExternalBookId("book-3");
+        Book libraryBook = Book.builder().id(20L).user(user).title("已入库书籍")
+                .format("structured").build();
+        CrawlerChapter chapter = CrawlerChapter.builder().crawlerBook(crawlerBook)
+                .chapterIndex(0).chapterName("第一章").content("正文").build();
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        CrawlerBookRepository crawlerBooks = mock(CrawlerBookRepository.class);
+        CrawlerChapterRepository chapters = mock(CrawlerChapterRepository.class);
+        BookRepository books = mock(BookRepository.class);
+        BookVersionRepository versions = mock(BookVersionRepository.class);
+        CrawlerExportService service = new CrawlerExportService(management, chapters,
+                mock(CrawlerBookExportRepository.class), crawlerBooks, books,
+                mock(com.aibook.repository.BookListRepository.class), mock(LibraryChapterRepository.class),
+                mock(CategoryRepository.class), mock(TagRepository.class), versions,
+                mock(VersionReadingProgressRepository.class), mock(OperationLogService.class));
+        String hash = ReflectionTestUtils.invokeMethod(service, "structuredHash", crawlerBook, List.of(chapter));
+        BookVersion version = BookVersion.builder().id(30L).book(libraryBook).format("structured")
+                .sourceType("CRAWLER").sourceId("3").fileHash(hash).primaryVersion(true).build();
+        when(crawlerBooks.findForLibraryImport(3L, user)).thenReturn(Optional.of(crawlerBook));
+        when(management.ownedBook(user, 3L)).thenReturn(crawlerBook);
+        when(chapters.findByCrawlerBookOrderByChapterIndexAsc(crawlerBook)).thenReturn(List.of(chapter));
+        when(versions.findByBookUserAndSourceTypeAndSourceIdOrderByIdDesc(user, "CRAWLER", "3"))
+                .thenReturn(List.of(version));
+        when(versions.findByBookOrderByPrimaryVersionDescCreatedAtAsc(libraryBook)).thenReturn(List.of(version));
+        when(crawlerBooks.linkLibraryBook(3L, user, libraryBook, CrawlerBook.ImportStatus.IMPORTED))
+                .thenReturn(1);
+
+        assertThat(service.importLibrary(user, 3L, List.of("STRUCTURED"))).isEqualTo(20L);
+        assertThat(service.importLibrary(user, 3L, List.of("STRUCTURED"))).isEqualTo(20L);
+
+        assertThat(crawlerBook.getLibraryBook()).isSameAs(libraryBook);
+        assertThat(crawlerBook.getImportStatus()).isEqualTo(CrawlerBook.ImportStatus.IMPORTED);
+        verify(versions, never()).save(any());
+        verify(crawlerBooks, times(2)).linkLibraryBook(3L, user, libraryBook, CrawlerBook.ImportStatus.IMPORTED);
+        verify(versions, times(1)).findByBookUserAndSourceTypeAndSourceIdOrderByIdDesc(user, "CRAWLER", "3");
+    }
+
+    @Test
+    void refusesToReportTrashedBookAsSuccessfulImport() {
+        User user = User.builder().id(1L).username("owner").build();
+        CrawlerBook crawlerBook = book(user);
+        Book trashedBook = Book.builder().id(20L).user(user)
+                .deletedAt(java.time.LocalDateTime.now()).build();
+        crawlerBook.setLibraryBook(trashedBook);
+        CrawlerBookRepository crawlerBooks = mock(CrawlerBookRepository.class);
+        CrawlerChapterRepository chapters = mock(CrawlerChapterRepository.class);
+        BookRepository books = mock(BookRepository.class);
+        CrawlerExportService service = new CrawlerExportService(mock(CrawlerManagementService.class), chapters,
+                mock(CrawlerBookExportRepository.class), crawlerBooks, books,
+                mock(com.aibook.repository.BookListRepository.class), mock(LibraryChapterRepository.class),
+                mock(CategoryRepository.class), mock(TagRepository.class), mock(BookVersionRepository.class),
+                mock(VersionReadingProgressRepository.class), mock(OperationLogService.class));
+        when(crawlerBooks.findForLibraryImport(3L, user)).thenReturn(Optional.of(crawlerBook));
+        when(chapters.findByCrawlerBookOrderByChapterIndexAsc(crawlerBook)).thenReturn(List.of(
+                CrawlerChapter.builder().content("正文").build()));
+
+        assertThatThrownBy(() -> service.importLibrary(user, 3L, List.of("STRUCTURED")))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("回收站");
+        verifyNoInteractions(books);
+        verify(crawlerBooks, never()).linkLibraryBook(any(), any(), any(), any());
     }
 
     private CrawlerExportService service(CrawlerManagementService management,

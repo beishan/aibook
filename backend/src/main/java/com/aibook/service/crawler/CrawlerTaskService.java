@@ -719,7 +719,9 @@ public class CrawlerTaskService {
         }
         log.info("[采集任务] 人工修改书籍状态: bookId={}, book={}, previous={}, current={}",
                 book.getId(), bookName(book), previous, status);
-        return managementService.bookView(book);
+        bookRepository.refreshImportStatus(book.getId(), hasContent
+                ? CrawlerBook.ImportStatus.READY : CrawlerBook.ImportStatus.NOT_IMPORTED);
+        return managementService.bookView(bookRepository.findById(book.getId()).orElse(book));
     }
 
     @Transactional
@@ -1623,6 +1625,9 @@ public class CrawlerTaskService {
         book.setImportStatus(contentFailed != 0 ? CrawlerBook.ImportStatus.NOT_IMPORTED
                 : book.getLibraryBook() == null ? CrawlerBook.ImportStatus.READY : CrawlerBook.ImportStatus.IMPORTED);
         book.setLastCrawlTime(LocalDateTime.now()); bookRepository.save(book);
+        bookRepository.refreshImportStatus(book.getId(), contentFailed == 0
+                ? CrawlerBook.ImportStatus.READY : CrawlerBook.ImportStatus.NOT_IMPORTED);
+        book = bookRepository.findById(book.getId()).orElse(book);
         if (contentFailed == 0 && book.getLibraryBook() != null && !Boolean.FALSE.equals(book.getAutoSyncLibrary())) {
             try {
                 int publishedVersions = exportService.syncImportedBook(task.getUser(), book.getId());

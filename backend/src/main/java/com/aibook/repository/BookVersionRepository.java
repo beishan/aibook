@@ -2,6 +2,7 @@ package com.aibook.repository;
 
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.BookVersion;
+import com.aibook.model.entity.User;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -25,6 +26,9 @@ public interface BookVersionRepository extends JpaRepository<BookVersion, Long> 
     Optional<BookVersion> findByIdAndBook(Long id, Book book);
 
     Optional<BookVersion> findByFileHash(String fileHash);
+
+    List<BookVersion> findByBookUserAndSourceTypeAndSourceIdOrderByIdDesc(
+            User user, String sourceType, String sourceId);
 
     boolean existsByBookAndSourceTypeAndSourceId(
             Book book, String sourceType, String sourceId);
