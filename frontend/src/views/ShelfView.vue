@@ -210,6 +210,9 @@
                 :compact="viewMode === 'list'"
               />
               <div v-if="viewMode === 'grid'" class="book-cover-actions shelf-book-actions" @click.stop>
+                <ShelfBookActions :book="book" :small="cardSize === 'small'"
+                  :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+                  @action="handleBookAction" />
                 <button
                   v-if="selectedShelfGroup !== 'all'"
                   class="action-btn"
@@ -264,6 +267,7 @@
               </div>
             </div>
             <div v-if="viewMode === 'list'" class="shelf-list-actions" @click.stop>
+              <ShelfBookActions :book="book" list hide-shelf :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id" @action="handleBookAction" />
               <button v-if="selectedShelfGroup !== 'all'" class="btn btn-text" :disabled="bookIndex === 0" @click="moveShelfBookOrder(bookIndex, -1)">上移</button>
               <button v-if="selectedShelfGroup !== 'all'" class="btn btn-text" :disabled="bookIndex === displayedShelfBooks.length - 1" @click="moveShelfBookOrder(bookIndex, 1)">下移</button>
               <el-dropdown trigger="click" @command="command => moveBookToShelfGroup(book, command)">
@@ -325,6 +329,9 @@
               :compact="viewMode === 'list'"
             />
             <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
+                <ShelfBookActions :book="book" :small="cardSize === 'small'"
+                  :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+                  @action="handleBookAction" />
               <button
                 class="action-btn"
                 :disabled="downloadingBookId !== null"
@@ -342,6 +349,8 @@
               <span v-if="book.publisher">{{ book.publisher }}</span>
             </div>
           </div>
+          <ShelfBookActions v-if="viewMode === 'list'" :book="book" list
+            :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id" @action="handleBookAction" />
           <button
             v-if="viewMode === 'list'"
             class="btn btn-text"
@@ -390,6 +399,9 @@
               :compact="viewMode === 'list'"
             />
             <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
+                <ShelfBookActions :book="book" :small="cardSize === 'small'"
+                  :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+                  @action="handleBookAction" />
               <button
                 class="action-btn"
                 :disabled="downloadingBookId !== null"
@@ -418,6 +430,8 @@
               <span v-if="book.publisher">{{ book.publisher }}</span>
             </div>
           </div>
+          <ShelfBookActions v-if="viewMode === 'list'" :book="book" list
+            :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id" @action="handleBookAction" />
           <button
             v-if="viewMode === 'list'"
             class="btn btn-text"
@@ -469,6 +483,9 @@
               :compact="viewMode === 'list'"
             />
             <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
+                <ShelfBookActions :book="book" :small="cardSize === 'small'"
+                  :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+                  @action="handleBookAction" />
               <button
                 class="action-btn"
                 :disabled="downloadingBookId !== null"
@@ -486,6 +503,8 @@
               <span v-if="book.publisher">{{ book.publisher }}</span>
             </div>
           </div>
+          <ShelfBookActions v-if="viewMode === 'list'" :book="book" list
+            :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id" @action="handleBookAction" />
           <button
             v-if="viewMode === 'list'"
             class="btn btn-text"
@@ -534,6 +553,9 @@
               :compact="viewMode === 'list'"
             />
             <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
+                <ShelfBookActions :book="book" :small="cardSize === 'small'"
+                  :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+                  @action="handleBookAction" />
               <button
                 class="action-btn"
                 :disabled="downloadingBookId !== null"
@@ -551,6 +573,8 @@
               <span v-if="book.publisher">{{ book.publisher }}</span>
             </div>
           </div>
+          <ShelfBookActions v-if="viewMode === 'list'" :book="book" list
+            :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id" @action="handleBookAction" />
           <button
             v-if="viewMode === 'list'"
             class="btn btn-text"
@@ -669,23 +693,155 @@
         </button>
       </template>
     </el-dialog>
+    <BookQuickReader ref="quickReader" @closed="refreshBookFromServer" />
+    <BookEditDialog :visible="editingBook !== null" :book="editingBook"
+      @close="editingBook=null" @saved="applyBookUpdate" />
+    <AddToBookListDialog :visible="bookToAddToList !== null" :book="bookToAddToList"
+      @close="bookToAddToList=null" />
+    <ScraperDialog ref="scraperDialog" :visible="scrapingBookId !== null"
+      @close="scrapingBookId=null" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
 import { allBookCoversHidden, shouldLoadBookCover } from '@/utils/imagePrivacy'
+import ShelfBookActions from '@/components/ShelfBookActions.vue'
+import BookQuickReader from '@/components/BookQuickReader.vue'
+import BookEditDialog from '@/components/BookEditDialog.vue'
+import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
+import ScraperDialog from '@/components/ScraperDialog.vue'
+import { scrapeBook } from '@/utils/scraper'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import type { Book } from '@/stores/book'
 import { downloadBookToLocal } from '@/utils/bookDownload'
 
 const router = useRouter()
 const bookStore = useBookStore()
+const pendingBookActions = ref(new Set<number>())
+const quickReader = ref<InstanceType<typeof BookQuickReader> | null>(null)
+const editingBook = ref<Book | null>(null)
+const bookToAddToList = ref<Book | null>(null)
+const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
+const scrapingBookId = ref<number | null>(null)
+
+function applyBookUpdate(updated:Book) {
+  const replace = (books:Book[]) => books.map(book => book.id === updated.id ? { ...book, ...updated } : book)
+  const marked = (books:Book[], included:boolean) => {
+    const result = replace(books).filter(book => book.id !== updated.id || included)
+    if (included && !result.some(book => book.id === updated.id)) result.unshift(updated)
+    return result
+  }
+  favoriteBooks.value = marked(favoriteBooks.value, updated.isFavorite)
+  wantedBooks.value = marked(wantedBooks.value, updated.isWanted)
+  readingBooks.value = marked(readingBooks.value, updated.readingStatus === 'READING')
+  bookStore.books = replace(bookStore.books)
+  if (!bookStore.books.some(book => book.id === updated.id)) bookStore.books.push(updated)
+  if (bookStore.currentBook?.id === updated.id) bookStore.currentBook = updated
+  const overview = shelfOverview.value
+  overview.ungroupedBooks = replace(overview.ungroupedBooks)
+    .filter(book => book.id !== updated.id || updated.onShelf)
+  overview.groups.forEach(group => {
+    group.books = replace(group.books).filter(book => book.id !== updated.id || updated.onShelf)
+  })
+  const shelfBooks = [...overview.ungroupedBooks, ...overview.groups.flatMap(group => group.books)]
+  if (updated.onShelf && !shelfBooks.some(book => book.id === updated.id)) {
+    const group = overview.groups.find(group => group.id === updated.shelfGroupId)
+    if (group) group.books.push(updated)
+    else overview.ungroupedBooks.push(updated)
+  }
+  overview.totalBooks = overview.ungroupedBooks.length
+    + overview.groups.reduce((count, group) => count + group.books.length, 0)
+}
+
+function removeBookFromCollections(bookId:number) {
+  const retain = (books:Book[]) => books.filter(book => book.id !== bookId)
+  favoriteBooks.value = retain(favoriteBooks.value)
+  wantedBooks.value = retain(wantedBooks.value)
+  readingBooks.value = retain(readingBooks.value)
+  shelfOverview.value.ungroupedBooks = retain(shelfOverview.value.ungroupedBooks)
+  shelfOverview.value.groups.forEach(group => { group.books = retain(group.books) })
+  shelfOverview.value.totalBooks = shelfOverview.value.ungroupedBooks.length
+    + shelfOverview.value.groups.reduce((count, group) => count + group.books.length, 0)
+}
+
+async function refreshBookFromServer(bookId:number) {
+  try {
+    const { data } = await api.get<Book>(`/api/books/${bookId}`)
+    applyBookUpdate(data)
+  } catch {
+    message.warning('刷新书籍信息失败，请重新打开当前列表')
+  }
+}
+
+async function handleBookAction(command:string, book:Book) {
+  if (pendingBookActions.value.has(book.id) || shelfActionBookId.value === book.id) return
+  pendingBookActions.value.add(book.id)
+  try {
+    switch (command) {
+      case 'favorite':
+        applyBookUpdate(await bookStore.toggleFavorite(book.id))
+        message.success(book.isFavorite ? '已取消收藏' : '已收藏')
+        break
+      case 'wanted':
+        applyBookUpdate(await bookStore.toggleWanted(book.id))
+        message.success(book.isWanted ? '已取消想读' : '已标记想读')
+        break
+      case 'shelf':
+        applyBookUpdate(book.onShelf
+          ? await bookStore.removeFromShelf(book.id) : await bookStore.addToShelf(book.id))
+        message.success(book.onShelf ? '已移出书架' : '已加入书架')
+        break
+      case 'quick-read':
+        quickReader.value?.open(book)
+        break
+      case 'edit':
+        editingBook.value = book
+        break
+      case 'add-to-list':
+        bookToAddToList.value = book
+        break
+      case 'repair':
+        router.push(`/books/${book.id}/repair`)
+        break
+      case 'random-cover':
+        applyBookUpdate(await bookStore.randomizeBookCover(book.id))
+        message.success('已随机更换书籍封面')
+        break
+      case 'reparse': {
+        const result = await bookStore.reparseBook(book.id)
+        if (result.book) applyBookUpdate(result.book)
+        message.success(result.message || '重新解析完成')
+        break
+      }
+      case 'scrape':
+        if (scrapingBookId.value !== null) return
+        scrapingBookId.value = book.id
+        await nextTick()
+        await scraperDialog.value?.startScrape(async () => {
+          const result = await scrapeBook(book.id)
+          if (result.success) await refreshBookFromServer(book.id)
+          return result
+        })
+        break
+      case 'delete':
+        if (!await confirm(`确定将《${book.title}》移入回收站吗？原始文件会保留，可从回收站恢复。`, '移入回收站')) return
+        await bookStore.deleteBook(book.id)
+        removeBookFromCollections(book.id)
+        message.success('已移入回收站')
+        break
+    }
+  } catch (error:any) {
+    message.error(error.response?.data?.message || '书籍操作失败，请稍后重试')
+  } finally {
+    pendingBookActions.value.delete(book.id)
+  }
+}
 
 const STORAGE_KEY = 'shelf-settings'
 
@@ -991,7 +1147,7 @@ const moveBookToShelfGroup = async (book: Book, command: string | number | objec
 const removeShelfBook = async (book: Book) => {
   shelfActionBookId.value = book.id
   try {
-    await bookStore.removeFromShelf(book.id)
+    applyBookUpdate(await bookStore.removeFromShelf(book.id))
     await loadShelf()
     message.success(`已将《${book.title}》移出书架`)
   } catch (error) {
@@ -1029,7 +1185,7 @@ const removeFromReading = async (book: Book) => {
   if (removingReadingIds.value.has(book.id)) return
   removingReadingIds.value.add(book.id)
   try {
-    await bookStore.updateReadingStatus(book.id, 'UNREADING')
+    applyBookUpdate(await bookStore.updateReadingStatus(book.id, 'UNREADING'))
     readingBooks.value = readingBooks.value.filter(item => item.id !== book.id)
     message.success(`已将《${book.title}》移出正在阅读`)
   } catch (error) {
@@ -1638,6 +1794,8 @@ button.shelf-folder-card {
 .shelf-list-actions {
   display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   gap: 4px;
 }
@@ -1793,6 +1951,7 @@ button.shelf-folder-card {
   left: 0;
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 8px;
   background: rgba(15, 23, 42, 0.72);
@@ -1913,6 +2072,7 @@ button.shelf-folder-card {
 
 .book-list-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-lg);
   padding: var(--spacing-md);
@@ -2221,8 +2381,13 @@ button.shelf-folder-card {
   }
 
   .shelf-list-actions {
+    flex-basis: 100%;
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+
+  .book-list-item > :deep(.shelf-common-actions.is-list) {
+    flex-basis: 100%;
   }
 
   .group-appearance-fields {
