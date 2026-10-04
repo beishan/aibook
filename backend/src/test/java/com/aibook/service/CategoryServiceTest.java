@@ -3,6 +3,7 @@ package com.aibook.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -119,6 +120,11 @@ class CategoryServiceTest {
 
         CategoryService service = new CategoryService(
                 categoryRepository, bookRepository, mock(ScanDirectoryRepository.class));
+        var entityManager = mock(jakarta.persistence.EntityManager.class);
+        var update = mock(jakarta.persistence.Query.class);
+        when(entityManager.createQuery(anyString())).thenReturn(update);
+        when(update.setParameter(anyString(), any())).thenReturn(update);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "entityManager", entityManager);
         service.deleteCategory(1L, null, user);
 
         assertThat(book.getCategory()).isNull();

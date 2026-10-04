@@ -93,6 +93,7 @@ interface UserPreferences {
   libraryCardPageSize: number | null
   libraryListPageSize: number | null
   authorPageSize: number | null
+  categoryPageSize: number | null
   scanThreadCount: number | null
   crawlerPollingIntervalSeconds: number | null
   crawlerFollowCurrentChapter: boolean | null
@@ -337,6 +338,7 @@ const readLocalReaderSettings = (): ReaderSettings => {
 }
 
 export const usePreferencesStore = defineStore('preferences', () => {
+  const categoryPageSize = ref(20)
   const themeStore = useThemeStore()
   const libraryViewMode = ref<LibraryViewMode>(readLocalLibraryViewMode())
   const libraryCardPageSize = ref<LibraryPageSize>(
@@ -642,6 +644,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
     else persist()
   }
 
+  const setCategoryPageSize = (value:number, syncRemote = true) => {
+    if (![10, 20, 50, 100].includes(value)) return
+    categoryPageSize.value = value
+    if (syncRemote) persistRemote({ categoryPageSize:value })
+  }
+
   const flushReaderSettings = () => {
     if (readerSettingsSaveTimer) {
       clearTimeout(readerSettingsSaveTimer)
@@ -851,6 +859,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
           quickReaderWindow.value = null
         }
       }
+      setCategoryPageSize([10, 20, 50, 100].includes(data.categoryPageSize ?? 0)
+        ? data.categoryPageSize! : 20, false)
 
       if (data.readerSettings) {
         setReaderSettings(data.readerSettings, false)
@@ -871,6 +881,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   }
 
   const resetHydration = () => {
+    categoryPageSize.value = 20
     hydrated.value = false
     dockNavigationItems.value = DEFAULT_DOCK_NAVIGATION_ITEMS.map(item => ({ ...item }))
     if (readerSettingsSaveTimer) {
@@ -895,6 +906,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     libraryCardPageSize,
     libraryListPageSize,
     authorPageSize,
+    categoryPageSize,
     scanThreadCount,
     crawlerPollingIntervalSeconds,
     crawlerFollowCurrentChapter,
@@ -917,6 +929,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setLibraryCardPageSize,
     setLibraryListPageSize,
     setAuthorPageSize,
+    setCategoryPageSize,
     setScanThreadCount,
     setCrawlerPollingIntervalSeconds,
     setCrawlerFollowCurrentChapter,

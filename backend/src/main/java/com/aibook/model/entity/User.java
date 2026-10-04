@@ -38,6 +38,12 @@ public class User implements UserDetails {
     @Column(unique = true, nullable = false)
     private String username;
 
+    // 用户主动删除分类后，空分类库不再自动补回预置分类。
+    @JsonIgnore
+    @Column(nullable = false, updatable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private Boolean categoryAutoPresetsDisabled = false;
+
     /**
      * 邮箱
      */
@@ -355,6 +361,14 @@ public class User implements UserDetails {
 
     public void setReaderSettings(String value) {
         preference().setReaderSettings(value);
+    }
+
+    public Integer getCategoryPageSize() {
+        return preference().getCategoryPageSize();
+    }
+
+    public void setCategoryPageSize(Integer value) {
+        preference().setCategoryPageSize(value);
     }
 
     public String getQuickReaderWindow() {

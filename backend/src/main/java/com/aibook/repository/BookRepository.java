@@ -187,6 +187,11 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     List<Book> findByUserAndCategoryAndDeletedAtIsNull(
             @Param("user") User user, @Param("category") Category category);
 
+    @Modifying(flushAutomatically = true)
+    @Query("update Book b set b.category = :target where b.user = :user and b.category = :source")
+    int transferCategory(@Param("user") User user, @Param("source") Category source,
+            @Param("target") Category target);
+
     /**
      * 统计某分类下的书籍。
      */

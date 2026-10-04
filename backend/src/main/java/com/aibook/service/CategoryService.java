@@ -1,6 +1,9 @@
 package com.aibook.service;
 
 import com.aibook.dto.CategoryDTO;
+import com.aibook.dto.CategoryBatchRequest;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import com.aibook.dto.CategoryMoveRequest;
 import com.aibook.dto.CategoryReorderRequest;
 import com.aibook.dto.CategoryRequest;
@@ -21,6 +24,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.LinkedHashSet;
+import java.util.Comparator;
 
 /**
  * 分类服务。
@@ -36,6 +42,52 @@ public class CategoryService {
     private final CategoryRepository categoryRepository;
     private final BookRepository bookRepository;
     private final ScanDirectoryRepository scanDirectoryRepository;
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    @Transactional
+    public void batchCategories(CategoryBatchRequest request, User user) {
+        Set<Long> ids = new LinkedHashSet<>(request.ids());
+        if (ids.isEmpty() || ids.size() > 1000 || ids.contains(null)) {
+            throw badRequest("请选择 1 至 1000 个分类");
+        }
+        // 在任何修改之前校验整批分类的归属和层级，失败时整批回滚。
+        List<Category> categories = ids.stream().map(id -> getOwnedCategory(id, user))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        if (request.action() != CategoryBatchRequest.Action.DELETE) {
+            boolean enabled = request.action() == CategoryBatchRequest.Action.ENABLE;
+            categories.forEach(category -> category.setEnabled(enabled));
+            categoryRepository.saveAll(categories);
+            return;
+        }
+        if (request.targetCategoryId() != null && ids.contains(request.targetCategoryId())) {
+            throw badRequest("书籍转移目标不能是待删除的分类");
+        }
+        Category target = resolveParent(request.targetCategoryId(), user);
+        for (Category category : categories) {
+            boolean hasUnselectedChildren = categoryRepository
+                    .findByUserAndParentOrderBySortOrderAscNameAsc(user, category).stream()
+                    .anyMatch(child -> !ids.contains(child.getId()));
+            if (hasUnselectedChildren) {
+                throw badRequest("分类“" + category.getName() + "”还有未选中的子分类，请先一并选中");
+            }
+        }
+        categories.sort(Comparator.comparingInt(this::depth).reversed());
+        disableAutomaticPresets(user);
+        for (Category category : categories) {
+            bookRepository.transferCategory(user, category, target);
+            transferScanDirectoryDefaults(category, target, user);
+            categoryRepository.delete(category);
+            // 子分类先落库删除，避免父子一起删除时触发外键约束。
+            categoryRepository.flush();
+        }
+    }
+
+    private void disableAutomaticPresets(User user) {
+        entityManager.createQuery("update User u set u.categoryAutoPresetsDisabled = true where u.id = :id")
+                .setParameter("id", user.getId()).executeUpdate();
+    }
 
     /**
      * 获取用户所有分类。空分类库会自动初始化常见分类。
@@ -177,6 +229,7 @@ public class CategoryService {
         Category target = resolveTransferTarget(targetCategoryId, category, user);
         transferBooks(category, target, user);
         transferScanDirectoryDefaults(category, target, user);
+        disableAutomaticPresets(user);
         categoryRepository.delete(category);
     }
 
@@ -244,7 +297,10 @@ public class CategoryService {
 
     private void initializeIfEmpty(User user) {
         if (categoryRepository.countByUser(user) == 0) {
-            initializePresets(user);
+            Boolean disabled = entityManager.createQuery(
+                    "select u.categoryAutoPresetsDisabled from User u where u.id = :id", Boolean.class)
+                    .setParameter("id", user.getId()).getSingleResult();
+            if (!Boolean.TRUE.equals(disabled)) initializePresets(user);
         }
     }
 

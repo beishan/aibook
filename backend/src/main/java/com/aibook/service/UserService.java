@@ -41,6 +41,7 @@ public class UserService implements UserDetailsService {
     private static final Set<Integer> LIBRARY_PAGE_SIZES =
             Set.of(10, 30, 50, 100, 200);
     private static final Set<Integer> AUTHOR_PAGE_SIZES = Set.of(10, 20, 50);
+    private static final Set<Integer> CATEGORY_PAGE_SIZES = Set.of(10, 20, 50, 100);
     private static final Set<Integer> CRAWLER_CHAPTER_PAGE_SIZES = Set.of(20, 50, 100);
     private static final Set<Integer> DEFAULT_CRAWLER_POLLING_INTERVALS =
             Set.of(1, 3, 5, 10, 30);
@@ -268,6 +269,10 @@ public class UserService implements UserDetailsService {
             user.setReaderSettings(serializeReaderSettings(
                     normalizeReaderSettings(request.getReaderSettings())));
         }
+        if (request.getCategoryPageSize() != null) {
+            requireAllowed("分类管理分页大小", request.getCategoryPageSize(), CATEGORY_PAGE_SIZES);
+            user.setCategoryPageSize(request.getCategoryPageSize());
+        }
         if (request.getQuickReaderWindow() != null) {
             user.setQuickReaderWindow(serializeQuickReaderWindow(
                     normalizeQuickReaderWindow(request.getQuickReaderWindow())));
@@ -296,6 +301,8 @@ public class UserService implements UserDetailsService {
                 .libraryCardPageSize(cardPageSize)
                 .libraryListPageSize(listPageSize)
                 .authorPageSize(normalizeAuthorPageSize(user.getAuthorPageSize()))
+                .categoryPageSize(user.getCategoryPageSize() != null
+                        && CATEGORY_PAGE_SIZES.contains(user.getCategoryPageSize()) ? user.getCategoryPageSize() : 20)
                 .scanThreadCount(
                         ScanSettings.normalizeThreadCount(user.getScanThreadCount()))
                 .crawlerPollingIntervalSeconds(user.getCrawlerPollingIntervalSeconds())

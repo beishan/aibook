@@ -1,6 +1,7 @@
 package com.aibook.controller;
 
 import com.aibook.dto.CategoryDTO;
+import com.aibook.dto.CategoryBatchRequest;
 import com.aibook.dto.CategoryMoveRequest;
 import com.aibook.dto.CategoryReorderRequest;
 import com.aibook.dto.CategoryRequest;
@@ -100,6 +101,13 @@ public class CategoryController {
             @PathVariable Long id,
             @RequestParam(required = false) Long targetCategoryId) {
         categoryService.deleteCategory(id, targetCategoryId, currentUser(authentication));
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/batch")
+    public ResponseEntity<Void> batchCategories(Authentication authentication,
+            @Valid @RequestBody CategoryBatchRequest request) {
+        categoryService.batchCategories(request, currentUser(authentication));
         return ResponseEntity.noContent().build();
     }
 

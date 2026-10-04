@@ -106,6 +106,10 @@ export const useCategoryStore = defineStore('category', () => {
     await refresh()
   }
 
+  async function batchCategories(ids:number[], action:'ENABLE'|'DISABLE'|'DELETE', targetCategoryId?:number) {
+    await api.post('/api/categories/batch', { ids, action, targetCategoryId }, { timeout:120000 })
+  }
+
   async function mergeCategory(id: number, targetCategoryId: number) {
     const response = await api.post(`/api/categories/${id}/merge`, { targetCategoryId })
     await refresh()
@@ -125,6 +129,7 @@ export const useCategoryStore = defineStore('category', () => {
     updateCategory,
     moveCategory,
     deleteCategory,
+    batchCategories,
     mergeCategory,
   }
 })

@@ -6,10 +6,10 @@
         <p class="page-subtitle">管理分类层级、常见分类和书籍归属</p>
       </div>
       <div class="header-actions">
-        <button class="btn" :disabled="categoryStore.loading" @click="restorePresets">
+        <button class="btn" :disabled="categoryStore.loading || batchBusy" @click="restorePresets">
           恢复常见分类
         </button>
-        <button class="btn btn-primary" @click="openCreate()">新增分类</button>
+        <button class="btn btn-primary" :disabled="batchBusy" @click="openCreate()">新增分类</button>
       </div>
     </div>
 
@@ -28,7 +28,7 @@
       </div>
     </div>
 
-    <div class="category-card glass">
+    <div class="category-card glass" :aria-busy="batchBusy">
       <div class="category-card-header">
         <div>
           <h2>分类树</h2>
@@ -44,6 +44,24 @@
         </button>
       </div>
 
+      <div v-if="categoryStore.flatTree.length" class="category-selection-bar" role="toolbar" aria-label="分类多选管理">
+        <el-checkbox :model-value="allPageSelected" :indeterminate="somePageSelected && !allPageSelected"
+          :disabled="batchBusy || categoryStore.loading" @change="selectPage(Boolean($event))">
+          选择当前页
+        </el-checkbox>
+        <el-checkbox :model-value="allSelected" :indeterminate="selectedIds.size > 0 && !allSelected"
+          :disabled="batchBusy || categoryStore.loading" @change="selectAll(Boolean($event))">
+          全选全部分类
+        </el-checkbox>
+        <span class="selection-count" aria-live="polite">{{ batchBusy ? '正在处理…' : `已选 ${selectedIds.size} 个` }}</span>
+        <div class="category-batch-actions">
+          <button class="btn btn-text" :disabled="batchBusy || !selectedIds.size" @click="selectedIds=new Set()">清空选择</button>
+          <button class="btn" :disabled="batchBusy || !selectedIds.size" @click="runBatch('ENABLE')">批量启用</button>
+          <button class="btn" :disabled="batchBusy || !selectedIds.size" @click="runBatch('DISABLE')">批量停用</button>
+          <button class="btn btn-danger" :disabled="batchBusy || !selectedIds.size" @click="openBatchDelete">批量删除</button>
+        </div>
+      </div>
+
       <div v-if="categoryStore.loading" class="loading">
         <div class="loading-spinner"></div>
         <p>正在加载分类...</p>
@@ -55,17 +73,20 @@
         <button class="btn btn-primary" @click="restorePresets">初始化常见分类</button>
       </div>
 
-      <div v-else class="category-list">
+      <div v-else class="category-list" :inert="batchBusy || undefined">
         <div
-          v-for="category in visibleCategories"
+          v-for="category in pagedCategories"
           :key="category.id"
           class="category-row"
           :class="{
             disabled: !category.enabled,
             'root-category': category.depth === 0,
             collapsed: isRootCollapsed(category),
+            selected: selectedIds.has(category.id),
           }"
         >
+          <el-checkbox class="category-select" :model-value="selectedIds.has(category.id)"
+            :aria-label="`选择分类 ${category.path}`" @change="selectCategory(category.id, Boolean($event))" />
           <div
             class="category-main"
             :class="{ 'category-main-collapsible': isCollapsibleRoot(category) }"
@@ -100,12 +121,13 @@
                 </span>
               </div>
               <div class="category-description">
-                {{ category.description || category.path }}
+                {{ category.depth > 0 ? [category.path, category.description].filter(Boolean).join(' · ') : category.description || category.path }}
               </div>
             </div>
           </div>
           <div class="category-count">{{ category.bookCount || 0 }} 本</div>
           <div class="category-actions">
+            <button v-if="category.children?.length" class="btn btn-text" @click="selectBranch(category)">选中含子类</button>
             <button class="btn btn-text" @click="openCreate(category.id)">新增子分类</button>
             <button class="btn btn-text" @click="openEdit(category)">编辑</button>
             <button class="btn btn-text" @click="toggleEnabled(category)">
@@ -116,6 +138,34 @@
         </div>
       </div>
     </div>
+
+    <div v-if="!categoryStore.loading && visibleCategories.length" class="category-pagination">
+      <p>按展开后的分类分页，已选项跨页保留。</p>
+      <el-pagination :current-page="currentPage" :page-size="pageSize"
+        :page-sizes="[10, 20, 50, 100]" :total="visibleCategories.length" :disabled="batchBusy"
+        layout="total, sizes, prev, pager, next, jumper"
+        @update:current-page="currentPage=$event" @update:page-size="changePageSize" />
+    </div>
+
+    <el-dialog v-model="batchDeleteVisible" title="批量删除分类" width="min(560px, 94vw)" append-to-body
+      :close-on-click-modal="!batchBusy" :close-on-press-escape="!batchBusy" :show-close="!batchBusy">
+      <p>将删除 {{ selectedCategories.length }} 个分类，关联 {{ selectedBookCount }} 本在库书籍。书籍和文件会保留。</p>
+      <div class="selected-category-preview">
+        <el-tag v-for="category in selectedCategories" :key="category.id" size="small">{{ category.path }}</el-tag>
+      </div>
+      <el-form label-position="top" :disabled="batchBusy">
+        <el-form-item label="关联书籍转移到">
+          <el-select v-model="batchTransferTarget" clearable filterable class="full-width" placeholder="不选择则转为未分类">
+            <el-option v-for="category in transferTargets" :key="category.id" :value="category.id" :label="category.path" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <p>回收站书籍和扫描目录的默认分类也会转移。删除父分类需同时选中其全部子分类，删除后可通过“恢复常见分类”重新添加预置分类。</p>
+      <template #footer>
+        <el-button :disabled="batchBusy" @click="batchDeleteVisible=false">取消</el-button>
+        <el-button type="danger" :loading="batchBusy" @click="runBatch('DELETE')">确认删除 {{ selectedIds.size }} 个分类</el-button>
+      </template>
+    </el-dialog>
 
     <Teleport to="body">
       <Transition name="fade">
@@ -186,7 +236,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import { usePreferencesStore } from '@/stores/preferences'
 import { confirm, message } from '@/utils/message'
 import {
   useCategoryStore,
@@ -195,6 +247,76 @@ import {
 } from '@/stores/category'
 
 const categoryStore = useCategoryStore()
+const preferencesStore = usePreferencesStore()
+const { categoryPageSize:pageSize } = storeToRefs(preferencesStore)
+const currentPage = ref(1)
+const selectedIds = ref<Set<number>>(new Set())
+const batchBusy = ref(false)
+const batchDeleteVisible = ref(false)
+const batchTransferTarget = ref<number>()
+const selectedCategories = computed(() => categoryStore.flatTree.filter(category => selectedIds.value.has(category.id)))
+const selectedBookCount = computed(() => selectedCategories.value.reduce((sum, category) => sum + (category.directBookCount || 0), 0))
+const transferTargets = computed(() => categoryStore.flatTree.filter(category => !selectedIds.value.has(category.id)))
+const allSelected = computed(() => categoryStore.flatTree.length > 0
+  && categoryStore.flatTree.every(category => selectedIds.value.has(category.id)))
+
+watch(() => categoryStore.flatTree.map(category => category.id), ids => {
+  const available = new Set(ids)
+  selectedIds.value = new Set([...selectedIds.value].filter(id => available.has(id)))
+})
+
+function selectCategory(id:number, selected:boolean) {
+  const next = new Set(selectedIds.value)
+  if (selected) next.add(id)
+  else next.delete(id)
+  selectedIds.value = next
+}
+
+function selectAll(selected:boolean) {
+  selectedIds.value = new Set(selected ? categoryStore.flatTree.map(category => category.id) : [])
+}
+
+function selectBranch(category:Category) {
+  const next = new Set(selectedIds.value)
+  const visit = (node:Category) => {
+    next.add(node.id)
+    node.children?.forEach(visit)
+  }
+  visit(category)
+  selectedIds.value = next
+}
+
+function openBatchDelete() {
+  const incomplete = selectedCategories.value.find(category =>
+    category.children?.some(child => !selectedIds.value.has(child.id)))
+  if (incomplete) {
+    return message.warning(`“${incomplete.name}”还有未选中的子分类，请使用“选中含子类”一并选中`)
+  }
+  batchTransferTarget.value = undefined
+  batchDeleteVisible.value = true
+}
+
+async function runBatch(action:'ENABLE'|'DISABLE'|'DELETE') {
+  if (batchBusy.value || categoryStore.loading || !selectedIds.value.size) return
+  const ids = [...selectedIds.value]
+  if (ids.length > 1000) return message.warning('每次最多处理 1000 个分类，请分批选择')
+  batchBusy.value = true
+  try {
+    await categoryStore.batchCategories(ids, action, action === 'DELETE' ? batchTransferTarget.value : undefined)
+    batchDeleteVisible.value = false
+    selectedIds.value = new Set()
+    message.success(`已${action === 'DELETE' ? '删除' : action === 'ENABLE' ? '启用' : '停用'} ${ids.length} 个分类`)
+    try {
+      await categoryStore.refresh()
+    } catch {
+      message.warning('操作已完成，但刷新分类失败，请重新打开分类管理')
+    }
+  } catch {
+    // 请求失败由 API 层显示具体原因，保留选择和删除对话框以便处理后重试。
+  } finally {
+    batchBusy.value = false
+  }
+}
 const COLLAPSED_ROOTS_KEY = 'aibook.category.collapsed-roots'
 const dialogVisible = ref(false)
 const editingId = ref<number>()
@@ -235,6 +357,33 @@ const visibleCategories = computed(() => {
   }
   visit(categoryStore.categoryTree, 0, '')
   return result
+})
+
+const pagedCategories = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return visibleCategories.value.slice(start, start + pageSize.value)
+})
+const allPageSelected = computed(() => pagedCategories.value.length > 0
+  && pagedCategories.value.every(category => selectedIds.value.has(category.id)))
+const somePageSelected = computed(() => pagedCategories.value.some(category => selectedIds.value.has(category.id)))
+
+function selectPage(selected:boolean) {
+  const next = new Set(selectedIds.value)
+  pagedCategories.value.forEach(category => {
+    if (selected) next.add(category.id)
+    else next.delete(category.id)
+  })
+  selectedIds.value = next
+}
+
+function changePageSize(value:number) {
+  preferencesStore.setCategoryPageSize(value)
+  currentPage.value = 1
+}
+
+watch([() => visibleCategories.value.length, pageSize], () => {
+  const lastPage = Math.max(1, Math.ceil(visibleCategories.value.length / pageSize.value))
+  currentPage.value = Math.min(currentPage.value, lastPage)
 })
 
 const saveCollapsedRoots = () => {
@@ -394,6 +543,7 @@ const restorePresets = async () => {
 }
 
 onMounted(async () => {
+  await preferencesStore.hydrate()
   const hasSavedCollapseState = loadCollapsedRoots()
   await categoryStore.refresh()
   if (!hasSavedCollapseState) {
@@ -405,6 +555,21 @@ onMounted(async () => {
 <style scoped>
 .category-view {
   width: 100%;
+}
+
+.category-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 18px 0;
+  overflow-x: auto;
+}
+
+.category-pagination p {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .page-header {
@@ -487,11 +652,50 @@ onMounted(async () => {
 
 .category-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 90px auto;
+  grid-template-columns: 36px minmax(260px, 1fr) 90px auto;
   align-items: center;
   min-height: 68px;
   border-bottom: 1px solid var(--border-color);
   transition: background-color 160ms ease, opacity 160ms ease;
+}
+
+.category-selection-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 8px;
+  border-top: 1px solid var(--border-color);
+  background: var(--surface-card);
+}
+
+.selection-count {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.category-batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.category-select {
+  justify-self: center;
+}
+
+.category-row.selected {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.selected-category-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  margin: 16px 0;
 }
 
 .category-row.root-category {
@@ -530,6 +734,11 @@ onMounted(async () => {
 
 .category-copy {
   min-width: 0;
+}
+
+.category-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .category-name {
@@ -618,7 +827,7 @@ onMounted(async () => {
   }
 
   .category-row {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
     gap: 8px;
     padding: 12px 0;
   }
@@ -628,7 +837,7 @@ onMounted(async () => {
   }
 
   .category-count {
-    grid-column: 2;
+    grid-column: 3;
     grid-row: 1;
   }
 
@@ -636,6 +845,7 @@ onMounted(async () => {
     grid-column: 1 / -1;
     flex-wrap: wrap;
     padding-left: 8px;
+    justify-content: flex-start;
   }
 
 
