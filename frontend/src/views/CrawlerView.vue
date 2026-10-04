@@ -26,7 +26,19 @@
         </article>
       </div>
       <div class="section-heading"><div><p class="eyebrow">LIVE QUEUE</p><h2>最近任务</h2></div><el-button text :icon="Refresh" @click="refreshOverview">刷新</el-button></div>
-      <TaskTable :tasks="dashboard?.recentTasks || []" @open="openTask" @command="runTaskCommand" @edit="openTaskEditor" @delete="removeTask" @scan-results="openScanResults" @queue="openTaskQueueDialog" />
+      <TaskTable
+        :tasks="dashboard?.recentTasks || []"
+        :prioritizing-task-id="queuedTaskPrioritizingId"
+        @open="openTask"
+        @command="runTaskCommand"
+        @edit="openTaskEditor"
+        @delete="removeTask"
+        @scan-results="openScanResults"
+        @toggle-favorite="toggleTaskFavorite"
+        @book-lists="openTaskBookLists"
+        @prioritize="prioritizeQueuedTask"
+        @queue="openTaskQueueDialog"
+      />
     </section>
 
     <section v-else-if="activeTab === 'statistics'" v-loading="statisticsLoading" class="panel crawler-statistics" role="tabpanel" aria-labelledby="crawler-statistics-title">
