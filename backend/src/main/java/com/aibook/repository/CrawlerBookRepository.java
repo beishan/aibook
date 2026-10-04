@@ -11,7 +11,7 @@ import java.util.*;
 
 public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> {
     @Query("""
-            select b.id as id, b.bookName as bookName, b.category as category,
+            select b.id as id, b.bookName as bookName, b.author as author, b.category as category,
                    b.site.siteName as siteName, library.id as libraryBookId,
                    category.id as libraryCategoryId, category.name as libraryCategoryName
             from CrawlerBook b

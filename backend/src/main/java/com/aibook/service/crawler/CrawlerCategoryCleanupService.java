@@ -68,7 +68,8 @@ public class CrawlerCategoryCleanupService {
             if (page.isEmpty()) return;
             for (var book : page) {
                 afterId = book.getId();
-                if (CrawlerCategoryPolicy.isBookTitle(book.getBookName(), book.getCategory())
+                if (CrawlerCategoryPolicy.isInvalidCategory(
+                        book.getBookName(), book.getAuthor(), book.getCategory())
                         || names.contains(CrawlerCategoryPolicy.normalize(book.getCategory()))) {
                     visitor.accept(book);
                 }

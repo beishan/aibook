@@ -886,7 +886,7 @@
       :show-close="!categoryCleanupBusy"
     >
       <div class="category-cleanup-dialog">
-        <el-alert type="info" :closable="false" title="自动识别分类与书名相同的记录（忽略空格和书名号）。范围覆盖当前账户的采集及发现记录，不受列表搜索、状态筛选或分页限制。" />
+        <el-alert type="info" :closable="false" title="自动识别分类为书名或“书名 + 空格 + 作者”的记录，兼容多个空格、全角空格和书名号。范围覆盖当前账户的采集及发现记录，不受列表搜索、状态筛选或分页限制。" />
         <el-form label-position="top" :disabled="categoryCleanupBusy">
           <el-form-item label="网站范围">
             <el-select v-model="categoryCleanupSiteId" clearable placeholder="全部网站">

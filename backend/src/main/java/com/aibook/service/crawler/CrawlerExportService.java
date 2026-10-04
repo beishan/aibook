@@ -487,15 +487,15 @@ public class CrawlerExportService {
 
     private void applyLibraryMetadata(Book libraryBook, CrawlerBook crawlerBook, User user) {
         libraryBook.setSourceBookStatus(trimToNull(crawlerBook.getBookStatus()));
-        if (CrawlerCategoryPolicy.isBookTitle(
-                crawlerBook.getBookName(), crawlerBook.getCategory())
+        if (CrawlerCategoryPolicy.isInvalidCategory(
+                crawlerBook.getBookName(), crawlerBook.getAuthor(), crawlerBook.getCategory())
                 && libraryBook.getCategory() != null
                 && CrawlerCategoryPolicy.normalize(crawlerBook.getCategory()).equals(
                         CrawlerCategoryPolicy.normalize(libraryBook.getCategory().getName()))) {
             libraryBook.setCategory(null);
         }
         String categoryName = trimToNull(CrawlerCategoryPolicy.sanitize(
-                crawlerBook.getBookName(), crawlerBook.getCategory()));
+                crawlerBook.getBookName(), crawlerBook.getAuthor(), crawlerBook.getCategory()));
         if (categoryName != null) {
             Category category = categoryRepository.findFirstByUserAndNameIgnoreCase(user, categoryName)
                     .orElseGet(() -> categoryRepository.save(Category.builder().name(categoryName)

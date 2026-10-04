@@ -93,6 +93,6 @@ public class CrawlerBook {
     @PreUpdate
     private void sanitizeCategory() {
         normalizeDefaults();
-        category = CrawlerCategoryPolicy.sanitize(bookName, category);
+        category = CrawlerCategoryPolicy.sanitize(bookName, author, category);
     }
 }
