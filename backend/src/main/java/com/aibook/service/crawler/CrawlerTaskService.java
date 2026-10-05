@@ -2306,8 +2306,34 @@ public class CrawlerTaskService {
             chapter.setFailedResponseHtml(response.html());
             chapter.setFailedResponseTime(LocalDateTime.now());
             chapter.setFailedResponseHttpStatus(response.statusCode());
+            ContentMarkerMatch responseMarker = matchedResponseFailureMarker(rule.getSite(), response.html());
+            if (responseMarker != null) {
+                throw new IllegalStateException("源站响应命中失败特征：" + responseMarker.marker(), exception);
+            }
             throw exception;
         }
+    }
+
+    static ContentMarkerMatch matchedResponseFailureMarker(CrawlerSite site, String html) {
+        if (site == null || site.getContentMarkersJson() == null
+                || site.getContentMarkersJson().isBlank() || html == null || html.isBlank()) return null;
+        org.jsoup.nodes.Document document = org.jsoup.Jsoup.parse(html);
+        StringBuilder message = new StringBuilder(document.text());
+        java.util.regex.Pattern messageAssignment = java.util.regex.Pattern.compile(
+                "(?s)\\b(?:let|var|const)\\s+msg\\s*=\\s*(['\"])(.*?)\\1");
+        for (org.jsoup.nodes.Element script : document.select("script:not([src])")) {
+            // Read source text only; never execute JavaScript from the fetched page.
+            String source = script.data();
+            if (!source.contains("cuteAlert(")) continue;
+            java.util.regex.Matcher matcher = messageAssignment.matcher(source);
+            while (matcher.find()) message.append('\n').append(matcher.group(2));
+        }
+        String normalizedMessage = message.toString().toLowerCase(Locale.ROOT);
+        return configuredContentMarkers(site).stream()
+                .filter(marker -> "FAILED".equalsIgnoreCase(marker.status()))
+                .filter(marker -> normalizedMessage.contains(marker.marker().toLowerCase(Locale.ROOT)))
+                .map(marker -> new ContentMarkerMatch(marker.marker(), ContentMarkerStatus.FAILED))
+                .findFirst().orElse(null);
     }
 
     static String contentPreview(String content) {

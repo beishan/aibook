@@ -20,7 +20,12 @@
     "updateIntervalMinutes": 60,
     "maxDiscoveryPages": 20,
     "autoImportFormat": "EPUB",
-    "contentMarkers": [],
+    "contentMarkers": [
+      {
+        "marker": "访问异常，请稍后再试",
+        "status": "FAILED"
+      }
+    ],
     "respectRobotsTxt": true
   },
   "rules": [
