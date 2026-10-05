@@ -155,41 +155,41 @@
                 active-text="人工冻结"
                 @change="setSiteManualFreeze(site, Boolean($event))"
               />
+              <div class="site-freeze-controls">
+                <label :for="`site-freeze-duration-${site.id}`">自动解冻</label>
+                <el-input-number
+                  :id="`site-freeze-duration-${site.id}`"
+                  :model-value="site.manualFreeze?.durationMinutes ?? 60"
+                  :min="0"
+                  :max="525600"
+                  :precision="0"
+                  :disabled="freezingSiteIds.includes(site.id)"
+                  size="small"
+                  controls-position="right"
+                  @change="setSiteFreezeDuration(site, $event)"
+                />
+                <span class="site-freeze-unit">分钟</span>
+                <el-tooltip :trigger="['hover', 'focus']" placement="top" :show-after="150">
+                  <template #content>
+                    <div class="site-freeze-tooltip">
+                      <p>开启人工冻结后，本站所有任务保留进度并等待解冻，关闭后自动继续。</p>
+                      <p>0 表示持续冻结至手动关闭；冻结中修改时长会重新计时。</p>
+                      <p v-if="site.manualFreeze?.frozen">
+                        {{ site.manualFreeze.until ? `解冻时间 ${formatTime(site.manualFreeze.until)}` : '当前已冻结，手动关闭后恢复' }}
+                      </p>
+                    </div>
+                  </template>
+                  <button type="button" class="site-freeze-help" aria-label="查看人工冻结与自动解冻说明">
+                    <el-icon><QuestionFilled /></el-icon>
+                  </button>
+                </el-tooltip>
+              </div>
               <el-tag :type="site.status==='RULE_ERROR'?'danger':!site.ruleVersion?'warning':site.enabled?'success':'info'">
                 {{ site.status==='RULE_ERROR'?'规则异常':!site.ruleVersion?'待配置规则':site.enabled?'启用':'停用' }}
               </el-tag>
             </div>
           </div>
           <div class="site-stats"><span><b>{{ site.bookCount }}</b> 本书</span><span><b>{{ site.requestIntervalMillis }}–{{ site.maxRequestIntervalMillis }}</b> ms 随机间隔</span><span><b>{{ site.maxConcurrency }}</b> 并发</span></div>
-          <div class="site-manual-freeze" :class="{ frozen: site.manualFreeze?.frozen }">
-            <div class="site-freeze-controls">
-              <label :for="`site-freeze-duration-${site.id}`">自动解冻（分钟）</label>
-              <el-input-number
-                :id="`site-freeze-duration-${site.id}`"
-                :model-value="site.manualFreeze?.durationMinutes ?? 60"
-                :min="0"
-                :max="525600"
-                :precision="0"
-                :disabled="freezingSiteIds.includes(site.id)"
-                size="small"
-                @change="setSiteFreezeDuration(site, $event)"
-              />
-              <el-tooltip :trigger="['hover', 'focus']" placement="top" :show-after="150">
-                <template #content>
-                  <div class="site-freeze-tooltip">
-                    <p>开启人工冻结后，本站所有任务保留进度并等待解冻，关闭后自动继续。</p>
-                    <p>0 表示持续冻结至手动关闭；冻结中修改时长会重新计时。</p>
-                    <p v-if="site.manualFreeze?.frozen">
-                      {{ site.manualFreeze.until ? `解冻时间 ${formatTime(site.manualFreeze.until)}` : '当前已冻结，手动关闭后恢复' }}
-                    </p>
-                  </div>
-                </template>
-                <button type="button" class="site-freeze-help" aria-label="查看人工冻结与自动解冻说明">
-                  <el-icon><QuestionFilled /></el-icon>
-                </button>
-              </el-tooltip>
-            </div>
-          </div>
           <div v-if="hasSiteProtection(site)" class="site-protection" :class="{cooling:site.protection.coolingDown}">
             <div class="site-protection-message"><strong>{{ site.protection.coolingDown ? '站点保护冷却中' : '请求节奏正在恢复' }}</strong><span>{{ site.protection.reason || '近期请求失败，系统已自动降低访问频率' }}</span></div>
             <el-button text size="small" type="warning" @click="openSiteProtectionDetails(site)">详情</el-button>
@@ -4196,29 +4196,22 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   overflow-y: auto;
 }
 
-.site-manual-freeze {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--border-color-light);
-  border-radius: 12px;
-  background: var(--surface-elevated);
-}
-.site-manual-freeze.frozen {
-  border-color: var(--warning);
+.site-card {
+  container-type: inline-size;
 }
 .site-freeze-controls {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 12px;
+  flex: 0 0 auto;
+  gap: 6px;
 }
-.site-freeze-controls label {
+.site-freeze-controls label,
+.site-freeze-unit {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
 }
 .site-freeze-controls .el-input-number {
-  width: 130px;
+  width: 96px;
 }
 
 .site-identity {
@@ -4231,8 +4224,12 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 8px;
+  max-width: 100%;
   white-space: nowrap;
+}
+.site-header-controls > * {
+  flex-shrink: 0;
 }
 .site-freeze-help {
   display: inline-flex;
@@ -4263,9 +4260,12 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 .site-freeze-tooltip p + p {
   margin-top: 6px;
 }
-@media (max-width: 560px) {
+@container (max-width: 640px) {
   .site-header-controls {
-    grid-column: 2 / -1;
+    grid-column: 1 / -1;
+    justify-self: end;
+    justify-content: flex-start;
+    overflow-x: auto;
   }
 }
 </style>
