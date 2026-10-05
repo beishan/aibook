@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.file.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 @RestController
@@ -137,7 +138,35 @@ public class CrawlerController {
         CrawlerBook book = managementService.ownedBook(user(auth), bookId);
         CrawlerChapter chapter = chapterRepository.findById(chapterId).filter(ch -> ch.getCrawlerBook().getId().equals(book.getId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集章节不存在"));
-        Map<String, Object> value = new LinkedHashMap<>(); value.put("id", chapter.getId()); value.put("title", chapter.getChapterName()); value.put("url", chapter.getChapterUrl()); value.put("content", Objects.toString(chapter.getContent(), "")); value.put("errorMessage", Objects.toString(chapter.getErrorMessage(), "")); return value;
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("id", chapter.getId());
+        value.put("title", chapter.getChapterName());
+        value.put("url", chapter.getChapterUrl());
+        value.put("content", Objects.toString(chapter.getContent(), ""));
+        value.put("errorMessage", Objects.toString(chapter.getErrorMessage(), ""));
+        value.put("hasFailedResponseHtml", chapter.getFailedResponseHtml() != null);
+        value.put("failedResponseTime", chapter.getFailedResponseTime());
+        value.put("failedResponseHttpStatus", chapter.getFailedResponseHttpStatus());
+        return value;
+    }
+
+    @GetMapping("/books/{bookId}/chapters/{chapterId}/failed-response-html")
+    public ResponseEntity<byte[]> downloadFailedResponseHtml(Authentication auth,
+            @PathVariable Long bookId, @PathVariable Long chapterId) {
+        CrawlerBook book = managementService.ownedBook(user(auth), bookId);
+        CrawlerChapter chapter = chapterRepository.findById(chapterId)
+                .filter(ch -> ch.getCrawlerBook().getId().equals(book.getId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集章节不存在"));
+        if (chapter.getFailedResponseHtml() == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "没有保存的失败响应 HTML，请重新采集该章节");
+        }
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename("chapter-" + chapterId + "-failed-response.html").build().toString())
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(chapter.getFailedResponseHtml().getBytes(StandardCharsets.UTF_8));
     }
     @PutMapping("/books/{bookId}/chapters/{chapterId}")
     public Map<String, Object> saveChapterContent(Authentication auth, @PathVariable Long bookId,

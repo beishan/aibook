@@ -22,6 +22,9 @@ public class CrawlerChapter {
     @Column(nullable = false, length = 1500) private String chapterUrl;
     @Column(columnDefinition = "TEXT") private String content;
     @Column(columnDefinition = "TEXT") private String originalHtml;
+    @Column(columnDefinition = "TEXT") private String failedResponseHtml;
+    private LocalDateTime failedResponseTime;
+    private Integer failedResponseHttpStatus;
     private String contentHash;
     private String sourceEtag;
     private String sourceLastModified;

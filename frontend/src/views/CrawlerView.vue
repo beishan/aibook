@@ -1524,6 +1524,12 @@
           </div>
           <div class="chapter-reader-actions">
             <a v-if="chapterDetail?.url" :href="chapterDetail.url" target="_blank" rel="noopener noreferrer">原始网页 ↗</a>
+            <button
+              v-if="chapterDetail?.hasFailedResponseHtml && !chapterReaderLoading"
+              type="button"
+              :disabled="downloadingChapterHtml"
+              @click="downloadChapterFailedHtml"
+            >{{ downloadingChapterHtml ? '下载中…' : '下载失败 HTML' }}</button>
             <template v-if="chapterEditing">
               <button type="button" @click="cancelChapterEdit">取消编辑</button>
               <button type="button" :disabled="savingChapter" @click="saveChapterEdit(false)">{{ savingChapter ? '保存中…' : '保存' }}</button>
@@ -1546,6 +1552,10 @@
               <template v-else>
                 <p v-for="(paragraph,index) in chapterReaderParagraphs" :key="index" class="chapter-reader-paragraph">{{ paragraph }}</p>
                 <p v-if="!chapterReaderParagraphs.length" class="chapter-reader-empty">{{ chapterDetail?.errorMessage || '本章暂无可阅读正文' }}</p>
+                <p v-if="chapterDetail?.hasFailedResponseHtml" class="chapter-reader-empty">
+                  已保存解析失败时收到的完整页面，可下载查看。
+                  HTTP {{ chapterDetail.failedResponseHttpStatus }} · {{ chapterDetail.failedResponseTime }}
+                </p>
               </template>
             </article>
           </section>
@@ -1722,7 +1732,17 @@ const siteContributionChartRef = ref<HTMLElement>()
 const funnelChartRef = ref<HTMLElement>()
 const chapterAttemptChartRef = ref<HTMLElement>()
 const currentCrawlerTasks=ref<CrawlerTask[]>([]), submittingBookTaskIds=ref(new Set<number>())
-const siteDialog=ref(false), siteProtectionDialog=ref(false), protectionDetailSite=ref<CrawlerSite>(), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'|'metadata'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), chapterDetail=ref<{title:string;url:string;content:string;errorMessage:string}>(), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
+const chapterDetail = ref<{
+  title: string
+  url: string
+  content: string
+  errorMessage: string
+  hasFailedResponseHtml?: boolean
+  failedResponseTime?: string
+  failedResponseHttpStatus?: number
+}>()
+const downloadingChapterHtml = ref(false)
+const siteDialog=ref(false), siteProtectionDialog=ref(false), protectionDetailSite=ref<CrawlerSite>(), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'|'metadata'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
 const chapterReaderSurface=ref<HTMLElement>(), chapterReaderActive=ref<CrawlerChapter>(), chapterReaderChapters=ref<CrawlerChapter[]>([]), chapterReaderBookId=ref<number>(), chapterReaderLoading=ref(false), chapterReaderSettingsOpen=ref(false), chapterEditing=ref(false), chapterEditContent=ref(''), savingChapter=ref(false)
 const discoveryPagesBySite=ref<Record<number,CrawlerDiscoveryPage[]>>({})
 const discoveryMetadataRefreshing=ref(false)
@@ -3135,6 +3155,28 @@ async function openChapter(chapter:CrawlerChapter){
   catch(error:any){if(openingSequence!==chapterReaderRequestSequence||!chapterDialog.value)return;chapterDetail.value={title:chapter.chapterName,url:chapter.chapterUrl,content:'',errorMessage:error.response?.data?.message||'章节正文加载失败'};chapterReaderLoading.value=false}
 }
 function moveChapterReader(offset:-1|1){const index=chapterReaderPosition.value-1,target=chapterReaderChapters.value[index+offset];if(target)void selectChapterReader(target)}
+async function downloadChapterFailedHtml() {
+  const bookId = selectedBook.value?.id
+  const chapterId = chapterReaderActive.value?.id
+  if (!bookId || !chapterId || downloadingChapterHtml.value) return
+  downloadingChapterHtml.value = true
+  try {
+    const blob = await crawlerApi.downloadFailedResponseHtml(bookId, chapterId)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `chapter-${chapterId}-failed-response.html`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch {
+    message.error('失败 HTML 下载失败，请刷新章节后重试')
+  } finally {
+    downloadingChapterHtml.value = false
+  }
+}
+
 function beginChapterEdit(){if(!chapterDetail.value)return;chapterEditContent.value=chapterDetail.value.content||'';chapterEditing.value=true;chapterReaderSettingsOpen.value=false}
 async function cancelChapterEdit(){if(chapterReaderEditDirty.value&&!await confirm('放弃尚未保存的章节修改吗？'))return;chapterEditing.value=false;chapterEditContent.value=chapterDetail.value?.content||''}
 async function saveChapterEdit(syncLibrary:boolean){

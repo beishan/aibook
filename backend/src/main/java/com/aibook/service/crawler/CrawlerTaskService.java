@@ -1496,7 +1496,8 @@ public class CrawlerTaskService {
                             + "；章节：" + chapter.getChapterName() + "；HTTP：304");
                     continue;
                 }
-                BookCrawlerParser.ParsedContent parsed = parser.parseChapter(response.html(), chapter.getChapterUrl(), rule);
+                BookCrawlerParser.ParsedContent parsed = parseChapterWithDiagnostics(
+                        parser, response, chapter, rule);
                 ContentMarkerMatch contentMarker = matchedContentMarker(site, parsed.content());
                 if (contentMarker != null && contentMarker.status() == ContentMarkerStatus.PENDING_RELEASE) {
                     attemptOutcome = "PENDING_RELEASE";
@@ -2238,6 +2239,28 @@ public class CrawlerTaskService {
         int count = value.codePointCount(0, value.length());
         return count <= maxCodePoints ? value : value.substring(0, value.offsetByCodePoints(0, maxCodePoints));
     }
+    static BookCrawlerParser.ParsedContent parseChapterWithDiagnostics(
+            BookCrawlerParser parser, CrawlerHttpClient.FetchResult response,
+            CrawlerChapter chapter, CrawlerSiteRule rule) {
+        try {
+            BookCrawlerParser.ParsedContent parsed = parser.parseChapter(
+                    response.html(), chapter.getChapterUrl(), rule);
+            if (parsed.content() == null || parsed.content().isBlank()) {
+                throw new IllegalArgumentException("正文清洗结果为空，请检查正文及清洗规则");
+            }
+            chapter.setFailedResponseHtml(null);
+            chapter.setFailedResponseTime(null);
+            chapter.setFailedResponseHttpStatus(null);
+            return parsed;
+        } catch (RuntimeException exception) {
+            // Keep the complete fetched page before selector matching or content cleaning.
+            chapter.setFailedResponseHtml(response.html());
+            chapter.setFailedResponseTime(LocalDateTime.now());
+            chapter.setFailedResponseHttpStatus(response.statusCode());
+            throw exception;
+        }
+    }
+
     static String contentPreview(String content) {
         if (content == null || content.isBlank()) return "(空)";
         String normalized = content.replaceAll("[\\p{Cc}\\p{Cf}\\s]+", " ").trim();

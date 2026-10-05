@@ -218,7 +218,14 @@ export const crawlerApi = {
   chapters: (bookId:number, params:CrawlerChapterQuery) => api.get<PageResult<CrawlerChapter>>(`/api/crawler/books/${bookId}/chapters`, {params}).then(r => r.data),
   currentChapter: (bookId:number, size:number) => api.get<CrawlerChapterFocus|undefined>(`/api/crawler/books/${bookId}/chapters/current`, {params:{size}}).then(r => r.data||undefined),
   logs: (bookId:number) => api.get<CrawlerLog[]>(`/api/crawler/books/${bookId}/logs`, {params:{limit:100}}).then(r => r.data),
-  chapter: (bookId:number, chapterId:number) => api.get<{title:string;url:string;content:string;errorMessage:string}>(`/api/crawler/books/${bookId}/chapters/${chapterId}`).then(r => r.data),
+  chapter: (bookId:number, chapterId:number) => api.get<{
+    title:string; url:string; content:string; errorMessage:string
+    hasFailedResponseHtml?:boolean; failedResponseTime?:string; failedResponseHttpStatus?:number
+  }>(`/api/crawler/books/${bookId}/chapters/${chapterId}`).then(r => r.data),
+  downloadFailedResponseHtml: (bookId:number, chapterId:number) => api.get<Blob>(
+    `/api/crawler/books/${bookId}/chapters/${chapterId}/failed-response-html`,
+    {responseType:'blob'},
+  ).then(r => r.data),
   saveChapterContent: (bookId:number, chapterId:number, content:string, syncLibrary:boolean) => api.put<{content:string;synced:boolean;versionPublished:boolean}>(`/api/crawler/books/${bookId}/chapters/${chapterId}`,{content,syncLibrary}).then(r => r.data),
   continueBook: (bookId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/continue`).then(r => r.data),
   retryFailures: (bookId:number) => api.post<CrawlerTask>(`/api/crawler/books/${bookId}/retry-failures`).then(r => r.data),
