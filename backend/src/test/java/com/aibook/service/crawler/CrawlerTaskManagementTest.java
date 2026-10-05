@@ -39,6 +39,82 @@ import static org.mockito.Mockito.*;
 class CrawlerTaskManagementTest {
 
     @Test
+    void freezingOneSitePreservesProgressAndLeavesOtherSitesAndUserPausedTasksAlone() {
+        User user = user();
+        CrawlerTask running = task(user, CrawlerTask.TaskStatus.RUNNING);
+        running.setSuccessCount(12);
+        running.setFailedCount(2);
+        CrawlerTask other = task(user, CrawlerTask.TaskStatus.RUNNING);
+        other.setSite(CrawlerSite.builder().id(9L).build());
+        CrawlerTask userPaused = task(user, CrawlerTask.TaskStatus.PAUSED);
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        when(tasks.findByStatusIn(List.of(CrawlerTask.TaskStatus.RUNNING)))
+                .thenReturn(List.of(running, other));
+        when(tasks.findById(running.getId())).thenReturn(Optional.of(running));
+        CrawlerTaskService service = service(tasks, mock(CrawlerBookRepository.class),
+                mock(CrawlerManagementService.class));
+        try {
+            service.holdFrozenSiteTasks(2L);
+            assertThat(running.getStatus()).isEqualTo(CrawlerTask.TaskStatus.WAITING);
+            assertThat(running.getSuccessCount()).isEqualTo(12);
+            assertThat(running.getFailedCount()).isEqualTo(2);
+            assertThat(running.getQueueOrder()).isNotNull();
+            assertThat(other.getStatus()).isEqualTo(CrawlerTask.TaskStatus.RUNNING);
+            assertThat(userPaused.getStatus()).isEqualTo(CrawlerTask.TaskStatus.PAUSED);
+            verify(tasks, never()).save(other);
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void frozenWaitingTaskDoesNotStartAndExecutesAfterUnfreezing() throws Exception {
+        CrawlerTask waiting = task(user(), CrawlerTask.TaskStatus.WAITING);
+        waiting.getSite().setBaseUrl("https://example.com/");
+        waiting.getSite().attachRule(com.aibook.model.entity.CrawlerSiteRule.builder().build());
+        CrawlerSiteRepository sites = mock(CrawlerSiteRepository.class);
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerHttpClient http = mock(CrawlerHttpClient.class);
+        BookCrawlerParser parser = mock(BookCrawlerParser.class);
+        CrawlerSettingsService settings = mock(CrawlerSettingsService.class);
+        when(settings.maxConcurrentTasks()).thenReturn(1);
+        when(tasks.findById(waiting.getId())).thenReturn(Optional.of(waiting));
+        when(sites.isManuallyFrozen(eq(2L), any(java.time.Instant.class))).thenReturn(true);
+        CrawlerTaskService service = new CrawlerTaskService(sites,
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class),
+                mock(CrawlerBookRepository.class), mock(CrawlerChapterRepository.class), tasks,
+                mock(CrawlerScanResultRepository.class), mock(CrawlerTaskLogRepository.class),
+                mock(CrawlerManagementService.class), mock(CrawlerChapterAttemptMetricService.class),
+                mock(OperationLogService.class), mock(CrawlerExportService.class), http,
+                List.of(parser), mock(ApplicationContext.class), settings);
+        try {
+            service.run(waiting.getId());
+            assertThat(waiting.getStatus()).isEqualTo(CrawlerTask.TaskStatus.WAITING);
+            assertThat(waiting.getStartedAt()).isNull();
+            verifyNoInteractions(http);
+
+            when(sites.isManuallyFrozen(eq(2L), any(java.time.Instant.class))).thenReturn(false);
+            when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+            when(tasks.findByStatusOrderByQueueOrderAsc(CrawlerTask.TaskStatus.WAITING))
+                    .thenAnswer(invocation -> waiting.getStatus() == CrawlerTask.TaskStatus.WAITING
+                            ? List.of(waiting) : List.of());
+            when(parser.supports(waiting.getSite())).thenReturn(true);
+            when(http.validateSiteUrl(waiting.getSite(), "https://example.com/"))
+                    .thenReturn(URI.create("https://example.com/"));
+            when(http.get(waiting.getSite(), "https://example.com/"))
+                    .thenReturn(new CrawlerHttpClient.FetchResult("page", 200, 1, null, null));
+            when(parser.parseNextBookListPage(anyString(), anyString(), any())).thenReturn("");
+            service.dispatchWaitingTasks();
+            verify(tasks, timeout(2000).atLeastOnce()).save(
+                    argThat(saved -> saved.getStatus() == CrawlerTask.TaskStatus.SUCCESS));
+            assertThat(waiting.getStatus()).isEqualTo(CrawlerTask.TaskStatus.SUCCESS);
+            verify(http).get(waiting.getSite(), "https://example.com/");
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void loweringConcurrencyMovesSurplusRunningTasksBackToWaiting() {
         User user = user();
         CrawlerTask retained = task(user, CrawlerTask.TaskStatus.RUNNING);

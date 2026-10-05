@@ -41,6 +41,16 @@ class CrawlerHttpClientTest {
             new ObjectMapper(), proxySettings, crawlerSettings, siteRepository);
     private final CrawlerSite site = CrawlerSite.builder().id(1L).baseUrl("https://novel.example.com").build();
 
+    @Test void manualFreezeStopsRequestsBeforeReadingNetworkConfiguration() {
+        when(siteRepository.isManuallyFrozen(eq(1L), any(Instant.class))).thenReturn(true);
+
+        assertThrows(CrawlerHttpClient.SiteManuallyFrozenException.class,
+                () -> client.get(site, "https://novel.example.com/chapter/1"));
+
+        verifyNoInteractions(crawlerSettings, proxySettings);
+        assertFalse(client.protectionState(site).coolingDown());
+    }
+
     @Test void acceptsSameDomainAndSubdomain() {
         assertEquals("novel.example.com", client.validateSiteUrl(site, "https://novel.example.com/book/1").getHost());
         assertEquals("img.novel.example.com", client.validateSiteUrl(site, "https://img.novel.example.com/cover/1").getHost());

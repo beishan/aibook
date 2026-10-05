@@ -39,6 +39,9 @@ public class CrawlerSite {
     @Column(length = 1000)
     private String homeUrl;
     @Builder.Default private Boolean enabled = false;
+    @Builder.Default private Boolean manuallyFrozen = false;
+    private Instant manualFreezeUntil;
+    @Builder.Default private Integer manualFreezeDurationMinutes = 60;
     @Builder.Default private Boolean autoScan = false;
     @Builder.Default private Boolean autoCrawl = false;
     @Builder.Default private Boolean autoUpdate = true;
@@ -82,6 +85,11 @@ public class CrawlerSite {
     public void attachRule(CrawlerSiteRule value) {
         rule = value;
         if (value != null) value.setSite(this);
+    }
+
+    public boolean isManuallyFrozenAt(Instant now) {
+        return Boolean.TRUE.equals(manuallyFrozen)
+                && (manualFreezeUntil == null || manualFreezeUntil.isAfter(now));
     }
 
     public boolean isAccessBlockedAt(LocalTime time) {

@@ -61,6 +61,14 @@ public class CrawlerController {
     @PutMapping("/sites/{id}") public SiteView updateSite(Authentication auth, @PathVariable Long id, @Valid @RequestBody SitePayload payload) { return managementService.updateSite(user(auth), id, payload); }
     @DeleteMapping("/sites/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteSite(Authentication auth, @PathVariable Long id) { managementService.deleteSite(user(auth), id); }
     @PostMapping("/sites/{id}/protection/reset") public SiteView resetSiteProtection(Authentication auth, @PathVariable Long id) { return managementService.resetSiteProtection(user(auth), id); }
+    @PutMapping("/sites/{id}/manual-freeze")
+    public SiteView setSiteFreeze(Authentication auth, @PathVariable Long id,
+            @Valid @RequestBody SiteFreezeRequest request) {
+        SiteView result = managementService.setSiteFreeze(user(auth), id, request);
+        if (result.manualFreeze().frozen()) taskService.holdFrozenSiteTasks(id);
+        else taskService.dispatchWaitingTasks();
+        return result;
+    }
     @PostMapping("/sites/{id}/robots-txt/refresh")
     public RobotsTxtView refreshRobotsTxt(Authentication auth, @PathVariable Long id) {
         return managementService.refreshRobotsTxt(user(auth), id);

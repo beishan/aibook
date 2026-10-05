@@ -132,6 +132,18 @@ public class CrawlerManagementService {
         return siteView(site);
     }
 
+    @Transactional
+    public SiteView setSiteFreeze(User user, Long id, SiteFreezeRequest request) {
+        CrawlerSite site = siteRepository.findLockedByIdAndUser(id, user)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集网站不存在"));
+        site.setManuallyFrozen(request.frozen());
+        site.setManualFreezeDurationMinutes(request.durationMinutes());
+        site.setManualFreezeUntil(Boolean.TRUE.equals(request.frozen()) && request.durationMinutes() > 0
+                ? java.time.Instant.now().plusSeconds(request.durationMinutes() * 60L) : null);
+        siteRepository.save(site);
+        return siteView(site);
+    }
+
     public RobotsTxtView refreshRobotsTxt(User user, Long id) {
         CrawlerHttpClient.RobotsTxtSnapshot snapshot = httpClient.refreshRobotsTxt(
                 ownedSite(user, id));
@@ -823,7 +835,10 @@ public class CrawlerManagementService {
                         protection.pageUrl(), protection.consecutiveFailures(), protection.adaptiveDelayMillis()),
                 normalizedThemeColor(s.getThemeColor()), maximumRequestInterval,
                 toAccessWindowPayloads(s.getBlockedAccessWindows()),
-                httpClient.cooldownFailureThreshold(s));
+                httpClient.cooldownFailureThreshold(s),
+                new SiteFreezeView(s.isManuallyFrozenAt(java.time.Instant.now()),
+                        s.isManuallyFrozenAt(java.time.Instant.now()) ? s.getManualFreezeUntil() : null,
+                        value(s.getManualFreezeDurationMinutes(), 60)));
     }
 
     private int maxRequestInterval(CrawlerSite site) {

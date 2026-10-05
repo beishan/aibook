@@ -20,6 +20,7 @@ public class CrawlerDiscoveryScheduler {
     public void scheduleDuePages() {
         LocalDateTime now = LocalDateTime.now();
         for (CrawlerDiscoveryPage page : repository.findByAutoScanEnabledTrueAndSiteEnabledTrue()) {
+            if (page.getSite().isManuallyFrozenAt(java.time.Instant.now())) continue;
             int interval = page.getScanIntervalMinutes() == null ? 360 : page.getScanIntervalMinutes();
             if (page.getLastScanAt() != null && page.getLastScanAt().plusMinutes(interval).isAfter(now)) continue;
             try {

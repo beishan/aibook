@@ -143,6 +143,32 @@
         <article v-for="site in sites" :key="site.id" class="site-card">
           <div class="site-top"><span class="site-mark" :style="{ '--site-theme-color': siteThemeColor(site.themeColor) }">{{ site.siteName.slice(0, 1) }}</span><div><h3>{{ site.siteName }}</h3><a :href="site.homeUrl || site.baseUrl" target="_blank">{{ site.baseUrl }}</a></div><el-tag :type="site.status==='RULE_ERROR'?'danger':!site.ruleVersion?'warning':site.enabled?'success':'info'">{{ site.status==='RULE_ERROR'?'规则异常':!site.ruleVersion?'待配置规则':site.enabled?'启用':'停用' }}</el-tag></div>
           <div class="site-stats"><span><b>{{ site.bookCount }}</b> 本书</span><span><b>{{ site.requestIntervalMillis }}–{{ site.maxRequestIntervalMillis }}</b> ms 随机间隔</span><span><b>{{ site.maxConcurrency }}</b> 并发</span></div>
+          <div class="site-manual-freeze" :class="{ frozen: site.manualFreeze?.frozen }">
+            <div class="site-freeze-controls">
+              <el-switch
+                :model-value="site.manualFreeze?.frozen || false"
+                :loading="freezingSiteIds.includes(site.id)"
+                aria-label="人工冻结该网站所有任务"
+                active-text="人工冻结"
+                @change="setSiteManualFreeze(site, Boolean($event))"
+              />
+              <label :for="`site-freeze-duration-${site.id}`">自动解冻（分钟）</label>
+              <el-input-number
+                :id="`site-freeze-duration-${site.id}`"
+                :model-value="site.manualFreeze?.durationMinutes ?? 60"
+                :min="0"
+                :max="525600"
+                :precision="0"
+                :disabled="freezingSiteIds.includes(site.id)"
+                size="small"
+                @change="setSiteFreezeDuration(site, $event)"
+              />
+            </div>
+            <small v-if="site.manualFreeze?.frozen">
+              本站所有任务等待解冻 · {{ site.manualFreeze.until ? `解冻时间 ${formatTime(site.manualFreeze.until)}` : '手动关闭后恢复' }}
+            </small>
+            <small v-else>0 表示持续冻结至手动关闭；冻结中修改时长会重新计时。</small>
+          </div>
           <div v-if="hasSiteProtection(site)" class="site-protection" :class="{cooling:site.protection.coolingDown}">
             <div class="site-protection-message"><strong>{{ site.protection.coolingDown ? '站点保护冷却中' : '请求节奏正在恢复' }}</strong><span>{{ site.protection.reason || '近期请求失败，系统已自动降低访问频率' }}</span></div>
             <el-button text size="small" type="warning" @click="openSiteProtectionDetails(site)">详情</el-button>
@@ -2803,6 +2829,31 @@ function setActiveProxy(index:number,enabled:boolean){siteForm.proxies.forEach((
 async function removeSite(site:CrawlerSite){if(await confirm(`确定删除采集网站“${site.siteName}”吗？`)){await crawlerApi.deleteSite(site.id);message.success('采集网站已删除');await refresh()}}
 function hasSiteProtection(site:CrawlerSite){return site.protection.coolingDown||site.protection.adaptiveDelayMillis>0||site.protection.consecutiveFailures>0}
 function openSiteProtectionDetails(site:CrawlerSite){protectionDetailSite.value=site;siteProtectionDialog.value=true}
+const freezingSiteIds = ref<number[]>([])
+
+async function setSiteManualFreeze(site: CrawlerSite, frozen: boolean, durationMinutes = site.manualFreeze?.durationMinutes ?? 60) {
+  if (freezingSiteIds.value.includes(site.id)) return
+  freezingSiteIds.value = [...freezingSiteIds.value, site.id]
+  try {
+    const updated = await crawlerApi.setSiteFreeze(site.id, frozen, durationMinutes)
+    sites.value = sites.value.map(item => item.id === site.id ? updated : item)
+    message.success(frozen
+      ? '网站已冻结，任务保留进度并等待解冻'
+      : site.manualFreeze?.frozen ? '网站已解冻，等待中的任务将自动继续' : '自动解冻时长已保存')
+    await loadTasks()
+  } catch {
+    // The shared API interceptor displays request errors.
+  } finally {
+    freezingSiteIds.value = freezingSiteIds.value.filter(id => id !== site.id)
+  }
+}
+
+function setSiteFreezeDuration(site: CrawlerSite, value: number | undefined) {
+  if (value === undefined || !Number.isInteger(value)) return
+  if (value === (site.manualFreeze?.durationMinutes ?? 60)) return
+  void setSiteManualFreeze(site, site.manualFreeze?.frozen || false, value)
+}
+
 async function resetSiteProtection(site:CrawlerSite){if(!await confirm(`确定解除“${site.siteName}”的请求保护吗？请先确认源站已允许恢复访问。`))return;const updated=await crawlerApi.resetSiteProtection(site.id);sites.value=sites.value.map(item=>item.id===site.id?updated:item);message.success('站点请求保护已解除')}
 async function exportSiteConfiguration(site:CrawlerSite){const data=await crawlerApi.exportSiteConfiguration(site.id);downloadJson(data,`${site.siteCode}-site-config.json`);message.success('网站全部配置已导出')}
 function openSiteConfigurationImport(){siteConfigurationImportMode.value='text';siteConfigurationJsonText.value='';siteConfigurationImportFileName.value='';siteConfigurationImportDialog.value=true}
@@ -4122,5 +4173,31 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   gap: 8px;
   max-height: 260px;
   overflow-y: auto;
+}
+
+.site-manual-freeze {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+}
+.site-manual-freeze.frozen {
+  border-color: var(--warning);
+}
+.site-freeze-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.site-freeze-controls label,
+.site-manual-freeze small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.site-freeze-controls .el-input-number {
+  width: 130px;
 }
 </style>

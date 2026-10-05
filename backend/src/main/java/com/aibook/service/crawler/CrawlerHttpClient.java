@@ -67,6 +67,7 @@ public class CrawlerHttpClient {
 
     public FetchResult get(CrawlerSite site, String url, String etag, String lastModified,
             RequestTiming timing) throws Exception {
+        ensureNotManuallyFrozen(site);
         URI uri = validateSiteUrl(site, url);
         CrawlerRequestSettings settings = requestSettings();
         ensureCircuitClosed(site);
@@ -130,6 +131,8 @@ public class CrawlerHttpClient {
                     if (retryDelay > settings.maxInlineRetryDelayMillis()) break;
                 }
                 increaseAdaptiveDelay(site, retryDelay, settings.adaptiveDelayMaxMillis());
+            } catch (SiteManuallyFrozenException exception) {
+                throw exception;
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
                 throw exception;
@@ -315,6 +318,7 @@ public class CrawlerHttpClient {
             long started = System.nanoTime();
             try {
                 throttle(site, current, timing);
+                ensureNotManuallyFrozen(site);
                 HttpRequest.Builder request = HttpRequest.newBuilder(current)
                         .timeout(Duration.ofMillis(settings.timeoutMillis()))
                         .GET().header("Accept", "text/html,application/xhtml+xml")
@@ -457,6 +461,18 @@ public class CrawlerHttpClient {
         if (!cached.policy().allows(target)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "robots.txt 不允许采集该地址，系统不会发起目标请求");
+        }
+    }
+
+    private void ensureNotManuallyFrozen(CrawlerSite site) {
+        if (crawlerSiteRepository.isManuallyFrozen(site.getId(), Instant.now())) {
+            throw new SiteManuallyFrozenException();
+        }
+    }
+
+    public static class SiteManuallyFrozenException extends ResponseStatusException {
+        public SiteManuallyFrozenException() {
+            super(HttpStatus.CONFLICT, "网站已人工冻结，等待解冻后继续");
         }
     }
 

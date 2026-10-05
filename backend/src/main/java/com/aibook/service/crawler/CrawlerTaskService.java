@@ -1022,7 +1022,7 @@ public class CrawlerTaskService {
 
     private void submitLegacy(CrawlerTask task, long queueOrder) {
         if (task.getStatus() != CrawlerTask.TaskStatus.WAITING || !active.add(task.getId())) return;
-        if (task.getSite().isAccessBlockedAt(LocalTime.now())) {
+        if (isSiteManuallyFrozen(task.getSite()) || task.getSite().isAccessBlockedAt(LocalTime.now())) {
             active.remove(task.getId());
             return;
         }
@@ -1079,6 +1079,7 @@ public class CrawlerTaskService {
     @Transactional
     public synchronized void dispatchWaitingTasks() {
         if (shuttingDown) return;
+        siteRepository.releaseExpiredManualFreezes(java.time.Instant.now());
         if (taskQueueRepository == null) {
             dispatchLegacyWaitingTasks();
             return;
@@ -1103,9 +1104,11 @@ public class CrawlerTaskService {
                 .thenComparing(CrawlerTask::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())));
         LocalDateTime now = LocalDateTime.now();
 
+        Map<Long, Boolean> frozenSites = new HashMap<>();
         for (CrawlerTask task : waitingTasks) {
             CrawlerSite site = task.getSite();
-            if (site.isAccessBlockedAt(LocalTime.now()) || isCoolingDown(site)) continue;
+            if (frozenSites.computeIfAbsent(site.getId(), ignored -> isSiteManuallyFrozen(site))
+                    || site.isAccessBlockedAt(LocalTime.now()) || isCoolingDown(site)) continue;
             CrawlerTaskQueue queue = task.getQueue() == null
                     ? queuesBySite.get(site.getId()) : queuesById.get(task.getQueue().getId());
             if (queue == null) continue;
@@ -1161,9 +1164,12 @@ public class CrawlerTaskService {
                         Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(CrawlerTask::getCreatedAt,
                         Comparator.nullsLast(Comparator.naturalOrder())));
+        Map<Long, Boolean> frozenSites = new HashMap<>();
         for (CrawlerTask task : waitingTasks) {
             if (active.size() >= configuredConcurrency()) break;
-            if (task.getSite().isAccessBlockedAt(LocalTime.now())
+            if (frozenSites.computeIfAbsent(task.getSite().getId(),
+                    ignored -> isSiteManuallyFrozen(task.getSite()))
+                    || task.getSite().isAccessBlockedAt(LocalTime.now())
                     || isCoolingDown(task.getSite())) continue;
             long queueOrder = task.getQueueOrder() == null ? nextQueueOrder() : task.getQueueOrder();
             submitLegacy(task, queueOrder);
@@ -1266,9 +1272,9 @@ public class CrawlerTaskService {
         private void executeTask() {
             CrawlerTask task = taskRepository.findById(taskId).orElse(null);
             if (task != null && task.getStatus() == CrawlerTask.TaskStatus.WAITING
-                    && (isCoolingDown(task.getSite())
+                    && (isSiteManuallyFrozen(task.getSite()) || isCoolingDown(task.getSite())
                             || task.getSite().isAccessBlockedAt(LocalTime.now()))) {
-                log.info("[采集任务] 网站处于冷却期或禁访时段，任务继续等待: taskId={}, site={}",
+                log.info("[采集任务] 网站人工冻结、冷却或禁访，任务继续等待: taskId={}, site={}",
                         taskId, task.getSite().getSiteName());
                 return;
             }
@@ -1294,8 +1300,8 @@ public class CrawlerTaskService {
         synchronized (taskLock(taskId)) {
             task = taskRepository.findById(taskId).orElse(null);
             if (task == null || task.getStatus() != CrawlerTask.TaskStatus.WAITING) return;
-            if (task.getSite().isAccessBlockedAt(LocalTime.now())) {
-                log.info("[采集任务] 命中网站禁访时段，任务继续等待: taskId={}, site={}",
+            if (isSiteManuallyFrozen(task.getSite()) || task.getSite().isAccessBlockedAt(LocalTime.now())) {
+                log.info("[采集任务] 网站人工冻结或禁访，任务继续等待: taskId={}, site={}",
                         taskId, task.getSite().getSiteName());
                 return;
             }
@@ -1377,6 +1383,8 @@ public class CrawlerTaskService {
             task = runningTask(taskId);
             if (task == null) return;
             crawlContents(task, book, site, rule, parser, task.getType() == CrawlerTask.TaskType.BOOK_UPDATE_CHECK);
+        } catch (CrawlerHttpClient.SiteManuallyFrozenException exception) {
+            waitForManualUnfreeze(taskId);
         } catch (CrawlerHttpClient.NoAvailableQueueProxyException exception) {
             waitForQueueProxy(taskId, exception.getMessage());
         } catch (InterruptedException exception) {
@@ -1404,6 +1412,31 @@ public class CrawlerTaskService {
                 bookRepository.save(task.getCrawlerBook());
             }
             recordCrawlerEvent(task, "等待队列代理恢复", reason);
+        }
+    }
+
+    public void holdFrozenSiteTasks(Long siteId) {
+        for (CrawlerTask task : taskRepository.findByStatusIn(List.of(CrawlerTask.TaskStatus.RUNNING))) {
+            if (!Objects.equals(task.getSite().getId(), siteId)) continue;
+            waitForManualUnfreeze(task.getId());
+            interruptRunningTask(task.getId());
+        }
+    }
+
+    private void waitForManualUnfreeze(String taskId) {
+        synchronized (taskLock(taskId)) {
+            CrawlerTask task = taskRepository.findById(taskId).orElse(null);
+            if (task == null || task.getStatus() != CrawlerTask.TaskStatus.RUNNING) return;
+            task.setStatus(CrawlerTask.TaskStatus.WAITING);
+            task.setQueueOrder(nextQueueOrder());
+            task.setFinishedAt(null);
+            task.setErrorMessage("网站已人工冻结，等待解冻后继续");
+            taskRepository.save(task);
+            if (task.getCrawlerBook() != null && task.getType() != CrawlerTask.TaskType.BOOK_METADATA) {
+                task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.WAITING);
+                bookRepository.save(task.getCrawlerBook());
+            }
+            recordCrawlerEvent(task, "网站人工冻结，任务转回等待", "保留当前进度，解冻后自动继续");
         }
     }
 
@@ -1557,6 +1590,13 @@ public class CrawlerTaskService {
                             + "；章节：" + chapter.getChapterName() + "；字数：" + chapter.getWordCount()
                             + "；耗时：" + response.durationMillis() + "ms；预览：" + contentPreview(parsed.content()));
                 }
+            } catch (CrawlerHttpClient.SiteManuallyFrozenException exception) {
+                attemptOutcome = "WAITING";
+                if (!hadParsedContent) {
+                    chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
+                    chapterRepository.save(chapter);
+                }
+                throw exception;
             } catch (CrawlerHttpClient.NoAvailableQueueProxyException exception) {
                 attemptOutcome = "WAITING";
                 if (!hadParsedContent) {
@@ -1943,9 +1983,18 @@ public class CrawlerTaskService {
     }
 
     private CrawlerTask runningTask(String taskId) {
-        return taskRepository.findById(taskId)
-                .filter(task -> task.getStatus() == CrawlerTask.TaskStatus.RUNNING)
+        CrawlerTask task = taskRepository.findById(taskId)
+                .filter(candidate -> candidate.getStatus() == CrawlerTask.TaskStatus.RUNNING)
                 .orElse(null);
+        if (task != null && isSiteManuallyFrozen(task.getSite())) {
+            waitForManualUnfreeze(taskId);
+            return null;
+        }
+        return task;
+    }
+
+    private boolean isSiteManuallyFrozen(CrawlerSite site) {
+        return siteRepository.isManuallyFrozen(site.getId(), java.time.Instant.now());
     }
 
     private CrawlerTask saveProgressIfRunning(CrawlerTask source) {

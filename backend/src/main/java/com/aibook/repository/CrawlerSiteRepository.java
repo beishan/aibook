@@ -20,6 +20,17 @@ public interface CrawlerSiteRepository extends JpaRepository<CrawlerSite, Long> 
     Optional<CrawlerSite> findLockedByIdAndUser(Long id, User user);
     Optional<CrawlerSite> findByUserAndSiteCode(User user, String siteCode);
 
+    @Query("select (count(s) > 0) from CrawlerSite s where s.id = :siteId "
+            + "and s.manuallyFrozen = true "
+            + "and (s.manualFreezeUntil is null or s.manualFreezeUntil > :now)")
+    boolean isManuallyFrozen(@Param("siteId") Long siteId, @Param("now") Instant now);
+
+    @Modifying
+    @Transactional
+    @Query("update CrawlerSite s set s.manuallyFrozen = false, s.manualFreezeUntil = null "
+            + "where s.manuallyFrozen = true and s.manualFreezeUntil <= :now")
+    int releaseExpiredManualFreezes(@Param("now") Instant now);
+
     @Modifying
     @Transactional
     @Query("update CrawlerSite s set s.crawlerBlockedUntil = :blockedUntil, "

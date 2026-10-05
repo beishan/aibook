@@ -39,6 +39,57 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class CrawlerManagementServiceTest {
+    @Test
+    void savesTimedFreezeAndManualReleaseWithoutChangingSiteEnablement() {
+        User user = User.builder().id(1L).build();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).enabled(true).build();
+        when(sites.findLockedByIdAndUser(2L, user)).thenReturn(Optional.of(site));
+        java.time.Instant started = java.time.Instant.now();
+
+        service.setSiteFreeze(user, 2L,
+                new com.aibook.dto.crawler.CrawlerDtos.SiteFreezeRequest(true, 30));
+
+        assertThat(site.getManuallyFrozen()).isTrue();
+        assertThat(site.getManualFreezeUntil()).isBetween(started.plusSeconds(1800),
+                java.time.Instant.now().plusSeconds(1800));
+        assertThat(site.getManualFreezeDurationMinutes()).isEqualTo(30);
+        assertThat(site.getEnabled()).isTrue();
+
+        service.setSiteFreeze(user, 2L,
+                new com.aibook.dto.crawler.CrawlerDtos.SiteFreezeRequest(false, 30));
+        assertThat(site.getManuallyFrozen()).isFalse();
+        assertThat(site.getManualFreezeUntil()).isNull();
+        assertThat(site.getManualFreezeDurationMinutes()).isEqualTo(30);
+    }
+
+    @Test
+    void indefiniteFreezeHasNoDeadlineAndOtherAccountsCannotChangeIt() {
+        User user = User.builder().id(1L).build();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).build();
+        when(sites.findLockedByIdAndUser(2L, user)).thenReturn(Optional.of(site));
+        service.setSiteFreeze(user, 2L,
+                new com.aibook.dto.crawler.CrawlerDtos.SiteFreezeRequest(true, 0));
+        assertThat(site.getManualFreezeUntil()).isNull();
+        assertThat(site.isManuallyFrozenAt(java.time.Instant.now().plusSeconds(86400))).isTrue();
+
+        User other = User.builder().id(9L).build();
+        assertThatThrownBy(() -> service.setSiteFreeze(other, 2L,
+                new com.aibook.dto.crawler.CrawlerDtos.SiteFreezeRequest(false, 0)))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("404");
+        assertThat(site.getManuallyFrozen()).isTrue();
+    }
+
+    @Test
+    void freezeExpiresAtTheDeadlineAndCanBeExtended() {
+        java.time.Instant deadline = java.time.Instant.parse("2026-10-05T08:00:00Z");
+        CrawlerSite site = CrawlerSite.builder().manuallyFrozen(true).manualFreezeUntil(deadline).build();
+        assertThat(site.isManuallyFrozenAt(deadline.minusSeconds(1))).isTrue();
+        assertThat(site.isManuallyFrozenAt(deadline)).isFalse();
+        assertThat(site.isManuallyFrozenAt(deadline.plusSeconds(1))).isFalse();
+        site.setManualFreezeUntil(deadline.plusSeconds(60));
+        assertThat(site.isManuallyFrozenAt(deadline.plusSeconds(1))).isTrue();
+    }
+
     private CrawlerSiteRepository sites;
     private CrawlerSiteRuleVersionRepository rules;
     private CrawlerBookRepository books;

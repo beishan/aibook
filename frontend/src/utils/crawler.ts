@@ -18,6 +18,7 @@ export interface CrawlerContentMarker { marker:string; status:'FAILED'|'PENDING_
 export interface CrawlerSiteAccessWindow { startTime:string; endTime:string }
 export interface CrawlerProtectionState { coolingDown:boolean; blockedUntil?:string; reason?:string; pageUrl?:string; consecutiveFailures:number; adaptiveDelayMillis:number }
 export interface CrawlerRobotsTxt { url:string; statusCode:number; content:string; fetchedAt:string }
+export interface CrawlerSiteFreeze { frozen:boolean; until?:string; durationMinutes:number }
 export interface CrawlerSitePayload {
   siteName: string; siteCode: string; baseUrl: string; homeUrl?: string; enabled: boolean
   autoScan: boolean; autoCrawl: boolean; autoUpdate: boolean; autoImportLibrary: boolean
@@ -28,7 +29,7 @@ export interface CrawlerSitePayload {
   respectRobotsTxt:boolean
   themeColor?:string
 }
-export interface CrawlerSite extends CrawlerSitePayload { id: number; themeColor:string; status: string; bookCount: number; proxy?:string; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string; protection:CrawlerProtectionState }
+export interface CrawlerSite extends CrawlerSitePayload { id: number; themeColor:string; status: string; bookCount: number; proxy?:string; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string; protection:CrawlerProtectionState; manualFreeze:CrawlerSiteFreeze }
 export interface CrawlerSiteActivity {
   id:number
   eventType:'DISCOVERY_SCAN'|'ACCESS_LIMITED'|'BOOK_CRAWL_COMPLETED'|'BOOK_CRAWL_PARTIAL'|'TASK_FAILED'
@@ -181,6 +182,8 @@ export const crawlerApi = {
   updateSite: (id:number, data:CrawlerSitePayload) => api.put<CrawlerSite>(`/api/crawler/sites/${id}`, data).then(r => r.data),
   deleteSite: (id:number) => api.delete(`/api/crawler/sites/${id}`),
   resetSiteProtection: (id:number) => api.post<CrawlerSite>(`/api/crawler/sites/${id}/protection/reset`).then(r => r.data),
+  setSiteFreeze: (id:number, frozen:boolean, durationMinutes:number) =>
+    api.put<CrawlerSite>(`/api/crawler/sites/${id}/manual-freeze`, {frozen,durationMinutes}).then(r => r.data),
   refreshRobotsTxt: (id:number) =>
     api.post<CrawlerRobotsTxt>(`/api/crawler/sites/${id}/robots-txt/refresh`).then(r => r.data),
   exportSiteConfiguration: (id:number) => api.get<CrawlerSiteConfiguration>(`/api/crawler/sites/${id}/configuration`).then(r => r.data),

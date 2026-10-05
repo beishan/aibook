@@ -117,7 +117,7 @@ public final class CrawlerDtos {
             List<ContentMarkerPayload> contentMarkers, boolean respectRobotsTxt,
             CrawlerProtectionView protection, String themeColor,
             int maxRequestIntervalMillis, List<SiteAccessWindowPayload> blockedAccessWindows,
-            int cooldownFailureThreshold) {
+            int cooldownFailureThreshold, SiteFreezeView manualFreeze) {
         public SiteView(Long id, String siteName, String siteCode, String baseUrl,
                 String homeUrl, boolean enabled, boolean autoScan, boolean autoCrawl,
                 boolean autoUpdate, boolean autoImportLibrary, int requestIntervalMillis,
@@ -139,7 +139,7 @@ public final class CrawlerDtos {
                     respectRobotsTxt, protection, themeColor,
                     (int) Math.min(Integer.MAX_VALUE,
                             (long) requestIntervalMillis + Math.max(0, randomDelayMillis)),
-                    List.of(), 5);
+                    List.of(), 5, new SiteFreezeView(false, null, 60));
         }
 
         public SiteView(Long id, String siteName, String siteCode, String baseUrl,
@@ -163,6 +163,11 @@ public final class CrawlerDtos {
                     respectRobotsTxt, protection, com.aibook.model.entity.CrawlerSite.DEFAULT_THEME_COLOR);
         }
     }
+
+    public record SiteFreezeRequest(@NotNull Boolean frozen,
+            @NotNull @Min(0) @Max(525600) Integer durationMinutes) { }
+
+    public record SiteFreezeView(boolean frozen, Instant until, int durationMinutes) { }
 
     public record CrawlerProtectionView(boolean coolingDown, Instant blockedUntil, String reason,
             String pageUrl, int consecutiveFailures, long adaptiveDelayMillis) {
