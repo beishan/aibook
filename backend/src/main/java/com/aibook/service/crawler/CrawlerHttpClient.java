@@ -45,6 +45,9 @@ public class CrawlerHttpClient {
     private final ProxySettingsService proxySettingsService;
     @Autowired
     private CrawlerQueueExecutorService queueExecutorService;
+    @Autowired
+    private CrawlerMihomoService mihomoService;
+    private final ThreadLocal<HttpClient> managedClient = new ThreadLocal<>();
     private final CrawlerSettingsService crawlerSettingsService;
     private final CrawlerSiteRepository crawlerSiteRepository;
     private final Map<Long, AtomicLong> siteNextRequests = new ConcurrentHashMap<>();
@@ -66,6 +69,23 @@ public class CrawlerHttpClient {
     }
 
     public FetchResult get(CrawlerSite site, String url, String etag, String lastModified,
+            RequestTiming timing) throws Exception {
+        ensureNotManuallyFrozen(site);
+        if (queueExecutorService != null && queueExecutorService.isMihomoBound()) {
+            return mihomoService.execute(queueExecutorService.boundExecutorId(), site, () -> {
+                try {
+                    return getInternal(site, url, etag, lastModified, timing);
+                } finally {
+                    HttpClient current = managedClient.get();
+                    managedClient.remove();
+                    if (current != null) current.close();
+                }
+            });
+        }
+        return getInternal(site, url, etag, lastModified, timing);
+    }
+
+    private FetchResult getInternal(CrawlerSite site, String url, String etag, String lastModified,
             RequestTiming timing) throws Exception {
         ensureNotManuallyFrozen(site);
         URI uri = validateSiteUrl(site, url);
@@ -180,6 +200,11 @@ public class CrawlerHttpClient {
                     Optional<String> challenge = settings.softBlockDetectionEnabled()
                             ? detectSoftBlock(html) : Optional.empty();
                     if (challenge.isPresent()) {
+                        if (queueExecutorService.isMihomoBound()) {
+                            openCircuit(site, Duration.ofSeconds(settings.accessDeniedCooldownSeconds()),
+                                    "检测到疑似反爬验证页：" + challenge.get(), timed.pageUrl().toString());
+                            throw new NoAvailableQueueProxyException("网站返回验证页，任务等待网站冷却");
+                        }
                         queueExecutorService.coolBoundProxy(candidate, site,
                                 "检测到疑似反爬验证页：" + challenge.get(), 0);
                         continue;
@@ -193,11 +218,20 @@ public class CrawlerHttpClient {
                     long retryAfter = response.statusCode() == 429
                             ? retryAfterMillis(response.headers(), Instant.now()).orElse(0) / 1000
                             : 0;
+                    if (queueExecutorService.isMihomoBound()) {
+                        openCircuit(site, Duration.ofSeconds(Math.max(1, Math.max(retryAfter,
+                                settings.accessDeniedCooldownSeconds()))),
+                                "源站限制访问（HTTP " + response.statusCode() + "）", timed.pageUrl().toString());
+                        throw new NoAvailableQueueProxyException("网站限制访问，任务等待网站冷却");
+                    }
                     queueExecutorService.coolBoundProxy(candidate, site,
                             "源站限制访问（HTTP " + response.statusCode() + "）", retryAfter);
                     continue;
                 }
                 if (response.statusCode() >= 500) {
+                    if (queueExecutorService.isMihomoBound()) {
+                        throw new NoAvailableQueueProxyException("源站返回 HTTP " + response.statusCode() + "，稍后重试");
+                    }
                     queueExecutorService.coolBoundProxyForNetworkFailure(candidate,
                             "源站返回 HTTP " + response.statusCode());
                     continue;
@@ -212,6 +246,7 @@ public class CrawlerHttpClient {
             } catch (ResponseStatusException exception) {
                 throw exception;
             } catch (IOException exception) {
+                if (queueExecutorService.isMihomoBound()) throw exception;
                 queueExecutorService.coolBoundProxyForNetworkFailure(candidate,
                         "代理连接失败：" + exception.getClass().getSimpleName());
             }
@@ -373,6 +408,17 @@ public class CrawlerHttpClient {
     }
 
     private HttpClient client(int timeoutMillis, String proxyUrl) {
+        if (queueExecutorService != null && queueExecutorService.isMihomoBound()) {
+            HttpClient current = managedClient.get();
+            if (current == null) {
+                URI proxy = URI.create(proxyUrl);
+                current = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(timeoutMillis))
+                        .proxy(ProxySelector.of(new InetSocketAddress(proxy.getHost(), proxy.getPort())))
+                        .followRedirects(HttpClient.Redirect.NEVER).build();
+                managedClient.set(current);
+            }
+            return current;
+        }
         HttpClientKey key = new HttpClientKey(timeoutMillis, defaultString(proxyUrl, ""));
         return clients.computeIfAbsent(key, ignored -> {
             HttpClient.Builder builder = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER)
@@ -521,6 +567,8 @@ public class CrawlerHttpClient {
         } catch (ResponseStatusException exception) {
             throw exception;
         } catch (Exception exception) {
+            if (queueExecutorService != null && queueExecutorService.isMihomoBound()
+                    && exception instanceof IOException) throw exception;
             robotsCache.put(robotsKey(site, target), new RobotsCacheEntry(
                     CrawlerRobotsPolicy.DISALLOW_ALL,
                     now.plus(Duration.ofMinutes(settings.robotsErrorCacheMinutes()))));
@@ -553,11 +601,19 @@ public class CrawlerHttpClient {
                     long delay = status == 429
                             ? retryAfterMillis(timed.response().headers(), now).orElse(0) / 1000
                             : 0;
+                    if (queueExecutorService.isMihomoBound()) {
+                        openCircuit(site, Duration.ofSeconds(Math.max(1, Math.max(delay,
+                                settings.accessDeniedCooldownSeconds()))), "robots.txt 限制访问", robotsUri.toString());
+                        throw new NoAvailableQueueProxyException("robots.txt 限制访问，等待网站恢复");
+                    }
                     queueExecutorService.coolBoundProxy(candidate, site,
                             "robots.txt 返回 HTTP " + status, delay);
                     continue;
                 }
                 if (status >= 500) {
+                    if (queueExecutorService.isMihomoBound()) {
+                        throw new NoAvailableQueueProxyException("robots.txt 返回 HTTP " + status + "，稍后重试");
+                    }
                     queueExecutorService.coolBoundProxyForNetworkFailure(candidate,
                             "robots.txt 返回 HTTP " + status);
                     continue;
@@ -565,6 +621,7 @@ public class CrawlerHttpClient {
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                         "无法确认 robots.txt 访问策略（HTTP " + status + "）");
             } catch (IOException exception) {
+                if (queueExecutorService.isMihomoBound()) throw exception;
                 queueExecutorService.coolBoundProxyForNetworkFailure(candidate,
                         "robots.txt 代理连接失败");
             }

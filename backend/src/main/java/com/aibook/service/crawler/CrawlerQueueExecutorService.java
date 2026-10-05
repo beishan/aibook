@@ -43,6 +43,7 @@ public class CrawlerQueueExecutorService {
     private final CrawlerQueueProxyCooldownRepository cooldownRepository;
     private final ProxySettingsService proxySettingsService;
     private final CrawlerSettingsService crawlerSettingsService;
+    private final CrawlerMihomoService mihomoService;
     private final ThreadLocal<ExecutionRoute> executionRoute = new ThreadLocal<>();
 
     public record ProxyCandidate(String key, String name, String url,
@@ -94,6 +95,25 @@ public class CrawlerQueueExecutorService {
         }
         executorRepository.saveAll(executors);
         syncQueueConcurrency(queue, executors);
+    }
+
+    public Long boundExecutorId() {
+        ExecutionRoute route = executionRoute.get();
+        return route == null ? null : route.executorId();
+    }
+
+    public boolean isMihomoBound() {
+        ExecutionRoute route = executionRoute.get();
+        return route != null && ownedExecutor(route.queueId(), route.executorId()).getProxyMode()
+                == CrawlerQueueExecutor.ProxyMode.MIHOMO;
+    }
+
+    public void recordChapter(String taskId, Long chapterId) {
+        if (isMihomoBound()) mihomoService.account(boundExecutorId(), "chapter:" + taskId + ":" + chapterId, true);
+    }
+
+    public void recordBookTask(String taskId) {
+        if (isMihomoBound()) mihomoService.account(boundExecutorId(), "task:" + taskId, false);
     }
 
     @Transactional(readOnly = true)
@@ -180,6 +200,7 @@ public class CrawlerQueueExecutorService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "默认执行器不能删除");
         }
         bindingRepository.deleteByExecutorId(executorId);
+        mihomoService.delete(executorId);
         executorRepository.delete(executor);
         List<CrawlerQueueExecutor> remaining = executors(queueId).stream()
                 .filter(item -> !Objects.equals(item.getId(), executorId))
@@ -194,6 +215,7 @@ public class CrawlerQueueExecutorService {
     @Transactional
     public void deleteQueueData(Long queueId) {
         for (CrawlerQueueExecutor executor : executors(queueId)) {
+            mihomoService.delete(executor.getId());
             bindingRepository.deleteByExecutorId(executor.getId());
             executorRepository.delete(executor);
         }
@@ -206,6 +228,9 @@ public class CrawlerQueueExecutorService {
     @Transactional(readOnly = true)
     public boolean canExecute(CrawlerSite site, CrawlerQueueExecutor executor) {
         if (!isExecutorEnabled(executor)) return false;
+        if (executor.getProxyMode() == CrawlerQueueExecutor.ProxyMode.MIHOMO) {
+            return mihomoService.canExecute(executor.getId());
+        }
         Map<String, Instant> blocked = cooldowns(executor.getQueue().getId());
         Instant now = Instant.now();
         return candidates(executor, site, proxyMap()).stream()
@@ -217,6 +242,10 @@ public class CrawlerQueueExecutorService {
         ExecutionRoute route = executionRoute.get();
         if (route == null) return List.of();
         CrawlerQueueExecutor executor = ownedExecutor(route.queueId(), route.executorId());
+        if (executor.getProxyMode() == CrawlerQueueExecutor.ProxyMode.MIHOMO) {
+            return List.of(new ProxyCandidate("mihomo:" + executor.getId(), "Mihomo 托管代理",
+                    mihomoService.proxyUrl(executor.getId()), executor.getDefaultProxyCooldownSeconds()));
+        }
         Map<String, Instant> blocked = cooldowns(route.queueId());
         Instant now = Instant.now();
         List<ProxyCandidate> available = new ArrayList<>(candidates(executor, site, proxyMap()).stream()
@@ -298,6 +327,12 @@ public class CrawlerQueueExecutorService {
 
     private List<ProxyCandidate> candidates(CrawlerQueueExecutor executor, CrawlerSite site,
             Map<Long, CrawlerProxyView> proxies) {
+        if (executor.getProxyMode() == CrawlerQueueExecutor.ProxyMode.MIHOMO) {
+            return mihomoService.canExecute(executor.getId())
+                    ? List.of(new ProxyCandidate("mihomo:" + executor.getId(), "Mihomo 托管代理",
+                            mihomoService.proxyUrl(executor.getId()), executor.getDefaultProxyCooldownSeconds()))
+                    : List.of();
+        }
         if (executor.getProxyMode() == CrawlerQueueExecutor.ProxyMode.SELECTED) {
             return bindingRepository.findByExecutorIdOrderBySortOrderAscIdAsc(executor.getId())
                     .stream()

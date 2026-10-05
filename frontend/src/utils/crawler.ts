@@ -96,7 +96,7 @@ export interface CrawlerQueueExecutor {
   description:string|null
   defaultExecutor:boolean
   enabled:boolean
-  proxyMode:'DEFAULT'|'SELECTED'
+  proxyMode:'DEFAULT'|'SELECTED'|'MIHOMO'
   selectionStrategy:'ORDERED'|'RANDOM'
   defaultProxyCooldownSeconds:number|null
   proxies:CrawlerQueueExecutorProxy[]
@@ -107,12 +107,57 @@ export interface CrawlerQueueExecutorPayload {
   name:string
   description:string
   enabled:boolean
-  proxyMode:'DEFAULT'|'SELECTED'
+  proxyMode:'DEFAULT'|'SELECTED'|'MIHOMO'
   selectionStrategy:'ORDERED'|'RANDOM'
   defaultProxyCooldownSeconds:number|null
   proxies:{proxyConfigId:number;cooldownSeconds:number|null}[]
 }
 export interface CrawlerQueueProxyOption { id:number; name:string; effectiveEnabled:boolean }
+export interface MihomoPolicyPayload {
+  controllerUrl:string
+  secret:string
+  clearSecret:boolean
+  proxyUrl:string
+  groupName:string
+  nodes:string[]
+  failover:boolean
+  failureThreshold:number
+  cooldownSeconds:number
+  rotationSeconds:number
+  rotationChapters:number
+  rotationTasks:number
+  randomOrder:boolean
+}
+export interface MihomoSwitchEvent {
+  time:string
+  from:string|null
+  to:string|null
+  reason:string
+  success:boolean
+}
+export interface MihomoPolicyView extends Omit<MihomoPolicyPayload, 'secret'|'clearSecret'> {
+  secretConfigured:boolean
+  currentNode:string|null
+  activeMillis:number
+  chapters:number
+  tasks:number
+  lastSwitchAt:string|null
+  retryAt:string|null
+  lastError:string|null
+  cooldowns:Record<string,string>
+  events:MihomoSwitchEvent[]
+}
+export interface MihomoNode {
+  name:string
+  type:string
+  alive:boolean|null
+  delay:number|null
+  checkedAt:string|null
+}
+export interface MihomoCatalog {
+  groups:{name:string;currentNode:string;nodes:string[]}[]
+  nodes:MihomoNode[]
+}
 export interface CrawlerScanResult { id:number; bookId?:number; bookName:string; bookUrl:string; resultStatus:'NEW'|'DUPLICATE'|'BLACKLISTED'|'FAILED'; errorMessage?:string; createdAt:string }
 export interface CrawlerChapter { id:number; chapterIndex:number; chapterName:string; chapterUrl:string; wordCount:number; crawlStatus:string; accessStatus:string; retryCount:number; errorMessage?:string; crawlTime?:string; createdAt?:string }
 export interface CrawlerChapterFocus { chapter:CrawlerChapter; page:number }
@@ -257,6 +302,11 @@ export const crawlerApi = {
   updateTaskQueue: (queueId:number, settings:{maxConcurrentTasks:number;taskIntervalSeconds:number;queueName?:string}) => api.put<CrawlerTaskQueue>(`/api/crawler/tasks/queues/${queueId}`,settings).then(r => r.data),
   queueProxyOptions: () => api.get<CrawlerQueueProxyOption[]>('/api/crawler/tasks/queues/proxy-options').then(r => r.data),
   queueExecutors: (queueId:number) => api.get<CrawlerQueueExecutor[]>(`/api/crawler/tasks/queues/${queueId}/executors`).then(r => r.data),
+  mihomoPolicy: (queueId:number,executorId:number) => api.get<MihomoPolicyView|null>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo`).then(r => r.data),
+  saveMihomo: (queueId:number,executorId:number,payload:MihomoPolicyPayload) => api.put<MihomoPolicyView>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo`,payload).then(r => r.data),
+  mihomoCatalog: (queueId:number,executorId:number,payload:MihomoPolicyPayload) => api.post<MihomoCatalog>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo/catalog`,payload).then(r => r.data),
+  mihomoDelay: (queueId:number,executorId:number,name:string) => api.post<{name:string;alive:boolean;delay:number|null;checkedAt:string}>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo/delay`,{name}).then(r => r.data),
+  mihomoSwitch: (queueId:number,executorId:number,name:string) => api.post<MihomoPolicyView>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo/switch`,{name}).then(r => r.data),
   createQueueExecutor: (queueId:number,payload:CrawlerQueueExecutorPayload) => api.post<CrawlerQueueExecutor>(`/api/crawler/tasks/queues/${queueId}/executors`,payload).then(r => r.data),
   updateQueueExecutor: (queueId:number,executorId:number,payload:CrawlerQueueExecutorPayload) => api.put<CrawlerQueueExecutor>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}`,payload).then(r => r.data),
   deleteQueueExecutor: (queueId:number,executorId:number) => api.delete(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}`),

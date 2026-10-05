@@ -11,7 +11,7 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CrawlerQueueExecutor {
-    public enum ProxyMode { DEFAULT, SELECTED }
+    public enum ProxyMode { DEFAULT, SELECTED, MIHOMO }
     public enum SelectionStrategy { ORDERED, RANDOM }
 
     @Id

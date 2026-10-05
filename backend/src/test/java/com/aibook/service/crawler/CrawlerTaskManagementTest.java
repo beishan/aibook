@@ -590,6 +590,8 @@ class CrawlerTaskManagementTest {
                 List.of(parser), mock(ApplicationContext.class),
                 mock(CrawlerSettingsService.class));
         try {
+            org.springframework.test.util.ReflectionTestUtils.setField(service,
+                    "queueExecutorService", mock(CrawlerQueueExecutorService.class));
             service.run(task.getId());
 
             assertThat(chapter.getCrawlStatus())

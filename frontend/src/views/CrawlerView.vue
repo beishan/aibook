@@ -1263,7 +1263,7 @@
             <el-tag v-if="item.enabled === false" type="info" size="small">已禁用</el-tag>
             <p>{{ item.description || '暂无描述' }}</p>
             <small>
-              {{ item.proxyMode === 'DEFAULT' ? '默认代理' : `${item.proxies.length} 个指定代理` }}
+              {{ item.proxyMode === 'MIHOMO' ? 'Mihomo 托管代理' : item.proxyMode === 'DEFAULT' ? '默认代理' : `${item.proxies.length} 个指定代理` }}
               · {{ item.selectionStrategy === 'RANDOM' ? '随机' : '按顺序' }}
               · 当前可用 {{ item.availableProxyCount }} 个
             </small>
@@ -1274,6 +1274,7 @@
             <small v-if="item.nextAvailableAt">最近恢复：{{ formatTime(item.nextAvailableAt) }}</small>
           </div>
           <div class="queue-executor-actions">
+            <el-button size="small" @click="mihomoExecutor = item; mihomoDialog = true">Mihomo 节点</el-button>
             <el-button size="small" @click="editQueueExecutor(item)">编辑</el-button>
             <el-button
               v-if="!item.defaultExecutor"
@@ -1289,6 +1290,15 @@
         <el-button @click="queueExecutorsDialog=false">关闭</el-button>
         <el-button type="primary" :disabled="queueExecutors.length >= 16" @click="addQueueExecutor">添加执行器</el-button>
       </template>
+    </el-dialog>
+
+    <el-dialog v-model="mihomoDialog" :title="`${mihomoExecutor?.name || '执行器'} · Mihomo 节点管理`" width="min(960px, 96vw)" append-to-body destroy-on-close>
+      <CrawlerMihomoPanel
+        v-if="mihomoExecutor && mihomoDialog"
+        :queue-id="mihomoExecutor.queueId"
+        :executor-id="mihomoExecutor.id"
+        @saved="openQueueExecutors"
+      />
     </el-dialog>
 
     <el-dialog
@@ -1316,6 +1326,7 @@
           <el-select v-model="queueExecutorForm.proxyMode">
             <el-option label="默认代理配置" value="DEFAULT" />
             <el-option label="指定代理" value="SELECTED" />
+            <el-option v-if="editingQueueExecutor?.proxyMode === 'MIHOMO'" label="Mihomo 托管代理" value="MIHOMO" />
           </el-select>
           <small class="field-hint">默认配置优先使用网站代理；未配置时使用全局采集代理。</small>
         </el-form-item>
@@ -1329,7 +1340,7 @@
           <el-input-number v-model="queueExecutorForm.defaultProxyCooldownSeconds" :min="10" :max="604800" />
           <small class="field-hint">留空时使用网站访问受限冷却时间。</small>
         </el-form-item>
-        <template v-else>
+        <template v-else-if="queueExecutorForm.proxyMode === 'SELECTED'">
           <el-form-item label="选择代理">
             <el-select v-model="selectedQueueProxyIds" multiple filterable placeholder="选择一个或多个代理">
               <el-option
@@ -1634,6 +1645,7 @@ import { useRouter } from 'vue-router'
 import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, MoreFilled, Plus, QuestionFilled, Refresh, Search, Star, StarFilled, Tickets, TrendCharts, Upload, VideoPause, VideoPlay, Warning } from '@element-plus/icons-vue'
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElProgress, ElTable, ElTableColumn, ElTag, ElTooltip, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
 import SiteSourceTag from '@/components/SiteSourceTag.vue'
+import CrawlerMihomoPanel from '@/components/CrawlerMihomoPanel.vue'
 import {
   crawlerApi,
   type CrawlerBook,
@@ -1810,6 +1822,8 @@ let siteActivityRequestSequence=0
 const queueOverviewDialog = ref(false)
 const queuePopupTab = ref<'config' | 'tasks'>('config')
 const queueSettingsDialog = ref(false)
+const mihomoDialog = ref(false)
+const mihomoExecutor = ref<CrawlerQueueExecutor>()
 const queueExecutorsDialog = ref(false)
 const queueExecutorEditorDialog = ref(false)
 const queueExecutorsLoading = ref(false)

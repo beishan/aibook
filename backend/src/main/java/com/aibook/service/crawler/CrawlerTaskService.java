@@ -1649,10 +1649,13 @@ public class CrawlerTaskService {
             }
             chapterRepository.save(chapter);
             if (recheckCompleted) {
+                if ("SUCCESS".equals(attemptOutcome)) queueExecutorService.recordChapter(task.getId(), chapter.getId());
                 if (chapter.getErrorMessage() == null) updateSuccess++; else updateFailed++;
                 refreshUpdateCounts(book, task, updateSuccess, updateFailed, pending.size(), durationTotal, requests);
-            } else refreshContentCounts(book, task, targetChapterId, chapter,
-                    durationTotal, requests);
+            } else {
+                if ("SUCCESS".equals(attemptOutcome)) queueExecutorService.recordChapter(task.getId(), chapter.getId());
+                refreshContentCounts(book, task, targetChapterId, chapter, durationTotal, requests);
+            }
             if (requestFailure != null) requestFailureGuard.failure(requestFailure);
         }
         if (!recheckCompleted) {
@@ -2030,7 +2033,13 @@ public class CrawlerTaskService {
             current.setAverageRequestMillis(source.getAverageRequestMillis());
             current.setFinishedAt(source.getFinishedAt());
             current.setErrorMessage(source.getErrorMessage());
-            return taskRepository.save(current);
+            CrawlerTask saved = taskRepository.save(current);
+            if (saved.getStatus() == CrawlerTask.TaskStatus.SUCCESS && saved.getTargetChapterId() == null
+                    && Set.of(CrawlerTask.TaskType.BOOK_CONTENT, CrawlerTask.TaskType.BOOK_FULL_CRAWL,
+                            CrawlerTask.TaskType.BOOK_UPDATE_CHECK).contains(saved.getType())) {
+                queueExecutorService.recordBookTask(saved.getId());
+            }
+            return saved;
         }
     }
 
