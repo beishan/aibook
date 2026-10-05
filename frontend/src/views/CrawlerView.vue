@@ -141,10 +141,13 @@
       <div class="section-heading"><div><p class="eyebrow">SOURCES</p><h2>采集网站</h2></div><div class="site-heading-actions"><el-button :icon="Upload" @click="openSiteConfigurationImport">导入配置</el-button><el-button type="primary" :icon="Plus" @click="openSite()">新增网站</el-button></div></div>
       <div v-if="sites.length" class="site-grid">
         <article v-for="site in sites" :key="site.id" class="site-card">
-          <div class="site-top"><span class="site-mark" :style="{ '--site-theme-color': siteThemeColor(site.themeColor) }">{{ site.siteName.slice(0, 1) }}</span><div><h3>{{ site.siteName }}</h3><a :href="site.homeUrl || site.baseUrl" target="_blank">{{ site.baseUrl }}</a></div><el-tag :type="site.status==='RULE_ERROR'?'danger':!site.ruleVersion?'warning':site.enabled?'success':'info'">{{ site.status==='RULE_ERROR'?'规则异常':!site.ruleVersion?'待配置规则':site.enabled?'启用':'停用' }}</el-tag></div>
-          <div class="site-stats"><span><b>{{ site.bookCount }}</b> 本书</span><span><b>{{ site.requestIntervalMillis }}–{{ site.maxRequestIntervalMillis }}</b> ms 随机间隔</span><span><b>{{ site.maxConcurrency }}</b> 并发</span></div>
-          <div class="site-manual-freeze" :class="{ frozen: site.manualFreeze?.frozen }">
-            <div class="site-freeze-controls">
+          <div class="site-top">
+            <span class="site-mark" :style="{ '--site-theme-color': siteThemeColor(site.themeColor) }">{{ site.siteName.slice(0, 1) }}</span>
+            <div class="site-identity">
+              <h3>{{ site.siteName }}</h3>
+              <a :href="site.homeUrl || site.baseUrl" target="_blank">{{ site.baseUrl }}</a>
+            </div>
+            <div class="site-header-controls">
               <el-switch
                 :model-value="site.manualFreeze?.frozen || false"
                 :loading="freezingSiteIds.includes(site.id)"
@@ -152,6 +155,14 @@
                 active-text="人工冻结"
                 @change="setSiteManualFreeze(site, Boolean($event))"
               />
+              <el-tag :type="site.status==='RULE_ERROR'?'danger':!site.ruleVersion?'warning':site.enabled?'success':'info'">
+                {{ site.status==='RULE_ERROR'?'规则异常':!site.ruleVersion?'待配置规则':site.enabled?'启用':'停用' }}
+              </el-tag>
+            </div>
+          </div>
+          <div class="site-stats"><span><b>{{ site.bookCount }}</b> 本书</span><span><b>{{ site.requestIntervalMillis }}–{{ site.maxRequestIntervalMillis }}</b> ms 随机间隔</span><span><b>{{ site.maxConcurrency }}</b> 并发</span></div>
+          <div class="site-manual-freeze" :class="{ frozen: site.manualFreeze?.frozen }">
+            <div class="site-freeze-controls">
               <label :for="`site-freeze-duration-${site.id}`">自动解冻（分钟）</label>
               <el-input-number
                 :id="`site-freeze-duration-${site.id}`"
@@ -163,11 +174,21 @@
                 size="small"
                 @change="setSiteFreezeDuration(site, $event)"
               />
+              <el-tooltip :trigger="['hover', 'focus']" placement="top" :show-after="150">
+                <template #content>
+                  <div class="site-freeze-tooltip">
+                    <p>开启人工冻结后，本站所有任务保留进度并等待解冻，关闭后自动继续。</p>
+                    <p>0 表示持续冻结至手动关闭；冻结中修改时长会重新计时。</p>
+                    <p v-if="site.manualFreeze?.frozen">
+                      {{ site.manualFreeze.until ? `解冻时间 ${formatTime(site.manualFreeze.until)}` : '当前已冻结，手动关闭后恢复' }}
+                    </p>
+                  </div>
+                </template>
+                <button type="button" class="site-freeze-help" aria-label="查看人工冻结与自动解冻说明">
+                  <el-icon><QuestionFilled /></el-icon>
+                </button>
+              </el-tooltip>
             </div>
-            <small v-if="site.manualFreeze?.frozen">
-              本站所有任务等待解冻 · {{ site.manualFreeze.until ? `解冻时间 ${formatTime(site.manualFreeze.until)}` : '手动关闭后恢复' }}
-            </small>
-            <small v-else>0 表示持续冻结至手动关闭；冻结中修改时长会重新计时。</small>
           </div>
           <div v-if="hasSiteProtection(site)" class="site-protection" :class="{cooling:site.protection.coolingDown}">
             <div class="site-protection-message"><strong>{{ site.protection.coolingDown ? '站点保护冷却中' : '请求节奏正在恢复' }}</strong><span>{{ site.protection.reason || '近期请求失败，系统已自动降低访问频率' }}</span></div>
@@ -1610,7 +1631,7 @@
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
-import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, MoreFilled, Plus, Refresh, Search, Star, StarFilled, Tickets, TrendCharts, Upload, VideoPause, VideoPlay, Warning } from '@element-plus/icons-vue'
+import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, MoreFilled, Plus, QuestionFilled, Refresh, Search, Star, StarFilled, Tickets, TrendCharts, Upload, VideoPause, VideoPlay, Warning } from '@element-plus/icons-vue'
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElProgress, ElTable, ElTableColumn, ElTag, ElTooltip, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
 import SiteSourceTag from '@/components/SiteSourceTag.vue'
 import {
@@ -4192,12 +4213,59 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   flex-wrap: wrap;
   gap: 8px 12px;
 }
-.site-freeze-controls label,
-.site-manual-freeze small {
+.site-freeze-controls label {
   color: var(--text-secondary);
   font-size: 12px;
 }
 .site-freeze-controls .el-input-number {
   width: 130px;
+}
+
+.site-identity {
+  min-width: 0;
+}
+.site-top .site-identity a {
+  max-width: 100%;
+}
+.site-header-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  white-space: nowrap;
+}
+.site-freeze-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 16px;
+  cursor: help;
+}
+.site-freeze-help:hover {
+  color: var(--primary);
+  background: var(--primary-alpha-10);
+}
+.site-freeze-help:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.site-freeze-tooltip {
+  max-width: 280px;
+  line-height: 1.7;
+}
+.site-freeze-tooltip p + p {
+  margin-top: 6px;
+}
+@media (max-width: 560px) {
+  .site-header-controls {
+    grid-column: 2 / -1;
+  }
 }
 </style>
