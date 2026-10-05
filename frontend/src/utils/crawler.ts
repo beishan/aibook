@@ -136,6 +136,10 @@ export interface MihomoSwitchEvent {
   success:boolean
 }
 export interface MihomoPolicyView extends Omit<MihomoPolicyPayload, 'secret'|'clearSecret'> {
+  systemProxyId:number|null
+  nodeGroupId:number|null
+  switchingMode:'MANUAL'|'FAILOVER'|'TIME'|'CHAPTER'|'TASK'|null
+  manualNode:string|null
   secretConfigured:boolean
   currentNode:string|null
   activeMillis:number
@@ -153,6 +157,19 @@ export interface MihomoNode {
   alive:boolean|null
   delay:number|null
   checkedAt:string|null
+}
+export interface MihomoReferencePayload {
+  systemProxyId:number|null
+  nodeGroupId:number|null
+  switchingMode:'MANUAL'|'FAILOVER'|'TIME'|'CHAPTER'|'TASK'
+  manualNode:string|null
+  failover:boolean
+  failureThreshold:number
+  cooldownSeconds:number
+  rotationSeconds:number
+  rotationChapters:number
+  rotationTasks:number
+  randomOrder:boolean
 }
 export interface MihomoCatalog {
   groups:{name:string;currentNode:string;nodes:string[]}[]
@@ -303,6 +320,9 @@ export const crawlerApi = {
   queueProxyOptions: () => api.get<CrawlerQueueProxyOption[]>('/api/crawler/tasks/queues/proxy-options').then(r => r.data),
   queueExecutors: (queueId:number) => api.get<CrawlerQueueExecutor[]>(`/api/crawler/tasks/queues/${queueId}/executors`).then(r => r.data),
   mihomoPolicy: (queueId:number,executorId:number) => api.get<MihomoPolicyView|null>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo`).then(r => r.data),
+  saveMihomoSelection: (queueId:number,executorId:number,payload:MihomoReferencePayload) => api.put<MihomoPolicyView>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo/selection`,payload).then(r => r.data),
+  migrateMihomo: (queueId:number,executorId:number) => api.post<MihomoPolicyView>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo/migrate`).then(r => r.data),
+  unbindMihomo: (queueId:number,executorId:number) => api.delete(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo/selection`),
   saveMihomo: (queueId:number,executorId:number,payload:MihomoPolicyPayload) => api.put<MihomoPolicyView>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo`,payload).then(r => r.data),
   mihomoCatalog: (queueId:number,executorId:number,payload:MihomoPolicyPayload) => api.post<MihomoCatalog>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo/catalog`,payload).then(r => r.data),
   mihomoDelay: (queueId:number,executorId:number,name:string) => api.post<{name:string;alive:boolean;delay:number|null;checkedAt:string}>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo/delay`,{name}).then(r => r.data),

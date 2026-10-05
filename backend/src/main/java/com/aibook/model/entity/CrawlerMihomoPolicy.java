@@ -14,6 +14,12 @@ import lombok.*;
 public class CrawlerMihomoPolicy {
     @Id
     private Long executorId;
+    private Long systemProxyId;
+    private Long nodeGroupId;
+    @Column(length = 20)
+    private String switchingMode;
+    @Column(length = 200)
+    private String manualNode;
     @Column(name = "controller_url", nullable = false, length = 500)
     private String controllerUrl;
     @Column(length = 500)

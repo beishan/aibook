@@ -8,6 +8,7 @@ import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -33,6 +34,25 @@ public class CrawlerMihomoController {
     public CatalogView catalog(Authentication auth, @PathVariable Long queueId, @PathVariable Long executorId,
             @RequestBody PolicyPayload draft) throws Exception {
         return service.browse(users.findByUsername(auth.getName()), queueId, executorId, draft);
+    }
+
+    @PutMapping("/selection")
+    public PolicyView selection(Authentication auth, @PathVariable Long queueId, @PathVariable Long executorId,
+            @RequestBody ReferencePayload request) throws Exception {
+        return service.saveReference(users.findByUsername(auth.getName()), queueId, executorId, request);
+    }
+
+    @PostMapping("/migrate")
+    @PreAuthorize("hasRole('ADMIN')")
+    public PolicyView migrate(Authentication auth, @PathVariable Long queueId, @PathVariable Long executorId) throws Exception {
+        return service.migrateLegacy(users.findByUsername(auth.getName()), queueId, executorId);
+    }
+
+    @DeleteMapping("/selection")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void unbind(Authentication auth, @PathVariable Long queueId, @PathVariable Long executorId)
+            throws InterruptedException {
+        service.unbind(users.findByUsername(auth.getName()), queueId, executorId);
     }
 
     @PostMapping("/delay")

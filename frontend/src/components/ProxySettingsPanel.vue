@@ -5,13 +5,13 @@
       <div>
         <p class="proxy-kicker">{{ crawler ? 'CRAWLER ROUTING' : 'NETWORK ROUTING' }}</p>
         <h2>{{ crawler ? '爬虫设置' : '系统代理配置' }}</h2>
-        <p>{{ crawler ? '集中管理爬取请求策略、请求身份与代理路由。' : '维护可被系统功能复用的代理资源；允许多条配置同时启用。' }}</p>
+        <p>{{ crawler ? '集中管理请求策略、请求身份、代理与执行器节点切换。' : '维护简单代理与 Mihomo 连接、节点及备用组。' }}</p>
       </div>
       <el-button v-if="!crawler" type="primary" @click="openCreate">＋ 新增代理</el-button>
     </header>
 
     <div v-if="crawler" class="crawler-subtabs-scroll">
-      <div class="crawler-subtabs" role="tablist" aria-label="爬虫子配置">
+      <div class="crawler-subtabs" :style="{ '--crawler-tab-count': crawlerSubtabs.length }" role="tablist" aria-label="爬虫子配置">
         <span class="crawler-subtab-indicator" :style="crawlerSubtabIndicatorStyle" aria-hidden="true"></span>
         <button
           v-for="(tab, index) in crawlerSubtabs"
@@ -30,9 +30,18 @@
       </div>
     </div>
 
+    <section
+      v-if="crawler && activeCrawlerSubtab === 'executors'"
+      id="crawler-settings-panel-executors"
+      role="tabpanel"
+      aria-labelledby="crawler-settings-tab-executors"
+    >
+      <CrawlerExecutorsSettingsPanel />
+    </section>
+
     <div v-if="crawler && activeCrawlerSubtab === 'proxy'" class="routing-note">
       <span class="routing-note-icon">i</span>
-      <div><strong>引用状态实时联动</strong><p>引用的系统代理被停用或删除后，此处会立即变为不可用且不会参与请求。</p></div>
+      <div><strong>普通代理引用状态实时联动</strong><p>系统代理停用或删除后引用不再参与请求。Mihomo 代理请在“执行器配置”中选择节点组与切换策略。</p></div>
     </div>
 
     <section
@@ -115,6 +124,9 @@
           <div class="proxy-identity" @dragenter.prevent="moveDraggedProxy(row)"><strong>{{ row.name || '引用已失效' }}</strong><small>{{ row.url || '系统代理已被删除' }}</small></div>
         </template>
       </el-table-column>
+      <el-table-column v-if="!crawler" label="类型" width="110">
+        <template #default="{ row }"><el-tag :type="row.proxyType === 'MIHOMO' ? 'primary' : 'info'">{{ row.proxyType === 'MIHOMO' ? 'Mihomo' : '简单代理' }}</el-tag></template>
+      </el-table-column>
       <el-table-column v-if="crawler" label="来源" width="130">
         <template #default="{ row }"><span class="source-chip" :class="row.sourceType.toLowerCase()">{{ row.sourceType === 'SYSTEM' ? '系统引用' : '爬虫独立' }}</span></template>
       </el-table-column>
@@ -123,9 +135,10 @@
           <span class="health-chip" :class="effective(row) ? 'online' : 'offline'"><i></i>{{ statusText(row) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="190" align="right">
+      <el-table-column label="操作" :width="crawler ? 190 : 300" align="right">
         <template #default="{ row }">
           <el-switch :model-value="row.enabled" :disabled="crawler && row.sourceType === 'SYSTEM' && !row.sourceAvailable" @change="toggle(row, Boolean($event))" />
+          <el-button v-if="!crawler && row.proxyType === 'MIHOMO'" text type="primary" @click="openNodes(row)">节点与备用组</el-button>
           <el-button text @click="openEdit(row)">编辑</el-button>
           <el-button text type="danger" @click="remove(row)">删除</el-button>
         </template>
@@ -149,11 +162,35 @@
         <button type="button" :class="{ active: form.sourceType === 'SYSTEM' }" @click="form.sourceType = 'SYSTEM'">引用系统代理</button>
       </div>
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="proxy-form">
+        <el-form-item v-if="!crawler" label="代理类型">
+          <el-select v-model="form.proxyType" @change="testResult = undefined">
+            <el-option label="简单代理" value="SIMPLE" />
+            <el-option label="Mihomo · 可管理具体节点" value="MIHOMO" />
+          </el-select>
+        </el-form-item>
         <el-form-item v-if="!crawler || form.sourceType === 'CUSTOM'" label="代理名称" prop="name"><el-input v-model="form.name" placeholder="例如：家庭出口 A" /></el-form-item>
         <el-form-item v-if="!crawler || form.sourceType === 'CUSTOM'" label="代理地址" prop="url"><el-input v-model="form.url" placeholder="http://127.0.0.1:7890" /></el-form-item>
+        <template v-if="!crawler && form.proxyType === 'MIHOMO'">
+          <el-form-item label="Mihomo 控制 API 地址">
+            <el-input v-model="form.controllerUrl" placeholder="http://mihomo:9111" />
+            <small>代理地址是实际 HTTP 出口，控制地址用于查询和切换节点，两者端口不同。</small>
+          </el-form-item>
+          <el-form-item label="控制 API 密钥">
+            <el-input v-model="form.secret" type="password" show-password autocomplete="new-password" placeholder="已保存密钥留空保留" />
+            <el-checkbox v-model="form.clearSecret">清除已保存密钥</el-checkbox>
+          </el-form-item>
+          <el-button :loading="testingProxy" @click="testProxy">测试控制 API 与代理有效性</el-button>
+          <el-alert
+            v-if="testResult"
+            :title="testResult.message"
+            :type="testResult.controllerAvailable && testResult.proxyAvailable ? 'success' : 'warning'"
+            :closable="false"
+          />
+          <p class="mihomo-hint">保存代理后，在列表的“节点与备用组”中查看全部节点、创建备用组。</p>
+        </template>
         <el-form-item v-if="crawler && form.sourceType === 'SYSTEM'" label="系统代理" prop="systemProxyId">
-          <el-select v-model="form.systemProxyId" placeholder="选择已有系统代理" style="width:100%">
-            <el-option v-for="proxy in systemOptions" :key="proxy.id" :value="proxy.id" :label="proxy.name" :disabled="!proxy.enabled"><span>{{ proxy.name }}</span><span class="option-url">{{ proxy.enabled ? proxy.url : '已停用' }}</span></el-option>
+          <el-select v-model="form.systemProxyId" placeholder="选择已有简单系统代理" style="width:100%">
+            <el-option v-for="proxy in systemOptions.filter(p => p.proxyType !== 'MIHOMO')" :key="proxy.id" :value="proxy.id" :label="proxy.name" :disabled="!proxy.enabled"><span>{{ proxy.name }}</span><span class="option-url">{{ proxy.enabled ? proxy.url : '已停用' }}</span></el-option>
           </el-select>
         </el-form-item>
         <div class="form-pair single">
@@ -162,24 +199,33 @@
       </el-form>
       <template #footer><el-button @click="dialogVisible=false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存配置</el-button></template>
     </el-dialog>
+
+    <el-dialog v-model="nodesDialog" :title="`${nodesProxy?.name || 'Mihomo'} · 节点与备用组`" width="min(960px, 96vw)" append-to-body destroy-on-close>
+      <SystemMihomoNodesPanel v-if="nodesProxy && nodesDialog" :proxy="nodesProxy" />
+    </el-dialog>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import SystemMihomoNodesPanel from '@/components/SystemMihomoNodesPanel.vue'
+import CrawlerExecutorsSettingsPanel from '@/components/CrawlerExecutorsSettingsPanel.vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { confirm, message } from '@/utils/message'
 import { proxySettingsApi, type CrawlerProxyConfig, type CrawlerRequestSettings, type SystemProxyConfig } from '@/utils/proxySettings'
 
 const props = defineProps<{ scope: 'system' | 'crawler' }>()
 const crawler = computed(() => props.scope === 'crawler')
-type CrawlerSubtab = 'request' | 'identity' | 'proxy'
+const route = useRoute()
+type CrawlerSubtab = 'request' | 'identity' | 'proxy' | 'executors'
 const crawlerSubtabs: Array<{ key: CrawlerSubtab; label: string; description: string }> = [
   { key: 'request', label: '请求策略', description: '超时、重试与停止条件' },
   { key: 'identity', label: '请求身份', description: 'User-Agent、Cookie 与 Header' },
   { key: 'proxy', label: '代理配置', description: '系统引用与独立代理' },
+  { key: 'executors', label: '执行器配置', description: '普通代理、节点组与切换策略' },
 ]
-const activeCrawlerSubtab = ref<CrawlerSubtab>('request')
+const activeCrawlerSubtab = ref<CrawlerSubtab>(route.query.crawlerTab === 'executors' ? 'executors' : 'request')
 const crawlerSubtabIndicatorStyle = computed(() => ({
   transform: `translateX(${crawlerSubtabs.findIndex(tab => tab.key === activeCrawlerSubtab.value) * 100}%)`,
 }))
@@ -189,6 +235,10 @@ const settingsLoading = ref(false)
 const settingsSaving = ref(false)
 const reorderSaving = ref(false)
 const dialogVisible = ref(false)
+const nodesDialog = ref(false)
+const nodesProxy = ref<SystemProxyConfig>()
+const testingProxy = ref(false)
+const testResult = ref<{controllerAvailable:boolean;proxyAvailable:boolean;message:string;delay:number|null}>()
 const editingId = ref<number>()
 const draggingId = ref<number>()
 const dragStartOrder = ref<number[]>([])
@@ -196,7 +246,11 @@ type ProxyRow = SystemProxyConfig | CrawlerProxyConfig
 const rows = ref<ProxyRow[]>([])
 const systemOptions = ref<SystemProxyConfig[]>([])
 const formRef = ref<FormInstance>()
-const form = reactive({ sourceType: 'CUSTOM' as 'CUSTOM' | 'SYSTEM', name: '', url: '', systemProxyId: undefined as number | undefined, enabled: true, priority: 100 })
+const form = reactive({
+  sourceType:'CUSTOM' as 'CUSTOM' | 'SYSTEM', name:'', url:'',
+  systemProxyId:undefined as number | undefined, enabled:true, priority:100,
+  proxyType:'SIMPLE' as 'SIMPLE' | 'MIHOMO', controllerUrl:'', secret:'', clearSecret:false,
+})
 const requestSettings = reactive<CrawlerRequestSettings>({timeoutMillis:15000,retryCount:2,maxConsecutiveFailures:5,retryBackoffMaxMillis:30000,maxInlineRetryDelayMillis:30000,maxResponseSizeMb:8,maxRedirects:5,maxOriginConcurrency:4,adaptiveDelayMaxMillis:60000,circuitCooldownSeconds:900,accessDeniedCooldownSeconds:3600,robotsCacheMinutes:360,robotsErrorCacheMinutes:15,softBlockDetectionEnabled:true,userAgent:'',cookie:'',headersJson:'{}'})
 const rules: FormRules = {
   name: [{ required: true, whitespace: true, message: '请输入代理名称', trigger: ['blur', 'change'] }],
@@ -239,9 +293,38 @@ async function saveCrawlerSettings(){
   catch(error:any){message.error(error.response?.data?.message||'爬虫请求设置保存失败')}
   finally{settingsSaving.value=false}
 }
-function reset() { editingId.value=undefined; Object.assign(form,{sourceType:'CUSTOM',name:'',url:'',systemProxyId:undefined,enabled:true,priority:100}) }
+function reset() {
+  editingId.value = undefined
+  testResult.value = undefined
+  Object.assign(form, { sourceType:'CUSTOM', name:'', url:'', systemProxyId:undefined,
+    enabled:true, priority:100, proxyType:'SIMPLE', controllerUrl:'', secret:'', clearSecret:false })
+}
 function openCreate() { reset(); form.priority=Math.min(9999,Math.max(0,...rows.value.map(row=>row.priority))+1); dialogVisible.value=true }
-function openEdit(row: any) { editingId.value=row.id; Object.assign(form,{sourceType:row.sourceType||'CUSTOM',name:row.name||'',url:row.url||'',systemProxyId:row.systemProxyId,enabled:row.enabled,priority:row.priority}); dialogVisible.value=true }
+function openEdit(row:any) {
+  reset()
+  editingId.value = row.id
+  Object.assign(form, { sourceType:row.sourceType || 'CUSTOM', name:row.name || '',
+    url:row.url || '', systemProxyId:row.systemProxyId, enabled:row.enabled, priority:row.priority,
+    proxyType:row.proxyType || 'SIMPLE', controllerUrl:row.controllerUrl || '' })
+  dialogVisible.value = true
+}
+
+function openNodes(row:SystemProxyConfig) {
+  nodesProxy.value = row
+  nodesDialog.value = true
+}
+
+async function testProxy() {
+  testingProxy.value = true
+  testResult.value = undefined
+  try {
+    testResult.value = await proxySettingsApi.testMihomo(editingId.value, { ...form })
+  } catch (error:any) {
+    message.error(error.response?.data?.message || 'Mihomo 代理测试失败')
+  } finally {
+    testingProxy.value = false
+  }
+}
 async function save() {
   if (!await formRef.value?.validate().catch(() => false)) return
   saving.value=true
@@ -250,7 +333,8 @@ async function save() {
       const payload = form.sourceType === 'SYSTEM' ? {systemProxyId:form.systemProxyId,enabled:form.enabled,priority:form.priority} : {name:form.name,url:form.url,enabled:form.enabled,priority:form.priority}
       if (editingId.value) await proxySettingsApi.updateCrawler(editingId.value,payload); else await proxySettingsApi.createCrawler(payload)
     } else {
-      const payload={name:form.name,url:form.url,enabled:form.enabled,priority:form.priority}
+      const payload = { name:form.name, url:form.url, enabled:form.enabled, priority:form.priority,
+        proxyType:form.proxyType, controllerUrl:form.controllerUrl, secret:form.secret, clearSecret:form.clearSecret }
       if(editingId.value) await proxySettingsApi.updateSystem(editingId.value,payload); else await proxySettingsApi.createSystem(payload)
     }
     message.success('代理配置已保存'); dialogVisible.value=false; await load()
@@ -304,11 +388,330 @@ onMounted(load)
 </script>
 
 <style scoped>
-.crawler-subtabs-scroll{margin:18px 24px 0;overflow-x:auto;overscroll-behavior-inline:contain}.crawler-subtabs{position:relative;display:grid;min-width:510px;grid-template-columns:repeat(3,1fr);padding:4px;border:1px solid var(--border-color);border-radius:15px;background:var(--surface-elevated);isolation:isolate}.crawler-subtab-indicator{position:absolute;top:4px;bottom:4px;left:4px;z-index:-1;width:calc((100% - 8px)/3);border:1px solid var(--border-color-light);border-radius:11px;background:var(--surface-card);box-shadow:var(--shadow-sm);transition:transform .26s cubic-bezier(.2,.8,.2,1)}.crawler-subtab{z-index:1;display:grid;gap:2px;padding:10px 14px;border:0;background:transparent;color:var(--text-secondary);cursor:pointer;text-align:left}.crawler-subtab strong{font-size:13px}.crawler-subtab small{overflow:hidden;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.crawler-subtab.active{color:var(--primary)}.crawler-subtab:focus-visible{outline:2px solid var(--primary);outline-offset:-2px;border-radius:11px}
-.proxy-settings-shell{overflow:hidden;padding:0}.proxy-hero{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;padding:28px 30px;border-bottom:1px solid var(--border-color-light);background:radial-gradient(circle at 82% -30%,var(--primary-alpha-10),transparent 48%),var(--surface-card)}.proxy-hero-mark{display:grid;width:54px;height:54px;place-items:center;border:1px solid var(--primary-alpha-20);border-radius:18px;background:var(--primary-alpha-10);color:var(--primary);font-size:32px}.proxy-kicker{margin:0 0 3px;color:var(--primary);font-size:10px;font-weight:800;letter-spacing:.17em}.proxy-hero h2{margin:0;font-family:'Iowan Old Style','Songti SC',serif;font-size:25px}.proxy-hero p:last-child{margin:5px 0 0;color:var(--text-secondary);font-size:13px}.routing-note{display:flex;gap:12px;margin:18px 24px 0;padding:14px 16px;border:1px solid var(--primary-alpha-20);border-radius:14px;background:var(--primary-alpha-10)}.routing-note-icon{display:grid;flex:0 0 22px;height:22px;place-items:center;border-radius:50%;background:var(--primary);color:white;font-family:serif;font-weight:700}.routing-note p{margin:2px 0 0;color:var(--text-secondary);font-size:12px}.crawler-request-card{margin:18px 24px;padding:20px;border:1px solid var(--border-color-light);border-radius:18px;background:var(--surface-elevated)}.request-card-header,.proxy-section-title{display:flex;align-items:center;justify-content:space-between;gap:18px}.request-card-header h3,.proxy-section-title h3{margin:2px 0;font-size:18px}.request-card-header span,.proxy-section-title span,.crawler-request-form small{color:var(--text-secondary);font-size:12px}.crawler-request-form{margin-top:18px}.request-number-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.request-number-grid .el-input-number{width:100%}.proxy-section-title{margin:24px 25px 0}.proxy-table{margin-top:14px}.proxy-drag-handle{display:grid;width:34px;height:34px;margin:auto;place-items:center;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--text-tertiary);cursor:grab;font-size:20px;line-height:1;transition:color .18s ease,background .18s ease,border-color .18s ease}.proxy-drag-handle:hover,.proxy-drag-handle:focus-visible{border-color:var(--primary-alpha-20);outline:none;background:var(--primary-alpha-10);color:var(--primary)}.proxy-drag-handle:active,.proxy-drag-handle.dragging{cursor:grabbing;opacity:.55}.priority-orb{display:inline-grid;min-width:38px;height:30px;padding:0 8px;place-items:center;border-radius:10px;background:var(--primary-alpha-10);color:var(--primary);font-weight:800}.proxy-identity{display:grid;gap:4px}.proxy-identity small{overflow:hidden;color:var(--text-secondary);font-family:'SFMono-Regular',Consolas,monospace;text-overflow:ellipsis}.source-chip,.health-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:var(--surface-elevated);font-size:12px}.source-chip.system{color:var(--primary)}.health-chip i{width:7px;height:7px;border-radius:50%;background:currentColor}.health-chip.online{color:var(--success-color,#2f9e68)}.health-chip.offline{color:var(--text-tertiary)}.proxy-footer{display:flex;justify-content:space-between;padding:14px 25px 20px;color:var(--text-secondary);font-size:12px}.source-segment{position:relative;display:grid;grid-template-columns:1fr 1fr;margin-bottom:20px;padding:4px;border:1px solid var(--border-color);border-radius:13px;background:var(--surface-elevated);isolation:isolate}.source-segment button{z-index:1;padding:9px;border:0;background:transparent;color:var(--text-secondary);cursor:pointer}.source-segment button.active{color:var(--primary);font-weight:700}.source-indicator{position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border:1px solid var(--border-color-light);border-radius:9px;background:var(--surface-card);box-shadow:var(--shadow-sm);transition:transform .24s ease}.source-segment.system .source-indicator{transform:translateX(100%)}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:18px}.option-url{float:right;margin-left:24px;color:var(--text-secondary);font-size:11px}@media(max-width:680px){.proxy-hero{grid-template-columns:auto 1fr;padding:22px}.proxy-hero .el-button{grid-column:1/-1}.form-pair,.request-number-grid{grid-template-columns:1fr}.request-card-header{align-items:flex-start;flex-direction:column}}
-.form-pair.single{grid-template-columns:1fr}
-@media(prefers-reduced-motion:reduce){.crawler-subtab-indicator,.source-indicator{transition:none}}
-:global(.proxy-config-dialog){display:flex;max-height:88vh;flex-direction:column;margin-bottom:0}
-:global(.proxy-config-dialog .el-dialog__header),:global(.proxy-config-dialog .el-dialog__footer){flex:0 0 auto}
-:global(.proxy-config-dialog .el-dialog__body){min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.crawler-subtabs-scroll {
+  margin: 18px 24px 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+.crawler-subtabs {
+  position: relative;
+  display: grid;
+  min-width: 680px;
+  grid-template-columns: repeat(var(--crawler-tab-count),1fr);
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 15px;
+  background: var(--surface-elevated);
+  isolation: isolate;
+}
+.crawler-subtab-indicator {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  z-index: -1;
+  width: calc((100% - 8px)/var(--crawler-tab-count));
+  border: 1px solid var(--border-color-light);
+  border-radius: 11px;
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+  transition: transform .26s cubic-bezier(.2,.8,.2,1);
+}
+.crawler-subtab {
+  z-index: 1;
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+}
+.crawler-subtab strong {
+  font-size: 13px;
+}
+.crawler-subtab small {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crawler-subtab.active {
+  color: var(--primary);
+}
+.crawler-subtab:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-radius: 11px;
+}
+.proxy-settings-shell {
+  overflow: hidden;
+  padding: 0;
+}
+.proxy-hero {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 18px;
+  padding: 28px 30px;
+  border-bottom: 1px solid var(--border-color-light);
+  background: radial-gradient(circle at 82% -30%,var(--primary-alpha-10),transparent 48%),var(--surface-card);
+}
+.proxy-hero-mark {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border: 1px solid var(--primary-alpha-20);
+  border-radius: 18px;
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+  font-size: 32px;
+}
+.proxy-kicker {
+  margin: 0 0 3px;
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .17em;
+}
+.proxy-hero h2 {
+  margin: 0;
+  font-family: 'Iowan Old Style','Songti SC',serif;
+  font-size: 25px;
+}
+.proxy-hero p:last-child {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.routing-note {
+  display: flex;
+  gap: 12px;
+  margin: 18px 24px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--primary-alpha-20);
+  border-radius: 14px;
+  background: var(--primary-alpha-10);
+}
+.routing-note-icon {
+  display: grid;
+  flex: 0 0 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  font-family: serif;
+  font-weight: 700;
+}
+.routing-note p {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.crawler-request-card {
+  margin: 18px 24px;
+  padding: 20px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 18px;
+  background: var(--surface-elevated);
+}
+.request-card-header,.proxy-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.request-card-header h3,.proxy-section-title h3 {
+  margin: 2px 0;
+  font-size: 18px;
+}
+.request-card-header span,.proxy-section-title span,.crawler-request-form small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.crawler-request-form {
+  margin-top: 18px;
+}
+.request-number-grid {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 16px;
+}
+.request-number-grid .el-input-number {
+  width: 100%;
+}
+.proxy-section-title {
+  margin: 24px 25px 0;
+}
+.proxy-table {
+  margin-top: 14px;
+}
+.proxy-drag-handle {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  margin: auto;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: grab;
+  font-size: 20px;
+  line-height: 1;
+  transition: color .18s ease,background .18s ease,border-color .18s ease;
+}
+.proxy-drag-handle:hover,.proxy-drag-handle:focus-visible {
+  border-color: var(--primary-alpha-20);
+  outline: none;
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+}
+.proxy-drag-handle:active,.proxy-drag-handle.dragging {
+  cursor: grabbing;
+  opacity: .55;
+}
+.priority-orb {
+  display: inline-grid;
+  min-width: 38px;
+  height: 30px;
+  padding: 0 8px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+  font-weight: 800;
+}
+.proxy-identity {
+  display: grid;
+  gap: 4px;
+}
+.proxy-identity small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-family: 'SFMono-Regular',Consolas,monospace;
+  text-overflow: ellipsis;
+}
+.source-chip,.health-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  font-size: 12px;
+}
+.source-chip.system {
+  color: var(--primary);
+}
+.health-chip i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.health-chip.online {
+  color: var(--success-color,#2f9e68);
+}
+.health-chip.offline {
+  color: var(--text-tertiary);
+}
+.proxy-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 25px 20px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.source-segment {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 20px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 13px;
+  background: var(--surface-elevated);
+  isolation: isolate;
+}
+.source-segment button {
+  z-index: 1;
+  padding: 9px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.source-segment button.active {
+  color: var(--primary);
+  font-weight: 700;
+}
+.source-indicator {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  border: 1px solid var(--border-color-light);
+  border-radius: 9px;
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+  transition: transform .24s ease;
+}
+.source-segment.system .source-indicator {
+  transform: translateX(100%);
+}
+.form-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.option-url {
+  float: right;
+  margin-left: 24px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+@media(max-width:680px) {
+  .proxy-hero {
+    grid-template-columns: auto 1fr;
+    padding: 22px;
+  }
+  .proxy-hero .el-button {
+    grid-column: 1/-1;
+  }
+  .form-pair,.request-number-grid {
+    grid-template-columns: 1fr;
+  }
+  .request-card-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+.form-pair.single {
+  grid-template-columns: 1fr;
+}
+@media(prefers-reduced-motion:reduce) {
+  .crawler-subtab-indicator,.source-indicator {
+    transition: none;
+  }
+}
+:global(.proxy-config-dialog) {
+  display: flex;
+  max-height: 88vh;
+  flex-direction: column;
+  margin-bottom: 0;
+}
+:global(.proxy-config-dialog .el-dialog__header),:global(.proxy-config-dialog .el-dialog__footer) {
+  flex: 0 0 auto;
+}
+:global(.proxy-config-dialog .el-dialog__body) {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 </style>

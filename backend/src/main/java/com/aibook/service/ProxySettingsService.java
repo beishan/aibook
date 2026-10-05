@@ -5,9 +5,12 @@ import com.aibook.model.entity.CrawlerProxyConfig;
 import com.aibook.model.entity.SystemProxyConfig;
 import com.aibook.repository.CrawlerProxyConfigRepository;
 import com.aibook.repository.SystemProxyConfigRepository;
+import com.aibook.repository.CrawlerMihomoPolicyRepository;
+import com.aibook.service.crawler.CrawlerMihomoService;
 import java.net.URI;
 import java.util.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +21,8 @@ import org.springframework.web.server.ResponseStatusException;
 public class ProxySettingsService {
     private final SystemProxyConfigRepository systemRepository;
     private final CrawlerProxyConfigRepository crawlerRepository;
+    @Autowired
+    private CrawlerMihomoPolicyRepository mihomoPolicies;
 
     @Transactional(readOnly = true)
     public List<SystemProxyView> systemProxies() {
@@ -126,8 +131,41 @@ public class ProxySettingsService {
     }
 
     private SystemProxyConfig apply(SystemProxyConfig config, SystemProxyRequest request) {
+        SystemProxyConfig.ProxyType type = config.getProxyType() == null
+                ? SystemProxyConfig.ProxyType.SIMPLE : config.getProxyType();
+        if (request.proxyType() != null) {
+            try {
+                type = SystemProxyConfig.ProxyType.valueOf(request.proxyType());
+            } catch (IllegalArgumentException exception) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "未知的代理类型");
+            }
+        }
+        if (type == SystemProxyConfig.ProxyType.MIHOMO) {
+            String controller = request.controllerUrl() == null
+                    ? config.getControllerUrl() : CrawlerMihomoService.normalizeUrl(request.controllerUrl(), false);
+            if (controller == null || controller.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请输入 Mihomo 控制 API 地址");
+            }
+            if (config.getId() != null && !Objects.equals(controller, config.getControllerUrl())
+                    && mihomoPolicies != null && mihomoPolicies.existsBySystemProxyId(config.getId())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "代理已绑定执行器，请先解除绑定再修改控制地址");
+            }
+            config.setControllerUrl(controller);
+            if (request.clearSecret()) config.setControllerSecret(null);
+            else if (request.secret() != null && !request.secret().isBlank()) {
+                if (request.secret().length() > 500 || request.secret().contains("\n") || request.secret().contains("\r")) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mihomo 密钥格式无效");
+                }
+                config.setControllerSecret(request.secret());
+            }
+        } else {
+            config.setControllerUrl(null);
+            config.setControllerSecret(null);
+        }
+        config.setProxyType(type);
         config.setName(required(request.name(), "请输入代理名称"));
-        config.setUrl(validateUrl(request.url()));
+        config.setUrl(type == SystemProxyConfig.ProxyType.MIHOMO
+                ? CrawlerMihomoService.normalizeUrl(request.url(), true) : validateUrl(request.url()));
         config.setEnabled(request.enabled() == null || request.enabled());
         config.setPriority(priority(request.priority()));
         return config;
@@ -153,12 +191,15 @@ public class ProxySettingsService {
     private SystemProxyView systemView(SystemProxyConfig config) {
         return new SystemProxyView(config.getId(), config.getName(), config.getUrl(),
                 Boolean.TRUE.equals(config.getEnabled()), priority(config.getPriority()),
-                config.getCreatedAt(), config.getUpdatedAt());
+                config.getCreatedAt(), config.getUpdatedAt(),
+                config.getProxyType() == null ? "SIMPLE" : config.getProxyType().name(),
+                config.getControllerUrl(), config.getControllerSecret() != null && !config.getControllerSecret().isBlank());
     }
 
     private CrawlerProxyView crawlerView(CrawlerProxyConfig config, SystemProxyConfig system) {
         boolean reference = config.getSystemProxyId() != null;
-        boolean sourceAvailable = !reference || system != null && Boolean.TRUE.equals(system.getEnabled());
+        boolean sourceAvailable = !reference || system != null && Boolean.TRUE.equals(system.getEnabled())
+                && system.getProxyType() != SystemProxyConfig.ProxyType.MIHOMO;
         String name = reference && system != null ? system.getName() : config.getName();
         String url = reference && system != null ? system.getUrl() : config.getUrl();
         return new CrawlerProxyView(config.getId(), reference ? "SYSTEM" : "CUSTOM", name, url,
@@ -170,7 +211,8 @@ public class ProxySettingsService {
 
     private String effectiveUrl(CrawlerProxyConfig config, SystemProxyConfig system) {
         if (config.getSystemProxyId() == null) return config.getUrl();
-        return system != null && Boolean.TRUE.equals(system.getEnabled()) ? system.getUrl() : null;
+        return system != null && Boolean.TRUE.equals(system.getEnabled())
+                && system.getProxyType() != SystemProxyConfig.ProxyType.MIHOMO ? system.getUrl() : null;
     }
 
     private SystemProxyConfig referencedSystem(CrawlerProxyConfig config) {

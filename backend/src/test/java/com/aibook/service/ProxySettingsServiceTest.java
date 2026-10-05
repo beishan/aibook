@@ -1,5 +1,7 @@
 package com.aibook.service;
 
+import com.aibook.dto.ProxySettingsDtos.SystemProxyRequest;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -20,6 +22,42 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 class ProxySettingsServiceTest {
+    @Test
+    void legacySystemProxyDefaultsToSimpleAndMihomoTogglePreservesSecret() {
+        SystemProxyConfigRepository systems = mock(SystemProxyConfigRepository.class);
+        CrawlerProxyConfigRepository crawlers = mock(CrawlerProxyConfigRepository.class);
+        SystemProxyConfig legacy = SystemProxyConfig.builder().id(1L).name("旧代理")
+                .url("http://proxy:7890").proxyType(null).enabled(true).build();
+        when(systems.findAllByOrderByPriorityAscIdAsc()).thenReturn(List.of(legacy));
+        ProxySettingsService service = new ProxySettingsService(systems, crawlers);
+        assertThat(service.systemProxies().getFirst().proxyType()).isEqualTo("SIMPLE");
+
+        legacy.setProxyType(SystemProxyConfig.ProxyType.MIHOMO);
+        legacy.setControllerUrl("http://mihomo:9111");
+        legacy.setControllerSecret("private-secret");
+        when(systems.findById(1L)).thenReturn(Optional.of(legacy));
+        when(systems.save(any())).thenAnswer(call -> call.getArgument(0));
+        var updated = service.updateSystemProxy(1L, new SystemProxyRequest("旧代理", "http://proxy:7890", false, 100));
+        assertThat(updated.proxyType()).isEqualTo("MIHOMO");
+        assertThat(updated.secretConfigured()).isTrue();
+        assertThat(updated.controllerUrl()).isEqualTo("http://mihomo:9111");
+        assertThat(legacy.getControllerSecret()).isEqualTo("private-secret");
+    }
+
+    @Test
+    void mihomoSystemProxyCannotEnterOrdinaryCrawlerProxyPool() {
+        SystemProxyConfigRepository systems = mock(SystemProxyConfigRepository.class);
+        CrawlerProxyConfigRepository crawlers = mock(CrawlerProxyConfigRepository.class);
+        SystemProxyConfig mihomo = SystemProxyConfig.builder().id(1L).name("Mihomo")
+                .url("http://mihomo:7890").proxyType(SystemProxyConfig.ProxyType.MIHOMO).enabled(true).build();
+        when(systems.findAll()).thenReturn(List.of(mihomo));
+        when(crawlers.findAllByOrderByPriorityAscIdAsc()).thenReturn(List.of(
+                CrawlerProxyConfig.builder().id(2L).systemProxyId(1L).enabled(true).build()));
+        ProxySettingsService service = new ProxySettingsService(systems, crawlers);
+        assertThat(service.activeCrawlerProxyUrls()).isEmpty();
+        assertThat(service.crawlerProxies().getFirst().effectiveEnabled()).isFalse();
+    }
+
 
     @Test
     void reordersSystemProxiesAndAssignsTopEntryHighestPriority() {

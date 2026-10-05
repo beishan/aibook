@@ -1274,8 +1274,7 @@
             <small v-if="item.nextAvailableAt">最近恢复：{{ formatTime(item.nextAvailableAt) }}</small>
           </div>
           <div class="queue-executor-actions">
-            <el-button size="small" @click="mihomoExecutor = item; mihomoDialog = true">Mihomo 节点</el-button>
-            <el-button size="small" @click="editQueueExecutor(item)">编辑</el-button>
+            <el-button size="small" @click="openExecutorSettings(item)">配置执行器</el-button>
             <el-button
               v-if="!item.defaultExecutor"
               size="small"
@@ -1288,80 +1287,7 @@
       </div>
       <template #footer>
         <el-button @click="queueExecutorsDialog=false">关闭</el-button>
-        <el-button type="primary" :disabled="queueExecutors.length >= 16" @click="addQueueExecutor">添加执行器</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="mihomoDialog" :title="`${mihomoExecutor?.name || '执行器'} · Mihomo 节点管理`" width="min(960px, 96vw)" append-to-body destroy-on-close>
-      <CrawlerMihomoPanel
-        v-if="mihomoExecutor && mihomoDialog"
-        :queue-id="mihomoExecutor.queueId"
-        :executor-id="mihomoExecutor.id"
-        @saved="openQueueExecutors"
-      />
-    </el-dialog>
-
-    <el-dialog
-      v-model="queueExecutorEditorDialog"
-      :title="editingQueueExecutor ? '编辑执行器' : '添加执行器'"
-      width="min(620px, 96vw)"
-      append-to-body
-    >
-      <el-form label-position="top">
-        <el-form-item label="执行器状态">
-          <el-switch
-            v-model="queueExecutorForm.enabled"
-            active-text="启用"
-            inactive-text="禁用"
-          />
-          <small class="field-hint">禁用后不会分配新任务；执行中的任务会继续完成。</small>
-        </el-form-item>
-        <el-form-item label="名称">
-          <el-input v-model="queueExecutorForm.name" maxlength="100" show-word-limit />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="queueExecutorForm.description" type="textarea" maxlength="500" show-word-limit />
-        </el-form-item>
-        <el-form-item label="代理配置">
-          <el-select v-model="queueExecutorForm.proxyMode">
-            <el-option label="默认代理配置" value="DEFAULT" />
-            <el-option label="指定代理" value="SELECTED" />
-            <el-option v-if="editingQueueExecutor?.proxyMode === 'MIHOMO'" label="Mihomo 托管代理" value="MIHOMO" />
-          </el-select>
-          <small class="field-hint">默认配置优先使用网站代理；未配置时使用全局采集代理。</small>
-        </el-form-item>
-        <el-form-item label="代理选用顺序">
-          <el-select v-model="queueExecutorForm.selectionStrategy">
-            <el-option label="按顺序" value="ORDERED" />
-            <el-option label="随机" value="RANDOM" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="queueExecutorForm.proxyMode === 'DEFAULT'" label="代理冷却时间（秒）">
-          <el-input-number v-model="queueExecutorForm.defaultProxyCooldownSeconds" :min="10" :max="604800" />
-          <small class="field-hint">留空时使用网站访问受限冷却时间。</small>
-        </el-form-item>
-        <template v-else-if="queueExecutorForm.proxyMode === 'SELECTED'">
-          <el-form-item label="选择代理">
-            <el-select v-model="selectedQueueProxyIds" multiple filterable placeholder="选择一个或多个代理">
-              <el-option
-                v-for="proxy in queueProxyOptions"
-                :key="proxy.id"
-                :label="`${proxy.name}${proxy.effectiveEnabled ? '' : '（已停用）'}`"
-                :value="proxy.id"
-              />
-            </el-select>
-          </el-form-item>
-          <div v-for="(proxy, index) in queueExecutorForm.proxies" :key="proxy.proxyConfigId" class="queue-executor-proxy-row">
-            <span>{{ queueProxyOptions.find(item => item.id === proxy.proxyConfigId)?.name || '已删除的代理' }}</span>
-            <el-input-number v-model="proxy.cooldownSeconds" :min="10" :max="604800" placeholder="默认冷却" />
-            <el-button :disabled="index === 0" @click="moveQueueProxy(index, -1)">上移</el-button>
-            <el-button :disabled="index === queueExecutorForm.proxies.length - 1" @click="moveQueueProxy(index, 1)">下移</el-button>
-          </div>
-        </template>
-      </el-form>
-      <template #footer>
-        <el-button @click="queueExecutorEditorDialog=false">取消</el-button>
-        <el-button type="primary" :loading="savingQueueExecutor" @click="saveQueueExecutor">保存执行器</el-button>
+        <el-button type="primary" :disabled="queueExecutors.length >= 16" @click="openExecutorSettings()">添加执行器</el-button>
       </template>
     </el-dialog>
 
@@ -1645,7 +1571,6 @@ import { useRouter } from 'vue-router'
 import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, MoreFilled, Plus, QuestionFilled, Refresh, Search, Star, StarFilled, Tickets, TrendCharts, Upload, VideoPause, VideoPlay, Warning } from '@element-plus/icons-vue'
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElProgress, ElTable, ElTableColumn, ElTag, ElTooltip, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
 import SiteSourceTag from '@/components/SiteSourceTag.vue'
-import CrawlerMihomoPanel from '@/components/CrawlerMihomoPanel.vue'
 import {
   crawlerApi,
   type CrawlerBook,
@@ -1669,8 +1594,6 @@ import {
   type CrawlerTask,
   type CrawlerTaskQueue,
   type CrawlerQueueExecutor,
-  type CrawlerQueueExecutorPayload,
-  type CrawlerQueueProxyOption,
 } from '@/utils/crawler'
 import { runCrawlerImports, type CrawlerImportFailure } from '@/utils/crawlerImport'
 import {
@@ -1822,34 +1745,9 @@ let siteActivityRequestSequence=0
 const queueOverviewDialog = ref(false)
 const queuePopupTab = ref<'config' | 'tasks'>('config')
 const queueSettingsDialog = ref(false)
-const mihomoDialog = ref(false)
-const mihomoExecutor = ref<CrawlerQueueExecutor>()
 const queueExecutorsDialog = ref(false)
-const queueExecutorEditorDialog = ref(false)
 const queueExecutorsLoading = ref(false)
-const savingQueueExecutor = ref(false)
 const queueExecutors = ref<CrawlerQueueExecutor[]>([])
-const queueProxyOptions = ref<CrawlerQueueProxyOption[]>([])
-const editingQueueExecutor = ref<CrawlerQueueExecutor>()
-const queueExecutorForm = ref<CrawlerQueueExecutorPayload>({
-  name: '',
-  description: '',
-  enabled: true,
-  proxyMode: 'DEFAULT',
-  selectionStrategy: 'ORDERED',
-  defaultProxyCooldownSeconds: null,
-  proxies: [],
-})
-const selectedQueueProxyIds = computed({
-  get: () => queueExecutorForm.value.proxies.map(item => item.proxyConfigId),
-  set: (ids: number[]) => {
-    const existing = new Map(queueExecutorForm.value.proxies.map(item => [item.proxyConfigId, item]))
-    queueExecutorForm.value.proxies = ids.map(id => existing.get(id) || {
-      proxyConfigId: id,
-      cooldownSeconds: null,
-    })
-  },
-})
 const createQueueDialog = ref(false)
 const taskQueueDialog = ref(false)
 const savingQueueSettings = ref(false)
@@ -2409,12 +2307,7 @@ async function openQueueExecutors() {
   queueExecutorsDialog.value = true
   queueExecutorsLoading.value = true
   try {
-    const [executors, proxies] = await Promise.all([
-      crawlerApi.queueExecutors(queue.id),
-      crawlerApi.queueProxyOptions(),
-    ])
-    queueExecutors.value = executors
-    queueProxyOptions.value = proxies
+    queueExecutors.value = await crawlerApi.queueExecutors(queue.id)
   } catch (error: any) {
     message.error(error.response?.data?.message || '执行器配置加载失败')
   } finally {
@@ -2422,73 +2315,14 @@ async function openQueueExecutors() {
   }
 }
 
-function addQueueExecutor() {
-  editingQueueExecutor.value = undefined
-  queueExecutorForm.value = {
-    name: `执行器 ${queueExecutors.value.length + 1}`,
-    description: '',
-    enabled: true,
-    proxyMode: 'DEFAULT',
-    selectionStrategy: 'ORDERED',
-    defaultProxyCooldownSeconds: null,
-    proxies: [],
-  }
-  queueExecutorEditorDialog.value = true
-}
-
-function editQueueExecutor(item: CrawlerQueueExecutor) {
-  editingQueueExecutor.value = item
-  queueExecutorForm.value = {
-    name: item.name,
-    description: item.description || '',
-    enabled: item.enabled !== false,
-    proxyMode: item.proxyMode,
-    selectionStrategy: item.selectionStrategy,
-    defaultProxyCooldownSeconds: item.defaultProxyCooldownSeconds,
-    proxies: item.proxies.map(proxy => ({
-      proxyConfigId: proxy.proxyConfigId,
-      cooldownSeconds: proxy.cooldownSeconds,
-    })),
-  }
-  queueExecutorEditorDialog.value = true
-}
-
-function moveQueueProxy(index: number, direction: -1 | 1) {
-  const next = [...queueExecutorForm.value.proxies]
-  const target = index + direction
-  if (target < 0 || target >= next.length) return
-  ;[next[index], next[target]] = [next[target], next[index]]
-  queueExecutorForm.value.proxies = next
-}
-
-async function saveQueueExecutor() {
-  const queue = queueSettingsTarget.value
-  if (!queue) return
-  const payload = queueExecutorForm.value
-  if (!payload.name.trim()) {
-    message.error('请填写执行器名称')
-    return
-  }
-  if (payload.proxyMode === 'SELECTED' && !payload.proxies.length) {
-    message.error('请至少选择一个代理')
-    return
-  }
-  savingQueueExecutor.value = true
-  try {
-    if (editingQueueExecutor.value) {
-      await crawlerApi.updateQueueExecutor(queue.id, editingQueueExecutor.value.id, payload)
-    } else {
-      await crawlerApi.createQueueExecutor(queue.id, payload)
-    }
-    queueExecutorEditorDialog.value = false
-    message.success('执行器配置已保存')
-    await Promise.all([openQueueExecutors(), loadTaskQueues()])
-    queueSettingsTarget.value = taskQueues.value.find(item => item.id === queue.id)
-  } catch (error: any) {
-    message.error(error.response?.data?.message || '执行器配置保存失败')
-  } finally {
-    savingQueueExecutor.value = false
-  }
+function openExecutorSettings(item?: CrawlerQueueExecutor) {
+  const queueId = item?.queueId || queueSettingsTarget.value?.id
+  if (!queueId) return
+  void router.push({
+    path: "/settings",
+    query: { tab: "crawler-settings", crawlerTab: "executors", queueId,
+      executorId: item?.id, newExecutor: item ? undefined : "1" },
+  })
 }
 
 async function removeQueueExecutor(item: CrawlerQueueExecutor) {

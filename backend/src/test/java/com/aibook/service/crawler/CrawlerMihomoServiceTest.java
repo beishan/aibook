@@ -23,6 +23,10 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.test.util.ReflectionTestUtils;
 import com.aibook.service.CrawlerSettingsService;
 import com.aibook.service.ProxySettingsService;
+import com.aibook.service.SystemMihomoService;
+import com.aibook.dto.crawler.MihomoDtos.ReferencePayload;
+import com.aibook.dto.crawler.MihomoDtos.NodeGroupView;
+import com.aibook.dto.ProxySettingsDtos.SystemProxyView;
 import com.sun.net.httpserver.HttpServer;
 import java.nio.charset.StandardCharsets;
 
@@ -40,7 +44,7 @@ class CrawlerMihomoServiceTest {
     private final CrawlerSite site = CrawlerSite.builder().id(3L).user(user).build();
     private final CrawlerTaskQueue queue = CrawlerTaskQueue.builder().id(2L).user(user).site(site).build();
     private final CrawlerQueueExecutor executor = CrawlerQueueExecutor.builder()
-            .id(4L).queue(queue).proxyMode(CrawlerQueueExecutor.ProxyMode.MIHOMO).build();
+            .id(4L).name("测试执行器").queue(queue).proxyMode(CrawlerQueueExecutor.ProxyMode.MIHOMO).build();
     private final CrawlerMihomoPolicy config = new CrawlerMihomoPolicy();
     private String actual = "A";
 
@@ -227,6 +231,106 @@ class CrawlerMihomoServiceTest {
         when(policies.existsByControllerUrlAndGroupNameAndExecutorIdNot(anyString(), anyString(), anyLong()))
                 .thenReturn(true);
         assertThrows(ResponseStatusException.class, () -> service.save(user, 2L, 4L, draft));
+    }
+
+    @Test
+    void referencedCredentialsStayInSystemProxyAndAreReadFreshForExecution() throws Exception {
+        SystemMihomoService shared = sharedSource();
+        var saved = service.saveReference(user, 2L, 4L, reference("TIME", "A"));
+        assertEquals(7L, saved.systemProxyId());
+        assertEquals(8L, saved.nodeGroupId());
+        assertNull(config.getSecret());
+        when(shared.resolve(7L, 8L, 1L)).thenReturn(new SystemMihomoService.ResolvedConnection(
+                config.getControllerUrl(), "updated-secret", config.getProxyUrl(), "crawler", List.of("A", "B")));
+        service.execute(4L, site, () -> "ok");
+        verify(api, atLeastOnce()).proxies(config.getControllerUrl(), "updated-secret");
+        assertNull(config.getSecret());
+    }
+
+    @Test
+    void manualModePinsNodeAndDoesNotFailOverOnNetworkFailure() throws Exception {
+        sharedSource();
+        service.saveReference(user, 2L, 4L, reference("MANUAL", "B"));
+        assertFalse(config.isFailover());
+        assertEquals(0, config.getRotationSeconds());
+        assertThrows(CrawlerHttpClient.NoAvailableQueueProxyException.class, () -> service.execute(4L, site, () -> {
+            throw new IOException("node request failed");
+        }));
+        verify(api, times(1)).select(anyString(), any(), eq("crawler"), eq("B"));
+        verify(api, never()).select(anyString(), any(), eq("crawler"), eq("A"));
+        assertEquals("B", config.getCurrentNode());
+    }
+
+    @Test
+    void switchModesOnlyEnableTheirOwnCounterAndRejectInvalidManualNode() throws Exception {
+        sharedSource();
+        config.setChapters(100);
+        service.saveReference(user, 2L, 4L, reference("CHAPTER", "A"));
+        assertEquals(0, config.getChapters());
+        assertEquals(0, config.getRotationSeconds());
+        assertEquals(50, config.getRotationChapters());
+        assertEquals(0, config.getRotationTasks());
+        service.saveReference(user, 2L, 4L, reference("TASK", "A"));
+        assertEquals(0, config.getRotationChapters());
+        assertEquals(1, config.getRotationTasks());
+        assertThrows(ResponseStatusException.class,
+                () -> service.saveReference(user, 2L, 4L, reference("MANUAL", "outside")));
+        service.saveReference(user, 2L, 4L, reference("FAILOVER", "A"));
+        assertTrue(config.isFailover());
+        assertEquals(0, config.getRotationSeconds());
+        assertEquals(0, config.getRotationChapters());
+        assertEquals(0, config.getRotationTasks());
+    }
+
+    @Test
+    void removedReferenceWaitsAndLiveGroupMembershipIsUsed() throws Exception {
+        SystemMihomoService shared = sharedSource();
+        service.saveReference(user, 2L, 4L, reference("MANUAL", "A"));
+        when(shared.resolve(7L, 8L, 1L)).thenReturn(new SystemMihomoService.ResolvedConnection(
+                config.getControllerUrl(), "shared-secret", config.getProxyUrl(), "crawler", List.of("B")));
+        assertThrows(CrawlerHttpClient.NoAvailableQueueProxyException.class,
+                () -> service.execute(4L, site, () -> "must not run"));
+        assertTrue(config.getLastError().contains("移除"));
+        when(shared.resolve(7L, 8L, 1L)).thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND));
+        assertFalse(service.canExecute(4L));
+        assertNotNull(service.get(user, 2L, 4L));
+    }
+
+    @Test
+    void migratesLegacyConnectionIntoSystemProxyAndNamedNodeGroup() throws Exception {
+        SystemMihomoService shared = sharedSource();
+        ProxySettingsService settings = mock(ProxySettingsService.class);
+        ReflectionTestUtils.setField(service, "proxySettingsService", settings);
+        when(settings.createSystemProxy(any())).thenReturn(new SystemProxyView(7L, "迁移", config.getProxyUrl(),
+                true, 100, null, null, "MIHOMO", config.getControllerUrl(), true));
+        when(shared.save(eq(7L), isNull(), eq(1L), any())).thenReturn(new NodeGroupView(
+                8L, 7L, "原节点", "crawler", config.getProxyUrl(), List.of("A", "B")));
+        var migrated = service.migrateLegacy(user, 2L, 4L);
+        assertEquals(7L, migrated.systemProxyId());
+        assertEquals(8L, migrated.nodeGroupId());
+        assertNull(config.getSecret());
+        verify(settings).createSystemProxy(argThat(p -> "private-secret".equals(p.secret()) && "MIHOMO".equals(p.proxyType())));
+    }
+
+    private SystemMihomoService sharedSource() {
+        SystemMihomoService shared = mock(SystemMihomoService.class);
+        ReflectionTestUtils.setField(service, "systemMihomoService", shared);
+        when(shared.resolve(7L, 8L, 1L)).thenReturn(new SystemMihomoService.ResolvedConnection(
+                config.getControllerUrl(), "shared-secret", config.getProxyUrl(), "crawler", List.of("A", "B")));
+        return shared;
+    }
+
+    @Test
+    void explicitUnbindReleasesPolicyAndRestoresDefaultModeWithoutSwitching() throws Exception {
+        service.unbind(user, 2L, 4L);
+        assertEquals(CrawlerQueueExecutor.ProxyMode.DEFAULT, executor.getProxyMode());
+        verify(policies).deleteById(4L);
+        verify(receipts).deleteByExecutorId(4L);
+        verifyNoInteractions(api);
+    }
+
+    private ReferencePayload reference(String mode, String node) {
+        return new ReferencePayload(7L, 8L, mode, node, true, 2, 300, 300, 50, 1, false);
     }
 
     @Test
