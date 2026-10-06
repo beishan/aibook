@@ -85,7 +85,6 @@
         <article v-for="cover in paginatedCovers" :key="cover.id" class="cover-item">
           <div class="cover-preview">
             <img
-              v-if="shouldLoadBookCover()"
               :src="getCoverUrl(cover.coverUrl)"
               :alt="cover.name"
               :class="{ 'is-hidden': isRandomCoverHidden(cover.id) }"
@@ -142,7 +141,6 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { Hide, QuestionFilled, View } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { getCoverUrl } from '@/utils/cover'
-import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import {
   allRandomCoversHidden,
   isRandomCoverHidden,
