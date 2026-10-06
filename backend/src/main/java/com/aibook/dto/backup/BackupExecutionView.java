@@ -18,16 +18,21 @@ public record BackupExecutionView(
         Long fileSizeBytes,
         Long fileCount,
         LocalDateTime startedAt,
-        LocalDateTime finishedAt) {
+        LocalDateTime finishedAt,
+        String executionStatus,
+        LocalDateTime deletedAt,
+        String deletionReason) {
 
     public static BackupExecutionView from(BackupExecution execution) {
         return new BackupExecutionView(
                 execution.getId(), execution.getTaskId(), execution.getTaskName(),
-                execution.getStatus().name(), execution.getContents(), execution.getDetails(),
+                execution.getDeletionReason() != null ? "DELETED" : execution.getStatus().name(),
+                execution.getContents(), execution.getDetails(),
                 execution.getCurrentStage(), execution.getProgressPercent(),
                 execution.getProgressDetail(),
                 execution.getOutputPath(), execution.getErrorMessage(),
                 execution.getFileSizeBytes(), execution.getFileCount(),
-                execution.getStartedAt(), execution.getFinishedAt());
+                execution.getStartedAt(), execution.getFinishedAt(),
+                execution.getStatus().name(), execution.getDeletedAt(), execution.getDeletionReason());
     }
 }

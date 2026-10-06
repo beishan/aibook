@@ -62,4 +62,9 @@ public class BackupExecution {
     private LocalDateTime startedAt;
 
     private LocalDateTime finishedAt;
+
+    private LocalDateTime deletedAt;
+
+    @Column(columnDefinition = "TEXT")
+    private String deletionReason;
 }

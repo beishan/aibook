@@ -21,7 +21,10 @@ export interface BackupExecution {
   id: number
   taskId: number | null
   taskName: string
-  status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED'
+  status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'DELETED'
+  executionStatus: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED'
+  deletedAt: string | null
+  deletionReason: string | null
   contents: string
   details: string
   currentStage: string | null

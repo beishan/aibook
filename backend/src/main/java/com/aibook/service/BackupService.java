@@ -102,7 +102,41 @@ public class BackupService {
 
     public List<BackupExecutionView> executions() {
         return executionRepository.findTop100ByOrderByStartedAtDesc().stream()
+                .peek(this::reconcileDeletedBackup)
                 .map(BackupExecutionView::from).toList();
+    }
+
+    private void reconcileDeletedBackup(BackupExecution execution) {
+        if (execution.getDeletionReason() != null
+                || execution.getStatus() == BackupExecution.Status.QUEUED
+                || execution.getStatus() == BackupExecution.Status.RUNNING) {
+            return;
+        }
+        if (execution.getOutputPath() == null || execution.getOutputPath().isBlank()) {
+            if (execution.getDetails() != null
+                    && execution.getDetails().contains("备份文件已按保留策略清理")) {
+                execution.setDeletionReason("备份文件已按保留策略清理（历史记录未保存清理时间及策略参数）");
+                executionRepository.save(execution);
+            }
+            return;
+        }
+        try {
+            Path root = Path.of(backupPath);
+            Path fileName = Path.of(execution.getOutputPath()).getFileName();
+            if (fileName == null || !Files.isDirectory(root) || !Files.isReadable(root)) return;
+            Path directory = root.resolve(fileName);
+            var parsed = parseBackupDirectory(directory);
+            if (parsed.isEmpty() || parsed.get().executionId() != execution.getId()
+                    || !isRecordedBackupPath(directory, execution)) return;
+            // notExists avoids treating an inaccessible path as a confirmed deletion.
+            if (Files.notExists(directory, LinkOption.NOFOLLOW_LINKS)) {
+                execution.setDeletedAt(LocalDateTime.now());
+                execution.setDeletionReason("备份目录已不存在，可能在应用外删除或由旧版本清理；具体删除原因未知");
+                executionRepository.save(execution);
+            }
+        } catch (RuntimeException exception) {
+            log.warn("检查备份目录状态失败 executionId={}", execution.getId(), exception);
+        }
     }
 
     public BackupPathView path() {
@@ -168,7 +202,10 @@ public class BackupService {
                     || isMonthlyRestorePoint(folder, earliestMonthlyMonth, latestSuccessfulByMonth)) {
                 continue;
             }
-            deleteBackupFolder(folder);
+            String reason = "自动保留策略清理：备份已超过最近 " + settings.recentDays()
+                    + " 天全量保留范围，且不属于最近 " + settings.monthlyMonths()
+                    + " 个月需保留的每月最新成功备份";
+            deleteBackupFolder(folder, reason);
         }
     }
 
@@ -237,7 +274,7 @@ public class BackupService {
         return latest != null && latest.path().equals(folder.path());
     }
 
-    private void deleteBackupFolder(BackupFolder folder) {
+    private void deleteBackupFolder(BackupFolder folder, String reason) {
         try {
             Files.walkFileTree(folder.path(), new SimpleFileVisitor<>() {
                 @Override
@@ -257,7 +294,8 @@ public class BackupService {
             });
             if (folder.execution() != null) {
                 BackupExecution execution = folder.execution();
-                execution.setOutputPath(null);
+                execution.setDeletedAt(LocalDateTime.now());
+                execution.setDeletionReason(reason);
                 String previousDetails = execution.getDetails() == null ? "" : execution.getDetails();
                 execution.setDetails((previousDetails.isBlank() ? "" : previousDetails + "\n")
                         + "备份文件已按保留策略清理");

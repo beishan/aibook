@@ -242,6 +242,9 @@
                     <span>{{ statusGlyph(execution.status) }}</span>
                     {{ statusLabel(execution.status) }}
                   </span>
+                  <small v-if="execution.deletionReason" class="execution-deletion-reason">
+                    删除原因：{{ execution.deletionReason }}
+                  </small>
                 </td>
                 <td>{{ execution.fileCount ?? '—' }}</td>
                 <td>{{ formatBytes(execution.fileSizeBytes) }}</td>
@@ -275,6 +278,18 @@
           </span>
         </div>
         <dl class="execution-detail-grid">
+          <div v-if="selectedExecution.status === 'DELETED'" class="execution-detail-wide">
+            <dt>删除原因</dt>
+            <dd>{{ selectedExecution.deletionReason || '删除原因未知' }}</dd>
+          </div>
+          <div v-if="selectedExecution.status === 'DELETED'">
+            <dt>删除标记时间</dt>
+            <dd>{{ formatTime(selectedExecution.deletedAt) }}</dd>
+          </div>
+          <div v-if="selectedExecution.status === 'DELETED'">
+            <dt>原执行状态</dt>
+            <dd>{{ statusLabel(selectedExecution.executionStatus) }}</dd>
+          </div>
           <div>
             <dt>备份内容</dt>
             <dd>{{ selectedExecution.contents || '—' }}</dd>
@@ -651,12 +666,14 @@ const statusLabel = (status: BackupExecution['status']) => ({
   RUNNING: '执行中',
   SUCCESS: '成功',
   FAILED: '失败',
+  DELETED: '已删除',
 })[status]
 const statusGlyph = (status: BackupExecution['status']) => ({
   QUEUED: '…',
   RUNNING: '↻',
   SUCCESS: '✓',
   FAILED: '!',
+  DELETED: '×',
 })[status]
 
 const fallbackStage = (status: BackupExecution['status']) => ({
@@ -664,6 +681,7 @@ const fallbackStage = (status: BackupExecution['status']) => ({
   RUNNING: '正在处理',
   SUCCESS: '备份完成',
   FAILED: '备份失败',
+  DELETED: '备份已删除',
 })[status]
 
 const displayProgress = (execution: BackupExecution) => {
@@ -1259,6 +1277,25 @@ onBeforeUnmount(() => {
 
 .status-queued {
   color: var(--text-secondary);
+}
+
+.status-deleted {
+  color: var(--text-secondary);
+}
+
+.status-deleted span {
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+}
+
+.execution-deletion-reason {
+  display: block;
+  min-width: 180px;
+  max-width: 280px;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .status-queued span {
