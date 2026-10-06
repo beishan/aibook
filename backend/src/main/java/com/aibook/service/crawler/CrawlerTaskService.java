@@ -1639,7 +1639,8 @@ public class CrawlerTaskService {
                         - randomWaitMillis - otherWaitMillis);
                 try {
                     chapterAttemptMetricService.record(
-                            task.getUser(), task, chapter, attemptStartedAt, attemptFinishedAt,
+                            task.getUser(), task, chapter, bookName(book),
+                            attemptStartedAt, attemptFinishedAt,
                             collectionMillis, fixedWaitMillis, randomWaitMillis,
                             otherWaitMillis, totalElapsedMillis, attemptOutcome);
                 } catch (Exception metricException) {

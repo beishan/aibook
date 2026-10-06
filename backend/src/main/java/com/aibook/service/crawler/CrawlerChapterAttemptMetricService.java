@@ -31,8 +31,9 @@ public class CrawlerChapterAttemptMetricService {
 
     private final CrawlerChapterAttemptMetricRepository metricRepository;
 
+    /** Uses the worker's loaded book name because the chapter's book proxy may be detached. */
     @Transactional
-    public void record(User user, CrawlerTask task, CrawlerChapter chapter,
+    public void record(User user, CrawlerTask task, CrawlerChapter chapter, String bookName,
             LocalDateTime startedAt, LocalDateTime finishedAt,
             long collectionMillis, long fixedWaitMillis, long randomWaitMillis,
             long otherWaitMillis, long totalElapsedMillis, String outcome) {
@@ -41,7 +42,7 @@ public class CrawlerChapterAttemptMetricService {
                 .taskId(task.getId())
                 .siteName(task.getSite().getSiteName())
                 .siteThemeColor(task.getSite().getThemeColor())
-                .bookName(chapter.getCrawlerBook().getBookName())
+                .bookName(bookName)
                 .chapterName(chapter.getChapterName())
                 .chapterIndex(chapter.getChapterIndex())
                 .attemptStartedAt(startedAt)
