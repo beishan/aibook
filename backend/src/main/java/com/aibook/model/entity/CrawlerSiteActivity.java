@@ -62,6 +62,7 @@ public class CrawlerSiteActivity {
     public enum EventType {
         DISCOVERY_SCAN,
         ACCESS_LIMITED,
+        CHAPTER_CRAWL_ERROR,
         BOOK_CRAWL_COMPLETED,
         BOOK_CRAWL_PARTIAL,
         TASK_FAILED

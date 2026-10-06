@@ -32,7 +32,7 @@ export interface CrawlerSitePayload {
 export interface CrawlerSite extends CrawlerSitePayload { id: number; themeColor:string; status: string; bookCount: number; proxy?:string; rule?:CrawlerRule; ruleVersion?:number; activeRuleId?:number; ruleCount:number; lastScanAt?:string; lastUpdateAt?:string; lastHealthCheckAt?:string; healthMessage?:string; createdAt: string; protection:CrawlerProtectionState; manualFreeze:CrawlerSiteFreeze }
 export interface CrawlerSiteActivity {
   id:number
-  eventType:'DISCOVERY_SCAN'|'ACCESS_LIMITED'|'BOOK_CRAWL_COMPLETED'|'BOOK_CRAWL_PARTIAL'|'TASK_FAILED'
+  eventType:'DISCOVERY_SCAN'|'ACCESS_LIMITED'|'CHAPTER_CRAWL_ERROR'|'BOOK_CRAWL_COMPLETED'|'BOOK_CRAWL_PARTIAL'|'TASK_FAILED'
   taskId?:string
   createdAt:string
   description:string

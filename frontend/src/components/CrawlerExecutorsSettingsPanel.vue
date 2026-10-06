@@ -125,150 +125,191 @@
 
     <el-dialog v-model="dialog" :title="editingId ? '配置执行器' : '新增执行器'" width="min(820px, 96vw)" append-to-body destroy-on-close>
       <div v-loading="editorLoading" class="executor-editor">
-        <el-form label-position="top">
-          <div class="form-grid">
-            <el-form-item label="执行器名称"><el-input v-model="form.name" maxlength="100" /></el-form-item>
-            <el-form-item label="启用"><el-switch v-model="form.enabled" /><small>停用后不接收新任务，已运行任务继续完成。</small></el-form-item>
+        <div class="editor-tabs-scroll">
+          <div class="editor-tabs" role="tablist" aria-label="执行器配置分类">
+            <span class="editor-tab-indicator" :style="{ transform: `translateX(${editorTabs.findIndex(tab => tab.id === editorTab) * 100}%)` }" aria-hidden="true" />
+            <button
+              v-for="tab in editorTabs"
+              :id="`executor-tab-${tab.id}`"
+              :key="tab.id"
+              type="button"
+              role="tab"
+              :aria-selected="editorTab === tab.id"
+              :aria-controls="`executor-panel-${tab.id}`"
+              :tabindex="editorTab === tab.id ? 0 : -1"
+              :class="{ active: editorTab === tab.id }"
+              @click="editorTab = tab.id"
+              @keydown="switchEditorTab($event, tab.id)"
+            >
+              {{ tab.label }}
+            </button>
           </div>
-          <el-form-item label="描述"><el-input v-model="form.description" type="textarea" maxlength="500" /></el-form-item>
-          <el-form-item label="代理方式">
-            <el-select v-model="form.proxyMode">
-              <el-option label="默认代理配置" value="DEFAULT" />
-              <el-option label="普通代理 · 指定代理列表" value="SELECTED" />
-              <el-option label="Mihomo · 系统代理与备用节点组" value="MIHOMO" />
-            </el-select>
-          </el-form-item>
-          <template v-if="form.proxyMode !== 'MIHOMO'">
-            <el-form-item label="代理选用顺序">
-              <el-select v-model="form.selectionStrategy">
-                <el-option label="按顺序" value="ORDERED" />
-                <el-option label="随机" value="RANDOM" />
-              </el-select>
-            </el-form-item>
-            <el-form-item v-if="form.proxyMode === 'DEFAULT'" label="代理冷却（秒，留空使用默认值）">
-              <el-input-number v-model="form.defaultProxyCooldownSeconds" :min="10" :max="604800" />
-            </el-form-item>
-            <template v-else>
-              <el-form-item label="选择普通代理">
-                <el-select v-model="selectedProxyIds" multiple filterable>
-                  <el-option v-for="proxy in proxyOptions" :key="proxy.id" :value="proxy.id" :label="proxy.name" :disabled="!proxy.effectiveEnabled" />
-                </el-select>
-              </el-form-item>
-              <div v-for="(proxy, index) in form.proxies" :key="proxy.proxyConfigId" class="proxy-row">
-                <span>{{ proxyOptions.find(p => p.id === proxy.proxyConfigId)?.name || '已删除代理' }}</span>
-                <el-input-number v-model="proxy.cooldownSeconds" :min="10" :max="604800" placeholder="冷却秒数" />
-                <el-button size="small" :disabled="index === 0" @click="moveProxy(index, -1)">上移</el-button>
-                <el-button size="small" :disabled="index === form.proxies.length - 1" @click="moveProxy(index, 1)">下移</el-button>
-              </div>
-            </template>
-          </template>
-          <template v-else>
-            <el-alert v-if="policy && !policy.systemProxyId" title="此执行器使用旧版独立 Mihomo 配置，继续有效。迁移后在系统代理管理连接和节点组。" type="info" :closable="false" />
-            <el-button v-if="policy && !policy.systemProxyId" :loading="saving" @click="migrate">迁移到系统代理配置</el-button>
+        </div>
+        <el-form label-position="top">
+          <div v-show="editorTab === 'basic'" id="executor-panel-basic" role="tabpanel" aria-labelledby="executor-tab-basic">
             <div class="form-grid">
-              <el-form-item label="Mihomo 系统代理">
-                <el-select v-model="reference.systemProxyId" filterable placeholder="请先在系统代理配置新增 Mihomo 代理" @change="changeSystem">
-                  <el-option v-for="proxy in systems" :key="proxy.id" :value="proxy.id" :label="proxy.name" :disabled="!proxy.enabled" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="备用节点组">
-                <el-select v-model="reference.nodeGroupId" filterable placeholder="选择已保存的节点组" @change="reference.manualNode = null">
-                  <el-option v-for="group in groups" :key="group.id" :value="group.id" :label="`${group.name} · ${group.nodes.length} 个节点`" />
-                </el-select>
-              </el-form-item>
+              <el-form-item label="执行器名称"><el-input v-model="form.name" maxlength="100" /></el-form-item>
+              <el-form-item label="启用"><el-switch v-model="form.enabled" /><small>停用后不接收新任务，已运行任务继续完成。</small></el-form-item>
             </div>
-            <div v-if="selectedGroup" class="group-preview">
-              <strong>{{ selectedGroup.name }}</strong>
-              <small>{{ selectedGroup.controlGroup }} · {{ selectedGroup.proxyUrl }}</small>
-              <div><el-tag v-for="node in selectedGroup.nodes" :key="node" size="small">{{ node }}</el-tag></div>
-            </div>
-            <el-form-item label="节点切换方式">
-              <el-select v-model="reference.switchingMode">
-                <el-option label="手动指定节点" value="MANUAL" />
-                <el-option label="仅在节点故障时自动切换" value="FAILOVER" />
-                <el-option label="按运行时间轮换" value="TIME" />
-                <el-option label="按成功章节数轮换" value="CHAPTER" />
-                <el-option label="按成功书籍任务数轮换" value="TASK" />
+            <el-form-item label="描述"><el-input v-model="form.description" type="textarea" maxlength="500" /></el-form-item>
+          </div>
+          <div v-show="editorTab === 'proxy'" id="executor-panel-proxy" role="tabpanel" aria-labelledby="executor-tab-proxy">
+            <el-form-item label="代理方式">
+              <el-select v-model="form.proxyMode">
+                <el-option label="默认代理配置" value="DEFAULT" />
+                <el-option label="普通代理 · 指定代理列表" value="SELECTED" />
+                <el-option label="Mihomo · 系统代理与备用节点组" value="MIHOMO" />
               </el-select>
             </el-form-item>
-            <el-form-item v-if="reference.switchingMode === 'MANUAL'" label="手动指定节点">
-              <el-select v-model="reference.manualNode" filterable>
-                <el-option v-for="node in selectedGroup?.nodes || []" :key="node" :value="node" :label="node" />
-              </el-select>
-              <small>保存后固定使用此节点，章节重试耗尽后记录失败；节点冻结时等待，不自动换到其他节点。</small>
-            </el-form-item>
-            <template v-else>
-              <el-form-item v-if="reference.switchingMode === 'TIME'" label="轮换间隔（秒）">
-                <el-input-number v-model="reference.rotationSeconds" :min="30" :max="604800" :step="30" />
-                <small>300 秒为 5 分钟。仅累计请求及请求内限速等待，空闲、冻结时暂停。</small>
+            <template v-if="form.proxyMode !== 'MIHOMO'">
+              <el-form-item label="代理选用顺序">
+                <el-select v-model="form.selectionStrategy">
+                  <el-option label="按顺序" value="ORDERED" />
+                  <el-option label="随机" value="RANDOM" />
+                </el-select>
               </el-form-item>
-              <el-form-item v-if="reference.switchingMode === 'CHAPTER'" label="每成功采集多少章节轮换">
-                <el-input-number v-model="reference.rotationChapters" :min="1" :max="1000000" />
+              <el-form-item v-if="form.proxyMode === 'DEFAULT'" label="代理冷却（秒，留空使用默认值）">
+                <el-input-number v-model="form.defaultProxyCooldownSeconds" :min="10" :max="604800" />
               </el-form-item>
-              <el-form-item v-if="reference.switchingMode === 'TASK'" label="每成功完成多少书籍任务轮换">
-                <el-input-number v-model="reference.rotationTasks" :min="1" :max="1000000" />
-              </el-form-item>
-              <div class="form-grid">
-                <el-form-item label="节点选用顺序">
-                  <el-select v-model="reference.randomOrder">
-                    <el-option label="按节点组顺序循环" :value="false" />
-                    <el-option label="随机，不立即重复" :value="true" />
+              <template v-else>
+                <el-form-item label="选择普通代理">
+                  <el-select v-model="selectedProxyIds" multiple filterable>
+                    <el-option v-for="proxy in proxyOptions" :key="proxy.id" :value="proxy.id" :label="proxy.name" :disabled="!proxy.effectiveEnabled" />
                   </el-select>
                 </el-form-item>
-                <el-form-item label="节点故障自动切换">
-                  <el-switch
-                    :model-value="reference.switchingMode === 'FAILOVER' || reference.failover"
-                    :disabled="reference.switchingMode === 'FAILOVER'"
-                    @change="reference.failover = Boolean($event)"
-                  />
-                </el-form-item>
-                <el-form-item label="连续节点异常阈值"><el-input-number v-model="reference.failureThreshold" :min="1" :max="10" /></el-form-item>
-                <el-form-item label="异常节点冻结（秒）"><el-input-number v-model="reference.cooldownSeconds" :min="10" :max="604800" /></el-form-item>
-                <p class="retry-help">同一章节先按采集请求重试次数在当前节点重试（至少请求 2 次），耗尽后记 1 次节点异常再切换；连续节点异常达到阈值后冻结，成功采集后清零。手动模式或关闭故障切换时保留当前节点。</p>
-              </div>
-            </template>
-            <p class="hint">切换只使用所选节点组。同一章节先重试当前节点，耗尽后计一次节点异常；开启故障切换时继续尝试备用节点。冻结后跳过该节点，同一受控组只由一个执行器管理。</p>
-          </template>
-        </el-form>
-        <div v-if="policy && form.proxyMode === 'MIHOMO'" class="runtime">
-          <strong>最近确认节点：{{ policy.currentNode || '尚未确认' }}</strong>
-          <small>{{ Math.floor(policy.activeMillis / 1000) }} 秒 · {{ policy.chapters }} 章 · {{ policy.tasks }} 个任务</small>
-          <el-alert v-if="policy.lastError" :title="policy.lastError" type="warning" :closable="false" />
-          <el-button size="small" @click="refreshPolicy">刷新状态</el-button>
-          <el-table :data="nodeStates" size="small" class="node-state-table">
-            <el-table-column prop="name" label="节点" min-width="130" />
-            <el-table-column label="状态" width="90">
-              <template #default="{ row }"><el-tag :type="row.frozen ? 'danger' : 'success'" size="small">{{ row.frozen ? '已冻结' : '可用' }}</el-tag></template>
-            </el-table-column>
-            <el-table-column prop="failures" label="连续异常" width="90" />
-            <el-table-column label="冻结详情" min-width="210">
-              <template #default="{ row }">
-                <span v-if="row.frozen">{{ row.reason || '节点检测失败' }}</span>
-                <small v-if="row.frozen">恢复时间：{{ new Date(row.until).toLocaleString() }}</small>
-                <span v-else>—</span>
+                <div v-for="(proxy, index) in form.proxies" :key="proxy.proxyConfigId" class="proxy-row">
+                  <span>{{ proxyOptions.find(p => p.id === proxy.proxyConfigId)?.name || '已删除代理' }}</span>
+                  <el-input-number v-model="proxy.cooldownSeconds" :min="10" :max="604800" placeholder="冷却秒数" />
+                  <el-button size="small" :disabled="index === 0" @click="moveProxy(index, -1)">上移</el-button>
+                  <el-button size="small" :disabled="index === form.proxies.length - 1" @click="moveProxy(index, 1)">下移</el-button>
+                </div>
               </template>
-            </el-table-column>
-          </el-table>
-          <details v-if="policy.events.length">
-            <summary>最近切换记录</summary>
-            <div v-for="(event, index) in policy.events" :key="index" class="event-row">
-              <small>{{ new Date(event.time).toLocaleString() }} · {{ event.reason }} · {{ event.success ? '成功' : '失败' }}</small>
-              {{ event.from || '未确认' }} → {{ event.to || '未确认' }}
-            </div>
-          </details>
-        </div>
-        <div v-if="form.proxyMode !== 'MIHOMO' && proxyStates.length" class="runtime">
-          <strong>普通代理状态</strong>
-          <small>章节重试耗尽记一次异常，使用网站连续失败阈值；冻结时长使用该代理冷却配置。</small>
-          <el-button size="small" @click="loadExecutors">刷新状态</el-button>
-          <div v-for="proxy in proxyStates" :key="proxy.proxyKey" class="proxy-state-row">
-            <span>{{ proxy.proxyName }}</span>
-            <el-tag :type="isFrozen(proxy.coolingUntil) ? 'danger' : proxy.available ? 'success' : 'info'" size="small">
-              {{ isFrozen(proxy.coolingUntil) ? '已冻结' : proxy.available ? '可用' : '已停用' }}
-            </el-tag>
-            <small>连续异常：{{ proxy.consecutiveFailures || 0 }}</small>
-            <small v-if="isFrozen(proxy.coolingUntil)">{{ proxy.freezeReason }} · 恢复时间：{{ new Date(proxy.coolingUntil || '').toLocaleString() }}</small>
+            </template>
+            <template v-else>
+              <el-alert v-if="policy && !policy.systemProxyId" title="此执行器使用旧版独立 Mihomo 配置，继续有效。迁移后在系统代理管理连接和节点组。" type="info" :closable="false" />
+              <el-button v-if="policy && !policy.systemProxyId" :loading="saving" @click="migrate">迁移到系统代理配置</el-button>
+              <div class="form-grid">
+                <el-form-item label="Mihomo 系统代理">
+                  <el-select v-model="reference.systemProxyId" filterable placeholder="请先在系统代理配置新增 Mihomo 代理" @change="changeSystem">
+                    <el-option v-for="proxy in systems" :key="proxy.id" :value="proxy.id" :label="proxy.name" :disabled="!proxy.enabled" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="备用节点组">
+                  <el-select v-model="reference.nodeGroupId" filterable placeholder="选择已保存的节点组" @change="reference.manualNode = null">
+                    <el-option v-for="group in groups" :key="group.id" :value="group.id" :label="`${group.name} · ${group.nodes.length} 个节点`" />
+                  </el-select>
+                </el-form-item>
+              </div>
+              <div v-if="selectedGroup" class="group-preview">
+                <strong>{{ selectedGroup.name }}</strong>
+                <small>{{ selectedGroup.controlGroup }} · {{ selectedGroup.proxyUrl }}</small>
+                <div><el-tag v-for="node in selectedGroup.nodes" :key="node" size="small">{{ node }}</el-tag></div>
+              </div>
+              <el-form-item label="节点切换方式">
+                <el-select v-model="reference.switchingMode">
+                  <el-option label="手动指定节点" value="MANUAL" />
+                  <el-option label="仅在节点故障时自动切换" value="FAILOVER" />
+                  <el-option label="按运行时间轮换" value="TIME" />
+                  <el-option label="按成功章节数轮换" value="CHAPTER" />
+                  <el-option label="按成功书籍任务数轮换" value="TASK" />
+                </el-select>
+              </el-form-item>
+              <el-form-item v-if="reference.switchingMode === 'MANUAL'" label="手动指定节点">
+                <el-select v-model="reference.manualNode" filterable>
+                  <el-option v-for="node in selectedGroup?.nodes || []" :key="node" :value="node" :label="node" />
+                </el-select>
+                <small>保存后固定使用此节点，章节重试耗尽后记录失败；节点冻结时等待，不自动换到其他节点。</small>
+              </el-form-item>
+              <template v-else>
+                <el-form-item v-if="reference.switchingMode === 'TIME'" label="轮换间隔（秒）">
+                  <el-input-number v-model="reference.rotationSeconds" :min="30" :max="604800" :step="30" />
+                  <small>300 秒为 5 分钟。仅累计请求及请求内限速等待，空闲、冻结时暂停。</small>
+                </el-form-item>
+                <el-form-item v-if="reference.switchingMode === 'CHAPTER'" label="每成功采集多少章节轮换">
+                  <el-input-number v-model="reference.rotationChapters" :min="1" :max="1000000" />
+                </el-form-item>
+                <el-form-item v-if="reference.switchingMode === 'TASK'" label="每成功完成多少书籍任务轮换">
+                  <el-input-number v-model="reference.rotationTasks" :min="1" :max="1000000" />
+                </el-form-item>
+                <div class="form-grid">
+                  <el-form-item label="节点选用顺序">
+                    <el-select v-model="reference.randomOrder">
+                      <el-option label="按节点组顺序循环" :value="false" />
+                      <el-option label="随机，不立即重复" :value="true" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="节点故障自动切换">
+                    <el-switch
+                      :model-value="reference.switchingMode === 'FAILOVER' || reference.failover"
+                      :disabled="reference.switchingMode === 'FAILOVER'"
+                      @change="reference.failover = Boolean($event)"
+                    />
+                  </el-form-item>
+                  <el-form-item label="连续节点异常阈值"><el-input-number v-model="reference.failureThreshold" :min="1" :max="10" /></el-form-item>
+                  <el-form-item label="异常节点冻结（秒）"><el-input-number v-model="reference.cooldownSeconds" :min="10" :max="604800" /></el-form-item>
+                  <p class="retry-help">同一章节先按采集请求重试次数在当前节点重试（至少请求 2 次），耗尽后记 1 次节点异常再切换；连续节点异常达到阈值后冻结，成功采集后清零。手动模式或关闭故障切换时保留当前节点。</p>
+                </div>
+              </template>
+              <p class="hint">切换只使用所选节点组。同一章节先重试当前节点，耗尽后计一次节点异常；开启故障切换时继续尝试备用节点。冻结后跳过该节点，同一受控组只由一个执行器管理。</p>
+            </template>
           </div>
+        </el-form>
+        <div v-show="editorTab === 'nodes'" id="executor-panel-nodes" role="tabpanel" aria-labelledby="executor-tab-nodes">
+          <div v-if="policy && form.proxyMode === 'MIHOMO'" class="runtime">
+            <strong>最近确认节点：{{ policy.currentNode || '尚未确认' }}</strong>
+            <small>{{ Math.floor(policy.activeMillis / 1000) }} 秒 · {{ policy.chapters }} 章 · {{ policy.tasks }} 个任务</small>
+            <el-alert v-if="policy.lastError" :title="policy.lastError" type="warning" :closable="false" />
+            <el-button size="small" @click="refreshPolicy">刷新状态</el-button>
+            <el-table :data="nodeStates" size="small" class="node-state-table">
+              <el-table-column prop="name" label="节点" min-width="130" />
+              <el-table-column label="状态" width="90">
+                <template #default="{ row }"><el-tag :type="row.frozen ? 'danger' : 'success'" size="small">{{ row.frozen ? '已冻结' : '可用' }}</el-tag></template>
+              </el-table-column>
+              <el-table-column prop="failures" label="连续异常" width="90" />
+              <el-table-column label="冻结详情" min-width="210">
+                <template #default="{ row }">
+                  <span v-if="row.frozen">{{ row.reason || '节点检测失败' }}</span>
+                  <small v-if="row.frozen">恢复时间：{{ new Date(row.until).toLocaleString() }}</small>
+                  <span v-else>—</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <div v-if="form.proxyMode !== 'MIHOMO' && proxyStates.length" class="runtime">
+            <strong>普通代理状态</strong>
+            <small>章节重试耗尽记一次异常，使用网站连续失败阈值；冻结时长使用该代理冷却配置。</small>
+            <el-button size="small" @click="loadExecutors">刷新状态</el-button>
+            <div v-for="proxy in proxyStates" :key="proxy.proxyKey" class="proxy-state-row">
+              <span>{{ proxy.proxyName }}</span>
+              <el-tag :type="isFrozen(proxy.coolingUntil) ? 'danger' : proxy.available ? 'success' : 'info'" size="small">
+                {{ isFrozen(proxy.coolingUntil) ? '已冻结' : proxy.available ? '可用' : '已停用' }}
+              </el-tag>
+              <small>连续异常：{{ proxy.consecutiveFailures || 0 }}</small>
+              <small v-if="isFrozen(proxy.coolingUntil)">{{ proxy.freezeReason }} · 恢复时间：{{ new Date(proxy.coolingUntil || '').toLocaleString() }}</small>
+            </div>
+          </div>
+          <el-empty v-if="form.proxyMode === 'MIHOMO' ? !policy : !proxyStates.length" description="暂无节点状态，保存代理配置后可查看" :image-size="64" />
+        </div>
+        <div v-show="editorTab === 'history'" id="executor-panel-history" role="tabpanel" aria-labelledby="executor-tab-history">
+          <div class="execution-toolbar">
+            <p class="execution-note">按时间倒序显示，保留最近 50 条切换记录。</p>
+            <el-button size="small" :disabled="!editingId || form.proxyMode !== 'MIHOMO'" @click="refreshPolicy">刷新记录</el-button>
+          </div>
+          <div v-if="switchEvents.length" class="switch-event-list">
+            <article v-for="(event, index) in pagedSwitchEvents" :key="`${event.time}-${switchPage}-${index}`" class="event-row">
+              <div class="switch-event-heading">
+                <time>{{ formatExecutionTime(event.time) }}</time>
+                <el-tag :type="event.success ? 'success' : 'danger'" size="small">{{ event.success ? '成功' : '失败' }}</el-tag>
+              </div>
+              <strong>{{ event.from || '未确认' }} → {{ event.to || '未确认' }}</strong>
+              <p>{{ event.reason }}</p>
+            </article>
+          </div>
+          <el-empty v-else :description="form.proxyMode === 'MIHOMO' ? '暂无切换记录' : '普通代理暂无节点切换记录'" :image-size="64" />
+          <footer v-if="switchEvents.length" class="execution-pagination">
+            <span>共 {{ switchEvents.length }} 条 · 每页 {{ switchPageSize }} 条</span>
+            <el-pagination v-model:current-page="switchPage" :total="switchEvents.length" :page-size="switchPageSize" :pager-count="5" layout="prev, pager, next" />
+          </footer>
         </div>
       </div>
       <template #footer>
@@ -281,7 +322,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { crawlerApi, type CrawlerExecutorLog, type CrawlerTaskQueue, type CrawlerQueueExecutor, type CrawlerQueueExecutorPayload, type CrawlerQueueProxyOption, type MihomoPolicyView, type MihomoReferencePayload } from '@/utils/crawler'
 import { proxySettingsApi, type SystemProxyConfig, type MihomoNodeGroup } from '@/utils/proxySettings'
@@ -300,6 +341,37 @@ const saving = ref(false)
 const dialog = ref(false)
 const editingId = ref<number>()
 const policy = ref<MihomoPolicyView|null>(null)
+const editorTabs = [
+  { id: 'basic', label: '基础配置' },
+  { id: 'proxy', label: '代理方式' },
+  { id: 'nodes', label: '节点状态' },
+  { id: 'history', label: '切换记录' },
+] as const
+type EditorTab = typeof editorTabs[number]['id']
+const editorTab = ref<EditorTab>('basic')
+const switchPage = ref(1)
+const switchPageSize = 10
+const switchEvents = computed(() => form.value.proxyMode === 'MIHOMO'
+  ? [...(policy.value?.events || [])].sort((a, b) => Date.parse(b.time) - Date.parse(a.time))
+  : [])
+const pagedSwitchEvents = computed(() => switchEvents.value.slice(
+  (switchPage.value - 1) * switchPageSize, switchPage.value * switchPageSize,
+))
+
+function switchEditorTab(event:KeyboardEvent, current:EditorTab) {
+  const index = editorTabs.findIndex(tab => tab.id === current)
+  let next = index
+  if (event.key === 'ArrowRight') next = (index + 1) % editorTabs.length
+  else if (event.key === 'ArrowLeft') next = (index + editorTabs.length - 1) % editorTabs.length
+  else if (event.key === 'Home') next = 0
+  else if (event.key === 'End') next = editorTabs.length - 1
+  else return
+  event.preventDefault()
+  editorTab.value = editorTabs[next].id
+  const target = (event.currentTarget as HTMLElement).parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]
+  target?.focus()
+  target?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+}
 const isFrozen = (until: string | null | undefined) => !!until && Date.parse(until) > Date.now()
 const nodeStates = computed(() => (policy.value?.nodes || []).map(name => ({
   name,
@@ -371,6 +443,9 @@ const emptyReference = ():MihomoReferencePayload => ({
   rotationChapters:50, rotationTasks:1, randomOrder:false,
 })
 const form = ref(emptyForm())
+watch(switchEvents, events => {
+  switchPage.value = Math.min(switchPage.value, Math.max(1, Math.ceil(events.length / switchPageSize)))
+})
 const reference = ref(emptyReference())
 const selectedGroup = computed(() => groups.value.find(g => g.id === reference.value.nodeGroupId))
 const selectedProxyIds = computed({
@@ -428,6 +503,8 @@ async function changeSystem() {
 }
 
 function create() {
+  editorTab.value = 'basic'
+  switchPage.value = 1
   editingId.value = undefined
   form.value = emptyForm()
   form.value.name = `执行器 ${executors.value.length + 1}`
@@ -449,6 +526,8 @@ function applyPolicy(value:MihomoPolicyView) {
 }
 
 async function edit(item:CrawlerQueueExecutor) {
+  editorTab.value = 'basic'
+  switchPage.value = 1
   editingId.value = item.id
   form.value = {
     name:item.name, description:item.description || '', enabled:item.enabled,
@@ -568,6 +647,80 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.editor-tabs-scroll {
+  overflow-x: auto;
+  margin-bottom: 20px;
+  padding: 2px;
+}
+.editor-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-width: 344px;
+  padding: 4px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 14px;
+  background: var(--el-fill-color-light);
+}
+.editor-tab-indicator {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 4);
+  border-radius: 10px;
+  background: var(--el-bg-color);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
+  transition: transform 220ms ease;
+  pointer-events: none;
+}
+.editor-tabs button {
+  position: relative;
+  min-height: 38px;
+  padding: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--el-text-color-secondary);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.editor-tabs button.active {
+  color: var(--el-color-primary);
+}
+.editor-tabs button:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: -2px;
+}
+.switch-event-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+.switch-event-list {
+  max-height: 420px;
+  overflow-y: auto;
+}
+.switch-event-list .event-row {
+  display: grid;
+  gap: 8px;
+  padding: 12px 2px;
+  overflow-wrap: anywhere;
+}
+.event-row p {
+  margin: 0;
+  color: var(--el-text-color-secondary);
+}
+@media (prefers-reduced-motion: reduce) {
+  .editor-tab-indicator {
+    transition: none;
+  }
+}
 .executors-panel {
   padding: 24px;
 }

@@ -34,14 +34,17 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class CrawlerHttpClientTest {
-    @Test
-    void ordinaryProxyRetriesSameChapterBeforeRecordingOneFailureAndTryingNextProxy() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"failover", "recover", "all-failed"})
+    void recordsOneActivityPerChapterAndNodeDespiteRetries(String scenario) throws Exception {
         List<String> requests = new CopyOnWriteArrayList<>();
         java.util.concurrent.atomic.AtomicReference<String> current = new java.util.concurrent.atomic.AtomicReference<>();
         HttpServer proxy = server("User-agent: *\nAllow: /\n", exchange -> {
             requests.add(current.get());
             exchange.getResponseHeaders().add("Content-Type", "text/html");
-            respond(exchange, "A".equals(current.get()) ? 503 : 200, "chapter");
+            boolean failed = "all-failed".equals(scenario)
+                    || ("recover".equals(scenario) ? requests.size() == 1 : "A".equals(current.get()));
+            respond(exchange, failed ? 503 : 200, "chapter");
         });
         try {
             CrawlerHttpClient http = configuredClient(2);
@@ -59,11 +62,30 @@ class CrawlerHttpClientTest {
             }).when(route).recordRequestProxy(any());
             org.springframework.test.util.ReflectionTestUtils.setField(http, "queueExecutorService", route);
 
-            assertEquals(200, http.get(source, url + "/chapter/1").statusCode());
-            assertEquals(List.of("A", "A", "A", "B"), requests);
-            verify(route).recordBoundProxyFailure(eq(first), eq(source), contains("503"), eq(0L));
-            verify(route).recordBoundProxySuccess(second);
-            verify(route, never()).recordBoundProxyFailure(eq(second), any(), anyString(), anyLong());
+            List<String> failures = new CopyOnWriteArrayList<>();
+            CrawlerHttpClient.NodeFailureObserver observer = (attempts, reason) ->
+                    failures.add(current.get() + ":" + attempts + ":" + reason);
+            if ("all-failed".equals(scenario)) {
+                assertThrows(CrawlerHttpClient.NodeRequestFailureException.class,
+                        () -> http.get(source, url + "/chapter/1", null, null, null, null, observer));
+                assertEquals(List.of("A", "A", "A", "B", "B", "B"), requests);
+                assertEquals(List.of("A:3:源站返回 HTTP 503", "B:3:源站返回 HTTP 503"), failures);
+            } else {
+                assertEquals(200, http.get(source, url + "/chapter/1", null, null, null, null, observer)
+                        .statusCode());
+                if ("recover".equals(scenario)) {
+                    assertEquals(List.of("A", "A"), requests);
+                    assertEquals(List.of("A:2:源站返回 HTTP 503"), failures);
+                    verify(route).recordBoundProxySuccess(first);
+                    verify(route, never()).recordBoundProxyFailure(any(), any(), anyString(), anyLong());
+                } else {
+                    assertEquals(List.of("A", "A", "A", "B"), requests);
+                    assertEquals(List.of("A:3:源站返回 HTTP 503"), failures);
+                    verify(route).recordBoundProxyFailure(eq(first), eq(source), contains("503"), eq(0L));
+                    verify(route).recordBoundProxySuccess(second);
+                    verify(route, never()).recordBoundProxyFailure(eq(second), any(), anyString(), anyLong());
+                }
+            }
         } finally {
             proxy.stop(0);
         }

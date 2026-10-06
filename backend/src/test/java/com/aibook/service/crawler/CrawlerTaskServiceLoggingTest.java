@@ -127,6 +127,29 @@ class CrawlerTaskServiceLoggingTest {
             assertThat(saved.getValue().getCrawlerBookId()).isEqualTo(3L);
             assertThat(saved.getValue().getDescription()).contains("章节采集完毕", "示例书");
             verifyNoInteractions(operationLogs);
+
+            var activities = mock(com.aibook.repository.CrawlerSiteActivityRepository.class);
+            org.springframework.test.util.ReflectionTestUtils.setField(service, "siteActivityRepository", activities);
+            var route = mock(CrawlerQueueExecutorService.class);
+            org.springframework.test.util.ReflectionTestUtils.setField(service, "queueExecutorService", route);
+            org.mockito.Mockito.when(route.requestProxySnapshot()).thenReturn(
+                    new CrawlerQueueExecutorService.RequestProxySnapshot("代理组", "节点A"),
+                    new CrawlerQueueExecutorService.RequestProxySnapshot("代理组", "节点B"));
+            var chapter = com.aibook.model.entity.CrawlerChapter.builder()
+                    .id(4L).chapterName("第一章").chapterUrl("https://example.com/1").build();
+            service.recordChapterSiteFailure(task, chapter, 3, "验证码");
+            service.recordChapterSiteFailure(task, chapter, 3, "HTTP 403");
+            var activity = ArgumentCaptor.forClass(com.aibook.model.entity.CrawlerSiteActivity.class);
+            verify(activities, org.mockito.Mockito.times(2)).save(activity.capture());
+            assertThat(activity.getAllValues()).allSatisfy(value -> {
+                assertThat(value.getEventType()).isEqualTo(
+                        com.aibook.model.entity.CrawlerSiteActivity.EventType.CHAPTER_CRAWL_ERROR);
+                assertThat(value.getDetails()).contains("第一章", "尝试次数：3", "https://example.com/1");
+            });
+            assertThat(activity.getAllValues().get(0).getDetails()).contains("节点A", "验证码");
+            assertThat(activity.getAllValues().get(1).getDetails()).contains("节点B", "HTTP 403");
+            verify(activities, org.mockito.Mockito.never()).existsByTaskIdAndEventType(
+                    org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         } finally {
             service.shutdown();
         }

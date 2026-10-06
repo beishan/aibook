@@ -2684,6 +2684,7 @@ function siteActivityLabel(eventType: CrawlerSiteActivity['eventType']): string 
   return {
     DISCOVERY_SCAN: '发现页扫描',
     ACCESS_LIMITED: '访问受限',
+    CHAPTER_CRAWL_ERROR: '章节采集异常',
     BOOK_CRAWL_COMPLETED: '书籍采集完成',
     BOOK_CRAWL_PARTIAL: '采集部分完成',
     TASK_FAILED: '任务失败',
@@ -2696,6 +2697,7 @@ function siteActivityType(
   return {
     DISCOVERY_SCAN: 'primary',
     ACCESS_LIMITED: 'danger',
+    CHAPTER_CRAWL_ERROR: 'danger',
     BOOK_CRAWL_COMPLETED: 'success',
     BOOK_CRAWL_PARTIAL: 'warning',
     TASK_FAILED: 'danger',

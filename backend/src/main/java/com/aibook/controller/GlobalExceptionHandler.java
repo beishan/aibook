@@ -1,11 +1,14 @@
 package com.aibook.controller;
 
 import com.aibook.exception.ResourceNotFoundException;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.catalina.connector.ClientAbortException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -96,12 +99,20 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGeneral(Exception ex) {
+    public ResponseEntity<Map<String, Object>> handleGeneral(
+            Exception ex, HttpServletResponse response) {
         log.error("Unexpected error", ex);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of(
                     "error", "Internal server error",
                     "message", "An unexpected error occurred"
                 ));
+    }
+
+    @ExceptionHandler(ClientAbortException.class)
+    public void handleClientAbort(ClientAbortException ex) {
+        log.debug("Client closed the connection before the response finished: {}", ex.getMessage());
     }
 }

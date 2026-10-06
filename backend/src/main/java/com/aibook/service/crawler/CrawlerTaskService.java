@@ -1546,7 +1546,7 @@ public class CrawlerTaskService {
             long attemptStartedNanos = System.nanoTime();
             String attemptOutcome = "FAILED";
             try {
-                CrawlerHttpClient.FetchResult response = fetchChapter(site, chapter, rule, parser,
+                CrawlerHttpClient.FetchResult response = fetchChapter(task, site, chapter, rule, parser,
                         recheckCompleted, requestTiming);
                 requestSucceeded = true;
                 requestFailureGuard.success();
@@ -2307,7 +2307,8 @@ public class CrawlerTaskService {
             String taskId, String description, String details) {
         if (siteActivityRepository == null || site == null || site.getId() == null) return;
         try {
-            if (taskId != null && siteActivityRepository.existsByTaskIdAndEventType(taskId, eventType)) {
+            if (eventType != CrawlerSiteActivity.EventType.CHAPTER_CRAWL_ERROR
+                    && taskId != null && siteActivityRepository.existsByTaskIdAndEventType(taskId, eventType)) {
                 return;
             }
             siteActivityRepository.save(CrawlerSiteActivity.builder()
@@ -2385,13 +2386,35 @@ public class CrawlerTaskService {
         int count = value.codePointCount(0, value.length());
         return count <= maxCodePoints ? value : value.substring(0, value.offsetByCodePoints(0, maxCodePoints));
     }
-    private CrawlerHttpClient.FetchResult fetchChapter(CrawlerSite site, CrawlerChapter chapter,
+    void recordChapterSiteFailure(CrawlerTask task, CrawlerChapter chapter, int attempts, String reason) {
+        var proxy = queueExecutorService == null ? null : queueExecutorService.requestProxySnapshot();
+        Long executorId = queueExecutorService == null ? null : queueExecutorService.boundExecutorId();
+        if (executorId == null) executorId = task.getQueueExecutorId();
+        String details = "书籍：" + bookName(task.getCrawlerBook())
+                + "；章节：" + chapter.getChapterName() + "；章节ID：" + chapter.getId()
+                + "；章节地址：" + chapter.getChapterUrl()
+                + "；执行器ID：" + executorId
+                + "；代理：" + (proxy == null ? "直连/未绑定" : proxy.name())
+                + "；节点：" + (proxy == null || proxy.node() == null ? "默认节点" : proxy.node())
+                + "；尝试次数：" + (attempts > 0 ? attempts : "按请求重试配置") + "；异常原因：" + reason;
+        recordSiteActivity(task.getSite(), CrawlerSiteActivity.EventType.CHAPTER_CRAWL_ERROR,
+                task.getId(), "章节采集异常：" + chapter.getChapterName(), details);
+    }
+
+    private CrawlerHttpClient.FetchResult fetchChapter(CrawlerTask task, CrawlerSite site, CrawlerChapter chapter,
             CrawlerSiteRule rule, BookCrawlerParser parser, boolean recheck,
             CrawlerHttpClient.RequestTiming timing) throws Exception {
         String etag = recheck ? chapter.getSourceEtag() : null;
         String modified = recheck ? chapter.getSourceLastModified() : null;
         if (!httpClient.hasBoundExecutor()) {
-            return httpClient.get(site, chapter.getChapterUrl(), etag, modified, timing);
+            try {
+                return httpClient.get(site, chapter.getChapterUrl(), etag, modified, timing);
+            } catch (InterruptedException exception) {
+                throw exception;
+            } catch (Exception exception) {
+                recordChapterSiteFailure(task, chapter, 0, exception.getMessage());
+                throw exception;
+            }
         }
         return httpClient.get(site, chapter.getChapterUrl(), etag, modified, timing, response -> {
             BookCrawlerParser.ParsedContent parsed;
@@ -2406,7 +2429,7 @@ public class CrawlerTaskService {
                 throw new CrawlerHttpClient.NodeRequestFailureException(
                         "正文命中失败特征：" + shortText(marker.marker(), 100), 0);
             }
-        });
+        }, (attempts, reason) -> recordChapterSiteFailure(task, chapter, attempts, reason));
     }
 
     static BookCrawlerParser.ParsedContent parseChapterWithDiagnostics(
