@@ -1,3 +1,5 @@
+import { bookCoverImageSizes, type BookCoverView } from '@/utils/bookCoverImageSizes'
+
 /**
  * 封面图片工具函数
  */
@@ -29,14 +31,16 @@ export function getCoverUrl(coverUrl: string | null | undefined): string {
   return coverUrl
 }
 
-/** 仅为后端支持的封面接口请求缩略图，详情页继续使用 getCoverUrl 原图。 */
+/** 根据账户中为对应视图选择的尺寸，请求后端固定尺寸缩略图。 */
 export function getCoverThumbnailUrl(
   coverUrl: string | null | undefined,
-  width: 96 | 320 = 320,
+  view: BookCoverView = 'card',
 ): string {
   const url = getCoverUrl(coverUrl)
   if (!url.startsWith('/api/covers/')) return url
+  const selectedSize = bookCoverImageSizes[view]
+  if (selectedSize === 'original') return url
   const parsed = new URL(url, 'http://localhost')
-  parsed.searchParams.set('width', String(width))
+  parsed.searchParams.set('width', selectedSize)
   return `${parsed.pathname}${parsed.search}${parsed.hash}`
 }

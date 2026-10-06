@@ -162,7 +162,6 @@
               <input v-model.number="retention.weeklyWeeks" type="number" min="0" max="520" />
               <small>周</small>
             </div>
-            <small>按周一至周日归为一周；设置为 0 可关闭每周保留。</small>
           </label>
           <label class="backup-retention-field">
             <span>之后每月保留最新备份</span>
@@ -171,6 +170,9 @@
               <small>个月</small>
             </div>
           </label>
+          <p class="backup-retention-weekly-note">
+            每周按周一至周日归类，保留该周最后一份成功备份；设为 0 可关闭每周保留。
+          </p>
         </div>
         <p class="backup-retention-note">
           {{ retentionDescription }} 每天凌晨 04:15 执行清理。关闭自动清理时，备份文件不会自动删除；执行历史会保留。
@@ -1236,16 +1238,31 @@ onBeforeUnmount(() => {
 }
 
 .backup-retention-fields {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 22px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 12px 22px;
 }
 
 .backup-retention-field {
   display: grid;
+  grid-template-rows: minmax(30px, auto) auto;
+  align-content: start;
   gap: 7px;
   color: var(--text-secondary);
   font-size: 11px;
+}
+
+.backup-retention-field > span {
+  align-self: end;
+}
+
+.backup-retention-weekly-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .backup-retention-field > div {
@@ -1556,6 +1573,17 @@ onBeforeUnmount(() => {
 
   .backup-path strong {
     margin-left: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .backup-retention-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .backup-retention-field {
+    grid-template-rows: auto auto;
   }
 }
 

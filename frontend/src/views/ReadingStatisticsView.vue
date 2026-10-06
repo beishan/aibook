@@ -163,7 +163,7 @@
             <div class="top-book-cover">
               <img
                 v-if="book.coverUrl && shouldLoadBookCover(book.bookId)"
-                :src="getCoverUrl(book.coverUrl)"
+                :src="getCoverThumbnailUrl(book.coverUrl, 'list')"
                 alt=""
               />
               <span v-else>{{ book.title.charAt(0) }}</span>
@@ -184,7 +184,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import api from '@/utils/api'
-import { getCoverUrl } from '@/utils/cover'
+import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 
 interface Overview {

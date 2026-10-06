@@ -418,7 +418,7 @@
         <div class="book-cover-small">
           <img
             v-if="row.coverUrl && shouldLoadBookCover(row.id)"
-            :src="getCoverThumbnailUrl(row.coverUrl, 96)"
+            :src="getCoverThumbnailUrl(row.coverUrl, 'list')"
             alt="封面"
             :loading="index < PRIORITY_COVER_COUNT ? 'eager' : 'lazy'"
             decoding="async"
@@ -868,7 +868,7 @@ const prepareBookCovers = async (books: Book[]) => {
     books
       .slice(0, PRIORITY_COVER_COUNT)
       .filter(book => shouldLoadBookCover(book.id))
-      .map(book => getCoverThumbnailUrl(book.coverUrl, viewMode.value === 'list' ? 96 : 320))
+      .map(book => getCoverThumbnailUrl(book.coverUrl, viewMode.value === 'list' ? 'list' : 'card'))
       .filter((url): url is string => Boolean(url)),
   ))
   // 快图仍可一起展示；慢图继续加载，但不能阻塞整页书籍和分页操作。

@@ -84,7 +84,7 @@
           <div class="book-cover">
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-              :src="getCoverUrl(book.coverUrl)"
+              :src="getCoverThumbnailUrl(book.coverUrl, 'detail')"
               alt="封面"
               class="cover-image"
             />
@@ -1000,7 +1000,7 @@ import { useCategoryStore } from '@/stores/category'
 import { useTagStore } from '@/stores/tag'
 import api from '@/utils/api'
 import { scrapeBook, downloadCover } from '@/utils/scraper'
-import { getCoverUrl } from '@/utils/cover'
+import { getCoverThumbnailUrl } from '@/utils/cover'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import ScraperDialog from '@/components/ScraperDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'

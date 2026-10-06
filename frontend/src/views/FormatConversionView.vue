@@ -49,7 +49,7 @@
                   <div v-if="libraryBooks.length && libraryViewMode !== 'list'" class="library-book-grid" :class="{ 'is-compact': libraryViewMode === 'compact' }">
                     <article v-for="book in libraryBooks" :key="book.id" class="library-book-card" :class="{ selected: selectedBookId === book.id }">
                       <div class="library-book-cover">
-                        <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverUrl(book.coverUrl)" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
+                        <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
                         <span v-else>{{ book.title?.charAt(0) || '书' }}</span>
                         <em>{{ (book.format || '未知').toUpperCase() }}</em>
                       </div>
@@ -64,7 +64,7 @@
                   <div v-else-if="libraryBooks.length" class="library-book-list">
                     <article v-for="book in libraryBooks" :key="book.id" class="library-book-list-row" :class="{ selected: selectedBookId === book.id }">
                       <div class="library-list-cover">
-                        <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverUrl(book.coverUrl)" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
+                        <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
                         <span v-else>{{ book.title?.charAt(0) || '书' }}</span>
                       </div>
                       <div class="library-list-primary">
@@ -141,7 +141,7 @@
     </el-tabs>
 
     <el-dialog v-model="showHistory" title="转换历史" width="min(960px, 94vw)" class="conversion-history-dialog" append-to-body><div class="history-actions"><span>关闭页面后也可以继续查看任务</span><el-button @click="loadHistory">刷新</el-button></div><el-table :data="history" empty-text="暂无转换任务"><el-table-column prop="title" label="书籍" min-width="180" /><el-table-column label="格式" width="120"><template #default="{ row }">{{ row.sourceFormat.toUpperCase() }} → {{ row.targetFormat.toUpperCase() }}</template></el-table-column><el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag></template></el-table-column><el-table-column prop="createdAt" label="创建时间" min-width="170" /><el-table-column label="操作" width="210"><template #default="{ row }"><el-button link type="primary" @click="openTask(row.id)">查看/继续</el-button><el-button v-if="row.status === 'SUCCESS'" link @click="download(row)">下载</el-button><el-button link type="danger" @click="removeTask(row.id)">删除</el-button></template></el-table-column></el-table></el-dialog>
-    <el-dialog v-model="showCoverDialog" title="从封面库选择" width="min(760px, 92vw)" append-to-body><el-input v-model="coverSearch" clearable placeholder="搜索封面文件名" /><div class="cover-library"><button v-for="cover in filteredCovers" :key="cover.id" @click="chooseCover(cover.id)"><img v-if="shouldLoadBookCover()" :src="getCoverUrl(cover.url)" :alt="cover.originalFilename" /><span>{{ cover.originalFilename }}</span></button></div><el-empty v-if="!filteredCovers.length" description="封面库为空" /></el-dialog>
+    <el-dialog v-model="showCoverDialog" title="从封面库选择" width="min(760px, 92vw)" append-to-body><el-input v-model="coverSearch" clearable placeholder="搜索封面文件名" /><div class="cover-library"><button v-for="cover in filteredCovers" :key="cover.id" @click="chooseCover(cover.id)"><img v-if="shouldLoadBookCover()" :src="getCoverThumbnailUrl(cover.url, 'card')" :alt="cover.originalFilename" /><span>{{ cover.originalFilename }}</span></button></div><el-empty v-if="!filteredCovers.length" description="封面库为空" /></el-dialog>
     <el-dialog v-model="showBookDialog" title="关联已有书籍" width="min(560px, 92vw)" append-to-body><el-select v-model="attachBookId" filterable class="wide" placeholder="选择书籍"><el-option v-for="book in books" :key="book.id" :label="`${book.title} · ${book.author || '未知作者'}`" :value="book.id" /></el-select><template #footer><el-button @click="showBookDialog = false">取消</el-button><el-button type="primary" :disabled="!attachBookId" @click="attachToBook(attachBookId)">确认关联</el-button></template></el-dialog>
   </div>
 </template>
@@ -151,7 +151,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CircleCheckFilled, Document, Grid, List, Search, Tickets, UploadFilled } from '@element-plus/icons-vue'
 import api from '@/utils/api'
-import { getCoverUrl } from '@/utils/cover'
+import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { message, confirm } from '@/utils/message'
 

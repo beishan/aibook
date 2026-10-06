@@ -395,6 +395,14 @@ public class User implements UserDetails {
         preference().setBookCoverVisibilityOverrides(value);
     }
 
+    public String getBookCoverImageSizes() {
+        return preference().getBookCoverImageSizes();
+    }
+
+    public void setBookCoverImageSizes(String value) {
+        preference().setBookCoverImageSizes(value);
+    }
+
     public Boolean getAllRandomCoversHidden() {
         return preference().getAllRandomCoversHidden();
     }

@@ -84,7 +84,7 @@
             <div class="trash-cover">
               <img
                 v-if="row.coverUrl && shouldLoadBookCover(row.id)"
-                :src="getCoverUrl(row.coverUrl)"
+                :src="getCoverThumbnailUrl(row.coverUrl, 'list')"
                 alt=""
               />
               <span v-else>{{ row.title?.charAt(0) || '书' }}</span>
@@ -130,7 +130,7 @@
 import { onMounted, ref } from 'vue'
 import { Delete, DeleteFilled, RefreshRight, Search } from '@element-plus/icons-vue'
 import { useBookStore, type Book } from '@/stores/book'
-import { getCoverUrl } from '@/utils/cover'
+import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { confirm, message } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'

@@ -1,6 +1,7 @@
 package com.aibook.controller;
 
 import com.aibook.dto.CoverPrivacyScopeDTO;
+import com.aibook.dto.BookCoverImageSizesDTO;
 import com.aibook.model.entity.User;
 import com.aibook.service.CoverPrivacyService;
 import com.aibook.service.UserService;
@@ -34,6 +35,21 @@ public class CoverPrivacyController {
             Authentication authentication,
             @RequestBody CoverPrivacyScopeDTO request) {
         return ResponseEntity.ok(coverPrivacyService.updateBookCoverSettings(
+                currentUser(authentication), request));
+    }
+
+    @GetMapping("/book-image-sizes")
+    public ResponseEntity<BookCoverImageSizesDTO> getBookCoverImageSizes(
+            Authentication authentication) {
+        return ResponseEntity.ok(
+                coverPrivacyService.getBookCoverImageSizes(currentUser(authentication)));
+    }
+
+    @PutMapping("/book-image-sizes")
+    public ResponseEntity<BookCoverImageSizesDTO> updateBookCoverImageSizes(
+            Authentication authentication,
+            @RequestBody BookCoverImageSizesDTO request) {
+        return ResponseEntity.ok(coverPrivacyService.updateBookCoverImageSizes(
                 currentUser(authentication), request));
     }
 

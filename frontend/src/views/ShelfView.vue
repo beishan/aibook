@@ -199,7 +199,7 @@
             <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
               <img
                 v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-                :src="getCoverUrl(book.coverUrl)"
+                :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
                 alt="封面"
               />
               <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
@@ -318,7 +318,7 @@
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-              :src="getCoverUrl(book.coverUrl)"
+              :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
               alt="封面"
             />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
@@ -388,7 +388,7 @@
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-              :src="getCoverUrl(book.coverUrl)"
+              :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
               alt="封面"
             />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
@@ -472,7 +472,7 @@
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-              :src="getCoverUrl(book.coverUrl)"
+              :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
               alt="封面"
             />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
@@ -542,7 +542,7 @@
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-              :src="getCoverUrl(book.coverUrl)"
+              :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
               alt="封面"
             />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
@@ -618,7 +618,7 @@
             >
               <img
                 v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-                :src="getCoverUrl(book.coverUrl)"
+                :src="getCoverThumbnailUrl(book.coverUrl, 'list')"
                 alt="封面"
               />
               <div v-else class="no-cover-small">{{ book.title.charAt(0) }}</div>
@@ -709,7 +709,7 @@ import { useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import api from '@/utils/api'
-import { getCoverUrl } from '@/utils/cover'
+import { getCoverThumbnailUrl } from '@/utils/cover'
 import { allBookCoversHidden, shouldLoadBookCover } from '@/utils/imagePrivacy'
 import ShelfBookActions from '@/components/ShelfBookActions.vue'
 import BookQuickReader from '@/components/BookQuickReader.vue'

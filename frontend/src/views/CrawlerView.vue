@@ -347,7 +347,7 @@
             </div>
             <div class="discovery-card-cover">
               <span>{{ book.bookName.slice(0,1) }}</span>
-              <img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/>
+              <img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/>
               <el-tag v-if="book.suspectedDuplicate" class="discovery-duplicate-badge" size="small" type="warning">疑似重复</el-tag>
               <SiteSourceTag
                 class="discovery-source-badge"
@@ -451,7 +451,7 @@
                 <template #dropdown><el-dropdown-menu><el-dropdown-item command="details">详细信息</el-dropdown-item><el-dropdown-item command="book-lists">加入书单</el-dropdown-item><el-dropdown-item command="website">查看网站</el-dropdown-item><el-dropdown-item command="updates" divided>检查更新</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(book)">刷新分类标签</el-dropdown-item><el-dropdown-item command="generate">生成文件</el-dropdown-item><el-dropdown-item command="import">{{ book.importStatus==='IMPORTED'?'同步入库':'加入书库' }}</el-dropdown-item><el-dropdown-item command="status">修改状态</el-dropdown-item></el-dropdown-menu></template>
               </el-dropdown>
             </div>
-            <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverUrl(book.coverUrl)" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><div class="crawler-book-cover-badges"><el-tag :type="statusType(book.crawlStatus)" effect="dark" size="small">{{ statusLabel(book.crawlStatus) }}</el-tag><el-tag :type="importStatusType(book.importStatus)" effect="dark" size="small">{{ importStatusLabel(book.importStatus) }}</el-tag></div><el-checkbox class="discovery-card-check crawler-book-card-check" :model-value="isBookSelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleBookSelection(book,Boolean($event))"/></div>
+            <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><div class="crawler-book-cover-badges"><el-tag :type="statusType(book.crawlStatus)" effect="dark" size="small">{{ statusLabel(book.crawlStatus) }}</el-tag><el-tag :type="importStatusType(book.importStatus)" effect="dark" size="small">{{ importStatusLabel(book.importStatus) }}</el-tag></div><el-checkbox class="discovery-card-check crawler-book-card-check" :model-value="isBookSelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleBookSelection(book,Boolean($event))"/></div>
             <div class="discovery-card-body crawler-book-card-body"><div class="discovery-card-title"><div><button type="button" class="crawler-book-title-button" :title="book.bookName" @click.stop="openBook(book)">{{ book.bookName }}</button><p>{{ book.author || '未知作者' }}</p></div><el-tag v-if="book.category" size="small" effect="plain">{{ book.category }}</el-tag></div><div v-if="book.tags?.length" class="crawler-book-tag-list"><el-tag v-for="tag in book.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></div><dl><div><dt>来源网站</dt><dd><SiteSourceTag :name="book.siteName" :color="book.siteThemeColor" /></dd></div></dl><div v-if="isBookCompleted(book)" class="book-crawl-result card-result"><div><span>采集结果</span><strong>采集完成</strong></div><small>正文 {{ book.crawledChapterCount }} · 待开放 {{ book.pendingReleaseChapterCount }} · 失败 {{ book.failedChapterCount }}</small><el-button text type="primary" size="small" @click.stop="openBook(book)">采集结果详情</el-button></div><div v-else class="crawler-book-progress"><div><span>采集进度</span><strong>正文 {{ book.crawledChapterCount }} · 待开放 {{ book.pendingReleaseChapterCount }} / 共 {{ book.chapterCount }} 章</strong></div><el-progress :class="{'crawler-running-progress':isBookRunning(book)}" :percentage="progress(book)" :stroke-width="7" /></div></div>
           </article>
         </div>
@@ -1683,7 +1683,7 @@ import {
   type ReaderContentWidth,
   type ReaderSettings,
 } from '@/stores/preferences'
-import { getCoverUrl } from '@/utils/cover'
+import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { confirm, message } from '@/utils/message'
 import api from '@/utils/api'

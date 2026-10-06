@@ -35,7 +35,7 @@
           <div class="reader-cover" aria-hidden="true">
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-              :src="getCoverUrl(book.coverUrl)"
+              :src="getCoverThumbnailUrl(book.coverUrl, 'detail')"
               alt=""
             />
             <span v-else>{{ book.title?.slice(0, 1) || '书' }}</span>
@@ -732,7 +732,7 @@ import type {
 import api from '@/utils/api'
 import { message, confirm } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'
-import { getCoverUrl } from '@/utils/cover'
+import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { downloadBookToLocal } from '@/utils/bookDownload'
 import {

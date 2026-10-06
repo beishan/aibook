@@ -115,6 +115,9 @@ public class UserPreference {
     @Column(name = "book_cover_visibility_overrides", columnDefinition = "TEXT")
     private String bookCoverVisibilityOverrides;
 
+    @Column(name = "book_cover_image_sizes", columnDefinition = "TEXT")
+    private String bookCoverImageSizes;
+
     @Column(name = "all_random_covers_hidden")
     private Boolean allRandomCoversHidden;
 

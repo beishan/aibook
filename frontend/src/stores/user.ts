@@ -10,6 +10,10 @@ import {
   resetRandomCoverPrivacy,
 } from '@/utils/randomCoverPrivacy'
 import {
+  hydrateBookCoverImageSizes,
+  resetBookCoverImageSizes,
+} from '@/utils/bookCoverImageSizes'
+import {
   deleteCachedUserAvatar,
   readCachedUserAvatar,
   writeCachedUserAvatar,
@@ -145,6 +149,7 @@ export const useUserStore = defineStore('user', () => {
       await Promise.all([
         hydrateBookCoverPrivacy(profile.id),
         hydrateRandomCoverPrivacy(profile.id),
+        hydrateBookCoverImageSizes(),
       ])
     }
     return data
@@ -175,6 +180,7 @@ export const useUserStore = defineStore('user', () => {
       await Promise.all([
         hydrateBookCoverPrivacy(profile.id),
         hydrateRandomCoverPrivacy(profile.id),
+        hydrateBookCoverImageSizes(),
       ])
     }
     return data
@@ -193,6 +199,7 @@ export const useUserStore = defineStore('user', () => {
     useDockIconStore().reset()
     resetBookCoverPrivacy()
     resetRandomCoverPrivacy()
+    resetBookCoverImageSizes()
   }
 
   window.addEventListener(AUTH_EXPIRED_EVENT, logout)

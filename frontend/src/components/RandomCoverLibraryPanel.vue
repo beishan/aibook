@@ -85,7 +85,7 @@
         <article v-for="cover in paginatedCovers" :key="cover.id" class="cover-item">
           <div class="cover-preview">
             <img
-              :src="getCoverUrl(cover.coverUrl)"
+              :src="getCoverThumbnailUrl(cover.coverUrl, 'card')"
               :alt="cover.name"
               :class="{ 'is-hidden': isRandomCoverHidden(cover.id) }"
               loading="lazy"
@@ -140,7 +140,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { Hide, QuestionFilled, View } from '@element-plus/icons-vue'
 import api from '@/utils/api'
-import { getCoverUrl } from '@/utils/cover'
+import { getCoverThumbnailUrl } from '@/utils/cover'
 import {
   allRandomCoversHidden,
   isRandomCoverHidden,

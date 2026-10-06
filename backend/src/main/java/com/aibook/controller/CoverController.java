@@ -68,7 +68,7 @@ public class CoverController {
     }
 
     private boolean validWidth(Integer width) {
-        return width == null || width == 96 || width == 320;
+        return width == null || width == 96 || width == 160 || width == 320 || width == 640;
     }
 
     private ResponseEntity<Resource> respond(Path path, CacheControl cache, WebRequest request)

@@ -71,7 +71,9 @@ public class CoverImageCacheService {
 
     /** 固定尺寸避免任意尺寸请求制造无限缓存；原文件变化自动使用新的缓存键。 */
     public Path thumbnail(Path source, int width) throws IOException {
-        if (width != 96 && width != 320) throw new IllegalArgumentException("无效封面尺寸");
+        if (width != 96 && width != 160 && width != 320 && width != 640) {
+            throw new IllegalArgumentException("无效封面尺寸");
+        }
         String key = hash(source.toAbsolutePath().normalize() + ":"
                 + Files.getLastModifiedTime(source) + ":" + Files.size(source) + ":" + width);
         Path target = cacheRoot().resolve("thumbnails").resolve(key + ".jpg");

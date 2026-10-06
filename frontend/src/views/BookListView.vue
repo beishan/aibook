@@ -29,7 +29,7 @@
         <div class="book-cover">
           <img
             v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-            :src="getCoverUrl(book.coverUrl)"
+            :src="getCoverThumbnailUrl(book.coverUrl, 'card')"
             alt="封面"
           />
           <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
@@ -59,7 +59,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/utils/api'
-import { getCoverUrl } from '@/utils/cover'
+import { getCoverThumbnailUrl } from '@/utils/cover'
 import { allBookCoversHidden, shouldLoadBookCover } from '@/utils/imagePrivacy'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 

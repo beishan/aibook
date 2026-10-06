@@ -42,15 +42,76 @@
       <strong>{{ allBookCoversHidden ? '当前不会加载封面' : '当前正常加载封面' }}</strong>
       <span>{{ allBookCoversHidden ? '已有封面数据不会被删除，重新选择“显示”即可恢复。' : '单本书仍可使用封面上的按钮单独隐藏。' }}</span>
     </div>
+
+    <section class="size-settings" aria-labelledby="cover-size-heading">
+      <div class="size-settings-heading">
+        <div>
+          <h3 id="cover-size-heading">封面图片尺寸</h3>
+          <p>按视图选择后端缩略图尺寸，设置会保存到当前账户。</p>
+        </div>
+        <button
+          class="btn btn-primary"
+          type="button"
+          :disabled="savingSizes || !sizeSettingsChanged"
+          @click="saveSizes"
+        >
+          {{ savingSizes ? '保存中…' : '保存尺寸设置' }}
+        </button>
+      </div>
+      <div class="size-settings-grid">
+        <label v-for="view in coverViews" :key="view.key" class="size-settings-field">
+          <span>{{ view.label }}</span>
+          <small>{{ view.description }}</small>
+          <select v-model="sizeDraft[view.key]">
+            <option v-for="option in bookCoverImageSizeOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+      </div>
+      <p class="size-settings-note">
+        缩略图保持原图比例，宽度按所选上限生成并缓存在服务器；不支持缩略的格式会回退原图。
+      </p>
+    </section>
   </section>
 </template>
 
 <script setup lang="ts">
+import { computed, reactive, ref } from 'vue'
+import {
+  bookCoverImageSizes,
+  bookCoverImageSizeOptions,
+  saveBookCoverImageSizes,
+  type BookCoverView,
+} from '@/utils/bookCoverImageSizes'
 import { message } from '@/utils/message'
 import {
   allBookCoversHidden,
   setAllBookCoversHidden,
 } from '@/utils/imagePrivacy'
+
+const coverViews: Array<{ key: BookCoverView; label: string; description: string }> = [
+  { key: 'card', label: '卡片视图', description: '书库网格、首页、书架和发现卡片' },
+  { key: 'list', label: '列表视图', description: '紧凑列表、系列和统计记录' },
+  { key: 'detail', label: '详情视图', description: '书籍详情与阅读页面' },
+]
+const sizeDraft = reactive({ ...bookCoverImageSizes })
+const savingSizes = ref(false)
+const sizeSettingsChanged = computed(() =>
+  coverViews.some(view => sizeDraft[view.key] !== bookCoverImageSizes[view.key]),
+)
+
+const saveSizes = async () => {
+  savingSizes.value = true
+  try {
+    await saveBookCoverImageSizes({ ...sizeDraft })
+    message.success('封面图片尺寸已保存到账户')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '保存封面图片尺寸失败')
+  } finally {
+    savingSizes.value = false
+  }
+}
 
 const updateVisibility = (hidden: boolean) => {
   if (allBookCoversHidden.value === hidden) return
@@ -119,9 +180,76 @@ const handleKeydown = (event: KeyboardEvent) => {
 .behavior-note strong { color: var(--text-primary); }
 .behavior-note.active { border-color: color-mix(in srgb, var(--primary) 30%, var(--border-color-light)); background: var(--primary-alpha-10); }
 
+.size-settings {
+  display: grid;
+  gap: 16px;
+  grid-column: 1 / -1;
+  padding: 18px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 14px;
+  background: var(--surface-hover);
+}
+.size-settings-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.size-settings-heading h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+.size-settings-heading p,
+.size-settings-note {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.size-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.size-settings-field {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.size-settings-field small {
+  min-height: 2.6em;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.size-settings-field select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: inherit;
+}
+.size-settings-field select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.size-settings-note { margin: 0; }
+
 @media (max-width: 720px) {
   .cover-display-settings { grid-template-columns: minmax(0, 1fr); padding: 20px; }
   .cover-display-segmented { width: 100%; }
+  .size-settings-heading { align-items: stretch; flex-direction: column; }
+  .size-settings-heading .btn { width: 100%; }
+  .size-settings-grid { grid-template-columns: minmax(0, 1fr); }
+  .size-settings-field small { min-height: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -101,7 +101,7 @@
                 </div>
 
                 <div v-if="selectedCandidate.coverUrl && shouldLoadBookCover()" class="cover-preview">
-                  <img :src="selectedCandidate.coverUrl" alt="封面预览" />
+                  <img :src="getCoverThumbnailUrl(selectedCandidate.coverUrl, 'card')" alt="封面预览" />
                 </div>
               </div>
 
@@ -133,6 +133,7 @@ import { computed, ref, reactive, watch } from 'vue'
 import api from '@/utils/api'
 import { message } from '@/utils/message'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
+import { getCoverThumbnailUrl } from '@/utils/cover'
 
 const props = defineProps<{
   modelValue: boolean

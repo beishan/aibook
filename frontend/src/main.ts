@@ -15,6 +15,7 @@ import { loadSiteFavicon } from './utils/siteFavicon'
 import { loadWebsiteSettings } from './utils/siteSettings'
 import { hydrateBookCoverPrivacy } from './utils/imagePrivacy'
 import { hydrateRandomCoverPrivacy } from './utils/randomCoverPrivacy'
+import { hydrateBookCoverImageSizes } from './utils/bookCoverImageSizes'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -44,6 +45,7 @@ const bootstrap = async () => {
       await Promise.all([
         hydrateBookCoverPrivacy(profile.id),
         hydrateRandomCoverPrivacy(profile.id),
+        hydrateBookCoverImageSizes(),
       ])
     }
     void dockIconStore.hydrate()

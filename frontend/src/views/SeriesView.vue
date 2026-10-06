@@ -41,7 +41,7 @@
             <li v-for="book in books" :key="book.id" class="volume-row">
               <span class="volume-number">{{ book.seriesIndex ?? '—' }}</span>
               <router-link :to="`/books/${book.id}`" class="cover" :aria-label="`查看${book.title}`">
-                <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 96)" alt="" loading="lazy" decoding="async" />
+                <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 'list')" alt="" loading="lazy" decoding="async" />
                 <span v-else aria-hidden="true">{{ book.title.charAt(0) }}</span>
               </router-link>
               <div class="volume-info"><span class="volume-label">{{ volumeLabel(book.seriesIndex) }}</span>
