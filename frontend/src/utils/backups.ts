@@ -47,6 +47,7 @@ export interface BackupPath {
 export interface BackupRetentionSettings {
   enabled: boolean
   recentDays: number
+  weeklyWeeks: number
   monthlyMonths: number
 }
 

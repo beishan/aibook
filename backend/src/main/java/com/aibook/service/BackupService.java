@@ -22,7 +22,10 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.temporal.TemporalAdjusters;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -52,6 +55,7 @@ public class BackupService {
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
     private static final String RETENTION_ENABLED_KEY = "backup.retention.enabled";
     private static final String RETENTION_RECENT_DAYS_KEY = "backup.retention.recent-days";
+    private static final String RETENTION_WEEKLY_WEEKS_KEY = "backup.retention.weekly-weeks";
     private static final String RETENTION_MONTHLY_MONTHS_KEY = "backup.retention.monthly-months";
     private static final Logger log = LoggerFactory.getLogger(BackupService.class);
 
@@ -148,6 +152,7 @@ public class BackupService {
         return new BackupRetentionSettings(
                 systemConfigService.getBooleanConfig(RETENTION_ENABLED_KEY, false),
                 boundedConfig(RETENTION_RECENT_DAYS_KEY, 7, 1, 3650),
+                boundedConfig(RETENTION_WEEKLY_WEEKS_KEY, 4, 0, 520),
                 boundedConfig(RETENTION_MONTHLY_MONTHS_KEY, 12, 0, 120));
     }
 
@@ -157,12 +162,16 @@ public class BackupService {
         if (request.recentDays() < 1 || request.recentDays() > 3650) {
             throw new IllegalArgumentException("最近备份保留天数必须在 1 到 3650 天之间");
         }
+        if (request.weeklyWeeks() < 0 || request.weeklyWeeks() > 520) {
+            throw new IllegalArgumentException("每周备份保留周数必须在 0 到 520 周之间");
+        }
         if (request.monthlyMonths() < 0 || request.monthlyMonths() > 120) {
             throw new IllegalArgumentException("月度备份保留月数必须在 0 到 120 个月之间");
         }
         systemConfigService.saveConfigs(Map.of(
                 RETENTION_ENABLED_KEY, Boolean.toString(request.enabled()),
                 RETENTION_RECENT_DAYS_KEY, Integer.toString(request.recentDays()),
+                RETENTION_WEEKLY_WEEKS_KEY, Integer.toString(request.weeklyWeeks()),
                 RETENTION_MONTHLY_MONTHS_KEY, Integer.toString(request.monthlyMonths())));
         return request;
     }
@@ -181,14 +190,27 @@ public class BackupService {
 
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime recentCutoff = now.minusDays(settings.recentDays());
+        LocalDate currentWeekStart = now.toLocalDate()
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        LocalDate earliestWeeklyWeek = settings.weeklyWeeks() == 0 ? null
+                : currentWeekStart.minusWeeks(settings.weeklyWeeks() - 1L);
         YearMonth currentMonth = YearMonth.from(now);
         YearMonth earliestMonthlyMonth = settings.monthlyMonths() == 0
                 ? null : currentMonth.minusMonths(settings.monthlyMonths() - 1L);
         List<BackupFolder> folders = findBackupFolders(root);
+        Map<LocalDate, BackupFolder> latestSuccessfulByWeek = new HashMap<>();
         Map<YearMonth, BackupFolder> latestSuccessfulByMonth = new HashMap<>();
 
         for (BackupFolder folder : folders) {
             if (!folder.successful()) continue;
+            LocalDate week = startOfWeek(folder.createdAt());
+            if (earliestWeeklyWeek != null
+                    && !week.isBefore(earliestWeeklyWeek)
+                    && !week.isAfter(currentWeekStart)) {
+                latestSuccessfulByWeek.merge(week, folder,
+                        (existing, candidate) -> candidate.createdAt().isAfter(existing.createdAt())
+                                ? candidate : existing);
+            }
             YearMonth month = YearMonth.from(folder.createdAt());
             if (earliestMonthlyMonth == null || month.isBefore(earliestMonthlyMonth)) continue;
             latestSuccessfulByMonth.merge(month, folder,
@@ -199,12 +221,15 @@ public class BackupService {
         for (BackupFolder folder : folders) {
             if (!folder.createdAt().isBefore(recentCutoff)
                     || folder.inProgress()
+                    || isWeeklyRestorePoint(folder, earliestWeeklyWeek,
+                            currentWeekStart, latestSuccessfulByWeek)
                     || isMonthlyRestorePoint(folder, earliestMonthlyMonth, latestSuccessfulByMonth)) {
                 continue;
             }
             String reason = "自动保留策略清理：备份已超过最近 " + settings.recentDays()
-                    + " 天全量保留范围，且不属于最近 " + settings.monthlyMonths()
-                    + " 个月需保留的每月最新成功备份";
+                    + " 天全量保留范围，且不是最近 " + settings.weeklyWeeks()
+                    + " 个自然周每周最新成功备份，也不是最近 " + settings.monthlyMonths()
+                    + " 个月每月最新成功备份";
             deleteBackupFolder(folder, reason);
         }
     }
@@ -272,6 +297,22 @@ public class BackupService {
         if (month.isBefore(earliestMonthlyMonth)) return false;
         BackupFolder latest = latestSuccessfulByMonth.get(month);
         return latest != null && latest.path().equals(folder.path());
+    }
+
+    private boolean isWeeklyRestorePoint(
+            BackupFolder folder,
+            LocalDate earliestWeeklyWeek,
+            LocalDate currentWeekStart,
+            Map<LocalDate, BackupFolder> latestSuccessfulByWeek) {
+        if (!folder.successful() || earliestWeeklyWeek == null) return false;
+        LocalDate week = startOfWeek(folder.createdAt());
+        if (week.isBefore(earliestWeeklyWeek) || week.isAfter(currentWeekStart)) return false;
+        BackupFolder latest = latestSuccessfulByWeek.get(week);
+        return latest != null && latest.path().equals(folder.path());
+    }
+
+    private LocalDate startOfWeek(LocalDateTime dateTime) {
+        return dateTime.toLocalDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
     }
 
     private void deleteBackupFolder(BackupFolder folder, String reason) {

@@ -157,6 +157,14 @@
             </div>
           </label>
           <label class="backup-retention-field">
+            <span>之后每周保留最新成功备份</span>
+            <div>
+              <input v-model.number="retention.weeklyWeeks" type="number" min="0" max="520" />
+              <small>周</small>
+            </div>
+            <small>按周一至周日归为一周；设置为 0 可关闭每周保留。</small>
+          </label>
+          <label class="backup-retention-field">
             <span>之后每月保留最新备份</span>
             <div>
               <input v-model.number="retention.monthlyMonths" type="number" min="0" max="120" />
@@ -453,6 +461,7 @@ const draft = reactive<BackupTaskInput>(emptyDraft())
 const retention = reactive<BackupRetentionSettings>({
   enabled: false,
   recentDays: 7,
+  weeklyWeeks: 4,
   monthlyMonths: 12,
 })
 
@@ -463,10 +472,13 @@ const selectedExecution = computed(
 const pathStatusText = computed(() => !pathInfo.value ? '正在检查' : pathInfo.value.writable ? '可写入' : pathInfo.value.exists ? '无写入权限' : '目录未挂载')
 const pathStatusClass = computed(() => pathInfo.value?.writable ? 'path-ready' : 'path-error')
 const retentionDescription = computed(() => {
-  if (retention.monthlyMonths === 0) {
-    return `保留最近 ${retention.recentDays} 天的所有备份，超过后清理。`
-  }
-  return `保留最近 ${retention.recentDays} 天的所有备份；更早的备份按月保留最新 1 份，共保留最近 ${retention.monthlyMonths} 个月。`
+  const weekly = retention.weeklyWeeks > 0
+    ? `之后每周保留最近 ${retention.weeklyWeeks} 个自然周各 1 份最新成功备份；`
+    : ''
+  const monthly = retention.monthlyMonths > 0
+    ? `更早的备份按月保留最新 1 份，共保留最近 ${retention.monthlyMonths} 个月。`
+    : '超出以上范围的备份将清理。'
+  return `保留最近 ${retention.recentDays} 天的所有备份；${weekly}${monthly}`
 })
 
 const activateTab = (tab: BackupTab) => {
@@ -556,6 +568,14 @@ const saveRetention = async () => {
     || retention.recentDays > 3650
   ) {
     message.warning('最近备份保留天数需设置为 1 到 3650 天')
+    return
+  }
+  if (
+    !Number.isInteger(retention.weeklyWeeks)
+    || retention.weeklyWeeks < 0
+    || retention.weeklyWeeks > 520
+  ) {
+    message.warning('每周备份保留周数需设置为 0 到 520 周')
     return
   }
   if (
