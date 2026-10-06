@@ -83,7 +83,8 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
     Optional<CrawlerBook> findBySiteAndExternalBookId(CrawlerSite site, String externalBookId);
     Optional<CrawlerBook> findFirstBySiteOrderByLastCrawlTimeDesc(CrawlerSite site);
     Page<CrawlerBook> findBySiteUser(User user, Pageable pageable);
-    @Query("""
+    // Keep the sorting parameter bindable in the count query without filtering any status.
+    @Query(value = """
             select b from CrawlerBook b
             where b.site.user = :user
               and b.discoveryStatus = :discoveryStatus
@@ -98,6 +99,22 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
                    or lower(b.site.siteName) like lower(concat('%', :keyword, '%'))
                    or lower(b.externalBookId) like lower(concat('%', :keyword, '%')))
             order by case when b.crawlStatus in :runningStatuses then 0 else 1 end
+            """, countQuery = """
+            select count(b) from CrawlerBook b
+            where b.site.user = :user
+              and b.discoveryStatus = :discoveryStatus
+              and b.crawlStatus <> :excludedCrawlStatus
+              and (:siteId is null or b.site.id = :siteId)
+              and (:crawlStatus is null or b.crawlStatus = :crawlStatus)
+              and (:importStatus is null or b.importStatus = :importStatus)
+              and (:favoriteOnly = false or b.favorite = true)
+              and (:keyword = ''
+                   or lower(b.bookName) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
+                   or lower(b.site.siteName) like lower(concat('%', :keyword, '%'))
+                   or lower(b.externalBookId) like lower(concat('%', :keyword, '%')))
+              and (b.crawlStatus in :runningStatuses
+                   or b.crawlStatus not in :runningStatuses or b.crawlStatus is null)
             """)
     Page<CrawlerBook> searchManagedBooks(
             @Param("user") User user,
