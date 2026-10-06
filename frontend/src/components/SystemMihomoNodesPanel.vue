@@ -190,7 +190,12 @@
             <h4>选择轮换节点</h4>
             <p>左侧是该组已选择的节点，右侧是所选受控组中的备选节点。</p>
           </div>
-          <span>最多 100 个节点</span>
+          <div class="latency-legend" aria-label="节点延迟颜色说明">
+            <el-tag type="success" effect="plain">≤300 ms</el-tag>
+            <el-tag type="warning" effect="plain">301–600 ms</el-tag>
+            <el-tag type="danger" effect="plain">&gt;600 ms</el-tag>
+            <el-tag type="info" effect="plain">未检测</el-tag>
+          </div>
         </div>
 
         <div class="node-transfer">
@@ -212,7 +217,16 @@
                 <span class="node-order">{{ index + 1 }}</span>
                 <div class="transfer-node-info">
                   <strong>{{ name }}</strong>
-                  <small>{{ nodeSummary(name) }}</small>
+                  <small v-if="nodeByName(name)">{{ nodeByName(name)?.type }}</small>
+                  <small v-else>当前控制器未返回此节点</small>
+                  <el-tag
+                    :type="nodeHealthType(nodeByName(name))"
+                    size="small"
+                    effect="plain"
+                    class="latency-tag"
+                  >
+                    {{ nodeHealthLabel(nodeByName(name)) }}
+                  </el-tag>
                 </div>
                 <div class="node-order-actions">
                   <el-button
@@ -285,7 +299,15 @@
                 />
                 <div class="transfer-node-info">
                   <strong>{{ node.name }}</strong>
-                  <small>{{ node.type }} · {{ nodeHealthLabel(node) }}</small>
+                  <small>{{ node.type }}</small>
+                  <el-tag
+                    :type="nodeHealthType(node)"
+                    size="small"
+                    effect="plain"
+                    class="latency-tag"
+                  >
+                    {{ nodeHealthLabel(node) }}
+                  </el-tag>
                 </div>
               </article>
               <el-empty
@@ -488,22 +510,26 @@ function move(index: number, direction: number) {
   draft.value.nodes = nodes
 }
 
-function nodeSummary(name: string) {
-  const node = catalog.value.nodes.find(item => item.name === name)
-  if (!node) return '当前控制器未返回此节点'
-  return `${node.type} · ${nodeHealthLabel(node)}`
+function nodeByName(name: string) {
+  return catalog.value.nodes.find(item => item.name === name)
 }
 
-function nodeHealthLabel(node: MihomoNode) {
+function nodeHealthLabel(node?: MihomoNode) {
+  if (!node) return '无节点数据'
   if (node.alive === false) return '检测失败'
-  if (node.delay != null) return `${node.delay} ms`
+  if (node.delay != null && Number.isFinite(node.delay) && node.delay >= 0) {
+    return `${node.delay} ms`
+  }
   return node.alive === true ? '可用' : '未检测'
 }
 
-function nodeHealthType(node: MihomoNode): 'success' | 'danger' | 'info' {
+function nodeHealthType(node?: MihomoNode): 'success' | 'warning' | 'danger' | 'info' {
+  if (!node) return 'info'
   if (node.alive === false) return 'danger'
-  if (node.alive === true) return 'success'
-  return 'info'
+  if (node.delay == null || !Number.isFinite(node.delay) || node.delay < 0) return 'info'
+  if (node.delay <= 300) return 'success'
+  if (node.delay <= 600) return 'warning'
+  return 'danger'
 }
 
 function formatTime(value?: string | null) {
@@ -603,6 +629,20 @@ onMounted(load)
 .transfer-heading {
   justify-content: space-between;
   gap: 16px;
+}
+
+.latency-legend {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.latency-legend :deep(.el-tag),
+.latency-tag {
+  font-variant-numeric: tabular-nums;
 }
 
 .nodes-panel-header h3,
@@ -913,6 +953,10 @@ onMounted(load)
   white-space: nowrap;
 }
 
+.transfer-node-info :deep(.latency-tag) {
+  margin-top: 3px;
+}
+
 .node-order {
   display: grid;
   width: 22px;
@@ -1024,6 +1068,10 @@ onMounted(load)
   .transfer-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .latency-legend {
+    justify-content: flex-start;
   }
 }
 
