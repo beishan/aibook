@@ -24,7 +24,8 @@ public class MihomoDtos {
             boolean randomOrder, String currentNode, long activeMillis, long chapters,
             long tasks, Instant lastSwitchAt, Instant retryAt, String lastError,
             Map<String, Instant> cooldowns, List<SwitchEvent> events, Long systemProxyId,
-            Long nodeGroupId, String switchingMode, String manualNode) { }
+            Long nodeGroupId, String switchingMode, String manualNode,
+            Map<String, Integer> nodeFailures, Map<String, String> cooldownReasons) { }
     public record NodeView(String name, String type, Boolean alive, Integer delay, Instant checkedAt) { }
     public record GroupView(String name, String currentNode, List<String> nodes) { }
     public record CatalogView(List<GroupView> groups, List<NodeView> nodes) { }

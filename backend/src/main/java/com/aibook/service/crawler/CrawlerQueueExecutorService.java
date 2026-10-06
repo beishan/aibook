@@ -4,6 +4,7 @@ import com.aibook.dto.ProxySettingsDtos.CrawlerProxyView;
 import com.aibook.dto.crawler.CrawlerDtos.QueueExecutorPayload;
 import com.aibook.dto.crawler.CrawlerDtos.QueueExecutorProxyPayload;
 import com.aibook.dto.crawler.CrawlerDtos.QueueExecutorProxyView;
+import com.aibook.dto.crawler.CrawlerDtos.QueueExecutorProxyStateView;
 import com.aibook.dto.crawler.CrawlerDtos.QueueExecutorView;
 import com.aibook.dto.crawler.CrawlerDtos.QueueProxyOptionView;
 import com.aibook.dto.crawler.CrawlerDtos.TaskExecutionView;
@@ -332,17 +333,32 @@ public class CrawlerQueueExecutorService {
         List<CrawlerQueueExecutorProxy> bindings = bindingRepository
                 .findByExecutorIdOrderBySortOrderAscIdAsc(executor.getId());
         List<QueueExecutorProxyView> bindingViews = new ArrayList<>();
+        Map<String, CrawlerQueueProxyCooldown> states = new HashMap<>();
+        cooldownRepository.findByQueueId(executor.getQueue().getId())
+                .forEach(state -> states.put(state.getProxyKey(), state));
         for (CrawlerQueueExecutorProxy binding : bindings) {
             CrawlerProxyView proxy = proxies.get(binding.getProxyConfigId());
             String key = "crawler:" + binding.getProxyConfigId();
             Instant until = cooldowns.get(key);
+            CrawlerQueueProxyCooldown state = states.get(key);
             bindingViews.add(new QueueExecutorProxyView(binding.getProxyConfigId(),
                     proxy == null ? "已删除的代理" : Objects.toString(proxy.name(), "未命名代理"),
                     binding.getSortOrder(), binding.getCooldownSeconds(), until,
                     proxy != null && proxy.effectiveEnabled()
-                            && (until == null || !until.isAfter(Instant.now()))));
+                            && (until == null || !until.isAfter(Instant.now())),
+                    state == null ? 0 : state.getConsecutiveFailures(),
+                    state == null ? null : state.getReason()));
         }
         List<ProxyCandidate> candidates = candidates(executor, site, proxies);
+        List<QueueExecutorProxyStateView> proxyStates = executor.getProxyMode()
+                == CrawlerQueueExecutor.ProxyMode.MIHOMO ? List.of() : candidates.stream().map(candidate -> {
+                    CrawlerQueueProxyCooldown state = states.get(candidate.key());
+                    return new QueueExecutorProxyStateView(candidate.key(), candidate.name(),
+                            !isCooling(candidate, cooldowns, Instant.now()),
+                            state == null ? 0 : state.getConsecutiveFailures(),
+                            state == null ? null : state.getBlockedUntil(),
+                            state == null ? null : state.getReason());
+                }).toList();
         Instant now = Instant.now();
         int availableCount = (int) candidates.stream()
                 .filter(candidate -> !isCooling(candidate, cooldowns, now)).count();
@@ -356,7 +372,29 @@ public class CrawlerQueueExecutorService {
                 isExecutorEnabled(executor),
                 executor.getProxyMode().name(), executor.getSelectionStrategy().name(),
                 executor.getDefaultProxyCooldownSeconds(), bindingViews,
-                availableCount, nextAvailable);
+                availableCount, nextAvailable, proxyStates);
+    }
+
+    public void recordBoundProxySuccess(ProxyCandidate candidate) {
+        ExecutionRoute route = executionRoute.get();
+        if (route != null && !candidate.key().startsWith("mihomo:")) {
+            cooldownRepository.resetFailures(route.queueId(), candidate.key());
+        }
+    }
+
+    public void recordBoundProxyFailure(ProxyCandidate candidate, CrawlerSite site,
+            String reason, long minimumSeconds) {
+        ExecutionRoute route = executionRoute.get();
+        if (route == null) return;
+        var settings = crawlerSettingsService.settings();
+        int threshold = site.getCooldownFailureThreshold() == null
+                ? settings.maxConsecutiveFailures() : site.getCooldownFailureThreshold();
+        int seconds = candidate.cooldownSeconds() == null
+                ? settings.accessDeniedCooldownSeconds() : candidate.cooldownSeconds();
+        Instant now = Instant.now();
+        cooldownRepository.recordFailure(route.queueId(), candidate.key(), Math.max(1, threshold),
+                now, now.plusSeconds(Math.max(Math.max(10, seconds), minimumSeconds)),
+                reason.substring(0, Math.min(300, reason.length())));
     }
 
     private boolean isExecutorEnabled(CrawlerQueueExecutor executor) {

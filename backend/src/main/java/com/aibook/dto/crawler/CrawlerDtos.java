@@ -234,13 +234,17 @@ public final class CrawlerDtos {
     public record QueueExecutorProxyView(
             Long proxyConfigId, String proxyName, int sortOrder,
             Integer cooldownSeconds, java.time.Instant coolingUntil,
-            boolean available) { }
+            boolean available, int consecutiveFailures, String freezeReason) { }
     public record QueueExecutorView(
             Long id, Long queueId, String name, String description,
             boolean defaultExecutor, boolean enabled, String proxyMode, String selectionStrategy,
             Integer defaultProxyCooldownSeconds,
             List<QueueExecutorProxyView> proxies,
-            int availableProxyCount, java.time.Instant nextAvailableAt) { }
+            int availableProxyCount, java.time.Instant nextAvailableAt,
+            List<QueueExecutorProxyStateView> proxyStates) { }
+    public record QueueExecutorProxyStateView(String proxyKey, String proxyName,
+            boolean available, int consecutiveFailures, java.time.Instant coolingUntil,
+            String freezeReason) { }
     public record QueueProxyOptionView(
             Long id, String name, boolean effectiveEnabled) { }
     public record TaskQueueView(

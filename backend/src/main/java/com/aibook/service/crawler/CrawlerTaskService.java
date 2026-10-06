@@ -25,6 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.event.EventListener;
+import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -1018,6 +1019,7 @@ public class CrawlerTaskService {
     }
 
     private void submitBatch(List<String> taskIds) {
+        if (shuttingDown) return;
         Map<String, CrawlerTask> tasksById = new HashMap<>();
         taskRepository.findAllById(taskIds).forEach(task -> tasksById.put(task.getId(), task));
         List<CrawlerTask> tasks = taskIds.stream()
@@ -1041,6 +1043,7 @@ public class CrawlerTaskService {
     }
 
     private void submit(String id) {
+        if (shuttingDown) return;
         CrawlerTask task = taskRepository.findById(id).orElse(null);
         if (task == null) return;
         long queueOrder = task.getQueueOrder() == null ? nextQueueOrder() : task.getQueueOrder();
@@ -1310,6 +1313,7 @@ public class CrawlerTaskService {
         }
 
         private void executeTask() {
+            if (shuttingDown) return;
             CrawlerTask task = taskRepository.findById(taskId).orElse(null);
             if (task != null && task.getStatus() == CrawlerTask.TaskStatus.WAITING
                     && (isSiteManuallyFrozen(task.getSite()) || isCoolingDown(task.getSite())
@@ -1336,6 +1340,7 @@ public class CrawlerTaskService {
     }
 
     void run(String taskId) {
+        if (shuttingDown) return;
         CrawlerTask task;
         synchronized (taskLock(taskId)) {
             task = taskRepository.findById(taskId).orElse(null);
@@ -1541,10 +1546,8 @@ public class CrawlerTaskService {
             long attemptStartedNanos = System.nanoTime();
             String attemptOutcome = "FAILED";
             try {
-                CrawlerHttpClient.FetchResult response = recheckCompleted
-                        ? httpClient.get(site, chapter.getChapterUrl(), chapter.getSourceEtag(),
-                                chapter.getSourceLastModified(), requestTiming)
-                        : httpClient.get(site, chapter.getChapterUrl(), null, null, requestTiming);
+                CrawlerHttpClient.FetchResult response = fetchChapter(site, chapter, rule, parser,
+                        recheckCompleted, requestTiming);
                 requestSucceeded = true;
                 requestFailureGuard.success();
                 CrawlerTask afterFetch = runningTask(task.getId());
@@ -2030,6 +2033,7 @@ public class CrawlerTaskService {
     }
 
     private CrawlerTask runningTask(String taskId) {
+        if (shuttingDown) return null;
         CrawlerTask task = taskRepository.findById(taskId)
                 .filter(candidate -> candidate.getStatus() == CrawlerTask.TaskStatus.RUNNING)
                 .orElse(null);
@@ -2088,6 +2092,7 @@ public class CrawlerTaskService {
     }
 
     private boolean isStopRequested(String taskId) {
+        if (shuttingDown) return true;
         return taskRepository.findById(taskId)
                 .map(task -> task.getStatus() == CrawlerTask.TaskStatus.PAUSED
                         || task.getStatus() == CrawlerTask.TaskStatus.WAITING
@@ -2180,9 +2185,27 @@ public class CrawlerTaskService {
         }
     }
 
-    @PreDestroy public void shutdown() {
-        shuttingDown = true;
-        executor.shutdownNow();
+    @EventListener
+    public void onContextClosed(ContextClosedEvent event) {
+        if (event.getApplicationContext() == applicationContext) shutdown();
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        synchronized (executor) {
+            if (shuttingDown) return;
+            shuttingDown = true;
+            executor.shutdownNow();
+        }
+        // ContextClosedEvent 先于 JPA 等 Bean 销毁，等待工作线程完成在途保存和清理。
+        try {
+            if (!executor.awaitTermination(20, TimeUnit.SECONDS)) {
+                log.warn("[采集任务] 停机等待超时，仍有 {} 个工作线程未退出", executor.getActiveCount());
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            log.warn("[采集任务] 等待采集线程停止时被中断");
+        }
     }
 
     private String sha256(String value) throws Exception { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
@@ -2362,6 +2385,30 @@ public class CrawlerTaskService {
         int count = value.codePointCount(0, value.length());
         return count <= maxCodePoints ? value : value.substring(0, value.offsetByCodePoints(0, maxCodePoints));
     }
+    private CrawlerHttpClient.FetchResult fetchChapter(CrawlerSite site, CrawlerChapter chapter,
+            CrawlerSiteRule rule, BookCrawlerParser parser, boolean recheck,
+            CrawlerHttpClient.RequestTiming timing) throws Exception {
+        String etag = recheck ? chapter.getSourceEtag() : null;
+        String modified = recheck ? chapter.getSourceLastModified() : null;
+        if (!httpClient.hasBoundExecutor()) {
+            return httpClient.get(site, chapter.getChapterUrl(), etag, modified, timing);
+        }
+        return httpClient.get(site, chapter.getChapterUrl(), etag, modified, timing, response -> {
+            BookCrawlerParser.ParsedContent parsed;
+            try {
+                parsed = parseChapterWithDiagnostics(parser, response, chapter, rule);
+            } catch (RuntimeException exception) {
+                if (matchedResponseFailureMarker(site, response.html()) == null) throw exception;
+                throw new CrawlerHttpClient.NodeRequestFailureException(exception.getMessage(), 0);
+            }
+            ContentMarkerMatch marker = matchedContentMarker(site, parsed.content());
+            if (marker != null && marker.status() == ContentMarkerStatus.FAILED) {
+                throw new CrawlerHttpClient.NodeRequestFailureException(
+                        "正文命中失败特征：" + shortText(marker.marker(), 100), 0);
+            }
+        });
+    }
+
     static BookCrawlerParser.ParsedContent parseChapterWithDiagnostics(
             BookCrawlerParser parser, CrawlerHttpClient.FetchResult response,
             CrawlerChapter chapter, CrawlerSiteRule rule) {

@@ -48,6 +48,7 @@ public class CrawlerHttpClient {
     @Autowired
     private CrawlerMihomoService mihomoService;
     private final ThreadLocal<HttpClient> managedClient = new ThreadLocal<>();
+    private final ThreadLocal<ResponseValidator> responseValidator = new ThreadLocal<>();
     private final CrawlerSettingsService crawlerSettingsService;
     private final CrawlerSiteRepository crawlerSiteRepository;
     private final Map<Long, AtomicLong> siteNextRequests = new ConcurrentHashMap<>();
@@ -84,6 +85,47 @@ public class CrawlerHttpClient {
             });
         }
         return getInternal(site, url, etag, lastModified, timing);
+    }
+
+    @FunctionalInterface
+    public interface ResponseValidator {
+        void validate(FetchResult response) throws Exception;
+    }
+
+    public boolean hasBoundExecutor() {
+        return queueExecutorService != null && queueExecutorService.hasBoundExecutor();
+    }
+
+    public FetchResult get(CrawlerSite site, String url, String etag, String lastModified,
+            RequestTiming timing, ResponseValidator validator) throws Exception {
+        ResponseValidator previous = responseValidator.get();
+        responseValidator.set(validator);
+        try {
+            return get(site, url, etag, lastModified, timing);
+        } finally {
+            if (previous == null) responseValidator.remove();
+            else responseValidator.set(previous);
+        }
+    }
+
+    private FetchResult validateResponse(FetchResult response) throws Exception {
+        if (response.statusCode() != 304 && responseValidator.get() != null) {
+            responseValidator.get().validate(response);
+        }
+        return response;
+    }
+
+    public static final class NodeRequestFailureException extends IOException {
+        private final long minimumCooldownSeconds;
+
+        public NodeRequestFailureException(String reason, long minimumCooldownSeconds) {
+            super(reason);
+            this.minimumCooldownSeconds = minimumCooldownSeconds;
+        }
+
+        public long minimumCooldownSeconds() {
+            return minimumCooldownSeconds;
+        }
     }
 
     private FetchResult getInternal(CrawlerSite site, String url, String etag, String lastModified,
@@ -185,75 +227,86 @@ public class CrawlerHttpClient {
         if (candidates.isEmpty()) {
             throw new NoAvailableQueueProxyException("当前队列的执行器没有可用代理，任务等待代理恢复");
         }
+        NodeRequestFailureException lastFailure = null;
         for (CrawlerQueueExecutorService.ProxyCandidate candidate : candidates) {
-            queueExecutorService.recordRequestProxy(candidate);
-            try {
-                TimedResponse timed = sendFollowingSafeRedirects(site, uri, etag,
-                        lastModified, candidate.url(), settings, timing);
-                NetworkResponse response = timed.response();
-                if (response.statusCode() == 304) {
-                    recordSuccess(site);
-                    return new FetchResult("", 304, timed.durationMillis(), etag, lastModified);
-                }
-                if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                    validateContentType(response);
-                    Charset charset = Charset.forName(defaultString(site.getEncoding(), "UTF-8"));
-                    String html = new String(response.body(), charset);
-                    Optional<String> challenge = settings.softBlockDetectionEnabled()
-                            ? detectSoftBlock(html) : Optional.empty();
-                    if (challenge.isPresent()) {
-                        if (queueExecutorService.isMihomoBound()) {
-                            openCircuit(site, Duration.ofSeconds(settings.accessDeniedCooldownSeconds()),
-                                    "检测到疑似反爬验证页：" + challenge.get(), timed.pageUrl().toString());
-                            throw new NoAvailableQueueProxyException("网站返回验证页，任务等待网站冷却");
+            int attempts = Math.max(2, settings.retryCount() + 1);
+            for (int attempt = 0; attempt < attempts; attempt++) {
+                queueExecutorService.recordRequestProxy(candidate);
+                try {
+                    TimedResponse timed = sendFollowingSafeRedirects(site, uri, etag,
+                            lastModified, candidate.url(), settings, timing);
+                    NetworkResponse response = timed.response();
+                    if (response.statusCode() == 304) {
+                        queueExecutorService.recordBoundProxySuccess(candidate);
+                        recordSuccess(site);
+                        return new FetchResult("", 304, timed.durationMillis(), etag, lastModified);
+                    }
+                    if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                        validateContentType(response);
+                        Charset charset = Charset.forName(defaultString(site.getEncoding(), "UTF-8"));
+                        String html = new String(response.body(), charset);
+                        if (html.isBlank()) {
+                            throw new NodeRequestFailureException("源站返回空页面", 0);
                         }
-                        queueExecutorService.coolBoundProxy(candidate, site,
-                                "检测到疑似反爬验证页：" + challenge.get(), 0);
+                        Optional<String> challenge = settings.softBlockDetectionEnabled()
+                                ? detectSoftBlock(html) : Optional.empty();
+                        if (challenge.isPresent()) {
+                            throw new NodeRequestFailureException("检测到疑似反爬验证页：" + challenge.get(), 0);
+                        }
+                        FetchResult result = validateResponse(new FetchResult(html, response.statusCode(),
+                                timed.durationMillis(), response.headers().firstValue("ETag").orElse(null),
+                                response.headers().firstValue("Last-Modified").orElse(null)));
+                        queueExecutorService.recordBoundProxySuccess(candidate);
+                        recordSuccess(site);
+                        return result;
+                    }
+                    if (Set.of(401, 403, 429, 451).contains(response.statusCode())) {
+                        long retryAfter = response.statusCode() == 429
+                                ? retryAfterMillis(response.headers(), Instant.now()).orElse(0) / 1000
+                                : 0;
+                        throw new NodeRequestFailureException("源站限制访问（HTTP "
+                                + response.statusCode() + "）", retryAfter);
+                    }
+                    if (response.statusCode() >= 500) {
+                        throw new NodeRequestFailureException("源站返回 HTTP " + response.statusCode(), 0);
+                    }
+                    recordFailure(site, cooldownFailureThreshold(site,
+                            settings.maxConsecutiveFailures()), settings.circuitCooldownSeconds());
+                    throw new ResponseStatusException(HttpStatusCode.valueOf(response.statusCode()),
+                            "源站返回 HTTP " + response.statusCode());
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw exception;
+                } catch (ResponseStatusException exception) {
+                    throw exception;
+                } catch (IOException exception) {
+                    lastFailure = exception instanceof NodeRequestFailureException failure ? failure
+                            : new NodeRequestFailureException("代理请求失败：" + exception.getMessage(), 0);
+                    long retryDelay = Math.max(retryBackoffMillis(attempt, settings.retryBackoffMaxMillis()),
+                            lastFailure.minimumCooldownSeconds() * 1000L);
+                    if (lastFailure.minimumCooldownSeconds() > 0
+                            && retryDelay > settings.maxInlineRetryDelayMillis()) {
+                        openCircuit(site, Duration.ofMillis(retryDelay),
+                                "源站要求等待后重试（HTTP 429）", uri.toString());
+                        throw new NoAvailableQueueProxyException("源站要求等待后重试，本轮尚未耗尽重试，不计节点异常");
+                    }
+                    if (attempt + 1 < attempts || lastFailure.minimumCooldownSeconds() > 0) {
+                        sleepOther(Math.min(retryDelay, settings.maxInlineRetryDelayMillis()), timing);
+                    }
+                    if (attempt + 1 < attempts) {
                         continue;
                     }
-                    recordSuccess(site);
-                    return new FetchResult(html, response.statusCode(), timed.durationMillis(),
-                            response.headers().firstValue("ETag").orElse(null),
-                            response.headers().firstValue("Last-Modified").orElse(null));
+                    break;
                 }
-                if (Set.of(401, 403, 429, 451).contains(response.statusCode())) {
-                    long retryAfter = response.statusCode() == 429
-                            ? retryAfterMillis(response.headers(), Instant.now()).orElse(0) / 1000
-                            : 0;
-                    if (queueExecutorService.isMihomoBound()) {
-                        openCircuit(site, Duration.ofSeconds(Math.max(1, Math.max(retryAfter,
-                                settings.accessDeniedCooldownSeconds()))),
-                                "源站限制访问（HTTP " + response.statusCode() + "）", timed.pageUrl().toString());
-                        throw new NoAvailableQueueProxyException("网站限制访问，任务等待网站冷却");
-                    }
-                    queueExecutorService.coolBoundProxy(candidate, site,
-                            "源站限制访问（HTTP " + response.statusCode() + "）", retryAfter);
-                    continue;
-                }
-                if (response.statusCode() >= 500) {
-                    if (queueExecutorService.isMihomoBound()) {
-                        throw new NoAvailableQueueProxyException("源站返回 HTTP " + response.statusCode() + "，稍后重试");
-                    }
-                    queueExecutorService.coolBoundProxyForNetworkFailure(candidate,
-                            "源站返回 HTTP " + response.statusCode());
-                    continue;
-                }
-                recordFailure(site, cooldownFailureThreshold(site,
-                        settings.maxConsecutiveFailures()), settings.circuitCooldownSeconds());
-                throw new ResponseStatusException(HttpStatusCode.valueOf(response.statusCode()),
-                        "源站返回 HTTP " + response.statusCode());
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                throw exception;
-            } catch (ResponseStatusException exception) {
-                throw exception;
-            } catch (IOException exception) {
-                if (queueExecutorService.isMihomoBound()) throw exception;
-                queueExecutorService.coolBoundProxyForNetworkFailure(candidate,
-                        "代理连接失败：" + exception.getClass().getSimpleName());
             }
+            if (queueExecutorService.isMihomoBound()) throw lastFailure;
+            queueExecutorService.recordBoundProxyFailure(candidate, site, lastFailure.getMessage(),
+                    lastFailure.minimumCooldownSeconds());
         }
-        throw new NoAvailableQueueProxyException("当前队列的执行器代理均不可用或处于冷却期，任务等待代理恢复");
+        if (queueExecutorService.availableCandidates(site).isEmpty()) {
+            throw new NoAvailableQueueProxyException("所有节点均已冻结，任务等待节点恢复");
+        }
+        throw lastFailure;
     }
 
     public RobotsTxtSnapshot refreshRobotsTxt(CrawlerSite site) {

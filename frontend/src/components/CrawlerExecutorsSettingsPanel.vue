@@ -195,7 +195,7 @@
               <el-select v-model="reference.manualNode" filterable>
                 <el-option v-for="node in selectedGroup?.nodes || []" :key="node" :value="node" :label="node" />
               </el-select>
-              <small>保存后采集请求固定使用此节点，失败时等待，不自动换到其他节点。</small>
+              <small>保存后固定使用此节点，章节重试耗尽后记录失败；节点冻结时等待，不自动换到其他节点。</small>
             </el-form-item>
             <template v-else>
               <el-form-item v-if="reference.switchingMode === 'TIME'" label="轮换间隔（秒）">
@@ -222,11 +222,12 @@
                     @change="reference.failover = Boolean($event)"
                   />
                 </el-form-item>
-                <el-form-item label="连续网络失败次数"><el-input-number v-model="reference.failureThreshold" :min="1" :max="10" /></el-form-item>
-                <el-form-item label="故障节点冷却（秒）"><el-input-number v-model="reference.cooldownSeconds" :min="10" :max="604800" /></el-form-item>
+                <el-form-item label="连续节点异常阈值"><el-input-number v-model="reference.failureThreshold" :min="1" :max="10" /></el-form-item>
+                <el-form-item label="异常节点冻结（秒）"><el-input-number v-model="reference.cooldownSeconds" :min="10" :max="604800" /></el-form-item>
+                <p class="retry-help">同一章节先按采集请求重试次数在当前节点重试（至少请求 2 次），耗尽后记 1 次节点异常再切换；连续节点异常达到阈值后冻结，成功采集后清零。手动模式或关闭故障切换时保留当前节点。</p>
               </div>
             </template>
-            <p class="hint">切换只使用所选节点组。网站限制访问进入冷却，正文失败不触发换节点；同一受控组只由一个执行器管理。</p>
+            <p class="hint">切换只使用所选节点组。同一章节先重试当前节点，耗尽后计一次节点异常；开启故障切换时继续尝试备用节点。冻结后跳过该节点，同一受控组只由一个执行器管理。</p>
           </template>
         </el-form>
         <div v-if="policy && form.proxyMode === 'MIHOMO'" class="runtime">
@@ -234,6 +235,20 @@
           <small>{{ Math.floor(policy.activeMillis / 1000) }} 秒 · {{ policy.chapters }} 章 · {{ policy.tasks }} 个任务</small>
           <el-alert v-if="policy.lastError" :title="policy.lastError" type="warning" :closable="false" />
           <el-button size="small" @click="refreshPolicy">刷新状态</el-button>
+          <el-table :data="nodeStates" size="small" class="node-state-table">
+            <el-table-column prop="name" label="节点" min-width="130" />
+            <el-table-column label="状态" width="90">
+              <template #default="{ row }"><el-tag :type="row.frozen ? 'danger' : 'success'" size="small">{{ row.frozen ? '已冻结' : '可用' }}</el-tag></template>
+            </el-table-column>
+            <el-table-column prop="failures" label="连续异常" width="90" />
+            <el-table-column label="冻结详情" min-width="210">
+              <template #default="{ row }">
+                <span v-if="row.frozen">{{ row.reason || '节点检测失败' }}</span>
+                <small v-if="row.frozen">恢复时间：{{ new Date(row.until).toLocaleString() }}</small>
+                <span v-else>—</span>
+              </template>
+            </el-table-column>
+          </el-table>
           <details v-if="policy.events.length">
             <summary>最近切换记录</summary>
             <div v-for="(event, index) in policy.events" :key="index" class="event-row">
@@ -241,6 +256,19 @@
               {{ event.from || '未确认' }} → {{ event.to || '未确认' }}
             </div>
           </details>
+        </div>
+        <div v-if="form.proxyMode !== 'MIHOMO' && proxyStates.length" class="runtime">
+          <strong>普通代理状态</strong>
+          <small>章节重试耗尽记一次异常，使用网站连续失败阈值；冻结时长使用该代理冷却配置。</small>
+          <el-button size="small" @click="loadExecutors">刷新状态</el-button>
+          <div v-for="proxy in proxyStates" :key="proxy.proxyKey" class="proxy-state-row">
+            <span>{{ proxy.proxyName }}</span>
+            <el-tag :type="isFrozen(proxy.coolingUntil) ? 'danger' : proxy.available ? 'success' : 'info'" size="small">
+              {{ isFrozen(proxy.coolingUntil) ? '已冻结' : proxy.available ? '可用' : '已停用' }}
+            </el-tag>
+            <small>连续异常：{{ proxy.consecutiveFailures || 0 }}</small>
+            <small v-if="isFrozen(proxy.coolingUntil)">{{ proxy.freezeReason }} · 恢复时间：{{ new Date(proxy.coolingUntil || '').toLocaleString() }}</small>
+          </div>
         </div>
       </div>
       <template #footer>
@@ -272,6 +300,21 @@ const saving = ref(false)
 const dialog = ref(false)
 const editingId = ref<number>()
 const policy = ref<MihomoPolicyView|null>(null)
+const isFrozen = (until: string | null | undefined) => !!until && Date.parse(until) > Date.now()
+const nodeStates = computed(() => (policy.value?.nodes || []).map(name => ({
+  name,
+  frozen: isFrozen(policy.value?.cooldowns[name]),
+  until: policy.value?.cooldowns[name],
+  failures: policy.value?.nodeFailures?.[name] || 0,
+  reason: policy.value?.cooldownReasons?.[name],
+})))
+const proxyStates = computed(() => {
+  const executor = executors.value.find(item => item.id === editingId.value)
+  return executor?.proxyStates || (executor?.proxies || []).map(proxy => ({
+    ...proxy,
+    proxyKey: `crawler:${proxy.proxyConfigId}`,
+  }))
+})
 const executionDrawer = ref(false)
 const executionLoading = ref(false)
 const detailExecutor = ref<CrawlerQueueExecutor>()
@@ -573,6 +616,32 @@ small {
 }
 .runtime > .el-button {
   justify-self: start;
+}
+
+.runtime {
+  min-width: 0;
+}
+
+.retry-help {
+  grid-column: 1 / -1;
+  margin: 0 0 12px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.proxy-state-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding-block: 8px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.proxy-state-row > small {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
 }
 .proxy-row {
   padding: 8px 0;

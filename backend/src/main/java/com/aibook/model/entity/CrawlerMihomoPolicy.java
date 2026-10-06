@@ -50,5 +50,9 @@ public class CrawlerMihomoPolicy {
     @Column(columnDefinition = "TEXT")
     private String cooldownsJson = "{}";
     @Column(columnDefinition = "TEXT")
+    private String nodeFailuresJson = "{}";
+    @Column(columnDefinition = "TEXT")
+    private String cooldownReasonsJson = "{}";
+    @Column(columnDefinition = "TEXT")
     private String eventsJson = "[]";
 }

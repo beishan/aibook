@@ -30,4 +30,8 @@ public class CrawlerQueueProxyCooldown {
 
     @Column(length = 300)
     private String reason;
+
+    @Column(columnDefinition = "integer default 0")
+    @Builder.Default
+    private int consecutiveFailures = 0;
 }

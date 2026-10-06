@@ -221,6 +221,10 @@ public class CrawlerMihomoService {
             ensureNotFrozen(id);
             CrawlerMihomoPolicy config = required(id);
             if (!nodes(config).contains(node)) bad("只能切换到已选节点；请先保存节点配置");
+            Instant frozenUntil = cooldowns(config).get(node);
+            if (frozenUntil != null && frozenUntil.isAfter(Instant.now())) {
+                bad("该节点仍处于冻结期，请选择其他节点或等待恢复");
+            }
             validateNodes(config, List.of(node));
             api.delay(config.getControllerUrl(), secret(config), node);
             switchTo(config, node, "手动切换");
@@ -279,11 +283,17 @@ public class CrawlerMihomoService {
                 }
                 reconcile(config);
                 int maximum = nodes(config).size() + config.getFailureThreshold();
+                Set<String> failedNodes = new HashSet<>();
+                CrawlerHttpClient.NodeRequestFailureException lastNodeFailure = null;
                 for (int attempt = 0; attempt < maximum; attempt++) {
                     ensureNotFrozen(id);
                     accrueActiveTime(config);
                     Instant coolingUntil = cooldowns(config).get(config.getCurrentNode());
                     if ("MANUAL".equals(config.getSwitchingMode())) {
+                        Instant manualCooling = cooldowns(config).get(config.getManualNode());
+                        if (manualCooling != null && manualCooling.isAfter(Instant.now())) {
+                            throw waitAndSave(config, "手动指定节点已冻结，等待节点恢复", 30);
+                        }
                         if (!nodes(config).contains(config.getManualNode())) throw waitAndSave(config, "手动指定节点已从节点组移除，请重新选择", 30);
                         if (!Objects.equals(config.getManualNode(), config.getCurrentNode())) {
                             try {
@@ -300,14 +310,53 @@ public class CrawlerMihomoService {
                     } else if (rotationDue(config)) {
                         rotate(config, "定期轮换", false);
                     }
+                    if (failedNodes.contains(config.getCurrentNode())) {
+                        throw new CrawlerHttpClient.NodeRequestFailureException(
+                                "本章节已在所有可用节点重试，仍异常：" + lastNodeFailure.getMessage(), 0);
+                    }
                     try {
                         requestTrace.set(new ExecutionSummary(config.getProxyUrl(),
                                 config.getGroupName(), config.getCurrentNode()));
                         T result = action.run();
+                        Map<String, Integer> failures = nodeFailures(config);
+                        failures.remove(config.getCurrentNode());
+                        config.setNodeFailuresJson(write(failures));
                         config.setFailures(0);
                         config.setLastError(null);
                         policies.save(config);
                         return result;
+                    } catch (CrawlerHttpClient.NodeRequestFailureException exception) {
+                        lastNodeFailure = exception;
+                        String node = config.getCurrentNode();
+                        failedNodes.add(node);
+                        Map<String, Integer> failures = nodeFailures(config);
+                        int count = failures.getOrDefault(node, 0) + 1;
+                        failures.put(node, count);
+                        config.setNodeFailuresJson(write(failures));
+                        config.setLastError(exception.getMessage().substring(
+                                0, Math.min(300, exception.getMessage().length())));
+                        if (count >= config.getFailureThreshold()) {
+                            freezeNode(config, node, exception.getMessage(), exception.minimumCooldownSeconds());
+                            event(config, node, node, "节点已冻结：连续 " + count + " 次节点异常；"
+                                    + exception.getMessage(), false);
+                        }
+                        policies.save(config);
+                        if (!config.isFailover() || "MANUAL".equals(config.getSwitchingMode())) {
+                            throw exception;
+                        }
+                        Map<String, Instant> blockedNodes = cooldowns(config);
+                        Instant now = Instant.now();
+                        boolean poolExhausted = nodes(config).stream().allMatch(candidate ->
+                                failedNodes.contains(candidate) || blockedNodes.get(candidate) != null
+                                        && blockedNodes.get(candidate).isAfter(now));
+                        if (poolExhausted) {
+                            boolean allFrozen = nodes(config).stream().allMatch(candidate ->
+                                    blockedNodes.get(candidate) != null && blockedNodes.get(candidate).isAfter(now));
+                            if (allFrozen) throw waitAndSave(config, "所有节点已冻结，等待节点恢复", 30);
+                            throw new CrawlerHttpClient.NodeRequestFailureException(
+                                    "本章节已在所有可用节点重试，仍异常：" + exception.getMessage(), 0);
+                        }
+                        rotate(config, "章节重试耗尽，切换下一个节点：" + exception.getMessage(), true);
                     } catch (IOException exception) {
                         config.setFailures(config.getFailures() + 1);
                         policies.save(config);
@@ -320,9 +369,7 @@ public class CrawlerMihomoService {
                             throw waitAndSave(config, "节点检测正常，目标网站请求失败，等待后重试", 30);
                         } catch (MihomoApiClient.ApiException failure) {
                             if (failure.status() != 503 && failure.status() != 504) throw failure;
-                            Map<String, Instant> cooldowns = cooldowns(config);
-                            cooldowns.put(config.getCurrentNode(), Instant.now().plusSeconds(config.getCooldownSeconds()));
-                            config.setCooldownsJson(write(cooldowns));
+                            freezeNode(config, config.getCurrentNode(), "节点网络检测失败", 0);
                             policies.save(config);
                             rotate(config, "网络故障切换", true);
                         }
@@ -331,6 +378,8 @@ public class CrawlerMihomoService {
                 throw waitAndSave(config, "本轮节点重试已耗尽", 30);
             } catch (CrawlerHttpClient.NoAvailableQueueProxyException exception) {
                 throw waitAndSave(config, exception.getMessage(), 30);
+            } catch (CrawlerHttpClient.NodeRequestFailureException exception) {
+                throw exception;
             } catch (IOException exception) {
                 throw waitAndSave(config, "Mihomo 控制或检测失败：" + exception.getMessage(), 30);
             } finally {
@@ -407,9 +456,7 @@ public class CrawlerMihomoService {
                 api.delay(config.getControllerUrl(), secret(config), candidate);
             } catch (MihomoApiClient.ApiException exception) {
                 if (exception.status() != 503 && exception.status() != 504) throw exception;
-                Map<String, Instant> cooldowns = cooldowns(config);
-                cooldowns.put(candidate, Instant.now().plusSeconds(config.getCooldownSeconds()));
-                config.setCooldownsJson(write(cooldowns));
+                freezeNode(config, candidate, "候选节点网络检测失败", 0);
                 event(config, config.getCurrentNode(), candidate, "候选节点检测失败", false);
                 policies.save(config);
                 continue;
@@ -639,6 +686,26 @@ public class CrawlerMihomoService {
         return read(config.getCooldownsJson(), new TypeReference<Map<String, Instant>>() { });
     }
 
+    private Map<String, Integer> nodeFailures(CrawlerMihomoPolicy config) {
+        return config.getNodeFailuresJson() == null ? new HashMap<>()
+                : read(config.getNodeFailuresJson(), new TypeReference<Map<String, Integer>>() { });
+    }
+
+    private Map<String, String> cooldownReasons(CrawlerMihomoPolicy config) {
+        return config.getCooldownReasonsJson() == null ? new HashMap<>()
+                : read(config.getCooldownReasonsJson(), new TypeReference<Map<String, String>>() { });
+    }
+
+    private void freezeNode(CrawlerMihomoPolicy config, String node, String reason, long minimumSeconds) {
+        Map<String, Instant> cooling = cooldowns(config);
+        Instant until = Instant.now().plusSeconds(Math.max(config.getCooldownSeconds(), minimumSeconds));
+        cooling.merge(node, until, (old, next) -> old.isAfter(next) ? old : next);
+        config.setCooldownsJson(write(cooling));
+        Map<String, String> reasons = cooldownReasons(config);
+        reasons.put(node, reason);
+        config.setCooldownReasonsJson(write(reasons));
+    }
+
     private PolicyView view(CrawlerMihomoPolicy p) {
         return new PolicyView(p.getControllerUrl(), p.getSecret() != null && !p.getSecret().isBlank(),
                 p.getProxyUrl(), p.getGroupName(), nodes(p), p.isFailover(), p.getFailureThreshold(),
@@ -646,7 +713,8 @@ public class CrawlerMihomoService {
                 p.isRandomOrder(), p.getCurrentNode(), p.getActiveMillis(), p.getChapters(), p.getTasks(),
                 p.getLastSwitchAt(), p.getRetryAt(), p.getLastError(), cooldowns(p),
                 read(p.getEventsJson(), new TypeReference<List<SwitchEvent>>() { }), p.getSystemProxyId(),
-                p.getNodeGroupId(), p.getSwitchingMode(), p.getManualNode());
+                p.getNodeGroupId(), p.getSwitchingMode(), p.getManualNode(),
+                nodeFailures(p), cooldownReasons(p));
     }
 
     private <T> T read(String value, TypeReference<T> type) {

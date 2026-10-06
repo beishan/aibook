@@ -109,8 +109,18 @@ export interface CrawlerQueueExecutorProxy {
   cooldownSeconds:number|null
   coolingUntil:string|null
   available:boolean
+  consecutiveFailures?:number
+  freezeReason?:string|null
 }
 export interface CrawlerQueueExecutor {
+  proxyStates?:{
+    proxyKey:string
+    proxyName:string
+    available:boolean
+    consecutiveFailures:number
+    coolingUntil:string|null
+    freezeReason:string|null
+  }[]
   id:number
   queueId:number
   name:string
@@ -170,6 +180,8 @@ export interface MihomoPolicyView extends Omit<MihomoPolicyPayload, 'secret'|'cl
   retryAt:string|null
   lastError:string|null
   cooldowns:Record<string,string>
+  nodeFailures?:Record<string,number>
+  cooldownReasons?:Record<string,string>
   events:MihomoSwitchEvent[]
 }
 export interface MihomoNode {

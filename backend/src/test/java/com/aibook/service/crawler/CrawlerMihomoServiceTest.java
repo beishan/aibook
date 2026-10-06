@@ -379,10 +379,110 @@ class CrawlerMihomoServiceTest {
     }
 
     @Test
-    void actualHttp403CoolsWebsiteAndDoesNotSwitchNodes() throws Exception {
+    void chapterRetriesOnSameNodeThenCountsOnceAndSwitchesBeforeFreezing() throws Exception {
         HttpServer proxy = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        List<String> requests = new CopyOnWriteArrayList<>();
         proxy.createContext("/", exchange -> {
-            exchange.sendResponseHeaders(403, -1);
+            requests.add(actual);
+            byte[] body = "<html>chapter content</html>".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/html");
+            exchange.sendResponseHeaders(actual.equals("A") ? 403 : 200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        proxy.start();
+        try {
+            CrawlerHttpClient http = managedHttp(proxy.getAddress().getPort());
+            assertEquals(200, http.get(site, "http://novel.example.com/chapter/1").statusCode());
+            assertTrue(requests.stream().filter("A"::equals).count() >= 2);
+            assertEquals("B", requests.getLast());
+            assertEquals(1, service.get(user, 2L, 4L).nodeFailures().get("A"));
+            assertFalse(service.get(user, 2L, 4L).cooldowns().containsKey("A"));
+            assertFalse(http.protectionState(site).coolingDown());
+
+            actual = "A";
+            config.setCurrentNode("A");
+            assertEquals(200, http.get(site, "http://novel.example.com/chapter/2").statusCode());
+            var policy = service.get(user, 2L, 4L);
+            assertEquals(2, policy.nodeFailures().get("A"));
+            assertTrue(policy.cooldowns().get("A").isAfter(Instant.now()));
+            assertTrue(policy.cooldownReasons().get("A").contains("403"));
+            assertEquals("B", actual);
+            assertThrows(ResponseStatusException.class, () -> service.switchManually(user, 2L, 4L, "A"));
+
+            long failures = requests.stream().filter("A"::equals).count();
+            assertEquals(200, http.get(site, "http://novel.example.com/chapter/3").statusCode());
+            assertEquals(failures, requests.stream().filter("A"::equals).count());
+        } finally {
+            proxy.stop(0);
+        }
+    }
+
+    @Test
+    void successfulChapterResetsOnlyItsNodesFailureCounter() throws Exception {
+        config.setNodeFailuresJson("{\"A\":1,\"B\":1}");
+        assertEquals("ok", service.execute(4L, site, () -> "ok"));
+        var counters = service.get(user, 2L, 4L).nodeFailures();
+        assertFalse(counters.containsKey("A"));
+        assertEquals(1, counters.get("B"));
+    }
+
+    @Test
+    void failingWholePoolCountsOncePerNodePerChapterAndEventuallyWaitsForFrozenNodes() throws Exception {
+        AtomicInteger attempts = new AtomicInteger();
+        CrawlerMihomoService.RequestAction<String> failure = () -> {
+            attempts.incrementAndGet();
+            throw new CrawlerHttpClient.NodeRequestFailureException("章节重试耗尽", 0);
+        };
+        assertThrows(CrawlerHttpClient.NodeRequestFailureException.class,
+                () -> service.execute(4L, site, failure));
+        assertEquals(2, attempts.get());
+        assertEquals(Map.of("A", 1, "B", 1), service.get(user, 2L, 4L).nodeFailures());
+        assertThrows(CrawlerHttpClient.NoAvailableQueueProxyException.class,
+                () -> service.execute(4L, site, failure));
+        assertEquals(4, attempts.get());
+        assertEquals(2, service.get(user, 2L, 4L).cooldowns().size());
+    }
+
+    @Test
+    void responseContentFailureIsRetriedBeforeNodeSwitchAndCountedOnce() throws Exception {
+        HttpServer proxy = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicInteger failedRequests = new AtomicInteger();
+        proxy.createContext("/", exchange -> {
+            String text = actual.equals("A") ? "网站异常，请稍后重试" : "有效章节正文";
+            if (actual.equals("A")) failedRequests.incrementAndGet();
+            byte[] body = text.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/html");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        proxy.start();
+        try {
+            CrawlerHttpClient http = managedHttp(proxy.getAddress().getPort());
+            var result = http.get(site, "http://novel.example.com/chapter/1", null, null,
+                    new CrawlerHttpClient.RequestTiming(), response -> {
+                        if (response.html().contains("网站异常")) {
+                            throw new CrawlerHttpClient.NodeRequestFailureException("网站异常", 0);
+                        }
+                    });
+            assertEquals("有效章节正文", result.html());
+            assertTrue(failedRequests.get() >= 2);
+            assertEquals(1, service.get(user, 2L, 4L).nodeFailures().get("A"));
+            assertEquals("B", service.lastRequestTrace().currentNode());
+        } finally {
+            proxy.stop(0);
+        }
+    }
+
+    @Test
+    void longRetryAfterWaitsWithoutCountingAnUnfinishedRetryRoundAsNodeFailure() throws Exception {
+        HttpServer proxy = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicInteger requests = new AtomicInteger();
+        proxy.createContext("/", exchange -> {
+            requests.incrementAndGet();
+            exchange.getResponseHeaders().add("Retry-After", "120");
+            exchange.sendResponseHeaders(429, -1);
             exchange.close();
         });
         proxy.start();
@@ -390,6 +490,9 @@ class CrawlerMihomoServiceTest {
             CrawlerHttpClient http = managedHttp(proxy.getAddress().getPort());
             assertThrows(CrawlerHttpClient.NoAvailableQueueProxyException.class,
                     () -> http.get(site, "http://novel.example.com/chapter/1"));
+            assertEquals(1, requests.get());
+            assertTrue(service.get(user, 2L, 4L).nodeFailures().isEmpty());
+            assertTrue(service.get(user, 2L, 4L).cooldowns().isEmpty());
             assertTrue(http.protectionState(site).coolingDown());
             verify(api, never()).select(anyString(), any(), anyString(), anyString());
         } finally {

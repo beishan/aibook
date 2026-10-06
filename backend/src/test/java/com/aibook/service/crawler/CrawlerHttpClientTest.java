@@ -34,6 +34,41 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class CrawlerHttpClientTest {
+    @Test
+    void ordinaryProxyRetriesSameChapterBeforeRecordingOneFailureAndTryingNextProxy() throws Exception {
+        List<String> requests = new CopyOnWriteArrayList<>();
+        java.util.concurrent.atomic.AtomicReference<String> current = new java.util.concurrent.atomic.AtomicReference<>();
+        HttpServer proxy = server("User-agent: *\nAllow: /\n", exchange -> {
+            requests.add(current.get());
+            exchange.getResponseHeaders().add("Content-Type", "text/html");
+            respond(exchange, "A".equals(current.get()) ? 503 : 200, "chapter");
+        });
+        try {
+            CrawlerHttpClient http = configuredClient(2);
+            CrawlerSite source = localSite(proxy, 77L);
+            source.setRespectRobotsTxt(false);
+            CrawlerQueueExecutorService route = mock(CrawlerQueueExecutorService.class);
+            String url = "http://127.0.0.1:" + proxy.getAddress().getPort();
+            var first = new CrawlerQueueExecutorService.ProxyCandidate("A", "A", url, 300);
+            var second = new CrawlerQueueExecutorService.ProxyCandidate("B", "B", url, 300);
+            when(route.hasBoundExecutor()).thenReturn(true);
+            when(route.availableCandidates(source)).thenReturn(List.of(first, second));
+            doAnswer(call -> {
+                current.set(((CrawlerQueueExecutorService.ProxyCandidate) call.getArgument(0)).key());
+                return null;
+            }).when(route).recordRequestProxy(any());
+            org.springframework.test.util.ReflectionTestUtils.setField(http, "queueExecutorService", route);
+
+            assertEquals(200, http.get(source, url + "/chapter/1").statusCode());
+            assertEquals(List.of("A", "A", "A", "B"), requests);
+            verify(route).recordBoundProxyFailure(eq(first), eq(source), contains("503"), eq(0L));
+            verify(route).recordBoundProxySuccess(second);
+            verify(route, never()).recordBoundProxyFailure(eq(second), any(), anyString(), anyLong());
+        } finally {
+            proxy.stop(0);
+        }
+    }
+
     private final ProxySettingsService proxySettings = mock(ProxySettingsService.class);
     private final CrawlerSettingsService crawlerSettings = mock(CrawlerSettingsService.class);
     private final CrawlerSiteRepository siteRepository = mock(CrawlerSiteRepository.class);
