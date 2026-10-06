@@ -35,6 +35,8 @@ public class CrawlerTask {
     @Builder.Default private Integer failedCount = 0;
     @Builder.Default private Integer waitingCount = 0;
     private String currentChapter;
+    @Column(name = "current_sub_step", length = 200)
+    private String currentSubStep;
     private Long averageRequestMillis;
     @Column(columnDefinition = "TEXT") private String errorMessage;
     private LocalDateTime startedAt;

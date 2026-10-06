@@ -1092,6 +1092,12 @@
           <el-progress v-if="selectedTask.status!=='SUCCESS'" :class="{'crawler-running-progress':selectedTask.status==='RUNNING'}" :percentage="taskProgress(selectedTask)" :status="selectedTask.status==='FAILED'?'exception':undefined" :stroke-width="12" />
           <div v-else class="task-success-progress"><strong>✓ 已完成</strong><span>{{ selectedTask.type==='SITE_SCAN' ? `扫描 ${selectedTask.scannedPageCount} 页，发现 ${selectedTask.totalCount} 本` : `成功处理 ${selectedTask.successCount} 项` }}</span></div>
           <p>{{ taskProgressDescription(selectedTask) }}</p>
+          <span
+            v-if="selectedTask.status==='RUNNING' && selectedTask.currentSubStep"
+            class="task-sub-step"
+          >
+            {{ selectedTask.currentSubStep }}
+          </span>
         </section>
 
         <section class="task-stat-grid">
@@ -1535,11 +1541,19 @@
               </template>
             </el-table-column>
             <el-table-column prop="wordCount" label="字数" width="90" />
-            <el-table-column label="状态" width="120">
+            <el-table-column label="状态" width="170">
               <template #default="{ row }">
-                <el-tag :type="statusType(row.crawlStatus)">
-                  {{ statusLabel(row.crawlStatus) }}
-                </el-tag>
+                <div class="chapter-crawl-status">
+                  <el-tag :type="statusType(row.crawlStatus)">
+                    {{ statusLabel(row.crawlStatus) }}
+                  </el-tag>
+                  <small
+                    v-if="row.crawlStatus==='CRAWLING' && row.currentSubStep"
+                    class="task-sub-step"
+                  >
+                    {{ row.currentSubStep }}
+                  </small>
+                </div>
               </template>
             </el-table-column>
             <el-table-column label="采集开始时间" width="180">
@@ -1747,7 +1761,10 @@ const TaskTable = defineComponent({
       ]))
   }}):null,
   h(ElTableColumn,{label:'优先级',width:90},{default:({row}:{row:CrawlerTask})=>h(ElTag,{type:priorityType(row.priority),effect:'plain'},()=>priorityLabel(row.priority))}),
-  h(ElTableColumn,{label:'当前章节',prop:'currentChapter',minWidth:150}),
+  h(ElTableColumn,{label:'当前章节',minWidth:180},{default:({row}:{row:CrawlerTask})=>h('div',{class:'task-current-chapter'},[
+    h('strong',{class:'task-current-chapter-title',title:row.currentChapter||'暂无'},row.currentChapter||'暂无'),
+    row.status==='RUNNING'&&row.currentSubStep?h('small',{class:'task-sub-step'},row.currentSubStep):null,
+  ])}),
   h(ElTableColumn,{label:'创建时间',width:170},{default:({row}:{row:CrawlerTask})=>formatTime(row.createdAt)}),
   h(ElTableColumn,{label:'完成时间',width:170},{default:({row}:{row:CrawlerTask})=>formatTime(row.finishedAt)}),
   h(ElTableColumn,{label:'操作',width:340,fixed:'right',align:'right'},{default:({row}:{row:CrawlerTask})=>{
@@ -4343,5 +4360,55 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
     max-width: 100%;
     overscroll-behavior-inline: contain;
   }
+}
+
+.task-current-chapter {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  line-height: 1.4;
+}
+
+.task-current-chapter-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapter-crawl-status {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+}
+
+.chapter-crawl-status :deep(.el-tag) {
+  width: fit-content;
+}
+
+.task-sub-step {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
+  border-radius: 999px;
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.task-sub-step::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
 }
 </style>

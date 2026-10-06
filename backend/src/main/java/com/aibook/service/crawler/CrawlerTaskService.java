@@ -786,6 +786,7 @@ public class CrawlerTaskService {
                 if (task.getStatus() == CrawlerTask.TaskStatus.RUNNING
                         || task.getStatus() == CrawlerTask.TaskStatus.WAITING) {
                     task.setStatus(CrawlerTask.TaskStatus.PAUSED);
+                    task.setCurrentSubStep(null);
                     taskRepository.save(task);
                     removeQueuedTask(taskId);
                     interruptRunningTask(taskId);
@@ -793,6 +794,7 @@ public class CrawlerTaskService {
             }
             case "cancel" -> {
                 task.setStatus(CrawlerTask.TaskStatus.CANCELLED);
+                task.setCurrentSubStep(null);
                 taskRepository.save(task);
                 removeQueuedTask(taskId);
                 interruptRunningTask(taskId);
@@ -1400,6 +1402,7 @@ public class CrawlerTaskService {
                     task.setWaitingCount(0);
                     task.setFinishedAt(LocalDateTime.now());
                     task.setCurrentChapter(null);
+                    task.setCurrentSubStep(null);
                     task = finishIfRunning(task);
                     if (task != null) {
                         log.info("[采集任务] 书籍元数据刷新完成: taskId={}, book={}, category={}, tags={}",
@@ -1451,6 +1454,7 @@ public class CrawlerTaskService {
             task.setQueueOrder(nextQueueOrder());
             task.setFinishedAt(null);
             task.setErrorMessage(reason);
+            task.setCurrentSubStep(null);
             taskRepository.save(task);
             if (task.getCrawlerBook() != null) {
                 task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.WAITING);
@@ -1476,6 +1480,7 @@ public class CrawlerTaskService {
             task.setQueueOrder(nextQueueOrder());
             task.setFinishedAt(null);
             task.setErrorMessage("网站已人工冻结，等待解冻后继续");
+            task.setCurrentSubStep(null);
             taskRepository.save(task);
             if (task.getCrawlerBook() != null && task.getType() != CrawlerTask.TaskType.BOOK_METADATA) {
                 task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.WAITING);
@@ -1525,6 +1530,7 @@ public class CrawlerTaskService {
             task.setCurrentChapter(chapter.getChapterName());
             task = saveProgressIfRunning(task);
             if (task == null) return;
+            updateCurrentSubStep(task.getId(), "准备采集章节");
             LocalDateTime attemptStartedAt = LocalDateTime.now();
             chapter.setCrawlStartedAt(attemptStartedAt);
             chapter.setCrawlFinishedAt(null);
@@ -1543,6 +1549,8 @@ public class CrawlerTaskService {
             Exception requestFailure = null;
             boolean requestSucceeded = false;
             CrawlerHttpClient.RequestTiming requestTiming = new CrawlerHttpClient.RequestTiming();
+            String progressTaskId = task.getId();
+            requestTiming.setProgressListener(step -> updateCurrentSubStep(progressTaskId, step));
             long attemptStartedNanos = System.nanoTime();
             String attemptOutcome = "FAILED";
             try {
@@ -1574,6 +1582,7 @@ public class CrawlerTaskService {
                             + "；章节：" + chapter.getChapterName() + "；HTTP：304");
                     continue;
                 }
+                requestTiming.reportProgress("解析章节内容中");
                 BookCrawlerParser.ParsedContent parsed = parseChapterWithDiagnostics(
                         parser, response, chapter, rule);
                 ContentMarkerMatch contentMarker = matchedContentMarker(site, parsed.content());
@@ -1619,6 +1628,7 @@ public class CrawlerTaskService {
                 chapter.setWordCount(parsed.content().replaceAll("\\s+", "").length()); chapter.setCrawlTime(LocalDateTime.now()); chapter.setErrorMessage(null);
                 boolean suspected = chapter.getWordCount() < value(rule.getMinChapterLength(), 100);
                 chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.COMPLETED);
+                requestTiming.reportProgress("保存章节内容中");
                 attemptOutcome = "SUCCESS";
                 if (suspected) {
                     log.warn("[采集任务] 章节内容疑似异常: taskId={}, book={}, progress={}/{} ({}%), chapter={}, chars={}, durationMs={}, preview=\"{}\"",
@@ -1673,6 +1683,7 @@ public class CrawlerTaskService {
                 recordCrawlerError(task, hadParsedContent ? "章节更新失败（已保留原内容）" : "章节采集失败",
                         "进度：" + current + "/" + task.getTotalCount() + "；章节：" + chapter.getChapterName()
                                 + "；原因：" + chapter.getErrorMessage());
+                updateCurrentSubStep(task.getId(), "本章采集异常，继续处理后续章节");
             } finally {
                 LocalDateTime attemptFinishedAt = LocalDateTime.now();
                 chapter.setCrawlFinishedAt(attemptFinishedAt);
@@ -1719,7 +1730,7 @@ public class CrawlerTaskService {
         task.setStatus(taskFailed == 0 ? CrawlerTask.TaskStatus.SUCCESS
                 : targetChapterId != null ? CrawlerTask.TaskStatus.FAILED
                 : CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
-        task.setFinishedAt(LocalDateTime.now()); task.setCurrentChapter(null);
+        task.setFinishedAt(LocalDateTime.now()); task.setCurrentChapter(null); task.setCurrentSubStep(null);
         task = finishIfRunning(task);
         if (task == null) return;
         book.setCrawlStatus(contentFailed == 0 ? CrawlerBook.CrawlStatus.COMPLETED : CrawlerBook.CrawlStatus.PARTIAL_SUCCESS);
@@ -1906,7 +1917,7 @@ public class CrawlerTaskService {
             });
         }
         task.setStatus(failed == 0 ? CrawlerTask.TaskStatus.SUCCESS : CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
-        task.setFinishedAt(LocalDateTime.now()); task.setCurrentChapter(null);
+        task.setFinishedAt(LocalDateTime.now()); task.setCurrentChapter(null); task.setCurrentSubStep(null);
         task = finishIfRunning(task);
         if (task == null) return;
         log.info("[采集任务] 网站扫描完毕: taskId={}, site={}, pages={}, succeeded={}, new={}, duplicate={}, failed={}",
@@ -1996,7 +2007,9 @@ public class CrawlerTaskService {
             taskRepository.findById(id).filter(task -> task.getStatus() == CrawlerTask.TaskStatus.RUNNING
                     || task.getStatus() == CrawlerTask.TaskStatus.WAITING).ifPresent(task -> {
                 task.setStatus(CrawlerTask.TaskStatus.FAILED); task.setErrorMessage(message);
-                task.setFinishedAt(LocalDateTime.now()); taskRepository.save(task);
+                task.setFinishedAt(LocalDateTime.now());
+                task.setCurrentSubStep(null);
+                taskRepository.save(task);
                 if (task.getCrawlerBook() != null
                         && task.getType() != CrawlerTask.TaskType.BOOK_METADATA) {
                     CrawlerBook book = task.getCrawlerBook();
@@ -2065,6 +2078,15 @@ public class CrawlerTaskService {
         }
     }
 
+    private void updateCurrentSubStep(String taskId, String subStep) {
+        synchronized (taskLock(taskId)) {
+            CrawlerTask current = runningTask(taskId);
+            if (current == null || Objects.equals(current.getCurrentSubStep(), subStep)) return;
+            current.setCurrentSubStep(subStep);
+            taskRepository.save(current);
+        }
+    }
+
     private CrawlerTask finishIfRunning(CrawlerTask source) {
         synchronized (taskLock(source.getId())) {
             CrawlerTask current = runningTask(source.getId());
@@ -2078,6 +2100,7 @@ public class CrawlerTaskService {
             current.setFailedCount(source.getFailedCount());
             current.setWaitingCount(source.getWaitingCount());
             current.setCurrentChapter(source.getCurrentChapter());
+            current.setCurrentSubStep(source.getCurrentSubStep());
             current.setAverageRequestMillis(source.getAverageRequestMillis());
             current.setFinishedAt(source.getFinishedAt());
             current.setErrorMessage(source.getErrorMessage());
@@ -2136,6 +2159,7 @@ public class CrawlerTaskService {
                 task.setErrorMessage(null);
                 task.setFinishedAt(null);
                 task.setCurrentChapter(null);
+                task.setCurrentSubStep(null);
                 taskRepository.save(task);
                 if (task.getCrawlerBook() != null
                         && task.getType() != CrawlerTask.TaskType.BOOK_METADATA) {

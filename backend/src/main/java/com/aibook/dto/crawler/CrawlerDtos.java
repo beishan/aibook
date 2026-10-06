@@ -302,7 +302,7 @@ public final class CrawlerDtos {
             Boolean syncLibrary) { }
 
     public record ChapterView(Long id, int chapterIndex, String chapterName, String chapterUrl,
-            int wordCount, String crawlStatus, String accessStatus, int retryCount,
+            int wordCount, String crawlStatus, String currentSubStep, String accessStatus, int retryCount,
             String errorMessage, LocalDateTime crawlTime, LocalDateTime createdAt,
             LocalDateTime crawlStartedAt, LocalDateTime crawlFinishedAt) { }
 
@@ -323,7 +323,7 @@ public final class CrawlerDtos {
             boolean favorite,
             int totalCount, int successCount, int newBookCount,
             int duplicateCount, int failedCount, int waitingCount, String currentChapter,
-            long averageRequestMillis, String errorMessage, LocalDateTime startedAt,
+            String currentSubStep, long averageRequestMillis, String errorMessage, LocalDateTime startedAt,
             LocalDateTime finishedAt, LocalDateTime createdAt, String siteThemeColor,
             Long queueId) { }
 

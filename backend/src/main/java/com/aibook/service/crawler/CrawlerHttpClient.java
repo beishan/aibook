@@ -160,6 +160,9 @@ public class CrawlerHttpClient {
         for (int attempt = 0; attempt < attempts; attempt++) {
             long retryDelay = retryBackoffMillis(attempt, settings.retryBackoffMaxMillis());
             try {
+                if (timing != null) {
+                    timing.reportProgress("请求章节内容中（第 " + (attempt + 1) + " / " + attempts + " 次）");
+                }
                 String proxyUrl = proxies.isEmpty() ? null : proxies.get(proxyIndex % proxies.size());
                 TimedResponse timed = sendFollowingSafeRedirects(
                         site, uri, etag, lastModified, proxyUrl, settings, timing);
@@ -222,6 +225,9 @@ public class CrawlerHttpClient {
             } catch (Exception exception) {
                 last = exception;
             }
+            if (attempt + 1 < attempts) {
+                reportRetryProgress(timing, attempt + 1, attempts, last);
+            }
             if (attempt + 1 < attempts) sleepOther(retryDelay, timing);
         }
         if (last instanceof IOException) {
@@ -252,6 +258,10 @@ public class CrawlerHttpClient {
                     attempted++;
                     queueExecutorService.recordRequestProxy(candidate);
                     try {
+                        if (timing != null) {
+                            timing.reportProgress("请求章节内容中（代理节点尝试 "
+                                    + (attempt + 1) + " / " + attempts + " 次）");
+                        }
                         TimedResponse timed = sendFollowingSafeRedirects(site, uri, etag,
                                 lastModified, candidate.url(), settings, timing);
                         NetworkResponse response = timed.response();
@@ -312,6 +322,9 @@ public class CrawlerHttpClient {
                             throw new NoAvailableQueueProxyException("源站要求等待后重试，本轮尚未耗尽重试，不计节点异常");
                         }
                         if (attempt + 1 < attempts || lastFailure.minimumCooldownSeconds() > 0) {
+                            if (attempt + 1 < attempts) {
+                                reportRetryProgress(timing, attempt + 1, attempts, lastFailure);
+                            }
                             sleepOther(Math.min(retryDelay, settings.maxInlineRetryDelayMillis()), timing);
                         }
                         if (attempt + 1 < attempts) {
@@ -924,6 +937,9 @@ public class CrawlerHttpClient {
                     now, interval);
             long wait = Math.max(siteSlot, originSlot) - now;
             if (wait > 0) {
+                if (timing != null) {
+                    timing.reportProgress(randomDelay > 0 ? "随机等待中" : "请求间隔等待中");
+                }
                 long sleepStarted = System.nanoTime();
                 try {
                     Thread.sleep(wait);
@@ -974,6 +990,16 @@ public class CrawlerHttpClient {
         }
     }
 
+    private void reportRetryProgress(RequestTiming timing, int failedAttempt,
+            int attempts, Exception exception) {
+        if (timing == null) return;
+        String reason = exception == null || exception.getMessage() == null
+                ? "请求异常" : exception.getMessage().trim();
+        if (reason.length() > 80) reason = reason.substring(0, 80) + "…";
+        timing.reportProgress("异常重试中（" + failedAttempt + " / " + attempts
+                + " 次失败）：" + reason);
+    }
+
     private long elapsedMillis(long startedNanos) {
         return Math.max(0, (System.nanoTime() - startedNanos) / 1_000_000);
     }
@@ -1011,6 +1037,20 @@ public class CrawlerHttpClient {
         private long fixedWaitMillis;
         private long randomWaitMillis;
         private long otherWaitMillis;
+        private java.util.function.Consumer<String> progressListener;
+
+        public void setProgressListener(java.util.function.Consumer<String> listener) {
+            progressListener = listener;
+        }
+
+        public void reportProgress(String step) {
+            if (progressListener == null || step == null || step.isBlank()) return;
+            try {
+                progressListener.accept(step);
+            } catch (RuntimeException ignored) {
+                // Progress reporting must not interrupt a chapter request.
+            }
+        }
 
         private void addPacingWait(long elapsedMillis, long fixed, long random, long adaptive) {
             long configuredTotal = fixed + random + adaptive;

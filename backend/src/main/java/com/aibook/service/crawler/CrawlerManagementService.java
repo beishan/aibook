@@ -397,7 +397,9 @@ public class CrawlerManagementService {
         CrawlerBook book = ownedBook(user, id);
         List<CrawlerChapter> chapters = chapterRepository.findByCrawlerBookOrderByChapterIndexAsc(book);
         normalizeParsedChapters(book, chapters);
-        return chapters.stream().map(this::chapterView).toList();
+        CrawlerTask activeTask = activeBookTask(book);
+        return chapters.stream().map(chapter -> chapterView(
+                chapter, currentChapterSubStep(activeTask, chapter))).toList();
     }
 
     @Transactional
@@ -407,7 +409,9 @@ public class CrawlerManagementService {
                 chapterSort(sort));
         Page<CrawlerChapter> chapters = chapterRepository.findByCrawlerBook(book, pageable);
         normalizeParsedChapters(book, chapters.getContent());
-        return chapters.map(this::chapterView);
+        CrawlerTask activeTask = activeBookTask(book);
+        return chapters.map(chapter -> chapterView(
+                chapter, currentChapterSubStep(activeTask, chapter)));
     }
 
     private Sort chapterSort(String value) {
@@ -436,12 +440,12 @@ public class CrawlerManagementService {
     @Transactional(readOnly = true)
     public Optional<ChapterFocusView> currentChapter(User user, Long id, int size) {
         CrawlerBook book = ownedBook(user, id);
+        CrawlerTask activeTask = activeBookTask(book);
         Optional<CrawlerChapter> chapter = chapterRepository
                 .findFirstByCrawlerBookAndCrawlStatusOrderByUpdatedAtDesc(
                         book, CrawlerChapter.CrawlStatus.CRAWLING);
         if (chapter.isEmpty()) {
-            chapter = taskRepository.findFirstByCrawlerBookAndStatusOrderByUpdatedAtDesc(
-                            book, CrawlerTask.TaskStatus.RUNNING)
+            chapter = Optional.ofNullable(activeTask)
                     .map(CrawlerTask::getCurrentChapter)
                     .filter(name -> !blank(name))
                     .flatMap(name -> chapterRepository
@@ -449,7 +453,7 @@ public class CrawlerManagementService {
         }
         int pageSize = Math.min(Math.max(size, 1), 100);
         return chapter.map(value -> new ChapterFocusView(
-                chapterView(value),
+                chapterView(value, currentChapterSubStep(activeTask, value)),
                 (int) (chapterRepository.countByCrawlerBookAndChapterIndexLessThan(
                         book, value.getChapterIndex()) / pageSize)));
     }
@@ -919,12 +923,30 @@ public class CrawlerManagementService {
                 .filter(tag -> !tag.isBlank()).distinct().toList();
     }
     public ChapterView chapterView(CrawlerChapter chapter) {
+        return chapterView(chapter, null);
+    }
+
+    private ChapterView chapterView(CrawlerChapter chapter, String currentSubStep) {
         return new ChapterView(chapter.getId(), chapter.getChapterIndex(),
                 chapter.getChapterName(), chapter.getChapterUrl(),
                 value(chapter.getWordCount(), 0), chapter.getCrawlStatus().name(),
-                chapter.getAccessStatus().name(), value(chapter.getRetryCount(), 0),
+                currentSubStep, chapter.getAccessStatus().name(), value(chapter.getRetryCount(), 0),
                 chapter.getErrorMessage(), chapter.getCrawlTime(), chapter.getCreatedAt(),
                 chapter.getCrawlStartedAt(), chapter.getCrawlFinishedAt());
+    }
+
+    private CrawlerTask activeBookTask(CrawlerBook book) {
+        return taskRepository.findFirstByCrawlerBookAndStatusOrderByUpdatedAtDesc(
+                book, CrawlerTask.TaskStatus.RUNNING).orElse(null);
+    }
+
+    private String currentChapterSubStep(CrawlerTask task, CrawlerChapter chapter) {
+        if (task == null || task.getCurrentSubStep() == null
+                || (chapter.getCrawlStatus() != CrawlerChapter.CrawlStatus.CRAWLING
+                        && !Objects.equals(task.getCurrentChapter(), chapter.getChapterName()))) {
+            return null;
+        }
+        return task.getCurrentSubStep();
     }
     public TaskView taskView(CrawlerTask t) {
         return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(),
@@ -936,6 +958,7 @@ public class CrawlerManagementService {
                 value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0),
                 value(t.getNewBookCount(), 0), value(t.getDuplicateCount(), 0),
                 value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(),
+                t.getCurrentSubStep(),
                 t.getAverageRequestMillis() == null ? 0 : t.getAverageRequestMillis(), t.getErrorMessage(),
                 t.getStartedAt(), t.getFinishedAt(), t.getCreatedAt(),
                 normalizedThemeColor(t.getSite().getThemeColor()),
