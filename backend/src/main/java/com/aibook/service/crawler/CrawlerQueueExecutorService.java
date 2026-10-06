@@ -6,6 +6,7 @@ import com.aibook.dto.crawler.CrawlerDtos.QueueExecutorProxyPayload;
 import com.aibook.dto.crawler.CrawlerDtos.QueueExecutorProxyView;
 import com.aibook.dto.crawler.CrawlerDtos.QueueExecutorView;
 import com.aibook.dto.crawler.CrawlerDtos.QueueProxyOptionView;
+import com.aibook.dto.crawler.CrawlerDtos.TaskExecutionView;
 import com.aibook.model.entity.CrawlerQueueExecutor;
 import com.aibook.model.entity.CrawlerQueueExecutorProxy;
 import com.aibook.model.entity.CrawlerQueueProxyCooldown;
@@ -45,6 +46,30 @@ public class CrawlerQueueExecutorService {
     private final CrawlerSettingsService crawlerSettingsService;
     private final CrawlerMihomoService mihomoService;
     private final ThreadLocal<ExecutionRoute> executionRoute = new ThreadLocal<>();
+    private final ThreadLocal<ProxyCandidate> requestProxy = new ThreadLocal<>();
+
+    public record RequestProxySnapshot(String name, String node) { }
+
+    public void clearRequestTrace() {
+        requestProxy.remove();
+        mihomoService.restoreRequestTrace(null);
+    }
+
+    public void recordRequestProxy(ProxyCandidate candidate) {
+        requestProxy.set(candidate);
+    }
+
+    public RequestProxySnapshot requestProxySnapshot() {
+        var mihomo = mihomoService.lastRequestTrace();
+        if (mihomo != null) return new RequestProxySnapshot(mihomo.groupName(), mihomo.currentNode());
+        var proxy = requestProxy.get();
+        return proxy == null ? null : new RequestProxySnapshot(proxy.name(), null);
+    }
+
+    public void validateOwnership(User user, Long queueId, Long executorId) {
+        ownedQueue(user, queueId);
+        ownedExecutor(queueId, executorId);
+    }
 
     public record ProxyCandidate(String key, String name, String url,
             Integer cooldownSeconds) { }
@@ -58,8 +83,14 @@ public class CrawlerQueueExecutorService {
 
     public RouteScope bind(Long queueId, Long executorId) {
         ExecutionRoute previous = executionRoute.get();
+        ProxyCandidate previousProxy = requestProxy.get();
+        var previousTrace = mihomoService.lastRequestTrace();
+        clearRequestTrace();
         executionRoute.set(new ExecutionRoute(queueId, executorId));
         return () -> {
+            if (previousProxy == null) requestProxy.remove();
+            else requestProxy.set(previousProxy);
+            mihomoService.restoreRequestTrace(previousTrace);
             if (previous == null) executionRoute.remove();
             else executionRoute.set(previous);
         };
@@ -124,6 +155,23 @@ public class CrawlerQueueExecutorService {
     @Transactional(readOnly = true)
     public List<CrawlerQueueExecutor> enabledExecutors(Long queueId) {
         return executors(queueId).stream().filter(this::isExecutorEnabled).toList();
+    }
+
+    public TaskExecutionView taskExecution(Long executorId) {
+        CrawlerQueueExecutor executor = executorRepository.findById(executorId).orElse(null);
+        if (executor == null) return null;
+
+        String proxyMode = executor.getProxyMode().name();
+        if (executor.getProxyMode() != CrawlerQueueExecutor.ProxyMode.MIHOMO) {
+            return new TaskExecutionView(executor.getName(), proxyMode, null, null, null);
+        }
+
+        CrawlerMihomoService.ExecutionSummary mihomo =
+                mihomoService.executionSummary(executorId);
+        return new TaskExecutionView(executor.getName(), proxyMode,
+                mihomo == null ? null : mihomo.proxyUrl(),
+                mihomo == null ? null : mihomo.groupName(),
+                mihomo == null ? null : mihomo.currentNode());
     }
 
     @Transactional(readOnly = true)

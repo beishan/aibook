@@ -266,6 +266,10 @@ public class CrawlerController {
     @GetMapping("/tasks/{id}") public TaskView task(Authentication auth, @PathVariable String id) {
         return managementService.task(user(auth), id);
     }
+    @GetMapping("/tasks/{id}/execution")
+    public TaskExecutionView taskExecution(Authentication auth, @PathVariable String id) {
+        return taskService.taskExecution(user(auth), id);
+    }
     @GetMapping("/tasks/queue-settings") public TaskQueueSettingsView queueSettings() {
         return taskService.queueSettings();
     }
@@ -296,6 +300,14 @@ public class CrawlerController {
     @GetMapping("/tasks/queues/{queueId}/executors")
     public List<QueueExecutorView> queueExecutors(Authentication auth, @PathVariable Long queueId) {
         return taskService.queueExecutors(user(auth), queueId);
+    }
+
+    @GetMapping("/tasks/queues/{queueId}/executors/{executorId}/logs")
+    public Page<ExecutorLogView> executorLogs(Authentication auth, @PathVariable Long queueId,
+            @PathVariable Long executorId, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "false") boolean failedOnly) {
+        return taskService.executorLogs(user(auth), queueId, executorId, page, size, failedOnly);
     }
     @PostMapping("/tasks/queues/{queueId}/executors")
     @ResponseStatus(HttpStatus.CREATED)

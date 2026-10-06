@@ -34,6 +34,8 @@ public class CrawlerChapter {
     @Builder.Default private Integer retryCount = 0;
     private LocalDateTime sourceUpdateTime;
     private LocalDateTime crawlTime;
+    private LocalDateTime crawlStartedAt;
+    private LocalDateTime crawlFinishedAt;
     @Column(columnDefinition = "TEXT") private String errorMessage;
     @CreationTimestamp private LocalDateTime createdAt;
     @UpdateTimestamp private LocalDateTime updatedAt;

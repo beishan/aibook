@@ -79,6 +79,27 @@ export interface CrawlerBook {
   suspectedDuplicate?:boolean
 }
 export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; siteThemeColor?:string; queueId?:number|null; discoveryPageId?:number; discoveryPageName?:string; scanMaxPages?:number; scannedPageCount:number; progressPercent:number; bookId?:number; bookName?:string; favorite:boolean; totalCount:number; successCount:number; newBookCount:number; duplicateCount:number; failedCount:number; waitingCount:number; currentChapter?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
+export interface CrawlerTaskExecution {
+  executorName:string
+  proxyMode:'DEFAULT'|'SELECTED'|'MIHOMO'
+  mihomoProxyUrl?:string
+  mihomoGroupName?:string
+  mihomoNode?:string
+}
+export interface CrawlerExecutorLog {
+  id:number
+  taskId:string
+  executorName?:string
+  siteName?:string
+  bookName?:string
+  chapterName?:string
+  description:string
+  details?:string
+  proxyName?:string
+  proxyNode?:string
+  failed:boolean
+  createdAt:string
+}
 export interface CrawlerTaskQueueSettings { maxConcurrentTasks:number; runningCount:number; queuedCount:number }
 export interface CrawlerTaskQueue { id:number; siteId:number|null; siteName?:string|null; queueName?:string|null; siteThemeColor?:string; maxConcurrentTasks:number; taskIntervalSeconds:number; runningCount:number; waitingCount:number; pausedCount:number; activeTaskCount:number; progressPercent:number; lastTaskStartedAt?:string }
 export interface CrawlerQueueExecutorProxy {
@@ -176,7 +197,21 @@ export interface MihomoCatalog {
   nodes:MihomoNode[]
 }
 export interface CrawlerScanResult { id:number; bookId?:number; bookName:string; bookUrl:string; resultStatus:'NEW'|'DUPLICATE'|'BLACKLISTED'|'FAILED'; errorMessage?:string; createdAt:string }
-export interface CrawlerChapter { id:number; chapterIndex:number; chapterName:string; chapterUrl:string; wordCount:number; crawlStatus:string; accessStatus:string; retryCount:number; errorMessage?:string; crawlTime?:string; createdAt?:string }
+export interface CrawlerChapter {
+  id:number
+  chapterIndex:number
+  chapterName:string
+  chapterUrl:string
+  wordCount:number
+  crawlStatus:string
+  accessStatus:string
+  retryCount:number
+  errorMessage?:string
+  crawlTime?:string
+  crawlStartedAt?:string
+  crawlFinishedAt?:string
+  createdAt?:string
+}
 export interface CrawlerChapterFocus { chapter:CrawlerChapter; page:number }
 export interface CrawlerLog { id:number; description:string; details?:string; createdAt:string }
 export interface CrawlerExport { id:number; format:string; fileSize:number; fileHash:string; createdAt:string }
@@ -336,6 +371,10 @@ export const crawlerApi = {
   assignTaskQueue: (taskId:string,queueId:number) => api.put<CrawlerTask>(`/api/crawler/tasks/${taskId}/queue`,{queueId}).then(r=>r.data),
   prioritizeQueuedTask: (id:string) => api.put<CrawlerTask[]>(`/api/crawler/tasks/queued/${id}/prioritize`).then(r => r.data),
   task: (id:string) => api.get<CrawlerTask>(`/api/crawler/tasks/${id}`).then(r => r.data),
+  taskExecution: (id:string) => api.get<CrawlerTaskExecution|null>(`/api/crawler/tasks/${id}/execution`).then(r => r.data),
+  executorLogs: (queueId:number, executorId:number, page:number, failedOnly:boolean) =>
+    api.get<PageResult<CrawlerExecutorLog>>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/logs`,
+      {params:{page,size:20,failedOnly}}).then(r => r.data),
   taskQueueSettings: () => api.get<CrawlerTaskQueueSettings>('/api/crawler/tasks/queue-settings').then(r => r.data),
   updateTaskQueueSettings: (maxConcurrentTasks:number) => api.put<CrawlerTaskQueueSettings>('/api/crawler/tasks/queue-settings',{maxConcurrentTasks}).then(r => r.data),
   scanResults: (id:string,page:number,size:number) => api.get<PageResult<CrawlerScanResult>>(`/api/crawler/tasks/${id}/scan-results`,{params:{page,size}}).then(r=>r.data),

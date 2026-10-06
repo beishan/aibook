@@ -70,6 +70,7 @@ public class CrawlerHttpClient {
 
     public FetchResult get(CrawlerSite site, String url, String etag, String lastModified,
             RequestTiming timing) throws Exception {
+        if (queueExecutorService != null) queueExecutorService.clearRequestTrace();
         ensureNotManuallyFrozen(site);
         if (queueExecutorService != null && queueExecutorService.isMihomoBound()) {
             return mihomoService.execute(queueExecutorService.boundExecutorId(), site, () -> {
@@ -185,6 +186,7 @@ public class CrawlerHttpClient {
             throw new NoAvailableQueueProxyException("当前队列的执行器没有可用代理，任务等待代理恢复");
         }
         for (CrawlerQueueExecutorService.ProxyCandidate candidate : candidates) {
+            queueExecutorService.recordRequestProxy(candidate);
             try {
                 TimedResponse timed = sendFollowingSafeRedirects(site, uri, etag,
                         lastModified, candidate.url(), settings, timing);
@@ -582,6 +584,7 @@ public class CrawlerHttpClient {
         List<CrawlerQueueExecutorService.ProxyCandidate> candidates =
                 queueExecutorService.availableCandidates(site);
         for (CrawlerQueueExecutorService.ProxyCandidate candidate : candidates) {
+            queueExecutorService.recordRequestProxy(candidate);
             try {
                 TimedResponse timed = sendFollowingSafeRedirects(site, robotsUri,
                         null, null, candidate.url(), settings, timing);

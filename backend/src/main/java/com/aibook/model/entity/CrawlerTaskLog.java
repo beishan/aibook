@@ -21,9 +21,11 @@ import org.hibernate.annotations.CreationTimestamp;
 @Entity
 @Table(
         name = "crawler_task_logs",
-        indexes = @Index(
+        indexes = {@Index(
                 name = "idx_crawler_task_logs_user_book_created",
-                columnList = "user_id,crawler_book_id,created_at"))
+                columnList = "user_id,crawler_book_id,created_at"),
+                @Index(name = "idx_crawler_task_logs_user_executor_created",
+                        columnList = "user_id,executor_id,created_at")})
 @Getter
 @Builder
 @NoArgsConstructor
@@ -40,6 +42,21 @@ public class CrawlerTaskLog {
 
     @Column(name = "crawler_book_id")
     private Long crawlerBookId;
+
+    private Long executorId;
+    @Column(length = 100)
+    private String executorName;
+    @Column(length = 200)
+    private String siteName;
+    @Column(length = 500)
+    private String bookName;
+    @Column(length = 500)
+    private String chapterName;
+    @Column(length = 500)
+    private String proxyName;
+    @Column(length = 200)
+    private String proxyNode;
+    private Boolean failed;
 
     @Column(nullable = false, length = 36)
     private String taskId;

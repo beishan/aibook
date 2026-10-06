@@ -299,7 +299,8 @@ public final class CrawlerDtos {
 
     public record ChapterView(Long id, int chapterIndex, String chapterName, String chapterUrl,
             int wordCount, String crawlStatus, String accessStatus, int retryCount,
-            String errorMessage, LocalDateTime crawlTime, LocalDateTime createdAt) { }
+            String errorMessage, LocalDateTime crawlTime, LocalDateTime createdAt,
+            LocalDateTime crawlStartedAt, LocalDateTime crawlFinishedAt) { }
 
     public record ChapterFocusView(ChapterView chapter, int page) { }
 
@@ -321,6 +322,14 @@ public final class CrawlerDtos {
             long averageRequestMillis, String errorMessage, LocalDateTime startedAt,
             LocalDateTime finishedAt, LocalDateTime createdAt, String siteThemeColor,
             Long queueId) { }
+
+    public record TaskExecutionView(String executorName, String proxyMode,
+            String mihomoProxyUrl, String mihomoGroupName, String mihomoNode) { }
+
+    public record ExecutorLogView(Long id, String taskId, String executorName,
+            String siteName, String bookName, String chapterName, String description,
+            String details, String proxyName, String proxyNode, boolean failed,
+            LocalDateTime createdAt) { }
 
     public record ExportView(Long id, String format, long fileSize, String fileHash,
             LocalDateTime createdAt) { }

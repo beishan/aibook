@@ -537,6 +537,8 @@ class CrawlerTaskManagementTest {
             assertThat(task.getErrorMessage()).isNull();
             assertThat(chapter.getCrawlStatus()).isEqualTo(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
             assertThat(chapter.getErrorMessage()).isNull();
+            assertThat(chapter.getCrawlStartedAt()).isNotNull();
+            assertThat(chapter.getCrawlFinishedAt()).isAfterOrEqualTo(chapter.getCrawlStartedAt());
         } finally {
             service.shutdown();
         }
@@ -652,8 +654,15 @@ class CrawlerTaskManagementTest {
                     any(CrawlerHttpClient.RequestTiming.class));
             assertThat(chaptersToCrawl.subList(0, 5))
                     .allMatch(chapter -> chapter.getCrawlStatus() == CrawlerChapter.CrawlStatus.FAILED);
+            for (CrawlerChapter chapter : chaptersToCrawl.subList(0, 5)) {
+                assertThat(chapter.getCrawlStartedAt()).isNotNull();
+                assertThat(chapter.getCrawlFinishedAt()).isAfterOrEqualTo(chapter.getCrawlStartedAt());
+            }
             assertThat(chaptersToCrawl.subList(5, 8))
                     .allMatch(chapter -> chapter.getCrawlStatus() != CrawlerChapter.CrawlStatus.FAILED);
+            assertThat(chaptersToCrawl.subList(5, 8))
+                    .allMatch(chapter -> chapter.getCrawlStartedAt() == null
+                            && chapter.getCrawlFinishedAt() == null);
         } finally {
             service.shutdown();
         }

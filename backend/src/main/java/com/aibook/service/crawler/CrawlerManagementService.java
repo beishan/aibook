@@ -918,7 +918,14 @@ public class CrawlerManagementService {
         return Arrays.stream(value.split("[\\r\\n,，、]+")).map(String::trim)
                 .filter(tag -> !tag.isBlank()).distinct().toList();
     }
-    public ChapterView chapterView(CrawlerChapter c) { return new ChapterView(c.getId(), c.getChapterIndex(), c.getChapterName(), c.getChapterUrl(), value(c.getWordCount(), 0), c.getCrawlStatus().name(), c.getAccessStatus().name(), value(c.getRetryCount(), 0), c.getErrorMessage(), c.getCrawlTime(), c.getCreatedAt()); }
+    public ChapterView chapterView(CrawlerChapter chapter) {
+        return new ChapterView(chapter.getId(), chapter.getChapterIndex(),
+                chapter.getChapterName(), chapter.getChapterUrl(),
+                value(chapter.getWordCount(), 0), chapter.getCrawlStatus().name(),
+                chapter.getAccessStatus().name(), value(chapter.getRetryCount(), 0),
+                chapter.getErrorMessage(), chapter.getCrawlTime(), chapter.getCreatedAt(),
+                chapter.getCrawlStartedAt(), chapter.getCrawlFinishedAt());
+    }
     public TaskView taskView(CrawlerTask t) {
         return new TaskView(t.getId(), t.getType().name(), t.getStatus().name(), t.getPriority().name(),
                 t.getSite().getId(), t.getSite().getSiteName(), t.getDiscoveryPageId(),

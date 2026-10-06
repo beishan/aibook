@@ -4,6 +4,10 @@ import com.aibook.dto.crawler.CrawlerDtos.TaskQueueSettingsView;
 import com.aibook.dto.crawler.CrawlerDtos.TaskQueuePayload;
 import com.aibook.dto.crawler.CrawlerDtos.TaskQueueView;
 import com.aibook.dto.crawler.CrawlerDtos.TaskView;
+import com.aibook.dto.crawler.CrawlerDtos.TaskExecutionView;
+import com.aibook.dto.crawler.CrawlerDtos.ExecutorLogView;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import com.aibook.dto.crawler.CrawlerDtos.QueueExecutorPayload;
 import com.aibook.dto.crawler.CrawlerDtos.QueueExecutorView;
 import com.aibook.dto.crawler.CrawlerDtos.QueueProxyOptionView;
@@ -204,6 +208,27 @@ public class CrawlerTaskService {
             submitAfterCommit(task.getId());
         }
         return managementService.taskView(task);
+    }
+
+    @Transactional(readOnly = true)
+    public TaskExecutionView taskExecution(User user, String taskId) {
+        CrawlerTask task = managementService.ownedTask(user, taskId);
+        Long executorId = activeTaskExecutors.getOrDefault(
+                taskId, task.getQueueExecutorId());
+        return executorId == null ? null : queueExecutorService.taskExecution(executorId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ExecutorLogView> executorLogs(User user, Long queueId, Long executorId,
+            int page, int size, boolean failedOnly) {
+        queueExecutorService.validateOwnership(user, queueId, executorId);
+        return taskLogRepository.findExecutionLogs(user, executorId, failedOnly,
+                PageRequest.of(Math.max(0, page), Math.max(1, Math.min(100, size))))
+                .map(log -> new ExecutorLogView(log.getId(), log.getTaskId(),
+                        log.getExecutorName(), log.getSiteName(), log.getBookName(),
+                        log.getChapterName(), log.getDescription(), log.getDetails(),
+                        log.getProxyName(), log.getProxyNode(), Boolean.TRUE.equals(log.getFailed()),
+                        log.getCreatedAt()));
     }
 
     public List<QueueProxyOptionView> queueProxyOptions() {
@@ -1130,6 +1155,7 @@ public class CrawlerTaskService {
             long queueOrder = task.getQueueOrder() == null ? nextQueueOrder() : task.getQueueOrder();
             task.setQueueOrder(queueOrder);
             if (task.getQueue() == null) task.setQueue(queue);
+            task.setQueueExecutorId(selectedExecutor.getId());
             taskRepository.save(task);
             queue.setLastTaskStartedAt(now);
             taskQueueRepository.save(queue);
@@ -1145,6 +1171,8 @@ public class CrawlerTaskService {
                 activeTaskSites.remove(task.getId());
                 activeTaskQueues.remove(task.getId());
                 activeTaskExecutors.remove(task.getId());
+                task.setQueueExecutorId(null);
+                taskRepository.save(task);
                 log.error("[采集任务] 任务队列派发失败: taskId={}", task.getId(), exception);
                 break;
             }
@@ -1411,7 +1439,7 @@ public class CrawlerTaskService {
                 task.getCrawlerBook().setCrawlStatus(CrawlerBook.CrawlStatus.WAITING);
                 bookRepository.save(task.getCrawlerBook());
             }
-            recordCrawlerEvent(task, "等待队列代理恢复", reason);
+            recordCrawlerError(task, "等待队列代理恢复", reason);
         }
     }
 
@@ -1480,12 +1508,15 @@ public class CrawlerTaskService {
             task.setCurrentChapter(chapter.getChapterName());
             task = saveProgressIfRunning(task);
             if (task == null) return;
+            LocalDateTime attemptStartedAt = LocalDateTime.now();
+            chapter.setCrawlStartedAt(attemptStartedAt);
+            chapter.setCrawlFinishedAt(null);
             boolean hadParsedContent = hasParsedContent(chapter);
             chapter.setErrorMessage(null);
             if (!hadParsedContent) {
                 chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.CRAWLING);
-                chapterRepository.save(chapter);
             }
+            chapterRepository.save(chapter);
             int current = Math.min(value(task.getTotalCount(), pending.size()), finishedCount(task) + 1);
             log.info("[采集任务] 正在采集章节: taskId={}, book={}, progress={}/{} ({}%), chapter={}, url={}",
                     task.getId(), bookName(book), current, task.getTotalCount(),
@@ -1495,7 +1526,6 @@ public class CrawlerTaskService {
             Exception requestFailure = null;
             boolean requestSucceeded = false;
             CrawlerHttpClient.RequestTiming requestTiming = new CrawlerHttpClient.RequestTiming();
-            LocalDateTime attemptStartedAt = LocalDateTime.now();
             long attemptStartedNanos = System.nanoTime();
             String attemptOutcome = "FAILED";
             try {
@@ -1625,11 +1655,12 @@ public class CrawlerTaskService {
                 log.warn("[采集任务] 章节采集失败: taskId={}, book={}, progress={}/{} ({}%), chapter={}, reason={}",
                         task.getId(), bookName(book), current, task.getTotalCount(), percentage(current, task.getTotalCount()),
                         chapter.getChapterName(), chapter.getErrorMessage());
-                recordCrawlerDetail(task, hadParsedContent ? "章节更新失败（已保留原内容）" : "章节采集失败",
+                recordCrawlerError(task, hadParsedContent ? "章节更新失败（已保留原内容）" : "章节采集失败",
                         "进度：" + current + "/" + task.getTotalCount() + "；章节：" + chapter.getChapterName()
                                 + "；原因：" + chapter.getErrorMessage());
             } finally {
                 LocalDateTime attemptFinishedAt = LocalDateTime.now();
+                chapter.setCrawlFinishedAt(attemptFinishedAt);
                 long totalElapsedMillis = Math.max(0,
                         (System.nanoTime() - attemptStartedNanos) / 1_000_000);
                 long fixedWaitMillis = requestTiming.fixedWaitMillis();
@@ -1647,8 +1678,8 @@ public class CrawlerTaskService {
                     log.warn("[采集统计] 保存章节耗时记录失败: taskId={}, chapterId={}",
                             task.getId(), chapter.getId(), metricException);
                 }
+                chapterRepository.save(chapter);
             }
-            chapterRepository.save(chapter);
             if (recheckCompleted) {
                 if ("SUCCESS".equals(attemptOutcome)) queueExecutorService.recordChapter(task.getId(), chapter.getId());
                 if (chapter.getErrorMessage() == null) updateSuccess++; else updateFailed++;
@@ -2278,14 +2309,35 @@ public class CrawlerTaskService {
         recordCrawlerLog(task, event, details);
     }
     private void recordCrawlerLog(CrawlerTask task, String event, String details) {
+        recordCrawlerLog(task, event, details, task.getStatus() == CrawlerTask.TaskStatus.FAILED);
+    }
+
+    private void recordCrawlerError(CrawlerTask task, String event, String details) {
+        recordCrawlerLog(task, event, details, true);
+    }
+
+    private void recordCrawlerLog(CrawlerTask task, String event, String details, boolean failed) {
         try {
             CrawlerBook crawlerBook = task.getCrawlerBook();
+            Long executorId = queueExecutorService == null ? null : queueExecutorService.boundExecutorId();
+            if (executorId == null) executorId = task.getQueueExecutorId();
+            var execution = executorId == null || queueExecutorService == null
+                    ? null : queueExecutorService.taskExecution(executorId);
+            var proxy = queueExecutorService == null ? null : queueExecutorService.requestProxySnapshot();
             String subject = crawlerBook == null ? task.getSite().getSiteName() : bookName(crawlerBook);
             String common = "任务ID：" + task.getId() + "；任务类型：" + task.getType()
                     + "；网站：" + task.getSite().getSiteName();
             taskLogRepository.save(CrawlerTaskLog.builder()
                     .user(task.getUser())
                     .crawlerBookId(crawlerBook == null ? null : crawlerBook.getId())
+                    .executorId(executorId)
+                    .executorName(execution == null ? null : execution.executorName())
+                    .siteName(task.getSite().getSiteName())
+                    .bookName(crawlerBook == null ? null : bookName(crawlerBook))
+                    .chapterName(task.getCurrentChapter())
+                    .proxyName(proxy == null ? null : proxy.name())
+                    .proxyNode(proxy == null ? null : proxy.node())
+                    .failed(failed)
                     .taskId(task.getId())
                     .description(shortText(event + "：" + subject, 500))
                     .details(details == null || details.isBlank() ? common : common + "；" + details)

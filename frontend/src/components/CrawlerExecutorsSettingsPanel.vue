@@ -27,13 +27,84 @@
       <el-table-column label="状态" width="95">
         <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '已启用' : '已停用' }}</el-tag></template>
       </el-table-column>
-      <el-table-column label="操作" width="180">
+      <el-table-column label="操作" width="270">
         <template #default="{ row }">
+          <el-button size="small" @click="openExecutionDetails(row)">执行详情</el-button>
           <el-button size="small" @click="edit(row)">配置</el-button>
           <el-button v-if="!row.defaultExecutor" size="small" type="danger" plain @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
+
+    <el-drawer
+      v-model="executionDrawer"
+      :title="`${detailExecutor?.name || '执行器'} · 执行详情`"
+      size="min(820px, 96vw)"
+      append-to-body
+    >
+      <div class="execution-toolbar">
+        <label>
+          <span>只看错误</span>
+          <el-switch v-model="failedOnly" @change="resetExecutionPage" />
+        </label>
+        <el-button :loading="executionLoading" @click="loadExecutionDetails">刷新详情</el-button>
+      </div>
+      <p class="execution-note">按时间倒序显示采集记录；错误中的代理节点为请求发生时保存的节点。</p>
+      <div v-loading="executionLoading" class="execution-records">
+        <article
+          v-for="record in executionRecords"
+          :key="record.id"
+          class="execution-record"
+          :class="{'execution-record-error':record.failed}"
+        >
+          <header>
+            <strong>{{ record.description }}</strong>
+            <el-tag :type="record.failed?'danger':'info'" size="small">
+              {{ record.failed?'采集错误':'执行记录' }}
+            </el-tag>
+          </header>
+          <time>{{ formatExecutionTime(record.createdAt) }}</time>
+          <dl>
+            <div>
+              <dt>网站</dt>
+              <dd>{{ record.siteName || '—' }}</dd>
+            </div>
+            <div>
+              <dt>书籍</dt>
+              <dd>{{ record.bookName || '网站扫描' }}</dd>
+            </div>
+            <div>
+              <dt>章节</dt>
+              <dd>{{ record.chapterName || '—' }}</dd>
+            </div>
+            <div>
+              <dt>执行器</dt>
+              <dd>{{ record.executorName || detailExecutor?.name }}</dd>
+            </div>
+            <div>
+              <dt>请求代理</dt>
+              <dd>{{ record.proxyName || '尚未发出请求或无记录' }}</dd>
+            </div>
+            <div>
+              <dt>代理节点</dt>
+              <dd :class="{'error-node':record.failed && record.proxyNode}">
+                {{ record.proxyNode || '无节点记录' }}
+              </dd>
+            </div>
+          </dl>
+          <p>{{ record.details }}</p>
+          <small>任务 {{ record.taskId }}</small>
+        </article>
+        <el-empty v-if="!executionRecords.length && !executionLoading" description="暂无执行记录，更新后的采集任务会记录执行器信息" />
+      </div>
+      <el-pagination
+        v-model:current-page="executionPage"
+        :total="executionTotal"
+        :page-size="20"
+        layout="total, prev, pager, next"
+        @current-change="loadExecutionDetails"
+      />
+    </el-drawer>
 
     <el-dialog v-model="dialog" :title="editingId ? '配置执行器' : '新增执行器'" width="min(820px, 96vw)" append-to-body destroy-on-close>
       <div v-loading="editorLoading" class="executor-editor">
@@ -167,7 +238,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { crawlerApi, type CrawlerTaskQueue, type CrawlerQueueExecutor, type CrawlerQueueExecutorPayload, type CrawlerQueueProxyOption, type MihomoPolicyView, type MihomoReferencePayload } from '@/utils/crawler'
+import { crawlerApi, type CrawlerExecutorLog, type CrawlerTaskQueue, type CrawlerQueueExecutor, type CrawlerQueueExecutorPayload, type CrawlerQueueProxyOption, type MihomoPolicyView, type MihomoReferencePayload } from '@/utils/crawler'
 import { proxySettingsApi, type SystemProxyConfig, type MihomoNodeGroup } from '@/utils/proxySettings'
 import { confirm, message } from '@/utils/message'
 
@@ -184,6 +255,52 @@ const saving = ref(false)
 const dialog = ref(false)
 const editingId = ref<number>()
 const policy = ref<MihomoPolicyView|null>(null)
+const executionDrawer = ref(false)
+const executionLoading = ref(false)
+const detailExecutor = ref<CrawlerQueueExecutor>()
+const detailQueueId = ref<number>()
+const executionRecords = ref<CrawlerExecutorLog[]>([])
+const executionPage = ref(1)
+const executionTotal = ref(0)
+const failedOnly = ref(false)
+let executionRequest = 0
+
+function formatExecutionTime(value:string) {
+  return new Date(value).toLocaleString('zh-CN', {hour12:false})
+}
+
+async function openExecutionDetails(executor:CrawlerQueueExecutor) {
+  detailExecutor.value = executor
+  detailQueueId.value = executor.queueId
+  executionRecords.value = []
+  executionTotal.value = 0
+  executionPage.value = 1
+  failedOnly.value = false
+  executionDrawer.value = true
+  await loadExecutionDetails()
+}
+
+async function resetExecutionPage() {
+  executionPage.value = 1
+  await loadExecutionDetails()
+}
+
+async function loadExecutionDetails() {
+  if (!detailExecutor.value || !detailQueueId.value) return
+  const request = ++executionRequest
+  executionLoading.value = true
+  try {
+    const result = await crawlerApi.executorLogs(detailQueueId.value,
+      detailExecutor.value.id, executionPage.value - 1, failedOnly.value)
+    if (request !== executionRequest || !executionDrawer.value) return
+    executionRecords.value = result.content
+    executionTotal.value = result.totalElements
+  } catch (e) {
+    if (request === executionRequest) error(e)
+  } finally {
+    if (request === executionRequest) executionLoading.value = false
+  }
+}
 const emptyForm = ():CrawlerQueueExecutorPayload => ({
   name:'', description:'', enabled:true, proxyMode:'DEFAULT', selectionStrategy:'ORDERED',
   defaultProxyCooldownSeconds:null, proxies:[],
@@ -456,6 +573,78 @@ small {
   }
   .panel-heading, .queue-toolbar, .proxy-row {
     flex-wrap: wrap;
+  }
+}
+.execution-toolbar,
+.execution-toolbar label,
+.execution-record header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.execution-toolbar label {
+  font-size: 13px;
+}
+.execution-note {
+  margin: 14px 0;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+.execution-records {
+  display: grid;
+  gap: 14px;
+  min-height: 100px;
+  margin-bottom: 18px;
+}
+.execution-record {
+  padding: 16px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 14px;
+}
+.execution-record-error {
+  border-color: var(--el-color-danger-light-5);
+}
+.execution-record time,
+.execution-record > small {
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+}
+.execution-record dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.execution-record dl > div {
+  display: grid;
+  gap: 4px;
+}
+.execution-record dt {
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+}
+.execution-record dd {
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.execution-record > p {
+  margin: 12px 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.execution-record .error-node {
+  color: var(--el-color-danger);
+  font-weight: 700;
+}
+@media (max-width: 520px) {
+  .execution-record dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .execution-record header {
+    align-items: flex-start;
   }
 }
 </style>

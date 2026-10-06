@@ -102,6 +102,24 @@ class CrawlerMihomoServiceTest {
     }
 
     @Test
+    void exhaustedRetriesKeepTheFailedRequestNodeAfterSwitching() throws Exception {
+        config.setCooldownSeconds(0);
+        when(api.delay(anyString(), any(), anyString())).thenAnswer(call -> {
+            if (actual.equals(call.getArgument(2))) throw new MihomoApiClient.ApiException(503);
+            return 10;
+        });
+
+        assertThrows(CrawlerHttpClient.NoAvailableQueueProxyException.class,
+                () -> service.execute(4L, site, () -> {
+                    throw new IOException("request failed");
+                }));
+
+        assertEquals("A", config.getCurrentNode());
+        assertEquals("B", service.lastRequestTrace().currentNode());
+        assertEquals("crawler", service.lastRequestTrace().groupName());
+    }
+
+    @Test
     void controlAuthenticationFailureDoesNotMarkNodesDead() throws Exception {
         when(api.proxies(anyString(), any())).thenThrow(new MihomoApiClient.ApiException(401));
         assertThrows(CrawlerHttpClient.NoAvailableQueueProxyException.class,

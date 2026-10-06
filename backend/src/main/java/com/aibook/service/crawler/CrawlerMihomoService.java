@@ -25,6 +25,18 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 @RequiredArgsConstructor
 public class CrawlerMihomoService {
+    public record ExecutionSummary(String proxyUrl, String groupName, String currentNode) { }
+    private final ThreadLocal<ExecutionSummary> requestTrace = new ThreadLocal<>();
+
+    public ExecutionSummary lastRequestTrace() {
+        return requestTrace.get();
+    }
+
+    public void restoreRequestTrace(ExecutionSummary trace) {
+        if (trace == null) requestTrace.remove();
+        else requestTrace.set(trace);
+    }
+
     private final CrawlerMihomoPolicyRepository policies;
     private final CrawlerMihomoReceiptRepository receipts;
     private final CrawlerQueueExecutorRepository executors;
@@ -49,6 +61,13 @@ public class CrawlerMihomoService {
     public PolicyView get(User user, Long queueId, Long id) {
         owned(user, queueId, id);
         return policies.findById(id).map(this::view).orElse(null);
+    }
+
+    public ExecutionSummary executionSummary(Long executorId) {
+        return policies.findById(executorId)
+                .map(policy -> new ExecutionSummary(
+                        policy.getProxyUrl(), policy.getGroupName(), policy.getCurrentNode()))
+                .orElse(null);
     }
 
     public CatalogView browse(User user, Long queueId, Long id, PolicyPayload draft) throws Exception {
@@ -282,6 +301,8 @@ public class CrawlerMihomoService {
                         rotate(config, "定期轮换", false);
                     }
                     try {
+                        requestTrace.set(new ExecutionSummary(config.getProxyUrl(),
+                                config.getGroupName(), config.getCurrentNode()));
                         T result = action.run();
                         config.setFailures(0);
                         config.setLastError(null);
