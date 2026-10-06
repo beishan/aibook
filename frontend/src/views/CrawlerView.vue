@@ -1535,6 +1535,13 @@
               </template>
             </el-table-column>
             <el-table-column prop="wordCount" label="字数" width="90" />
+            <el-table-column label="状态" width="120">
+              <template #default="{ row }">
+                <el-tag :type="statusType(row.crawlStatus)">
+                  {{ statusLabel(row.crawlStatus) }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="采集开始时间" width="180">
               <template #default="{ row }">
                 {{ formatTime(row.crawlStartedAt) }}
@@ -1543,13 +1550,6 @@
             <el-table-column label="采集完成时间" width="180">
               <template #default="{ row }">
                 {{ formatTime(row.crawlStartedAt ? row.crawlFinishedAt : row.crawlTime) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="状态" width="120">
-              <template #default="{ row }">
-                <el-tag :type="statusType(row.crawlStatus)">
-                  {{ statusLabel(row.crawlStatus) }}
-                </el-tag>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="118" fixed="right">
