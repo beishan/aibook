@@ -980,9 +980,9 @@
     </el-dialog>
     <MetadataSearch
       v-model="showMetadataSearch"
-      :initial-title="book.title"
-      :initial-author="book.author"
-      :initial-isbn="book.isbn"
+      :initial-title="book?.title || ''"
+      :initial-author="book?.author || ''"
+      :initial-isbn="book?.isbn || ''"
       @apply="applyMetadataCandidate"
     />
   </div>
@@ -3913,7 +3913,45 @@ onMounted(() => {
 
 @media (max-width: 480px) {
   .detail-toolbar-actions {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .detail-toolbar-actions > :last-child {
+    grid-column: 1 / -1;
+  }
+
+  .detail-toolbar-actions .btn {
+    min-width: 0;
+    padding: 10px 6px;
+    font-size: 12px;
+  }
+
+  .cover-column {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 16px;
+  }
+
+  .cover-column .book-cover {
+    flex: 0 0 104px;
+    width: 104px;
+    height: 156px;
+  }
+
+  .cover-action-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .book-hero {
+    gap: 18px;
+  }
+
+  .book-title {
+    font-size: 24px;
   }
 
   .detail-toolbar-actions :deep(.el-dropdown) {

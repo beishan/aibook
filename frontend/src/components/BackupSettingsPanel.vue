@@ -99,9 +99,9 @@
             </thead>
             <tbody>
               <tr v-for="task in tasks" :key="task.id">
-                <th scope="row" class="task-name-cell">{{ task.name }}</th>
-                <td class="task-content-cell">{{ contentLabel(task) }}</td>
-                <td class="task-schedule-cell">
+                <th scope="row" class="task-name-cell" data-label="任务">{{ task.name }}</th>
+                <td class="task-content-cell" data-label="备份内容">{{ contentLabel(task) }}</td>
+                <td class="task-schedule-cell" data-label="执行计划">
                   <strong>{{ task.scheduleEnabled ? task.cronExpression : '仅手动执行' }}</strong>
                   <small v-if="task.scheduleEnabled">下次执行 {{ formatTime(task.nextRunAt) }}</small>
                   <small v-else>定时计划已关闭</small>
@@ -203,11 +203,11 @@
             </thead>
             <tbody>
               <tr v-for="execution in executions" :key="execution.id">
-                <td class="execution-time-cell">
+                <td class="execution-time-cell" data-label="执行时间">
                   {{ formatTime(execution.finishedAt || execution.startedAt) }}
                 </td>
-                <th scope="row" class="execution-task-cell">{{ execution.taskName }}</th>
-                <td class="execution-details-cell">
+                <th scope="row" class="execution-task-cell" data-label="任务">{{ execution.taskName }}</th>
+                <td class="execution-details-cell" data-label="备份内容 / 结果">
                   <div class="execution-summary-heading">
                     <strong>{{ execution.contents }}</strong>
                     <button
@@ -246,9 +246,9 @@
                     删除原因：{{ execution.deletionReason }}
                   </small>
                 </td>
-                <td>{{ execution.fileCount ?? '—' }}</td>
-                <td>{{ formatBytes(execution.fileSizeBytes) }}</td>
-                <td class="execution-path-cell">
+                <td data-label="文件数">{{ execution.fileCount ?? '—' }}</td>
+                <td data-label="大小">{{ formatBytes(execution.fileSizeBytes) }}</td>
+                <td class="execution-path-cell" data-label="备份目录">
                   <code v-if="execution.outputPath">{{ execution.outputPath }}</code>
                   <span v-else>—</span>
                 </td>
@@ -260,6 +260,7 @@
     </section>
 
     <el-dialog
+      append-to-body
       v-model="executionDetailsVisible"
       title="备份执行详情"
       width="min(680px, calc(100vw - 32px))"
@@ -355,7 +356,13 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="min(620px, calc(100vw - 32px))" destroy-on-close>
+    <el-dialog
+      append-to-body
+      v-model="dialogVisible"
+      :title="dialogTitle"
+      width="min(620px, calc(100vw - 32px))"
+      destroy-on-close
+    >
       <div class="backup-form">
         <label v-if="dialogMode === 'task'" class="backup-field">
           <span>任务名称</span>
@@ -1444,13 +1451,75 @@ onBeforeUnmount(() => {
   to { transform: rotate(360deg); }
 }
 
-@media (max-width: 760px) {
-  .backup-tab-panel {
-    min-height: 420px;
-  }
-
+@media (max-width: 768px), (max-width: 1024px) and (max-height: 500px) and (pointer: coarse) {
   .backup-hero {
     grid-template-columns: 1fr;
+  }
+
+  .backup-tab-panel {
+    min-height: 0;
+  }
+
+  .backup-list-frame {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .backup-data-table,
+  .backup-data-table tbody {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .backup-data-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .backup-data-table tr {
+    display: block;
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    background: var(--surface-card);
+  }
+
+  .backup-data-table th,
+  .backup-data-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    padding: 8px 2px;
+    border: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .backup-data-table [data-label]::before {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--text-secondary);
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .backup-task-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .execution-deletion-reason {
+    min-width: 0;
+    max-width: none;
   }
 
   .execution-detail-grid {

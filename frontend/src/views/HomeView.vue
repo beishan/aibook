@@ -656,7 +656,14 @@ function formatAddedDate(value: string) {
 
 @media (max-width: 640px) {
   .stats-section {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .stat-card {
+    min-width: 0;
+    padding: 14px 10px;
+    gap: 10px;
   }
 
   .recent-books {

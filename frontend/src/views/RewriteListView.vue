@@ -59,7 +59,13 @@
       @current-change="loadProjects"
     />
 
-    <el-dialog v-model="createOpen" title="新建书籍重写" width="min(680px, 94vw)" destroy-on-close>
+    <el-dialog
+      append-to-body
+      v-model="createOpen"
+      title="新建书籍重写"
+      width="min(680px, 94vw)"
+      destroy-on-close
+    >
       <div class="create-form">
         <label for="rewrite-book-search">选择书籍</label>
         <div class="search-row">
@@ -378,6 +384,32 @@ watch(filter, () => {
 .preview-chapter small { color: #888; }
 .preview-chapter p { margin: 5px 0 0; font-size: 12px; color: var(--text-secondary, #728078); white-space: pre-wrap; }
 .merge-option { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 400 !important; }
+@media (max-width: 768px), (max-width: 1024px) and (max-height: 500px) and (pointer: coarse) {
+  .rewrite-page {
+    padding: 8px 0 20px;
+  }
+
+  .rewrite-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .project-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .project-card {
+    padding: 16px;
+  }
+
+  .project-card h2,
+  .project-book {
+    overflow-wrap: anywhere;
+  }
+}
+
 @media (max-width: 480px) {
   .status-tabs button { padding-inline: 2px; font-size: 12px; }
 }

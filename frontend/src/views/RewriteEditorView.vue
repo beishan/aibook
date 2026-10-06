@@ -250,7 +250,12 @@
       </main>
       <div v-else class="editor-panel empty-panel">请选择章节</div>
     </div>
-    <el-dialog v-model="historyOpen" title="章节历史" width="min(760px, 94vw)">
+    <el-dialog
+      append-to-body
+      v-model="historyOpen"
+      title="章节历史"
+      width="min(760px, 94vw)"
+    >
       <div class="history-dialog">
         <div class="history-list">
           <button
@@ -293,7 +298,12 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="searchOpen" title="查找与替换" width="min(780px, 94vw)">
+    <el-dialog
+      append-to-body
+      v-model="searchOpen"
+      title="查找与替换"
+      width="min(780px, 94vw)"
+    >
       <div class="rewrite-search">
         <el-input v-model="searchQuery" placeholder="查找正文内容" @keyup.enter="runSearch" />
         <el-input v-model="replacement" placeholder="替换为" />
@@ -346,7 +356,12 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="snapshotsOpen" title="整书快照" width="min(680px, 94vw)">
+    <el-dialog
+      append-to-body
+      v-model="snapshotsOpen"
+      title="整书快照"
+      width="min(680px, 94vw)"
+    >
       <div class="snapshot-list">
         <p v-if="!snapshots.length">还没有整书快照。快照会保存当前章节顺序、正文、卷和来源关系。</p>
         <el-alert
@@ -377,7 +392,12 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="exportOpen" title="导出已保存内容" width="min(560px, 92vw)">
+    <el-dialog
+      append-to-body
+      v-model="exportOpen"
+      title="导出已保存内容"
+      width="min(560px, 92vw)"
+    >
       <div class="export-settings">
         <label>
           导出格式
@@ -419,7 +439,12 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="renumberOpen" title="章节自动编号" width="min(620px, 94vw)">
+    <el-dialog
+      append-to-body
+      v-model="renumberOpen"
+      title="章节自动编号"
+      width="min(620px, 94vw)"
+    >
       <div class="renumber-settings">
         <el-select v-model="renumberStyle" aria-label="编号格式">
           <el-option label="第 1 章" value="ARABIC" />
@@ -445,7 +470,12 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="quickJumpOpen" title="快速跳转" width="min(560px, 92vw)">
+    <el-dialog
+      append-to-body
+      v-model="quickJumpOpen"
+      title="快速跳转"
+      width="min(560px, 92vw)"
+    >
       <div class="quick-jump">
         <el-input
           ref="quickJumpInput"
@@ -469,7 +499,12 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="memosOpen" title="重写资料" width="min(720px, 94vw)">
+    <el-dialog
+      append-to-body
+      v-model="memosOpen"
+      title="重写资料"
+      width="min(720px, 94vw)"
+    >
       <div class="memo-workspace">
         <div v-if="!memoFormOpen" class="memo-type-control" role="group" aria-label="资料类型">
           <span :style="{ transform: `translateX(${memoType === 'GLOSSARY' ? '100%' : '0'})` }" />
@@ -2314,4 +2349,44 @@ onBeforeUnmount(() => {
   .writing-surface.comparing .rich-editor-surface { grid-row: auto; }
 }
 @media (prefers-reduced-motion: reduce) { .chapter-status-slider { transition: none; } }
+@media (max-width: 768px) {
+  .rewrite-workspace {
+    --rewrite-editor-height: max(300px, 55dvh);
+    --rewrite-diff-review-height: 55dvh;
+    padding: 0;
+  }
+
+  .workspace-header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 16px;
+  }
+
+  .workspace-header .header-actions {
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .workspace-header kbd {
+    display: none;
+  }
+
+  .history-dialog {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .history-list {
+    max-height: 160px;
+  }
+
+  .rich-toolbar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .rich-toolbar button {
+    min-width: 36px;
+    min-height: 40px;
+  }
+}
 </style>

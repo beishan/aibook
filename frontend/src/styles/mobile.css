@@ -1,5 +1,5 @@
 /* 全站手机端适配基线：仅约束小屏，不改变桌面布局。 */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-width: 1024px) and (max-height: 500px) and (pointer: coarse) {
   :root {
     --mobile-page-gutter: 14px;
   }
@@ -116,7 +116,8 @@
 
   .el-overlay-dialog {
     box-sizing: border-box;
-    padding: 10px;
+    padding: max(10px, env(safe-area-inset-top)) 10px
+      max(10px, env(safe-area-inset-bottom));
     overflow: auto;
   }
 
@@ -124,9 +125,9 @@
     display: flex;
     width: calc(100vw - 20px) !important;
     max-width: calc(100vw - 20px) !important;
-    max-height: calc(100dvh - 20px);
+    max-height: calc(100dvh - max(10px, env(safe-area-inset-top)) - max(10px, env(safe-area-inset-bottom)));
     flex-direction: column;
-    margin: 10px auto !important;
+    margin: 0 auto !important;
   }
 
   .el-dialog__header,
@@ -150,7 +151,7 @@
 
   .el-drawer.ltr,
   .el-drawer.rtl {
-    width: min(92vw, 420px) !important;
+    width: 100% !important;
   }
 
   .el-drawer.ttb,
@@ -167,6 +168,7 @@
     min-width: 0;
     padding: 14px;
     overflow: auto;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
   }
 
   .el-popper,
@@ -236,6 +238,290 @@
 
   .upload-area {
     padding: 22px 14px;
+  }
+}
+
+/* 三种主题共用手机导航和内容边界，阅读／编辑保留独立工具栏。 */
+@media (max-width: 768px), (max-width: 1024px) and (max-height: 500px) and (pointer: coarse) {
+  :root {
+    --mobile-nav-height: calc(62px + env(safe-area-inset-bottom));
+  }
+
+  .app-layout {
+    min-height: 100dvh;
+    min-width: 0;
+  }
+
+  .app-layout .dock-nav,
+  .app-layout .mobile-nav,
+  .app-layout .header-nav,
+  .app-layout .modern-sidebar {
+    display: none;
+  }
+
+  .app-layout .layout-main,
+  .app-layout .modern-main {
+    width: 100%;
+    min-width: 0;
+    padding: 16px var(--mobile-page-gutter) calc(var(--mobile-nav-height) + 20px);
+  }
+
+  .app-layout .modern-workspace,
+  .app-layout .content-shell {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .app-layout .modern-workspace {
+    margin-left: 0;
+  }
+
+  .app-layout .header-content {
+    gap: 12px;
+    padding-inline: var(--mobile-page-gutter);
+  }
+
+  .app-layout .header-left,
+  .app-layout .header-right,
+  .app-layout .header-actions {
+    min-width: 0;
+  }
+
+  .app-layout .header-right {
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  .app-layout .header-right .search-box {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .app-layout .search-input,
+  .app-layout .search-input:focus {
+    width: min(32vw, 160px);
+    min-width: 0;
+    font-size: 16px;
+  }
+
+  .app-layout .global-search,
+  .app-layout .global-search:focus-within {
+    width: min(55vw, 220px);
+  }
+
+  .app-layout--immersive .layout-header,
+  .app-layout--immersive .modern-header {
+    display: none;
+  }
+
+  .app-layout--immersive .layout-main,
+  .app-layout--immersive .modern-main,
+  .app-layout--immersive .content-shell {
+    padding: 0;
+  }
+
+  .phone-navigation-sheet.el-drawer.btt {
+    height: auto !important;
+    max-height: 90dvh;
+    border-radius: 22px 22px 0 0;
+  }
+
+  .phone-navigation-sheet .el-drawer__header {
+    padding: 20px 18px 12px;
+  }
+
+  .phone-navigation-sheet .el-drawer__body {
+    padding: 10px 18px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .el-dialog__headerbtn,
+  .el-drawer__close-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .el-input__inner,
+  .el-textarea__inner,
+  .el-select__input {
+    font-size: 16px;
+  }
+
+  .el-button + .el-button {
+    margin-left: 0;
+  }
+
+  .el-form-item__content {
+    min-width: 0;
+  }
+
+  .el-form--inline .el-form-item {
+    display: flex;
+    margin-right: 0;
+  }
+
+  .page-header,
+  .page-header-actions,
+  .page-heading,
+  .card-header {
+    gap: 12px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .page-header > div,
+  .card-header > div {
+    min-width: 0;
+  }
+
+  .app-layout .page-title,
+  .app-layout .crawler-page-title {
+    font-size: 26px;
+    overflow-wrap: anywhere;
+  }
+
+  .page-subtitle,
+  .crawler-page-subtitle {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .page-header-actions,
+  .header-actions {
+    flex-wrap: wrap;
+  }
+
+  .books-view .page-header-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .books-view .page-header-actions .btn {
+    min-width: 0;
+    padding: 10px 8px;
+    font-size: 12px;
+  }
+
+  .books-view .page-header-actions > :last-child {
+    grid-column: 1 / -1;
+  }
+
+  .books-view .filter-card {
+    padding: 14px;
+  }
+
+  .books-view .filter-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .books-view .filter-row > .search-box,
+  .books-view .filter-actions {
+    grid-column: 1 / -1;
+  }
+
+  .books-view .select-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .settings-view .settings-content,
+  .settings-view .tab-content,
+  .backup-settings,
+  .reading-statistics-view,
+  .rewrite-list-view,
+  .rewrite-workspace {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .settings-view .settings-nav {
+    gap: 6px;
+    margin-bottom: 16px;
+    padding-bottom: 6px;
+    overscroll-behavior-inline: contain;
+  }
+
+  .settings-view .settings-nav-item {
+    min-height: 44px;
+  }
+
+  .app-layout .settings-view .card {
+    padding: 16px;
+  }
+
+  .app-layout .settings-view .theme-settings-tabs {
+    padding: 0;
+  }
+
+  .app-layout .backup-settings .backup-hero,
+  .app-layout .backup-settings .backup-retention {
+    padding: 16px;
+  }
+
+  .backup-settings .backup-section-heading,
+  .backup-settings .backup-hero-actions {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .backup-settings .backup-tab-panel {
+    min-height: 0;
+  }
+
+  .backup-settings .backup-list-scroll {
+    overscroll-behavior-inline: contain;
+  }
+
+  .rewrite-workspace .workspace-header {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .rewrite-workspace .workspace-header h1,
+  .rewrite-workspace .workspace-header p {
+    overflow-wrap: anywhere;
+  }
+
+  .rewrite-workspace .workspace-header .header-actions {
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .rewrite-workspace .workspace-body {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rewrite-workspace .writing-surface,
+  .rewrite-workspace .draft-pane,
+  .rewrite-workspace .source-pane {
+    min-width: 0;
+  }
+
+  .rewrite-workspace .rich-toolbar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .btn:hover,
+  .btn:active {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .btn:active {
+    opacity: 0.8;
+  }
+
+  .btn,
+  .el-button,
+  .el-dropdown-menu__item {
+    min-height: 44px;
   }
 }
 

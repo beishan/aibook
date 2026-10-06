@@ -29,8 +29,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
@@ -52,6 +55,8 @@ public class CrawlerTaskService {
     private final CrawlerBookRepository bookRepository;
     private final CrawlerChapterRepository chapterRepository;
     private final CrawlerTaskRepository taskRepository;
+    @Autowired
+    private PlatformTransactionManager transactionManager;
     @Autowired
     private CrawlerTaskQueueRepository taskQueueRepository;
     @Autowired
@@ -984,7 +989,7 @@ public class CrawlerTaskService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                submit(taskId);
+                submitInNewTransaction(() -> submit(taskId));
             }
         });
     }
@@ -1000,9 +1005,16 @@ public class CrawlerTaskService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                submitBatch(ids);
+                submitInNewTransaction(() -> submitBatch(ids));
             }
         });
+    }
+
+    private void submitInNewTransaction(Runnable submission) {
+        // afterCommit 仍绑定原事务资源，必须挂起它并开启新事务才能继续更新队列。
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        transaction.executeWithoutResult(status -> submission.run());
     }
 
     private void submitBatch(List<String> taskIds) {

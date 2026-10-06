@@ -39,71 +39,88 @@
     <el-drawer
       v-model="executionDrawer"
       :title="`${detailExecutor?.name || '执行器'} · 执行详情`"
-      size="min(820px, 96vw)"
+      size="min(1080px, 96vw)"
+      class="executor-details-drawer"
       append-to-body
     >
-      <div class="execution-toolbar">
-        <label>
-          <span>只看错误</span>
-          <el-switch v-model="failedOnly" @change="resetExecutionPage" />
-        </label>
-        <el-button :loading="executionLoading" @click="loadExecutionDetails">刷新详情</el-button>
+      <div class="execution-detail-layout">
+        <div class="execution-toolbar">
+          <label>
+            <span>只看错误</span>
+            <el-switch v-model="failedOnly" aria-label="只看错误" @change="resetExecutionPage" />
+          </label>
+          <el-button :loading="executionLoading" @click="loadExecutionDetails">刷新详情</el-button>
+        </div>
+        <p class="execution-note">按时间倒序显示采集记录；错误中的代理节点为请求发生时保存的节点。</p>
+        <p class="execution-mobile-hint">左右滑动查看全部列，点击行首箭头展开完整详情。</p>
+        <div class="execution-list">
+          <el-table
+            v-loading="executionLoading"
+            :data="executionRecords"
+            row-key="id"
+            height="100%"
+            :row-class-name="({ row }) => row.failed ? 'execution-error-row' : ''"
+            empty-text="暂无执行记录，更新后的采集任务会记录执行器信息"
+          >
+            <el-table-column type="expand" width="44">
+              <template #default="{ row }">
+                <div class="execution-expanded">
+                  <p><strong>执行器：</strong>{{ row.executorName || detailExecutor?.name }}</p>
+                  <p><strong>任务：</strong>{{ row.taskId }}</p>
+                  <p><strong>执行结果：</strong>{{ row.description }}</p>
+                  <p class="execution-expanded-details">{{ row.details || '暂无详细信息' }}</p>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="执行时间" width="165">
+              <template #default="{ row }">{{ formatExecutionTime(row.createdAt) }}</template>
+            </el-table-column>
+            <el-table-column label="网站" min-width="110" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.siteName || '—' }}</template>
+            </el-table-column>
+            <el-table-column label="书籍 / 章节" min-width="190">
+              <template #default="{ row }">
+                <div class="execution-cell">
+                  <strong>{{ row.bookName || '网站扫描' }}</strong>
+                  <small>{{ row.chapterName || '—' }}</small>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="请求代理 / 节点" min-width="180">
+              <template #default="{ row }">
+                <div class="execution-cell">
+                  <span>{{ row.proxyName || '尚未发出请求或无记录' }}</span>
+                  <small :class="{ 'error-node': row.failed && row.proxyNode }">
+                    {{ row.proxyNode || '无节点记录' }}
+                  </small>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="执行结果" min-width="220">
+              <template #default="{ row }">
+                <div class="execution-cell">
+                  <el-tag :type="row.failed ? 'danger' : 'info'" size="small">
+                    {{ row.failed ? '采集错误' : '执行记录' }}
+                  </el-tag>
+                  <span>{{ row.description }}</span>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <footer class="execution-pagination">
+          <span>共 {{ executionTotal }} 条 · 每页 20 条</span>
+          <el-pagination
+            v-model:current-page="executionPage"
+            :total="executionTotal"
+            :page-size="20"
+            :pager-count="5"
+            :disabled="executionLoading"
+            layout="prev, pager, next"
+            @current-change="loadExecutionDetails"
+          />
+        </footer>
       </div>
-      <p class="execution-note">按时间倒序显示采集记录；错误中的代理节点为请求发生时保存的节点。</p>
-      <div v-loading="executionLoading" class="execution-records">
-        <article
-          v-for="record in executionRecords"
-          :key="record.id"
-          class="execution-record"
-          :class="{'execution-record-error':record.failed}"
-        >
-          <header>
-            <strong>{{ record.description }}</strong>
-            <el-tag :type="record.failed?'danger':'info'" size="small">
-              {{ record.failed?'采集错误':'执行记录' }}
-            </el-tag>
-          </header>
-          <time>{{ formatExecutionTime(record.createdAt) }}</time>
-          <dl>
-            <div>
-              <dt>网站</dt>
-              <dd>{{ record.siteName || '—' }}</dd>
-            </div>
-            <div>
-              <dt>书籍</dt>
-              <dd>{{ record.bookName || '网站扫描' }}</dd>
-            </div>
-            <div>
-              <dt>章节</dt>
-              <dd>{{ record.chapterName || '—' }}</dd>
-            </div>
-            <div>
-              <dt>执行器</dt>
-              <dd>{{ record.executorName || detailExecutor?.name }}</dd>
-            </div>
-            <div>
-              <dt>请求代理</dt>
-              <dd>{{ record.proxyName || '尚未发出请求或无记录' }}</dd>
-            </div>
-            <div>
-              <dt>代理节点</dt>
-              <dd :class="{'error-node':record.failed && record.proxyNode}">
-                {{ record.proxyNode || '无节点记录' }}
-              </dd>
-            </div>
-          </dl>
-          <p>{{ record.details }}</p>
-          <small>任务 {{ record.taskId }}</small>
-        </article>
-        <el-empty v-if="!executionRecords.length && !executionLoading" description="暂无执行记录，更新后的采集任务会记录执行器信息" />
-      </div>
-      <el-pagination
-        v-model:current-page="executionPage"
-        :total="executionTotal"
-        :page-size="20"
-        layout="total, prev, pager, next"
-        @current-change="loadExecutionDetails"
-      />
     </el-drawer>
 
     <el-dialog v-model="dialog" :title="editingId ? '配置执行器' : '新增执行器'" width="min(820px, 96vw)" append-to-body destroy-on-close>
@@ -576,8 +593,7 @@ small {
   }
 }
 .execution-toolbar,
-.execution-toolbar label,
-.execution-record header {
+.execution-toolbar label {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -591,60 +607,83 @@ small {
   color: var(--el-text-color-secondary);
   font-size: 12px;
 }
-.execution-records {
+.execution-mobile-hint {
+  display: none;
+}
+:global(.executor-details-drawer .el-drawer__body) {
+  min-height: 0;
+  overflow: hidden;
+}
+.execution-detail-layout {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+}
+.execution-toolbar,
+.execution-note,
+.execution-mobile-hint,
+.execution-pagination {
+  flex: 0 0 auto;
+}
+.execution-list {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.execution-cell {
   display: grid;
-  gap: 14px;
-  min-height: 100px;
-  margin-bottom: 18px;
-}
-.execution-record {
-  padding: 16px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 14px;
-}
-.execution-record-error {
-  border-color: var(--el-color-danger-light-5);
-}
-.execution-record time,
-.execution-record > small {
-  color: var(--el-text-color-secondary);
-  font-size: 11px;
-}
-.execution-record dl {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 14px 0;
-}
-.execution-record dl > div {
-  display: grid;
-  gap: 4px;
-}
-.execution-record dt {
-  color: var(--el-text-color-secondary);
-  font-size: 11px;
-}
-.execution-record dd {
-  margin: 0;
-  font-size: 13px;
+  justify-items: start;
+  gap: 5px;
   overflow-wrap: anywhere;
 }
-.execution-record > p {
-  margin: 12px 0;
-  font-size: 12px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.execution-cell strong {
+  font-weight: 500;
 }
-.execution-record .error-node {
+.execution-cell .error-node {
   color: var(--el-color-danger);
   font-weight: 700;
 }
+.execution-list :deep(.execution-error-row) {
+  --el-table-tr-bg-color: var(--el-color-danger-light-9);
+}
+.execution-expanded {
+  display: grid;
+  gap: 8px;
+  padding: 16px 20px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.execution-expanded-details {
+  white-space: pre-wrap;
+}
+.execution-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 16px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
 @media (max-width: 520px) {
-  .execution-record dl {
-    grid-template-columns: minmax(0, 1fr);
+  .execution-mobile-hint {
+    display: block;
+    margin: 0 0 12px;
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
   }
-  .execution-record header {
+  .execution-expanded {
+    max-width: calc(100vw - 28px);
+  }
+  .execution-toolbar {
+    flex-wrap: wrap;
+  }
+  .execution-pagination {
     align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

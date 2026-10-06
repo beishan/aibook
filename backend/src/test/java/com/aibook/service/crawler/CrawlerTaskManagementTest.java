@@ -861,6 +861,12 @@ class CrawlerTaskManagementTest {
         when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(tasks.findById(anyString())).thenReturn(Optional.empty());
         CrawlerTaskService service = service(tasks, management);
+        org.springframework.transaction.PlatformTransactionManager transactionManager =
+                mock(org.springframework.transaction.PlatformTransactionManager.class);
+        when(transactionManager.getTransaction(any())).thenReturn(
+                new org.springframework.transaction.support.SimpleTransactionStatus());
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                service, "transactionManager", transactionManager);
         TransactionSynchronizationManager.initSynchronization();
         TransactionSynchronizationManager.setActualTransactionActive(true);
         try {

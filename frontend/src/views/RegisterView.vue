@@ -409,6 +409,18 @@ const handleRegister = async () => {
 
 /* 响应式 */
 @media (max-width: 480px) {
+  .register-container {
+    padding: max(16px, env(safe-area-inset-top)) 14px
+      max(16px, env(safe-area-inset-bottom));
+    align-items: flex-start;
+    min-height: 100dvh;
+  }
+
+  .register-card {
+    padding: 28px 20px;
+    border-radius: 20px;
+  }
+
   .form-row {
     grid-template-columns: 1fr;
   }

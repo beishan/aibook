@@ -6820,4 +6820,18 @@ onBeforeUnmount(() => {
   /* 为父窗口右上角的独立拖动手柄留出空间，避免遮挡阅读器操作。 */
   padding-right: 64px;
 }
+
+@media (max-width: 768px) {
+  .reader-view:not(.trial-reader-mode) .reader-tool-rail {
+    bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .reader-view:not(.trial-reader-mode) .reader-tool-rail button {
+    min-height: 44px;
+  }
+
+  .reader-view:not(.trial-reader-mode) .reader-body {
+    margin-bottom: calc(54px + env(safe-area-inset-bottom));
+  }
+}
 </style>

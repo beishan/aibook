@@ -135,9 +135,14 @@
 
     <!-- 视图切换 -->
     <div class="view-controls">
-      <div class="btn-group">
+      <div class="btn-group" role="tablist" aria-label="书库显示方式" @keydown="handleViewModeKey">
+        <span class="view-mode-slider" :style="{ transform: `translateX(${viewModeIndex * 100}%)` }" aria-hidden="true" />
         <button
           class="btn"
+          type="button"
+          role="tab"
+          :aria-selected="viewMode === 'card'"
+          :tabindex="viewMode === 'card' ? 0 : -1"
           :class="{ active: viewMode === 'card' }"
           @click="handleViewModeChange('card')"
         >
@@ -146,6 +151,10 @@
         </button>
         <button
           class="btn"
+          type="button"
+          role="tab"
+          :aria-selected="viewMode === 'compact-card'"
+          :tabindex="viewMode === 'compact-card' ? 0 : -1"
           :class="{ active: viewMode === 'compact-card' }"
           @click="handleViewModeChange('compact-card')"
         >
@@ -154,6 +163,10 @@
         </button>
         <button
           class="btn"
+          type="button"
+          role="tab"
+          :aria-selected="viewMode === 'list'"
+          :tabindex="viewMode === 'list' ? 0 : -1"
           :class="{ active: viewMode === 'list' }"
           @click="handleViewModeChange('list')"
         >
@@ -1275,6 +1288,20 @@ const handleViewModeChange = (mode: 'card' | 'compact-card' | 'list') => {
   loadBooks()
 }
 
+const viewModes = ['card', 'compact-card', 'list'] as const
+const viewModeIndex = computed(() => Math.max(0, viewModes.indexOf(viewMode.value)))
+const handleViewModeKey = (event: KeyboardEvent) => {
+  const index = viewModeIndex.value
+  const next = event.key === 'ArrowRight' ? (index + 1) % viewModes.length
+    : event.key === 'ArrowLeft' ? (index + viewModes.length - 1) % viewModes.length
+    : event.key === 'Home' ? 0
+    : event.key === 'End' ? viewModes.length - 1 : -1
+  if (next < 0) return
+  event.preventDefault()
+  handleViewModeChange(viewModes[next])
+  ;(event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+}
+
 watch(
   () => route.query.search,
   (newSearch) => {
@@ -1454,9 +1481,40 @@ onMounted(async () => {
 }
 
 .btn-group .btn.active {
-  background: var(--primary);
-  color: white;
-  box-shadow: 0 2px 8px var(--primary-alpha-30);
+  background: transparent;
+  color: var(--primary);
+  box-shadow: none;
+}
+
+.btn-group {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 3px;
+  gap: 0;
+  isolation: isolate;
+}
+
+.view-mode-slider {
+  position: absolute;
+  z-index: -1;
+  inset: 3px auto 3px 3px;
+  width: calc((100% - 6px) / 3);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+  transition: transform 250ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.btn-group .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.btn-group .btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 
 .selection-controls {
@@ -2130,9 +2188,81 @@ onMounted(async () => {
 }
 
 /* 响应式 */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-width: 1024px) and (max-height: 500px) and (pointer: coarse) {
+  .view-controls {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .btn-group {
+    display: grid;
+    width: 100%;
+  }
+
+  .selection-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .selection-controls .btn {
+    padding: 10px;
+    white-space: nowrap;
+  }
+
+  .batch-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 14px;
+  }
+
+  .batch-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .batch-actions .el-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .pagination {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
   .filter-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-row > .search-box,
+  .filter-actions {
+    grid-column: 1 / -1;
+  }
+
+  .filter-card {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .books-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .book-cover {
+    height: auto;
+    aspect-ratio: 3 / 4;
+  }
+
+  .book-info {
+    padding: 10px;
+  }
+
+  .book-list-item {
+    flex-wrap: wrap;
+    gap: 10px;
   }
 
   .search-box {
@@ -2161,6 +2291,9 @@ onMounted(async () => {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .view-mode-slider {
+    transition: none;
+  }
   .book-cover-actions,
   .cover-image,
   .book-cover-small img {

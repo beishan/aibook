@@ -4290,4 +4290,56 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
     align-items: flex-start;
   }
 }
+@media (max-width: 768px) {
+  .crawler-page {
+    gap: 16px;
+    padding-top: 8px;
+  }
+
+  .panel {
+    min-width: 0;
+    min-height: 0;
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .metric-card {
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    gap: 8px;
+    padding: 14px;
+  }
+
+  .metric-card strong {
+    font-size: 24px;
+  }
+
+  .metric-card small {
+    font-size: 11px;
+  }
+
+  .toolbar,
+  .drawer-actions,
+  .crawler-header-actions {
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .drawer-actions > .el-button {
+    flex: 1 1 auto;
+  }
+
+  .segmented-wrap {
+    min-width: 0;
+    max-width: 100%;
+    overscroll-behavior-inline: contain;
+  }
+}
 </style>
