@@ -181,36 +181,80 @@ class CrawlerHttpClientTest {
         assertEquals(1_150L, CrawlerHttpClient.reserveRequestSlot(gate, 1_000L, 150L));
     }
 
-    @Test void sharesRequestSpacingAcrossSiteConfigurationsForTheSameOrigin() throws Exception {
+    @Test void preservesRequestSpacingWithinOneExecutor() throws Exception {
         List<Long> starts = new CopyOnWriteArrayList<>();
         HttpServer server = server("User-agent: *\nAllow: /\n", exchange -> {
             starts.add(System.nanoTime());
             respond(exchange, 200, "content");
         });
-        var executor = Executors.newFixedThreadPool(2);
         try {
             CrawlerHttpClient httpClient = configuredClient(0);
+            CrawlerQueueExecutorService route = mock(CrawlerQueueExecutorService.class);
+            when(route.boundExecutorId()).thenReturn(101L);
+            org.springframework.test.util.ReflectionTestUtils.setField(httpClient, "queueExecutorService", route);
             CrawlerSite first = localSite(server, 19L);
-            CrawlerSite second = localSite(server, 20L);
             first.setRespectRobotsTxt(false);
-            second.setRespectRobotsTxt(false);
             first.setRequestIntervalMillis(120);
-            second.setRequestIntervalMillis(120);
-
-            Future<?> firstRequest = executor.submit(
-                    () -> httpClient.get(first, first.getBaseUrl() + "/one"));
-            Future<?> secondRequest = executor.submit(
-                    () -> httpClient.get(second, second.getBaseUrl() + "/two"));
-            firstRequest.get(2, TimeUnit.SECONDS);
-            secondRequest.get(2, TimeUnit.SECONDS);
+            httpClient.get(first, first.getBaseUrl() + "/one");
+            httpClient.get(first, first.getBaseUrl() + "/two");
 
             assertEquals(2, starts.size());
             starts.sort(Long::compareTo);
             assertTrue(TimeUnit.NANOSECONDS.toMillis(starts.get(1) - starts.get(0)) >= 80,
-                    "同一源的不同网站配置不应同时突发请求");
+                    "同一个执行器的连续请求仍须遵守网站间隔");
         } finally {
-            executor.shutdownNow();
             server.stop(0);
+        }
+    }
+
+    @Test void differentExecutorsDoNotShareSiteOrOriginRequestSpacing() throws Exception {
+        CountDownLatch arrivals = new CountDownLatch(2);
+        CountDownLatch release = new CountDownLatch(1);
+        var serverWorkers = Executors.newFixedThreadPool(2);
+        var workers = Executors.newFixedThreadPool(2);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.setExecutor(serverWorkers);
+        server.createContext("/", exchange -> {
+            arrivals.countDown();
+            try {
+                release.await(5, TimeUnit.SECONDS);
+                respond(exchange, 200, "content");
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                exchange.close();
+            }
+        });
+        server.start();
+        try {
+            CrawlerHttpClient httpClient = configuredClient(0);
+            ThreadLocal<Long> executorId = new ThreadLocal<>();
+            CrawlerQueueExecutorService route = mock(CrawlerQueueExecutorService.class);
+            when(route.boundExecutorId()).thenAnswer(invocation -> executorId.get());
+            org.springframework.test.util.ReflectionTestUtils.setField(httpClient, "queueExecutorService", route);
+            CrawlerSite site = localSite(server, 19L);
+            site.setRespectRobotsTxt(false);
+            site.setRequestIntervalMillis(3000);
+            site.setMaxRequestIntervalMillis(3000);
+            List<Future<Integer>> requests = new ArrayList<>();
+            for (long id : List.of(101L, 102L)) {
+                requests.add(workers.submit(() -> {
+                    executorId.set(id);
+                    try {
+                        return httpClient.get(site, site.getBaseUrl() + "/chapter").statusCode();
+                    } finally {
+                        executorId.remove();
+                    }
+                }));
+            }
+            assertTrue(arrivals.await(2, TimeUnit.SECONDS),
+                    "两个执行器应同时到达网站，不能共享 3 秒的请求时间队列");
+            release.countDown();
+            for (Future<Integer> request : requests) assertEquals(200, request.get(5, TimeUnit.SECONDS));
+        } finally {
+            release.countDown();
+            workers.shutdownNow();
+            server.stop(0);
+            serverWorkers.shutdownNow();
         }
     }
 

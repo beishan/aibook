@@ -52,8 +52,9 @@ public class CrawlerHttpClient {
     private final ThreadLocal<NodeFailureObserver> nodeFailureObserver = new ThreadLocal<>();
     private final CrawlerSettingsService crawlerSettingsService;
     private final CrawlerSiteRepository crawlerSiteRepository;
-    private final Map<Long, AtomicLong> siteNextRequests = new ConcurrentHashMap<>();
-    private final Map<String, AtomicLong> originNextRequests = new ConcurrentHashMap<>();
+    private final Map<ExecutorPacingKey, AtomicLong> executorNextRequests = new ConcurrentHashMap<>();
+    private final ThreadLocal<Map<Long, AtomicLong>> unboundNextRequests =
+            ThreadLocal.withInitial(HashMap::new);
     private final Map<String, RobotsCacheEntry> robotsCache = new ConcurrentHashMap<>();
     private final Map<String, Object> robotsLocks = new ConcurrentHashMap<>();
     private final Map<Long, CircuitState> circuitStates = new ConcurrentHashMap<>();
@@ -425,9 +426,9 @@ public class CrawlerHttpClient {
         URI current = original;
         long duration = 0;
         for (int redirects = 0; redirects <= settings.maxRedirects(); redirects++) {
-            // Task executors control concurrency; requests only share pacing intervals.
+            // Each executor maintains its own request spacing, including redirects and retries.
             long started = System.nanoTime();
-            throttle(site, current, timing);
+            throttle(site, timing);
             ensureNotManuallyFrozen(site);
             HttpRequest.Builder request = HttpRequest.newBuilder(current)
                     .timeout(Duration.ofMillis(settings.timeoutMillis()))
@@ -529,7 +530,7 @@ public class CrawlerHttpClient {
         if (siteId == null) return;
         circuitStates.remove(siteId);
         adaptiveDelays.remove(siteId);
-        siteNextRequests.remove(siteId);
+        clearRequestSpacing(siteId);
         String keyPrefix = siteId + "|";
         robotsCache.keySet().removeIf(key -> key.startsWith(keyPrefix));
         robotsLocks.keySet().removeIf(key -> key.startsWith(keyPrefix));
@@ -552,7 +553,7 @@ public class CrawlerHttpClient {
     void resetProtection(CrawlerSite site) {
         circuitStates.remove(site.getId());
         adaptiveDelays.remove(site.getId());
-        siteNextRequests.remove(site.getId());
+        clearRequestSpacing(site.getId());
         persistProtection(site, null, null, null);
     }
 
@@ -884,7 +885,23 @@ public class CrawlerHttpClient {
                 8, 5, 4, 60000, 900, 3600, 360, 15, true, "", "", "{}") : settings;
     }
 
-    private void throttle(CrawlerSite site, URI target, RequestTiming timing) throws InterruptedException {
+    private void clearRequestSpacing(Long siteId) {
+        executorNextRequests.keySet().removeIf(key -> Objects.equals(key.siteId(), siteId));
+        unboundNextRequests.get().remove(siteId);
+    }
+
+    private AtomicLong requestSpacing(CrawlerSite site) {
+        Long executorId = queueExecutorService == null ? null : queueExecutorService.boundExecutorId();
+        if (executorId == null) {
+            return unboundNextRequests.get().computeIfAbsent(site.getId(), ignored -> new AtomicLong());
+        }
+        return executorNextRequests.computeIfAbsent(
+                new ExecutorPacingKey(site.getId(), executorId), ignored -> new AtomicLong());
+    }
+
+    private record ExecutorPacingKey(Long siteId, Long executorId) { }
+
+    private void throttle(CrawlerSite site, RequestTiming timing) throws InterruptedException {
         AdaptiveDelay adaptiveDelay = adaptiveDelays.get(site.getId());
         long fixedDelay = Math.max(0, value(site.getRequestIntervalMillis(), 1500));
         long legacyRandomLimit = Math.max(0, value(site.getRandomDelayMillis(), 1000));
@@ -901,13 +918,8 @@ public class CrawlerHttpClient {
         while (true) {
             waitUntilAccessAllowed(site, timing);
             long now = System.currentTimeMillis();
-            long siteSlot = reserveRequestSlot(
-                    siteNextRequests.computeIfAbsent(site.getId(), ignored -> new AtomicLong()),
-                    now, interval);
-            long originSlot = reserveRequestSlot(
-                    originNextRequests.computeIfAbsent(originKey(target), ignored -> new AtomicLong()),
-                    now, interval);
-            long wait = Math.max(siteSlot, originSlot) - now;
+            long slot = reserveRequestSlot(requestSpacing(site), now, interval);
+            long wait = slot - now;
             if (wait > 0) {
                 if (timing != null) {
                     timing.reportProgress(randomDelay > 0 ? "随机等待中" : "请求间隔等待中");
