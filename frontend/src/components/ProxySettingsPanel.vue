@@ -53,7 +53,11 @@
       aria-labelledby="crawler-settings-tab-request"
     >
       <header class="request-card-header">
-        <div><p class="proxy-kicker">REQUEST POLICY</p><h3>请求与失败策略</h3><span>以下配置对全部书籍爬虫任务生效。</span></div>
+        <div>
+          <p class="proxy-kicker">REQUEST POLICY</p>
+          <h3>请求与失败策略</h3>
+          <span>以下配置对全部书籍爬虫任务生效，任务并发由启用的执行器数量决定。</span>
+        </div>
         <el-button type="primary" :loading="settingsSaving" @click="saveCrawlerSettings">保存请求设置</el-button>
       </header>
       <el-form label-position="top" class="crawler-request-form">
@@ -65,7 +69,6 @@
           <el-form-item label="原地等待上限（ms）"><el-input-number v-model="requestSettings.maxInlineRetryDelayMillis" :min="0" :max="120000" :step="1000" controls-position="right" /><small>Retry-After 超过此值时结束本次请求并进入冷却。</small></el-form-item>
           <el-form-item label="响应体积上限（MiB）"><el-input-number v-model="requestSettings.maxResponseSizeMb" :min="1" :max="64" controls-position="right" /></el-form-item>
           <el-form-item label="重定向次数上限"><el-input-number v-model="requestSettings.maxRedirects" :min="0" :max="10" controls-position="right" /></el-form-item>
-          <el-form-item label="同源总并发上限"><el-input-number v-model="requestSettings.maxOriginConcurrency" :min="1" :max="16" controls-position="right" /><small>相同协议、主机和端口下所有网站配置共享。</small></el-form-item>
           <el-form-item label="自适应附加延迟上限（ms）"><el-input-number v-model="requestSettings.adaptiveDelayMaxMillis" :min="1000" :max="300000" :step="1000" controls-position="right" /></el-form-item>
           <el-form-item label="普通熔断冷却（秒）"><el-input-number v-model="requestSettings.circuitCooldownSeconds" :min="10" :max="86400" :step="60" controls-position="right" /></el-form-item>
           <el-form-item label="访问拒绝冷却（秒）"><el-input-number v-model="requestSettings.accessDeniedCooldownSeconds" :min="60" :max="604800" :step="300" controls-position="right" /></el-form-item>

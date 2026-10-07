@@ -68,7 +68,7 @@
           <header>
             <div>
               <h3>章节采集耗时</h3>
-              <p>按天展示每次尝试的平均耗时；限速等待按固定与随机配置比例拆分，其他等待含并发门控与重试退避</p>
+              <p>按天展示每次尝试的平均耗时；限速等待按固定与随机配置比例拆分，其他等待含自适应延迟、重试退避与访问时段等待</p>
             </div>
             <div class="statistics-summary">
               <span>记录 <b>{{ chapterAttemptStatistics?.attempts.totalElements || 0 }}</b> 次</span>
@@ -189,7 +189,13 @@
               </el-tag>
             </div>
           </div>
-          <div class="site-stats"><span><b>{{ site.bookCount }}</b> 本书</span><span><b>{{ site.requestIntervalMillis }}–{{ site.maxRequestIntervalMillis }}</b> ms 随机间隔</span><span><b>{{ site.maxConcurrency }}</b> 并发</span></div>
+          <div class="site-stats">
+            <span><b>{{ site.bookCount }}</b> 本书</span>
+            <span>
+              <b>{{ site.requestIntervalMillis }}–{{ site.maxRequestIntervalMillis }}</b>
+              ms 随机间隔
+            </span>
+          </div>
           <div v-if="hasSiteProtection(site)" class="site-protection" :class="{cooling:site.protection.coolingDown}">
             <div class="site-protection-message"><strong>{{ site.protection.coolingDown ? '站点保护冷却中' : '请求节奏正在恢复' }}</strong><span>{{ site.protection.reason || '近期请求失败，系统已自动降低访问频率' }}</span></div>
             <el-button text size="small" type="warning" @click="openSiteProtectionDetails(site)">详情</el-button>
@@ -710,9 +716,6 @@
                   验证码、拒绝访问和 429 等明确限制仍会立即冷却；
                   普通冷却时长沿用系统爬虫设置。
                 </small>
-              </el-form-item>
-              <el-form-item label="最大并发">
-                <el-input-number v-model="siteForm.maxConcurrency" :min="1" :max="8" />
               </el-form-item>
             </div>
             <el-form-item label="robots.txt 策略">

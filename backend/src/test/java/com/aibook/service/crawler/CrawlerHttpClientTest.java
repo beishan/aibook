@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -239,33 +240,57 @@ class CrawlerHttpClientTest {
         }
     }
 
-    @Test void appliesNewerConcurrencyLimitWithoutOldConfigurationOverwritingIt() throws Exception {
-        CrawlerHttpClient.AdjustableConcurrencyGate gate =
-                new CrawlerHttpClient.AdjustableConcurrencyGate();
-        LocalDateTime oldConfiguration = LocalDateTime.parse("2026-09-16T08:00:00");
-        LocalDateTime newConfiguration = oldConfiguration.plusMinutes(1);
-        gate.acquire(2, oldConfiguration);
-        gate.acquire(2, oldConfiguration);
-
-        var executor = Executors.newSingleThreadExecutor();
-        CountDownLatch started = new CountDownLatch(1);
-        Future<?> waiting = executor.submit(() -> {
-            started.countDown();
-            gate.acquire(1, newConfiguration);
-            gate.release();
-            return null;
+    @Test void allowsConcurrentRequestsDespiteLegacySiteAndOriginLimits() throws Exception {
+        int requestCount = 5;
+        CountDownLatch arrivals = new CountDownLatch(requestCount);
+        CountDownLatch release = new CountDownLatch(1);
+        var serverExecutor = Executors.newFixedThreadPool(requestCount);
+        var requestExecutor = Executors.newFixedThreadPool(requestCount);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.setExecutor(serverExecutor);
+        server.createContext("/", exchange -> {
+            arrivals.countDown();
+            try {
+                release.await(10, TimeUnit.SECONDS);
+                respond(exchange, 200, "content");
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                exchange.close();
+            }
         });
-        assertTrue(started.await(1, TimeUnit.SECONDS));
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
-        while (gate.limit() != 1 && System.nanoTime() < deadline) Thread.onSpinWait();
-        assertEquals(1, gate.limit());
-        gate.release();
-        assertFalse(waiting.isDone());
-        gate.updateLimit(3, oldConfiguration);
-        assertEquals(1, gate.limit());
-        gate.release();
-        waiting.get(1, TimeUnit.SECONDS);
-        executor.shutdownNow();
+        server.start();
+        try {
+            CrawlerHttpClient httpClient = configuredClient(new CrawlerRequestSettings(
+                    10000, 0, 3, 30000, 30000, 8, 5, 1, 60000,
+                    900, 3600, 360, 15, true, "AiBookCrawler/1.0", "", "{}"));
+            CrawlerSite first = localSite(server, 21L);
+            CrawlerSite second = localSite(server, 22L);
+            first.setRespectRobotsTxt(false);
+            second.setRespectRobotsTxt(false);
+            List<Future<Long>> requests = new ArrayList<>();
+            for (int index = 0; index < requestCount; index++) {
+                CrawlerSite source = index == requestCount - 1 ? second : first;
+                requests.add(requestExecutor.submit(() -> {
+                    CrawlerHttpClient.RequestTiming timing = new CrawlerHttpClient.RequestTiming();
+                    assertEquals(200, httpClient.get(
+                            source, source.getBaseUrl() + "/chapter", null, null, timing).statusCode());
+                    return timing.otherWaitMillis();
+                }));
+            }
+
+            assertTrue(arrivals.await(5, TimeUnit.SECONDS),
+                    "请求必须能并行到达，不能被旧网站或同源并发上限阻塞");
+            release.countDown();
+            for (Future<Long> request : requests) {
+                assertEquals(0L, request.get(5, TimeUnit.SECONDS).longValue(),
+                        "无退避与访问时段限制时不应产生并发门控等待");
+            }
+        } finally {
+            release.countDown();
+            requestExecutor.shutdownNow();
+            server.stop(0);
+            serverExecutor.shutdownNow();
+        }
     }
 
     @Test void doesNotRetryForbiddenResponseOrSwitchProxy() throws Exception {

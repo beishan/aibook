@@ -12,7 +12,7 @@ const [panel, api, dto, service, client, controller] = await Promise.all([
 
 const fields = [
   'retryBackoffMaxMillis', 'maxInlineRetryDelayMillis', 'maxResponseSizeMb',
-  'maxRedirects', 'maxOriginConcurrency', 'adaptiveDelayMaxMillis',
+  'maxRedirects', 'adaptiveDelayMaxMillis',
   'circuitCooldownSeconds', 'accessDeniedCooldownSeconds', 'robotsCacheMinutes',
   'robotsErrorCacheMinutes', 'softBlockDetectionEnabled',
 ]

@@ -54,8 +54,6 @@ public class CrawlerHttpClient {
     private final CrawlerSiteRepository crawlerSiteRepository;
     private final Map<Long, AtomicLong> siteNextRequests = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> originNextRequests = new ConcurrentHashMap<>();
-    private final Map<Long, AdjustableConcurrencyGate> concurrencyGates = new ConcurrentHashMap<>();
-    private final Map<String, AdjustableConcurrencyGate> originConcurrencyGates = new ConcurrentHashMap<>();
     private final Map<String, RobotsCacheEntry> robotsCache = new ConcurrentHashMap<>();
     private final Map<String, Object> robotsLocks = new ConcurrentHashMap<>();
     private final Map<Long, CircuitState> circuitStates = new ConcurrentHashMap<>();
@@ -424,54 +422,31 @@ public class CrawlerHttpClient {
     private TimedResponse sendFollowingSafeRedirects(CrawlerSite site, URI original, String etag,
             String lastModified, String proxyUrl, CrawlerRequestSettings settings,
             RequestTiming timing) throws Exception {
-        AdjustableConcurrencyGate gate = concurrencyGates.computeIfAbsent(site.getId(),
-                ignored -> new AdjustableConcurrencyGate());
-        acquireWithTiming(gate, Math.max(1, value(site.getMaxConcurrency(), 1)),
-                site.getUpdatedAt(), timing);
-        try {
-            return sendFollowingSafeRedirectsWithinGate(
-                    site, original, etag, lastModified, proxyUrl, settings, timing);
-        } finally {
-            gate.release();
-        }
-    }
-
-    private TimedResponse sendFollowingSafeRedirectsWithinGate(CrawlerSite site, URI original, String etag,
-            String lastModified, String proxyUrl, CrawlerRequestSettings settings,
-            RequestTiming timing) throws Exception {
         URI current = original;
         long duration = 0;
         for (int redirects = 0; redirects <= settings.maxRedirects(); redirects++) {
-            String origin = originKey(current);
-            AdjustableConcurrencyGate originGate = originConcurrencyGates.computeIfAbsent(
-                    origin, ignored -> new AdjustableConcurrencyGate());
-            acquireWithTiming(originGate, settings.maxOriginConcurrency(), null, timing);
-            NetworkResponse response;
+            // Task executors control concurrency; requests only share pacing intervals.
             long started = System.nanoTime();
-            try {
-                throttle(site, current, timing);
-                ensureNotManuallyFrozen(site);
-                HttpRequest.Builder request = HttpRequest.newBuilder(current)
-                        .timeout(Duration.ofMillis(settings.timeoutMillis()))
-                        .GET().header("Accept", "text/html,application/xhtml+xml")
-                        .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.6")
-                        .header("User-Agent", defaultString(settings.userAgent(), DEFAULT_USER_AGENT));
-                if (etag != null && !etag.isBlank()) request.header("If-None-Match", etag);
-                if (lastModified != null && !lastModified.isBlank()) request.header("If-Modified-Since", lastModified);
-                if (!settings.cookie().isBlank()) request.header("Cookie", settings.cookie());
-                applyHeaders(request, settings.headersJson());
-                HttpResponse<InputStream> rawResponse = client(settings.timeoutMillis(), proxyUrl)
-                        .send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
-                byte[] responseBody;
-                try (InputStream input = rawResponse.body()) {
-                    responseBody = readBounded(input, contentLength(rawResponse.headers()),
-                            settings.maxResponseSizeMb() * 1024 * 1024);
-                }
-                response = new NetworkResponse(
-                        rawResponse.statusCode(), rawResponse.headers(), responseBody);
-            } finally {
-                originGate.release();
+            throttle(site, current, timing);
+            ensureNotManuallyFrozen(site);
+            HttpRequest.Builder request = HttpRequest.newBuilder(current)
+                    .timeout(Duration.ofMillis(settings.timeoutMillis()))
+                    .GET().header("Accept", "text/html,application/xhtml+xml")
+                    .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.6")
+                    .header("User-Agent", defaultString(settings.userAgent(), DEFAULT_USER_AGENT));
+            if (etag != null && !etag.isBlank()) request.header("If-None-Match", etag);
+            if (lastModified != null && !lastModified.isBlank()) request.header("If-Modified-Since", lastModified);
+            if (!settings.cookie().isBlank()) request.header("Cookie", settings.cookie());
+            applyHeaders(request, settings.headersJson());
+            HttpResponse<InputStream> rawResponse = client(settings.timeoutMillis(), proxyUrl)
+                    .send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
+            byte[] responseBody;
+            try (InputStream input = rawResponse.body()) {
+                responseBody = readBounded(input, contentLength(rawResponse.headers()),
+                        settings.maxResponseSizeMb() * 1024 * 1024);
             }
+            NetworkResponse response = new NetworkResponse(
+                    rawResponse.statusCode(), rawResponse.headers(), responseBody);
             duration += (System.nanoTime() - started) / 1_000_000;
             if (!Set.of(301, 302, 303, 307, 308).contains(response.statusCode())) {
                 return new TimedResponse(response, duration, current);
@@ -545,8 +520,6 @@ public class CrawlerHttpClient {
 
     void refreshSiteConfiguration(CrawlerSite site) {
         if (site.getId() == null) return;
-        concurrencyGates.computeIfAbsent(site.getId(), ignored -> new AdjustableConcurrencyGate())
-                .updateLimit(Math.max(1, value(site.getMaxConcurrency(), 1)), LocalDateTime.now());
         String keyPrefix = site.getId() + "|";
         robotsCache.keySet().removeIf(key -> key.startsWith(keyPrefix));
         robotsLocks.keySet().removeIf(key -> key.startsWith(keyPrefix));
@@ -554,7 +527,6 @@ public class CrawlerHttpClient {
 
     void removeSiteRuntimeState(Long siteId) {
         if (siteId == null) return;
-        concurrencyGates.remove(siteId);
         circuitStates.remove(siteId);
         adaptiveDelays.remove(siteId);
         siteNextRequests.remove(siteId);
@@ -971,16 +943,6 @@ public class CrawlerHttpClient {
         }
     }
 
-    private void acquireWithTiming(AdjustableConcurrencyGate gate, int limit,
-            LocalDateTime updatedAt, RequestTiming timing) throws InterruptedException {
-        long started = System.nanoTime();
-        try {
-            gate.acquire(limit, updatedAt);
-        } finally {
-            if (timing != null) timing.addOtherWait(elapsedMillis(started));
-        }
-    }
-
     private void sleepOther(long requestedMillis, RequestTiming timing) throws InterruptedException {
         long started = System.nanoTime();
         try {
@@ -1131,33 +1093,4 @@ public class CrawlerHttpClient {
         }
     }
 
-    static final class AdjustableConcurrencyGate {
-        private int active;
-        private int limit = 1;
-        private LocalDateTime configurationUpdatedAt;
-
-        synchronized void acquire(int requestedLimit, LocalDateTime updatedAt) throws InterruptedException {
-            updateLimit(requestedLimit, updatedAt);
-            while (active >= limit) wait();
-            active++;
-        }
-
-        synchronized void updateLimit(int requestedLimit, LocalDateTime updatedAt) {
-            if (configurationUpdatedAt == null
-                    || (updatedAt != null && !updatedAt.isBefore(configurationUpdatedAt))) {
-                limit = Math.max(1, requestedLimit);
-                configurationUpdatedAt = updatedAt;
-                notifyAll();
-            }
-        }
-
-        synchronized int limit() {
-            return limit;
-        }
-
-        synchronized void release() {
-            active--;
-            notifyAll();
-        }
-    }
 }
