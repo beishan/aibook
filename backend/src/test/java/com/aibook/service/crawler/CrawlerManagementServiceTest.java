@@ -40,6 +40,23 @@ import static org.mockito.Mockito.*;
 
 class CrawlerManagementServiceTest {
     @Test
+    void taskViewReflectsCurrentBookAutoImportSettingAndHandlesSiteScans() {
+        CrawlerSite site = CrawlerSite.builder().id(2L).siteName("测试网站").build();
+        CrawlerBook book = CrawlerBook.builder().id(3L).autoImportEnabled(true).build();
+        CrawlerTask task = CrawlerTask.builder().site(site).crawlerBook(book)
+                .type(CrawlerTask.TaskType.BOOK_FULL_CRAWL)
+                .status(CrawlerTask.TaskStatus.WAITING)
+                .priority(CrawlerTask.Priority.NORMAL).build();
+
+        assertThat(service.taskView(task).autoImportEnabled()).isTrue();
+        book.setAutoImportEnabled(false);
+        assertThat(service.taskView(task).autoImportEnabled()).isFalse();
+        task.setCrawlerBook(null);
+        task.setType(CrawlerTask.TaskType.SITE_SCAN);
+        assertThat(service.taskView(task).autoImportEnabled()).isFalse();
+    }
+
+    @Test
     void savesTimedFreezeAndManualReleaseWithoutChangingSiteEnablement() {
         User user = User.builder().id(1L).build();
         CrawlerSite site = CrawlerSite.builder().id(2L).user(user).enabled(true).build();

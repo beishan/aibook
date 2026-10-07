@@ -322,7 +322,7 @@ public final class CrawlerDtos {
     public record TaskView(String id, String type, String status, String priority,
             Long siteId, String siteName, Long discoveryPageId, String discoveryPageName,
             Integer scanMaxPages, int scannedPageCount, int progressPercent, Long bookId, String bookName,
-            boolean favorite,
+            boolean favorite, boolean autoImportEnabled,
             int totalCount, int successCount, int newBookCount,
             int duplicateCount, int failedCount, int waitingCount, String currentChapter,
             String currentSubStep, long averageRequestMillis, String errorMessage, LocalDateTime startedAt,

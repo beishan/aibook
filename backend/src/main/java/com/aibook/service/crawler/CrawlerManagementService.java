@@ -997,6 +997,7 @@ public class CrawlerManagementService {
                 taskProgressPercent(t), t.getCrawlerBook() == null ? null : t.getCrawlerBook().getId(),
                 t.getCrawlerBook() == null ? null : t.getCrawlerBook().getBookName(),
                 t.getCrawlerBook() != null && Boolean.TRUE.equals(t.getCrawlerBook().getFavorite()),
+                t.getCrawlerBook() != null && Boolean.TRUE.equals(t.getCrawlerBook().getAutoImportEnabled()),
                 value(t.getTotalCount(), 0), value(t.getSuccessCount(), 0),
                 value(t.getNewBookCount(), 0), value(t.getDuplicateCount(), 0),
                 value(t.getFailedCount(), 0), value(t.getWaitingCount(), 0), t.getCurrentChapter(),

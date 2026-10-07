@@ -78,7 +78,7 @@ export interface CrawlerBook {
   createdAt?:string
   suspectedDuplicate?:boolean
 }
-export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; siteThemeColor?:string; queueId?:number|null; discoveryPageId?:number; discoveryPageName?:string; scanMaxPages?:number; scannedPageCount:number; progressPercent:number; bookId?:number; bookName?:string; favorite:boolean; totalCount:number; successCount:number; newBookCount:number; duplicateCount:number; failedCount:number; waitingCount:number; currentChapter?:string; currentSubStep?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
+export interface CrawlerTask { id:string; type:string; status:string; priority:string; siteId:number; siteName:string; siteThemeColor?:string; queueId?:number|null; discoveryPageId?:number; discoveryPageName?:string; scanMaxPages?:number; scannedPageCount:number; progressPercent:number; bookId?:number; bookName?:string; favorite:boolean; autoImportEnabled:boolean; totalCount:number; successCount:number; newBookCount:number; duplicateCount:number; failedCount:number; waitingCount:number; currentChapter?:string; currentSubStep?:string; averageRequestMillis:number; errorMessage?:string; startedAt?:string; finishedAt?:string; createdAt:string }
 export interface CrawlerTaskExecution {
   executorName:string
   proxyMode:'DEFAULT'|'SELECTED'|'MIHOMO'

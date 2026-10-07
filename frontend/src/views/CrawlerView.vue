@@ -35,6 +35,7 @@
         @delete="removeTask"
         @scan-results="openScanResults"
         @toggle-favorite="toggleTaskFavorite"
+        @auto-import="openTaskAutoImport"
         @book-lists="openTaskBookLists"
         @prioritize="prioritizeQueuedTask"
         @queue="openTaskQueueDialog"
@@ -517,6 +518,7 @@
           @delete="removeTask"
           @scan-results="openScanResults"
           @toggle-favorite="toggleTaskFavorite"
+          @auto-import="openTaskAutoImport"
           @book-lists="openTaskBookLists"
           @queue="openTaskQueueDialog"
         />
@@ -1257,6 +1259,7 @@
             @delete="removeQueueTabTask"
             @scan-results="openScanResults"
             @toggle-favorite="toggleQueueTabTaskFavorite"
+            @auto-import="openTaskAutoImport"
             @book-lists="openTaskBookLists"
             @prioritize="prioritizeQueueTabTask"
             @queue="openTaskQueueDialog"
@@ -1742,6 +1745,7 @@ const TaskTable = defineComponent({
   emits: [
     'open', 'command', 'edit', 'delete', 'scan-results',
     'selection-change', 'toggle-favorite', 'book-lists', 'prioritize', 'queue',
+    'auto-import',
   ],
   setup(props, { emit, expose }) {
   const tableRef = ref<InstanceType<typeof ElTable>>()
@@ -1771,6 +1775,26 @@ const TaskTable = defineComponent({
     () => [
   props.selectable?h(ElTableColumn,{type:'selection',width:48,reserveSelection:true,fixed:'left'}):null,
   h(ElTableColumn,{label:'收藏',width:58,fixed:'left',align:'center'},{default:({row}:{row:CrawlerTask})=>row.bookId?h(ElButton,{size:'small',circle:true,icon:row.favorite?StarFilled:Star,class:['favorite-action','row-hover-action',row.favorite?'is-favorite':''],'aria-label':row.favorite?'取消收藏':'加入收藏',title:row.favorite?'取消收藏':'加入收藏',onClick:(event:MouseEvent)=>{event.stopPropagation();emit('toggle-favorite',row)}}):null}),
+  h(ElTableColumn, {
+    label: '自动入库',
+    width: 110,
+    fixed: 'left',
+    align: 'center',
+  }, {
+    default: ({ row }: { row: CrawlerTask }) => row.bookId
+      ? h(ElButton, {
+        size: 'small',
+        type: row.autoImportEnabled ? 'primary' : 'default',
+        plain: true,
+        'aria-label': `${row.bookName || '本书'}：配置自动入库${row.autoImportEnabled ? '（已开启）' : '（未开启）'}`,
+        title: '配置采集完成后的自动入库与入库格式',
+        onClick: (event: MouseEvent) => {
+          event.stopPropagation()
+          emit('auto-import', row)
+        },
+      }, () => row.autoImportEnabled ? '已开启' : '设置')
+      : null,
+  }),
   h(ElTableColumn,{label:'任务',minWidth:240,fixed:'left'},{default:({row}:{row:CrawlerTask})=>h('div',{class:'task-open',role:'button',tabindex:0,onClick:()=>emit('open',row),onKeydown:(event:KeyboardEvent)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();emit('open',row)}}},[row.siteName?h('span',{class:'task-site-mark',style:{'--site-theme-color':siteThemeColor(row.siteThemeColor)},title:row.siteName,'aria-label':`来源网站：${row.siteName}`},row.siteName.slice(0,1)):null,h('strong',{title:row.bookName||row.discoveryPageName||taskTypeLabel(row.type)},row.bookName||row.discoveryPageName||taskTypeLabel(row.type))])}),
   h(ElTableColumn,{label:'任务类型',width:120},{default:({row}:{row:CrawlerTask})=>taskTypeLabel(row.type)}),
   h(ElTableColumn,{label:'进度 / 扫描结果',minWidth:300},{default:({row}:{row:CrawlerTask})=>row.status==='SUCCESS'&&row.type==='SITE_SCAN'?h('div',{class:'task-scan-progress task-scan-completed'},[h('div',{class:'task-success-progress'},[h('strong','✓ 已完成'),h('span',`扫描 ${row.scannedPageCount} 页，发现 ${row.totalCount} 本`)]),h('div',{class:'task-scan-summary'},[h('i',`新增 ${row.newBookCount}`),h('em',`重复 ${row.duplicateCount}`),row.failedCount?h('strong',`失败 ${row.failedCount}`):null])]):row.status==='SUCCESS'?h('div',{class:'task-success-progress'},[h('strong','✓ 已完成'),h('span',`成功处理 ${row.successCount} 项`)]):row.type==='SITE_SCAN'?h('div',{class:'task-scan-progress'},[h(ElProgress,{class:row.status==='RUNNING'?'crawler-running-progress':undefined,percentage:scanTaskPercentage(row),strokeWidth:7}),h('small',scanTaskProgressText(row)),h('div',{class:'task-scan-summary'},[`扫描到 ${row.totalCount}`,h('b',`成功 ${row.successCount}`),h('i',`新增 ${row.newBookCount}`),h('em',`重复 ${row.duplicateCount}`),row.failedCount?h('strong',`失败 ${row.failedCount}`):null])]):h(ElProgress,{class:row.status==='RUNNING'?'crawler-running-progress':undefined,percentage:row.totalCount?Math.round(row.successCount/row.totalCount*100):0,strokeWidth:7})}),
@@ -2003,6 +2027,13 @@ function openAutoImport(targets:CrawlerBook[]) {
   autoImportForm.formats = targets.length === 1
     ? [...(targets[0].autoImportFormats || ['STRUCTURED'])] : ['STRUCTURED']
   autoImportDialog.value = true
+}
+
+async function openTaskAutoImport(task: CrawlerTask) {
+  if (!task.bookId) return
+  const book = await crawlerApi.book(task.bookId)
+  applyCrawlerBookUpdate(book)
+  openAutoImport([book])
 }
 
 async function saveAutoImport() {
@@ -3002,7 +3033,10 @@ function applyCrawlerBookUpdate(updated:CrawlerBook){
       suspectedDuplicate:selectedBook.value.suspectedDuplicate??updated.suspectedDuplicate,
     }
   }
-  const applyTask=(task:CrawlerTask)=>task.bookId===updated.id?{...task,favorite:updated.favorite}:task
+  const applyTask = (task: CrawlerTask) => task.bookId === updated.id
+    ? { ...task, favorite: updated.favorite, autoImportEnabled: updated.autoImportEnabled }
+    : task
+  queueTabTasks.value = queueTabTasks.value.map(applyTask)
   tasks.value=tasks.value.map(applyTask);failedTasks.value=failedTasks.value.map(applyTask);currentCrawlerTasks.value=currentCrawlerTasks.value.map(applyTask);queuedTasks.value=queuedTasks.value.map(applyTask)
   if(selectedTask.value?.bookId===updated.id)selectedTask.value=applyTask(selectedTask.value)
   if(dashboard.value)dashboard.value.recentTasks=dashboard.value.recentTasks.map(applyTask)
