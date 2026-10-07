@@ -176,6 +176,13 @@ public class CrawlerController {
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(chapter.getFailedResponseHtml().getBytes(StandardCharsets.UTF_8));
     }
+    @PutMapping("/books/{bookId}/chapters/{chapterId}/crawl-status")
+    public BookView setChapterStatus(Authentication auth, @PathVariable Long bookId,
+            @PathVariable Long chapterId, @Valid @RequestBody ChapterCrawlStatusRequest request) {
+        return managementService.setChapterStatus(user(auth), bookId, chapterId,
+                CrawlerChapter.CrawlStatus.valueOf(request.status()));
+    }
+
     @PutMapping("/books/{bookId}/chapters/{chapterId}")
     public Map<String, Object> saveChapterContent(Authentication auth, @PathVariable Long bookId,
             @PathVariable Long chapterId, @Valid @RequestBody ChapterContentSaveRequest request) {

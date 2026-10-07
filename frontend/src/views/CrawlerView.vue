@@ -1509,50 +1509,43 @@
       <div v-if="selectedBook" class="book-drawer-content">
         <div class="book-summary"><div class="large-cover">{{ selectedBook.bookName.slice(0,1) }}</div><div><h2>{{ selectedBook.bookName }}</h2><p class="book-source-line"><span>{{ selectedBook.author || '未知作者' }}</span><SiteSourceTag :name="selectedBook.siteName" :color="selectedBook.siteThemeColor" /></p><div v-if="isBookCompleted(selectedBook)" class="book-crawl-result drawer-result"><div><span>采集结果详情</span><strong>采集完成</strong></div><small>正文 {{ selectedBook.crawledChapterCount }} 章 · 待开放 {{ selectedBook.pendingReleaseChapterCount }} 章 · 失败 {{ selectedBook.failedChapterCount }} 章</small></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(selectedBook)}" :percentage="progress(selectedBook)"/><small>正文 {{ selectedBook.crawledChapterCount }} / {{ selectedBook.chapterCount }} 章，待开放 {{ selectedBook.pendingReleaseChapterCount }}，失败 {{ selectedBook.failedChapterCount }}</small></template></div></div>
         <div class="crawler-book-metadata"><span><small>来源状态</small><strong>{{ selectedBook.bookStatus || '未识别' }}</strong></span><span><small>分类</small><strong>{{ selectedBook.category || '未分类' }}</strong></span><span class="metadata-tag-row"><small>标签</small><span v-if="selectedBook.tags?.length" class="metadata-tags"><el-tag v-for="tag in selectedBook.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></span><strong v-else>无</strong></span></div>
-        <div class="library-sync-control book-auto-import-settings">
-          <div class="book-auto-import-heading">
-            <div>
-              <strong>采集完成后自动入库</strong>
-              <p>{{ bookAutoImportDraft.enabled ? '任务完成时自动将本书加入书库。' : '开启后，本书采集任务完成时自动加入书库。' }}</p>
-            </div>
-            <el-switch
-              v-model="bookAutoImportDraft.enabled"
-              :disabled="bookAutoImportSaving"
-              aria-label="开启采集完成后自动入库"
-            />
-          </div>
-          <div v-if="bookAutoImportDraft.enabled" class="book-auto-import-formats">
-            <span class="book-auto-import-label">入库内容</span>
-            <el-checkbox-group
-              v-model="bookAutoImportDraft.formats"
-              :disabled="bookAutoImportSaving"
-              class="book-auto-import-options"
-            >
-              <el-checkbox-button
-                v-for="option in importFormatOptions"
-                :key="option.value"
-                :value="option.value"
-              >
-                <strong>{{ option.label }}</strong>
-                <small>{{ option.description }}</small>
-              </el-checkbox-button>
-            </el-checkbox-group>
-          </div>
-          <div class="book-auto-import-footer">
-            <span>设置仅应用于本书</span>
-            <el-button
-              size="small"
-              type="primary"
-              :loading="bookAutoImportSaving"
-              :disabled="!bookAutoImportDraftChanged"
-              @click="saveBookAutoImport"
-            >
-              保存设置
-            </el-button>
-          </div>
-        </div>
         <div v-if="selectedBook.libraryBookId" class="library-sync-control"><div><strong>自动同步到书库</strong><p>检查更新或续采成功后，自动发布为同一本书的新版本。</p></div><el-switch :model-value="selectedBook.autoSyncLibrary" @change="toggleLibrarySync(selectedBook,Boolean($event))" /></div>
-        <div class="drawer-actions"><el-button size="small" circle :icon="selectedBook.favorite?StarFilled:Star" class="favorite-action" :class="{'is-favorite':selectedBook.favorite}" :aria-label="selectedBook.favorite?'取消收藏':'加入收藏'" :title="selectedBook.favorite?'取消收藏':'加入收藏'" @click="toggleFavorite(selectedBook)"/><el-button @click="openCrawlerBookLists(selectedBook)">加入书单</el-button><el-button :disabled="isBookTaskActive(selectedBook)" @click="continueCrawl(selectedBook)">{{ isBookTaskActive(selectedBook)?'任务中':'继续采集' }}</el-button><el-button :disabled="isBookTaskActive(selectedBook)" @click="refreshBookMetadata(selectedBook)">刷新分类标签</el-button><el-button :disabled="!selectedBook.failedChapterCount" @click="retryFailures(selectedBook)">重试失败</el-button><el-button @click="openStatusEditor(selectedBook)">修改状态</el-button><el-button type="primary" plain :disabled="!selectedBook.crawledChapterCount" @click="startTrial(selectedBook)">临时试读</el-button><el-button type="primary" @click="generate(selectedBook)">生成 TXT + EPUB</el-button><el-button type="primary" plain @click="importBook(selectedBook)">{{ selectedBook.importStatus==='IMPORTED'?'立即同步书库':'入库' }}</el-button></div>
+        <div class="drawer-actions">
+          <el-button
+            size="small"
+            circle
+            :icon="selectedBook.favorite ? StarFilled : Star"
+            class="favorite-action"
+            :class="{ 'is-favorite': selectedBook.favorite }"
+            :aria-label="selectedBook.favorite ? '取消收藏' : '加入收藏'"
+            :title="selectedBook.favorite ? '取消收藏' : '加入收藏'"
+            @click="toggleFavorite(selectedBook)"
+          />
+          <el-button
+            :type="selectedBook.autoImportEnabled ? 'primary' : 'default'"
+            plain
+            :aria-label="selectedBook.autoImportEnabled ? '自动入库设置（已开启）' : '自动入库设置（未开启）'"
+            @click="openAutoImport([selectedBook])"
+          >自动入库</el-button>
+          <el-button @click="openCrawlerBookLists(selectedBook)">加入书单</el-button>
+          <el-button :disabled="isBookTaskActive(selectedBook)" @click="continueCrawl(selectedBook)">
+            {{ isBookTaskActive(selectedBook) ? '任务中' : '继续采集' }}
+          </el-button>
+          <el-button :disabled="isBookTaskActive(selectedBook)" @click="refreshBookMetadata(selectedBook)">
+            刷新分类标签
+          </el-button>
+          <el-button :disabled="!selectedBook.failedChapterCount" @click="retryFailures(selectedBook)">
+            重试失败
+          </el-button>
+          <el-button @click="openStatusEditor(selectedBook)">修改状态</el-button>
+          <el-button type="primary" plain :disabled="!selectedBook.crawledChapterCount" @click="startTrial(selectedBook)">
+            临时试读
+          </el-button>
+          <el-button type="primary" @click="generate(selectedBook)">生成 TXT + EPUB</el-button>
+          <el-button type="primary" plain @click="importBook(selectedBook)">
+            {{ selectedBook.importStatus === 'IMPORTED' ? '立即同步书库' : '入库' }}
+          </el-button>
+        </div>
         <div class="book-detail-tabs" role="tablist" aria-label="书籍采集详情" @keydown="handleBookDetailTabKey"><span class="book-detail-tab-indicator" :style="{transform:`translateX(${bookDetailTabIndex*100}%)`}"/><button v-for="item in bookDetailTabs" :key="item.value" type="button" role="tab" :aria-selected="bookDetailTab===item.value" :tabindex="bookDetailTab===item.value?0:-1" :class="{active:bookDetailTab===item.value}" @click="bookDetailTab=item.value"><span>{{ item.label }}</span><b>{{ item.value==='chapters'?chapterTotal:crawlerLogs.length }}</b></button></div>
         <section v-show="bookDetailTab==='chapters'" class="drawer-detail-panel chapter-progress-panel" role="tabpanel">
           <div class="chapter-list-heading"><div><p class="eyebrow">CHAPTER INDEX</p><h3>章节进度</h3></div><div class="chapter-heading-tools"><label class="chapter-follow" :class="{active:followCurrentChapter}"><strong>跟随采集</strong><el-switch :model-value="followCurrentChapter" aria-label="自动跟随当前采集章节" @change="setFollowCurrentChapter(Boolean($event))" /></label><div class="chapter-sort" :class="{disabled:followCurrentChapter}" role="tablist" aria-label="章节排序方式" @keydown="handleChapterSortKey"><span class="chapter-sort-indicator" :style="{transform:`translateX(${chapterSortIndex*100}%)`}"/><button v-for="item in chapterSortOptions" :key="item.value" type="button" role="tab" :disabled="followCurrentChapter" :aria-selected="chapterSort===item.value" :tabindex="chapterSort===item.value?0:-1" :class="{active:chapterSort===item.value}" @click="changeChapterSort(item.value)">{{ item.label }}</button></div></div></div>
@@ -1619,15 +1612,22 @@
                 {{ formatTime(row.crawlStartedAt ? row.crawlFinishedAt : row.crawlTime) }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="118" fixed="right">
+            <el-table-column label="操作" width="220" fixed="right">
               <template #default="{ row }">
+                <el-button
+                  size="small"
+                  :disabled="isBookTaskActive(selectedBook) || Boolean(retryingChapterId) || chapterStatusSaving"
+                  :title="isBookTaskActive(selectedBook) ? '请先结束或取消该书的运行中、等待或暂停任务' : '修改本章采集状态'"
+                  :aria-label="`修改${row.chapterName}的采集状态`"
+                  @click.stop="openChapterStatusEditor(row)"
+                >修改状态</el-button>
                 <el-button
                   v-if="['FAILED', 'CONTENT_SUSPECTED'].includes(row.crawlStatus)"
                   size="small"
                   type="primary"
                   plain
                   :loading="retryingChapterId === row.id"
-                  :disabled="isBookTaskActive(selectedBook) || Boolean(retryingChapterId)"
+                  :disabled="isBookTaskActive(selectedBook) || Boolean(retryingChapterId) || chapterStatusSaving"
                   @click.stop="retryChapter(row)"
                 >
                   重新采集
@@ -1646,6 +1646,45 @@
         </section>
       </div>
     </el-drawer>
+    <el-dialog
+      v-model="chapterStatusDialog"
+      title="修改章节状态"
+      width="min(520px, 94vw)"
+      append-to-body
+      :close-on-click-modal="!chapterStatusSaving"
+      :close-on-press-escape="!chapterStatusSaving"
+      :show-close="!chapterStatusSaving"
+    >
+      <div v-if="chapterStatusTarget" class="chapter-status-editor">
+        <strong>{{ chapterStatusTarget.chapter.chapterName }}</strong>
+        <p>
+          {{ chapterStatusTarget.bookName }} · 当前状态：
+          {{ statusLabel(chapterStatusTarget.chapter.crawlStatus) }}
+        </p>
+        <el-form label-position="top" :disabled="chapterStatusSaving">
+          <el-form-item label="修改为">
+            <el-select v-model="manualChapterStatus" aria-label="章节采集状态">
+              <el-option
+                v-for="option in manualChapterStatusOptions"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <p>保留已有正文，不自动发起采集或同步书库。已有正文才能设为“已完成”；设为“未采集”会重置重试次数，“已忽略”会跳过后续采集。</p>
+      </div>
+      <template #footer>
+        <el-button :disabled="chapterStatusSaving" @click="chapterStatusDialog=false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="chapterStatusSaving"
+          :disabled="manualChapterStatus === chapterStatusTarget?.chapter.crawlStatus"
+          @click="saveChapterStatus"
+        >保存状态</el-button>
+      </template>
+    </el-dialog>
     <el-dialog v-model="chapterDialog" width="min(760px, 94vw)" class="chapter-reader-dialog" :show-close="false" :close-on-click-modal="false" :close-on-press-escape="false" append-to-body destroy-on-close @closed="closeChapterReader">
       <div class="chapter-reader" :class="`chapter-reader--${chapterReaderTheme}`">
         <header class="chapter-reader-toolbar">
@@ -1905,6 +1944,18 @@ const bookLoading=ref(false), bookPage=ref(1), bookPageSize=ref(20), bookTotal=r
 const bookTableRef=ref<InstanceType<typeof ElTable>>()
 const bookSiteId=ref<number>(), bookCrawlStatus=ref(''), bookImportStatus=ref(''), bookFavoriteOnly=ref(false), bookSort=ref('CREATED_DESC')
 const chapterLoading=ref(false), chapterPage=ref(1), chapterTotal=ref(0), retryingChapterId=ref<number>()
+const chapterStatusDialog = ref(false)
+const chapterStatusSaving = ref(false)
+const chapterStatusTarget = ref<{ bookId: number; bookName: string; chapter: CrawlerChapter }>()
+const manualChapterStatus = ref('NOT_CRAWLED')
+const manualChapterStatusOptions = [
+  { value: 'NOT_CRAWLED', label: '未采集' },
+  { value: 'COMPLETED', label: '已完成' },
+  { value: 'PENDING_RELEASE', label: '待开放' },
+  { value: 'FAILED', label: '失败' },
+  { value: 'CONTENT_SUSPECTED', label: '内容异常' },
+  { value: 'IGNORED', label: '已忽略' },
+]
 const currentCrawlingChapter=ref<CrawlerChapter>()
 const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=ref(0)
 const taskStatusFilter=ref(''), taskTypeFilter=ref(''), taskFavoriteOnly=ref(false)
@@ -2026,39 +2077,6 @@ const autoImportDialog = ref(false)
 const autoImportSaving = ref(false)
 const autoImportTargets = ref<CrawlerBook[]>([])
 const autoImportForm = reactive({enabled:false, formats:['STRUCTURED'] as string[]})
-const bookAutoImportSaving = ref(false)
-const bookAutoImportDraft = reactive({enabled:false, formats:['STRUCTURED'] as string[]})
-const bookAutoImportDraftChanged = computed(() => {
-  if (!selectedBook.value) return false
-  const storedFormats = [...(selectedBook.value.autoImportFormats || ['STRUCTURED'])].sort()
-  const draftFormats = [...bookAutoImportDraft.formats].sort()
-  return bookAutoImportDraft.enabled !== selectedBook.value.autoImportEnabled
-    || JSON.stringify(draftFormats) !== JSON.stringify(storedFormats)
-})
-
-async function saveBookAutoImport() {
-  const book = selectedBook.value
-  if (!book || bookAutoImportSaving.value || !bookAutoImportDraftChanged.value) return
-  if (bookAutoImportDraft.enabled && !bookAutoImportDraft.formats.length) {
-    return message.warning('请至少选择一种入库内容')
-  }
-
-  bookAutoImportSaving.value = true
-  try {
-    const updated = await crawlerApi.setAutoImport(
-      [book.id],
-      bookAutoImportDraft.enabled,
-      bookAutoImportDraft.formats.length ? bookAutoImportDraft.formats : ['STRUCTURED'],
-    )
-    updated.forEach(applyCrawlerBookUpdate)
-    message.success(bookAutoImportDraft.enabled
-      ? '已保存，本书采集完成后将自动入库'
-      : '已关闭本书的自动入库')
-  } finally {
-    bookAutoImportSaving.value = false
-  }
-}
-
 function openAutoImport(targets:CrawlerBook[]) {
   if (!targets.length) return
   autoImportTargets.value = [...targets]
@@ -3168,10 +3186,49 @@ async function saveCrawlerBookLists(){
   try{const updated=await crawlerApi.setBookLists(bookListTarget.value.id,selectedBookListIds.value);applyCrawlerBookUpdate(updated);bookListDialog.value=false;message.success(updated.libraryBookId?'书单已同步到已入库书籍':'已保存，书籍入库时会自动加入所选书单')}
   finally{bookListSaving.value=false}
 }
-async function openBook(book:CrawlerBook){selectedBook.value=book;bookAutoImportDraft.enabled=book.autoImportEnabled;bookAutoImportDraft.formats=[...(book.autoImportFormats||['STRUCTURED'])];chapters.value=[];chapterTotal.value=book.chapterCount;chapterPage.value=1;if(followCurrentChapter.value)chapterSort.value='indexAsc';currentCrawlingChapter.value=undefined;crawlerLogs.value=[];bookDetailTab.value='chapters';bookDrawer.value=true;await syncOpenBookProgress()}
+async function openBook(book: CrawlerBook) {
+  selectedBook.value = book
+  chapters.value = []
+  chapterTotal.value = book.chapterCount
+  chapterPage.value = 1
+  if (followCurrentChapter.value) chapterSort.value = 'indexAsc'
+  currentCrawlingChapter.value = undefined
+  crawlerLogs.value = []
+  bookDetailTab.value = 'chapters'
+  bookDrawer.value = true
+  await syncOpenBookProgress()
+}
 function startTrial(book:CrawlerBook){if(!book.crawledChapterCount)return;void router.push({name:'CrawlerTrialReader',params:{id:book.id}})}
 async function continueCrawl(book:CrawlerBook){if(isBookTaskActive(book))return;setBookTaskSubmitting(book.id,true);try{const task=await crawlerApi.continueBook(book.id);currentCrawlerTasks.value=[task,...currentCrawlerTasks.value.filter(item=>item.id!==task.id)];message.success('续采任务已创建');await refresh()}finally{setBookTaskSubmitting(book.id,false)}}
 async function retryFailures(book:CrawlerBook){await crawlerApi.retryFailures(book.id);message.success('失败章节已进入重试队列');await refresh()}
+function openChapterStatusEditor(chapter: CrawlerChapter) {
+  const book = selectedBook.value
+  if (!book || isBookTaskActive(book) || chapterStatusSaving.value || retryingChapterId.value) return
+  chapterStatusTarget.value = { bookId: book.id, bookName: book.bookName, chapter: { ...chapter } }
+  manualChapterStatus.value = manualChapterStatusOptions.some(option => option.value === chapter.crawlStatus)
+    ? chapter.crawlStatus : 'NOT_CRAWLED'
+  chapterStatusDialog.value = true
+}
+
+async function saveChapterStatus() {
+  const target = chapterStatusTarget.value
+  if (!target || chapterStatusSaving.value) return
+  chapterStatusSaving.value = true
+  try {
+    const updated = await crawlerApi.setChapterStatus(target.bookId, target.chapter.id, manualChapterStatus.value)
+    applyCrawlerBookUpdate(updated)
+    chapterStatusDialog.value = false
+    message.success(`章节状态已改为“${statusLabel(manualChapterStatus.value)}”`)
+    if (bookDrawer.value && selectedBook.value?.id === target.bookId) {
+      await syncOpenBookProgress({ silent: true })
+    }
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '章节状态修改失败')
+  } finally {
+    chapterStatusSaving.value = false
+  }
+}
+
 async function retryChapter(chapter: CrawlerChapter) {
   const book = selectedBook.value
   if (!book || isBookTaskActive(book)) return
@@ -3406,7 +3463,28 @@ function progress(book:CrawlerBook){return book.chapterCount?Math.round((book.cr
 function isBookRunning(book:CrawlerBook){return ['CRAWLING_METADATA','CRAWLING_CHAPTER_LIST','CRAWLING_CONTENT','UPDATING'].includes(book.crawlStatus)}
 function isBookTaskActive(book:CrawlerBook){return submittingBookTaskIds.value.has(book.id)||activeBookTaskIds.value.has(book.id)}
 function setBookTaskSubmitting(bookId:number,submitting:boolean){const next=new Set(submittingBookTaskIds.value);if(submitting)next.add(bookId);else next.delete(bookId);submittingBookTaskIds.value=next}
-function statusLabel(status:string){return ({WAITING:'等待中',RUNNING:'运行中',PAUSED:'已暂停',SUCCESS:'成功',PARTIAL_SUCCESS:'部分成功',FAILED:'失败',CANCELLED:'已取消',DISCOVERED:'已发现',CRAWLING_METADATA:'解析元信息',CRAWLING_CHAPTER_LIST:'解析目录',CRAWLING_CONTENT:'采集正文',COMPLETED:'已完成',PENDING_RELEASE:'待开放',NOT_CRAWLED:'未采集',CRAWLING:'采集中',CONTENT_SUSPECTED:'内容异常'} as Record<string,string>)[status]||status}
+function statusLabel(status: string) {
+  const labels: Record<string, string> = {
+    WAITING: '等待中',
+    RUNNING: '运行中',
+    PAUSED: '已暂停',
+    SUCCESS: '成功',
+    PARTIAL_SUCCESS: '部分成功',
+    FAILED: '失败',
+    CANCELLED: '已取消',
+    DISCOVERED: '已发现',
+    CRAWLING_METADATA: '解析元信息',
+    CRAWLING_CHAPTER_LIST: '解析目录',
+    CRAWLING_CONTENT: '采集正文',
+    COMPLETED: '已完成',
+    PENDING_RELEASE: '待开放',
+    NOT_CRAWLED: '未采集',
+    CRAWLING: '采集中',
+    CONTENT_SUSPECTED: '内容异常',
+    IGNORED: '已忽略',
+  }
+  return labels[status] || status
+}
 function statusType(status:string):''|'success'|'warning'|'info'|'danger'{if(['RUNNING','SUCCESS','COMPLETED'].includes(status))return'success';if(['FAILED','CONTENT_SUSPECTED'].includes(status))return'danger';if(['PARTIAL_SUCCESS','PAUSED','PENDING_RELEASE'].includes(status))return'warning';return'info'}
 function importStatusLabel(status?:string){return ({NOT_IMPORTED:'未就绪',READY:'待入库',IMPORTED:'已入库'} as Record<string,string>)[status||'']||'未知'}
 function importStatusType(status?:string):'success'|'warning'|'info'{if(status==='IMPORTED')return'success';if(status==='READY')return'warning';return'info'}
@@ -3510,7 +3588,6 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 .site-card footer{flex-wrap:wrap}.health-line{margin-top:12px;color:var(--text-tertiary);font-size:11px}.health-line.error{color:var(--danger)}.test-result{padding:18px;border:1px solid var(--success-alpha-15);border-radius:16px;background:var(--surface-elevated)}.test-result.failed{border-color:var(--danger)}.test-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.test-facts span{display:grid;gap:4px}.test-facts small{color:var(--text-tertiary)}.test-result>p{margin:18px 0 8px}.test-result pre{max-height:260px;overflow:auto;padding:14px;border-radius:12px;background:var(--bg-page);font:14px/1.7 'Songti SC',serif;white-space:pre-wrap}.file-input{display:none}.rule-manager-bar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:20px;padding:15px 18px;border-radius:14px;background:var(--primary-alpha-10);color:var(--text-secondary)}.rule-manager-bar>div{display:flex;flex-shrink:0;gap:8px}.rule-table{width:100%;border:1px solid var(--border-color-light);border-radius:14px;overflow:hidden}.rule-version-text{color:var(--primary);font-family:'Iowan Old Style','Songti SC',serif;font-size:17px}.rule-table code{padding:3px 6px;border-radius:6px;background:var(--bg-page);color:var(--text-secondary);font-size:12px}.rule-actions{display:flex;flex-wrap:wrap;align-items:center;gap:2px 4px;white-space:normal}.rule-actions .el-button{margin-left:0;padding:5px 7px}:deep(.rule-table .active-rule-row td.el-table__cell){background:var(--success-alpha-15)!important}:deep(.rule-table .active-rule-row:hover td.el-table__cell){background:var(--success-alpha-15)!important}.import-mode{position:relative;display:grid;grid-template-columns:repeat(2,1fr);max-width:360px;margin:0 auto 20px;padding:4px;border:1px solid var(--border-color);border-radius:14px;background:var(--bg-page);isolation:isolate}.site-configuration-import-mode{margin-top:18px}.import-mode-indicator{position:absolute;top:4px;bottom:4px;left:4px;z-index:-1;width:calc(50% - 4px);border:1px solid var(--border-color-light);border-radius:10px;background:var(--surface-elevated);box-shadow:var(--shadow-sm);transition:transform .25s cubic-bezier(.2,.8,.2,1)}.import-mode button{padding:9px 16px;border:0;background:transparent;color:var(--text-secondary);cursor:pointer}.import-mode button.active{color:var(--primary);font-weight:700}.import-mode button:focus-visible{outline:2px solid var(--primary);outline-offset:-2px;border-radius:10px}.import-pane{display:grid;gap:10px}.import-pane>p{color:var(--text-tertiary);font-size:12px}.file-pane{display:grid;place-items:stretch}.file-picker{display:grid;min-height:150px;place-items:center;padding:24px;border:1px dashed var(--primary);border-radius:16px;background:var(--primary-alpha-10);color:var(--text-secondary);cursor:pointer}.file-picker .el-icon{color:var(--primary);font-size:28px}.file-picker strong{color:var(--text-primary);font-size:15px}.file-picker span{font-size:12px}
 @media(max-width:900px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.site-grid{grid-template-columns:minmax(0,1fr)}.proxy-row{grid-template-columns:1fr 1.5fr}.proxy-state{grid-column:1/-1;justify-content:flex-end}}@media(max-width:640px){.panel{padding:16px}.metric-grid,.form-grid,.proxy-row{grid-template-columns:minmax(0,1fr)}.proxy-state{grid-column:auto}.site-form-section{padding:14px}.site-form-section>.section-with-action{grid-template-columns:auto 1fr}.section-with-action>.el-button{grid-column:1/-1}.segmented-wrap{justify-content:start}.section-heading,.rule-manager-bar{align-items:flex-start;flex-direction:column;gap:12px}.rule-manager-bar>div{width:100%;flex-wrap:wrap}.rule-table{max-width:100%;overflow-x:auto}.search{width:100%}}@media(prefers-reduced-motion:reduce){.segment-indicator,.import-mode-indicator{transition:none}}
 .drawer-actions{flex-wrap:wrap}.library-sync-control{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:-4px 0 16px;padding:13px 16px;border:1px solid var(--border-color-light);border-radius:14px;background:var(--surface-elevated)}.library-sync-control p{margin-top:3px;color:var(--text-secondary);font-size:12px}.status-editor{display:flex;align-items:center;gap:6px;padding:3px;border:0;background:transparent;cursor:pointer}.status-editor small{color:var(--text-tertiary)}.status-editor:hover small,.status-editor:focus-visible small{color:var(--primary)}.status-editor:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:8px}.status-dialog-content{display:grid;gap:18px}.status-book{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--border-color-light);border-radius:14px;background:var(--surface-elevated)}.status-book .mini-cover{flex:0 0 auto}.status-book p{margin-top:4px;color:var(--text-secondary);font-size:12px}
-.book-auto-import-settings{display:grid;gap:14px}.book-auto-import-heading,.book-auto-import-footer{display:flex;align-items:center;justify-content:space-between;gap:14px}.book-auto-import-formats{display:grid;gap:9px}.book-auto-import-label{color:var(--text-secondary);font-size:12px;font-weight:650}.book-auto-import-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.book-auto-import-options :deep(.el-checkbox-button){width:100%}.book-auto-import-options :deep(.el-checkbox-button__inner){display:grid;width:100%;gap:4px;padding:11px 12px;border:1px solid var(--border-color)!important;border-radius:11px!important;background:var(--surface)!important;box-shadow:none!important;text-align:left}.book-auto-import-options :deep(.el-checkbox-button__inner strong){font-size:13px}.book-auto-import-options :deep(.el-checkbox-button__inner small){color:var(--text-tertiary);font-size:11px;font-weight:400;white-space:normal}.book-auto-import-options :deep(.el-checkbox-button.is-checked .el-checkbox-button__inner){border-color:var(--primary)!important;background:var(--primary-alpha-10)!important;color:var(--primary)}.book-auto-import-options :deep(.el-checkbox-button.is-focus .el-checkbox-button__inner){outline:2px solid var(--primary);outline-offset:2px}.book-auto-import-footer{padding-top:11px;border-top:1px solid var(--border-color-light)}.book-auto-import-footer>span{color:var(--text-tertiary);font-size:11px}@media(max-width:560px){.book-auto-import-options{grid-template-columns:minmax(0,1fr)}.book-auto-import-settings{padding:12px}}
 :deep(.book-detail-drawer .el-drawer__body){min-height:0;overflow:hidden}.book-drawer-content{display:flex;height:100%;min-height:0;flex-direction:column}.chapter-list-heading{display:flex;align-items:end;justify-content:space-between;gap:16px;margin:2px 0 12px}.chapter-list-heading h3{font-family:'Iowan Old Style','Songti SC',serif;font-size:20px}.chapter-sort{position:relative;display:grid;grid-template-columns:repeat(3,minmax(82px,1fr));padding:4px;border:1px solid var(--border-color);border-radius:13px;background:var(--bg-page);isolation:isolate}.chapter-sort-indicator{position:absolute;top:4px;bottom:4px;left:4px;z-index:0;width:calc((100% - 8px)/3);border:1px solid var(--border-color-light);border-radius:9px;background:var(--surface-elevated);box-shadow:var(--shadow-sm);transition:transform .25s cubic-bezier(.2,.8,.2,1)}.chapter-sort button{position:relative;z-index:1;padding:7px 10px;border:0;background:transparent;color:var(--text-secondary);font-size:12px;cursor:pointer}.chapter-sort button.active{color:var(--primary);font-weight:700}.chapter-sort button:focus-visible{outline:2px solid var(--primary);outline-offset:-2px;border-radius:9px}.chapters-table{flex:1;min-height:220px}.chapter-pagination{display:flex;flex:0 0 auto;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px 0;color:var(--text-tertiary);font-size:12px}.chapter-pagination :deep(.el-pagination){min-width:0}@media(max-width:640px){.chapter-list-heading{align-items:stretch;flex-direction:column}.chapter-sort{width:100%;overflow-x:auto}.chapter-pagination{align-items:flex-start;flex-direction:column}.chapter-pagination :deep(.el-pagination){flex-wrap:wrap;justify-content:flex-start}}@media(prefers-reduced-motion:reduce){.chapter-sort-indicator{transition:none}}
 .book-detail-tabs{position:relative;display:grid;grid-template-columns:repeat(2,1fr);flex:0 0 auto;margin-bottom:14px;padding:4px;border:1px solid var(--border-color);border-radius:14px;background:var(--bg-page);isolation:isolate}.book-detail-tab-indicator{position:absolute;top:4px;bottom:4px;left:4px;z-index:0;width:calc((100% - 8px)/2);border:1px solid var(--border-color-light);border-radius:10px;background:var(--surface-elevated);box-shadow:var(--shadow-sm);transition:transform .25s cubic-bezier(.2,.8,.2,1)}.book-detail-tabs button{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:9px 14px;border:0;background:transparent;color:var(--text-secondary);cursor:pointer}.book-detail-tabs button b{min-width:22px;padding:2px 7px;border-radius:99px;background:var(--primary-alpha-10);font-size:11px}.book-detail-tabs button.active{color:var(--primary);font-weight:700}.book-detail-tabs button:focus-visible{outline:2px solid var(--primary);outline-offset:-2px;border-radius:10px}.drawer-detail-panel{flex:1;min-height:0}.chapter-progress-panel{display:flex;flex-direction:column}.realtime-log-panel{overflow:hidden;border:1px solid var(--border-color-light);border-radius:16px;background:var(--surface-elevated)}.realtime-log-heading{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border-color-light)}.realtime-log-heading h3{font-family:'Iowan Old Style','Songti SC',serif;font-size:20px}.live-state{display:flex;align-items:center;gap:7px;color:var(--text-tertiary);font-size:11px}.live-state i{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 0 5px var(--success-alpha-15);animation:live-pulse 1.8s ease-out infinite}.crawler-log-stream{height:calc(100% - 69px);overflow:auto;padding:4px 18px 18px}.crawler-log-item{display:grid;grid-template-columns:128px minmax(0,1fr);gap:14px;padding:14px 0;border-bottom:1px solid var(--border-color-light)}.crawler-log-item time{padding-top:2px;color:var(--text-tertiary);font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}.crawler-log-item strong{display:block;color:var(--text-primary);font-size:13px}.crawler-log-item p{margin-top:5px;color:var(--text-secondary);font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}.realtime-log-panel>.el-empty{height:calc(100% - 69px)}@keyframes live-pulse{70%,100%{box-shadow:0 0 0 9px transparent}}@media(max-width:640px){.crawler-log-item{grid-template-columns:minmax(0,1fr);gap:5px}.crawler-log-item time{padding-top:0}}@media(prefers-reduced-motion:reduce){.book-detail-tab-indicator{transition:none}.live-state i{animation:none}}
 .task-edit-content{display:grid;gap:20px}.task-edit-summary{display:flex;align-items:center;gap:12px;padding:15px;border:1px solid var(--border-color-light);border-radius:14px;background:var(--surface-elevated)}.task-edit-summary>span{display:grid;min-width:74px;height:42px;place-items:center;padding:0 10px;border-radius:11px;background:var(--primary-alpha-10);color:var(--primary);font-size:12px;font-weight:700}.task-edit-summary p{margin-top:4px;color:var(--text-secondary);font-size:12px}.field-label{margin-bottom:8px;color:var(--text-secondary);font-size:13px;font-weight:700}.priority-segment{position:relative;display:grid;grid-template-columns:repeat(3,1fr);padding:4px;border:1px solid var(--border-color);border-radius:14px;background:var(--bg-page);isolation:isolate}.priority-indicator{position:absolute;top:4px;bottom:4px;left:4px;z-index:0;width:calc((100% - 8px)/3);border:1px solid var(--border-color-light);border-radius:10px;background:var(--surface-elevated);box-shadow:var(--shadow-sm);transition:transform .25s cubic-bezier(.2,.8,.2,1)}.priority-segment button{position:relative;z-index:1;padding:10px;border:0;background:transparent;color:var(--text-secondary);cursor:pointer}.priority-segment button.active{color:var(--primary);font-weight:700}.priority-segment button:focus-visible{outline:2px solid var(--primary);outline-offset:-2px;border-radius:10px}@media(prefers-reduced-motion:reduce){.priority-indicator{transition:none}}

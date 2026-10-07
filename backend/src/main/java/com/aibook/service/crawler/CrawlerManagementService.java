@@ -499,6 +499,65 @@ public class CrawlerManagementService {
                 .toList();
     }
 
+    @Transactional
+    public BookView setChapterStatus(User user, Long bookId, Long chapterId,
+            CrawlerChapter.CrawlStatus status) {
+        CrawlerBook book = ownedBook(user, bookId);
+        CrawlerChapter chapter = chapterRepository.findById(chapterId)
+                .filter(value -> Objects.equals(value.getCrawlerBook().getId(), bookId))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集章节不存在"));
+        if (status == null || status == CrawlerChapter.CrawlStatus.WAITING
+                || status == CrawlerChapter.CrawlStatus.CRAWLING) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能人工设置章节的运行状态");
+        }
+        if (hasActiveTask(book)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "该书籍仍有运行中、等待或暂停任务，请先结束或取消任务");
+        }
+        if (status == CrawlerChapter.CrawlStatus.COMPLETED
+                && (chapter.getContent() == null || chapter.getContent().isBlank())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "章节没有正文，不能标记为已完成");
+        }
+        chapter.setCrawlStatus(status);
+        if (status == CrawlerChapter.CrawlStatus.NOT_CRAWLED) chapter.setRetryCount(0);
+        if (status == CrawlerChapter.CrawlStatus.FAILED
+                || status == CrawlerChapter.CrawlStatus.CONTENT_SUSPECTED) {
+            if (chapter.getErrorMessage() == null || chapter.getErrorMessage().isBlank()) {
+                chapter.setErrorMessage(status == CrawlerChapter.CrawlStatus.FAILED
+                        ? "人工标记为采集失败" : "人工标记为疑似正文异常");
+            }
+        } else {
+            chapter.setErrorMessage(null);
+        }
+        chapterRepository.saveAndFlush(chapter);
+        int total = (int) chapterRepository.countByCrawlerBook(book);
+        int completed = (int) chapterRepository.countByCrawlerBookAndCrawlStatus(
+                book, CrawlerChapter.CrawlStatus.COMPLETED);
+        int pendingRelease = (int) chapterRepository.countByCrawlerBookAndCrawlStatus(
+                book, CrawlerChapter.CrawlStatus.PENDING_RELEASE);
+        int ignored = (int) chapterRepository.countByCrawlerBookAndCrawlStatus(
+                book, CrawlerChapter.CrawlStatus.IGNORED);
+        int failed = (int) (chapterRepository.countByCrawlerBookAndCrawlStatus(
+                book, CrawlerChapter.CrawlStatus.FAILED)
+                + chapterRepository.countByCrawlerBookAndCrawlStatus(
+                        book, CrawlerChapter.CrawlStatus.CONTENT_SUSPECTED));
+        book.setChapterCount(total);
+        book.setCrawledChapterCount(completed);
+        book.setPendingReleaseChapterCount(pendingRelease);
+        book.setFailedChapterCount(failed);
+        if (total > 0 && completed + pendingRelease + ignored == total) {
+            book.setCrawlStatus(CrawlerBook.CrawlStatus.COMPLETED);
+        } else if (completed > 0) {
+            book.setCrawlStatus(CrawlerBook.CrawlStatus.PARTIAL_SUCCESS);
+        } else {
+            book.setCrawlStatus(failed > 0 ? CrawlerBook.CrawlStatus.FAILED : CrawlerBook.CrawlStatus.DISCOVERED);
+        }
+        book.setImportStatus(book.getLibraryBook() != null ? CrawlerBook.ImportStatus.IMPORTED
+                : completed > 0 ? CrawlerBook.ImportStatus.READY : CrawlerBook.ImportStatus.NOT_IMPORTED);
+        bookRepository.save(book);
+        return bookView(book);
+    }
+
     private void refreshParsedBookStatus(CrawlerBook book) {
         int total = (int) chapterRepository.countByCrawlerBook(book);
         int completed = (int) chapterRepository.countByCrawlerBookAndCrawlStatus(

@@ -42,6 +42,115 @@ import static org.mockito.Mockito.*;
 
 class CrawlerManagementServiceTest {
     @Test
+    void manualChapterStatesPreserveContentAndRefreshBookCounts() {
+        User user = user();
+        CrawlerChapter chapter = editableChapter(user);
+        LocalDateTime crawlTime = LocalDateTime.of(2026, 10, 7, 8, 0);
+        chapter.setCrawlTime(crawlTime);
+        chapter.setContentHash("original-hash");
+        chapter.setRetryCount(5);
+        chapter.setErrorMessage("旧失败原因");
+
+        var completed = service.setChapterStatus(user, 3L, 4L, CrawlerChapter.CrawlStatus.COMPLETED);
+        assertThat(completed.crawledChapterCount()).isEqualTo(1);
+        assertThat(completed.failedChapterCount()).isZero();
+        assertThat(completed.crawlStatus()).isEqualTo("COMPLETED");
+        assertThat(completed.importStatus()).isEqualTo("READY");
+        assertThat(chapter.getErrorMessage()).isNull();
+
+        var failed = service.setChapterStatus(user, 3L, 4L, CrawlerChapter.CrawlStatus.FAILED);
+        assertThat(failed.crawledChapterCount()).isZero();
+        assertThat(failed.failedChapterCount()).isEqualTo(1);
+        assertThat(failed.crawlStatus()).isEqualTo("FAILED");
+        assertThat(chapter.getErrorMessage()).contains("人工标记");
+
+        var suspected = service.setChapterStatus(user, 3L, 4L, CrawlerChapter.CrawlStatus.CONTENT_SUSPECTED);
+        assertThat(suspected.failedChapterCount()).isEqualTo(1);
+        var pending = service.setChapterStatus(user, 3L, 4L, CrawlerChapter.CrawlStatus.PENDING_RELEASE);
+        assertThat(pending.pendingReleaseChapterCount()).isEqualTo(1);
+        assertThat(pending.failedChapterCount()).isZero();
+        var ignored = service.setChapterStatus(user, 3L, 4L, CrawlerChapter.CrawlStatus.IGNORED);
+        assertThat(ignored.crawlStatus()).isEqualTo("COMPLETED");
+
+        var reset = service.setChapterStatus(user, 3L, 4L, CrawlerChapter.CrawlStatus.NOT_CRAWLED);
+        assertThat(reset.crawledChapterCount()).isZero();
+        assertThat(reset.pendingReleaseChapterCount()).isZero();
+        assertThat(reset.failedChapterCount()).isZero();
+        assertThat(reset.crawlStatus()).isEqualTo("DISCOVERED");
+        assertThat(reset.importStatus()).isEqualTo("NOT_IMPORTED");
+        assertThat(chapter.getRetryCount()).isZero();
+        assertThat(chapter.getContent()).isEqualTo("已有章节正文");
+        assertThat(chapter.getContentHash()).isEqualTo("original-hash");
+        assertThat(chapter.getCrawlTime()).isEqualTo(crawlTime);
+        verify(tasks, never()).save(any());
+    }
+
+    @Test
+    void chapterCannotBeCompletedWithoutContentOrAssignedRuntimeStates() {
+        User user = user();
+        CrawlerChapter chapter = editableChapter(user);
+        for (String content : new String[] { null, "", "  \n " }) {
+            chapter.setContent(content);
+            assertThatThrownBy(() -> service.setChapterStatus(user, 3L, 4L,
+                    CrawlerChapter.CrawlStatus.COMPLETED)).isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("409");
+        }
+        for (var status : new CrawlerChapter.CrawlStatus[] {
+                null, CrawlerChapter.CrawlStatus.WAITING, CrawlerChapter.CrawlStatus.CRAWLING }) {
+            assertThatThrownBy(() -> service.setChapterStatus(user, 3L, 4L, status))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("400");
+        }
+        verify(chapters, never()).saveAndFlush(any());
+        verify(books, never()).save(any());
+    }
+
+    @Test
+    void chapterStatusChecksActiveTasksAndBookOwnership() {
+        User user = user();
+        CrawlerChapter chapter = editableChapter(user);
+        when(tasks.existsByCrawlerBookAndStatusIn(eq(chapter.getCrawlerBook()), any())).thenReturn(true);
+        assertThatThrownBy(() -> service.setChapterStatus(user, 3L, 4L, CrawlerChapter.CrawlStatus.IGNORED))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("409");
+        when(tasks.existsByCrawlerBookAndStatusIn(eq(chapter.getCrawlerBook()), any())).thenReturn(false);
+        chapter.setCrawlerBook(CrawlerBook.builder().id(9L).build());
+        assertThatThrownBy(() -> service.setChapterStatus(user, 3L, 4L, CrawlerChapter.CrawlStatus.FAILED))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("404");
+        User other = User.builder().id(20L).build();
+        assertThatThrownBy(() -> service.setChapterStatus(other, 3L, 4L, CrawlerChapter.CrawlStatus.FAILED))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("404");
+        verify(chapters, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void chapterStateChangeKeepsLibraryAssociationAndAccountAutomationSettings() {
+        User user = user();
+        CrawlerChapter chapter = editableChapter(user);
+        CrawlerBook book = chapter.getCrawlerBook();
+        book.setLibraryBook(Book.builder().id(8L).build());
+        book.setAutoImportEnabled(true);
+        book.setAutoUpdateEnabled(true);
+        var result = service.setChapterStatus(user, 3L, 4L, CrawlerChapter.CrawlStatus.NOT_CRAWLED);
+        assertThat(result.importStatus()).isEqualTo("IMPORTED");
+        assertThat(result.libraryBookId()).isEqualTo(8L);
+        assertThat(result.autoImportEnabled()).isTrue();
+        assertThat(result.autoUpdateEnabled()).isTrue();
+        verify(tasks, never()).save(any());
+    }
+
+    private CrawlerChapter editableChapter(User user) {
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("测试网站").build();
+        CrawlerBook book = CrawlerBook.builder().id(3L).site(site).bookName("测试书籍").build();
+        CrawlerChapter chapter = CrawlerChapter.builder().id(4L).crawlerBook(book)
+                .content("已有章节正文").crawlStatus(CrawlerChapter.CrawlStatus.FAILED).build();
+        when(books.findByIdAndSiteUser(3L, user)).thenReturn(Optional.of(book));
+        when(chapters.findById(4L)).thenReturn(Optional.of(chapter));
+        when(chapters.countByCrawlerBook(book)).thenReturn(1L);
+        when(chapters.countByCrawlerBookAndCrawlStatus(eq(book), any()))
+                .thenAnswer(invocation -> chapter.getCrawlStatus() == invocation.getArgument(1) ? 1L : 0L);
+        return chapter;
+    }
+
+    @Test
     void scanResultFiltersApplyBeforePaginationAndPreserveMatchingTotal() {
         User user = user();
         CrawlerTask task = CrawlerTask.builder().id("scan-filter")

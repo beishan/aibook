@@ -200,6 +200,9 @@ public final class CrawlerDtos {
     public record BookCrawlStatusRequest(
             @NotBlank @Pattern(regexp = "DISCOVERED|WAITING|PAUSED|PARTIAL_SUCCESS|COMPLETED|FAILED") String status,
             Boolean autoUpdateEnabled) { }
+    public record ChapterCrawlStatusRequest(
+            @NotBlank @Pattern(regexp = "NOT_CRAWLED|COMPLETED|PENDING_RELEASE|FAILED|CONTENT_SUSPECTED|IGNORED")
+            String status) { }
     public record LibrarySyncRequest(@NotNull Boolean enabled) { }
     public record FavoriteRequest(@NotNull Boolean favorite) { }
     public record BookListSelectionRequest(
