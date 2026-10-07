@@ -18,6 +18,51 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 class CrawlerTaskShutdownTest {
     @Test
+    void contextCloseWaitsForSubmissionCleanupBeforeDestroyingDatabase() throws Exception {
+        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
+        CrawlerTaskService service = service(context, mock(CrawlerTaskRepository.class));
+        ExecutorService submissions = (ExecutorService)
+                ReflectionTestUtils.getField(service, "submissionExecutor");
+        CloseProbe database = new CloseProbe();
+        context.getBeanFactory().registerSingleton("crawlerTaskService", service);
+        context.registerBean("databaseResource", CloseProbe.class, () -> database);
+        context.refresh();
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+        CountDownLatch releaseCleanup = new CountDownLatch(1);
+        ExecutorService closer = Executors.newSingleThreadExecutor();
+        try {
+            submissions.execute(() -> {
+                started.countDown();
+                try {
+                    new CountDownLatch(1).await();
+                } catch (InterruptedException exception) {
+                    interrupted.countDown();
+                    try {
+                        releaseCleanup.await();
+                    } catch (InterruptedException unexpected) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            });
+            assertThat(started.await(2, TimeUnit.SECONDS)).isTrue();
+            Future<?> closing = closer.submit(context::close);
+            assertThat(interrupted.await(2, TimeUnit.SECONDS)).isTrue();
+            assertThat(closing.isDone()).isFalse();
+            assertThat(database.closed).isFalse();
+            releaseCleanup.countDown();
+            closing.get(3, TimeUnit.SECONDS);
+            assertThat(submissions.isTerminated()).isTrue();
+            assertThat(database.closed).isTrue();
+        } finally {
+            releaseCleanup.countDown();
+            context.close();
+            service.shutdown();
+            closer.shutdownNow();
+        }
+    }
+
+    @Test
     void contextCloseWaitsForWorkerCleanupBeforeDestroyingDatabase() throws Exception {
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
         CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);

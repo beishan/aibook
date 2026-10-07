@@ -11,6 +11,9 @@ import com.aibook.service.OperationLogService;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -21,7 +24,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 class CrawlerTaskSubmissionTransactionTest {
     @Test
-    void batchSubmissionWritesInFreshTransactionAfterCreationCommits() {
+    void batchSubmissionWritesInFreshTransactionAfterCreationCommits() throws Exception {
         try (Fixture fixture = new Fixture()) {
             new TransactionTemplate(fixture.transactions).executeWithoutResult(status -> {
                 assertThat(fixture.service.batchCrawl(fixture.user, List.of(3L))).hasSize(1);
@@ -29,10 +32,11 @@ class CrawlerTaskSubmissionTransactionTest {
                 verify(fixture.sites, never()).releaseExpiredManualFreezes(any());
             });
 
+            assertThat(fixture.transactions.submissionCommitted.await(5, TimeUnit.SECONDS)).isTrue();
             verify(fixture.tasks).saveAll(any());
             verify(fixture.sites).releaseExpiredManualFreezes(any());
-            assertThat(fixture.transactions.commits).isEqualTo(2);
-            assertThat(fixture.transactions.suspensions).isEqualTo(1);
+            assertThat(fixture.transactions.commits.get()).isEqualTo(2);
+            assertThat(fixture.transactions.suspensions.get()).isZero();
             assertThat(fixture.created.getFirst().getQueueOrder()).isNotNull();
         }
     }
@@ -47,12 +51,12 @@ class CrawlerTaskSubmissionTransactionTest {
 
             verify(fixture.tasks, never()).saveAll(any());
             verify(fixture.sites, never()).releaseExpiredManualFreezes(any());
-            assertThat(fixture.transactions.commits).isZero();
+            assertThat(fixture.transactions.commits.get()).isZero();
         }
     }
 
     @Test
-    void singleSubmissionAlsoUsesFreshTransactionAfterCommit() {
+    void singleSubmissionAlsoUsesFreshTransactionAfterCommit() throws Exception {
         try (Fixture fixture = new Fixture()) {
             when(fixture.tasks.findById(any())).thenAnswer(invocation ->
                     fixture.created.stream().findFirst());
@@ -61,9 +65,33 @@ class CrawlerTaskSubmissionTransactionTest {
                 verify(fixture.sites, never()).releaseExpiredManualFreezes(any());
             });
 
+            assertThat(fixture.transactions.submissionCommitted.await(5, TimeUnit.SECONDS)).isTrue();
             verify(fixture.sites).releaseExpiredManualFreezes(any());
-            assertThat(fixture.transactions.commits).isEqualTo(2);
-            assertThat(fixture.transactions.suspensions).isEqualTo(1);
+            assertThat(fixture.transactions.commits.get()).isEqualTo(2);
+            assertThat(fixture.transactions.suspensions.get()).isZero();
+        }
+    }
+
+    @Test
+    void slowDispatchDoesNotHoldUpRequestCommit() throws Exception {
+        CountDownLatch dispatchEntered = new CountDownLatch(1);
+        CountDownLatch releaseDispatch = new CountDownLatch(1);
+        try (Fixture fixture = new Fixture()) {
+            doAnswer(invocation -> {
+                fixture.transactions.requireWritableTransaction();
+                dispatchEntered.countDown();
+                assertThat(releaseDispatch.await(5, TimeUnit.SECONDS)).isTrue();
+                return 0;
+            }).when(fixture.sites).releaseExpiredManualFreezes(any());
+            try {
+                new TransactionTemplate(fixture.transactions).executeWithoutResult(status ->
+                        fixture.service.batchCrawl(fixture.user, List.of(3L)));
+                assertThat(dispatchEntered.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(fixture.transactions.commits.get()).isEqualTo(1);
+            } finally {
+                releaseDispatch.countDown();
+            }
+            assertThat(fixture.transactions.submissionCommitted.await(5, TimeUnit.SECONDS)).isTrue();
         }
     }
 
@@ -122,8 +150,9 @@ class CrawlerTaskSubmissionTransactionTest {
     /** 使用 Spring 的真实提交回调及挂起机制，拒绝已提交资源上的写入。 */
     private static final class TrackingTransactions extends AbstractPlatformTransactionManager {
         private final ThreadLocal<Resource> current = new ThreadLocal<>();
-        int commits;
-        int suspensions;
+        final AtomicInteger commits = new AtomicInteger();
+        final AtomicInteger suspensions = new AtomicInteger();
+        final CountDownLatch submissionCommitted = new CountDownLatch(1);
 
         void requireWritableTransaction() {
             assertThat(current.get()).isNotNull();
@@ -152,7 +181,7 @@ class CrawlerTaskSubmissionTransactionTest {
             Resource resource = current.get();
             current.remove();
             ((Holder) transaction).resource = null;
-            suspensions++;
+            suspensions.incrementAndGet();
             return resource;
         }
 
@@ -164,7 +193,7 @@ class CrawlerTaskSubmissionTransactionTest {
         @Override
         protected void doCommit(DefaultTransactionStatus status) {
             ((Holder) status.getTransaction()).resource.committed = true;
-            commits++;
+            if (commits.incrementAndGet() == 2) submissionCommitted.countDown();
         }
 
         @Override

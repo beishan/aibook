@@ -45,6 +45,7 @@ import java.time.LocalTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 @RequiredArgsConstructor
@@ -88,6 +89,13 @@ public class CrawlerTaskService {
     private final Map<String, Long> activeTaskQueues = new ConcurrentHashMap<>();
     private final Map<String, Long> activeTaskExecutors = new ConcurrentHashMap<>();
     private final Map<String, Thread> runningThreads = new ConcurrentHashMap<>();
+    private final ExecutorService submissionExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread thread = new Thread(r, "crawler-submission");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final Queue<List<String>> pendingSubmissions = new ConcurrentLinkedQueue<>();
+    private final AtomicBoolean submissionScheduled = new AtomicBoolean();
     private volatile boolean shuttingDown;
     private static final List<CrawlerTask.TaskStatus> ACTIVE_STATUSES = List.of(
             CrawlerTask.TaskStatus.WAITING, CrawlerTask.TaskStatus.RUNNING, CrawlerTask.TaskStatus.PAUSED);
@@ -555,10 +563,12 @@ public class CrawlerTaskService {
         return queuedTasks(user, targetQueue == null ? null : targetQueue.getId());
     }
 
+    @Transactional
     public TaskView start(User user, Long siteId, String url) {
         return start(user, siteId, url, null, null);
     }
 
+    @Transactional
     public TaskView start(User user, Long siteId, String url, Boolean autoImportEnabled,
             List<String> autoImportFormats) {
         List<String> formats = autoImportEnabled == null ? null
@@ -578,11 +588,13 @@ public class CrawlerTaskService {
         return managementService.taskView(createBookTask(user, book, CrawlerTask.TaskType.BOOK_FULL_CRAWL));
     }
 
+    @Transactional
     public TaskView continueBook(User user, Long bookId) {
         CrawlerBook book = managementService.ownedBook(user, bookId);
         return managementService.taskView(createBookTask(user, book, CrawlerTask.TaskType.BOOK_FULL_CRAWL));
     }
 
+    @Transactional
     public TaskView retryFailures(User user, Long bookId) {
         CrawlerBook book = managementService.ownedBook(user, bookId);
         chapterRepository.findByCrawlerBookOrderByChapterIndexAsc(book).stream()
@@ -657,12 +669,14 @@ public class CrawlerTaskService {
         return managementService.taskView(task);
     }
 
+    @Transactional
     public TaskView checkUpdates(User user, Long bookId) {
         CrawlerBook book = managementService.ownedBook(user, bookId);
         requireEnabled(book.getSite());
         return managementService.taskView(createBookTask(user, book, CrawlerTask.TaskType.BOOK_UPDATE_CHECK));
     }
 
+    @Transactional
     public TaskView refreshMetadata(User user, Long bookId) {
         CrawlerBook book = managementService.ownedBook(user, bookId);
         return managementService.taskView(createBookTask(user, book, CrawlerTask.TaskType.BOOK_METADATA));
@@ -691,6 +705,7 @@ public class CrawlerTaskService {
         return tasks.stream().map(managementService::taskView).toList();
     }
 
+    @Transactional
     public List<TaskView> batchRefreshMetadata(User user, List<Long> bookIds) {
         List<CrawlerBook> books = ownedBooks(user, bookIds);
         books.forEach(this::ensureNoActiveTask);
@@ -992,7 +1007,7 @@ public class CrawlerTaskService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                submitInNewTransaction(() -> submit(taskId));
+                enqueueSubmission(List.of(taskId));
             }
         });
     }
@@ -1008,13 +1023,52 @@ public class CrawlerTaskService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                submitInNewTransaction(() -> submitBatch(ids));
+                enqueueSubmission(ids);
             }
         });
     }
 
+    private void enqueueSubmission(List<String> ids) {
+        if (shuttingDown) return;
+        pendingSubmissions.add(ids);
+        scheduleSubmissionDrain();
+    }
+
+    private void scheduleSubmissionDrain() {
+        if (shuttingDown || !submissionScheduled.compareAndSet(false, true)) return;
+        try {
+            submissionExecutor.execute(this::drainSubmissions);
+        } catch (RejectedExecutionException exception) {
+            submissionScheduled.set(false);
+            if (!shuttingDown) {
+                log.warn("[采集任务] 后台派发提交失败，等待定时调度重试", exception);
+            }
+        }
+    }
+
+    private void drainSubmissions() {
+        try {
+            LinkedHashSet<String> ids = new LinkedHashSet<>();
+            List<String> batch;
+            while ((batch = pendingSubmissions.poll()) != null) ids.addAll(batch);
+            if (ids.isEmpty() || shuttingDown) return;
+            submitInNewTransaction(() -> {
+                if (taskQueueRepository == null) {
+                    ids.forEach(this::submit);
+                } else {
+                    submitBatch(List.copyOf(ids));
+                }
+            });
+        } catch (Exception exception) {
+            log.error("[采集任务] 后台派发失败，已保存任务等待定时调度重试", exception);
+        } finally {
+            submissionScheduled.set(false);
+            if (!pendingSubmissions.isEmpty()) scheduleSubmissionDrain();
+        }
+    }
+
     private void submitInNewTransaction(Runnable submission) {
-        // afterCommit 仍绑定原事务资源，必须挂起它并开启新事务才能继续更新队列。
+        // 后台派发使用独立事务，只有已提交的任务才会进入此处。
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
         transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         transaction.executeWithoutResult(status -> submission.run());
@@ -1128,7 +1182,6 @@ public class CrawlerTaskService {
         }
         List<CrawlerTaskQueue> queues = taskQueueRepository.findAll();
         if (queues.isEmpty()) return;
-        applyConcurrencyLimit(configuredQueueConcurrency());
         Map<Long, CrawlerTaskQueue> queuesBySite = new HashMap<>();
         Map<Long, CrawlerTaskQueue> queuesById = new HashMap<>();
         for (CrawlerTaskQueue queue : queues) {
@@ -1136,6 +1189,9 @@ public class CrawlerTaskService {
             queuesById.put(queue.getId(), queue);
             if (queue.getSite() != null) queuesBySite.put(queue.getSite().getId(), queue);
         }
+        long concurrency = queues.stream()
+                .mapToLong(queue -> value(queue.getMaxConcurrentTasks(), 1)).sum();
+        applyConcurrencyLimit((int) Math.max(1, Math.min(Integer.MAX_VALUE, concurrency)));
 
         Map<Long, Integer> scheduledByQueue = new HashMap<>();
         activeTaskQueues.values().forEach(queueId -> scheduledByQueue.merge(queueId, 1, Integer::sum));
@@ -1147,6 +1203,7 @@ public class CrawlerTaskService {
         LocalDateTime now = LocalDateTime.now();
 
         Map<Long, Boolean> frozenSites = new HashMap<>();
+        Map<Long, List<CrawlerQueueExecutor>> executorsByQueue = new HashMap<>();
         for (CrawlerTask task : waitingTasks) {
             CrawlerSite site = task.getSite();
             if (frozenSites.computeIfAbsent(site.getId(), ignored -> isSiteManuallyFrozen(site))
@@ -1154,8 +1211,8 @@ public class CrawlerTaskService {
             CrawlerTaskQueue queue = task.getQueue() == null
                     ? queuesBySite.get(site.getId()) : queuesById.get(task.getQueue().getId());
             if (queue == null) continue;
-            List<CrawlerQueueExecutor> executors =
-                    queueExecutorService.enabledExecutors(queue.getId());
+            List<CrawlerQueueExecutor> executors = executorsByQueue.computeIfAbsent(
+                    queue.getId(), queueExecutorService::enabledExecutors);
             int queueActive = scheduledByQueue.getOrDefault(queue.getId(), 0);
             if (queueActive >= executors.size()) continue;
             CrawlerQueueExecutor selectedExecutor = executors.stream()
@@ -2219,10 +2276,15 @@ public class CrawlerTaskService {
         synchronized (executor) {
             if (shuttingDown) return;
             shuttingDown = true;
+            submissionExecutor.shutdownNow();
+            pendingSubmissions.clear();
             executor.shutdownNow();
         }
         // ContextClosedEvent 先于 JPA 等 Bean 销毁，等待工作线程完成在途保存和清理。
         try {
+            if (!submissionExecutor.awaitTermination(20, TimeUnit.SECONDS)) {
+                log.warn("[采集任务] 停机等待超时，后台派发线程未退出");
+            }
             if (!executor.awaitTermination(20, TimeUnit.SECONDS)) {
                 log.warn("[采集任务] 停机等待超时，仍有 {} 个工作线程未退出", executor.getActiveCount());
             }

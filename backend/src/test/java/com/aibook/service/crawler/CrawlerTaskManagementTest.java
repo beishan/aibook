@@ -883,8 +883,8 @@ class CrawlerTaskManagementTest {
             assertThat(synchronizations).hasSize(2);
             synchronizations.forEach(TransactionSynchronization::afterCommit);
 
-            verify(tasks).findById(first.getId());
-            verify(tasks).findById(second.getId());
+            verify(tasks, timeout(2000)).findById(first.getId());
+            verify(tasks, timeout(2000)).findById(second.getId());
         } finally {
             TransactionSynchronizationManager.clear();
             service.shutdown();
