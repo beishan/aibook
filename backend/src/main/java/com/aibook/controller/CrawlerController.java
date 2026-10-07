@@ -333,8 +333,9 @@ public class CrawlerController {
     }
     @GetMapping("/tasks/{id}/scan-results") public Page<ScanBookResultView> scanResults(
             Authentication auth, @PathVariable String id,
-            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
-        return managementService.scanResults(user(auth), id, page, size);
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) CrawlerScanResult.ResultStatus resultStatus) {
+        return managementService.scanResults(user(auth), id, page, size, resultStatus);
     }
     @PutMapping("/tasks/{id}") public TaskView updateTask(Authentication auth, @PathVariable String id, @Valid @RequestBody TaskUpdateRequest request) { return taskService.updateTask(user(auth), id, request.priority()); }
     @DeleteMapping("/tasks/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteTask(Authentication auth, @PathVariable String id) { taskService.deleteTask(user(auth), id); }

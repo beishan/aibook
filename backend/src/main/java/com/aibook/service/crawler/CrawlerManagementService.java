@@ -689,13 +689,17 @@ public class CrawlerManagementService {
     }
 
     @Transactional(readOnly = true)
-    public Page<ScanBookResultView> scanResults(User user, String taskId, int page, int size) {
+    public Page<ScanBookResultView> scanResults(User user, String taskId, int page, int size,
+            CrawlerScanResult.ResultStatus resultStatus) {
         CrawlerTask task = ownedTask(user, taskId);
         if (task.getType() != CrawlerTask.TaskType.SITE_SCAN) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "该任务没有发现页扫描结果");
         }
-        return scanResultRepository.findByTaskOrderByIdAsc(task,
-                        PageRequest.of(Math.max(0, page), Math.min(100, Math.max(1, size))))
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(100, Math.max(1, size)));
+        Page<CrawlerScanResult> results = resultStatus == null
+                ? scanResultRepository.findByTaskOrderByIdAsc(task, pageable)
+                : scanResultRepository.findByTaskAndResultStatusOrderByIdAsc(task, resultStatus, pageable);
+        return results
                 .map(result -> new ScanBookResultView(result.getId(), result.getCrawlerBookId(),
                         result.getBookName(), result.getBookUrl(), result.getResultStatus().name(),
                         result.getErrorMessage(), result.getCreatedAt()));

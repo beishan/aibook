@@ -395,7 +395,10 @@ export const crawlerApi = {
       {params:{page,size:20,failedOnly}}).then(r => r.data),
   taskQueueSettings: () => api.get<CrawlerTaskQueueSettings>('/api/crawler/tasks/queue-settings').then(r => r.data),
   updateTaskQueueSettings: (maxConcurrentTasks:number) => api.put<CrawlerTaskQueueSettings>('/api/crawler/tasks/queue-settings',{maxConcurrentTasks}).then(r => r.data),
-  scanResults: (id:string,page:number,size:number) => api.get<PageResult<CrawlerScanResult>>(`/api/crawler/tasks/${id}/scan-results`,{params:{page,size}}).then(r=>r.data),
+  scanResults: (id: string, page: number, size: number, resultStatus?: CrawlerScanResult['resultStatus']) =>
+    api.get<PageResult<CrawlerScanResult>>(`/api/crawler/tasks/${id}/scan-results`, {
+      params: { page, size, resultStatus },
+    }).then(r => r.data),
   updateTask: (id:string, priority:'LOW'|'NORMAL'|'HIGH') => api.put<CrawlerTask>(`/api/crawler/tasks/${id}`, {priority}).then(r => r.data),
   batchManageTasks: (taskIds:string[], action:'pause'|'resume'|'cancel'|'delete'|'priority', priority?:'LOW'|'NORMAL'|'HIGH') => api.post<{affectedCount:number}>('/api/crawler/tasks/batch', {taskIds,action,priority}).then(r => r.data),
   deleteTask: (id:string) => api.delete(`/api/crawler/tasks/${id}`),

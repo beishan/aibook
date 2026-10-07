@@ -11,6 +11,7 @@ import com.aibook.model.entity.CrawlerSite;
 import com.aibook.model.entity.CrawlerSiteRuleVersion;
 import com.aibook.model.entity.CrawlerTaskLog;
 import com.aibook.model.entity.CrawlerTask;
+import com.aibook.model.entity.CrawlerScanResult;
 import com.aibook.model.entity.User;
 import com.aibook.repository.CrawlerBookRepository;
 import com.aibook.repository.CrawlerChapterRepository;
@@ -18,6 +19,7 @@ import com.aibook.repository.CrawlerSiteRepository;
 import com.aibook.repository.CrawlerSiteRuleVersionRepository;
 import com.aibook.repository.CrawlerTaskRepository;
 import com.aibook.repository.CrawlerTaskLogRepository;
+import com.aibook.repository.CrawlerScanResultRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +41,63 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class CrawlerManagementServiceTest {
+    @Test
+    void scanResultFiltersApplyBeforePaginationAndPreserveMatchingTotal() {
+        User user = user();
+        CrawlerTask task = CrawlerTask.builder().id("scan-filter")
+                .type(CrawlerTask.TaskType.SITE_SCAN).build();
+        when(tasks.findByIdAndUser(task.getId(), user)).thenReturn(Optional.of(task));
+        var pageable = org.springframework.data.domain.PageRequest.of(1, 20);
+
+        for (var status : CrawlerScanResult.ResultStatus.values()) {
+            CrawlerScanResult result = CrawlerScanResult.builder().id(21L)
+                    .crawlerBookId(3L).bookName("筛选结果").bookUrl("https://example.com/book/3")
+                    .resultStatus(status).build();
+            when(scanResults.findByTaskAndResultStatusOrderByIdAsc(task, status, pageable))
+                    .thenReturn(new PageImpl<>(List.of(result), pageable, 41));
+
+            var response = service.scanResults(user, task.getId(), 1, 20, status);
+
+            assertThat(response.getTotalElements()).isEqualTo(41);
+            assertThat(response.getNumber()).isEqualTo(1);
+            assertThat(response.getContent()).hasSize(1);
+            assertThat(response.getContent().get(0).resultStatus()).isEqualTo(status.name());
+            verify(scanResults).findByTaskAndResultStatusOrderByIdAsc(task, status, pageable);
+        }
+        verify(scanResults, never()).findByTaskOrderByIdAsc(any(), any());
+    }
+
+    @Test
+    void allScanResultsKeepOriginalQueryAndClampPageSize() {
+        User user = user();
+        CrawlerTask task = CrawlerTask.builder().id("scan-all")
+                .type(CrawlerTask.TaskType.SITE_SCAN).build();
+        when(tasks.findByIdAndUser(task.getId(), user)).thenReturn(Optional.of(task));
+        var pageable = org.springframework.data.domain.PageRequest.of(0, 100);
+        when(scanResults.findByTaskOrderByIdAsc(task, pageable)).thenReturn(Page.empty(pageable));
+
+        assertThat(service.scanResults(user, task.getId(), -1, 200, null).getContent()).isEmpty();
+        verify(scanResults).findByTaskOrderByIdAsc(task, pageable);
+        verify(scanResults, never()).findByTaskAndResultStatusOrderByIdAsc(any(), any(), any());
+    }
+
+    @Test
+    void scanResultFiltersCannotBypassTaskOwnershipOrTaskType() {
+        User user = user();
+        when(tasks.findByIdAndUser("other-account", user)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.scanResults(user, "other-account", 0, 20,
+                CrawlerScanResult.ResultStatus.NEW)).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+
+        CrawlerTask task = CrawlerTask.builder().id("book-task")
+                .type(CrawlerTask.TaskType.BOOK_FULL_CRAWL).build();
+        when(tasks.findByIdAndUser(task.getId(), user)).thenReturn(Optional.of(task));
+        assertThatThrownBy(() -> service.scanResults(user, task.getId(), 0, 20,
+                CrawlerScanResult.ResultStatus.DUPLICATE)).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("409");
+        verifyNoInteractions(scanResults);
+    }
+
     @Test
     void taskViewReflectsCurrentBookAutoImportSettingAndHandlesSiteScans() {
         CrawlerSite site = CrawlerSite.builder().id(2L).siteName("测试网站").build();
@@ -113,6 +172,7 @@ class CrawlerManagementServiceTest {
     private CrawlerChapterRepository chapters;
     private CrawlerTaskLogRepository crawlerLogs;
     private CrawlerTaskRepository tasks;
+    private CrawlerScanResultRepository scanResults;
     private com.aibook.repository.BookListRepository bookLists;
     private CrawlerHttpClient httpClient;
     private CrawlerManagementService service;
@@ -125,6 +185,7 @@ class CrawlerManagementServiceTest {
         chapters = mock(CrawlerChapterRepository.class);
         crawlerLogs = mock(CrawlerTaskLogRepository.class);
         tasks = mock(CrawlerTaskRepository.class);
+        scanResults = mock(CrawlerScanResultRepository.class);
         bookLists = mock(com.aibook.repository.BookListRepository.class);
         httpClient = mock(CrawlerHttpClient.class);
         when(httpClient.protectionState(any(CrawlerSite.class))).thenReturn(
@@ -133,7 +194,7 @@ class CrawlerManagementServiceTest {
                 mock(com.aibook.repository.BookRepository.class),
                 chapters, tasks, crawlerLogs, rules,
                 mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class),
-                mock(com.aibook.repository.CrawlerScanResultRepository.class),
+                scanResults,
                 bookLists,
                 new ObjectMapper(), httpClient);
         when(sites.save(any(CrawlerSite.class))).thenAnswer(invocation -> invocation.getArgument(0));

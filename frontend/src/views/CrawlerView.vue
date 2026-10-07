@@ -1390,13 +1390,40 @@
 
     <el-dialog v-model="scanResultsDialog" :title="`${scanResultsTask?.discoveryPageName || scanResultsTask?.siteName || '采集网站'} · 扫描结果`" width="min(920px, 96vw)" append-to-body>
       <div v-if="scanResultsTask" class="scan-result-summary"><span><small>扫描到</small><strong>{{ scanResultsTask.totalCount }}</strong></span><span><small>成功</small><strong>{{ scanResultsTask.successCount }}</strong></span><span><small>新增</small><strong>{{ scanResultsTask.newBookCount }}</strong></span><span><small>重复</small><strong>{{ scanResultsTask.duplicateCount }}</strong></span><span><small>失败</small><strong>{{ scanResultsTask.failedCount }}</strong></span></div>
+      <div class="scan-result-filter-scroll">
+        <div
+          class="scan-result-filter"
+          role="radiogroup"
+          aria-label="扫描结果筛选"
+          @keydown="handleScanResultFilterKey"
+        >
+          <span
+            class="scan-result-filter-indicator"
+            aria-hidden="true"
+            :style="{ transform: `translateX(${scanResultFilterIndex * 100}%)` }"
+          />
+          <button
+            v-for="option in scanResultFilterOptions"
+            :key="option.value"
+            type="button"
+            role="radio"
+            :aria-checked="scanResultStatusFilter === option.value"
+            :tabindex="scanResultStatusFilter === option.value ? 0 : -1"
+            :class="{ active: scanResultStatusFilter === option.value }"
+            @click="setScanResultFilter(option.value)"
+          >{{ option.label }}</button>
+        </div>
+      </div>
       <el-table v-loading="scanResultsLoading" :data="scanResults" max-height="52vh" class="scan-results-table">
         <el-table-column prop="bookName" label="书籍" min-width="220" show-overflow-tooltip />
         <el-table-column label="结果" width="100"><template #default="{row}"><el-tag :type="scanResultType(row.resultStatus)" effect="light">{{ scanResultLabel(row.resultStatus) }}</el-tag></template></el-table-column>
         <el-table-column label="地址" min-width="280" show-overflow-tooltip><template #default="{row}"><a :href="row.bookUrl" target="_blank">{{ row.bookUrl }}</a></template></el-table-column>
         <el-table-column prop="errorMessage" label="说明" min-width="180" show-overflow-tooltip />
       </el-table>
-      <el-empty v-if="!scanResultsLoading&&!scanResults.length" description="任务尚未产生书籍扫描结果" />
+      <el-empty
+        v-if="!scanResultsLoading && !scanResults.length"
+        :description="scanResultStatusFilter ? '暂无符合筛选条件的扫描结果' : '任务尚未产生书籍扫描结果'"
+      />
       <div v-if="scanResultsTotal" class="scan-results-pagination"><span>共 {{ scanResultsTotal }} 条</span><el-pagination v-model:current-page="scanResultsPage" v-model:page-size="scanResultsPageSize" :page-sizes="[20,50,100]" :total="scanResultsTotal" layout="sizes, prev, pager, next" background small @current-change="loadScanResults" @size-change="handleScanResultSizeChange" /></div>
       <template #footer><el-button @click="scanResultsDialog=false">关闭</el-button></template>
     </el-dialog>
@@ -1883,6 +1910,18 @@ const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=r
 const taskStatusFilter=ref(''), taskTypeFilter=ref(''), taskFavoriteOnly=ref(false)
 const selectedTasks=ref<CrawlerTask[]>([]), selectedFailedTasks=ref<CrawlerTask[]>([]), taskTableSelectionVersion=ref(0), batchTaskManaging=ref(false), batchTaskAction=ref<'pause'|'resume'|'cancel'|'delete'|'priority'|'resume-all'>()
 const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
+type ScanResultFilter = '' | CrawlerScanResult['resultStatus']
+const scanResultStatusFilter = ref<ScanResultFilter>('')
+const scanResultFilterOptions: { value: ScanResultFilter; label: string }[] = [
+  { value: '', label: '全部' },
+  { value: 'NEW', label: '新增' },
+  { value: 'DUPLICATE', label: '重复' },
+  { value: 'BLACKLISTED', label: '黑名单' },
+  { value: 'FAILED', label: '失败' },
+]
+const scanResultFilterIndex = computed(() =>
+  scanResultFilterOptions.findIndex(option => option.value === scanResultStatusFilter.value))
+let scanResultsRequestId = 0
 const siteActivityDialog=ref(false), siteActivityLoading=ref(false), siteActivitySite=ref<CrawlerSite>()
 const siteActivities=ref<CrawlerSiteActivity[]>([]), siteActivityPage=ref(1), siteActivityPageSize=ref(20)
 const siteActivityTotal=ref(0), siteActivityScanTaskId=ref<string>()
@@ -2779,8 +2818,54 @@ function siteActivityType(
   }[eventType] as 'success' | 'warning' | 'info' | 'danger' | 'primary'
 }
 
-async function openScanResults(task:CrawlerTask){scanResultsTask.value=task;scanResults.value=[];scanResultsPage.value=1;scanResultsTotal.value=0;scanResultsDialog.value=true;await loadScanResults()}
-async function loadScanResults(){if(!scanResultsTask.value)return;scanResultsLoading.value=true;try{const result=await crawlerApi.scanResults(scanResultsTask.value.id,scanResultsPage.value-1,scanResultsPageSize.value);scanResults.value=result.content;scanResultsTotal.value=result.totalElements}finally{scanResultsLoading.value=false}}
+async function openScanResults(task: CrawlerTask) {
+  scanResultsTask.value = task
+  scanResultStatusFilter.value = ''
+  scanResultsPage.value = 1
+  scanResultsDialog.value = true
+  await loadScanResults()
+}
+
+async function loadScanResults() {
+  if (!scanResultsTask.value) return
+  const requestId = ++scanResultsRequestId
+  scanResultsLoading.value = true
+  scanResults.value = []
+  scanResultsTotal.value = 0
+  try {
+    const result = await crawlerApi.scanResults(
+      scanResultsTask.value.id,
+      scanResultsPage.value - 1,
+      scanResultsPageSize.value,
+      scanResultStatusFilter.value || undefined,
+    )
+    if (requestId !== scanResultsRequestId) return
+    scanResults.value = result.content
+    scanResultsTotal.value = result.totalElements
+  } finally {
+    if (requestId === scanResultsRequestId) scanResultsLoading.value = false
+  }
+}
+
+async function setScanResultFilter(value: ScanResultFilter) {
+  if (scanResultStatusFilter.value === value) return
+  scanResultStatusFilter.value = value
+  scanResultsPage.value = 1
+  await loadScanResults()
+}
+
+function handleScanResultFilterKey(event: KeyboardEvent) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  const count = scanResultFilterOptions.length
+  const current = scanResultFilterIndex.value
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? count - 1
+    : (current + (event.key === 'ArrowRight' ? 1 : -1) + count) % count
+  void setScanResultFilter(scanResultFilterOptions[next].value)
+  const button = (event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('button')[next]
+  button?.focus()
+  button?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+}
 async function handleScanResultSizeChange(){scanResultsPage.value=1;await loadScanResults()}
 async function loadFailedTasks(options:LoadOptions={}){if(!options.silent){failedTaskLoading.value=true;selectedFailedTasks.value=[]}try{const result=await crawlerApi.tasks({page:failedTaskPage.value-1,size:failedTaskPageSize.value,failedOnly:true});const lastPage=Math.max(1,Math.ceil(result.totalElements/failedTaskPageSize.value));if(failedTaskPage.value>lastPage){failedTaskPage.value=lastPage;return await loadFailedTasks(options)}failedTasks.value=result.content;failedTaskTotal.value=result.totalElements}finally{if(!options.silent)failedTaskLoading.value=false}}
 async function handleFailedTaskSizeChange(){failedTaskPage.value=1;await loadFailedTasks()}
@@ -3346,6 +3431,65 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 </script>
 
 <style scoped>
+.scan-result-filter-scroll {
+  overflow-x: auto;
+  margin: 16px 0;
+  padding: 2px;
+}
+
+.scan-result-filter {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  width: 400px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--surface-card);
+}
+
+.scan-result-filter-indicator {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 5);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  transition: transform 220ms cubic-bezier(.2, .8, .2, 1);
+  pointer-events: none;
+}
+
+.scan-result-filter button {
+  position: relative;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.scan-result-filter button.active {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.scan-result-filter button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-result-filter-indicator {
+    transition: none;
+  }
+}
+
 .crawler-book-heading-actions {
   display: flex;
   align-items: center;
