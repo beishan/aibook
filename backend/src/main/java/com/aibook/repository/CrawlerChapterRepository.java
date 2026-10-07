@@ -23,7 +23,8 @@ public interface CrawlerChapterRepository extends JpaRepository<CrawlerChapter, 
     long countByCrawlerBookAndCrawlStatus(CrawlerBook book, CrawlerChapter.CrawlStatus status);
     long countByCrawlerBook(CrawlerBook book);
     long countByCrawlerBookSiteUserAndCrawlStatus(User user, CrawlerChapter.CrawlStatus status);
-    long countByCrawlerBookSiteUserAndCreatedAtAfter(User user, LocalDateTime start);
+    long countByCrawlerBookSiteUserAndCrawlStatusAndCrawlTimeAfter(
+            User user, CrawlerChapter.CrawlStatus status, LocalDateTime start);
     @Query("""
             select cast(c.createdAt as LocalDate), count(c)
             from CrawlerChapter c

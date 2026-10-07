@@ -304,7 +304,9 @@ public final class CrawlerDtos {
     public record ChapterView(Long id, int chapterIndex, String chapterName, String chapterUrl,
             int wordCount, String crawlStatus, String currentSubStep, String accessStatus, int retryCount,
             String errorMessage, LocalDateTime crawlTime, LocalDateTime createdAt,
-            LocalDateTime crawlStartedAt, LocalDateTime crawlFinishedAt) { }
+            LocalDateTime crawlStartedAt, LocalDateTime crawlFinishedAt,
+            Long collectionMillis, Long fixedWaitMillis, Long randomWaitMillis,
+            Long otherWaitMillis, Long totalElapsedMillis) { }
 
     public record ChapterFocusView(ChapterView chapter, int page) { }
 
@@ -340,7 +342,7 @@ public final class CrawlerDtos {
 
     public record DashboardView(long siteCount, long enabledSiteCount, long bookCount,
             long completedBookCount, long crawlingBookCount, long failedBookCount,
-            long todayNewBooks, long todayNewChapters, long readyToImportCount,
+            long todayNewBooks, long todaySuccessfulChapters, long readyToImportCount,
             long importedCount, List<TaskView> recentTasks) { }
 
     public record DailyStatisticsView(LocalDate date, long newChapters,

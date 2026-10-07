@@ -50,6 +50,8 @@ public class CrawlerManagementService {
     private final CrawlerBookRepository bookRepository;
     private final BookRepository libraryBookRepository;
     private final CrawlerChapterRepository chapterRepository;
+    @Autowired
+    private CrawlerChapterAttemptMetricRepository chapterAttemptMetricRepository;
     private final CrawlerTaskRepository taskRepository;
     @Autowired
     private CrawlerTaskQueueRepository taskQueueRepository;
@@ -410,9 +412,37 @@ public class CrawlerManagementService {
         Page<CrawlerChapter> chapters = chapterRepository.findByCrawlerBook(book, pageable);
         normalizeParsedChapters(book, chapters.getContent());
         CrawlerTask activeTask = activeBookTask(book);
+        Map<Long, CrawlerChapterAttemptMetric> latestMetrics = latestSuccessfulChapterMetrics(
+                user, book, chapters.getContent());
         return chapters.map(chapter -> chapterView(
-                chapter, currentChapterSubStep(activeTask, chapter)));
+                chapter, currentChapterSubStep(activeTask, chapter), latestMetrics.get(chapter.getId())));
     }
+
+    private Map<Long, CrawlerChapterAttemptMetric> latestSuccessfulChapterMetrics(
+            User user, CrawlerBook book, List<CrawlerChapter> chapters) {
+        if (chapterAttemptMetricRepository == null || chapters.isEmpty()) return Map.of();
+        List<Integer> chapterIndices = chapters.stream()
+                .map(CrawlerChapter::getChapterIndex).filter(Objects::nonNull).distinct().toList();
+        if (chapterIndices.isEmpty()) return Map.of();
+        Map<ChapterMetricKey, CrawlerChapterAttemptMetric> latestByChapter = new HashMap<>();
+        chapterAttemptMetricRepository
+                .findByUserIdAndSiteNameAndBookNameAndChapterIndexInOrderByAttemptFinishedAtDesc(
+                        user.getId(), book.getSite().getSiteName(), book.getBookName(), chapterIndices)
+                .stream()
+                .filter(metric -> "SUCCESS".equals(metric.getOutcome())
+                        || "UNCHANGED".equals(metric.getOutcome()))
+                .forEach(metric -> latestByChapter.putIfAbsent(
+                        new ChapterMetricKey(metric.getChapterIndex(), metric.getChapterName()), metric));
+        Map<Long, CrawlerChapterAttemptMetric> metricsById = new HashMap<>();
+        for (CrawlerChapter chapter : chapters) {
+            CrawlerChapterAttemptMetric metric = latestByChapter.get(
+                    new ChapterMetricKey(chapter.getChapterIndex(), chapter.getChapterName()));
+            if (metric != null) metricsById.put(chapter.getId(), metric);
+        }
+        return metricsById;
+    }
+
+    private record ChapterMetricKey(Integer chapterIndex, String chapterName) { }
 
     private Sort chapterSort(String value) {
         return switch (blank(value) ? "INDEX_ASC" : value.trim().toUpperCase(Locale.ROOT)) {
@@ -686,7 +716,9 @@ public class CrawlerManagementService {
                 bookRepository.countBySiteUserAndCrawlStatus(user, CrawlerBook.CrawlStatus.COMPLETED),
                 bookRepository.countBySiteUserAndCrawlStatus(user, CrawlerBook.CrawlStatus.CRAWLING_CONTENT),
                 bookRepository.countBySiteUserAndCrawlStatus(user, CrawlerBook.CrawlStatus.FAILED),
-                bookRepository.countCreatedSince(user, today), chapterRepository.countByCrawlerBookSiteUserAndCreatedAtAfter(user, today),
+                bookRepository.countCreatedSince(user, today),
+                chapterRepository.countByCrawlerBookSiteUserAndCrawlStatusAndCrawlTimeAfter(
+                        user, CrawlerChapter.CrawlStatus.COMPLETED, today),
                 bookRepository.countBySiteUserAndImportStatus(user, CrawlerBook.ImportStatus.READY),
                 bookRepository.countBySiteUserAndImportStatus(user, CrawlerBook.ImportStatus.IMPORTED), recentTasks(user, 8));
     }
@@ -927,12 +959,22 @@ public class CrawlerManagementService {
     }
 
     private ChapterView chapterView(CrawlerChapter chapter, String currentSubStep) {
+        return chapterView(chapter, currentSubStep, null);
+    }
+
+    private ChapterView chapterView(CrawlerChapter chapter, String currentSubStep,
+            CrawlerChapterAttemptMetric metric) {
         return new ChapterView(chapter.getId(), chapter.getChapterIndex(),
                 chapter.getChapterName(), chapter.getChapterUrl(),
                 value(chapter.getWordCount(), 0), chapter.getCrawlStatus().name(),
                 currentSubStep, chapter.getAccessStatus().name(), value(chapter.getRetryCount(), 0),
                 chapter.getErrorMessage(), chapter.getCrawlTime(), chapter.getCreatedAt(),
-                chapter.getCrawlStartedAt(), chapter.getCrawlFinishedAt());
+                chapter.getCrawlStartedAt(), chapter.getCrawlFinishedAt(),
+                metric == null ? null : metric.getCollectionMillis(),
+                metric == null ? null : metric.getFixedWaitMillis(),
+                metric == null ? null : metric.getRandomWaitMillis(),
+                metric == null ? null : metric.getOtherWaitMillis(),
+                metric == null ? null : metric.getTotalElapsedMillis());
     }
 
     private CrawlerTask activeBookTask(CrawlerBook book) {

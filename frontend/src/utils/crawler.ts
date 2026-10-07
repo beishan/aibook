@@ -224,11 +224,16 @@ export interface CrawlerChapter {
   crawlStartedAt?:string
   crawlFinishedAt?:string
   createdAt?:string
+  collectionMillis?:number|null
+  fixedWaitMillis?:number|null
+  randomWaitMillis?:number|null
+  otherWaitMillis?:number|null
+  totalElapsedMillis?:number|null
 }
 export interface CrawlerChapterFocus { chapter:CrawlerChapter; page:number }
 export interface CrawlerLog { id:number; description:string; details?:string; createdAt:string }
 export interface CrawlerExport { id:number; format:string; fileSize:number; fileHash:string; createdAt:string }
-export interface CrawlerDashboard { siteCount:number; enabledSiteCount:number; bookCount:number; completedBookCount:number; crawlingBookCount:number; failedBookCount:number; todayNewBooks:number; todayNewChapters:number; readyToImportCount:number; importedCount:number; recentTasks:CrawlerTask[] }
+export interface CrawlerDashboard { siteCount:number; enabledSiteCount:number; bookCount:number; completedBookCount:number; crawlingBookCount:number; failedBookCount:number; todayNewBooks:number; todaySuccessfulChapters:number; readyToImportCount:number; importedCount:number; recentTasks:CrawlerTask[] }
 export interface CrawlerDailyStatistics { date:string; newChapters:number; successfulChapters:number; newBooks:number; finishedTasks:number; successfulTasks:number; successfulBooks:number; failedTasks:number }
 export interface CrawlerSiteContribution { siteId:number; siteName:string; newBooks:number; newChapters:number }
 export interface CrawlerFunnel { discoveredBooks:number; taskedBooks:number; completedBooks:number; importedBooks:number }

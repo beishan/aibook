@@ -1475,7 +1475,7 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="bookDrawer" size="min(760px, 96vw)" :title="selectedBook?.bookName || '采集书籍详情'" class="book-detail-drawer">
+    <el-drawer v-model="bookDrawer" size="min(1240px, 98vw)" :title="selectedBook?.bookName || '采集书籍详情'" class="book-detail-drawer">
       <div v-if="selectedBook" class="book-drawer-content">
         <div class="book-summary"><div class="large-cover">{{ selectedBook.bookName.slice(0,1) }}</div><div><h2>{{ selectedBook.bookName }}</h2><p class="book-source-line"><span>{{ selectedBook.author || '未知作者' }}</span><SiteSourceTag :name="selectedBook.siteName" :color="selectedBook.siteThemeColor" /></p><div v-if="isBookCompleted(selectedBook)" class="book-crawl-result drawer-result"><div><span>采集结果详情</span><strong>采集完成</strong></div><small>正文 {{ selectedBook.crawledChapterCount }} 章 · 待开放 {{ selectedBook.pendingReleaseChapterCount }} 章 · 失败 {{ selectedBook.failedChapterCount }} 章</small></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(selectedBook)}" :percentage="progress(selectedBook)"/><small>正文 {{ selectedBook.crawledChapterCount }} / {{ selectedBook.chapterCount }} 章，待开放 {{ selectedBook.pendingReleaseChapterCount }}，失败 {{ selectedBook.failedChapterCount }}</small></template></div></div>
         <div class="crawler-book-metadata"><span><small>来源状态</small><strong>{{ selectedBook.bookStatus || '未识别' }}</strong></span><span><small>分类</small><strong>{{ selectedBook.category || '未分类' }}</strong></span><span class="metadata-tag-row"><small>标签</small><span v-if="selectedBook.tags?.length" class="metadata-tags"><el-tag v-for="tag in selectedBook.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></span><strong v-else>无</strong></span></div>
@@ -1557,6 +1557,26 @@
                     {{ row.currentSubStep }}
                   </small>
                 </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="耗时（总/采/固/随/其）" width="400" align="center">
+              <template #default="{ row }">
+                <div
+                  v-if="row.crawlStatus==='COMPLETED' && row.totalElapsedMillis!=null"
+                  class="chapter-duration-segments"
+                  :aria-label="`总时间 ${formatAttemptDuration(row.totalElapsedMillis)}，采集耗时 ${formatAttemptDuration(row.collectionMillis||0)}，固定等待 ${formatAttemptDuration(row.fixedWaitMillis||0)}，随机等待 ${formatAttemptDuration(row.randomWaitMillis||0)}，其他等待 ${formatAttemptDuration(row.otherWaitMillis||0)}`"
+                >
+                  <span class="chapter-duration-total" :title="`总时间 ${formatAttemptDuration(row.totalElapsedMillis)}`">总 {{ formatAttemptDuration(row.totalElapsedMillis) }}</span>
+                  <i>/</i>
+                  <span class="chapter-duration-collection" :title="`采集耗时 ${formatAttemptDuration(row.collectionMillis||0)}`">采 {{ formatAttemptDuration(row.collectionMillis||0) }}</span>
+                  <i>/</i>
+                  <span class="chapter-duration-fixed" :title="`固定等待 ${formatAttemptDuration(row.fixedWaitMillis||0)}`">固 {{ formatAttemptDuration(row.fixedWaitMillis||0) }}</span>
+                  <i>/</i>
+                  <span class="chapter-duration-random" :title="`随机等待 ${formatAttemptDuration(row.randomWaitMillis||0)}`">随 {{ formatAttemptDuration(row.randomWaitMillis||0) }}</span>
+                  <i>/</i>
+                  <span class="chapter-duration-other" :title="`其他等待 ${formatAttemptDuration(row.otherWaitMillis||0)}`">其 {{ formatAttemptDuration(row.otherWaitMillis||0) }}</span>
+                </div>
+                <span v-else class="chapter-duration-empty">—</span>
               </template>
             </el-table-column>
             <el-table-column label="采集开始时间" width="180">
@@ -2124,7 +2144,7 @@ const activeSiteTabIndex=computed(()=>siteEditorTabs.findIndex(tab=>tab.key===ac
 const activeBookTaskIds=computed(()=>new Set(currentCrawlerTasks.value.flatMap(task=>task.bookId?[task.bookId]:[])))
 const runningCurrentTaskCount=computed(()=>currentCrawlerTasks.value.filter(task=>task.status==='RUNNING').length)
 const pagedQueuedTasks=computed(()=>queuedTasks.value.slice((queuedTaskPage.value-1)*queuedTaskPageSize.value,queuedTaskPage.value*queuedTaskPageSize.value))
-const metrics=computed(()=>[{label:'采集网站',value:dashboard.value?.siteCount||0,note:`${dashboard.value?.enabledSiteCount||0} 个启用`,icon:Connection},{label:'采集书籍',value:dashboard.value?.bookCount||0,note:`今日 +${dashboard.value?.todayNewBooks||0}`,icon:Collection},{label:'已采集完成',value:dashboard.value?.completedBookCount||0,note:`${dashboard.value?.readyToImportCount||0} 本待入库`,icon:Document},{label:'今日新增章节',value:dashboard.value?.todayNewChapters||0,note:`${dashboard.value?.crawlingBookCount||0} 本采集中`,icon:Tickets}])
+const metrics=computed(()=>[{label:'采集网站',value:dashboard.value?.siteCount||0,note:`${dashboard.value?.enabledSiteCount||0} 个启用`,icon:Connection},{label:'采集书籍',value:dashboard.value?.bookCount||0,note:`今日 +${dashboard.value?.todayNewBooks||0}`,icon:Collection},{label:'已采集完成',value:dashboard.value?.completedBookCount||0,note:`${dashboard.value?.readyToImportCount||0} 本待入库`,icon:Document},{label:'今日成功采集章节',value:dashboard.value?.todaySuccessfulChapters||0,note:`${dashboard.value?.crawlingBookCount||0} 本采集中`,icon:Tickets}])
 const statisticsRangeOptions:StatisticsDays[]=[7,30,90]
 const statisticsRangeIndex=computed(()=>statisticsRangeOptions.indexOf(statisticsDays.value))
 const statisticsChapterTotals=computed(()=>statistics.value?.daily.reduce((totals,item)=>({newChapters:totals.newChapters+item.newChapters,successfulChapters:totals.successfulChapters+item.successfulChapters}),{newChapters:0,successfulChapters:0})||{newChapters:0,successfulChapters:0})
@@ -4413,5 +4433,38 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   border-radius: 50%;
   background: currentColor;
   content: '';
+}
+
+.chapter-duration-segments {
+  display: flex;
+  min-width: 380px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chapter-duration-segments span {
+  font-weight: 650;
+}
+
+.chapter-duration-segments i {
+  color: var(--text-quaternary, var(--text-tertiary));
+  font-style: normal;
+}
+
+.chapter-duration-total { color: var(--primary); }
+.chapter-duration-collection { color: var(--success); }
+.chapter-duration-fixed { color: var(--warning); }
+.chapter-duration-random { color: var(--info); }
+.chapter-duration-other { color: #8b5cf6; }
+.chapter-duration-empty { color: var(--text-tertiary); }
+
+@media (max-width: 640px) {
+  .chapter-duration-segments {
+    min-width: 380px;
+  }
 }
 </style>

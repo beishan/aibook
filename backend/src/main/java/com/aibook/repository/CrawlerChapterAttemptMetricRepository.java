@@ -13,6 +13,9 @@ import java.util.List;
 public interface CrawlerChapterAttemptMetricRepository
         extends JpaRepository<CrawlerChapterAttemptMetric, Long> {
 
+    List<CrawlerChapterAttemptMetric> findByUserIdAndSiteNameAndBookNameAndChapterIndexInOrderByAttemptFinishedAtDesc(
+            Long userId, String siteName, String bookName, List<Integer> chapterIndices);
+
     Page<CrawlerChapterAttemptMetric> findByUserIdAndAttemptStartedAtBetween(
             Long userId,
             LocalDateTime start,
