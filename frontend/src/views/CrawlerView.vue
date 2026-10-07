@@ -1559,22 +1559,22 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="耗时（总/采/固/随/其）" width="400" align="center">
+            <el-table-column label="耗时(秒：总/采/固/随/其)" width="260" align="center">
               <template #default="{ row }">
                 <div
                   v-if="row.crawlStatus==='COMPLETED' && row.totalElapsedMillis!=null"
                   class="chapter-duration-segments"
                   :aria-label="`总时间 ${formatAttemptDuration(row.totalElapsedMillis)}，采集耗时 ${formatAttemptDuration(row.collectionMillis||0)}，固定等待 ${formatAttemptDuration(row.fixedWaitMillis||0)}，随机等待 ${formatAttemptDuration(row.randomWaitMillis||0)}，其他等待 ${formatAttemptDuration(row.otherWaitMillis||0)}`"
                 >
-                  <span class="chapter-duration-total" :title="`总时间 ${formatAttemptDuration(row.totalElapsedMillis)}`">总 {{ formatAttemptDuration(row.totalElapsedMillis) }}</span>
+                  <span class="chapter-duration-total" :title="`总时间 ${formatAttemptDuration(row.totalElapsedMillis)}`">{{ formatChapterSeconds(row.totalElapsedMillis) }}</span>
                   <i>/</i>
-                  <span class="chapter-duration-collection" :title="`采集耗时 ${formatAttemptDuration(row.collectionMillis||0)}`">采 {{ formatAttemptDuration(row.collectionMillis||0) }}</span>
+                  <span class="chapter-duration-collection" :title="`采集耗时 ${formatAttemptDuration(row.collectionMillis||0)}`">{{ formatChapterSeconds(row.collectionMillis) }}</span>
                   <i>/</i>
-                  <span class="chapter-duration-fixed" :title="`固定等待 ${formatAttemptDuration(row.fixedWaitMillis||0)}`">固 {{ formatAttemptDuration(row.fixedWaitMillis||0) }}</span>
+                  <span class="chapter-duration-fixed" :title="`固定等待 ${formatAttemptDuration(row.fixedWaitMillis||0)}`">{{ formatChapterSeconds(row.fixedWaitMillis) }}</span>
                   <i>/</i>
-                  <span class="chapter-duration-random" :title="`随机等待 ${formatAttemptDuration(row.randomWaitMillis||0)}`">随 {{ formatAttemptDuration(row.randomWaitMillis||0) }}</span>
+                  <span class="chapter-duration-random" :title="`随机等待 ${formatAttemptDuration(row.randomWaitMillis||0)}`">{{ formatChapterSeconds(row.randomWaitMillis) }}</span>
                   <i>/</i>
-                  <span class="chapter-duration-other" :title="`其他等待 ${formatAttemptDuration(row.otherWaitMillis||0)}`">其 {{ formatAttemptDuration(row.otherWaitMillis||0) }}</span>
+                  <span class="chapter-duration-other" :title="`其他等待 ${formatAttemptDuration(row.otherWaitMillis||0)}`">{{ formatChapterSeconds(row.otherWaitMillis) }}</span>
                 </div>
                 <span v-else class="chapter-duration-empty">—</span>
               </template>
@@ -2233,6 +2233,10 @@ function formatAttemptDuration(milliseconds:number) {
   return milliseconds >= 1000
     ? `${(milliseconds / 1000).toFixed(2)} 秒`
     : `${milliseconds} 毫秒`
+}
+
+function formatChapterSeconds(milliseconds?:number|null) {
+  return (Math.max(0, milliseconds || 0) / 1000).toFixed(2)
 }
 
 function formatAttemptTimestamp(value?:string) {
@@ -4437,11 +4441,11 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 
 .chapter-duration-segments {
   display: flex;
-  min-width: 380px;
+  min-width: 240px;
   align-items: center;
-  justify-content: space-between;
-  gap: 5px;
-  font-size: 11px;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -4464,7 +4468,7 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 
 @media (max-width: 640px) {
   .chapter-duration-segments {
-    min-width: 380px;
+    min-width: 240px;
   }
 }
 </style>
