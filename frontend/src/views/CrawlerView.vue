@@ -68,7 +68,7 @@
           <header>
             <div>
               <h3>章节采集耗时</h3>
-              <p>按天展示每次尝试的平均耗时；限速等待按固定与随机配置比例拆分，其他等待含自适应延迟、重试退避与访问时段等待</p>
+              <p>按天展示每次章节尝试的平均耗时；robots 检查、重定向和重试请求会累计。单次请求超出配置间隔的排队时间计入其他等待，其他等待还包含自适应延迟、重试退避与访问时段等待</p>
             </div>
             <div class="statistics-summary">
               <span>记录 <b>{{ chapterAttemptStatistics?.attempts.totalElements || 0 }}</b> 次</span>

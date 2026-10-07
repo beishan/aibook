@@ -1020,17 +1020,18 @@ public class CrawlerHttpClient {
                 addOtherWait(elapsedMillis);
                 return;
             }
-            long fixedPart = elapsedMillis * fixed / configuredTotal;
-            long randomPart = elapsedMillis * random / configuredTotal;
-            long otherPart = elapsedMillis - fixedPart - randomPart;
-            if (adaptive == 0 && fixed + random > 0) {
+            long configuredWait = Math.min(Math.max(0, elapsedMillis), configuredTotal);
+            long fixedPart = configuredWait * fixed / configuredTotal;
+            long randomPart = configuredWait * random / configuredTotal;
+            long otherPart = configuredWait - fixedPart - randomPart;
+            if (adaptive == 0 && fixed + random > 0 && elapsedMillis <= configuredTotal) {
                 if (fixed >= random) fixedPart += otherPart;
                 else randomPart += otherPart;
                 otherPart = 0;
             }
             fixedWaitMillis += fixedPart;
             randomWaitMillis += randomPart;
-            otherWaitMillis += otherPart;
+            otherWaitMillis += otherPart + Math.max(0, elapsedMillis - configuredTotal);
         }
 
         private void addOtherWait(long elapsedMillis) {
