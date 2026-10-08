@@ -1706,6 +1706,14 @@
             <el-table-column label="操作" width="220" fixed="right">
               <template #default="{ row }">
                 <el-button
+                  v-if="row.crawlStatus === 'COMPLETED'"
+                  size="small"
+                  type="primary"
+                  plain
+                  :aria-label="`编辑${row.chapterName}的内容`"
+                  @click.stop="openChapterEditor(row)"
+                >编辑内容</el-button>
+                <el-button
                   size="small"
                   :disabled="isBookTaskActive(selectedBook) || Boolean(retryingChapterId) || chapterStatusSaving"
                   :title="isBookTaskActive(selectedBook) ? '请先结束或取消该书的运行中、等待或暂停任务' : '修改本章采集状态'"
@@ -1792,12 +1800,12 @@
               @click="downloadChapterFailedHtml"
             >{{ downloadingChapterHtml ? '下载中…' : '下载失败 HTML' }}</button>
             <template v-if="chapterEditing">
-              <button type="button" @click="cancelChapterEdit">取消编辑</button>
+              <button type="button" :disabled="savingChapter" @click="cancelChapterEdit">取消编辑</button>
               <button type="button" :disabled="savingChapter" @click="saveChapterEdit(false)">{{ savingChapter ? '保存中…' : '保存' }}</button>
               <button v-if="selectedBook?.libraryHasStructuredChapters" type="button" :disabled="savingChapter" @click="saveChapterEdit(true)">{{ savingChapter ? '保存中…' : '保存并同步' }}</button>
             </template>
             <template v-else>
-              <button v-if="chapterDetail && !chapterReaderLoading" type="button" @click="beginChapterEdit">编辑</button>
+              <button v-if="canEditChapter" type="button" @click="beginChapterEdit">编辑</button>
               <button type="button" :aria-expanded="chapterReaderSettingsOpen" aria-controls="chapter-reader-settings" @click="chapterReaderSettingsOpen=!chapterReaderSettingsOpen">Aa <span>阅读设置</span></button>
             </template>
             <button class="chapter-reader-close" type="button" aria-label="关闭章节阅读" title="关闭" @click="requestCloseChapterReader">×</button>
@@ -1809,7 +1817,7 @@
             <article v-else>
               <p class="chapter-reader-kicker"><span>{{ selectedBook?.author || '未知作者' }}</span><SiteSourceTag :name="selectedBook?.siteName || '来源网站'" :color="selectedBook?.siteThemeColor" /></p>
               <div class="chapter-reader-rule"><span>◆</span></div>
-              <textarea v-if="chapterEditing" v-model="chapterEditContent" class="chapter-reader-editor" aria-label="编辑章节正文" spellcheck="false" />
+              <textarea v-if="chapterEditing" v-model="chapterEditContent" class="chapter-reader-editor" :readonly="savingChapter" aria-label="编辑章节正文" spellcheck="false" />
               <template v-else>
                 <p v-for="(paragraph,index) in chapterReaderParagraphs" :key="index" class="chapter-reader-paragraph">{{ paragraph }}</p>
                 <p v-if="!chapterReaderParagraphs.length" class="chapter-reader-empty">{{ chapterDetail?.errorMessage || '本章暂无可阅读正文' }}</p>
@@ -2342,6 +2350,14 @@ const managedDiscoveryPages=computed(()=>discoveryManagerSite.value?discoveryPag
 const chapterSortIndex=computed(()=>chapterSortOptions.findIndex(item=>item.value===chapterSort.value))
 const chapterReaderPosition=computed(()=>chapterReaderChapters.value.findIndex(item=>item.id===chapterReaderActive.value?.id)+1)
 const chapterReaderProgress=computed(()=>chapterReaderPosition.value&&chapterReaderChapters.value.length?chapterReaderPosition.value/chapterReaderChapters.value.length*100:0)
+const chapterReaderLoaded = ref(false)
+const canEditChapter = computed(() => {
+  const chapter = chapterReaderActive.value
+  const book = selectedBook.value
+  return chapterReaderLoaded.value && !!chapterDetail.value && !chapterReaderLoading.value
+    && !!chapter && !!book && chapter.crawlStatus !== 'CRAWLING'
+    && (chapter.crawlStatus === 'COMPLETED' || !isBookTaskActive(book))
+})
 const chapterReaderEditDirty=computed(()=>chapterEditing.value&&chapterEditContent.value!==(chapterDetail.value?.content||''))
 const chapterReaderParagraphs=computed(()=>{const text=(chapterDetail.value?.content||'').trim();if(!text)return[];const blocks=text.split(/\r?\n\s*\r?\n+/).map(value=>value.trim()).filter(Boolean);return blocks.length>1?blocks:text.split(/\r?\n/).map(value=>value.trim()).filter(Boolean)})
 const chapterReaderTheme=computed<ChapterReaderTheme>(()=>readerSettings.value.backgroundColor==='#2d2d2d'||readerSettings.value.backgroundColor==='#1a1a2e'?'night':readerSettings.value.backgroundColor==='#ffffff'?'light':'paper')
@@ -3589,6 +3605,7 @@ async function selectChapterReader(chapter:CrawlerChapter){
   if(!bookId)return
   const requestSequence=++chapterReaderRequestSequence
   chapterReaderActive.value=chapter
+  chapterReaderLoaded.value=false
   chapterEditing.value=false
   chapterEditContent.value=''
   chapterReaderLoading.value=true
@@ -3596,6 +3613,7 @@ async function selectChapterReader(chapter:CrawlerChapter){
     const detail=await crawlerApi.chapter(bookId,chapter.id)
     if(requestSequence!==chapterReaderRequestSequence)return
     chapterDetail.value=detail
+    chapterReaderLoaded.value=true
     await nextTick()
     chapterReaderSurface.value?.scrollTo({top:0,behavior:'auto'})
   }catch(error:any){
@@ -3611,9 +3629,18 @@ async function openChapter(chapter:CrawlerChapter){
   chapterReaderSettingsOpen.value=false
   chapterReaderActive.value=chapter
   chapterDetail.value=undefined
+  chapterReaderLoaded.value=false
   chapterReaderLoading.value=true
   try{await loadChapterReaderIndex(bookId);if(openingSequence!==chapterReaderRequestSequence||!chapterDialog.value)return;await selectChapterReader(chapter)}
   catch(error:any){if(openingSequence!==chapterReaderRequestSequence||!chapterDialog.value)return;chapterDetail.value={title:chapter.chapterName,url:chapter.chapterUrl,content:'',errorMessage:error.response?.data?.message||'章节正文加载失败'};chapterReaderLoading.value=false}
+}
+async function openChapterEditor(chapter: CrawlerChapter) {
+  const bookId = selectedBook.value?.id
+  await openChapter(chapter)
+  if (selectedBook.value?.id === bookId && chapterReaderActive.value?.id === chapter.id
+      && chapterDialog.value && canEditChapter.value) {
+    beginChapterEdit()
+  }
 }
 function moveChapterReader(offset:-1|1){const index=chapterReaderPosition.value-1,target=chapterReaderChapters.value[index+offset];if(target)void selectChapterReader(target)}
 async function downloadChapterFailedHtml() {
@@ -3638,16 +3665,21 @@ async function downloadChapterFailedHtml() {
   }
 }
 
-function beginChapterEdit(){if(!chapterDetail.value)return;chapterEditContent.value=chapterDetail.value.content||'';chapterEditing.value=true;chapterReaderSettingsOpen.value=false}
-async function cancelChapterEdit(){if(chapterReaderEditDirty.value&&!await confirm('放弃尚未保存的章节修改吗？'))return;chapterEditing.value=false;chapterEditContent.value=chapterDetail.value?.content||''}
+function beginChapterEdit(){if(!canEditChapter.value||savingChapter.value)return;chapterEditContent.value=chapterDetail.value.content||'';chapterEditing.value=true;chapterReaderSettingsOpen.value=false}
+async function cancelChapterEdit(){if(savingChapter.value)return;if(chapterReaderEditDirty.value&&!await confirm('放弃尚未保存的章节修改吗？'))return;chapterEditing.value=false;chapterEditContent.value=chapterDetail.value?.content||''}
 async function saveChapterEdit(syncLibrary:boolean){
   const bookId=selectedBook.value?.id,chapterId=chapterReaderActive.value?.id
   if(!bookId||!chapterId||savingChapter.value)return
   if(syncLibrary&&!selectedBook.value?.libraryHasStructuredChapters)return
   savingChapter.value=true
   try{
-    await crawlerApi.saveChapterContent(bookId,chapterId,chapterEditContent.value,syncLibrary)
-    if(chapterDetail.value)chapterDetail.value={...chapterDetail.value,content:chapterEditContent.value,errorMessage:''}
+    const content = chapterEditContent.value
+    await crawlerApi.saveChapterContent(bookId,chapterId,content,syncLibrary)
+    if(chapterDetail.value)chapterDetail.value={...chapterDetail.value,content,errorMessage:''}
+    const wordCount = content.replace(/\s+/g, '').length
+    for (const chapter of [...chapters.value, ...chapterReaderChapters.value]) {
+      if (chapter.id === chapterId) chapter.wordCount = wordCount
+    }
     chapterEditing.value=false
     message.success(syncLibrary?'章节已保存并同步到结构化书库版本':'章节内容已保存')
   }catch(error:any){message.error(error.response?.data?.message||'章节内容保存失败')}
@@ -3659,7 +3691,7 @@ function updateChapterReaderSettings(patch:Partial<ReaderSettings>){preferencesS
 function setChapterReaderTheme(theme:ChapterReaderTheme){updateChapterReaderSettings({backgroundColor:theme==='night'?'#2d2d2d':theme==='light'?'#ffffff':'#f5f5dc'})}
 function setChapterReaderWidth(width:ReaderContentWidth){updateChapterReaderSettings({contentWidth:width})}
 function setChapterReaderNumber(field:'fontSize'|'lineHeight',event:Event){const value=Number((event.target as HTMLInputElement).value);if(Number.isFinite(value))updateChapterReaderSettings({[field]:value})}
-function handleChapterReaderKeydown(event:KeyboardEvent){if(!chapterDialog.value||event.target instanceof HTMLInputElement||event.target instanceof HTMLButtonElement||event.target instanceof HTMLAnchorElement)return;if(event.key==='ArrowLeft')moveChapterReader(-1);else if(event.key==='ArrowRight')moveChapterReader(1)}
+function handleChapterReaderKeydown(event:KeyboardEvent){if(!chapterDialog.value||chapterEditing.value||savingChapter.value||event.target instanceof HTMLTextAreaElement||event.target instanceof HTMLInputElement||event.target instanceof HTMLButtonElement||event.target instanceof HTMLAnchorElement)return;if(event.key==='ArrowLeft')moveChapterReader(-1);else if(event.key==='ArrowRight')moveChapterReader(1)}
 function progress(book:CrawlerBook){return book.chapterCount?Math.round((book.crawledChapterCount+book.pendingReleaseChapterCount)/book.chapterCount*100):0}
 function isBookRunning(book:CrawlerBook){return ['CRAWLING_METADATA','CRAWLING_CHAPTER_LIST','CRAWLING_CONTENT','UPDATING'].includes(book.crawlStatus)}
 function isBookTaskActive(book:CrawlerBook){return submittingBookTaskIds.value.has(book.id)||activeBookTaskIds.value.has(book.id)}

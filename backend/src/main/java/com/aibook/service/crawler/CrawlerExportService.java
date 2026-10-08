@@ -269,12 +269,14 @@ public class CrawlerExportService {
     public boolean saveEditedChapterContent(User user, Long bookId, Long chapterId,
             String content, boolean syncLibrary) {
         CrawlerBook crawlerBook = managementService.ownedBook(user, bookId);
-        if (managementService.hasActiveTask(crawlerBook)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "采集任务运行期间不能编辑章节，请稍后重试");
-        }
-        CrawlerChapter chapter = chapterRepository.findById(chapterId)
-                .filter(item -> item.getCrawlerBook().getId().equals(crawlerBook.getId()))
+        CrawlerChapter chapter = chapterRepository.findForContentEdit(chapterId, crawlerBook.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集章节不存在"));
+        boolean completed = chapter.getCrawlStatus() == CrawlerChapter.CrawlStatus.COMPLETED;
+        if (chapter.getCrawlStatus() == CrawlerChapter.CrawlStatus.CRAWLING
+                || (!completed && managementService.hasActiveTask(crawlerBook))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "本章仍在采集或等待采集，请在章节采集完成后编辑");
+        }
 
         List<BookVersion> versions = List.of();
         Book libraryBook = crawlerBook.getLibraryBook();

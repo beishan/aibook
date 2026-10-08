@@ -10,6 +10,11 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public interface CrawlerChapterRepository extends JpaRepository<CrawlerChapter, Long> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from CrawlerChapter c where c.id = :chapterId and c.crawlerBook.id = :bookId")
+    Optional<CrawlerChapter> findForContentEdit(@Param("chapterId") Long chapterId,
+            @Param("bookId") Long bookId);
+
     List<CrawlerChapter> findByCrawlerBookOrderByChapterIndexAsc(CrawlerBook book);
     List<CrawlerChapter> findByCrawlerBookAndCrawlStatus(
             CrawlerBook book, CrawlerChapter.CrawlStatus status);

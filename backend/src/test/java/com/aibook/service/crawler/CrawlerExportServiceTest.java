@@ -401,6 +401,71 @@ class CrawlerExportServiceTest {
         verifyNoInteractions((CategoryRepository) ReflectionTestUtils.getField(service, "categoryRepository"));
     }
 
+    @Test
+    void editsCompletedChapterWhileOtherChaptersAreStillBeingCollected() {
+        User user = User.builder().id(1L).build();
+        CrawlerBook book = book(user);
+        CrawlerChapter chapter = CrawlerChapter.builder().id(9L).crawlerBook(book)
+                .crawlStatus(CrawlerChapter.CrawlStatus.COMPLETED).content("旧正文").build();
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        CrawlerChapterRepository chapters = mock(CrawlerChapterRepository.class);
+        when(management.ownedBook(user, 3L)).thenReturn(book);
+        when(management.hasActiveTask(book)).thenReturn(true);
+        when(chapters.findForContentEdit(9L, 3L)).thenReturn(Optional.of(chapter));
+        CrawlerExportService service = service(management, chapters, mock(CrawlerBookExportRepository.class));
+
+        assertThat(service.saveEditedChapterContent(user, 3L, 9L, "修订\n正文", false)).isFalse();
+
+        assertThat(chapter.getContent()).isEqualTo("修订\n正文");
+        assertThat(chapter.getWordCount()).isEqualTo(4);
+        assertThat(chapter.getContentHash()).hasSize(64);
+        assertThat(chapter.getCrawlStatus()).isEqualTo(CrawlerChapter.CrawlStatus.COMPLETED);
+        verify(chapters).save(chapter);
+    }
+
+    @Test
+    void rejectsEditingCurrentlyCollectingChapterEvenIfTaskStateIsStale() {
+        assertChapterEditBlocked(CrawlerChapter.CrawlStatus.CRAWLING, false);
+    }
+
+    @Test
+    void rejectsEditingWaitingChapterWhileBookHasActiveTask() {
+        assertChapterEditBlocked(CrawlerChapter.CrawlStatus.WAITING, true);
+    }
+
+    private void assertChapterEditBlocked(CrawlerChapter.CrawlStatus status, boolean active) {
+        User user = User.builder().id(1L).build();
+        CrawlerBook book = book(user);
+        CrawlerChapter chapter = CrawlerChapter.builder().id(9L).crawlerBook(book)
+                .crawlStatus(status).content("原正文").build();
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        CrawlerChapterRepository chapters = mock(CrawlerChapterRepository.class);
+        when(management.ownedBook(user, 3L)).thenReturn(book);
+        when(management.hasActiveTask(book)).thenReturn(active);
+        when(chapters.findForContentEdit(9L, 3L)).thenReturn(Optional.of(chapter));
+        CrawlerExportService service = service(management, chapters, mock(CrawlerBookExportRepository.class));
+
+        assertThatThrownBy(() -> service.saveEditedChapterContent(user, 3L, 9L, "修改", false))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("采集完成后编辑");
+        assertThat(chapter.getContent()).isEqualTo("原正文");
+        verify(chapters, never()).save(any());
+    }
+
+    @Test
+    void chapterFromAnotherBookCannotBeEdited() {
+        User user = User.builder().id(1L).build();
+        CrawlerBook book = book(user);
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        CrawlerChapterRepository chapters = mock(CrawlerChapterRepository.class);
+        when(management.ownedBook(user, 3L)).thenReturn(book);
+        when(chapters.findForContentEdit(9L, 3L)).thenReturn(Optional.empty());
+        CrawlerExportService service = service(management, chapters, mock(CrawlerBookExportRepository.class));
+
+        assertThatThrownBy(() -> service.saveEditedChapterContent(user, 3L, 9L, "修改", false))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("采集章节不存在");
+        verify(chapters, never()).save(any());
+    }
+
     private CrawlerExportService service(CrawlerManagementService management,
             CrawlerChapterRepository chapters, CrawlerBookExportRepository exports) {
         CrawlerExportService service = new CrawlerExportService(management, chapters, exports,
