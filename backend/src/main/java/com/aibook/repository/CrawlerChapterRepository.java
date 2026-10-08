@@ -14,6 +14,8 @@ public interface CrawlerChapterRepository extends JpaRepository<CrawlerChapter, 
     List<CrawlerChapter> findByCrawlerBookAndCrawlStatus(
             CrawlerBook book, CrawlerChapter.CrawlStatus status);
     Page<CrawlerChapter> findByCrawlerBook(CrawlerBook book, Pageable pageable);
+    Page<CrawlerChapter> findByCrawlerBookAndCrawlStatus(
+            CrawlerBook book, CrawlerChapter.CrawlStatus status, Pageable pageable);
     Optional<CrawlerChapter> findFirstByCrawlerBookAndCrawlStatusOrderByUpdatedAtDesc(
             CrawlerBook book, CrawlerChapter.CrawlStatus status);
     Optional<CrawlerChapter> findFirstByCrawlerBookAndChapterNameOrderByChapterIndexAsc(

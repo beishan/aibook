@@ -1548,10 +1548,74 @@
         </div>
         <div class="book-detail-tabs" role="tablist" aria-label="书籍采集详情" @keydown="handleBookDetailTabKey"><span class="book-detail-tab-indicator" :style="{transform:`translateX(${bookDetailTabIndex*100}%)`}"/><button v-for="item in bookDetailTabs" :key="item.value" type="button" role="tab" :aria-selected="bookDetailTab===item.value" :tabindex="bookDetailTab===item.value?0:-1" :class="{active:bookDetailTab===item.value}" @click="bookDetailTab=item.value"><span>{{ item.label }}</span><b>{{ item.value==='chapters'?chapterTotal:crawlerLogs.length }}</b></button></div>
         <section v-show="bookDetailTab==='chapters'" class="drawer-detail-panel chapter-progress-panel" role="tabpanel">
-          <div class="chapter-list-heading"><div><p class="eyebrow">CHAPTER INDEX</p><h3>章节进度</h3></div><div class="chapter-heading-tools"><label class="chapter-follow" :class="{active:followCurrentChapter}"><strong>跟随采集</strong><el-switch :model-value="followCurrentChapter" aria-label="自动跟随当前采集章节" @change="setFollowCurrentChapter(Boolean($event))" /></label><div class="chapter-sort" :class="{disabled:followCurrentChapter}" role="tablist" aria-label="章节排序方式" @keydown="handleChapterSortKey"><span class="chapter-sort-indicator" :style="{transform:`translateX(${chapterSortIndex*100}%)`}"/><button v-for="item in chapterSortOptions" :key="item.value" type="button" role="tab" :disabled="followCurrentChapter" :aria-selected="chapterSort===item.value" :tabindex="chapterSort===item.value?0:-1" :class="{active:chapterSort===item.value}" @click="changeChapterSort(item.value)">{{ item.label }}</button></div></div></div>
+          <div class="chapter-list-heading">
+            <div>
+              <p class="eyebrow">CHAPTER INDEX</p>
+              <h3>章节进度</h3>
+            </div>
+            <div class="chapter-heading-tools">
+              <label class="chapter-follow" :class="{ active: chapterFollowActive }">
+                <strong>跟随采集</strong>
+                <el-switch
+                  :model-value="chapterFollowActive"
+                  :disabled="Boolean(chapterStatusFilter)"
+                  aria-label="自动跟随当前采集章节"
+                  @change="setFollowCurrentChapter(Boolean($event))"
+                />
+              </label>
+              <div
+                class="chapter-sort"
+                :class="{ disabled: chapterFollowActive }"
+                role="tablist"
+                aria-label="章节排序方式"
+                @keydown="handleChapterSortKey"
+              >
+                <span class="chapter-sort-indicator" :style="{ transform: `translateX(${chapterSortIndex * 100}%)` }" />
+                <button
+                  v-for="item in chapterSortOptions"
+                  :key="item.value"
+                  type="button"
+                  role="tab"
+                  :disabled="chapterFollowActive"
+                  :aria-selected="chapterSort === item.value"
+                  :tabindex="chapterSort === item.value ? 0 : -1"
+                  :class="{ active: chapterSort === item.value }"
+                  @click="changeChapterSort(item.value)"
+                >{{ item.label }}</button>
+              </div>
+            </div>
+          </div>
+          <div class="scan-result-filter-scroll chapter-status-filter-scroll">
+            <div
+              class="scan-result-filter chapter-status-filter"
+              role="radiogroup"
+              aria-label="章节状态筛选"
+              @keydown="handleChapterStatusFilterKey"
+            >
+              <span
+                class="scan-result-filter-indicator"
+                aria-hidden="true"
+                :style="{ transform: `translateX(${chapterStatusFilterIndex * 100}%)` }"
+              />
+              <button
+                v-for="option in chapterStatusFilterOptions"
+                :key="option.value"
+                type="button"
+                role="radio"
+                :aria-checked="chapterStatusFilter === option.value"
+                :tabindex="chapterStatusFilter === option.value ? 0 : -1"
+                :class="{ active: chapterStatusFilter === option.value }"
+                @click="setChapterStatusFilter(option.value)"
+              >{{ option.label }}</button>
+            </div>
+          </div>
+          <p v-if="chapterStatusFilter && followCurrentChapter" class="chapter-filter-hint">
+            状态筛选期间暂停跟随采集，切回“全部”后恢复。
+          </p>
           <el-table
             v-loading="chapterLoading"
             :data="chapters"
+            :empty-text="chapterStatusFilter ? '暂无符合筛选条件的章节' : '暂无章节'"
             height="100%"
             class="chapters-table"
             :row-class-name="chapterRowClassName"
@@ -1760,7 +1824,7 @@ import SiteSourceTag from '@/components/SiteSourceTag.vue'
 import {
   crawlerApi,
   type CrawlerBook,
-  type CrawlerChapter,
+  type CrawlerChapter, type CrawlerChapterStatus,
   type CrawlerChapterAttemptStatistics,
   type CrawlerDashboard,
   type CrawlerDashboardStatistics,
@@ -1944,6 +2008,22 @@ const bookLoading=ref(false), bookPage=ref(1), bookPageSize=ref(20), bookTotal=r
 const bookTableRef=ref<InstanceType<typeof ElTable>>()
 const bookSiteId=ref<number>(), bookCrawlStatus=ref(''), bookImportStatus=ref(''), bookFavoriteOnly=ref(false), bookSort=ref('CREATED_DESC')
 const chapterLoading=ref(false), chapterPage=ref(1), chapterTotal=ref(0), retryingChapterId=ref<number>()
+type ChapterStatusFilter = '' | CrawlerChapterStatus
+const chapterStatusFilter = ref<ChapterStatusFilter>('')
+const chapterStatusFilterOptions: { value: ChapterStatusFilter; label: string }[] = [
+  { value: '', label: '全部' },
+  { value: 'NOT_CRAWLED', label: '未采集' },
+  { value: 'WAITING', label: '等待中' },
+  { value: 'CRAWLING', label: '采集中' },
+  { value: 'COMPLETED', label: '已完成' },
+  { value: 'PENDING_RELEASE', label: '待开放' },
+  { value: 'FAILED', label: '失败' },
+  { value: 'CONTENT_SUSPECTED', label: '内容异常' },
+  { value: 'IGNORED', label: '已忽略' },
+]
+const chapterStatusFilterIndex = computed(() =>
+  chapterStatusFilterOptions.findIndex(option => option.value === chapterStatusFilter.value))
+const chapterFollowActive = computed(() => followCurrentChapter.value && !chapterStatusFilter.value)
 const chapterStatusDialog = ref(false)
 const chapterStatusSaving = ref(false)
 const chapterStatusTarget = ref<{ bookId: number; bookName: string; chapter: CrawlerChapter }>()
@@ -2430,31 +2510,45 @@ async function pollCrawlerProgress(){
   }finally{progressPolling=false}
 }
 async function syncOpenBookProgress(options:LoadOptions={}){
-  const bookId=selectedBook.value?.id
-  if(!bookDrawer.value||!bookId)return
-  const requestSequence=++chapterRequestSequence
-  if(!options.silent)chapterLoading.value=true
-  try{
-    const latestFocus=followCurrentChapter.value?await crawlerApi.currentChapter(bookId,chapterPageSize.value):undefined
-    if(!bookDrawer.value||selectedBook.value?.id!==bookId||requestSequence!==chapterRequestSequence)return
-    let targetPage=followCurrentChapter.value&&latestFocus?latestFocus.page+1:chapterPage.value
-    if(targetPage!==chapterPage.value)chapterPage.value=targetPage
-    const loadTargetPage=()=>crawlerApi.chapters(bookId,{page:targetPage-1,size:chapterPageSize.value,sort:chapterSortApiValue(chapterSort.value)})
-    const [latestBook,latestLogs,initialChapters]=await Promise.all([crawlerApi.book(bookId),crawlerApi.logs(bookId),loadTargetPage()])
-    if(!bookDrawer.value||selectedBook.value?.id!==bookId||requestSequence!==chapterRequestSequence)return
-    let latestChapters=initialChapters
-    const lastPage=Math.max(1,latestChapters.totalPages)
-    if(targetPage>lastPage){targetPage=lastPage;chapterPage.value=lastPage;latestChapters=await loadTargetPage()}
-    if(!bookDrawer.value||selectedBook.value?.id!==bookId||requestSequence!==chapterRequestSequence)return
-    currentCrawlingChapter.value=followCurrentChapter.value?latestFocus?.chapter:undefined
-    selectedBook.value=latestBook
-    chapters.value=latestChapters.content
-    chapterTotal.value=latestChapters.totalElements
-    crawlerLogs.value=latestLogs
-    books.value=books.value.map(book=>book.id===bookId?latestBook:book)
-    if(followCurrentChapter.value&&currentCrawlingChapter.value)await scrollToCurrentCrawlingChapter()
-  }finally{
-    if(!options.silent&&requestSequence===chapterRequestSequence)chapterLoading.value=false
+  const bookId = selectedBook.value?.id
+  if (!bookDrawer.value || !bookId) return
+  const requestSequence = ++chapterRequestSequence
+  if (!options.silent) chapterLoading.value = true
+  const isCurrentRequest = () => bookDrawer.value && selectedBook.value?.id === bookId
+    && requestSequence === chapterRequestSequence
+  try {
+    const latestFocus = chapterFollowActive.value
+      ? await crawlerApi.currentChapter(bookId, chapterPageSize.value) : undefined
+    if (!isCurrentRequest()) return
+    let targetPage = chapterFollowActive.value && latestFocus ? latestFocus.page + 1 : chapterPage.value
+    if (targetPage !== chapterPage.value) chapterPage.value = targetPage
+    const loadTargetPage = () => crawlerApi.chapters(bookId, {
+      page: targetPage - 1,
+      size: chapterPageSize.value,
+      sort: chapterSortApiValue(chapterSort.value),
+      crawlStatus: chapterStatusFilter.value || undefined,
+    })
+    const [latestBook, latestLogs, initialChapters] = await Promise.all([
+      crawlerApi.book(bookId), crawlerApi.logs(bookId), loadTargetPage(),
+    ])
+    if (!isCurrentRequest()) return
+    let latestChapters = initialChapters
+    const lastPage = Math.max(1, latestChapters.totalPages)
+    if (targetPage > lastPage) {
+      targetPage = lastPage
+      chapterPage.value = lastPage
+      latestChapters = await loadTargetPage()
+    }
+    if (!isCurrentRequest()) return
+    currentCrawlingChapter.value = chapterFollowActive.value ? latestFocus?.chapter : undefined
+    selectedBook.value = latestBook
+    chapters.value = latestChapters.content
+    chapterTotal.value = latestChapters.totalElements
+    crawlerLogs.value = latestLogs
+    books.value = books.value.map(book => book.id === bookId ? latestBook : book)
+    if (chapterFollowActive.value && currentCrawlingChapter.value) await scrollToCurrentCrawlingChapter()
+  } finally {
+    if (requestSequence === chapterRequestSequence) chapterLoading.value = false
   }
 }
 async function syncOpenTask(options:LoadOptions={}){
@@ -2687,10 +2781,38 @@ async function persistQueuedTaskOrder(){queuedTasksReordering.value=true;try{awa
 async function finishQueuedTaskDrag(){const currentOrder=queuedTasks.value.filter(task=>task.status==='WAITING').map(task=>task.id);const changed=queuedTaskDragStartOrder.value.join(',')!==currentOrder.join(',');queuedTaskDraggingId.value=undefined;queuedTaskDragStartOrder.value=[];if(changed)await persistQueuedTaskOrder()}
 async function moveQueuedTaskByKeyboard(task:CrawlerTask,direction:-1|1){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskCommandId.value)return;const index=queuedTasks.value.findIndex(item=>item.id===task.id),target=index+direction;if(index<0||target<0||target>=queuedTasks.value.length||queuedTasks.value[target].status!=='WAITING')return;if(queuedTasks.value[target].priority!==task.priority)return message.warning('跨优先级排序请先修改任务优先级');const next=[...queuedTasks.value];[next[index],next[target]]=[next[target],next[index]];queuedTasks.value=next;await persistQueuedTaskOrder()}
 function queuedTaskRowClassName({row}:{row:CrawlerTask}){return row.id===queuedTaskDraggingId.value?'queued-task-row-dragging':''}
+async function setChapterStatusFilter(value: ChapterStatusFilter) {
+  if (chapterStatusFilter.value === value) return
+  chapterStatusFilter.value = value
+  if (!value && followCurrentChapter.value) chapterSort.value = 'indexAsc'
+  chapterPage.value = 1
+  currentCrawlingChapter.value = undefined
+  chapters.value = []
+  await syncOpenBookProgress()
+}
+
+function handleChapterStatusFilterKey(event: KeyboardEvent) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  const count = chapterStatusFilterOptions.length
+  const current = chapterStatusFilterIndex.value
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? count - 1
+    : (current + (event.key === 'ArrowRight' ? 1 : -1) + count) % count
+  void setChapterStatusFilter(chapterStatusFilterOptions[next].value)
+  const button = (event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('button')[next]
+  button?.focus()
+  button?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+}
+
 function chapterSortApiValue(value:ChapterSort){return value==='indexDesc'?'INDEX_DESC':value==='createdDesc'?'CREATED_DESC':'INDEX_ASC'}
 async function loadChapterPage(){await syncOpenBookProgress()}
 async function handleChapterSizeChange(size:number){preferencesStore.setCrawlerChapterPageSize(size);chapterPage.value=1;await syncOpenBookProgress()}
-async function changeChapterSort(value:ChapterSort){if(followCurrentChapter.value||chapterSort.value===value)return;chapterSort.value=value;chapterPage.value=1;await syncOpenBookProgress()}
+async function changeChapterSort(value: ChapterSort) {
+  if (chapterFollowActive.value || chapterSort.value === value) return
+  chapterSort.value = value
+  chapterPage.value = 1
+  await syncOpenBookProgress()
+}
 async function setFollowCurrentChapter(enabled:boolean){preferencesStore.setCrawlerFollowCurrentChapter(enabled);currentCrawlingChapter.value=undefined;if(enabled){chapterSort.value='indexAsc';chapterPage.value=1}await syncOpenBookProgress()}
 function chapterRowClassName({row}:{row:CrawlerChapter}){return row.id===currentCrawlingChapter.value?.id?'current-crawling-row':''}
 async function scrollToCurrentCrawlingChapter(){await nextTick();const row=document.querySelector<HTMLElement>('.book-detail-drawer .chapters-table .current-crawling-row');if(!row)return;const viewport=row.closest<HTMLElement>('.el-scrollbar__wrap');if(!viewport)return row.scrollIntoView({block:'center',behavior:'smooth'});const rowRect=row.getBoundingClientRect(),viewportRect=viewport.getBoundingClientRect();viewport.scrollTo({top:viewport.scrollTop+rowRect.top-viewportRect.top-(viewport.clientHeight-rowRect.height)/2,behavior:'smooth'})}
@@ -3191,7 +3313,8 @@ async function openBook(book: CrawlerBook) {
   chapters.value = []
   chapterTotal.value = book.chapterCount
   chapterPage.value = 1
-  if (followCurrentChapter.value) chapterSort.value = 'indexAsc'
+  chapterStatusFilter.value = ''
+  if (chapterFollowActive.value) chapterSort.value = 'indexAsc'
   currentCrawlingChapter.value = undefined
   crawlerLogs.value = []
   bookDetailTab.value = 'chapters'
@@ -3503,12 +3626,43 @@ function handleTabKey(e:KeyboardEvent){const keys=tabs.value.map(t=>t.key);let i
 function handleSiteEditorTabKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();let index=activeSiteTabIndex.value;if(e.key==='ArrowRight')index=(index+1)%siteEditorTabs.length;else if(e.key==='ArrowLeft')index=(index-1+siteEditorTabs.length)%siteEditorTabs.length;else index=e.key==='Home'?0:siteEditorTabs.length-1;activeSiteTab.value=siteEditorTabs[index].key;requestAnimationFrame(()=>document.querySelectorAll<HTMLButtonElement>('.site-editor-tabs button')[index]?.focus())}
 function handleImportModeKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();importMode.value=e.key==='ArrowLeft'||e.key==='Home'?'text':'file';requestAnimationFrame(()=>document.querySelectorAll<HTMLButtonElement>('.import-mode button')[importMode.value==='text'?0:1]?.focus())}
 function handleSiteConfigurationImportModeKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();siteConfigurationImportMode.value=e.key==='ArrowLeft'||e.key==='Home'?'text':'file';requestAnimationFrame(()=>document.querySelectorAll<HTMLButtonElement>('.site-configuration-import-mode button')[siteConfigurationImportMode.value==='text'?0:1]?.focus())}
-function handleChapterSortKey(e:KeyboardEvent){if(followCurrentChapter.value||!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();let index=chapterSortIndex.value;if(e.key==='ArrowRight')index=(index+1)%chapterSortOptions.length;else if(e.key==='ArrowLeft')index=(index-1+chapterSortOptions.length)%chapterSortOptions.length;else index=e.key==='Home'?0:chapterSortOptions.length-1;void changeChapterSort(chapterSortOptions[index].value);requestAnimationFrame(()=>document.querySelectorAll<HTMLButtonElement>('.chapter-sort button')[index]?.focus())}
+function handleChapterSortKey(event: KeyboardEvent) {
+  if (chapterFollowActive.value || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  const count = chapterSortOptions.length
+  const current = chapterSortIndex.value
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? count - 1
+    : (current + (event.key === 'ArrowRight' ? 1 : -1) + count) % count
+  void changeChapterSort(chapterSortOptions[next].value)
+  requestAnimationFrame(() => document.querySelectorAll<HTMLButtonElement>('.chapter-sort button')[next]?.focus())
+}
 function handleBookDetailTabKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();let index=bookDetailTabIndex.value;if(e.key==='ArrowRight')index=(index+1)%bookDetailTabs.length;else if(e.key==='ArrowLeft')index=(index-1+bookDetailTabs.length)%bookDetailTabs.length;else index=e.key==='Home'?0:bookDetailTabs.length-1;bookDetailTab.value=bookDetailTabs[index].value;requestAnimationFrame(()=>document.querySelectorAll<HTMLButtonElement>('.book-detail-tabs button')[index]?.focus())}
 function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();let index=taskPriorityIndex.value;if(e.key==='ArrowRight')index=(index+1)%taskPriorityOptions.length;else if(e.key==='ArrowLeft')index=(index-1+taskPriorityOptions.length)%taskPriorityOptions.length;else index=e.key==='Home'?0:taskPriorityOptions.length-1;taskPriority.value=taskPriorityOptions[index].value;requestAnimationFrame(()=>document.querySelectorAll<HTMLButtonElement>('.priority-segment button')[index]?.focus())}
 </script>
 
 <style scoped>
+.scan-result-filter-scroll.chapter-status-filter-scroll {
+  flex: 0 0 auto;
+  margin: 0 0 10px;
+}
+
+.scan-result-filter.chapter-status-filter {
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  width: 810px;
+  max-width: none;
+}
+
+.chapter-status-filter .scan-result-filter-indicator {
+  width: calc((100% - 8px) / 9);
+}
+
+.chapter-filter-hint {
+  flex: 0 0 auto;
+  margin: 0 0 10px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
 .scan-result-filter-scroll {
   overflow-x: auto;
   margin: 16px 0;

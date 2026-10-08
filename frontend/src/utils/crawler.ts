@@ -277,7 +277,14 @@ export interface CrawlerSiteConfiguration { schemaVersion:number; type:'AIBOOK_C
 export interface PageResult<T> { content:T[]; totalElements:number; totalPages:number; number:number; size:number; first:boolean; last:boolean }
 export interface CrawlerDiscoveryQuery { page:number; size:number; keyword?:string; siteId?:number; favoriteOnly?:boolean; sort:string }
 export interface CrawlerBookQuery { page:number; size:number; keyword?:string; siteId?:number; crawlStatus?:string; importStatus?:string; favoriteOnly?:boolean; sort:string }
-export interface CrawlerChapterQuery { page:number; size:number; sort:'INDEX_ASC'|'INDEX_DESC'|'CREATED_DESC' }
+export type CrawlerChapterStatus = 'NOT_CRAWLED' | 'WAITING' | 'CRAWLING' | 'COMPLETED'
+  | 'PENDING_RELEASE' | 'FAILED' | 'CONTENT_SUSPECTED' | 'IGNORED'
+export interface CrawlerChapterQuery {
+  page: number
+  size: number
+  sort: 'INDEX_ASC' | 'INDEX_DESC' | 'CREATED_DESC'
+  crawlStatus?: CrawlerChapterStatus
+}
 export interface CrawlerTaskQuery { page:number; size:number; failedOnly?:boolean; status?:string; type?:string; favoriteOnly?:boolean; siteId?:number; queueId?:number; priority?:string; createdAfter?:string; createdBefore?:string }
 
 export const crawlerApi = {

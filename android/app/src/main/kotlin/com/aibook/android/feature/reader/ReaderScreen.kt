@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -181,7 +182,9 @@ private data class ReaderPageContent(
     val title: String?,
     val paragraphs: List<String>,
     val imageUri: String? = null
-)
+) {
+    val key: String get() = "page_${chapterIndex}_$startLineIndex"
+}
 
 @Composable
 fun ReaderScreen(
@@ -364,23 +367,30 @@ private fun ReaderMainPage(
 
     var restoredInitialPosition by remember(state.book?.id, state.remoteBookId) { mutableStateOf(false) }
 
+    var appliedChapterNavigationId by remember(state.book?.id, state.remoteBookId) {
+        mutableStateOf(state.chapterWindowNavigation?.requestId)
+    }
+
     // 章节切换时滚动到顶部；初次打开时恢复到保存的章节内行号
-    LaunchedEffect(state.loadedChapters.firstOrNull()?.index, state.book?.id, state.remoteBookId, settings.pageTurnMode) {
+    LaunchedEffect(
+        state.loadedChapters.firstOrNull()?.index,
+        state.chapterWindowNavigation?.requestId,
+        state.book?.id,
+        state.remoteBookId,
+        settings.pageTurnMode
+    ) {
         if (state.loadedChapters.size == 1 && !settings.pageTurnMode.usesPagedReading()) {
-            val savedProgress = state.book?.progress ?: state.remoteProgress
-            val loadedChapter = state.loadedChapters.firstOrNull()
-            val canRestore = !restoredInitialPosition &&
-                savedProgress != null &&
-                loadedChapter != null &&
-                (savedProgress.chapterIndex == loadedChapter.index || savedProgress.chapterHref == loadedChapter.href)
-            val targetItem = if (canRestore && savedProgress?.lineIndex != null) {
-                (savedProgress.lineIndex ?: 0) + 1
+            val navigationId = state.chapterWindowNavigation?.requestId
+            val restore = !restoredInitialPosition && navigationId == appliedChapterNavigationId
+            val targetItem = if (restore && (state.currentLineIndex > 0 || state.currentScrollOffset > 0)) {
+                state.currentLineIndex + 1
             } else {
                 0
             }
-            val targetOffset = if (canRestore) savedProgress?.scrollOffset ?: 0 else 0
+            val targetOffset = if (restore) state.currentScrollOffset else 0
             scrollState.scrollToItem(targetItem.coerceAtLeast(0), targetOffset.coerceAtLeast(0))
             restoredInitialPosition = true
+            appliedChapterNavigationId = navigationId
         }
     }
 
@@ -754,9 +764,6 @@ private fun ReaderTextContent(
             chapter to paragraphs
         }
     }
-    val chapterItemCounts = remember(chapterParagraphs) {
-        chapterParagraphs.map { (chapter, paragraphs) -> chapter.index to 1 + paragraphs.size }
-    }
     val fontFamily = rememberReaderFontFamily(settings)
 
     if (settings.pageTurnMode.usesPagedReading()) {
@@ -787,12 +794,15 @@ private fun ReaderTextContent(
         if (shouldLoadMore.value) onLoadNextChapter()
     }
 
-    val shouldLoadPrevious = remember(scrollState, loadedChapters) {
+    val isDragging by scrollState.interactionSource.collectIsDraggedAsState()
+    val shouldLoadPrevious = remember(scrollState, loadedChapters, isDragging) {
         derivedStateOf {
             ReaderChapterWindow.shouldPrependPrevious(
                 firstVisibleItemIndex = scrollState.firstVisibleItemIndex,
                 scrollOffset = scrollState.firstVisibleItemScrollOffset
-            )
+            ) && isDragging &&
+                scrollState.layoutInfo.visibleItemsInfo.firstOrNull()?.key ==
+                "title_${loadedChapters.firstOrNull()?.index}"
         }
     }
     LaunchedEffect(shouldLoadPrevious.value) {
@@ -824,26 +834,21 @@ private fun ReaderTextContent(
     // 追踪当前所在章节与章节内行号
     LaunchedEffect(scrollState, loadedChapters) {
         snapshotFlow {
-            val firstVisible = scrollState.firstVisibleItemIndex
-            // 累积每个已加载章节的段落数，确定当前章节
-            var offset = 0
-            var currentIdx = loadedChapters.lastOrNull()?.index ?: 0
-            var lineIndex = 0
-            for ((chapterIndex, chapterItems) in chapterItemCounts) {
-                if (firstVisible < offset + chapterItems) {
-                    currentIdx = chapterIndex
-                    lineIndex = (firstVisible - offset - 1).coerceAtLeast(0)
-                    break
-                }
-                offset += chapterItems
-            }
-            ReaderVisiblePosition(
-                chapterIndex = currentIdx,
-                lineIndex = lineIndex,
-                scrollOffset = scrollState.firstVisibleItemScrollOffset
+            val position = ReaderChapterWindow.positionForItemKey(
+                scrollState.layoutInfo.visibleItemsInfo.firstOrNull()?.key
             )
+            position?.takeIf { (chapterIndex, _) -> loadedChapters.any { it.index == chapterIndex } }
+                ?.let { (chapterIndex, lineIndex) ->
+                    ReaderVisiblePosition(
+                        chapterIndex = chapterIndex,
+                        lineIndex = lineIndex,
+                        scrollOffset = scrollState.firstVisibleItemScrollOffset
+                    )
+                }
         }.distinctUntilChanged().collect { position ->
-            onReadingPositionChanged(position.chapterIndex, position.lineIndex, position.scrollOffset)
+            if (position != null) {
+                onReadingPositionChanged(position.chapterIndex, position.lineIndex, position.scrollOffset)
+            }
         }
     }
 
@@ -945,50 +950,55 @@ private fun ReaderPagedContent(
     var restoredInitialPage by remember(state.book?.id, state.remoteBookId, settings.pageTurnMode) {
         mutableStateOf(false)
     }
+    var appliedNavigationId by remember(state.book?.id, state.remoteBookId, settings.pageTurnMode) {
+        mutableStateOf(state.chapterWindowNavigation?.requestId)
+    }
 
-    LaunchedEffect(state.loadedChapters.firstOrNull()?.index, pages.size, settings.pageTurnMode) {
+    // 窗口预加载改变页数时保留位置，仅初次打开或明确导航请求才主动定位。
+    LaunchedEffect(pages, state.chapterWindowNavigation?.requestId, settings.pageTurnMode) {
         if (pages.isEmpty()) return@LaunchedEffect
+        val requestId = state.chapterWindowNavigation?.requestId
+        val navigation = state.chapterWindowNavigation?.takeIf { it.requestId != appliedNavigationId }
+        if (!ReaderChapterWindow.shouldNavigateToPage(
+                initialized = restoredInitialPage,
+                appliedRequestId = appliedNavigationId,
+                requestId = requestId
+            )
+        ) return@LaunchedEffect
 
-        val savedProgress = state.book?.progress ?: state.remoteProgress
-        val loadedChapter = state.loadedChapters.firstOrNull()
-        val canRestore = !restoredInitialPage &&
-            savedProgress != null &&
-            loadedChapter != null &&
-            (savedProgress.chapterIndex == loadedChapter.index || savedProgress.chapterHref == loadedChapter.href)
-        val targetChapterIndex = loadedChapter?.index ?: state.currentChapterIndex
-        val targetLineIndex = if (canRestore) savedProgress?.lineIndex ?: 0 else 0
+        val targetChapterIndex = navigation?.chapterIndex ?: state.currentChapterIndex
+        val targetLineIndex = navigation?.lineIndex ?: state.currentLineIndex
         val targetPage = pages.indexOfFirst {
             it.chapterIndex == targetChapterIndex && targetLineIndex in it.startLineIndex..it.endLineIndex
-        }.takeIf { it >= 0 } ?: pages.indexOfFirst { it.chapterIndex == targetChapterIndex }.takeIf { it >= 0 } ?: 0
-
+        }.takeIf { it >= 0 }
+            ?: pages.indexOfFirst { it.chapterIndex == targetChapterIndex }.takeIf { it >= 0 }
+            ?: return@LaunchedEffect
         pagerState.scrollToPage(targetPage)
+        appliedNavigationId = requestId
         restoredInitialPage = true
     }
 
-    LaunchedEffect(state.chapterWindowNavigation?.requestId) {
-        val navigation = state.chapterWindowNavigation ?: return@LaunchedEffect
-        val targetPage = pages.indexOfFirst {
-            it.chapterIndex == navigation.chapterIndex &&
-                navigation.lineIndex in it.startLineIndex..it.endLineIndex
-        }.takeIf { it >= 0 }
-            ?: pages.indexOfFirst { it.chapterIndex == navigation.chapterIndex }.takeIf { it >= 0 }
-            ?: return@LaunchedEffect
-        pagerState.scrollToPage(targetPage)
-    }
-
-    LaunchedEffect(pagerState, pages) {
-        snapshotFlow { pagerState.currentPage }
-            .distinctUntilChanged()
-            .collect { pageIndex ->
-                val page = pages.getOrNull(pageIndex) ?: return@collect
-                onReadingPositionChanged(page.chapterIndex, page.startLineIndex, 0)
-                if (pageIndex <= 1) {
-                    onLoadPreviousChapter()
-                }
-                if (pageIndex >= pages.size - 2) {
-                    onLoadNextChapter()
-                }
+    LaunchedEffect(
+        pagerState,
+        pages,
+        restoredInitialPage,
+        appliedNavigationId,
+        state.chapterWindowNavigation?.requestId
+    ) {
+        snapshotFlow {
+            // 使用布局实际显示的页键，避免窗口前插后旧页码被当作前几章。
+            pagerState.layoutInfo.visiblePagesInfo
+                .firstOrNull { it.index == pagerState.currentPage }?.key
+        }.distinctUntilChanged().collect { pageKey ->
+            if (!restoredInitialPage || appliedNavigationId != state.chapterWindowNavigation?.requestId) {
+                return@collect
             }
+            val pageIndex = pages.indexOfFirst { it.key == pageKey }
+            val page = pages.getOrNull(pageIndex) ?: return@collect
+            onReadingPositionChanged(page.chapterIndex, page.startLineIndex, 0)
+            if (pageIndex <= 1) onLoadPreviousChapter()
+            if (pageIndex >= pages.size - 2) onLoadNextChapter()
+        }
     }
 
     LaunchedEffect(autoPlaying, pages.size, settings.autoPageIntervalSeconds) {
@@ -1032,6 +1042,7 @@ private fun ReaderPagedContent(
                     }
                 }
             },
+        key = { pages[it].key },
         beyondViewportPageCount = 1,
         userScrollEnabled = !touchLocked
     ) { pageIndex ->

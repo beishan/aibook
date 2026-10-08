@@ -128,8 +128,9 @@ public class CrawlerController {
     @GetMapping("/books/{id}/chapters") public Page<ChapterView> chapters(
             Authentication auth, @PathVariable Long id,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "INDEX_ASC") String sort) {
-        return managementService.chapters(user(auth), id, page, size, sort);
+            @RequestParam(defaultValue = "INDEX_ASC") String sort,
+            @RequestParam(required = false) CrawlerChapter.CrawlStatus crawlStatus) {
+        return managementService.chapters(user(auth), id, page, size, sort, crawlStatus);
     }
     @GetMapping("/books/{id}/chapters/current") public ResponseEntity<ChapterFocusView> currentChapter(
             Authentication auth, @PathVariable Long id,

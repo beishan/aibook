@@ -404,13 +404,21 @@ public class CrawlerManagementService {
                 chapter, currentChapterSubStep(activeTask, chapter))).toList();
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public Page<ChapterView> chapters(User user, Long id, int page, int size, String sort) {
+        return chapters(user, id, page, size, sort, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ChapterView> chapters(User user, Long id, int page, int size, String sort,
+            CrawlerChapter.CrawlStatus crawlStatus) {
         CrawlerBook book = ownedBook(user, id);
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
                 chapterSort(sort));
-        Page<CrawlerChapter> chapters = chapterRepository.findByCrawlerBook(book, pageable);
-        normalizeParsedChapters(book, chapters.getContent());
+        // 列表查询保留实际采集状态，避免有正文的人工失败、忽略等状态被读取操作覆盖。
+        Page<CrawlerChapter> chapters = crawlStatus == null
+                ? chapterRepository.findByCrawlerBook(book, pageable)
+                : chapterRepository.findByCrawlerBookAndCrawlStatus(book, crawlStatus, pageable);
         CrawlerTask activeTask = activeBookTask(book);
         Map<Long, CrawlerChapterAttemptMetric> latestMetrics = latestSuccessfulChapterMetrics(
                 user, book, chapters.getContent());

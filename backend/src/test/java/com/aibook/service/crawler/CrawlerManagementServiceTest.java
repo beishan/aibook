@@ -544,6 +544,63 @@ class CrawlerManagementServiceTest {
     }
 
     @Test
+    void filtersAllChapterStatesBeforePaginationAndPreservesStoredStatus() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();
+        CrawlerBook book = CrawlerBook.builder().id(15L).site(site).bookName("示例书籍").build();
+        when(books.findByIdAndSiteUser(15L, user)).thenReturn(Optional.of(book));
+
+        for (CrawlerChapter.CrawlStatus status : CrawlerChapter.CrawlStatus.values()) {
+            CrawlerChapter chapter = CrawlerChapter.builder().id(22L).crawlerBook(book)
+                    .chapterIndex(8).chapterName("第九章").content("保留正文")
+                    .crawlStatus(status).build();
+            when(chapters.findByCrawlerBookAndCrawlStatus(eq(book), eq(status), any(Pageable.class)))
+                    .thenAnswer(invocation -> new PageImpl<>(List.of(chapter), invocation.getArgument(2), 61));
+
+            var result = service.chapters(user, 15L, 2, 20, "INDEX_DESC", status);
+
+            assertThat(result.getTotalElements()).isEqualTo(61);
+            assertThat(result.getNumber()).isEqualTo(2);
+            assertThat(result.getTotalPages()).isEqualTo(4);
+            assertThat(result.getContent()).extracting(item -> item.crawlStatus()).containsExactly(status.name());
+            assertThat(chapter.getCrawlStatus()).isEqualTo(status);
+            ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+            verify(chapters).findByCrawlerBookAndCrawlStatus(eq(book), eq(status), pageable.capture());
+            assertThat(pageable.getValue().getSort().getOrderFor("chapterIndex").isDescending()).isTrue();
+        }
+        verify(chapters, never()).findByCrawlerBook(any(), any(Pageable.class));
+        verify(chapters, never()).save(any());
+    }
+
+    @Test
+    void chapterFilterClampsPaginationAndReturnsEmptyMatchingPage() {
+        User user = user();
+        CrawlerBook book = CrawlerBook.builder().id(15L)
+                .site(CrawlerSite.builder().id(7L).user(user).build()).build();
+        when(books.findByIdAndSiteUser(15L, user)).thenReturn(Optional.of(book));
+        when(chapters.findByCrawlerBookAndCrawlStatus(eq(book), eq(CrawlerChapter.CrawlStatus.FAILED), any(Pageable.class)))
+                .thenAnswer(invocation -> Page.empty(invocation.getArgument(2)));
+
+        var result = service.chapters(user, 15L, -1, 500, "CREATED_DESC", CrawlerChapter.CrawlStatus.FAILED);
+
+        assertThat(result.getNumber()).isZero();
+        assertThat(result.getSize()).isEqualTo(100);
+        assertThat(result.getTotalElements()).isZero();
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getSort().getOrderFor("createdAt").isDescending()).isTrue();
+    }
+
+    @Test
+    void chapterFilterRejectsBooksOutsideTheCurrentAccount() {
+        User user = user();
+        when(books.findByIdAndSiteUser(15L, user)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.chapters(user, 15L, 0, 20, "INDEX_ASC", CrawlerChapter.CrawlStatus.FAILED))
+                .isInstanceOf(ResponseStatusException.class);
+        verifyNoInteractions(chapters);
+    }
+
+    @Test
     void locatesCurrentCrawlingChapterAndItsPage() {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();

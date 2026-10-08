@@ -118,6 +118,7 @@ class ReaderViewModel(
 
     private val _state = MutableStateFlow(ReaderUiState())
     private val loadingChapterIndexes = mutableSetOf<Int>()
+    private var chapterSelectionRequestId = 0L
     private val structuredChapterCache = StructuredChapterCache(File(appContext.cacheDir, "structured-chapters"))
     private var structuredCacheNamespace: String = "default"
     private var settingsSnapshot: ReaderSettings? = null
@@ -615,14 +616,14 @@ class ReaderViewModel(
         val chapters = _state.value.chapters
         val chapter = chapters.getOrNull(index) ?: return
         val book = _state.value.book
+        val selectionRequestId = ++chapterSelectionRequestId
 
         if (isStructuredChapterOnDemand(_state.value, index) &&
             chapter.content.isBlank() && chapter.imageUri.isNullOrBlank()
         ) {
-            if (!loadingChapterIndexes.add(index)) return
             viewModelScope.launch {
                 val loaded = loadStructuredChapter(index)
-                loadingChapterIndexes.remove(index)
+                if (selectionRequestId != chapterSelectionRequestId) return@launch
                 if (loaded == null) {
                     _state.update { it.copy(errorMessage = "章节加载失败，请检查网络后重试") }
                     return@launch
@@ -632,12 +633,11 @@ class ReaderViewModel(
             }
         } else if (book != null && book.format == BookFormat.EPUB && chapter.content.isBlank() && chapter.imageUri.isNullOrBlank()) {
             // 需要先从 Readium 加载这个章节
-            if (!loadingChapterIndexes.add(index)) return
             viewModelScope.launch {
                 val loaded = runCatching {
                     ReadiumEpubReader(appContext).parseChapter(File(book.uri), index)
                 }.getOrNull()
-                loadingChapterIndexes.remove(index)
+                if (selectionRequestId != chapterSelectionRequestId) return@launch
                 if (loaded == null) return@launch
                 // 更新 chapters 列表中这个章节的内容
                 val updatedChapters = _state.value.chapters.map {
@@ -647,17 +647,8 @@ class ReaderViewModel(
                 prefetchNextEpubChapter(index)
             }
         } else {
-            // 章节已有内容，直接显示
-            _state.update {
-                it.copy(
-                    loadedChapters = listOf(chapter),
-                    currentChapterIndex = index,
-                    currentLineIndex = 0,
-                    currentScrollOffset = 0,
-                    scrollProgress = ReaderProgressCalculator.chapterProgress(index, chapters.size)
-                )
-            }
-            saveProgress()
+            // 缓存命中和按需加载使用同一明确导航请求，重复点击当前章节也回到章首。
+            publishSelectedChapter(index, chapter)
             prefetchNextEpubChapter(index)
             if (_state.value.remoteFormat == STRUCTURED_FORMAT) prefetchStructuredChapters(index)
         }
@@ -689,7 +680,7 @@ class ReaderViewModel(
                 _state.update {
                     it.copy(
                         chapters = it.chapters.map { item -> if (item.index == nextIndex) loaded else item },
-                        loadedChapters = it.loadedChapters + loaded,
+                        loadedChapters = ReaderChapterWindow.append(it.loadedChapters, loaded),
                         errorMessage = null
                     )
                 }
@@ -709,14 +700,14 @@ class ReaderViewModel(
                 _state.update {
                     it.copy(
                         chapters = updatedChapters,
-                        loadedChapters = it.loadedChapters + loaded
+                        loadedChapters = ReaderChapterWindow.append(it.loadedChapters, loaded)
                     )
                 }
             }
         } else {
             _state.update {
                 it.copy(
-                    loadedChapters = it.loadedChapters + nextChapter
+                    loadedChapters = ReaderChapterWindow.append(it.loadedChapters, nextChapter)
                 )
             }
         }
@@ -736,11 +727,13 @@ class ReaderViewModel(
 
         fun prepend(loaded: ReaderChapter) {
             _state.update { current ->
+                val window = ReaderChapterWindow.prepend(current.loadedChapters, loaded)
+                if (window === current.loadedChapters) return@update current
                 current.copy(
                     chapters = current.chapters.map {
                         if (it.index == previousIndex) loaded else it
                     },
-                    loadedChapters = ReaderChapterWindow.prepend(current.loadedChapters, loaded),
+                    loadedChapters = window,
                     chapterWindowNavigation = ChapterWindowNavigation(
                         requestId = System.nanoTime(),
                         chapterIndex = current.currentChapterIndex,
@@ -1246,6 +1239,12 @@ class ReaderViewModel(
                 currentLineIndex = 0,
                 currentScrollOffset = 0,
                 scrollProgress = ReaderProgressCalculator.chapterProgress(index, chapters.size),
+                bookmarkNavigation = null,
+                chapterWindowNavigation = ChapterWindowNavigation(
+                    requestId = System.nanoTime(),
+                    chapterIndex = index,
+                    lineIndex = 0
+                ),
                 errorMessage = null
             )
         }

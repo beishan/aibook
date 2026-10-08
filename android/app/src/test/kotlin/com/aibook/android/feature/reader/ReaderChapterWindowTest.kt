@@ -3,6 +3,7 @@ package com.aibook.android.feature.reader
 import com.aibook.android.core.reader.ReaderChapter
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertSame
 
 class ReaderChapterWindowTest {
 
@@ -25,6 +26,21 @@ class ReaderChapterWindowTest {
         )
 
         assertEquals(listOf(2, 3), chapters.map { it.index })
+    }
+
+    @Test
+    fun ignoresPreviousChapterResponseFromBeforeDirectoryJump() {
+        val selectedWindow = listOf(chapter(20))
+        assertSame(selectedWindow, ReaderChapterWindow.prepend(selectedWindow, chapter(2)))
+    }
+
+    @Test
+    fun ignoresNextChapterResponseFromBeforeDirectoryJumpAndDuplicateResponses() {
+        val selectedWindow = listOf(chapter(20))
+        assertSame(selectedWindow, ReaderChapterWindow.append(selectedWindow, chapter(4)))
+        val expandedWindow = ReaderChapterWindow.append(selectedWindow, chapter(21))
+        assertEquals(listOf(20, 21), expandedWindow.map { it.index })
+        assertSame(expandedWindow, ReaderChapterWindow.append(expandedWindow, chapter(21)))
     }
 
     private fun chapter(index: Int) = ReaderChapter(
