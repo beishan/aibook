@@ -1612,13 +1612,26 @@
           <p v-if="chapterStatusFilter && followCurrentChapter" class="chapter-filter-hint">
             状态筛选期间暂停跟随采集，切回“全部”后恢复。
           </p>
+          <div
+            class="chapter-stage-legend"
+            aria-label="章节采集阶段图例"
+            title="阶段条表示处理流程，不表示耗时占比；无需等待的阶段会跳过。"
+          >
+            <span v-for="stage in CHAPTER_PROGRESS_STAGES" :key="stage.key">
+              <i :style="{ background: stage.color }" aria-hidden="true" />
+              {{ stage.label }}
+            </span>
+            <small>行底彩色表示已通过 · 灰色表示未到达 · 当前阶段闪烁</small>
+          </div>
           <el-table
+            ref="chapterTableRef"
             v-loading="chapterLoading"
             :data="chapters"
             :empty-text="chapterStatusFilter ? '暂无符合筛选条件的章节' : '暂无章节'"
             height="100%"
             class="chapters-table"
             :row-class-name="chapterRowClassName"
+            :row-style="({ row }) => chapterStageRowStyle(row)"
             @row-click="openChapter"
           >
             <el-table-column prop="chapterIndex" label="#" width="65" />
@@ -1633,17 +1646,15 @@
             <el-table-column prop="wordCount" label="字数" width="90" />
             <el-table-column label="状态" width="110">
               <template #default="{ row }">
-                <div class="chapter-crawl-status">
+                <div
+                  class="chapter-crawl-status"
+                  role="group"
+                  :title="chapterStageProgress(row).description"
+                  :aria-label="chapterStageProgress(row).description || statusLabel(row.crawlStatus)"
+                >
                   <el-tag :type="statusType(row.crawlStatus)">
                     {{ statusLabel(row.crawlStatus) }}
                   </el-tag>
-                  <small
-                    v-if="row.crawlStatus==='CRAWLING' && row.currentSubStep"
-                    class="task-sub-step"
-                    :title="row.currentSubStep"
-                  >
-                    {{ row.currentSubStep }}
-                  </small>
                 </div>
               </template>
             </el-table-column>
@@ -1816,6 +1827,13 @@
 </template>
 
 <script setup lang="ts">
+import '@/assets/crawlerChapterProgress.css'
+import {
+  CHAPTER_PROGRESS_STAGES,
+  chapterStageProgress,
+  chapterStageRowStyle,
+  observeChapterProgressViewport,
+} from '@/utils/crawlerChapterProgress'
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
@@ -2006,6 +2024,13 @@ const discoveryPagesBySite=ref<Record<number,CrawlerDiscoveryPage[]>>({})
 const discoveryMetadataRefreshing=ref(false)
 const batchDiscoveryCrawling = ref(false)
 const bookLoading=ref(false), bookPage=ref(1), bookPageSize=ref(20), bookTotal=ref(0)
+const chapterTableRef = ref<InstanceType<typeof ElTable>>()
+let stopChapterProgressViewport = () => {}
+watch(chapterTableRef, table => {
+  stopChapterProgressViewport()
+  stopChapterProgressViewport = table ? observeChapterProgressViewport(table.$el) : () => {}
+}, { flush: 'post' })
+onUnmounted(() => stopChapterProgressViewport())
 const bookTableRef=ref<InstanceType<typeof ElTable>>()
 const bookSiteId=ref<number>(), bookCrawlStatus=ref(''), bookImportStatus=ref(''), bookFavoriteOnly=ref(false), bookSort=ref('CREATED_DESC')
 const chapterLoading=ref(false), chapterPage=ref(1), chapterTotal=ref(0), retryingChapterId=ref<number>()
@@ -2815,7 +2840,14 @@ async function changeChapterSort(value: ChapterSort) {
   await syncOpenBookProgress()
 }
 async function setFollowCurrentChapter(enabled:boolean){preferencesStore.setCrawlerFollowCurrentChapter(enabled);currentCrawlingChapter.value=undefined;if(enabled){chapterSort.value='indexAsc';chapterPage.value=1}await syncOpenBookProgress()}
-function chapterRowClassName({row}:{row:CrawlerChapter}){return row.id===currentCrawlingChapter.value?.id?'current-crawling-row':''}
+function chapterRowClassName({ row }: { row: CrawlerChapter }) {
+  const progress = chapterStageProgress(row)
+  return [
+    row.id === currentCrawlingChapter.value?.id ? 'current-crawling-row' : '',
+    progress.visible ? 'chapter-stage-row' : '',
+    progress.activeIndex >= 0 ? 'chapter-stage-running' : '',
+  ].filter(Boolean).join(' ')
+}
 async function scrollToCurrentCrawlingChapter(){await nextTick();const row=document.querySelector<HTMLElement>('.book-detail-drawer .chapters-table .current-crawling-row');if(!row)return;const viewport=row.closest<HTMLElement>('.el-scrollbar__wrap');if(!viewport)return row.scrollIntoView({block:'center',behavior:'smooth'});const rowRect=row.getBoundingClientRect(),viewportRect=viewport.getBoundingClientRect();viewport.scrollTo({top:viewport.scrollTop+rowRect.top-viewportRect.top-(viewport.clientHeight-rowRect.height)/2,behavior:'smooth'})}
 async function loadBooks(options:LoadOptions={}){if(!options.silent)bookLoading.value=true;if(!options.preserveSelection){selectedBooks.value=[];bookTableRef.value?.clearSelection()}try{const result=await crawlerApi.books({page:bookPage.value-1,size:bookPageSize.value,keyword:bookKeyword.value.trim()||undefined,siteId:bookSiteId.value,crawlStatus:bookCrawlStatus.value||undefined,importStatus:bookImportStatus.value||undefined,favoriteOnly:bookFavoriteOnly.value||undefined,sort:bookSort.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/bookPageSize.value));if(bookPage.value>lastPage){bookPage.value=lastPage;return await loadBooks(options)}books.value=result.content;bookTotal.value=result.totalElements}finally{if(!options.silent)bookLoading.value=false}}
 async function handleBookSizeChange(){bookPage.value=1;await loadBooks()}
@@ -4821,21 +4853,6 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 
 .chapter-crawl-status :deep(.el-tag) {
   width: fit-content;
-}
-
-/* 章节列表保持紧凑；长步骤用悬停提示查看完整内容。 */
-.chapter-crawl-status .task-sub-step {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chapter-crawl-status .task-sub-step::before {
-  display: inline-block;
-  margin: 0 6px 0 0;
-  vertical-align: middle;
 }
 
 .task-sub-step {

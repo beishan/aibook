@@ -30,6 +30,7 @@ import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
@@ -160,7 +161,7 @@ public class CrawlerHttpClient {
             long retryDelay = retryBackoffMillis(attempt, settings.retryBackoffMaxMillis());
             try {
                 if (timing != null) {
-                    timing.reportProgress("请求章节内容中（第 " + (attempt + 1) + " / " + attempts + " 次）");
+                    timing.reportProgress("准备请求章节（第 " + (attempt + 1) + " / " + attempts + " 次）");
                 }
                 String proxyUrl = proxies.isEmpty() ? null : proxies.get(proxyIndex % proxies.size());
                 TimedResponse timed = sendFollowingSafeRedirects(
@@ -258,7 +259,7 @@ public class CrawlerHttpClient {
                     queueExecutorService.recordRequestProxy(candidate);
                     try {
                         if (timing != null) {
-                            timing.reportProgress("请求章节内容中（代理节点尝试 "
+                            timing.reportProgress("准备代理请求（代理节点尝试 "
                                     + (attempt + 1) + " / " + attempts + " 次）");
                         }
                         TimedResponse timed = sendFollowingSafeRedirects(site, uri, etag,
@@ -439,6 +440,7 @@ public class CrawlerHttpClient {
             if (lastModified != null && !lastModified.isBlank()) request.header("If-Modified-Since", lastModified);
             if (!settings.cookie().isBlank()) request.header("Cookie", settings.cookie());
             applyHeaders(request, settings.headersJson());
+            if (timing != null) timing.reportProgress("请求章节内容中");
             HttpResponse<InputStream> rawResponse = client(settings.timeoutMillis(), proxyUrl)
                     .send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
             byte[] responseBody;
@@ -921,12 +923,17 @@ public class CrawlerHttpClient {
             long slot = reserveRequestSlot(requestSpacing(site), now, interval);
             long wait = slot - now;
             if (wait > 0) {
-                if (timing != null) {
-                    timing.reportProgress(randomDelay > 0 ? "随机等待中" : "请求间隔等待中");
-                }
                 long sleepStarted = System.nanoTime();
                 try {
-                    Thread.sleep(wait);
+                    long phaseDeadline = sleepStarted;
+                    for (PacingWaitStage phase : pacingWaitStages(wait, fixedDelay, randomDelay, adaptiveMillis)) {
+                        phaseDeadline += TimeUnit.MILLISECONDS.toNanos(phase.millis());
+                        if (phaseDeadline <= System.nanoTime()) continue;
+                        if (timing != null) timing.reportProgress(phase.step());
+                        // 上报也需要时间；按同一预留时隙的截止时间休眠，避免拆段额外延长等待。
+                        long remaining = phaseDeadline - System.nanoTime();
+                        if (remaining > 0) TimeUnit.NANOSECONDS.sleep(remaining);
+                    }
                 } finally {
                     long actualMillis = elapsedMillis(sleepStarted);
                     if (timing != null) {
@@ -938,9 +945,31 @@ public class CrawlerHttpClient {
         }
     }
 
+    record PacingWaitStage(String step, long millis) { }
+
+    static List<PacingWaitStage> pacingWaitStages(long wait, long fixed, long random, long adaptive) {
+        if (wait <= 0) return List.of();
+        long total = fixed + random + adaptive;
+        if (total <= 0) return List.of(new PacingWaitStage("其他等待中", wait));
+        long fixedPart = wait * fixed / total;
+        long randomPart = wait * random / total;
+        long otherPart = wait - fixedPart - randomPart;
+        if (adaptive == 0) {
+            if (fixed >= random) fixedPart += otherPart;
+            else randomPart += otherPart;
+            otherPart = 0;
+        }
+        List<PacingWaitStage> phases = new ArrayList<>();
+        if (fixedPart > 0) phases.add(new PacingWaitStage("固定等待中", fixedPart));
+        if (randomPart > 0) phases.add(new PacingWaitStage("随机等待中", randomPart));
+        if (otherPart > 0) phases.add(new PacingWaitStage("自适应等待中", otherPart));
+        return phases;
+    }
+
     private void waitUntilAccessAllowed(CrawlerSite site, RequestTiming timing)
             throws InterruptedException {
         while (site.isAccessBlockedAt(LocalTime.now())) {
+            if (timing != null) timing.reportProgress("访问时段等待中");
             LocalDateTime now = LocalDateTime.now();
             long waitMillis = Duration.ofMinutes(1).toMillis()
                     - now.getSecond() * 1000L

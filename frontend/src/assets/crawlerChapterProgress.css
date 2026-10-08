@@ -1,0 +1,72 @@
+/* 整个章节行共用一条轨道，独立于各单元格宽度和固定操作列。 */
+.chapters-table {
+  --chapter-stage-pending: var(--border-color, #d1d5db);
+}
+
+.chapters-table .chapter-stage-row > td.el-table__cell:first-child {
+  position: relative;
+  z-index: 3;
+}
+
+.chapters-table .chapter-stage-row > td.el-table__cell:first-child::after,
+.chapters-table .chapter-stage-running > td.el-table__cell:first-child::before {
+  position: absolute;
+  bottom: 0;
+  z-index: 5;
+  height: 3px;
+  content: '';
+  pointer-events: none;
+}
+
+.chapters-table .chapter-stage-row > td.el-table__cell:first-child::after {
+  left: var(--chapter-stage-scroll-left, 0px);
+  width: var(--chapter-stage-viewport-width, 100%);
+  background: var(--chapter-stage-track);
+}
+
+.chapters-table .chapter-stage-running > td.el-table__cell:first-child::before {
+  left: var(--chapter-stage-left);
+  z-index: 6;
+  width: var(--chapter-stage-width);
+  background: var(--chapter-stage-color);
+  animation: chapter-stage-pulse 1.4s ease-in-out infinite;
+}
+
+.chapter-stage-legend {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.chapter-stage-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chapter-stage-legend i {
+  width: 12px;
+  height: 3px;
+  border-radius: 1px;
+}
+
+.chapter-stage-legend small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+@keyframes chapter-stage-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chapters-table .chapter-stage-running > td.el-table__cell:first-child::before {
+    animation: none;
+  }
+}

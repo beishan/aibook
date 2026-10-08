@@ -181,6 +181,43 @@ class CrawlerHttpClientTest {
         assertEquals(1_150L, CrawlerHttpClient.reserveRequestSlot(gate, 1_000L, 150L));
     }
 
+    @Test void pacingStagesKeepTheReservedWaitAndSkipZeroLengthPhases() {
+        var phases = CrawlerHttpClient.pacingWaitStages(100, 60, 30, 10);
+        assertEquals(List.of("固定等待中", "随机等待中", "自适应等待中"),
+                phases.stream().map(CrawlerHttpClient.PacingWaitStage::step).toList());
+        assertEquals(100L, phases.stream().mapToLong(CrawlerHttpClient.PacingWaitStage::millis).sum());
+        assertEquals(List.of(new CrawlerHttpClient.PacingWaitStage("固定等待中", 101)),
+                CrawlerHttpClient.pacingWaitStages(101, 60, 0, 0));
+        assertEquals(List.of(new CrawlerHttpClient.PacingWaitStage("随机等待中", 101)),
+                CrawlerHttpClient.pacingWaitStages(101, 0, 60, 0));
+        assertEquals(List.of(new CrawlerHttpClient.PacingWaitStage("其他等待中", 101)),
+                CrawlerHttpClient.pacingWaitStages(101, 0, 0, 0));
+        assertTrue(CrawlerHttpClient.pacingWaitStages(0, 60, 30, 10).isEmpty());
+    }
+
+    @Test void requestStageIsRestoredAfterThePacingWait() throws Exception {
+        HttpServer server = server("User-agent: *\nAllow: /\n", exchange -> respond(exchange, 200, "content"));
+        try {
+            CrawlerHttpClient httpClient = configuredClient(0);
+            CrawlerSite site = localSite(server, 119L);
+            site.setRespectRobotsTxt(false);
+            site.setRequestIntervalMillis(250);
+            site.setMaxRequestIntervalMillis(250);
+            httpClient.get(site, site.getBaseUrl() + "/one");
+            List<String> steps = new CopyOnWriteArrayList<>();
+            var timing = new CrawlerHttpClient.RequestTiming();
+            timing.setProgressListener(steps::add);
+
+            httpClient.get(site, site.getBaseUrl() + "/two", null, null, timing);
+
+            assertTrue(steps.contains("固定等待中"));
+            assertEquals("请求章节内容中", steps.getLast());
+            assertTrue(timing.fixedWaitMillis() > 0);
+        } finally {
+            server.stop(0);
+        }
+    }
+
     @Test void preservesRequestSpacingWithinOneExecutor() throws Exception {
         List<Long> starts = new CopyOnWriteArrayList<>();
         HttpServer server = server("User-agent: *\nAllow: /\n", exchange -> {
