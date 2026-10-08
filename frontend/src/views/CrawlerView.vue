@@ -143,7 +143,12 @@
       <div v-if="sites.length" class="site-grid">
         <article v-for="site in sites" :key="site.id" class="site-card">
           <div class="site-top">
-            <span class="site-mark" :style="{ '--site-theme-color': siteThemeColor(site.themeColor) }">{{ site.siteName.slice(0, 1) }}</span>
+            <CrawlerSiteIcon
+              :key="`${site.id}-${siteIconRevision}`"
+              :site-id="site.id"
+              :name="site.siteName"
+              :color="siteThemeColor(site.themeColor)"
+            />
             <div class="site-identity">
               <h3>{{ site.siteName }}</h3>
               <a :href="site.homeUrl || site.baseUrl" target="_blank">{{ site.baseUrl }}</a>
@@ -585,6 +590,16 @@
                 <el-input v-model="siteForm.homeUrl" placeholder="留空时使用根地址" />
               </el-form-item>
             </div>
+            <el-form-item label="网站图标">
+              <CrawlerSiteIcon
+                :site-id="editingSite?.id"
+                :name="siteForm.siteName"
+                :color="siteForm.themeColor"
+                editable
+                @selected="pendingSiteIcon = $event"
+                @changed="siteIconRevision++"
+              />
+            </el-form-item>
             <div class="form-grid">
               <el-form-item label="字符编码">
                 <el-select v-model="siteForm.encoding">
@@ -1840,6 +1855,7 @@ import { useRouter } from 'vue-router'
 import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, MoreFilled, Plus, QuestionFilled, Refresh, Search, Star, StarFilled, Tickets, TrendCharts, Upload, VideoPause, VideoPlay, Warning } from '@element-plus/icons-vue'
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElProgress, ElTable, ElTableColumn, ElTag, ElTooltip, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
 import SiteSourceTag from '@/components/SiteSourceTag.vue'
+import CrawlerSiteIcon from '@/components/CrawlerSiteIcon.vue'
 import {
   crawlerApi,
   type CrawlerBook,
@@ -3081,7 +3097,11 @@ async function refreshRobotsTxt(){
   }
 }
 
+const pendingSiteIcon = ref<File>()
+const siteIconRevision = ref(0)
+
 function openSite(site?:CrawlerSite){
+  pendingSiteIcon.value = undefined
   robotsTxtDialog.value=false
   robotsTxtView.value=undefined
   robotsTxtError.value=''
@@ -3136,7 +3156,32 @@ async function saveSite(){
     return
   }
   saving.value=true
-  try{editingSite.value?await crawlerApi.updateSite(editingSite.value.id,siteForm):await crawlerApi.createSite(siteForm);message.success(editingSite.value?'网站信息已保存':'网站已创建，请在卡片的规则管理中添加规则');siteDialog.value=false;await refresh()}finally{saving.value=false}
+  try {
+    const wasEditing = !!editingSite.value
+    const saved = editingSite.value
+      ? await crawlerApi.updateSite(editingSite.value.id, siteForm)
+      : await crawlerApi.createSite(siteForm)
+    const iconFile = pendingSiteIcon.value
+    editingSite.value = saved
+    if (iconFile) {
+      const data = new FormData()
+      data.append('file', iconFile)
+      try {
+        await api.post(`/api/crawler/sites/${saved.id}/icon`, data)
+        pendingSiteIcon.value = undefined
+        siteIconRevision.value++
+      } catch {
+        message.warning('网站已保存，图标上传失败，请在编辑窗口重新上传')
+        await refresh()
+        return
+      }
+    }
+    message.success(wasEditing ? '网站信息已保存' : '网站已创建，请在卡片的规则管理中添加规则')
+    siteDialog.value = false
+    await refresh()
+  } finally {
+    saving.value = false
+  }
 }
 function addProxy(){siteForm.proxies.push({name:`代理 ${siteForm.proxies.length+1}`,url:'',enabled:false})}
 function removeProxy(index:number){siteForm.proxies.splice(index,1)}

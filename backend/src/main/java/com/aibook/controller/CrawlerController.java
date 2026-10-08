@@ -36,6 +36,7 @@ public class CrawlerController {
     private final CrawlerSiteConfigurationService siteConfigurationService;
     private final CrawlerChapterAttemptMetricService chapterAttemptMetricService;
     private final CrawlerChapterRepository chapterRepository;
+    private final CrawlerSiteIconService siteIconService;
 
     @GetMapping("/dashboard") public DashboardView dashboard(Authentication auth) { return managementService.dashboard(user(auth)); }
     @GetMapping("/dashboard/statistics") public DashboardStatisticsView dashboardStatistics(
@@ -59,7 +60,7 @@ public class CrawlerController {
     }
     @PostMapping("/sites") @ResponseStatus(HttpStatus.CREATED) public SiteView createSite(Authentication auth, @Valid @RequestBody SitePayload payload) { return managementService.createSite(user(auth), payload); }
     @PutMapping("/sites/{id}") public SiteView updateSite(Authentication auth, @PathVariable Long id, @Valid @RequestBody SitePayload payload) { return managementService.updateSite(user(auth), id, payload); }
-    @DeleteMapping("/sites/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteSite(Authentication auth, @PathVariable Long id) { managementService.deleteSite(user(auth), id); }
+    @DeleteMapping("/sites/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteSite(Authentication auth, @PathVariable Long id) { managementService.deleteSite(user(auth), id); siteIconService.delete(id); }
     @PostMapping("/sites/{id}/protection/reset") public SiteView resetSiteProtection(Authentication auth, @PathVariable Long id) { return managementService.resetSiteProtection(user(auth), id); }
     @PutMapping("/sites/{id}/manual-freeze")
     public SiteView setSiteFreeze(Authentication auth, @PathVariable Long id,
