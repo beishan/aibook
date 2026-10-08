@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { loadWebsiteSettings } from '@/utils/siteSettings'
+import { installRouteLoadRecovery } from '@/utils/routeLoadRecovery'
+import { message } from '@/utils/message'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -129,6 +131,8 @@ const router = createRouter({
   history: createWebHistory(),
   routes,
 })
+
+installRouteLoadRecovery(router, message.error)
 
 // 路由守卫
 router.beforeEach(async (to, _from, next) => {
