@@ -3898,7 +3898,15 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 :global(.site-editor-dialog .el-dialog__body){display:flex;min-width:0;min-height:0;flex:1;flex-direction:column;overflow:hidden}
 :global(.site-editor-dialog .el-dialog__header),:global(.site-editor-dialog .el-dialog__footer){flex:0 0 auto}
 .site-editor-form{box-sizing:border-box;width:100%;min-width:0;min-height:0;flex:1 1 auto;align-content:start;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}
-.site-editor-tab-scroll{position:sticky;top:0;z-index:3;flex:0 0 auto;overflow-x:auto;padding-bottom:8px;background:var(--surface-card)}
+.site-editor-tab-scroll {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  flex: 0 0 auto;
+  overflow-x: auto;
+  margin-bottom: 8px;
+  background: transparent;
+}
 .site-editor-tabs{position:relative;display:grid;width:max(100%,650px);grid-template-columns:repeat(5,minmax(130px,1fr));padding:4px;border:1px solid var(--border-color);border-radius:15px;background:var(--bg-page);isolation:isolate}.site-editor-tab-indicator{position:absolute;top:4px;bottom:4px;left:4px;z-index:0;width:calc((100% - 8px)/5);border:1px solid var(--border-color-light);border-radius:11px;background:var(--surface-elevated);box-shadow:var(--shadow-sm);transition:transform .28s cubic-bezier(.2,.8,.2,1)}.site-editor-tabs button{position:relative;z-index:1;display:grid;gap:2px;padding:9px 12px;border:0;background:transparent;color:var(--text-secondary);text-align:center;cursor:pointer}.site-editor-tabs button strong{font-size:13px}.site-editor-tabs button small{color:var(--text-tertiary);font-size:10px}.site-editor-tabs button.active,.site-editor-tabs button.active small{color:var(--primary)}.site-editor-tabs button:focus-visible{outline:2px solid var(--primary);outline-offset:-2px;border-radius:11px}.site-tab-panel{display:grid;gap:14px}
 @media(max-width:640px){:global(.site-editor-dialog){width:calc(100vw - 20px)!important;max-height:calc(100dvh - 20px);margin-top:10px!important;margin-bottom:10px}:global(.site-editor-dialog .el-dialog__body){padding-right:14px;padding-left:14px}.site-editor-form{padding-right:0}}
 @media(prefers-reduced-motion:reduce){.site-editor-tab-indicator{transition:none}}
