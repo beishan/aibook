@@ -1631,7 +1631,7 @@
               </template>
             </el-table-column>
             <el-table-column prop="wordCount" label="字数" width="90" />
-            <el-table-column label="状态" width="170">
+            <el-table-column label="状态" width="110">
               <template #default="{ row }">
                 <div class="chapter-crawl-status">
                   <el-tag :type="statusType(row.crawlStatus)">
@@ -1640,6 +1640,7 @@
                   <small
                     v-if="row.crawlStatus==='CRAWLING' && row.currentSubStep"
                     class="task-sub-step"
+                    :title="row.currentSubStep"
                   >
                     {{ row.currentSubStep }}
                   </small>
@@ -4813,12 +4814,28 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 
 .chapter-crawl-status {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   justify-items: start;
   gap: 5px;
 }
 
 .chapter-crawl-status :deep(.el-tag) {
   width: fit-content;
+}
+
+/* 章节列表保持紧凑；长步骤用悬停提示查看完整内容。 */
+.chapter-crawl-status .task-sub-step {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapter-crawl-status .task-sub-step::before {
+  display: inline-block;
+  margin: 0 6px 0 0;
+  vertical-align: middle;
 }
 
 .task-sub-step {
