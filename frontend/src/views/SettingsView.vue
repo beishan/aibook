@@ -4,11 +4,51 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">系统设置</h1>
-        <p class="page-subtitle">管理您的书库配置</p>
+        <p class="page-subtitle">{{ activeGroup.label }} / {{ activeMenuLabel }}</p>
       </div>
     </div>
 
     <div class="settings-layout">
+      <nav class="settings-mobile-nav" aria-label="设置导航">
+        <div class="settings-segment-scroll">
+          <div class="settings-segment" aria-label="设置分组">
+            <span
+              class="settings-segment-slider"
+              :style="{ transform: `translateX(${activeGroupIndex * 100}%)` }"
+              aria-hidden="true"
+            ></span>
+            <button
+              v-for="group in tabGroups"
+              :key="group.label"
+              type="button"
+              :aria-pressed="group.label === activeGroup.label"
+              @click="selectTab(group.items[0].key)"
+              @keydown="handleSegmentKeydown"
+            >
+              {{ group.label }}
+            </button>
+          </div>
+        </div>
+        <div class="settings-segment-scroll">
+          <div :key="activeGroup.label" class="settings-segment" aria-label="组内设置菜单">
+            <span
+              class="settings-segment-slider"
+              :style="{ transform: `translateX(${activeMenuIndex * 100}%)` }"
+              aria-hidden="true"
+            ></span>
+            <button
+              v-for="tab in activeGroup.items"
+              :key="tab.key"
+              type="button"
+              :aria-pressed="tab.key === activeTab"
+              @click="selectTab(tab.key)"
+              @keydown="handleSegmentKeydown"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+        </div>
+      </nav>
       <nav class="settings-nav" aria-label="设置导航">
         <div v-for="group in tabGroups" :key="group.label" class="settings-nav-group">
           <div class="settings-nav-title">{{ group.label }}</div>
@@ -853,56 +893,57 @@ const updateResourceRefreshTimer = () => {
 const isAdmin = computed(() => userStore.userInfo?.role === 'ADMIN')
 const tabGroups = computed(() => [
   {
-    label: '个人',
-    items: [{ key: 'profile', label: '个人设置', icon: '👤' }],
-  },
-  {
-    label: '外观',
+    label: '个人与外观',
     items: [
-      { key: 'theme', label: '主题风格', icon: '🎨' },
-      { key: 'fonts', label: '字体管理', icon: '🔤' },
+      { key: 'profile', label: '个人设置', icon: '👤' },
+      { key: 'theme', label: '主题与界面', icon: '🎨' },
       { key: 'cover-display', label: '封面显示', icon: '🖼️' },
-      { key: 'reader-backgrounds', label: '阅读背景', icon: '🌄' },
     ],
   },
   {
-    label: '书库',
+    label: '阅读资源',
+    items: [
+      { key: 'fonts', label: '字体管理', icon: '🔤' },
+      { key: 'reader-backgrounds', label: '阅读背景', icon: '🌄' },
+      { key: 'covers', label: '书籍封面库', icon: '🖼️' },
+    ],
+  },
+  {
+    label: '书库管理',
     items: [
       { key: 'directories', label: '扫描目录', icon: '📂' },
-      { key: 'covers', label: '书籍封面库', icon: '🖼️' },
+      { key: 'scheduler', label: '定时扫描', icon: '⏰' },
       { key: 'categories', label: '分类管理', icon: '🗂️' },
       { key: 'tags', label: '标签管理', icon: '🏷️' },
       { key: 'authors', label: '作者管理', icon: '✍️' },
       { key: 'trash', label: '回收站', icon: '🗑️' },
-      { key: 'scheduler', label: '定时任务', icon: '⏰' },
-      ...(isAdmin.value ? [{ key: 'metadata-scraping', label: '书籍信息刮削', icon: '📚' }] : []),
     ],
   },
   {
-    label: '连接',
+    label: '采集与连接',
     items: [
+      ...(isAdmin.value ? [
+        { key: 'metadata-scraping', label: '书籍信息刮削', icon: '📚' },
+        { key: 'crawler-settings', label: '爬虫设置', icon: '🕷️' },
+        { key: 'crawler-refresh-options', label: '采集页刷新选项', icon: '⟳' },
+      ] : []),
       { key: 'connections', label: 'OPDS 连接', icon: '🔗' },
       ...(isAdmin.value ? [{ key: 'proxies', label: '系统代理', icon: '⇄' }] : []),
-      ...(isAdmin.value ? [{ key: 'crawler-settings', label: '爬虫设置', icon: '🕷️' }] : []),
     ],
   },
   {
-    label: '管理',
+    label: '系统管理',
     items: [
-      ...(isAdmin.value ? [{ key: 'users', label: '用户管理', icon: '👥' }] : []),
+      ...(isAdmin.value ? [
+        { key: 'website', label: '网站设置', icon: '🌐' },
+        { key: 'users', label: '用户管理', icon: '👥' },
+        { key: 'backups', label: '数据备份', icon: '💾' },
+      ] : []),
       { key: 'logs', label: '操作日志', icon: '📋' },
-    ],
-  },
-    {
-    label: '系统',
-    items: [
-      ...(isAdmin.value ? [{ key: 'crawler-refresh-options', label: '爬虫自动刷新', icon: '⟳' }] : []),
-      ...(isAdmin.value ? [{ key: 'website', label: '网站设置', icon: '🌐' }] : []),
-      ...(isAdmin.value ? [{ key: 'backups', label: '数据备份', icon: '💾' }] : []),
       { key: 'info', label: '系统信息', icon: 'ℹ️' },
     ],
   },
-])
+].filter(group => group.items.length > 0))
 const tabs = computed(() => tabGroups.value.flatMap(group => group.items))
 
 const getLayoutName = (layout: string) => {
@@ -930,6 +971,28 @@ const handleThemeChange = (id: ThemeId) => {
 
 const tabKeys = computed(() => new Set(tabs.value.map(tab => tab.key)))
 const activeTab = ref('profile')
+const activeGroupIndex = computed(() => Math.max(0,
+  tabGroups.value.findIndex(group => group.items.some(tab => tab.key === activeTab.value))
+))
+const activeGroup = computed(() => tabGroups.value[activeGroupIndex.value])
+const activeMenuIndex = computed(() => Math.max(0,
+  activeGroup.value.items.findIndex(tab => tab.key === activeTab.value)
+))
+const activeMenuLabel = computed(() => activeGroup.value.items[activeMenuIndex.value].label)
+
+const handleSegmentKeydown = (event: KeyboardEvent) => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  const current = event.currentTarget as HTMLButtonElement
+  const buttons = Array.from(current.parentElement!.querySelectorAll('button'))
+  const index = buttons.indexOf(current)
+  const nextIndex = event.key === 'Home' ? 0
+    : event.key === 'End' ? buttons.length - 1
+    : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
+  event.preventDefault()
+  buttons[nextIndex].click()
+  buttons[nextIndex].focus()
+  buttons[nextIndex].scrollIntoView({ block: 'nearest', inline: 'nearest' })
+}
 
 const syncActiveTab = (tab: unknown) => {
   activeTab.value =
@@ -1366,6 +1429,70 @@ onUnmounted(() => {
   max-width: 1200px;
   margin: 0 auto;
   padding: var(--spacing-lg) 0;
+}
+
+.settings-mobile-nav {
+  display: none;
+}
+
+.settings-segment-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.settings-segment {
+  position: relative;
+  display: flex;
+  width: max-content;
+  padding: 4px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 16px;
+  background: var(--surface-hover);
+  isolation: isolate;
+}
+
+.settings-segment-slider {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  bottom: 4px;
+  width: 132px;
+  border-radius: 12px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-color-light);
+  transition: transform 220ms ease;
+  z-index: -1;
+  box-sizing: border-box;
+}
+
+.settings-segment button {
+  flex: 0 0 132px;
+  width: 132px;
+  padding: 12px 8px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.settings-segment button[aria-pressed="true"] {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.settings-segment button:focus-visible,
+.settings-nav-item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-segment-slider {
+    transition: none;
+  }
 }
 
 .settings-layout {
@@ -2468,27 +2595,16 @@ onUnmounted(() => {
   }
 
   .settings-nav {
-    position: static;
-    display: flex;
-    gap: var(--spacing-sm);
-    margin-bottom: var(--spacing-xl);
-    overflow-x: auto;
-    scrollbar-width: thin;
-  }
-
-  .settings-nav-group {
-    display: contents;
-  }
-
-  .settings-nav-title {
     display: none;
   }
 
-  .settings-nav-item {
-    width: auto;
-    flex: 0 0 auto;
-    padding: 10px 14px;
+  .settings-mobile-nav {
+    display: grid;
+    gap: 10px;
+    margin-bottom: var(--spacing-xl);
+    min-width: 0;
   }
+
 }
 
 @media (max-width: 768px) {
