@@ -50,6 +50,55 @@ class BackupServiceTest {
     }
 
     @Test
+    void executionPaginationReturnsTotalsStableOrderAndGlobalActivity() {
+        BackupExecution row = new BackupExecution();
+        row.setId(123L);
+        row.setStatus(BackupExecution.Status.RUNNING);
+        row.setTaskName("分页记录");
+        when(repository.findAll(any(org.springframework.data.domain.Pageable.class))).thenAnswer(call -> {
+            org.springframework.data.domain.Pageable request = call.getArgument(0);
+            assertThat(request.getPageNumber()).isEqualTo(1);
+            assertThat(request.getPageSize()).isEqualTo(20);
+            assertThat(request.getSort().getOrderFor("startedAt").isDescending()).isTrue();
+            assertThat(request.getSort().getOrderFor("id").isDescending()).isTrue();
+            return new org.springframework.data.domain.PageImpl<>(List.of(row), request, 123);
+        });
+        when(repository.existsByStatusIn(any())).thenReturn(true);
+        var result = service.executions(1, 20);
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.totalElements()).isEqualTo(123);
+        assertThat(result.totalPages()).isEqualTo(7);
+        assertThat(result.active()).isTrue();
+    }
+
+    @Test
+    void executionPaginationClampsSizeAndRecoversOutOfRangePage() {
+        when(repository.findAll(any(org.springframework.data.domain.Pageable.class))).thenAnswer(call -> {
+            org.springframework.data.domain.Pageable request = call.getArgument(0);
+            assertThat(request.getPageSize()).isEqualTo(100);
+            return new org.springframework.data.domain.PageImpl<>(List.of(), request, 123);
+        });
+        var result = service.executions(99, 10000);
+        assertThat(result.number()).isEqualTo(1);
+        assertThat(result.totalElements()).isEqualTo(123);
+        assertThat(result.size()).isEqualTo(100);
+    }
+
+    @Test
+    void executionPaginationNormalizesEmptyAndNegativeRequests() {
+        when(repository.findAll(any(org.springframework.data.domain.Pageable.class))).thenAnswer(call -> {
+            org.springframework.data.domain.Pageable request = call.getArgument(0);
+            assertThat(request.getPageNumber()).isZero();
+            assertThat(request.getPageSize()).isEqualTo(1);
+            return new org.springframework.data.domain.PageImpl<>(List.of(), request, 0);
+        });
+        var result = service.executions(-1, 0);
+        assertThat(result.number()).isZero();
+        assertThat(result.totalPages()).isZero();
+        assertThat(result.active()).isFalse();
+    }
+
+    @Test
     void retentionCleanupRecordsReasonAndKeepsOriginalResult() throws Exception {
         BackupExecution execution = execution(LocalDateTime.now().minusDays(40));
         execution.setDetails("备份成功");

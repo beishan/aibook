@@ -59,6 +59,7 @@ function fixture(path) {
   if (path === '/api/booklists/1') return { id: 1, name: '手机测试书单', description: '长篇书籍阅读计划', bookCount: 1, books: [book] }
   if (path === '/api/rewrite/projects') return pageResult()
   if (path === '/api/system/backups/path') return { path: '/backups', exists: true, writable: true }
+  if (path === '/api/system/backups/executions/page') return { content: [execution], totalElements: 1, totalPages: 1, number: 0, size: 20, active: false }
   if (path === '/api/system/backups/executions') return [execution]
   if (path === '/api/system/backups/retention') return { enabled: true, recentDays: 7, monthlyMonths: 12 }
   if (path === '/api/crawler/dashboard') return { bookCount: 0, siteCount: 0, runningTaskCount: 0 }

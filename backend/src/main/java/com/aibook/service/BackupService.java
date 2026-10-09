@@ -110,6 +110,27 @@ public class BackupService {
                 .map(BackupExecutionView::from).toList();
     }
 
+    public record ExecutionPage(List<BackupExecutionView> content, long totalElements,
+            int totalPages, int number, int size, boolean active) { }
+
+    public ExecutionPage executions(int page, int size) {
+        int boundedSize = Math.max(1, Math.min(100, size));
+        var sort = org.springframework.data.domain.Sort.by(
+                org.springframework.data.domain.Sort.Direction.DESC, "startedAt", "id");
+        var result = executionRepository.findAll(org.springframework.data.domain.PageRequest.of(
+                Math.max(0, page), boundedSize, sort));
+        if (result.getTotalPages() > 0 && result.getNumber() >= result.getTotalPages()) {
+            result = executionRepository.findAll(org.springframework.data.domain.PageRequest.of(
+                    result.getTotalPages() - 1, boundedSize, sort));
+        }
+        var rows = result.getContent().stream().peek(this::reconcileDeletedBackup)
+                .map(BackupExecutionView::from).toList();
+        return new ExecutionPage(rows, result.getTotalElements(), result.getTotalPages(),
+                result.getTotalElements() == 0 ? 0 : result.getNumber(), boundedSize,
+                executionRepository.existsByStatusIn(List.of(
+                        BackupExecution.Status.QUEUED, BackupExecution.Status.RUNNING)));
+    }
+
     private void reconcileDeletedBackup(BackupExecution execution) {
         if (execution.getDeletionReason() != null
                 || execution.getStatus() == BackupExecution.Status.QUEUED

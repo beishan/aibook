@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/system/backups")
@@ -75,6 +76,13 @@ public class BackupController {
     public ResponseEntity<BackupExecutionView> runImmediately(
             @RequestBody BackupTaskRequest request) {
         return ResponseEntity.accepted().body(backupService.runImmediately(request));
+    }
+
+    @GetMapping("/executions/page")
+    public ResponseEntity<BackupService.ExecutionPage> executionPage(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(backupService.executions(page, size));
     }
 
     @GetMapping("/executions")

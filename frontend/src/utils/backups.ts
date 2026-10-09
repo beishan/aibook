@@ -38,6 +38,15 @@ export interface BackupExecution {
   finishedAt: string | null
 }
 
+export interface BackupExecutionPage {
+  content: BackupExecution[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
+  active: boolean
+}
+
 export interface BackupPath {
   path: string
   exists: boolean
@@ -62,6 +71,9 @@ export const backupApi = {
   tasks: () => api.get<BackupTask[]>('/api/system/backups/tasks').then(({ data }) => data),
   executions: () => api
     .get<BackupExecution[]>('/api/system/backups/executions')
+    .then(({ data }) => data),
+  executionPage: (page: number, size = 20) => api
+    .get<BackupExecutionPage>('/api/system/backups/executions/page', { params: { page, size } })
     .then(({ data }) => data),
   createTask: (input: BackupTaskInput) => api
     .post<BackupTask>('/api/system/backups/tasks', input)

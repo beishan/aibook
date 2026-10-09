@@ -61,7 +61,7 @@
         @click="activateTab('executions')"
         @keydown="handleTabKeydown($event, 'executions')"
       >
-        执行结果 <span>{{ executions.length }}</span>
+        执行结果 <span>{{ executionTotal }}</span>
       </button>
     </div>
 
@@ -190,7 +190,7 @@
     >
       <div class="backup-section-heading">
         <div><span class="backup-section-kicker">RUN HISTORY</span><h3>执行结果</h3></div>
-        <span class="backup-history-note">最近 100 次执行</span>
+        <span class="backup-history-note">共 {{ executionTotal }} 条记录，每页 20 条</span>
       </div>
 
       <div v-if="executions.length === 0" class="backup-empty card glass">
@@ -265,6 +265,27 @@
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+      <div v-if="executionTotal > 0" class="backup-pagination" aria-label="备份执行结果分页">
+        <span>第 {{ executionPage }} / {{ executionPages }} 页</span>
+        <div>
+          <button
+            type="button"
+            class="btn"
+            :disabled="executionPage <= 1 || executionPageLoading"
+            @click="changeExecutionPage(executionPage - 1)"
+          >
+            上一页
+          </button>
+          <button
+            type="button"
+            class="btn"
+            :disabled="executionPage >= executionPages || executionPageLoading"
+            @click="changeExecutionPage(executionPage + 1)"
+          >
+            下一页
+          </button>
         </div>
       </div>
     </section>
@@ -437,6 +458,12 @@ const contentOptions: { key: ContentKey; label: string; description: string }[] 
 
 const tasks = ref<BackupTask[]>([])
 const executions = ref<BackupExecution[]>([])
+const executionPage = ref(1)
+const executionTotal = ref(0)
+const executionPages = ref(0)
+const executionActive = ref(false)
+const executionPageLoading = ref(false)
+let executionRequestSequence = 0
 const pathInfo = ref<BackupPath | null>(null)
 const loading = ref(false)
 const saving = ref(false)
@@ -451,7 +478,6 @@ const taskTabButton = ref<HTMLButtonElement | null>(null)
 const retentionTabButton = ref<HTMLButtonElement | null>(null)
 const executionTabButton = ref<HTMLButtonElement | null>(null)
 let executionPollingTimer: ReturnType<typeof setTimeout> | null = null
-let executionPollingInFlight = false
 let componentUnmounted = false
 
 const emptyDraft = (): BackupTaskInput => ({
@@ -517,15 +543,45 @@ const handleTabKeydown = (event: KeyboardEvent, currentTab: BackupTab) => {
   }
 }
 
+const loadExecutionPage = async () => {
+  const sequence = ++executionRequestSequence
+  const requestedPage = executionPage.value
+  executionPageLoading.value = true
+  try {
+    const result = await backupApi.executionPage(requestedPage - 1)
+    if (componentUnmounted || sequence !== executionRequestSequence) return
+    executions.value = result.content
+    executionTotal.value = result.totalElements
+    executionPages.value = result.totalPages
+    executionPage.value = result.number + 1
+    executionActive.value = result.active
+  } finally {
+    if (sequence === executionRequestSequence) executionPageLoading.value = false
+  }
+}
+
+const changeExecutionPage = async (page: number) => {
+  const previous = executionPage.value
+  executionPage.value = page
+  executionDetailsVisible.value = false
+  try {
+    await loadExecutionPage()
+  } catch (error: any) {
+    executionPage.value = previous
+    message.error(error.response?.data?.message || '执行记录加载失败')
+  } finally {
+    syncExecutionPolling()
+  }
+}
+
 const refreshAll = async (quiet = false) => {
   loading.value = true
   try {
-    const [path, taskRows, executionRows, retentionSettings] = await Promise.all([
-      backupApi.path(), backupApi.tasks(), backupApi.executions(), backupApi.retention(),
+    const [path, taskRows, , retentionSettings] = await Promise.all([
+      backupApi.path(), backupApi.tasks(), loadExecutionPage(), backupApi.retention(),
     ])
     pathInfo.value = path
     tasks.value = taskRows
-    executions.value = executionRows
     syncExecutionPolling()
     Object.assign(retention, retentionSettings)
   } catch (error: any) {
@@ -542,7 +598,7 @@ const syncExecutionPolling = () => {
   }
   if (
     componentUnmounted
-    || !executions.value.some(execution => ['QUEUED', 'RUNNING'].includes(execution.status))
+    || !executionActive.value
   ) return
   executionPollingTimer = setTimeout(() => {
     void refreshExecutions()
@@ -550,15 +606,11 @@ const syncExecutionPolling = () => {
 }
 
 const refreshExecutions = async () => {
-  if (executionPollingInFlight) return
-  executionPollingInFlight = true
   try {
-    const executionRows = await backupApi.executions()
-    if (!componentUnmounted) executions.value = executionRows
+    await loadExecutionPage()
   } catch {
     // Keep the last progress snapshot and retry while an execution is active.
   } finally {
-    executionPollingInFlight = false
     syncExecutionPolling()
   }
 }
@@ -629,6 +681,7 @@ const submitDialog = async () => {
   try {
     if (dialogMode.value === 'run') {
       await backupApi.runImmediately({ ...draft })
+      executionPage.value = 1
       message.success('备份已加入执行队列')
     } else if (editingId.value) {
       await backupApi.updateTask(editingId.value, { ...draft })
@@ -649,6 +702,7 @@ const submitDialog = async () => {
 const runTask = async (task: BackupTask) => {
   try {
     await backupApi.runTask(task.id)
+    executionPage.value = 1
     message.success(`「${task.name}」已加入执行队列`)
     await refreshAll(true)
   } catch (error: any) {
@@ -734,6 +788,21 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.backup-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+  color: var(--text-secondary);
+}
+
+.backup-pagination > div {
+  display: flex;
+  gap: 8px;
+}
+
 .backup-settings {
   display: grid;
   gap: 22px;
