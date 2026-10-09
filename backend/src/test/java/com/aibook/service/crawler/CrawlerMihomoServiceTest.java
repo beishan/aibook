@@ -75,6 +75,39 @@ class CrawlerMihomoServiceTest {
     }
 
     @Test
+    void configurationSaveReturnsConflictWhileRequestStillOwnsGate() throws Exception {
+        CountDownLatch requestStarted = new CountDownLatch(1);
+        CountDownLatch releaseRequest = new CountDownLatch(1);
+        ExecutorService worker = Executors.newSingleThreadExecutor();
+        Future<String> request = worker.submit(() -> service.execute(4L, site, () -> {
+            requestStarted.countDown();
+            assertTrue(releaseRequest.await(10, TimeUnit.SECONDS));
+            return "ok";
+        }));
+        try {
+            assertTrue(requestStarted.await(3, TimeUnit.SECONDS));
+            PolicyPayload draft = new PolicyPayload("http://localhost:9111", "", true,
+                    "http://localhost:7895", "crawler", List.of("A", "B"),
+                    true, 2, 300, 0, 0, 0, false);
+            clearInvocations(api, policies);
+            ResponseStatusException failure = assertTimeoutPreemptively(
+                    java.time.Duration.ofSeconds(4),
+                    () -> assertThrows(ResponseStatusException.class,
+                            () -> service.save(user, 2L, 4L, draft)));
+            assertEquals(409, failure.getStatusCode().value());
+            assertFalse(request.isDone());
+            verify(api, never()).proxies(anyString(), any());
+            verify(policies, never()).save(any());
+            releaseRequest.countDown();
+            assertEquals("ok", request.get(3, TimeUnit.SECONDS));
+            assertNotNull(service.save(user, 2L, 4L, draft));
+        } finally {
+            releaseRequest.countDown();
+            worker.shutdownNow();
+        }
+    }
+
+    @Test
     void switchesOnlyAfterThresholdAndHealthFailure() throws Exception {
         when(api.delay(anyString(), any(), eq("A"))).thenThrow(new MihomoApiClient.ApiException(503));
         AtomicInteger attempts = new AtomicInteger();

@@ -447,6 +447,7 @@ watch(switchEvents, events => {
   switchPage.value = Math.min(switchPage.value, Math.max(1, Math.ceil(events.length / switchPageSize)))
 })
 const reference = ref(emptyReference())
+const savedReference = ref<string | null>(null)
 const selectedGroup = computed(() => groups.value.find(g => g.id === reference.value.nodeGroupId))
 const selectedProxyIds = computed({
   get: () => form.value.proxies.map(p => p.proxyConfigId),
@@ -509,6 +510,7 @@ function create() {
   form.value = emptyForm()
   form.value.name = `执行器 ${executors.value.length + 1}`
   reference.value = emptyReference()
+  savedReference.value = null
   groups.value = []
   policy.value = null
   dialog.value = true
@@ -523,6 +525,7 @@ function applyPolicy(value:MihomoPolicyView) {
     rotationSeconds:value.rotationSeconds || 300, rotationChapters:value.rotationChapters || 50,
     rotationTasks:value.rotationTasks || 1, randomOrder:value.randomOrder,
   }
+  savedReference.value = JSON.stringify(reference.value)
 }
 
 async function edit(item:CrawlerQueueExecutor) {
@@ -536,6 +539,7 @@ async function edit(item:CrawlerQueueExecutor) {
     proxies:item.proxies.map(p => ({ proxyConfigId:p.proxyConfigId, cooldownSeconds:p.cooldownSeconds })),
   }
   reference.value = emptyReference()
+  savedReference.value = null
   groups.value = []
   policy.value = null
   dialog.value = true
@@ -585,6 +589,7 @@ async function migrate() {
 }
 
 async function save() {
+  if (saving.value) return
   if (!queueId.value || !form.value.name.trim()) return message.error('请选择队列并填写执行器名称')
   if (form.value.proxyMode === 'SELECTED' && !form.value.proxies.length) return message.error('请至少选择一个普通代理')
   if (form.value.proxyMode === 'MIHOMO' && (!reference.value.systemProxyId || !reference.value.nodeGroupId)) return message.error('请选择 Mihomo 系统代理与备用节点组，旧配置可先迁移')
@@ -597,7 +602,9 @@ async function save() {
       const created = await crawlerApi.createQueueExecutor(queueId.value, { ...payload, enabled:isMihomo ? false : form.value.enabled })
       editingId.value = created.id
     }
-    if (isMihomo) applyPolicy(await crawlerApi.saveMihomoSelection(queueId.value, editingId.value, reference.value))
+    if (isMihomo && savedReference.value !== JSON.stringify(reference.value)) {
+      applyPolicy(await crawlerApi.saveMihomoSelection(queueId.value, editingId.value, reference.value))
+    }
     await crawlerApi.updateQueueExecutor(queueId.value, editingId.value, payload)
     message.success('执行器配置已保存')
     dialog.value = false
@@ -617,6 +624,7 @@ async function unbind() {
     await crawlerApi.unbindMihomo(queueId.value, editingId.value)
     policy.value = null
     reference.value = emptyReference()
+    savedReference.value = null
     groups.value = []
     form.value.proxyMode = 'DEFAULT'
     await loadExecutors()

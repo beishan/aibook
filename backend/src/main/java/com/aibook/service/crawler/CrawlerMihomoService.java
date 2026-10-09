@@ -13,6 +13,7 @@ import java.net.URI;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -130,7 +131,12 @@ public class CrawlerMihomoService {
     private PolicyView saveConfigured(User user, Long queueId, Long id, PolicyPayload payload,
             ReferencePayload reference) throws Exception {
         ReentrantLock gate = lock(id);
-        gate.lockInterruptibly();
+        // Crawling holds this gate across network requests and retries. A settings request
+        // must not wait indefinitely or overwrite the state of an in-flight request.
+        if (!gate.tryLock(2, TimeUnit.SECONDS)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "执行器正在请求或切换节点，代理配置尚未保存，请稍后重试");
+        }
         try {
             CrawlerQueueExecutor executor = owned(user, queueId, id);
             String previousConnection = policies.findById(id)
