@@ -1,17 +1,33 @@
 <template>
-  <nav v-if="!immersive" class="phone-navigation" aria-label="手机主导航">
-    <router-link
-      v-for="item in primaryItems"
-      :key="item.path"
-      :to="item.path"
-      :class="{ active: isActive(item.path) }"
-      :aria-current="isActive(item.path) ? 'page' : undefined"
-    >
-      <el-icon aria-hidden="true"><component :is="item.icon" /></el-icon>
-      <span>{{ item.title }}</span>
-    </router-link>
+  <nav
+    v-if="!immersive"
+    class="phone-navigation"
+    :style="dockStyle"
+    aria-label="手机 Dock 主导航"
+  >
+    <div class="phone-dock-items">
+      <router-link
+        v-for="item in primaryItems"
+        :key="item.path"
+        :to="item.path"
+        :class="{ active: isActive(item.path) }"
+        :aria-current="isActive(item.path) ? 'page' : undefined"
+        :aria-label="item.title"
+      >
+        <span class="phone-dock-icon" aria-hidden="true">
+          <DockIcon
+            :name="item.icon"
+            :variant="preferencesStore.dockIconStyle"
+            :custom-src="dockIconStore.iconUrls[item.icon]"
+          />
+        </span>
+        <span class="phone-dock-label">{{ item.title }}</span>
+        <span class="phone-dock-dot" aria-hidden="true"></span>
+      </router-link>
+    </div>
     <button
       type="button"
+      class="phone-dock-more"
       :class="{ active: moreActive }"
       aria-label="更多功能"
       aria-haspopup="dialog"
@@ -40,7 +56,13 @@
         :aria-current="isActive(item.path) ? 'page' : undefined"
         @click="open = false"
       >
-        <el-icon aria-hidden="true"><component :is="item.icon" /></el-icon>
+        <span class="phone-sheet-icon" aria-hidden="true">
+          <DockIcon
+            :name="item.icon"
+            :variant="preferencesStore.dockIconStyle"
+            :custom-src="dockIconStore.iconUrls[item.icon]"
+          />
+        </span>
         <span>{{ item.title }}</span>
       </router-link>
     </div>
@@ -55,34 +77,42 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  Collection, Connection, DataAnalysis, EditPen, Grid, House,
-  Reading, Setting, Switch, Tools,
-} from '@element-plus/icons-vue'
+import { Grid } from '@element-plus/icons-vue'
+import DockIcon from '@/components/DockIcon.vue'
+import { usePreferencesStore } from '@/stores/preferences'
+import { useDockIconStore } from '@/stores/dockIcons'
 import { useUserStore } from '@/stores/user'
 import { confirm } from '@/utils/message'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const preferencesStore = usePreferencesStore()
+const dockIconStore = useDockIconStore()
 const open = ref(false)
 const immersive = computed(() => ['Reader', 'CrawlerTrialReader', 'RewriteEditor'].includes(String(route.name)))
-const primaryItems = [
-  { path: '/', title: '首页', icon: House },
-  { path: '/books', title: '书库', icon: Collection },
-  { path: '/shelf', title: '书架', icon: Reading },
-]
-const allItems = [
-  ...primaryItems,
-  { path: '/rewrite', title: '书籍重写', icon: EditPen },
-  { path: '/text-repair', title: '内容修复', icon: Tools },
-  { path: '/format-conversion', title: '格式转换', icon: Switch },
-  { path: '/crawler', title: '书籍采集', icon: Connection },
-  { path: '/statistics', title: '阅读统计', icon: DataAnalysis },
-  { path: '/settings', title: '系统设置', icon: Setting },
-]
+const menuRoutes: Record<string, string> = {
+  home: '/',
+  library: '/books',
+  rewrite: '/rewrite',
+  shelf: '/shelf',
+  repair: '/text-repair',
+  conversion: '/format-conversion',
+  crawler: '/crawler',
+  statistics: '/statistics',
+  settings: '/settings',
+}
+const allItems = computed(() => [...preferencesStore.dockNavigationItems]
+  .sort((a, b) => a.order - b.order)
+  .map(item => ({ path: menuRoutes[item.key], icon: item.icon, title: item.title, enabled: item.enabled })))
+const primaryItems = computed(() => allItems.value.filter(item => item.enabled))
+const dockStyle = computed(() => ({
+  '--phone-dock-icon-size': `${Math.min(44, preferencesStore.dockSize)}px`,
+  '--phone-dock-opacity': String(preferencesStore.dockOpacity / 100),
+  '--phone-dock-blur': `${preferencesStore.dockBlur}px`,
+}))
 const isActive = (path: string) => path === '/' ? route.path === '/' : route.path.startsWith(path)
-const moreActive = computed(() => !primaryItems.some(item => isActive(item.path)))
+const moreActive = computed(() => !primaryItems.value.some(item => isActive(item.path)))
 watch(() => route.fullPath, () => { open.value = false })
 
 const logout = async () => {
@@ -102,27 +132,45 @@ const logout = async () => {
   .phone-navigation {
     position: fixed;
     z-index: 110;
-    inset: auto 0 0;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    inset: auto max(10px, env(safe-area-inset-right))
+      calc(8px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    display: flex;
+    align-items: center;
     gap: 4px;
-    padding: 6px max(10px, env(safe-area-inset-right))
-      calc(6px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
-    border-top: 1px solid var(--border-color);
-    background: color-mix(in srgb, var(--surface-card) 96%, transparent);
-    backdrop-filter: blur(18px);
+    padding: 7px;
+    border: 1px solid var(--border-color-light);
+    border-radius: 24px;
+    background: color-mix(in srgb, var(--surface-card) calc(var(--phone-dock-opacity) * 100%), transparent);
+    backdrop-filter: blur(var(--phone-dock-blur));
+    -webkit-backdrop-filter: blur(var(--phone-dock-blur));
   }
 
-  .phone-navigation > a,
-  .phone-navigation > button {
-    display: grid;
+  .phone-dock-items {
+    display: flex;
+    flex: 1 1 auto;
     min-width: 0;
-    min-height: 50px;
-    place-content: center;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .phone-dock-items::-webkit-scrollbar {
+    display: none;
+  }
+
+  .phone-dock-items > a,
+  .phone-dock-more {
+    position: relative;
+    display: grid;
+    flex: 0 0 64px;
+    width: 64px;
+    min-height: 68px;
+    align-content: center;
     justify-items: center;
     gap: 4px;
+    padding: 4px;
     border: 0;
-    border-radius: 12px;
+    border-radius: 17px;
     background: transparent;
     color: var(--text-secondary);
     font: inherit;
@@ -131,14 +179,53 @@ const logout = async () => {
     cursor: pointer;
   }
 
-  .phone-navigation .el-icon {
-    font-size: 22px;
+  .phone-dock-icon {
+    width: var(--phone-dock-icon-size);
+    height: var(--phone-dock-icon-size);
   }
 
-  .phone-navigation > .active {
+  .phone-dock-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .phone-dock-more {
+    flex-basis: 48px;
+    width: 48px;
+    border-left: 1px solid var(--border-color-light);
+  }
+
+  .phone-dock-more .el-icon {
+    height: var(--phone-dock-icon-size);
+    font-size: 28px;
+  }
+
+  .phone-dock-items > .active,
+  .phone-dock-more.active {
     background: var(--primary-alpha-10);
     color: var(--primary);
     font-weight: 700;
+  }
+
+  .phone-dock-dot {
+    position: absolute;
+    bottom: 1px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--primary);
+    opacity: 0;
+  }
+
+  .phone-dock-items > .active .phone-dock-dot {
+    opacity: 1;
+  }
+
+  .phone-dock-items > a:active,
+  .phone-dock-more:active {
+    background: var(--primary-alpha-10);
   }
 }
 
@@ -161,8 +248,9 @@ const logout = async () => {
   text-decoration: none;
 }
 
-.phone-navigation-grid .el-icon {
-  font-size: 24px;
+.phone-sheet-icon {
+  width: 40px;
+  height: 40px;
   color: var(--primary);
 }
 

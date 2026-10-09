@@ -246,7 +246,7 @@
 /* 三种主题共用手机导航和内容边界，阅读／编辑保留独立工具栏。 */
 @media (max-width: 768px), (max-width: 1024px) and (max-height: 500px) and (pointer: coarse) {
   :root {
-    --mobile-nav-height: calc(62px + env(safe-area-inset-bottom));
+    --mobile-nav-height: calc(90px + env(safe-area-inset-bottom));
   }
 
   .app-layout {
