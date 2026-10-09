@@ -13,7 +13,6 @@ import java.net.URI;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -51,12 +50,61 @@ public class CrawlerMihomoService {
     private ProxySettingsService proxySettingsService;
     private final ThreadLocal<SystemMihomoService.ResolvedConnection> referenceConnection = new ThreadLocal<>();
     private final Map<Long, ReentrantLock> locks = new ConcurrentHashMap<>();
+    private final Map<Long, ReentrantLock> configurationLocks = new ConcurrentHashMap<>();
+    private final ThreadLocal<CrawlerMihomoPolicy> requestPolicy = new ThreadLocal<>();
+    private final ThreadLocal<CrawlerMihomoPolicy> chapterPolicy = new ThreadLocal<>();
+    private final ThreadLocal<SystemMihomoService.ResolvedConnection> chapterConnection = new ThreadLocal<>();
     private final ThreadLocal<Long> executingSiteId = new ThreadLocal<>();
 
     public interface RequestAction<T> { T run() throws Exception; }
 
     private ReentrantLock lock(Long id) {
         return locks.computeIfAbsent(id, ignored -> new ReentrantLock(true));
+    }
+
+    private ReentrantLock configurationLock(Long id) {
+        return configurationLocks.computeIfAbsent(id, ignored -> new ReentrantLock());
+    }
+
+    public AutoCloseable beginChapter(Long id) {
+        CrawlerMihomoPolicy previous = chapterPolicy.get();
+        var previousConnection = chapterConnection.get();
+        CrawlerMihomoPolicy snapshot = policies.findById(id).map(this::copy).orElse(null);
+        SystemMihomoService.ResolvedConnection connection = null;
+        try {
+            if (snapshot != null) connection = resolveReference(snapshot);
+        } catch (ResponseStatusException unavailable) {
+            // Let execute report unavailable references through the existing retry/wait path.
+        }
+        if (snapshot == null) chapterPolicy.remove();
+        else chapterPolicy.set(snapshot);
+        if (connection == null) chapterConnection.remove();
+        else chapterConnection.set(connection);
+        return () -> {
+            if (previous == null) chapterPolicy.remove();
+            else chapterPolicy.set(previous);
+            if (previousConnection == null) chapterConnection.remove();
+            else chapterConnection.set(previousConnection);
+        };
+    }
+
+    private CrawlerMihomoPolicy copy(CrawlerMihomoPolicy value) {
+        return mapper.convertValue(value, CrawlerMihomoPolicy.class);
+    }
+
+    private long revision(CrawlerMihomoPolicy value) {
+        return value.getConfigurationRevision() == null ? 0 : value.getConfigurationRevision();
+    }
+
+    /** Only persist runtime state if its configuration still matches the saved revision. */
+    private void saveRuntime(CrawlerMihomoPolicy running) {
+        ReentrantLock gate = configurationLock(running.getExecutorId());
+        gate.lock();
+        try {
+            policies.updateRuntime(running, revision(running));
+        } finally {
+            gate.unlock();
+        }
     }
 
     public PolicyView get(User user, Long queueId, Long id) {
@@ -130,13 +178,15 @@ public class CrawlerMihomoService {
 
     private PolicyView saveConfigured(User user, Long queueId, Long id, PolicyPayload payload,
             ReferencePayload reference) throws Exception {
-        ReentrantLock gate = lock(id);
-        // Crawling holds this gate across network requests and retries. A settings request
-        // must not wait indefinitely or overwrite the state of an in-flight request.
-        if (!gate.tryLock(2, TimeUnit.SECONDS)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "执行器正在请求或切换节点，代理配置尚未保存，请稍后重试");
-        }
+        owned(user, queueId, id);
+        // Validate without holding the running-request gate or a database write lock.
+        CrawlerMihomoPolicy validation = connection(id, payload);
+        validation.setSystemProxyId(reference == null ? null : reference.systemProxyId());
+        validation.setNodeGroupId(reference == null ? null : reference.nodeGroupId());
+        validation.setGroupName(payload.groupName());
+        if (payload.nodes() != null && !payload.nodes().isEmpty()) validateNodes(validation, payload.nodes());
+        ReentrantLock gate = configurationLock(id);
+        gate.lockInterruptibly();
         try {
             CrawlerQueueExecutor executor = owned(user, queueId, id);
             String previousConnection = policies.findById(id)
@@ -162,7 +212,6 @@ public class CrawlerMihomoService {
                     || selected.stream().anyMatch(node -> node == null || node.isBlank() || node.length() > 200)) {
                 bad("请选择 1 至 100 个不重复节点，节点名称不能超过 200 个字符");
             }
-            validateNodes(config, selected);
             range(payload.failureThreshold(), 1, 10, "连续失败阈值");
             range(payload.cooldownSeconds(), 10, 604800, "节点冷却秒数");
             range(payload.rotationSeconds(), 0, 604800, "轮换秒数");
@@ -194,6 +243,7 @@ public class CrawlerMihomoService {
             config.setLastError(null);
             config.setLastActivityAt(null);
             transactions.executeWithoutResult(status -> {
+                config.setConfigurationRevision(revision(config) + 1);
                 policies.save(config);
                 executor.setProxyMode(CrawlerQueueExecutor.ProxyMode.MIHOMO);
                 executor.setSelectionStrategy(payload.randomOrder()
@@ -235,8 +285,21 @@ public class CrawlerMihomoService {
             api.delay(config.getControllerUrl(), secret(config), node);
             switchTo(config, node, "手动切换");
             if ("MANUAL".equals(config.getSwitchingMode())) {
-                config.setManualNode(node);
-                policies.save(config);
+                ReentrantLock settings = configurationLock(id);
+                settings.lock();
+                try {
+                    transactions.executeWithoutResult(status -> {
+                        CrawlerMihomoPolicy latest = policies.findById(id).orElse(null);
+                        if (latest != null && revision(latest) == revision(config)) {
+                            latest.setManualNode(node);
+                            latest.setConfigurationRevision(revision(latest) + 1);
+                            policies.save(latest);
+                        }
+                    });
+                    config.setManualNode(node);
+                } finally {
+                    settings.unlock();
+                }
             }
             return view(config);
         } finally {
@@ -245,7 +308,11 @@ public class CrawlerMihomoService {
     }
 
     public boolean canExecute(Long id) {
-        return policies.findById(id).map(p -> {
+        CrawlerMihomoPolicy snapshot = chapterPolicy.get();
+        if (snapshot == null) snapshot = requestPolicy.get();
+        Optional<CrawlerMihomoPolicy> selected = snapshot != null && Objects.equals(snapshot.getExecutorId(), id)
+                ? Optional.of(snapshot) : policies.findById(id);
+        return selected.map(p -> {
             try {
                 resolveReference(p);
                 return p.getRetryAt() == null || !p.getRetryAt().isAfter(Instant.now());
@@ -270,6 +337,7 @@ public class CrawlerMihomoService {
         try {
             ensureNotFrozen(id);
             CrawlerMihomoPolicy config = required(id);
+            requestPolicy.set(config);
             if (!canExecute(id)) throw waiting(config.getLastError());
             // Never accrue a persisted in-flight timestamp after a process crash/restart.
             config.setLastActivityAt(null);
@@ -329,7 +397,7 @@ public class CrawlerMihomoService {
                         config.setNodeFailuresJson(write(failures));
                         config.setFailures(0);
                         config.setLastError(null);
-                        policies.save(config);
+                        saveRuntime(config);
                         return result;
                     } catch (CrawlerHttpClient.NodeRequestFailureException exception) {
                         lastNodeFailure = exception;
@@ -346,7 +414,7 @@ public class CrawlerMihomoService {
                             event(config, node, node, "节点已冻结：连续 " + count + " 次节点异常；"
                                     + exception.getMessage(), false);
                         }
-                        policies.save(config);
+                        saveRuntime(config);
                         if (!config.isFailover() || "MANUAL".equals(config.getSwitchingMode())) {
                             throw exception;
                         }
@@ -365,7 +433,7 @@ public class CrawlerMihomoService {
                         rotate(config, "章节重试耗尽，切换下一个节点：" + exception.getMessage(), true);
                     } catch (IOException exception) {
                         config.setFailures(config.getFailures() + 1);
-                        policies.save(config);
+                        saveRuntime(config);
                         if (!config.isFailover()) throw waitAndSave(config, "节点请求失败，自动故障切换已关闭", 30);
                         if (config.getFailures() < config.getFailureThreshold()) continue;
                         // Verify control-plane availability before interpreting a delay failure as node failure.
@@ -376,7 +444,7 @@ public class CrawlerMihomoService {
                         } catch (MihomoApiClient.ApiException failure) {
                             if (failure.status() != 503 && failure.status() != 504) throw failure;
                             freezeNode(config, config.getCurrentNode(), "节点网络检测失败", 0);
-                            policies.save(config);
+                            saveRuntime(config);
                             rotate(config, "网络故障切换", true);
                         }
                     }
@@ -392,10 +460,11 @@ public class CrawlerMihomoService {
                 accrueActiveTime(config);
                 // Explicitly stop timing between requests: freeze/idle/restart gaps are not counted.
                 config.setLastActivityAt(null);
-                policies.save(config);
+                saveRuntime(config);
             }
         } finally {
             referenceConnection.remove();
+            requestPolicy.remove();
             executingSiteId.remove();
             gate.unlock();
         }
@@ -415,7 +484,7 @@ public class CrawlerMihomoService {
                 receipts.save(receipt);
                 if (chapter) config.setChapters(config.getChapters() + 1);
                 else config.setTasks(config.getTasks() + 1);
-                policies.save(config);
+                saveRuntime(config);
             });
         } finally {
             gate.unlock();
@@ -428,7 +497,7 @@ public class CrawlerMihomoService {
     }
 
     public void unbind(User user, Long queueId, Long id) throws InterruptedException {
-        ReentrantLock gate = lock(id);
+        ReentrantLock gate = configurationLock(id);
         gate.lockInterruptibly();
         try {
             CrawlerQueueExecutor executor = owned(user, queueId, id);
@@ -464,7 +533,7 @@ public class CrawlerMihomoService {
                 if (exception.status() != 503 && exception.status() != 504) throw exception;
                 freezeNode(config, candidate, "候选节点网络检测失败", 0);
                 event(config, config.getCurrentNode(), candidate, "候选节点检测失败", false);
-                policies.save(config);
+                saveRuntime(config);
                 continue;
             }
             switchTo(config, candidate, reason);
@@ -474,7 +543,7 @@ public class CrawlerMihomoService {
         // A scheduled rotation cannot silently continue forever on an exhausted pool.
         if (selected.size() > 1) throw waitAndSave(config, "没有可用于轮换的备用节点", 30);
         resetCounters(config);
-        policies.save(config);
+        saveRuntime(config);
     }
 
     private void switchTo(CrawlerMihomoPolicy config, String node, String reason) throws Exception {
@@ -484,7 +553,7 @@ public class CrawlerMihomoService {
             api.select(config.getControllerUrl(), secret(config), config.getGroupName(), node);
         } catch (Exception exception) {
             event(config, previous, node, "切换失败或无法确认结果", false);
-            policies.save(config);
+            saveRuntime(config);
             throw exception;
         }
         config.setCurrentNode(node);
@@ -493,7 +562,7 @@ public class CrawlerMihomoService {
         config.setLastError(null);
         resetCounters(config);
         event(config, previous, node, reason, true);
-        policies.save(config);
+        saveRuntime(config);
     }
 
     private void resetCounters(CrawlerMihomoPolicy config) {
@@ -529,7 +598,7 @@ public class CrawlerMihomoService {
             event(config, config.getCurrentNode(), actual, "同步 Mihomo 实际节点", true);
             config.setCurrentNode(actual);
             resetCounters(config);
-            policies.save(config);
+            saveRuntime(config);
         }
     }
 
@@ -579,7 +648,7 @@ public class CrawlerMihomoService {
     }
 
     private CrawlerMihomoPolicy connection(Long id, PolicyPayload draft) {
-        CrawlerMihomoPolicy config = policies.findById(id).orElseGet(CrawlerMihomoPolicy::new);
+        CrawlerMihomoPolicy config = policies.findById(id).map(this::copy).orElseGet(CrawlerMihomoPolicy::new);
         config.setExecutorId(id);
         config.setControllerUrl(normalizeUrl(draft.controllerUrl(), false));
         if (draft.clearSecret()) config.setSecret(null);
@@ -632,12 +701,16 @@ public class CrawlerMihomoService {
     }
 
     private CrawlerMihomoPolicy required(Long id) {
-        return policies.findById(id).orElseThrow(() ->
+        CrawlerMihomoPolicy snapshot = chapterPolicy.get();
+        if (snapshot == null) snapshot = requestPolicy.get();
+        if (snapshot != null && Objects.equals(snapshot.getExecutorId(), id)) return snapshot;
+        return policies.findById(id).map(this::copy).orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.CONFLICT, "请先配置 Mihomo 连接和节点"));
     }
 
     private SystemMihomoService.ResolvedConnection resolveReference(CrawlerMihomoPolicy config) {
         if (config.getSystemProxyId() == null) return null;
+        if (chapterPolicy.get() == config && chapterConnection.get() != null) return chapterConnection.get();
         CrawlerQueueExecutor executor = executors.findById(config.getExecutorId()).orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "执行器不存在"));
         CrawlerTaskQueue queue = executor.getQueue();
@@ -661,7 +734,7 @@ public class CrawlerMihomoService {
             CrawlerMihomoPolicy config, String message, int seconds) {
         config.setRetryAt(Instant.now().plusSeconds(seconds));
         config.setLastError(message.substring(0, Math.min(message.length(), 300)));
-        policies.save(config);
+        saveRuntime(config);
         return waiting(message);
     }
 

@@ -59,6 +59,31 @@ class CrawlerMihomoServiceTest {
         config.setCurrentNode("A");
         when(policies.findById(4L)).thenReturn(Optional.of(config));
         when(policies.existsById(4L)).thenReturn(true);
+        when(policies.save(any())).thenAnswer(call -> {
+            CrawlerMihomoPolicy saved = call.getArgument(0);
+            org.springframework.beans.BeanUtils.copyProperties(saved, config);
+            return saved;
+        });
+        when(policies.updateRuntime(any(), anyLong())).thenAnswer(call -> {
+            CrawlerMihomoPolicy running = call.getArgument(0);
+            long expected = call.getArgument(1);
+            long current = config.getConfigurationRevision() == null ? 0 : config.getConfigurationRevision();
+            if (expected != current) return 0;
+            config.setCurrentNode(running.getCurrentNode());
+            config.setFailures(running.getFailures());
+            config.setActiveMillis(running.getActiveMillis());
+            config.setChapters(running.getChapters());
+            config.setTasks(running.getTasks());
+            config.setLastActivityAt(running.getLastActivityAt());
+            config.setLastSwitchAt(running.getLastSwitchAt());
+            config.setRetryAt(running.getRetryAt());
+            config.setLastError(running.getLastError());
+            config.setCooldownsJson(running.getCooldownsJson());
+            config.setNodeFailuresJson(running.getNodeFailuresJson());
+            config.setCooldownReasonsJson(running.getCooldownReasonsJson());
+            config.setEventsJson(running.getEventsJson());
+            return 1;
+        });
         when(executors.findById(4L)).thenReturn(Optional.of(executor));
         when(api.proxies(anyString(), any())).thenAnswer(call -> mapper.readTree(
                 "{\"proxies\":{\"crawler\":{\"type\":\"Selector\",\"now\":\"" + actual
@@ -75,36 +100,64 @@ class CrawlerMihomoServiceTest {
     }
 
     @Test
-    void configurationSaveReturnsConflictWhileRequestStillOwnsGate() throws Exception {
+    void configurationSaveDoesNotWaitAndCurrentChapterKeepsItsSnapshot() throws Exception {
+        SystemMihomoService shared = sharedSource();
+        service.saveReference(user, 2L, 4L, reference("MANUAL", "A"));
         CountDownLatch requestStarted = new CountDownLatch(1);
         CountDownLatch releaseRequest = new CountDownLatch(1);
         ExecutorService worker = Executors.newSingleThreadExecutor();
-        Future<String> request = worker.submit(() -> service.execute(4L, site, () -> {
-            requestStarted.countDown();
-            assertTrue(releaseRequest.await(10, TimeUnit.SECONDS));
-            return "ok";
-        }));
+        Future<String> request = worker.submit(() -> {
+            try (AutoCloseable chapter = service.beginChapter(4L)) {
+                String first = service.execute(4L, site, () -> {
+                    requestStarted.countDown();
+                    assertTrue(releaseRequest.await(10, TimeUnit.SECONDS));
+                    return service.proxyUrl(4L);
+                });
+                // A second page/retry within the same chapter retains its original settings.
+                service.execute(4L, site, () -> "same chapter");
+                assertEquals("A", service.lastRequestTrace().currentNode());
+                return first;
+            }
+        });
         try {
             assertTrue(requestStarted.await(3, TimeUnit.SECONDS));
-            PolicyPayload draft = new PolicyPayload("http://localhost:9111", "", true,
-                    "http://localhost:7895", "crawler", List.of("A", "B"),
-                    true, 2, 300, 0, 0, 0, false);
-            clearInvocations(api, policies);
-            ResponseStatusException failure = assertTimeoutPreemptively(
-                    java.time.Duration.ofSeconds(4),
-                    () -> assertThrows(ResponseStatusException.class,
-                            () -> service.save(user, 2L, 4L, draft)));
-            assertEquals(409, failure.getStatusCode().value());
-            assertFalse(request.isDone());
-            verify(api, never()).proxies(anyString(), any());
-            verify(policies, never()).save(any());
+            long oldRevision = config.getConfigurationRevision();
+            when(shared.resolve(7L, 8L, 1L)).thenReturn(new SystemMihomoService.ResolvedConnection(
+                    config.getControllerUrl(), "updated-secret", "http://localhost:7896",
+                    "crawler", List.of("A", "B")));
+            var saved = assertTimeoutPreemptively(java.time.Duration.ofSeconds(2),
+                    () -> service.saveReference(user, 2L, 4L, reference("MANUAL", "B")));
+            assertEquals("B", saved.manualNode());
+            assertEquals(oldRevision + 1, config.getConfigurationRevision());
+            assertFalse(request.isDone(), "Saving must not stop the active request");
+            verify(api, never()).select(anyString(), any(), anyString(), eq("B"));
             releaseRequest.countDown();
-            assertEquals("ok", request.get(3, TimeUnit.SECONDS));
-            assertNotNull(service.save(user, 2L, 4L, draft));
+            assertEquals("http://localhost:7895", request.get(3, TimeUnit.SECONDS));
+            assertEquals("B", config.getManualNode(), "Old runtime must not overwrite saved settings");
+            assertEquals("http://localhost:7896", config.getProxyUrl());
+            assertNull(config.getCurrentNode(), "Old chapter must not restore a reset node in the new revision");
+            try (AutoCloseable next = service.beginChapter(4L)) {
+                service.execute(4L, site, () -> {
+                    assertEquals("http://localhost:7896", service.proxyUrl(4L));
+                    return "next chapter";
+                });
+                assertEquals("B", service.lastRequestTrace().currentNode());
+            }
         } finally {
             releaseRequest.countDown();
             worker.shutdownNow();
         }
+    }
+
+    @Test
+    void invalidDraftNeverMutatesTheSavedOrRunningConfiguration() throws Exception {
+        String original = config.getControllerUrl();
+        PolicyPayload invalid = new PolicyPayload("http://localhost:9112", "new-secret", false,
+                "http://localhost:7896", "crawler", List.of("DIRECT"), true, 2, 300, 0, 0, 0, false);
+        assertThrows(ResponseStatusException.class, () -> service.save(user, 2L, 4L, invalid));
+        assertEquals(original, config.getControllerUrl());
+        assertEquals("private-secret", config.getSecret());
+        assertEquals(0L, config.getConfigurationRevision());
     }
 
     @Test

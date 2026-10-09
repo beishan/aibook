@@ -33,6 +33,7 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -47,6 +48,12 @@ public class CrawlerQueueExecutorService {
     private final CrawlerSettingsService crawlerSettingsService;
     private final CrawlerMihomoService mihomoService;
     private final ThreadLocal<ExecutionRoute> executionRoute = new ThreadLocal<>();
+
+    private record ChapterConfiguration(CrawlerQueueExecutor.ProxyMode mode,
+            CrawlerQueueExecutor.SelectionStrategy strategy, Integer cooldownSeconds,
+            List<ProxyCandidate> candidates) { }
+
+    private final ThreadLocal<ChapterConfiguration> chapterConfiguration = new ThreadLocal<>();
     private final ThreadLocal<ProxyCandidate> requestProxy = new ThreadLocal<>();
 
     public record RequestProxySnapshot(String name, String node) { }
@@ -97,6 +104,38 @@ public class CrawlerQueueExecutorService {
         };
     }
 
+    /** Pins proxy routing through every request/retry belonging to one chapter. */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public AutoCloseable beginChapter(CrawlerSite site) {
+        ExecutionRoute route = executionRoute.get();
+        if (route == null) return () -> { };
+        CrawlerQueueExecutor executor = ownedExecutor(route.queueId(), route.executorId());
+        ChapterConfiguration previous = chapterConfiguration.get();
+        AutoCloseable mihomo = executor.getProxyMode() == CrawlerQueueExecutor.ProxyMode.MIHOMO
+                ? mihomoService.beginChapter(executor.getId()) : () -> { };
+        try {
+            List<ProxyCandidate> selected = executor.getProxyMode() == CrawlerQueueExecutor.ProxyMode.MIHOMO
+                    ? List.of() : List.copyOf(candidates(executor, site, proxyMap()));
+            chapterConfiguration.set(new ChapterConfiguration(executor.getProxyMode(),
+                    executor.getSelectionStrategy(), executor.getDefaultProxyCooldownSeconds(), selected));
+        } catch (RuntimeException failure) {
+            try {
+                mihomo.close();
+            } catch (Exception cleanup) {
+                failure.addSuppressed(cleanup);
+            }
+            throw failure;
+        }
+        return () -> {
+            try {
+                mihomo.close();
+            } finally {
+                if (previous == null) chapterConfiguration.remove();
+                else chapterConfiguration.set(previous);
+            }
+        };
+    }
+
     public boolean hasBoundExecutor() {
         return executionRoute.get() != null;
     }
@@ -136,7 +175,9 @@ public class CrawlerQueueExecutorService {
 
     public boolean isMihomoBound() {
         ExecutionRoute route = executionRoute.get();
-        return route != null && ownedExecutor(route.queueId(), route.executorId()).getProxyMode()
+        ChapterConfiguration snapshot = chapterConfiguration.get();
+        return route != null && (snapshot == null
+                ? ownedExecutor(route.queueId(), route.executorId()).getProxyMode() : snapshot.mode())
                 == CrawlerQueueExecutor.ProxyMode.MIHOMO;
     }
 
@@ -290,17 +331,20 @@ public class CrawlerQueueExecutorService {
     public List<ProxyCandidate> availableCandidates(CrawlerSite site) {
         ExecutionRoute route = executionRoute.get();
         if (route == null) return List.of();
-        CrawlerQueueExecutor executor = ownedExecutor(route.queueId(), route.executorId());
-        if (executor.getProxyMode() == CrawlerQueueExecutor.ProxyMode.MIHOMO) {
-            return List.of(new ProxyCandidate("mihomo:" + executor.getId(), "Mihomo 托管代理",
-                    mihomoService.proxyUrl(executor.getId()), executor.getDefaultProxyCooldownSeconds()));
+        ChapterConfiguration snapshot = chapterConfiguration.get();
+        CrawlerQueueExecutor executor = snapshot == null ? ownedExecutor(route.queueId(), route.executorId()) : null;
+        if (isMihomoBound()) {
+            Integer cooldown = snapshot == null ? executor.getDefaultProxyCooldownSeconds() : snapshot.cooldownSeconds();
+            return List.of(new ProxyCandidate("mihomo:" + route.executorId(), "Mihomo 托管代理",
+                    mihomoService.proxyUrl(route.executorId()), cooldown));
         }
         Map<String, Instant> blocked = cooldowns(route.queueId());
         Instant now = Instant.now();
-        List<ProxyCandidate> available = new ArrayList<>(candidates(executor, site, proxyMap()).stream()
-                .filter(candidate -> !isCooling(candidate, blocked, now))
-                .toList());
-        if (executor.getSelectionStrategy() == CrawlerQueueExecutor.SelectionStrategy.RANDOM) {
+        List<ProxyCandidate> selected = snapshot == null ? candidates(executor, site, proxyMap()) : snapshot.candidates();
+        List<ProxyCandidate> available = new ArrayList<>(selected.stream()
+                .filter(candidate -> !isCooling(candidate, blocked, now)).toList());
+        var strategy = snapshot == null ? executor.getSelectionStrategy() : snapshot.strategy();
+        if (strategy == CrawlerQueueExecutor.SelectionStrategy.RANDOM) {
             Collections.shuffle(available);
         }
         return available;

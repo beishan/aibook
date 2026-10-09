@@ -3,7 +3,7 @@
     <header class="panel-heading">
       <div>
         <h3>执行器配置</h3>
-        <p>按队列管理执行器，配置普通代理或引用系统 Mihomo 备用节点组。</p>
+        <p>配置普通代理或引用系统 Mihomo 节点组；保存后下一章节使用新配置，当前章节及重试继续使用原配置。</p>
       </div>
       <el-button type="primary" :disabled="!queueId || executors.length >= 16" @click="create">新增执行器</el-button>
     </header>
@@ -606,7 +606,7 @@ async function save() {
       applyPolicy(await crawlerApi.saveMihomoSelection(queueId.value, editingId.value, reference.value))
     }
     await crawlerApi.updateQueueExecutor(queueId.value, editingId.value, payload)
-    message.success('执行器配置已保存')
+    message.success('执行器配置已保存，下一章节使用新配置')
     dialog.value = false
   } catch (e) {
     error(e)

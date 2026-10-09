@@ -1588,190 +1588,193 @@ public class CrawlerTaskService {
             task = saveProgressIfRunning(task);
             if (task == null) return;
             updateCurrentSubStep(task.getId(), "准备采集章节");
-            LocalDateTime attemptStartedAt = LocalDateTime.now();
-            chapter.setCrawlStartedAt(attemptStartedAt);
-            chapter.setCrawlFinishedAt(null);
-            boolean hadParsedContent = hasParsedContent(chapter);
-            chapter.setErrorMessage(null);
-            if (!hadParsedContent) {
-                chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.CRAWLING);
-            }
-            chapterRepository.save(chapter);
-            int current = Math.min(value(task.getTotalCount(), pending.size()), finishedCount(task) + 1);
-            log.info("[采集任务] 正在采集章节: taskId={}, book={}, progress={}/{} ({}%), chapter={}, url={}",
-                    task.getId(), bookName(book), current, task.getTotalCount(),
-                    percentage(Math.max(0, current - 1), task.getTotalCount()), chapter.getChapterName(), chapter.getChapterUrl());
-            recordCrawlerDetail(task, "正在采集章节", "进度：" + current + "/" + task.getTotalCount()
-                    + "；章节：" + chapter.getChapterName() + "；地址：" + chapter.getChapterUrl());
-            Exception requestFailure = null;
-            boolean requestSucceeded = false;
-            CrawlerHttpClient.RequestTiming requestTiming = new CrawlerHttpClient.RequestTiming();
-            String progressTaskId = task.getId();
-            requestTiming.setProgressListener(step -> updateCurrentSubStep(progressTaskId, step));
-            long attemptStartedNanos = System.nanoTime();
-            String attemptOutcome = "FAILED";
-            try {
-                CrawlerHttpClient.FetchResult response = fetchChapter(task, site, chapter, rule, parser,
-                        recheckCompleted, requestTiming);
-                requestSucceeded = true;
-                requestFailureGuard.success();
-                CrawlerTask afterFetch = runningTask(task.getId());
-                if (afterFetch == null) {
-                    attemptOutcome = "INTERRUPTED";
+            try (AutoCloseable chapterConfiguration = queueExecutorService.beginChapter(site)) {
+                LocalDateTime attemptStartedAt = LocalDateTime.now();
+                chapter.setCrawlStartedAt(attemptStartedAt);
+                chapter.setCrawlFinishedAt(null);
+                boolean hadParsedContent = hasParsedContent(chapter);
+                chapter.setErrorMessage(null);
+                if (!hadParsedContent) {
+                    chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.CRAWLING);
+                }
+                chapterRepository.save(chapter);
+                int current = Math.min(value(task.getTotalCount(), pending.size()), finishedCount(task) + 1);
+                log.info("[采集任务] 正在采集章节: taskId={}, book={}, progress={}/{} ({}%), chapter={}, url={}",
+                        task.getId(), bookName(book), current, task.getTotalCount(),
+                        percentage(Math.max(0, current - 1), task.getTotalCount()), chapter.getChapterName(), chapter.getChapterUrl());
+                recordCrawlerDetail(task, "正在采集章节", "进度：" + current + "/" + task.getTotalCount()
+                        + "；章节：" + chapter.getChapterName() + "；地址：" + chapter.getChapterUrl());
+                Exception requestFailure = null;
+                boolean requestSucceeded = false;
+                CrawlerHttpClient.RequestTiming requestTiming = new CrawlerHttpClient.RequestTiming();
+                String progressTaskId = task.getId();
+                requestTiming.setProgressListener(step -> updateCurrentSubStep(progressTaskId, step));
+                long attemptStartedNanos = System.nanoTime();
+                String attemptOutcome = "FAILED";
+                try {
+                    CrawlerHttpClient.FetchResult response = fetchChapter(task, site, chapter, rule, parser,
+                            recheckCompleted, requestTiming);
+                    requestSucceeded = true;
+                    requestFailureGuard.success();
+                    CrawlerTask afterFetch = runningTask(task.getId());
+                    if (afterFetch == null) {
+                        attemptOutcome = "INTERRUPTED";
+                        if (!hadParsedContent) {
+                            chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
+                            chapterRepository.save(chapter);
+                        }
+                        return;
+                    }
+                    task = afterFetch;
+                    durationTotal += response.durationMillis(); requests++;
+                    if (response.statusCode() == 304) {
+                        attemptOutcome = "UNCHANGED";
+                        chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.COMPLETED);
+                        chapter.setCrawlTime(LocalDateTime.now()); chapter.setErrorMessage(null); chapterRepository.save(chapter);
+                        if (recheckCompleted) refreshUpdateCounts(book, task, ++updateSuccess, updateFailed, pending.size(), durationTotal, requests);
+                        else refreshContentCounts(book, task, targetChapterId, chapter,
+                                durationTotal, requests);
+                        log.info("[采集任务] 章节未变化: taskId={}, book={}, progress={}/{} ({}%), chapter={}, httpStatus=304",
+                                task.getId(), bookName(book), finishedCount(task), task.getTotalCount(), progress(task), chapter.getChapterName());
+                        recordCrawlerDetail(task, "章节未变化", progressDetails(task)
+                                + "；章节：" + chapter.getChapterName() + "；HTTP：304");
+                        continue;
+                    }
+                    requestTiming.reportProgress("解析章节内容中");
+                    BookCrawlerParser.ParsedContent parsed = parseChapterWithDiagnostics(
+                            parser, response, chapter, rule);
+                    ContentMarkerMatch contentMarker = matchedContentMarker(site, parsed.content());
+                    if (contentMarker != null && contentMarker.status() == ContentMarkerStatus.PENDING_RELEASE) {
+                        attemptOutcome = "PENDING_RELEASE";
+                        if (parsed.title() != null && !parsed.title().isBlank()) {
+                            chapter.setChapterName(parsed.title());
+                        }
+                        chapter.setAccessStatus(CrawlerChapter.AccessStatus.LOCKED);
+                        chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.PENDING_RELEASE);
+                        chapter.setCrawlTime(LocalDateTime.now());
+                        chapter.setErrorMessage("正文待开放，命中特征：" + shortText(contentMarker.marker(), 100));
+                        chapter.setSourceEtag(null); chapter.setSourceLastModified(null);
+                        if (!hadParsedContent) {
+                            chapter.setContent(null); chapter.setContentHash(null);
+                            chapter.setOriginalHtml(null); chapter.setWordCount(0);
+                        }
+                        chapterRepository.save(chapter);
+                        log.info("[采集任务] 章节正文待开放: taskId={}, book={}, chapter={}, marker={}",
+                                task.getId(), bookName(book), chapter.getChapterName(), contentMarker.marker());
+                        recordCrawlerDetail(task, "章节正文待开放", "进度：" + current + "/"
+                                + task.getTotalCount() + "；章节：" + chapter.getChapterName()
+                                + "；命中特征：" + shortText(contentMarker.marker(), 100));
+                        if (recheckCompleted) {
+                            refreshUpdateCounts(book, task, ++updateSuccess, updateFailed,
+                                    pending.size(), durationTotal, requests);
+                        } else {
+                            refreshContentCounts(book, task, targetChapterId, chapter,
+                                    durationTotal, requests);
+                        }
+                        continue;
+                    }
+                    if (contentMarker != null) {
+                        chapter.setAccessStatus(CrawlerChapter.AccessStatus.LOCKED);
+                        throw new IllegalStateException("正文命中失败特征："
+                                + shortText(contentMarker.marker(), 100));
+                    }
+                    chapter.setAccessStatus(CrawlerChapter.AccessStatus.FREE);
+                    if (parsed.title() != null && !parsed.title().isBlank()) chapter.setChapterName(parsed.title());
+                    chapter.setContent(parsed.content()); chapter.setContentHash(sha256(parsed.content()));
+                    chapter.setOriginalHtml(Boolean.TRUE.equals(rule.getSaveOriginalHtml()) ? parsed.originalHtml() : null);
+                    chapter.setSourceEtag(response.etag()); chapter.setSourceLastModified(response.lastModified());
+                    chapter.setWordCount(parsed.content().replaceAll("\\s+", "").length()); chapter.setCrawlTime(LocalDateTime.now()); chapter.setErrorMessage(null);
+                    boolean suspected = chapter.getWordCount() < value(rule.getMinChapterLength(), 100);
+                    chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.COMPLETED);
+                    requestTiming.reportProgress("保存章节内容中");
+                    attemptOutcome = "SUCCESS";
+                    if (suspected) {
+                        log.warn("[采集任务] 章节内容疑似异常: taskId={}, book={}, progress={}/{} ({}%), chapter={}, chars={}, durationMs={}, preview=\"{}\"",
+                                task.getId(), bookName(book), current, task.getTotalCount(), percentage(current, task.getTotalCount()),
+                                chapter.getChapterName(), chapter.getWordCount(), response.durationMillis(), contentPreview(parsed.content()));
+                        recordCrawlerDetail(task, "章节解析成功（内容较短）", "进度：" + current + "/" + task.getTotalCount()
+                                + "；章节：" + chapter.getChapterName() + "；字数：" + chapter.getWordCount()
+                                + "；耗时：" + response.durationMillis() + "ms；预览：" + contentPreview(parsed.content()));
+                    } else {
+                        log.info("[采集任务] 章节采集完毕: taskId={}, book={}, progress={}/{} ({}%), chapter={}, chars={}, durationMs={}, preview=\"{}\"",
+                                task.getId(), bookName(book), current, task.getTotalCount(), percentage(current, task.getTotalCount()),
+                                chapter.getChapterName(), chapter.getWordCount(), response.durationMillis(), contentPreview(parsed.content()));
+                        recordCrawlerDetail(task, "章节采集完毕", "进度：" + current + "/" + task.getTotalCount()
+                                + "；章节：" + chapter.getChapterName() + "；字数：" + chapter.getWordCount()
+                                + "；耗时：" + response.durationMillis() + "ms；预览：" + contentPreview(parsed.content()));
+                    }
+                } catch (CrawlerHttpClient.SiteManuallyFrozenException exception) {
+                    attemptOutcome = "WAITING";
                     if (!hadParsedContent) {
                         chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
                         chapterRepository.save(chapter);
                     }
-                    return;
-                }
-                task = afterFetch;
-                durationTotal += response.durationMillis(); requests++;
-                if (response.statusCode() == 304) {
-                    attemptOutcome = "UNCHANGED";
-                    chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.COMPLETED);
-                    chapter.setCrawlTime(LocalDateTime.now()); chapter.setErrorMessage(null); chapterRepository.save(chapter);
-                    if (recheckCompleted) refreshUpdateCounts(book, task, ++updateSuccess, updateFailed, pending.size(), durationTotal, requests);
-                    else refreshContentCounts(book, task, targetChapterId, chapter,
-                            durationTotal, requests);
-                    log.info("[采集任务] 章节未变化: taskId={}, book={}, progress={}/{} ({}%), chapter={}, httpStatus=304",
-                            task.getId(), bookName(book), finishedCount(task), task.getTotalCount(), progress(task), chapter.getChapterName());
-                    recordCrawlerDetail(task, "章节未变化", progressDetails(task)
-                            + "；章节：" + chapter.getChapterName() + "；HTTP：304");
-                    continue;
-                }
-                requestTiming.reportProgress("解析章节内容中");
-                BookCrawlerParser.ParsedContent parsed = parseChapterWithDiagnostics(
-                        parser, response, chapter, rule);
-                ContentMarkerMatch contentMarker = matchedContentMarker(site, parsed.content());
-                if (contentMarker != null && contentMarker.status() == ContentMarkerStatus.PENDING_RELEASE) {
-                    attemptOutcome = "PENDING_RELEASE";
-                    if (parsed.title() != null && !parsed.title().isBlank()) {
-                        chapter.setChapterName(parsed.title());
-                    }
-                    chapter.setAccessStatus(CrawlerChapter.AccessStatus.LOCKED);
-                    chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.PENDING_RELEASE);
-                    chapter.setCrawlTime(LocalDateTime.now());
-                    chapter.setErrorMessage("正文待开放，命中特征：" + shortText(contentMarker.marker(), 100));
-                    chapter.setSourceEtag(null); chapter.setSourceLastModified(null);
-                    if (!hadParsedContent) {
-                        chapter.setContent(null); chapter.setContentHash(null);
-                        chapter.setOriginalHtml(null); chapter.setWordCount(0);
-                    }
-                    chapterRepository.save(chapter);
-                    log.info("[采集任务] 章节正文待开放: taskId={}, book={}, chapter={}, marker={}",
-                            task.getId(), bookName(book), chapter.getChapterName(), contentMarker.marker());
-                    recordCrawlerDetail(task, "章节正文待开放", "进度：" + current + "/"
-                            + task.getTotalCount() + "；章节：" + chapter.getChapterName()
-                            + "；命中特征：" + shortText(contentMarker.marker(), 100));
-                    if (recheckCompleted) {
-                        refreshUpdateCounts(book, task, ++updateSuccess, updateFailed,
-                                pending.size(), durationTotal, requests);
-                    } else {
-                        refreshContentCounts(book, task, targetChapterId, chapter,
-                                durationTotal, requests);
-                    }
-                    continue;
-                }
-                if (contentMarker != null) {
-                    chapter.setAccessStatus(CrawlerChapter.AccessStatus.LOCKED);
-                    throw new IllegalStateException("正文命中失败特征："
-                            + shortText(contentMarker.marker(), 100));
-                }
-                chapter.setAccessStatus(CrawlerChapter.AccessStatus.FREE);
-                if (parsed.title() != null && !parsed.title().isBlank()) chapter.setChapterName(parsed.title());
-                chapter.setContent(parsed.content()); chapter.setContentHash(sha256(parsed.content()));
-                chapter.setOriginalHtml(Boolean.TRUE.equals(rule.getSaveOriginalHtml()) ? parsed.originalHtml() : null);
-                chapter.setSourceEtag(response.etag()); chapter.setSourceLastModified(response.lastModified());
-                chapter.setWordCount(parsed.content().replaceAll("\\s+", "").length()); chapter.setCrawlTime(LocalDateTime.now()); chapter.setErrorMessage(null);
-                boolean suspected = chapter.getWordCount() < value(rule.getMinChapterLength(), 100);
-                chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.COMPLETED);
-                requestTiming.reportProgress("保存章节内容中");
-                attemptOutcome = "SUCCESS";
-                if (suspected) {
-                    log.warn("[采集任务] 章节内容疑似异常: taskId={}, book={}, progress={}/{} ({}%), chapter={}, chars={}, durationMs={}, preview=\"{}\"",
-                            task.getId(), bookName(book), current, task.getTotalCount(), percentage(current, task.getTotalCount()),
-                            chapter.getChapterName(), chapter.getWordCount(), response.durationMillis(), contentPreview(parsed.content()));
-                    recordCrawlerDetail(task, "章节解析成功（内容较短）", "进度：" + current + "/" + task.getTotalCount()
-                            + "；章节：" + chapter.getChapterName() + "；字数：" + chapter.getWordCount()
-                            + "；耗时：" + response.durationMillis() + "ms；预览：" + contentPreview(parsed.content()));
-                } else {
-                    log.info("[采集任务] 章节采集完毕: taskId={}, book={}, progress={}/{} ({}%), chapter={}, chars={}, durationMs={}, preview=\"{}\"",
-                            task.getId(), bookName(book), current, task.getTotalCount(), percentage(current, task.getTotalCount()),
-                            chapter.getChapterName(), chapter.getWordCount(), response.durationMillis(), contentPreview(parsed.content()));
-                    recordCrawlerDetail(task, "章节采集完毕", "进度：" + current + "/" + task.getTotalCount()
-                            + "；章节：" + chapter.getChapterName() + "；字数：" + chapter.getWordCount()
-                            + "；耗时：" + response.durationMillis() + "ms；预览：" + contentPreview(parsed.content()));
-                }
-            } catch (CrawlerHttpClient.SiteManuallyFrozenException exception) {
-                attemptOutcome = "WAITING";
-                if (!hadParsedContent) {
-                    chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
-                    chapterRepository.save(chapter);
-                }
-                throw exception;
-            } catch (CrawlerHttpClient.NoAvailableQueueProxyException exception) {
-                attemptOutcome = "WAITING";
-                if (!hadParsedContent) {
-                    chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
-                    chapter.setErrorMessage(null);
-                    chapterRepository.save(chapter);
-                }
-                throw exception;
-            } catch (Exception exception) {
-                if (shuttingDown || isStopRequested(task.getId())) {
-                    attemptOutcome = "INTERRUPTED";
+                    throw exception;
+                } catch (CrawlerHttpClient.NoAvailableQueueProxyException exception) {
+                    attemptOutcome = "WAITING";
                     if (!hadParsedContent) {
                         chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
                         chapter.setErrorMessage(null);
                         chapterRepository.save(chapter);
                     }
-                    return;
+                    throw exception;
+                } catch (Exception exception) {
+                    if (shuttingDown || isStopRequested(task.getId())) {
+                        attemptOutcome = "INTERRUPTED";
+                        if (!hadParsedContent) {
+                            chapter.setCrawlStatus(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
+                            chapter.setErrorMessage(null);
+                            chapterRepository.save(chapter);
+                        }
+                        return;
+                    }
+                    recordSiteAccessRestriction(task, exception);
+                    if (!requestSucceeded) requestFailure = exception;
+                    chapter.setRetryCount(value(chapter.getRetryCount(), 0) + 1); chapter.setErrorMessage(userMessage(exception));
+                    chapter.setCrawlStatus(targetChapterId != null
+                            ? CrawlerChapter.CrawlStatus.FAILED
+                            : hadParsedContent ? CrawlerChapter.CrawlStatus.COMPLETED
+                            : CrawlerChapter.CrawlStatus.FAILED);
+                    log.warn("[采集任务] 章节采集失败: taskId={}, book={}, progress={}/{} ({}%), chapter={}, reason={}",
+                            task.getId(), bookName(book), current, task.getTotalCount(), percentage(current, task.getTotalCount()),
+                            chapter.getChapterName(), chapter.getErrorMessage());
+                    recordCrawlerError(task, hadParsedContent ? "章节更新失败（已保留原内容）" : "章节采集失败",
+                            "进度：" + current + "/" + task.getTotalCount() + "；章节：" + chapter.getChapterName()
+                                    + "；原因：" + chapter.getErrorMessage());
+                    updateCurrentSubStep(task.getId(), "本章采集异常，继续处理后续章节");
+                } finally {
+                    LocalDateTime attemptFinishedAt = LocalDateTime.now();
+                    chapter.setCrawlFinishedAt(attemptFinishedAt);
+                    long totalElapsedMillis = Math.max(0,
+                            (System.nanoTime() - attemptStartedNanos) / 1_000_000);
+                    long fixedWaitMillis = requestTiming.fixedWaitMillis();
+                    long randomWaitMillis = requestTiming.randomWaitMillis();
+                    long otherWaitMillis = requestTiming.otherWaitMillis();
+                    long collectionMillis = Math.max(0, totalElapsedMillis - fixedWaitMillis
+                            - randomWaitMillis - otherWaitMillis);
+                    try {
+                        chapterAttemptMetricService.record(
+                                task.getUser(), task, chapter, bookName(book),
+                                attemptStartedAt, attemptFinishedAt,
+                                collectionMillis, fixedWaitMillis, randomWaitMillis,
+                                otherWaitMillis, totalElapsedMillis, attemptOutcome);
+                    } catch (Exception metricException) {
+                        log.warn("[采集统计] 保存章节耗时记录失败: taskId={}, chapterId={}",
+                                task.getId(), chapter.getId(), metricException);
+                    }
+                    chapterRepository.save(chapter);
                 }
-                recordSiteAccessRestriction(task, exception);
-                if (!requestSucceeded) requestFailure = exception;
-                chapter.setRetryCount(value(chapter.getRetryCount(), 0) + 1); chapter.setErrorMessage(userMessage(exception));
-                chapter.setCrawlStatus(targetChapterId != null
-                        ? CrawlerChapter.CrawlStatus.FAILED
-                        : hadParsedContent ? CrawlerChapter.CrawlStatus.COMPLETED
-                        : CrawlerChapter.CrawlStatus.FAILED);
-                log.warn("[采集任务] 章节采集失败: taskId={}, book={}, progress={}/{} ({}%), chapter={}, reason={}",
-                        task.getId(), bookName(book), current, task.getTotalCount(), percentage(current, task.getTotalCount()),
-                        chapter.getChapterName(), chapter.getErrorMessage());
-                recordCrawlerError(task, hadParsedContent ? "章节更新失败（已保留原内容）" : "章节采集失败",
-                        "进度：" + current + "/" + task.getTotalCount() + "；章节：" + chapter.getChapterName()
-                                + "；原因：" + chapter.getErrorMessage());
-                updateCurrentSubStep(task.getId(), "本章采集异常，继续处理后续章节");
-            } finally {
-                LocalDateTime attemptFinishedAt = LocalDateTime.now();
-                chapter.setCrawlFinishedAt(attemptFinishedAt);
-                long totalElapsedMillis = Math.max(0,
-                        (System.nanoTime() - attemptStartedNanos) / 1_000_000);
-                long fixedWaitMillis = requestTiming.fixedWaitMillis();
-                long randomWaitMillis = requestTiming.randomWaitMillis();
-                long otherWaitMillis = requestTiming.otherWaitMillis();
-                long collectionMillis = Math.max(0, totalElapsedMillis - fixedWaitMillis
-                        - randomWaitMillis - otherWaitMillis);
-                try {
-                    chapterAttemptMetricService.record(
-                            task.getUser(), task, chapter, bookName(book),
-                            attemptStartedAt, attemptFinishedAt,
-                            collectionMillis, fixedWaitMillis, randomWaitMillis,
-                            otherWaitMillis, totalElapsedMillis, attemptOutcome);
-                } catch (Exception metricException) {
-                    log.warn("[采集统计] 保存章节耗时记录失败: taskId={}, chapterId={}",
-                            task.getId(), chapter.getId(), metricException);
+                if (recheckCompleted) {
+                    if ("SUCCESS".equals(attemptOutcome)) queueExecutorService.recordChapter(task.getId(), chapter.getId());
+                    if (chapter.getErrorMessage() == null) updateSuccess++; else updateFailed++;
+                    refreshUpdateCounts(book, task, updateSuccess, updateFailed, pending.size(), durationTotal, requests);
+                } else {
+                    if ("SUCCESS".equals(attemptOutcome)) queueExecutorService.recordChapter(task.getId(), chapter.getId());
+                    refreshContentCounts(book, task, targetChapterId, chapter, durationTotal, requests);
                 }
-                chapterRepository.save(chapter);
+                if (requestFailure != null) requestFailureGuard.failure(requestFailure);
             }
-            if (recheckCompleted) {
-                if ("SUCCESS".equals(attemptOutcome)) queueExecutorService.recordChapter(task.getId(), chapter.getId());
-                if (chapter.getErrorMessage() == null) updateSuccess++; else updateFailed++;
-                refreshUpdateCounts(book, task, updateSuccess, updateFailed, pending.size(), durationTotal, requests);
-            } else {
-                if ("SUCCESS".equals(attemptOutcome)) queueExecutorService.recordChapter(task.getId(), chapter.getId());
-                refreshContentCounts(book, task, targetChapterId, chapter, durationTotal, requests);
-            }
-            if (requestFailure != null) requestFailureGuard.failure(requestFailure);
+
         }
         if (!recheckCompleted) {
             CrawlerChapter targetChapter = targetChapterId == null || pending.isEmpty()

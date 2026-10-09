@@ -14,6 +14,8 @@ import lombok.*;
 public class CrawlerMihomoPolicy {
     @Id
     private Long executorId;
+    /** Null on existing rows is revision zero. */
+    private Long configurationRevision = 0L;
     private Long systemProxyId;
     private Long nodeGroupId;
     @Column(length = 20)
