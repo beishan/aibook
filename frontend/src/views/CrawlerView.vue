@@ -1515,6 +1515,23 @@
         <span>ACTIVITY LEDGER</span>
         <p>查看扫描结果、源站访问限制和书籍采集状态。访问限制会附带保护原因与预计恢复时间。</p>
       </div>
+      <div class="site-activity-filters">
+        <span>行为类型</span>
+        <el-select
+          v-model="siteActivityEventType"
+          clearable
+          placeholder="全部行为类型"
+          aria-label="行为类型筛选"
+          @change="handleSiteActivityTypeChange"
+        >
+          <el-option
+            v-for="eventType in siteActivityEventTypes"
+            :key="eventType"
+            :label="siteActivityLabel(eventType)"
+            :value="eventType"
+          />
+        </el-select>
+      </div>
       <el-table
         v-loading="siteActivityLoading"
         :data="siteActivities"
@@ -2172,6 +2189,11 @@ let scanResultsRequestId = 0
 const siteActivityDialog=ref(false), siteActivityLoading=ref(false), siteActivitySite=ref<CrawlerSite>()
 const siteActivities=ref<CrawlerSiteActivity[]>([]), siteActivityPage=ref(1), siteActivityPageSize=ref(20)
 const siteActivityTotal=ref(0), siteActivityScanTaskId=ref<string>()
+const siteActivityEventType = ref<CrawlerSiteActivity['eventType']>()
+const siteActivityEventTypes: CrawlerSiteActivity['eventType'][] = [
+  'DISCOVERY_SCAN', 'ACCESS_LIMITED', 'CHAPTER_CRAWL_ERROR',
+  'BOOK_CRAWL_COMPLETED', 'BOOK_CRAWL_PARTIAL', 'TASK_FAILED',
+]
 let siteActivityRequestSequence=0
 const queueOverviewDialog = ref(false)
 const queuePopupTab = ref<'config' | 'tasks'>('config')
@@ -3014,6 +3036,7 @@ async function manageSelectedTasks(action:'pause'|'resume'|'cancel'|'delete'|'pr
 }
 function openSiteActivities(site:CrawlerSite) {
   siteActivitySite.value = site
+  siteActivityEventType.value = undefined
   siteActivityPage.value = 1
   siteActivities.value = []
   siteActivityTotal.value = 0
@@ -3032,6 +3055,7 @@ async function loadSiteActivities() {
       site.id,
       siteActivityPage.value - 1,
       siteActivityPageSize.value,
+      siteActivityEventType.value || undefined,
     )
     if (requestSequence !== siteActivityRequestSequence) return
     siteActivities.value = result.content
@@ -3045,6 +3069,11 @@ async function loadSiteActivities() {
       siteActivityLoading.value = false
     }
   }
+}
+
+async function handleSiteActivityTypeChange() {
+  siteActivityPage.value = 1
+  await loadSiteActivities()
 }
 
 async function handleSiteActivitySizeChange() {
@@ -4688,6 +4717,19 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   display: flex;
   justify-content: flex-end;
   margin-top: 12px;
+}
+
+.site-activity-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.site-activity-filters .el-select {
+  width: 220px;
+  max-width: 100%;
 }
 
 .site-activity-intro {

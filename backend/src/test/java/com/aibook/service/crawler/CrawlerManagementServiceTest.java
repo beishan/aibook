@@ -42,6 +42,47 @@ import static org.mockito.Mockito.*;
 
 class CrawlerManagementServiceTest {
     @Test
+    void siteActivityFilterUsesOwnedSiteAndDatabasePagination() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).build();
+        var activities = mock(com.aibook.repository.CrawlerSiteActivityRepository.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                service, "siteActivityRepository", activities);
+        when(sites.findByIdAndUser(2L, user)).thenReturn(Optional.of(site));
+        var eventType = com.aibook.model.entity.CrawlerSiteActivity.EventType.TASK_FAILED;
+        var activity = com.aibook.model.entity.CrawlerSiteActivity.builder()
+                .id(9L).site(site).eventType(eventType).description("任务失败").build();
+        when(activities.findBySiteAndEventTypeOrderByCreatedAtDescIdDesc(
+                eq(site), eq(eventType), any(Pageable.class)))
+                .thenAnswer(invocation -> new PageImpl<>(List.of(activity),
+                        invocation.getArgument(2), 45));
+
+        var result = service.siteActivities(user, 2L, 1, 20, eventType);
+
+        assertThat(result.getTotalElements()).isEqualTo(45);
+        assertThat(result.getContent()).extracting(item -> item.eventType())
+                .containsExactly("TASK_FAILED");
+        ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
+        verify(activities).findBySiteAndEventTypeOrderByCreatedAtDescIdDesc(
+                eq(site), eq(eventType), page.capture());
+        assertThat(page.getValue().getPageNumber()).isEqualTo(1);
+        assertThat(page.getValue().getPageSize()).isEqualTo(20);
+        verify(activities, never()).findBySiteOrderByCreatedAtDescIdDesc(any(), any());
+
+        when(activities.findBySiteOrderByCreatedAtDescIdDesc(eq(site), any()))
+                .thenReturn(Page.empty());
+        service.siteActivities(user, 2L, -1, 200, null);
+        verify(activities).findBySiteOrderByCreatedAtDescIdDesc(eq(site), page.capture());
+        assertThat(page.getValue().getPageNumber()).isZero();
+        assertThat(page.getValue().getPageSize()).isEqualTo(100);
+
+        clearInvocations(activities);
+        assertThatThrownBy(() -> service.siteActivities(user, 3L, 0, 20, eventType))
+                .isInstanceOf(ResponseStatusException.class);
+        verifyNoInteractions(activities);
+    }
+
+    @Test
     void manualChapterStatesPreserveContentAndRefreshBookCounts() {
         User user = user();
         CrawlerChapter chapter = editableChapter(user);

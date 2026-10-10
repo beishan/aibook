@@ -11,6 +11,9 @@ public interface CrawlerSiteActivityRepository extends JpaRepository<CrawlerSite
     Page<CrawlerSiteActivity> findBySiteOrderByCreatedAtDescIdDesc(
             CrawlerSite site, Pageable pageable);
 
+    Page<CrawlerSiteActivity> findBySiteAndEventTypeOrderByCreatedAtDescIdDesc(
+            CrawlerSite site, CrawlerSiteActivity.EventType eventType, Pageable pageable);
+
     boolean existsByTaskIdAndEventType(String taskId, CrawlerSiteActivity.EventType eventType);
 
     void deleteBySite(CrawlerSite site);

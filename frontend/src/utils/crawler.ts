@@ -296,9 +296,9 @@ export const crawlerApi = {
       params:{days, page, size},
     }).then(r => r.data),
   sites: () => api.get<CrawlerSite[]>('/api/crawler/sites').then(r => r.data),
-  siteActivities: (siteId:number, page:number, size:number) =>
+  siteActivities: (siteId:number, page:number, size:number, eventType?:CrawlerSiteActivity['eventType']) =>
     api.get<PageResult<CrawlerSiteActivity>>(`/api/crawler/sites/${siteId}/activities`, {
-      params:{page, size},
+      params:{page, size, eventType},
     }).then(r => r.data),
   createSite: (data:CrawlerSitePayload) => api.post<CrawlerSite>('/api/crawler/sites', data).then(r => r.data),
   updateSite: (id:number, data:CrawlerSitePayload) => api.put<CrawlerSite>(`/api/crawler/sites/${id}`, data).then(r => r.data),

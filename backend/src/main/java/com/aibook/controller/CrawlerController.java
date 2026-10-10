@@ -55,8 +55,9 @@ public class CrawlerController {
     @GetMapping("/sites/{id}/activities")
     public Page<SiteActivityView> siteActivities(Authentication auth, @PathVariable Long id,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return managementService.siteActivities(user(auth), id, page, size);
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) com.aibook.model.entity.CrawlerSiteActivity.EventType eventType) {
+        return managementService.siteActivities(user(auth), id, page, size, eventType);
     }
     @PostMapping("/sites") @ResponseStatus(HttpStatus.CREATED) public SiteView createSite(Authentication auth, @Valid @RequestBody SitePayload payload) { return managementService.createSite(user(auth), payload); }
     @PutMapping("/sites/{id}") public SiteView updateSite(Authentication auth, @PathVariable Long id, @Valid @RequestBody SitePayload payload) { return managementService.updateSite(user(auth), id, payload); }

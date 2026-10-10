@@ -71,11 +71,15 @@ public class CrawlerManagementService {
     public List<SiteView> sites(User user) { return siteRepository.findByUserOrderByCreatedAtDesc(user).stream().map(this::siteView).toList(); }
 
     @Transactional(readOnly = true)
-    public Page<SiteActivityView> siteActivities(User user, Long id, int page, int size) {
+    public Page<SiteActivityView> siteActivities(User user, Long id, int page, int size,
+            CrawlerSiteActivity.EventType eventType) {
         CrawlerSite site = ownedSite(user, id);
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(100, Math.max(1, size)));
-        return siteActivityRepository.findBySiteOrderByCreatedAtDescIdDesc(site, pageable)
-                .map(activity -> new SiteActivityView(
+        Page<CrawlerSiteActivity> activities = eventType == null
+                ? siteActivityRepository.findBySiteOrderByCreatedAtDescIdDesc(site, pageable)
+                : siteActivityRepository.findBySiteAndEventTypeOrderByCreatedAtDescIdDesc(
+                        site, eventType, pageable);
+        return activities.map(activity -> new SiteActivityView(
                         activity.getId(), activity.getEventType().name(), activity.getTaskId(),
                         activity.getCreatedAt(), activity.getDescription(), activity.getDetails()));
     }
