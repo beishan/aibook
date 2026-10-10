@@ -448,7 +448,27 @@
         <el-table-column label="创建时间" width="154"><template #default="{row}">{{ formatTime(row.createdAt) }}</template></el-table-column>
         <el-table-column label="开始爬取" width="154"><template #default="{row}">{{ row.lastCrawlStartedAt ? formatTime(row.lastCrawlStartedAt) : '暂无记录' }}</template></el-table-column>
         <el-table-column label="失败" width="80" prop="failedChapterCount" />
-        <el-table-column label="操作" width="340" fixed="right" align="right"><template #default="{row}"><div class="crawler-book-action-cluster row-hover-action" @click.stop><el-button size="small" round class="crawler-book-action-button crawler-book-action-details" @click="openBook(row)">详情</el-button><el-button size="small" round class="crawler-book-action-button crawler-book-action-continue" :disabled="isBookTaskActive(row)" @click="continueCrawl(row)">{{ isBookTaskActive(row)?'任务中':'继续' }}</el-button><el-button size="small" round class="crawler-book-action-button crawler-book-action-import" @click="importBook(row)">{{ row.importStatus==='IMPORTED'?'同步入库':'入库' }}</el-button><el-dropdown trigger="click" placement="bottom-end" popper-class="discovery-more-popper" @command="handleCrawlerBookTableMore($event,row)"><el-button size="small" circle :icon="MoreFilled" class="crawler-book-action-more" aria-label="更多操作" title="更多操作" /><template #dropdown><el-dropdown-menu><el-dropdown-item command="book-lists">加入书单</el-dropdown-item><el-dropdown-item command="updates">检查更新</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(row)">刷新分类标签</el-dropdown-item><el-dropdown-item command="trial" :disabled="!row.crawledChapterCount">试读</el-dropdown-item><el-dropdown-item command="generate">生成文件</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div></template></el-table-column>
+        <el-table-column label="操作" width="260" fixed="right" align="right">
+          <template #default="{ row }">
+            <div class="crawler-book-action-cluster row-hover-action" @click.stop>
+              <el-button size="small" round class="crawler-book-action-button crawler-book-action-details" @click="openBook(row)">详情</el-button>
+              <el-button size="small" round class="crawler-book-action-button crawler-book-action-continue" :disabled="isBookTaskActive(row)" @click="continueCrawl(row)">{{ isBookTaskActive(row)?'任务中':'继续' }}</el-button>
+              <el-button size="small" round class="crawler-book-action-button crawler-book-action-import" @click="importBook(row)">{{ row.importStatus==='IMPORTED'?'同步入库':'入库' }}</el-button>
+              <el-dropdown trigger="click" placement="bottom-end" popper-class="discovery-more-popper" @command="handleCrawlerBookTableMore($event,row)">
+                <el-button size="small" circle :icon="MoreFilled" class="crawler-book-action-more" aria-label="更多操作" title="更多操作" />
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="book-lists">加入书单</el-dropdown-item>
+                    <el-dropdown-item command="updates">检查更新</el-dropdown-item>
+                    <el-dropdown-item command="metadata" :disabled="isBookTaskActive(row)">刷新分类标签</el-dropdown-item>
+                    <el-dropdown-item command="trial" :disabled="!row.crawledChapterCount">试读</el-dropdown-item>
+                    <el-dropdown-item command="generate">生成文件</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </template>
+        </el-table-column>
       </el-table>
       <div v-else v-loading="bookLoading" class="discovery-card-panel">
         <div v-if="books.length" class="discovery-card-selection"><el-checkbox :model-value="allBooksSelected" :indeterminate="someBooksSelected&&!allBooksSelected" @change="toggleCurrentBookPage(Boolean($event))">选择当前页</el-checkbox><span>已选择 {{ selectedBooks.length }} 本</span></div>
