@@ -7,7 +7,7 @@ const taskTable = source.match(/const TaskTable = defineComponent\(([\s\S]*?)\r?
 assert.ok(taskTable, 'CrawlerView must define the shared task table')
 assert.match(taskTable, /type:'selection',width:48,reserveSelection:true,fixed:'left'/, 'the selection column must stay fixed beside the task name')
 assert.match(taskTable, /label:'任务',minWidth:240,fixed:'left'/, 'the task-name column must be fixed on the left')
-assert.match(taskTable, /label:'操作',width:340,fixed:'right',align:'right'/, 'the action column must be fixed on the right with right-aligned buttons')
+assert.match(taskTable, /label:\s*'操作',\s*width:\s*260,\s*fixed:\s*'right',\s*align:\s*'right'/, 'the action column must be fixed on the right with right-aligned buttons')
 assert.match(taskTable, /label:'当前章节'[\s\S]*?label:'创建时间'/, 'the current-chapter column must appear before the created-time column')
 assert.match(taskTable, /h\('div',\{class:'task-action-cluster row-hover-action'\}/, 'task actions must use a row-hover action cluster')
 assert.match(taskTable, /task-action-details/, 'the details action must have a distinct primary treatment')

@@ -2048,7 +2048,12 @@ const TaskTable = defineComponent({
   ])}),
   h(ElTableColumn,{label:'创建时间',width:170},{default:({row}:{row:CrawlerTask})=>formatTime(row.createdAt)}),
   h(ElTableColumn,{label:'完成时间',width:170},{default:({row}:{row:CrawlerTask})=>formatTime(row.finishedAt)}),
-  h(ElTableColumn,{label:'操作',width:340,fixed:'right',align:'right'},{default:({row}:{row:CrawlerTask})=>{
+  h(ElTableColumn, {
+    label: '操作',
+    width: 260,
+    fixed: 'right',
+    align: 'right',
+  }, {default:({row}:{row:CrawlerTask})=>{
     const actions=moreActions(row)
     return h('div',{class:'task-action-cluster row-hover-action'},[
       h(ElButton,{size:'small',round:true,class:'task-action-button task-action-details',onClick:()=>emit('open',row)},()=> '详情'),
