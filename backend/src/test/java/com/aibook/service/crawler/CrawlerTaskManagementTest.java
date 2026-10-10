@@ -530,9 +530,18 @@ class CrawlerTaskManagementTest {
                 mock(CrawlerChapterAttemptMetricService.class),
                 mock(OperationLogService.class), mock(CrawlerExportService.class), httpClient, List.of(parser),
                 mock(ApplicationContext.class), mock(com.aibook.service.CrawlerSettingsService.class));
+        CrawlerQueueExecutorService queueExecutors = mock(CrawlerQueueExecutorService.class);
+        AutoCloseable chapterConfiguration = mock(AutoCloseable.class);
+        when(queueExecutors.beginChapter(site)).thenReturn(chapterConfiguration);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                service, "queueExecutorService", queueExecutors);
         try {
             service.run(task.getId());
 
+            verify(queueExecutors).beginChapter(site);
+            verify(chapterConfiguration).close();
+            verify(httpClient).get(eq(site), eq(chapter.getChapterUrl()), isNull(), isNull(),
+                    any(CrawlerHttpClient.RequestTiming.class));
             assertThat(task.getStatus()).isEqualTo(CrawlerTask.TaskStatus.PAUSED);
             assertThat(task.getErrorMessage()).isNull();
             assertThat(chapter.getCrawlStatus()).isEqualTo(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
@@ -645,6 +654,10 @@ class CrawlerTaskManagementTest {
                 mock(CrawlerChapterAttemptMetricService.class),
                 mock(OperationLogService.class), mock(CrawlerExportService.class), httpClient, List.of(parser),
                 mock(ApplicationContext.class), mock(com.aibook.service.CrawlerSettingsService.class));
+        CrawlerQueueExecutorService queueExecutors = mock(CrawlerQueueExecutorService.class);
+        when(queueExecutors.beginChapter(site)).thenAnswer(invocation -> (AutoCloseable) () -> { });
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                service, "queueExecutorService", queueExecutors);
         try {
             service.run(task.getId());
 
