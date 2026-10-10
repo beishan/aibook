@@ -269,7 +269,7 @@ const handleLogout = async () => {
   background: transparent;
 }
 
-.desktop-menu:not(.el-menu--collapse) {
+.desktop-menu {
   width: 100%;
 }
 
@@ -296,6 +296,18 @@ const handleLogout = async () => {
 .desktop-menu.el-menu--collapse :deep(.el-menu-item) {
   justify-content: center;
   padding: 0;
+}
+
+.desktop-menu.el-menu--collapse :deep(.el-menu-tooltip__trigger) {
+  justify-content: center;
+  padding: 0;
+}
+
+.collapsed .brand-button,
+.collapsed .collapse-button {
+  justify-content: center;
+  padding-right: 0;
+  padding-left: 0;
 }
 
 .sidebar-footer {
