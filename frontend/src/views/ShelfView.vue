@@ -191,7 +191,7 @@
         </div>
         <div v-else :class="[viewMode === 'grid' ? 'books-grid' : 'books-list', `card-${cardSize}`]">
           <div
-            v-for="(book, bookIndex) in displayedShelfBooks"
+            v-for="(book, bookIndex) in pagedShelfBooks"
             :key="book.id"
             :class="viewMode === 'grid' ? 'book-card glass' : 'book-list-item glass'"
             @click="$router.push(`/books/${book.id}`)"
@@ -216,16 +216,16 @@
                 <button
                   v-if="selectedShelfGroup !== 'all'"
                   class="action-btn"
-                  :disabled="bookIndex === 0 || shelfActionBookId === book.id"
+                  :disabled="shelfPageOffset + bookIndex === 0 || shelfActionBookId === book.id"
                   title="向前移动"
-                  @click="moveShelfBookOrder(bookIndex, -1)"
+                  @click="moveShelfBookOrder(shelfPageOffset + bookIndex, -1)"
                 ><span class="action-icon">↑</span></button>
                 <button
                   v-if="selectedShelfGroup !== 'all'"
                   class="action-btn"
-                  :disabled="bookIndex === displayedShelfBooks.length - 1 || shelfActionBookId === book.id"
+                  :disabled="shelfPageOffset + bookIndex === displayedShelfBooks.length - 1 || shelfActionBookId === book.id"
                   title="向后移动"
-                  @click="moveShelfBookOrder(bookIndex, 1)"
+                  @click="moveShelfBookOrder(shelfPageOffset + bookIndex, 1)"
                 ><span class="action-icon">↓</span></button>
                 <el-dropdown trigger="click" @command="command => moveBookToShelfGroup(book, command)">
                   <button class="action-btn" title="移动到分组" @click.stop>
@@ -268,8 +268,18 @@
             </div>
             <div v-if="viewMode === 'list'" class="shelf-list-actions" @click.stop>
               <ShelfBookActions :book="book" list hide-shelf :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id" @action="handleBookAction" />
-              <button v-if="selectedShelfGroup !== 'all'" class="btn btn-text" :disabled="bookIndex === 0" @click="moveShelfBookOrder(bookIndex, -1)">上移</button>
-              <button v-if="selectedShelfGroup !== 'all'" class="btn btn-text" :disabled="bookIndex === displayedShelfBooks.length - 1" @click="moveShelfBookOrder(bookIndex, 1)">下移</button>
+              <button
+                v-if="selectedShelfGroup !== 'all'"
+                class="btn btn-text"
+                :disabled="shelfPageOffset + bookIndex === 0 || shelfActionBookId === book.id"
+                @click="moveShelfBookOrder(shelfPageOffset + bookIndex, -1)"
+              >上移</button>
+              <button
+                v-if="selectedShelfGroup !== 'all'"
+                class="btn btn-text"
+                :disabled="shelfPageOffset + bookIndex === displayedShelfBooks.length - 1 || shelfActionBookId === book.id"
+                @click="moveShelfBookOrder(shelfPageOffset + bookIndex, 1)"
+              >下移</button>
               <el-dropdown trigger="click" @command="command => moveBookToShelfGroup(book, command)">
                 <button class="btn btn-text" @click.stop>移动分组</button>
                 <template #dropdown>
@@ -310,7 +320,7 @@
       </div>
       <div v-else :class="[viewMode === 'grid' ? 'books-grid' : 'books-list', `card-${cardSize}`]">
         <div
-          v-for="book in favoriteBooks"
+          v-for="book in pagedFavoriteBooks"
           :key="book.id"
           :class="viewMode === 'grid' ? 'book-card glass' : 'book-list-item glass'"
           @click="$router.push(`/books/${book.id}`)"
@@ -380,7 +390,7 @@
       </div>
       <div v-else :class="[viewMode === 'grid' ? 'books-grid' : 'books-list', `card-${cardSize}`]">
         <div
-          v-for="book in readingBooks"
+          v-for="book in pagedReadingBooks"
           :key="book.id"
           :class="viewMode === 'grid' ? 'book-card glass' : 'book-list-item glass'"
           @click="$router.push(`/reader/${book.id}`)"
@@ -458,13 +468,17 @@
       role="tabpanel"
       aria-labelledby="shelf-tab-finished"
     >
-      <div v-if="finishedBooks.length === 0" class="empty glass">
+      <div v-if="finishedLoading" class="loading glass">
+        <div class="loading-spinner"></div>
+        <p>正在加载...</p>
+      </div>
+      <div v-else-if="finishedBooks.length === 0" class="empty glass">
         <div class="empty-icon">✅</div>
         <p>暂无已读完的书籍</p>
       </div>
       <div v-else :class="[viewMode === 'grid' ? 'books-grid' : 'books-list', `card-${cardSize}`]">
         <div
-          v-for="book in finishedBooks"
+          v-for="book in pagedFinishedBooks"
           :key="book.id"
           :class="viewMode === 'grid' ? 'book-card glass' : 'book-list-item glass'"
           @click="$router.push(`/books/${book.id}`)"
@@ -534,7 +548,7 @@
       </div>
       <div v-else :class="[viewMode === 'grid' ? 'books-grid' : 'books-list', `card-${cardSize}`]">
         <div
-          v-for="book in wantedBooks"
+          v-for="book in pagedWantedBooks"
           :key="book.id"
           :class="viewMode === 'grid' ? 'book-card glass' : 'book-list-item glass'"
           @click="$router.push(`/books/${book.id}`)"
@@ -600,7 +614,7 @@
       </div>
       <div v-else class="book-lists">
         <div
-          v-for="list in bookLists"
+          v-for="list in pagedBookLists"
           :key="list.id"
           class="list-card glass"
           @click="handleViewList(list)"
@@ -633,6 +647,18 @@
         </div>
       </div>
     </div>
+
+    <nav v-if="activeTotal > 0 && !activeLoading" class="shelf-pagination" aria-label="书架分页">
+      <span class="shelf-pagination-summary">共 {{ activeTotal }} 项，每页 {{ SHELF_PAGE_SIZE }} 项</span>
+      <el-pagination
+        v-model:current-page="activePage"
+        :page-size="SHELF_PAGE_SIZE"
+        :total="activeTotal"
+        :pager-count="5"
+        layout="prev, pager, next"
+        background
+      />
+    </nav>
 
     <!-- 创建书单对话框 -->
     <Teleport to="body">
@@ -740,6 +766,7 @@ function applyBookUpdate(updated:Book) {
   favoriteBooks.value = marked(favoriteBooks.value, updated.isFavorite)
   wantedBooks.value = marked(wantedBooks.value, updated.isWanted)
   readingBooks.value = marked(readingBooks.value, updated.readingStatus === 'READING')
+  finishedBooks.value = marked(finishedBooks.value, updated.readingStatus === 'FINISHED')
   bookStore.books = replace(bookStore.books)
   if (!bookStore.books.some(book => book.id === updated.id)) bookStore.books.push(updated)
   if (bookStore.currentBook?.id === updated.id) bookStore.currentBook = updated
@@ -764,6 +791,7 @@ function removeBookFromCollections(bookId:number) {
   favoriteBooks.value = retain(favoriteBooks.value)
   wantedBooks.value = retain(wantedBooks.value)
   readingBooks.value = retain(readingBooks.value)
+  finishedBooks.value = retain(finishedBooks.value)
   shelfOverview.value.ungroupedBooks = retain(shelfOverview.value.ungroupedBooks)
   shelfOverview.value.groups.forEach(group => { group.books = retain(group.books) })
   shelfOverview.value.totalBooks = shelfOverview.value.ungroupedBooks.length
@@ -908,7 +936,8 @@ const newListForm = ref({
   description: '',
 })
 
-const finishedBooks = computed(() => bookStore.books.filter((b) => b.readingStatus === 'FINISHED'))
+const finishedBooks = ref<Book[]>([])
+const finishedLoading = ref(false)
 const displayedShelfBooks = computed(() => {
   if (selectedShelfGroup.value === 'ungrouped') return shelfOverview.value.ungroupedBooks
   if (typeof selectedShelfGroup.value === 'number') {
@@ -917,6 +946,49 @@ const displayedShelfBooks = computed(() => {
   return [...shelfOverview.value.ungroupedBooks, ...shelfOverview.value.groups.flatMap(group => group.books)]
     .sort((left, right) => new Date(right.shelfAddedAt || 0).getTime() - new Date(left.shelfAddedAt || 0).getTime())
 })
+// 页码是本次浏览状态；固定每页数量不新增账户偏好。
+const SHELF_PAGE_SIZE = 24
+const tabPages = ref<Record<string, number>>({})
+const activePage = computed({
+  get: () => tabPages.value[activeTab.value] || 1,
+  set: (page: number) => { tabPages.value[activeTab.value] = page },
+})
+const collectionTotals = computed(() => ({
+  shelf: displayedShelfBooks.value.length,
+  favorite: favoriteBooks.value.length,
+  reading: readingBooks.value.length,
+  finished: finishedBooks.value.length,
+  wanted: wantedBooks.value.length,
+  lists: bookLists.value.length,
+}))
+const activeTotal = computed(() => collectionTotals.value[activeTab.value as keyof typeof collectionTotals.value] || 0)
+const activeLoading = computed(() => ({
+  shelf: shelfLoading.value,
+  favorite: favoriteLoading.value,
+  reading: readingLoading.value,
+  finished: finishedLoading.value,
+  wanted: wantedLoading.value,
+} as Record<string, boolean>)[activeTab.value] || false)
+const pageBooks = <T,>(items: T[], tab: string): T[] => {
+  const offset = ((tabPages.value[tab] || 1) - 1) * SHELF_PAGE_SIZE
+  return items.slice(offset, offset + SHELF_PAGE_SIZE)
+}
+const shelfPageOffset = computed(() => ((tabPages.value.shelf || 1) - 1) * SHELF_PAGE_SIZE)
+const pagedShelfBooks = computed(() => pageBooks(displayedShelfBooks.value, 'shelf'))
+const pagedFavoriteBooks = computed(() => pageBooks(favoriteBooks.value, 'favorite'))
+const pagedReadingBooks = computed(() => pageBooks(readingBooks.value, 'reading'))
+const pagedFinishedBooks = computed(() => pageBooks(finishedBooks.value, 'finished'))
+const pagedWantedBooks = computed(() => pageBooks(wantedBooks.value, 'wanted'))
+const pagedBookLists = computed(() => pageBooks(bookLists.value, 'lists'))
+
+watch(selectedShelfGroup, () => { tabPages.value.shelf = 1 }, { flush: 'sync' })
+watch(collectionTotals, totals => {
+  for (const [tab, count] of Object.entries(totals)) {
+    const lastPage = Math.max(1, Math.ceil(count / SHELF_PAGE_SIZE))
+    tabPages.value[tab] = Math.min(tabPages.value[tab] || 1, lastPage)
+  }
+}, { flush: 'sync' })
+
 const selectedShelfTitle = computed(() => {
   if (selectedShelfGroup.value === 'all') return '全部书籍'
   if (selectedShelfGroup.value === 'ungrouped') return '未分组'
@@ -954,8 +1026,28 @@ const saveSettings = () => {
 // 监听设置变化
 watch([viewMode, cardSize], saveSettings)
 
-const loadBooks = async () => {
-  await bookStore.fetchBooks(0, 100, 'createdAt', 'desc')
+const loadFinishedBooks = async () => {
+  if (finishedLoading.value) return
+  finishedLoading.value = true
+  try {
+    const books: Book[] = []
+    let page = 0
+    let totalPages = 1
+    do {
+      const response = await api.get('/api/books', {
+        params: { page, size: 100, sortBy: 'updatedAt', sortDir: 'desc', status: 'FINISHED' },
+      })
+      books.push(...response.data.content)
+      totalPages = response.data.totalPages
+      page += 1
+    } while (page < totalPages)
+    finishedBooks.value = books
+  } catch (error) {
+    console.error('Failed to load finished books:', error)
+    message.error('已读完书籍加载失败')
+  } finally {
+    finishedLoading.value = false
+  }
 }
 
 const loadMarkedBooks = async (endpoint: 'favorites' | 'wanted') => {
@@ -1232,6 +1324,8 @@ const handleTabChange = (tab: string) => {
     loadWantedBooks()
   } else if (tab === 'lists') {
     loadBookLists()
+  } else if (tab === 'finished') {
+    loadFinishedBooks()
   } else if (tab === 'reading') {
     loadReadingBooks()
   }
@@ -1290,7 +1384,7 @@ const handleViewList = (list: any) => {
 
 onMounted(() => {
   loadSettings()
-  loadBooks()
+  loadFinishedBooks()
   loadShelf()
   loadFavoriteBooks()
   loadWantedBooks()
@@ -1303,6 +1397,36 @@ onMounted(() => {
   max-width: 1400px;
   margin: 0 auto;
   padding: var(--spacing-lg) 0;
+}
+
+.shelf-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-xl);
+}
+
+.shelf-pagination-summary {
+  color: var(--text-on-page-bg-secondary);
+  font-size: var(--font-size-sm);
+}
+
+@media (max-width: 480px) {
+  .shelf-pagination {
+    gap: var(--spacing-sm);
+  }
+
+  .shelf-pagination-summary {
+    flex-basis: 100%;
+    text-align: center;
+  }
+
+  .shelf-pagination :deep(.el-pagination) {
+    --el-pagination-button-width: 28px;
+    --el-pagination-button-height: 28px;
+  }
 }
 
 /* 页面头部 */
