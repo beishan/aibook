@@ -1,16 +1,5 @@
 <template>
   <section v-loading="loading && activeTab !== 'basic'" class="nodes-panel">
-    <header class="nodes-panel-header">
-      <div>
-        <p class="eyebrow">MIHOMO ROUTING</p>
-        <h3>{{ proxy.name }} · 节点与备用组</h3>
-        <p class="nodes-panel-description">
-          管理备用节点组，并查看控制器返回的全部具体节点。
-        </p>
-      </div>
-      <el-button :loading="loading" @click="load">刷新</el-button>
-    </header>
-
     <div class="nodes-tabs-scroll">
       <div
         class="nodes-segmented-tabs"
@@ -40,6 +29,10 @@
           <b v-if="tab.key !== 'basic'">{{ tab.key === 'groups' ? groups.length : catalog.nodes.length }}</b>
         </button>
       </div>
+    </div>
+
+    <div v-if="activeTab !== 'basic'" class="nodes-refresh-toolbar">
+      <el-button :loading="loading" @click="load">刷新</el-button>
     </div>
 
     <section
@@ -617,6 +610,11 @@ onMounted(load)
 </script>
 
 <style scoped>
+.nodes-refresh-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .nodes-panel {
   display: grid;
   min-width: 0;

@@ -168,7 +168,7 @@
 
     <el-dialog
       v-model="dialogVisible"
-      :title="mergedProxy ? `${mergedProxy.name} · 节点与备用组配置` : editingId ? '编辑代理' : '新增代理'"
+      :title="editingId ? `${rows.find(row => row.id === editingId)?.name || '代理'} 编辑` : '新增代理'"
       :width="mergedProxy ? 'min(960px, 96vw)' : 'min(520px, 92vw)'"
       top="6vh"
       class="proxy-config-dialog"
