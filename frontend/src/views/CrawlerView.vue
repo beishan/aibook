@@ -342,7 +342,48 @@
         <el-table-column label="分类 / 标签" min-width="190"><template #default="{row}"><div class="crawler-book-tag-list table-tags"><el-tag v-if="row.category" size="small" type="info" effect="plain">{{ row.category }}</el-tag><el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag><span v-if="!row.category&&!row.tags?.length">暂无</span></div></template></el-table-column>
         <el-table-column prop="latestChapter" label="最新章节" min-width="180" />
         <el-table-column label="发现时间" width="170"><template #default="{row}">{{ formatTime(row.discoverTime) }}</template></el-table-column>
-        <el-table-column label="操作" width="340" fixed="right" align="right"><template #default="{row}"><div class="crawler-book-action-cluster discovery-book-action-cluster row-hover-action" @click.stop><el-button size="small" round class="crawler-book-action-button crawler-book-action-details" @click="openBook(row)">详情</el-button><el-button size="small" round class="crawler-book-action-button crawler-book-action-import" @click="crawlDiscovered(row)">采集</el-button><el-dropdown trigger="click" placement="bottom-end" popper-class="discovery-more-popper" @command="handleDiscoveryCardMore($event,row)"><el-button size="small" circle :icon="MoreFilled" class="crawler-book-action-more" aria-label="更多操作" title="更多操作" /><template #dropdown><el-dropdown-menu><el-dropdown-item command="book-lists">加入书单</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(row)">刷新分类标签</el-dropdown-item><el-dropdown-item command="website">查看网站</el-dropdown-item><el-dropdown-item command="ignore" divided>忽略</el-dropdown-item><el-dropdown-item command="blacklist" class="danger-dropdown-item">加入黑名单</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div></template></el-table-column>
+        <el-table-column label="操作" width="180" fixed="right" align="right">
+          <template #default="{ row }">
+            <div class="crawler-book-action-cluster discovery-book-action-cluster row-hover-action" @click.stop>
+              <el-button
+                size="small"
+                round
+                class="crawler-book-action-button crawler-book-action-details"
+                @click="openBook(row)"
+              >详情</el-button>
+              <el-button
+                size="small"
+                round
+                class="crawler-book-action-button crawler-book-action-import"
+                @click="crawlDiscovered(row)"
+              >采集</el-button>
+              <el-dropdown
+                trigger="click"
+                placement="bottom-end"
+                popper-class="discovery-more-popper"
+                @command="handleDiscoveryCardMore($event, row)"
+              >
+                <el-button
+                  size="small"
+                  circle
+                  :icon="MoreFilled"
+                  class="crawler-book-action-more"
+                  aria-label="更多操作"
+                  title="更多操作"
+                />
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="book-lists">加入书单</el-dropdown-item>
+                    <el-dropdown-item command="metadata" :disabled="isBookTaskActive(row)">刷新分类标签</el-dropdown-item>
+                    <el-dropdown-item command="website">查看网站</el-dropdown-item>
+                    <el-dropdown-item command="ignore" divided>忽略</el-dropdown-item>
+                    <el-dropdown-item command="blacklist" class="danger-dropdown-item">加入黑名单</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </template>
+        </el-table-column>
       </el-table>
       <div v-else v-loading="discoveryLoading" class="discovery-card-panel">
         <div v-if="discoveredBooks.length" class="discovery-card-selection"><el-checkbox :model-value="allDiscoveredSelected" :indeterminate="someDiscoveredSelected&&!allDiscoveredSelected" @change="toggleCurrentDiscoveryPage(Boolean($event))">选择当前页</el-checkbox><span>已选择 {{ selectedDiscoveries.length }} 本</span></div>
