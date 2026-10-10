@@ -1,5 +1,5 @@
 <template>
-  <section v-loading="loading" class="nodes-panel">
+  <section v-loading="loading && activeTab !== 'basic'" class="nodes-panel">
     <header class="nodes-panel-header">
       <div>
         <p class="eyebrow">MIHOMO ROUTING</p>
@@ -11,33 +11,47 @@
       <el-button :loading="loading" @click="load">刷新</el-button>
     </header>
 
-    <div
-      class="nodes-segmented-tabs"
-      role="tablist"
-      aria-label="Mihomo 节点管理分类"
-      @keydown="handleTabKeydown"
-    >
-      <span
-        class="nodes-tab-indicator"
-        :style="{ transform: `translateX(${activeTabIndex * 100}%)` }"
-        aria-hidden="true"
-      />
-      <button
-        v-for="tab in tabs"
-        :id="`mihomo-tab-${tab.key}`"
-        :key="tab.key"
-        type="button"
-        role="tab"
-        :aria-selected="activeTab === tab.key"
-        :aria-controls="`mihomo-panel-${tab.key}`"
-        :tabindex="activeTab === tab.key ? 0 : -1"
-        :class="{ active: activeTab === tab.key }"
-        @click="activeTab = tab.key"
+    <div class="nodes-tabs-scroll">
+      <div
+        class="nodes-segmented-tabs"
+        :style="{ '--node-tab-count': tabs.length }"
+        role="tablist"
+        aria-label="Mihomo 节点管理分类"
+        @keydown="handleTabKeydown"
       >
-        <span>{{ tab.label }}</span>
-        <b>{{ tab.key === 'groups' ? groups.length : catalog.nodes.length }}</b>
-      </button>
+        <span
+          class="nodes-tab-indicator"
+          :style="{ transform: `translateX(${activeTabIndex * 100}%)` }"
+          aria-hidden="true"
+        />
+        <button
+          v-for="tab in tabs"
+          :id="`mihomo-tab-${tab.key}`"
+          :key="tab.key"
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === tab.key"
+          :aria-controls="`mihomo-panel-${tab.key}`"
+          :tabindex="activeTab === tab.key ? 0 : -1"
+          :class="{ active: activeTab === tab.key }"
+          @click="activeTab = tab.key"
+        >
+          <span>{{ tab.label }}</span>
+          <b v-if="tab.key !== 'basic'">{{ tab.key === 'groups' ? groups.length : catalog.nodes.length }}</b>
+        </button>
+      </div>
     </div>
+
+    <section
+      v-show="activeTab === 'basic'"
+      id="mihomo-panel-basic"
+      class="nodes-tab-panel"
+      role="tabpanel"
+      aria-labelledby="mihomo-tab-basic"
+      tabindex="0"
+    >
+      <slot />
+    </section>
 
     <section
       v-show="activeTab === 'groups'"
@@ -345,9 +359,10 @@ import { confirm, message } from '@/utils/message'
 
 const props = defineProps<{ proxy: SystemProxyConfig }>()
 
-type NodeTab = 'groups' | 'nodes'
+type NodeTab = 'basic' | 'groups' | 'nodes'
 
 const tabs: { key: NodeTab; label: string }[] = [
+  { key: 'basic', label: '基础配置' },
   { key: 'groups', label: '节点组' },
   { key: 'nodes', label: '全部节点' },
 ]
@@ -355,7 +370,7 @@ const tabs: { key: NodeTab; label: string }[] = [
 const loading = ref(false)
 const saving = ref(false)
 const testing = ref('')
-const activeTab = ref<NodeTab>('groups')
+const activeTab = ref<NodeTab>('basic')
 const nodeSearch = ref('')
 const candidateSearch = ref('')
 const groups = ref<MihomoNodeGroup[]>([])
@@ -671,10 +686,16 @@ onMounted(load)
   letter-spacing: 0.13em;
 }
 
+.nodes-tabs-scroll {
+  overflow-x: auto;
+  padding: 3px;
+}
+
 .nodes-segmented-tabs {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--node-tab-count), minmax(0, 1fr));
+  min-width: 420px;
   padding: 4px;
   border: 1px solid var(--el-border-color);
   border-radius: 13px;
@@ -688,7 +709,7 @@ onMounted(load)
   bottom: 4px;
   left: 4px;
   z-index: 0;
-  width: calc((100% - 8px) / 2);
+  width: calc((100% - 8px) / var(--node-tab-count));
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 10px;
   background: var(--el-bg-color);

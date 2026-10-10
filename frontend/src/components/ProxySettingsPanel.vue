@@ -138,10 +138,9 @@
           <span class="health-chip" :class="effective(row) ? 'online' : 'offline'"><i></i>{{ statusText(row) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" :width="crawler ? 190 : 300" align="right">
+      <el-table-column label="操作" width="190" align="right">
         <template #default="{ row }">
           <el-switch :model-value="row.enabled" :disabled="crawler && row.sourceType === 'SYSTEM' && !row.sourceAvailable" @change="toggle(row, Boolean($event))" />
-          <el-button v-if="!crawler && row.proxyType === 'MIHOMO'" text type="primary" @click="openNodes(row)">节点与备用组</el-button>
           <el-button text @click="openEdit(row)">编辑</el-button>
           <el-button text type="danger" @click="remove(row)">删除</el-button>
         </template>
@@ -152,60 +151,66 @@
 
     <el-dialog
       v-model="dialogVisible"
-      :title="editingId ? '编辑代理' : '新增代理'"
-      width="min(520px, 92vw)"
+      :title="mergedProxy ? `${mergedProxy.name} · 节点与备用组配置` : editingId ? '编辑代理' : '新增代理'"
+      :width="mergedProxy ? 'min(960px, 96vw)' : 'min(520px, 92vw)'"
       top="6vh"
       class="proxy-config-dialog"
       append-to-body
       destroy-on-close
     >
-      <div v-if="crawler" class="source-segment" :class="form.sourceType.toLowerCase()">
-        <span class="source-indicator"></span>
-        <button type="button" :class="{ active: form.sourceType === 'CUSTOM' }" @click="form.sourceType = 'CUSTOM'">独立代理</button>
-        <button type="button" :class="{ active: form.sourceType === 'SYSTEM' }" @click="form.sourceType = 'SYSTEM'">引用系统代理</button>
-      </div>
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="proxy-form">
-        <el-form-item v-if="!crawler" label="代理类型">
-          <el-select v-model="form.proxyType" @change="testResult = undefined">
-            <el-option label="简单代理" value="SIMPLE" />
-            <el-option label="Mihomo · 可管理具体节点" value="MIHOMO" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="!crawler || form.sourceType === 'CUSTOM'" label="代理名称" prop="name"><el-input v-model="form.name" placeholder="例如：家庭出口 A" /></el-form-item>
-        <el-form-item v-if="!crawler || form.sourceType === 'CUSTOM'" label="代理地址" prop="url"><el-input v-model="form.url" placeholder="http://127.0.0.1:7890" /></el-form-item>
-        <template v-if="!crawler && form.proxyType === 'MIHOMO'">
-          <el-form-item label="Mihomo 控制 API 地址">
-            <el-input v-model="form.controllerUrl" placeholder="http://mihomo:9111" />
-            <small>代理地址是实际 HTTP 出口，控制地址用于查询和切换节点，两者端口不同。</small>
-          </el-form-item>
-          <el-form-item label="控制 API 密钥">
-            <el-input v-model="form.secret" type="password" show-password autocomplete="new-password" placeholder="已保存密钥留空保留" />
-            <el-checkbox v-model="form.clearSecret">清除已保存密钥</el-checkbox>
-          </el-form-item>
-          <el-button :loading="testingProxy" @click="testProxy">测试控制 API 与代理有效性</el-button>
-          <el-alert
-            v-if="testResult"
-            :title="testResult.message"
-            :type="testResult.controllerAvailable && testResult.proxyAvailable ? 'success' : 'warning'"
-            :closable="false"
-          />
-          <p class="mihomo-hint">保存代理后，在列表的“节点与备用组”中查看全部节点、创建备用组。</p>
-        </template>
-        <el-form-item v-if="crawler && form.sourceType === 'SYSTEM'" label="系统代理" prop="systemProxyId">
-          <el-select v-model="form.systemProxyId" placeholder="选择已有简单系统代理" style="width:100%">
-            <el-option v-for="proxy in systemOptions.filter(p => p.proxyType !== 'MIHOMO')" :key="proxy.id" :value="proxy.id" :label="proxy.name" :disabled="!proxy.enabled"><span>{{ proxy.name }}</span><span class="option-url">{{ proxy.enabled ? proxy.url : '已停用' }}</span></el-option>
-          </el-select>
-        </el-form-item>
-        <div class="form-pair single">
-          <el-form-item label="启用"><el-switch v-model="form.enabled" active-text="参与路由" inactive-text="停用" /></el-form-item>
+      <component
+        :is="mergedProxy ? SystemMihomoNodesPanel : 'div'"
+        v-if="dialogVisible"
+        :proxy="mergedProxy"
+      >
+        <div v-if="crawler" class="source-segment" :class="form.sourceType.toLowerCase()">
+          <span class="source-indicator"></span>
+          <button type="button" :class="{ active: form.sourceType === 'CUSTOM' }" @click="form.sourceType = 'CUSTOM'">独立代理</button>
+          <button type="button" :class="{ active: form.sourceType === 'SYSTEM' }" @click="form.sourceType = 'SYSTEM'">引用系统代理</button>
         </div>
-      </el-form>
-      <template #footer><el-button @click="dialogVisible=false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存配置</el-button></template>
+        <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="proxy-form">
+          <el-form-item v-if="!crawler" label="代理类型">
+            <el-select v-model="form.proxyType" @change="testResult = undefined">
+              <el-option label="简单代理" value="SIMPLE" />
+              <el-option label="Mihomo · 可管理具体节点" value="MIHOMO" />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="!crawler || form.sourceType === 'CUSTOM'" label="代理名称" prop="name"><el-input v-model="form.name" placeholder="例如：家庭出口 A" /></el-form-item>
+          <el-form-item v-if="!crawler || form.sourceType === 'CUSTOM'" label="代理地址" prop="url"><el-input v-model="form.url" placeholder="http://127.0.0.1:7890" /></el-form-item>
+          <template v-if="!crawler && form.proxyType === 'MIHOMO'">
+            <el-form-item label="Mihomo 控制 API 地址">
+              <el-input v-model="form.controllerUrl" placeholder="http://mihomo:9111" />
+              <small>代理地址是实际 HTTP 出口，控制地址用于查询和切换节点，两者端口不同。</small>
+            </el-form-item>
+            <el-form-item label="控制 API 密钥">
+              <el-input v-model="form.secret" type="password" show-password autocomplete="new-password" placeholder="已保存密钥留空保留" />
+              <el-checkbox v-model="form.clearSecret">清除已保存密钥</el-checkbox>
+            </el-form-item>
+            <el-button :loading="testingProxy" @click="testProxy">测试控制 API 与代理有效性</el-button>
+            <el-alert
+              v-if="testResult"
+              :title="testResult.message"
+              :type="testResult.controllerAvailable && testResult.proxyAvailable ? 'success' : 'warning'"
+              :closable="false"
+            />
+            <p class="mihomo-hint">保存代理后，点击条目的“编辑”，在“节点组”和“全部节点”中管理节点与备用组。</p>
+          </template>
+          <el-form-item v-if="crawler && form.sourceType === 'SYSTEM'" label="系统代理" prop="systemProxyId">
+            <el-select v-model="form.systemProxyId" placeholder="选择已有简单系统代理" style="width:100%">
+              <el-option v-for="proxy in systemOptions.filter(p => p.proxyType !== 'MIHOMO')" :key="proxy.id" :value="proxy.id" :label="proxy.name" :disabled="!proxy.enabled"><span>{{ proxy.name }}</span><span class="option-url">{{ proxy.enabled ? proxy.url : '已停用' }}</span></el-option>
+            </el-select>
+          </el-form-item>
+          <div class="form-pair single">
+            <el-form-item label="启用"><el-switch v-model="form.enabled" active-text="参与路由" inactive-text="停用" /></el-form-item>
+          </div>
+        </el-form>
+        <div class="proxy-basic-actions">
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
+        </div>
+      </component>
     </el-dialog>
 
-    <el-dialog v-model="nodesDialog" :title="`${nodesProxy?.name || 'Mihomo'} · 节点与备用组`" width="min(960px, 96vw)" append-to-body destroy-on-close>
-      <SystemMihomoNodesPanel v-if="nodesProxy && nodesDialog" :proxy="nodesProxy" />
-    </el-dialog>
   </section>
 </template>
 
@@ -238,8 +243,10 @@ const settingsLoading = ref(false)
 const settingsSaving = ref(false)
 const reorderSaving = ref(false)
 const dialogVisible = ref(false)
-const nodesDialog = ref(false)
-const nodesProxy = ref<SystemProxyConfig>()
+const mergedProxy = computed(() => {
+  if (crawler.value || !editingId.value) return undefined
+  return rows.value.find(row => row.id === editingId.value && 'proxyType' in row && row.proxyType === 'MIHOMO') as SystemProxyConfig | undefined
+})
 const testingProxy = ref(false)
 const testResult = ref<{controllerAvailable:boolean;proxyAvailable:boolean;message:string;delay:number|null}>()
 const editingId = ref<number>()
@@ -310,11 +317,6 @@ function openEdit(row:any) {
     url:row.url || '', systemProxyId:row.systemProxyId, enabled:row.enabled, priority:row.priority,
     proxyType:row.proxyType || 'SIMPLE', controllerUrl:row.controllerUrl || '' })
   dialogVisible.value = true
-}
-
-function openNodes(row:SystemProxyConfig) {
-  nodesProxy.value = row
-  nodesDialog.value = true
 }
 
 async function testProxy() {
@@ -391,6 +393,13 @@ onMounted(load)
 </script>
 
 <style scoped>
+.proxy-basic-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
 .crawler-subtabs-scroll {
   margin: 18px 24px 0;
   overflow-x: auto;
