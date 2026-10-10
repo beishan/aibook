@@ -104,6 +104,17 @@
     </div>
 
     <el-table v-if="!crawler || activeCrawlerSubtab === 'proxy'" :id="crawler ? 'crawler-settings-panel-proxy' : undefined" v-loading="loading || reorderSaving" :data="rows" row-key="id" class="proxy-table" empty-text="暂无代理配置" :role="crawler ? 'tabpanel' : undefined" :aria-labelledby="crawler ? 'crawler-settings-tab-proxy' : undefined">
+      <el-table-column v-if="!crawler" width="36" align="center">
+        <template #default="{ row }">
+          <span
+            class="proxy-status-dot"
+            :class="{ online: effective(row) }"
+            role="img"
+            :aria-label="effective(row) ? '生效中' : '已停用'"
+            :title="effective(row) ? '生效中' : '已停用'"
+          />
+        </template>
+      </el-table-column>
       <el-table-column label="排序" width="64" align="center">
         <template #default="{ row }">
           <button
@@ -133,14 +144,20 @@
       <el-table-column v-if="crawler" label="来源" width="130">
         <template #default="{ row }"><span class="source-chip" :class="row.sourceType.toLowerCase()">{{ row.sourceType === 'SYSTEM' ? '系统引用' : '爬虫独立' }}</span></template>
       </el-table-column>
-      <el-table-column label="状态" width="130">
+      <el-table-column label="状态" :width="crawler ? 130 : 80">
         <template #default="{ row }">
-          <span class="health-chip" :class="effective(row) ? 'online' : 'offline'"><i></i>{{ statusText(row) }}</span>
+          <el-switch
+            v-if="!crawler"
+            :model-value="row.enabled"
+            :aria-label="`启用代理：${row.name}`"
+            @change="toggle(row, Boolean($event))"
+          />
+          <span v-else class="health-chip" :class="effective(row) ? 'online' : 'offline'"><i></i>{{ statusText(row) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="190" align="right">
+      <el-table-column label="操作" :width="crawler ? 190 : 130" align="right">
         <template #default="{ row }">
-          <el-switch :model-value="row.enabled" :disabled="crawler && row.sourceType === 'SYSTEM' && !row.sourceAvailable" @change="toggle(row, Boolean($event))" />
+          <el-switch v-if="crawler" :model-value="row.enabled" :disabled="crawler && row.sourceType === 'SYSTEM' && !row.sourceAvailable" @change="toggle(row, Boolean($event))" />
           <el-button text @click="openEdit(row)">编辑</el-button>
           <el-button text type="danger" @click="remove(row)">删除</el-button>
         </template>
@@ -393,6 +410,18 @@ onMounted(load)
 </script>
 
 <style scoped>
+.proxy-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--el-color-info);
+}
+
+.proxy-status-dot.online {
+  background: var(--el-color-success);
+}
+
 .proxy-basic-actions {
   display: flex;
   justify-content: flex-end;
