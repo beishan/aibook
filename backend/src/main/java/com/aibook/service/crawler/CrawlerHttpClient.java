@@ -949,20 +949,15 @@ public class CrawlerHttpClient {
 
     static List<PacingWaitStage> pacingWaitStages(long wait, long fixed, long random, long adaptive) {
         if (wait <= 0) return List.of();
-        long total = fixed + random + adaptive;
-        if (total <= 0) return List.of(new PacingWaitStage("其他等待中", wait));
-        long fixedPart = wait * fixed / total;
-        long randomPart = wait * random / total;
-        long otherPart = wait - fixedPart - randomPart;
-        if (adaptive == 0) {
-            if (fixed >= random) fixedPart += otherPart;
-            else randomPart += otherPart;
-            otherPart = 0;
-        }
+        long fixedPart = Math.min(wait, Math.max(0, fixed));
+        long randomPart = Math.min(wait - fixedPart, Math.max(0, random));
+        long adaptivePart = Math.min(wait - fixedPart - randomPart, Math.max(0, adaptive));
+        long otherPart = wait - fixedPart - randomPart - adaptivePart;
         List<PacingWaitStage> phases = new ArrayList<>();
         if (fixedPart > 0) phases.add(new PacingWaitStage("固定等待中", fixedPart));
         if (randomPart > 0) phases.add(new PacingWaitStage("随机等待中", randomPart));
-        if (otherPart > 0) phases.add(new PacingWaitStage("自适应等待中", otherPart));
+        if (adaptivePart > 0) phases.add(new PacingWaitStage("自适应等待中", adaptivePart));
+        if (otherPart > 0) phases.add(new PacingWaitStage("其他等待中", otherPart));
         return phases;
     }
 
@@ -1008,11 +1003,14 @@ public class CrawlerHttpClient {
     }
 
     static long reserveRequestSlot(AtomicLong gate, long now, long interval) {
+        long previousSlot;
         long slot;
         do {
-            slot = gate.get();
-        } while (!gate.compareAndSet(slot, Math.max(now, slot) + Math.max(0, interval)));
-        return Math.max(now, slot);
+            previousSlot = gate.get();
+            // 每次请求都完整等待配置时长，首个请求及采集后的空闲时间不能抵扣。
+            slot = Math.max(now, previousSlot) + Math.max(0, interval);
+        } while (!gate.compareAndSet(previousSlot, slot));
+        return slot;
     }
 
     static String originKey(URI uri) {
@@ -1056,23 +1054,13 @@ public class CrawlerHttpClient {
         }
 
         private void addPacingWait(long elapsedMillis, long fixed, long random, long adaptive) {
-            long configuredTotal = fixed + random + adaptive;
-            if (configuredTotal <= 0) {
-                addOtherWait(elapsedMillis);
-                return;
+            for (PacingWaitStage phase : pacingWaitStages(elapsedMillis, fixed, random, adaptive)) {
+                switch (phase.step()) {
+                    case "固定等待中" -> fixedWaitMillis += phase.millis();
+                    case "随机等待中" -> randomWaitMillis += phase.millis();
+                    default -> otherWaitMillis += phase.millis();
+                }
             }
-            long configuredWait = Math.min(Math.max(0, elapsedMillis), configuredTotal);
-            long fixedPart = configuredWait * fixed / configuredTotal;
-            long randomPart = configuredWait * random / configuredTotal;
-            long otherPart = configuredWait - fixedPart - randomPart;
-            if (adaptive == 0 && fixed + random > 0 && elapsedMillis <= configuredTotal) {
-                if (fixed >= random) fixedPart += otherPart;
-                else randomPart += otherPart;
-                otherPart = 0;
-            }
-            fixedWaitMillis += fixedPart;
-            randomWaitMillis += randomPart;
-            otherWaitMillis += otherPart + Math.max(0, elapsedMillis - configuredTotal);
         }
 
         private void addOtherWait(long elapsedMillis) {

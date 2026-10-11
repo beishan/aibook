@@ -177,8 +177,11 @@ class CrawlerHttpClientTest {
                 CrawlerHttpClient.originKey(URI.create("https://example.com:8443/path")));
         AtomicLong gate = new AtomicLong();
 
-        assertEquals(1_000L, CrawlerHttpClient.reserveRequestSlot(gate, 1_000L, 150L));
         assertEquals(1_150L, CrawlerHttpClient.reserveRequestSlot(gate, 1_000L, 150L));
+        assertEquals(1_300L, CrawlerHttpClient.reserveRequestSlot(gate, 1_000L, 150L));
+        assertEquals(8_000L, CrawlerHttpClient.reserveRequestSlot(gate, 5_000L, 3_000L));
+        assertEquals(8_200L, CrawlerHttpClient.reserveRequestSlot(gate, 5_000L, 200L));
+        assertEquals(9_000L, CrawlerHttpClient.reserveRequestSlot(gate, 9_000L, 0L));
     }
 
     @Test void pacingStagesKeepTheReservedWaitAndSkipZeroLengthPhases() {
@@ -186,13 +189,59 @@ class CrawlerHttpClientTest {
         assertEquals(List.of("固定等待中", "随机等待中", "自适应等待中"),
                 phases.stream().map(CrawlerHttpClient.PacingWaitStage::step).toList());
         assertEquals(100L, phases.stream().mapToLong(CrawlerHttpClient.PacingWaitStage::millis).sum());
-        assertEquals(List.of(new CrawlerHttpClient.PacingWaitStage("固定等待中", 101)),
+        assertEquals(List.of(new CrawlerHttpClient.PacingWaitStage("固定等待中", 60),
+                        new CrawlerHttpClient.PacingWaitStage("其他等待中", 41)),
                 CrawlerHttpClient.pacingWaitStages(101, 60, 0, 0));
-        assertEquals(List.of(new CrawlerHttpClient.PacingWaitStage("随机等待中", 101)),
+        assertEquals(List.of(new CrawlerHttpClient.PacingWaitStage("随机等待中", 60),
+                        new CrawlerHttpClient.PacingWaitStage("其他等待中", 41)),
                 CrawlerHttpClient.pacingWaitStages(101, 0, 60, 0));
         assertEquals(List.of(new CrawlerHttpClient.PacingWaitStage("其他等待中", 101)),
                 CrawlerHttpClient.pacingWaitStages(101, 0, 0, 0));
         assertTrue(CrawlerHttpClient.pacingWaitStages(0, 60, 30, 10).isEmpty());
+        assertEquals(List.of(new CrawlerHttpClient.PacingWaitStage("固定等待中", 3000),
+                        new CrawlerHttpClient.PacingWaitStage("随机等待中", 500),
+                        new CrawlerHttpClient.PacingWaitStage("自适应等待中", 200),
+                        new CrawlerHttpClient.PacingWaitStage("其他等待中", 100)),
+                CrawlerHttpClient.pacingWaitStages(3800, 3000, 500, 200));
+        assertEquals(List.of(new CrawlerHttpClient.PacingWaitStage("固定等待中", 1200)),
+                CrawlerHttpClient.pacingWaitStages(1200, 3000, 500, 200));
+    }
+
+    @Test void waitsFullThreeSecondsBeforeFirstAndSubsequentRequests() throws Exception {
+        HttpServer server = server("User-agent: *\nAllow: /\n", exchange -> {
+            try {
+                Thread.sleep(150);
+                respond(exchange, 200, "content");
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                exchange.close();
+            }
+        });
+        try {
+            CrawlerHttpClient httpClient = configuredClient(0);
+            CrawlerSite site = localSite(server, 120L);
+            site.setRespectRobotsTxt(false);
+            site.setRequestIntervalMillis(3000);
+            site.setMaxRequestIntervalMillis(3100);
+            for (int request = 0; request < 2; request++) {
+                var timing = new CrawlerHttpClient.RequestTiming();
+                httpClient.get(site, site.getBaseUrl() + "/chapter/" + request, null, null, timing);
+                assertEquals(3000L, timing.fixedWaitMillis(), "固定等待不得被响应耗时抵扣或按比例缩短");
+                assertTrue(timing.randomWaitMillis() >= 0 && timing.randomWaitMillis() <= 100);
+                Thread.sleep(200);
+            }
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test void recordsInterruptedWaitInActualStageOrder() {
+        var timing = new CrawlerHttpClient.RequestTiming();
+        org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                timing, "addPacingWait", 3200L, 3000L, 500L, 200L);
+        assertEquals(3000L, timing.fixedWaitMillis());
+        assertEquals(200L, timing.randomWaitMillis());
+        assertEquals(0L, timing.otherWaitMillis());
     }
 
     @Test void requestStageIsRestoredAfterThePacingWait() throws Exception {
@@ -283,8 +332,8 @@ class CrawlerHttpClientTest {
                     }
                 }));
             }
-            assertTrue(arrivals.await(2, TimeUnit.SECONDS),
-                    "两个执行器应同时到达网站，不能共享 3 秒的请求时间队列");
+            assertTrue(arrivals.await(5, TimeUnit.SECONDS),
+                    "两个执行器各自等待 3 秒后应同时到达网站，不能共享请求时间队列");
             release.countDown();
             for (Future<Integer> request : requests) assertEquals(200, request.get(5, TimeUnit.SECONDS));
         } finally {
