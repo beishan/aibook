@@ -222,7 +222,9 @@ class CrawlerHttpClientTest {
             CrawlerSite site = localSite(server, 120L);
             site.setRespectRobotsTxt(false);
             site.setRequestIntervalMillis(3000);
-            site.setMaxRequestIntervalMillis(3100);
+            site.setMaxRequestIntervalMillis(3000);
+            site.setMinRandomDelayMillis(0);
+            site.setMaxRandomDelayMillis(100);
             for (int request = 0; request < 2; request++) {
                 var timing = new CrawlerHttpClient.RequestTiming();
                 httpClient.get(site, site.getBaseUrl() + "/chapter/" + request, null, null, timing);
@@ -242,6 +244,30 @@ class CrawlerHttpClientTest {
         assertEquals(3000L, timing.fixedWaitMillis());
         assertEquals(200L, timing.randomWaitMillis());
         assertEquals(0L, timing.otherWaitMillis());
+    }
+
+    @Test void samplesBothWaitRangesIndependentlyAndPreservesLegacyTotalRange() {
+        CrawlerSite site = CrawlerSite.builder().requestIntervalMillis(3000)
+                .maxRequestIntervalMillis(15000).randomDelayMillis(12000).build();
+        assertEquals(3000, site.fixedWaitMinimumMillis());
+        assertEquals(15000, site.fixedWaitMaximumMillis());
+        assertEquals(0, site.randomWaitMinimumMillis());
+        assertEquals(0, site.randomWaitMaximumMillis());
+        site.setMaxRequestIntervalMillis(null);
+        assertEquals(15000, site.fixedWaitMaximumMillis());
+        site.setMinRandomDelayMillis(500);
+        site.setMaxRandomDelayMillis(2500);
+        var fixedSamples = new java.util.HashSet<Long>();
+        for (int sample = 0; sample < 1000; sample++) {
+            long fixed = CrawlerHttpClient.sampleWaitMillis(site.fixedWaitMinimumMillis(), site.fixedWaitMaximumMillis());
+            long random = CrawlerHttpClient.sampleWaitMillis(site.randomWaitMinimumMillis(), site.randomWaitMaximumMillis());
+            assertTrue(fixed >= 3000 && fixed <= 15000);
+            assertTrue(random >= 500 && random <= 2500);
+            fixedSamples.add(fixed);
+        }
+        assertTrue(fixedSamples.size() > 1);
+        assertEquals(3000, CrawlerHttpClient.sampleWaitMillis(3000, 3000));
+        assertEquals(0, CrawlerHttpClient.sampleWaitMillis(0, 0));
     }
 
     @Test void requestStageIsRestoredAfterThePacingWait() throws Exception {

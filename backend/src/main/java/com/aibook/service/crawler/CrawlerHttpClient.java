@@ -905,17 +905,10 @@ public class CrawlerHttpClient {
 
     private void throttle(CrawlerSite site, RequestTiming timing) throws InterruptedException {
         AdaptiveDelay adaptiveDelay = adaptiveDelays.get(site.getId());
-        long fixedDelay = Math.max(0, value(site.getRequestIntervalMillis(), 1500));
-        long legacyRandomLimit = Math.max(0, value(site.getRandomDelayMillis(), 1000));
-        long maximumDelay = site.getMaxRequestIntervalMillis() == null
-                ? fixedDelay + legacyRandomLimit
-                : Math.max(fixedDelay, site.getMaxRequestIntervalMillis());
-        long selectedInterval = maximumDelay == fixedDelay
-                ? fixedDelay
-                : ThreadLocalRandom.current().nextLong(fixedDelay, maximumDelay + 1);
-        long randomDelay = selectedInterval - fixedDelay;
+        long fixedDelay = sampleWaitMillis(site.fixedWaitMinimumMillis(), site.fixedWaitMaximumMillis());
+        long randomDelay = sampleWaitMillis(site.randomWaitMinimumMillis(), site.randomWaitMaximumMillis());
         long adaptiveMillis = adaptiveDelay == null ? 0 : adaptiveDelay.current();
-        long interval = selectedInterval + adaptiveMillis;
+        long interval = fixedDelay + randomDelay + adaptiveMillis;
 
         while (true) {
             waitUntilAccessAllowed(site, timing);
@@ -946,6 +939,10 @@ public class CrawlerHttpClient {
     }
 
     record PacingWaitStage(String step, long millis) { }
+
+    static long sampleWaitMillis(int minimum, int maximum) {
+        return minimum == maximum ? minimum : ThreadLocalRandom.current().nextLong(minimum, (long) maximum + 1);
+    }
 
     static List<PacingWaitStage> pacingWaitStages(long wait, long fixed, long random, long adaptive) {
         if (wait <= 0) return List.of();

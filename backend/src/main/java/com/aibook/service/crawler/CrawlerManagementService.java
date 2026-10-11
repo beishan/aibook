@@ -890,11 +890,21 @@ public class CrawlerManagementService {
                 : p.maxRequestIntervalMillis();
         if (maximumRequestInterval < minimumRequestInterval) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "最长请求间隔不能小于最短请求间隔");
+                    "固定等待最大值不能小于最小值");
+        }
+        int minimumRandomDelay = value(p.minRandomDelayMillis(), 0);
+        int maximumRandomDelay = value(p.maxRandomDelayMillis(), 0);
+        if (minimumRequestInterval < 100 || maximumRequestInterval > 600000
+                || minimumRandomDelay < 0 || maximumRandomDelay > 600000
+                || maximumRandomDelay < minimumRandomDelay) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "等待范围无效：固定等待为 100–600000 毫秒，随机等待为 0–600000 毫秒，最大值不能小于最小值");
         }
         site.setRequestIntervalMillis(minimumRequestInterval);
         site.setMaxRequestIntervalMillis(maximumRequestInterval);
         site.setRandomDelayMillis(maximumRequestInterval - minimumRequestInterval);
+        site.setMinRandomDelayMillis(minimumRandomDelay);
+        site.setMaxRandomDelayMillis(maximumRandomDelay);
         site.setCooldownFailureThreshold(value(p.cooldownFailureThreshold(), 5));
         site.setMaxConcurrency(value(p.maxConcurrency(), 1));
         site.setRespectRobotsTxt(bool(p.respectRobotsTxt(), true));
@@ -949,16 +959,12 @@ public class CrawlerManagementService {
                 httpClient.cooldownFailureThreshold(s),
                 new SiteFreezeView(s.isManuallyFrozenAt(java.time.Instant.now()),
                         s.isManuallyFrozenAt(java.time.Instant.now()) ? s.getManualFreezeUntil() : null,
-                        value(s.getManualFreezeDurationMinutes(), 60)));
+                        value(s.getManualFreezeDurationMinutes(), 60)),
+                s.randomWaitMinimumMillis(), s.randomWaitMaximumMillis());
     }
 
     private int maxRequestInterval(CrawlerSite site) {
-        int minimum = value(site.getRequestIntervalMillis(), 1500);
-        if (site.getMaxRequestIntervalMillis() != null) {
-            return Math.max(minimum, site.getMaxRequestIntervalMillis());
-        }
-        return (int) Math.min(Integer.MAX_VALUE,
-                (long) minimum + value(site.getRandomDelayMillis(), 1000));
+        return site.fixedWaitMaximumMillis();
     }
 
     private List<CrawlerSiteAccessWindow> toAccessWindows(

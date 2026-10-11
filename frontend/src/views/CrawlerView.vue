@@ -199,7 +199,11 @@
             <span><b>{{ site.bookCount }}</b> 本书</span>
             <span>
               <b>{{ site.requestIntervalMillis }}–{{ site.maxRequestIntervalMillis }}</b>
-              ms 随机间隔
+              ms 固定等待
+            </span>
+            <span>
+              <b>{{ site.minRandomDelayMillis }}–{{ site.maxRandomDelayMillis }}</b>
+              ms 随机等待
             </span>
           </div>
           <div v-if="hasSiteProtection(site)" class="site-protection" :class="{cooling:site.protection.coolingDown}">
@@ -721,10 +725,10 @@
               </el-button>
             </header>
             <div class="form-grid">
-              <el-form-item label="最短请求间隔（ms）">
-                <el-input-number v-model="siteForm.requestIntervalMillis" :min="100" :step="100" />
+              <el-form-item label="固定等待最小值（ms）">
+                <el-input-number v-model="siteForm.requestIntervalMillis" :min="100" :max="600000" :step="100" />
               </el-form-item>
-              <el-form-item label="最长请求间隔（ms）">
+              <el-form-item label="固定等待最大值（ms）">
                 <el-input-number
                   v-model="siteForm.maxRequestIntervalMillis"
                   :min="siteForm.requestIntervalMillis"
@@ -732,9 +736,21 @@
                   :step="100"
                 />
               </el-form-item>
+              <el-form-item label="随机等待最小值（ms）">
+                <el-input-number v-model="siteForm.minRandomDelayMillis" :min="0" :max="600000" :step="100" />
+              </el-form-item>
+              <el-form-item label="随机等待最大值（ms）">
+                <el-input-number
+                  v-model="siteForm.maxRandomDelayMillis"
+                  :min="siteForm.minRandomDelayMillis"
+                  :max="600000"
+                  :step="100"
+                />
+              </el-form-item>
             </div>
             <p class="field-hint request-range-hint">
-              各执行器独立按最短与最长间隔控制请求频率；最小值不能大于最大值，最长可设 600000 毫秒。
+              每次请求分别从固定、随机范围抽取等待时长，两段相加后执行；随机范围设为 0–0 可关闭额外随机等待。
+              各执行器独立计时，重试或重定向会再次等待，章节统计累计各次等待。每段最大值为 600000 毫秒。
             </p>
             <section class="blocked-window-editor" aria-labelledby="blocked-window-title">
               <header>
@@ -2381,11 +2397,50 @@ const siteThemeColorOptions = siteThemeColors.map(color => color.value)
 function siteThemeColor(color?:string):string {
   return color && /^#[\da-fA-F]{6}$/.test(color) ? color : '#009688'
 }
-const emptySite=():CrawlerSitePayload=>({siteName:'',siteCode:'',baseUrl:'',homeUrl:'',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',requestIntervalMillis:1500,randomDelayMillis:1000,maxRequestIntervalMillis:2500,blockedAccessWindows:[],cooldownFailureThreshold:5,maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[],contentMarkers:[],themeColor:'#009688'})
+const emptySite = (): CrawlerSitePayload => ({
+  siteName: '',
+  siteCode: '',
+  baseUrl: '',
+  homeUrl: '',
+  enabled: false,
+  autoScan: false,
+  autoCrawl: false,
+  autoUpdate: false,
+  autoImportLibrary: false,
+  scanIntervalMinutes: 360,
+  updateIntervalMinutes: 30,
+  maxDiscoveryPages: 3,
+  autoImportFormat: 'EPUB',
+  requestIntervalMillis: 1500,
+  randomDelayMillis: 1000,
+  maxRequestIntervalMillis: 2500,
+  minRandomDelayMillis: 0,
+  maxRandomDelayMillis: 0,
+  blockedAccessWindows: [],
+  cooldownFailureThreshold: 5,
+  maxConcurrency: 1,
+  respectRobotsTxt: true,
+  encoding: 'UTF-8',
+  proxies: [],
+  contentMarkers: [],
+  themeColor: '#009688',
+})
 const siteConfigurationTemplate:CrawlerSiteConfiguration={
   schemaVersion:1,
   type:'AIBOOK_CRAWLER_SITE',
-  site:{siteName:'示例小说站',siteCode:'example_novel',baseUrl:'https://www.example.com',homeUrl:'https://www.example.com',enabled:false,autoScan:false,autoCrawl:false,autoUpdate:false,autoImportLibrary:false,requestIntervalMillis:1500,randomDelayMillis:1000,maxRequestIntervalMillis:2500,blockedAccessWindows:[],cooldownFailureThreshold:5,maxConcurrency:1,respectRobotsTxt:true,encoding:'UTF-8',proxies:[{name:'备用代理',url:'http://127.0.0.1:7890',enabled:false}],scanIntervalMinutes:360,updateIntervalMinutes:30,maxDiscoveryPages:3,autoImportFormat:'EPUB',contentMarkers:[{marker:'以下内容为VIP专属，升级会员即可继续阅读',status:'PENDING_RELEASE'},{marker:'Access Denied',status:'FAILED'}],themeColor:'#2196F3'},
+  site: {
+    ...emptySite(),
+    siteName: '示例小说站',
+    siteCode: 'example_novel',
+    baseUrl: 'https://www.example.com',
+    homeUrl: 'https://www.example.com',
+    proxies: [{ name: '备用代理', url: 'http://127.0.0.1:7890', enabled: false }],
+    contentMarkers: [
+      { marker: '以下内容为VIP专属，升级会员即可继续阅读', status: 'PENDING_RELEASE' },
+      { marker: 'Access Denied', status: 'FAILED' },
+    ],
+    themeColor: '#2196F3',
+  },
   rules:[{version:1,changeSummary:'初始规则',enabled:true,rule:{discoveryItemSelector:'.book-list .book',discoveryUrlSelector:'a.book-link',discoveryTitleSelector:'.title',discoveryAuthorSelector:'.author',discoveryCoverSelector:'img.cover::data-src',discoveryCategorySelector:'.category',discoveryLatestChapterSelector:'.latest',discoveryNextPageSelector:'a.next',titleSelector:'h1.book-title',authorSelector:'.author',coverSelector:'img.cover::data-src',descriptionSelector:'#intro',categorySelector:'.book-meta .category',tagsSelector:'.book-meta .tags a',statusSelector:'.book-meta .status',latestChapterSelector:'.latest',chapterListUrlSelector:'a.catalog',chapterItemSelector:'#chapter-list a',chapterTitleSelector:':scope',chapterUrlSelector:':scope',contentTitleSelector:'h1',contentSelector:'#content',removeSelectors:'.ads, .navigation',xpathRemoveSelectors:'',stringReplacementsJson:'',regexReplacementsJson:'',removeBlankLines:true,saveOriginalHtml:false,minChapterLength:100}}],
   discoveryPages:[{pageName:'热门小说',pageUrl:'https://www.example.com/rank/hot',autoScanEnabled:false,scanIntervalMinutes:360,maxPages:50}],
 }
@@ -3244,13 +3299,33 @@ async function removeDiscoveryPage(page:CrawlerDiscoveryPage){if(!await confirm(
 function siteTabForField(field:string):SiteEditorTab{
   if(field.startsWith('contentMarkers'))return'validation'
   if(field.startsWith('proxies'))return'proxy'
-  if(['requestIntervalMillis','randomDelayMillis','maxRequestIntervalMillis','blockedAccessWindows','maxConcurrency','respectRobotsTxt'].includes(field))return'request'
+  if ([
+    'requestIntervalMillis', 'randomDelayMillis', 'maxRequestIntervalMillis',
+    'minRandomDelayMillis', 'maxRandomDelayMillis', 'blockedAccessWindows',
+    'maxConcurrency', 'respectRobotsTxt',
+  ].includes(field)) return 'request'
   if(['enabled','maxDiscoveryPages'].includes(field))return'automation'
   return'basic'
 }
 async function saveSite(){
+  const waitRanges = [
+    { min: siteForm.requestIntervalMillis, max: siteForm.maxRequestIntervalMillis, lower: 100 },
+    { min: siteForm.minRandomDelayMillis, max: siteForm.maxRandomDelayMillis, lower: 0 },
+  ]
+  if (waitRanges.some(range => !Number.isInteger(range.min) || !Number.isInteger(range.max)
+      || range.min < range.lower || range.max > 600000)) {
+    message.warning('请填写完整等待范围：固定等待 100–600000 ms，随机等待 0–600000 ms')
+    activeSiteTab.value = 'request'
+    return
+  }
   if(siteForm.maxRequestIntervalMillis<siteForm.requestIntervalMillis){
-    message.warning('最长请求间隔不能小于最短请求间隔')
+    message.warning('固定等待最大值不能小于最小值')
+    activeSiteTab.value = 'request'
+    return
+  }
+  if(siteForm.maxRandomDelayMillis<siteForm.minRandomDelayMillis){
+    message.warning('随机等待最大值不能小于最小值')
+    activeSiteTab.value = 'request'
     return
   }
   if(siteForm.blockedAccessWindows.some(window=>window.startTime===window.endTime)){

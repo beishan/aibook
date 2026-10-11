@@ -430,6 +430,46 @@ class CrawlerManagementServiceTest {
         assertThat(result.autoUpdate()).isFalse();
         assertThat(result.autoImportLibrary()).isFalse();
         assertThat(result.respectRobotsTxt()).isTrue();
+        assertThat(result.requestIntervalMillis()).isEqualTo(1500);
+        assertThat(result.maxRequestIntervalMillis()).isEqualTo(2500);
+        assertThat(result.minRandomDelayMillis()).isZero();
+        assertThat(result.maxRandomDelayMillis()).isZero();
+    }
+
+    @Test
+    void persistsIndependentFixedAndRandomWaitRanges() {
+        User user = user();
+        SitePayload payload = waitRangePayload(3000, 15000, 500, 2500);
+        var result = service.createSite(user, payload);
+
+        assertThat(result.requestIntervalMillis()).isEqualTo(3000);
+        assertThat(result.maxRequestIntervalMillis()).isEqualTo(15000);
+        assertThat(result.minRandomDelayMillis()).isEqualTo(500);
+        assertThat(result.maxRandomDelayMillis()).isEqualTo(2500);
+        var saved = org.mockito.ArgumentCaptor.forClass(CrawlerSite.class);
+        verify(sites).save(saved.capture());
+        assertThat(saved.getValue().getMinRandomDelayMillis()).isEqualTo(500);
+        assertThat(saved.getValue().getMaxRandomDelayMillis()).isEqualTo(2500);
+    }
+
+    @Test
+    void rejectsInvalidIndependentWaitRanges() {
+        for (SitePayload payload : List.of(
+                waitRangePayload(3000, 2000, 0, 0),
+                waitRangePayload(3000, 15000, 2500, 500),
+                waitRangePayload(3000, 15000, -1, 500),
+                waitRangePayload(3000, 600001, 0, 0),
+                waitRangePayload(3000, 15000, 0, 600001))) {
+            assertThatThrownBy(() -> service.createSite(user(), payload))
+                    .isInstanceOf(ResponseStatusException.class);
+        }
+    }
+
+    private SitePayload waitRangePayload(int fixedMin, int fixedMax, int randomMin, int randomMax) {
+        return new SitePayload("示例站", "wait-range", "https://example.com", null,
+                false, false, false, false, false, fixedMin, 0, 1, "UTF-8", List.of(),
+                360, 30, 3, "EPUB", List.of(), false, null, fixedMax, List.of(), 5,
+                randomMin, randomMax);
     }
 
     @Test

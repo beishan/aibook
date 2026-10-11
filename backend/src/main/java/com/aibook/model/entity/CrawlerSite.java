@@ -54,6 +54,29 @@ public class CrawlerSite {
     @Builder.Default private Integer randomDelayMillis = 1000;
     @Builder.Default private Integer cooldownFailureThreshold = 5;
     private Integer maxRequestIntervalMillis;
+    /** 独立随机等待范围；空值表示旧配置，仅使用原请求间隔范围。 */
+    private Integer minRandomDelayMillis;
+    private Integer maxRandomDelayMillis;
+
+    public int fixedWaitMinimumMillis() {
+        return Math.max(0, requestIntervalMillis == null ? 1500 : requestIntervalMillis);
+    }
+
+    public int fixedWaitMaximumMillis() {
+        int minimum = fixedWaitMinimumMillis();
+        return maxRequestIntervalMillis == null
+                ? (int) Math.min(Integer.MAX_VALUE,
+                        (long) minimum + Math.max(0, randomDelayMillis == null ? 1000 : randomDelayMillis))
+                : Math.max(minimum, maxRequestIntervalMillis);
+    }
+
+    public int randomWaitMinimumMillis() {
+        return Math.max(0, minRandomDelayMillis == null ? 0 : minRandomDelayMillis);
+    }
+
+    public int randomWaitMaximumMillis() {
+        return Math.max(randomWaitMinimumMillis(), maxRandomDelayMillis == null ? 0 : maxRandomDelayMillis);
+    }
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "crawler_site_blocked_windows",
             joinColumns = @JoinColumn(name = "site_id"))

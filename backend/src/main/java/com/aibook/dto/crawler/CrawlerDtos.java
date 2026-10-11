@@ -42,7 +42,7 @@ public final class CrawlerDtos {
             @NotBlank String siteName, @Pattern(regexp = "\\s*|[a-zA-Z0-9_-]+") String siteCode,
             @NotBlank String baseUrl, String homeUrl, Boolean enabled,
             Boolean autoScan, Boolean autoCrawl, Boolean autoUpdate, Boolean autoImportLibrary,
-            @Min(100) Integer requestIntervalMillis, @Min(0) Integer randomDelayMillis,
+            @Min(100) @Max(600000) Integer requestIntervalMillis, @Min(0) Integer randomDelayMillis,
             @Min(1) @Max(8) Integer maxConcurrency, String encoding,
             @Valid List<ProxyPayload> proxies,
             @Min(1) Integer scanIntervalMinutes, @Min(1) Integer updateIntervalMinutes,
@@ -51,9 +51,28 @@ public final class CrawlerDtos {
             @Size(max = 50) List<@Valid ContentMarkerPayload> contentMarkers,
             Boolean respectRobotsTxt,
             @Pattern(regexp = "#[0-9a-fA-F]{6}") String themeColor,
-            @Min(100) Integer maxRequestIntervalMillis,
+            @Min(100) @Max(600000) Integer maxRequestIntervalMillis,
             @Size(max = 50) List<@NotNull @Valid SiteAccessWindowPayload> blockedAccessWindows,
-            @Min(1) @Max(100) Integer cooldownFailureThreshold) {
+            @Min(1) @Max(100) Integer cooldownFailureThreshold,
+            @Min(0) @Max(600000) Integer minRandomDelayMillis,
+            @Min(0) @Max(600000) Integer maxRandomDelayMillis) {
+        public SitePayload(
+                String siteName, String siteCode, String baseUrl, String homeUrl,
+                Boolean enabled, Boolean autoScan, Boolean autoCrawl, Boolean autoUpdate,
+                Boolean autoImportLibrary, Integer requestIntervalMillis,
+                Integer randomDelayMillis, Integer maxConcurrency, String encoding,
+                List<ProxyPayload> proxies, Integer scanIntervalMinutes,
+                Integer updateIntervalMinutes, Integer maxDiscoveryPages,
+                String autoImportFormat, List<ContentMarkerPayload> contentMarkers,
+                Boolean respectRobotsTxt, String themeColor, Integer maxRequestIntervalMillis,
+                List<SiteAccessWindowPayload> blockedAccessWindows, Integer cooldownFailureThreshold) {
+            this(siteName, siteCode, baseUrl, homeUrl, enabled, autoScan, autoCrawl,
+                    autoUpdate, autoImportLibrary, requestIntervalMillis, randomDelayMillis,
+                    maxConcurrency, encoding, proxies, scanIntervalMinutes, updateIntervalMinutes,
+                    maxDiscoveryPages, autoImportFormat, contentMarkers, respectRobotsTxt,
+                    themeColor, maxRequestIntervalMillis, blockedAccessWindows, cooldownFailureThreshold,
+                    null, null);
+        }
         public SitePayload(
                 String siteName, String siteCode, String baseUrl, String homeUrl,
                 Boolean enabled, Boolean autoScan, Boolean autoCrawl, Boolean autoUpdate,
@@ -117,7 +136,8 @@ public final class CrawlerDtos {
             List<ContentMarkerPayload> contentMarkers, boolean respectRobotsTxt,
             CrawlerProtectionView protection, String themeColor,
             int maxRequestIntervalMillis, List<SiteAccessWindowPayload> blockedAccessWindows,
-            int cooldownFailureThreshold, SiteFreezeView manualFreeze) {
+            int cooldownFailureThreshold, SiteFreezeView manualFreeze,
+            int minRandomDelayMillis, int maxRandomDelayMillis) {
         public SiteView(Long id, String siteName, String siteCode, String baseUrl,
                 String homeUrl, boolean enabled, boolean autoScan, boolean autoCrawl,
                 boolean autoUpdate, boolean autoImportLibrary, int requestIntervalMillis,
@@ -139,7 +159,7 @@ public final class CrawlerDtos {
                     respectRobotsTxt, protection, themeColor,
                     (int) Math.min(Integer.MAX_VALUE,
                             (long) requestIntervalMillis + Math.max(0, randomDelayMillis)),
-                    List.of(), 5, new SiteFreezeView(false, null, 60));
+                    List.of(), 5, new SiteFreezeView(false, null, 60), 0, 0);
         }
 
         public SiteView(Long id, String siteName, String siteCode, String baseUrl,

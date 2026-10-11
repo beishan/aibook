@@ -23,6 +23,7 @@ export interface CrawlerSitePayload {
   siteName: string; siteCode: string; baseUrl: string; homeUrl?: string; enabled: boolean
   autoScan: boolean; autoCrawl: boolean; autoUpdate: boolean; autoImportLibrary: boolean
   requestIntervalMillis: number; randomDelayMillis: number; maxRequestIntervalMillis:number
+  minRandomDelayMillis: number; maxRandomDelayMillis: number
   blockedAccessWindows:CrawlerSiteAccessWindow[]; cooldownFailureThreshold:number; maxConcurrency: number
   encoding: string; proxies:CrawlerProxy[]; scanIntervalMinutes:number
   updateIntervalMinutes:number; maxDiscoveryPages:number; autoImportFormat:'TXT'|'EPUB'|'BOTH'; contentMarkers:CrawlerContentMarker[]
