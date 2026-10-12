@@ -390,7 +390,7 @@
         <el-button type="primary" :icon="Search" @click="applyDiscoveryFilters">查询</el-button><el-button @click="resetDiscoveryFilters">重置</el-button>
       </div>
       <el-table v-if="discoveryViewMode==='table'" v-loading="discoveryLoading" :data="discoveredBooks" class="data-table" @selection-change="selectedDiscoveries=$event">
-        <el-table-column type="selection" width="48" fixed="left" />
+        <el-table-column type="selection" width="48" :fixed="isMobileCrawlerLayout ? false : 'left'" />
         <el-table-column label="自动入库" width="110">
           <template #default="{row}">
             <el-button size="small" :type="row.autoImportEnabled ? 'primary' : 'default'" plain
@@ -399,8 +399,8 @@
             </el-button>
           </template>
         </el-table-column>
-        <el-table-column label="收藏" width="58" fixed="left" align="center"><template #default="{row}"><el-button size="small" circle :icon="row.favorite?StarFilled:Star" class="favorite-action row-hover-action" :class="{'is-favorite':row.favorite}" :aria-label="row.favorite?'取消收藏':'加入收藏'" :title="row.favorite?'取消收藏':'加入收藏'" @click.stop="toggleFavorite(row)"/></template></el-table-column>
-        <el-table-column label="快捷操作" width="88" fixed="left" align="center">
+        <el-table-column label="收藏" width="58" :fixed="isMobileCrawlerLayout ? false : 'left'" align="center"><template #default="{row}"><el-button size="small" circle :icon="row.favorite?StarFilled:Star" class="favorite-action row-hover-action" :class="{'is-favorite':row.favorite}" :aria-label="row.favorite?'取消收藏':'加入收藏'" :title="row.favorite?'取消收藏':'加入收藏'" @click.stop="toggleFavorite(row)"/></template></el-table-column>
+        <el-table-column label="快捷操作" width="88" :fixed="isMobileCrawlerLayout ? false : 'left'" align="center">
           <template #default="{row}">
             <el-button
               size="small"
@@ -433,7 +433,7 @@
         <el-table-column label="分类 / 标签" min-width="190"><template #default="{row}"><div class="crawler-book-tag-list table-tags"><el-tag v-if="row.category" size="small" type="info" effect="plain">{{ row.category }}</el-tag><el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag><span v-if="!row.category&&!row.tags?.length">暂无</span></div></template></el-table-column>
         <el-table-column prop="latestChapter" label="最新章节" min-width="180" />
         <el-table-column label="发现时间" width="170"><template #default="{row}">{{ formatTime(row.discoverTime) }}</template></el-table-column>
-        <el-table-column label="操作" width="180" fixed="right" align="right">
+        <el-table-column label="操作" width="180" :fixed="isMobileCrawlerLayout ? false : 'right'" align="right">
           <template #default="{ row }">
             <div class="crawler-book-action-cluster discovery-book-action-cluster row-hover-action" @click.stop>
               <el-button
@@ -549,7 +549,7 @@
         </div>
       </transition>
       <el-table v-if="bookViewMode==='table'" ref="bookTableRef" v-loading="bookLoading" :data="books" row-key="id" @selection-change="selectedBooks=$event" @row-click="handleBookTableRowClick" class="data-table">
-        <el-table-column type="selection" width="48" reserve-selection fixed="left" />
+        <el-table-column type="selection" width="48" reserve-selection :fixed="isMobileCrawlerLayout ? false : 'left'" />
         <el-table-column label="自动入库" width="110">
           <template #default="{row}">
             <el-button size="small" :type="row.autoImportEnabled ? 'primary' : 'default'" plain
@@ -558,7 +558,7 @@
             </el-button>
           </template>
         </el-table-column>
-        <el-table-column label="收藏" width="58" fixed="left" align="center"><template #default="{row}"><el-button size="small" circle :icon="row.favorite?StarFilled:Star" class="favorite-action row-hover-action" :class="{'is-favorite':row.favorite}" :aria-label="row.favorite?'取消收藏':'加入收藏'" :title="row.favorite?'取消收藏':'加入收藏'" @click.stop="toggleFavorite(row)"/></template></el-table-column>
+        <el-table-column label="收藏" width="58" :fixed="isMobileCrawlerLayout ? false : 'left'" align="center"><template #default="{row}"><el-button size="small" circle :icon="row.favorite?StarFilled:Star" class="favorite-action row-hover-action" :class="{'is-favorite':row.favorite}" :aria-label="row.favorite?'取消收藏':'加入收藏'" :title="row.favorite?'取消收藏':'加入收藏'" @click.stop="toggleFavorite(row)"/></template></el-table-column>
         <el-table-column label="书籍" min-width="280">
           <template #default="{ row }">
             <div class="book-cell">
@@ -580,7 +580,7 @@
         <el-table-column label="创建时间" width="154"><template #default="{row}">{{ formatTime(row.createdAt) }}</template></el-table-column>
         <el-table-column label="开始爬取" width="154"><template #default="{row}">{{ row.lastCrawlStartedAt ? formatTime(row.lastCrawlStartedAt) : '暂无记录' }}</template></el-table-column>
         <el-table-column label="失败" width="80" prop="failedChapterCount" />
-        <el-table-column label="操作" width="260" fixed="right" align="right">
+        <el-table-column label="操作" width="260" :fixed="isMobileCrawlerLayout ? false : 'right'" align="right">
           <template #default="{ row }">
             <div class="crawler-book-action-cluster row-hover-action" @click.stop>
               <el-button size="small" round class="crawler-book-action-button crawler-book-action-details" @click="openBook(row)">详情</el-button>
@@ -1560,7 +1560,7 @@
         <el-table-column label="状态" width="90"><template #default="{row}"><el-tag :type="statusType(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
         <el-table-column label="优先级" width="90"><template #default="{row}"><el-tag :type="priorityType(row.priority)" effect="plain">{{ priorityLabel(row.priority) }}</el-tag></template></el-table-column>
         <el-table-column label="创建时间" width="160"><template #default="{row}">{{ formatTime(row.createdAt) }}</template></el-table-column>
-        <el-table-column label="操作" width="250" fixed="right" align="right"><template #default="{row}"><div class="queued-task-actions row-hover-action"><el-button size="small" round class="queued-task-action-details" :disabled="Boolean(queuedTaskCommandId)||queuedTasksReordering||Boolean(queuedTaskPrioritizingId)" @click="openQueuedTask(row)">详情</el-button><el-button v-if="['RUNNING','WAITING'].includes(row.status)" size="small" circle :icon="VideoPause" class="queued-task-action-pause" aria-label="暂停任务" title="暂停任务" :loading="queuedTaskCommandId===row.id&&queuedTaskCommand==='pause'" :disabled="Boolean(queuedTaskCommandId&&queuedTaskCommandId!==row.id)||queuedTasksReordering||Boolean(queuedTaskPrioritizingId)" @click="commandCurrentTask(row,'pause')"/><el-button v-if="row.status==='PAUSED'" size="small" circle :icon="VideoPlay" class="queued-task-action-resume" aria-label="继续任务" title="继续任务" :loading="queuedTaskCommandId===row.id&&queuedTaskCommand==='resume'" :disabled="Boolean(queuedTaskCommandId&&queuedTaskCommandId!==row.id)||queuedTasksReordering||Boolean(queuedTaskPrioritizingId)" @click="commandCurrentTask(row,'resume')"/><el-button v-if="row.status==='WAITING'" size="small" round class="queued-task-action-prioritize" :loading="queuedTaskPrioritizingId===row.id" :disabled="queuedTasksReordering||Boolean(queuedTaskCommandId)||Boolean(queuedTaskPrioritizingId&&queuedTaskPrioritizingId!==row.id)" @click="prioritizeQueuedTask(row)">优先</el-button><el-button v-if="['RUNNING','WAITING','PAUSED'].includes(row.status)" size="small" round class="queued-task-action-cancel" :loading="queuedTaskCommandId===row.id&&queuedTaskCommand==='cancel'" :disabled="Boolean(queuedTaskCommandId&&queuedTaskCommandId!==row.id)||queuedTasksReordering||Boolean(queuedTaskPrioritizingId)" @click="commandCurrentTask(row,'cancel')">取消</el-button></div></template></el-table-column>
+        <el-table-column label="操作" width="250" :fixed="isMobileCrawlerLayout ? false : 'right'" align="right"><template #default="{row}"><div class="queued-task-actions row-hover-action"><el-button size="small" round class="queued-task-action-details" :disabled="Boolean(queuedTaskCommandId)||queuedTasksReordering||Boolean(queuedTaskPrioritizingId)" @click="openQueuedTask(row)">详情</el-button><el-button v-if="['RUNNING','WAITING'].includes(row.status)" size="small" circle :icon="VideoPause" class="queued-task-action-pause" aria-label="暂停任务" title="暂停任务" :loading="queuedTaskCommandId===row.id&&queuedTaskCommand==='pause'" :disabled="Boolean(queuedTaskCommandId&&queuedTaskCommandId!==row.id)||queuedTasksReordering||Boolean(queuedTaskPrioritizingId)" @click="commandCurrentTask(row,'pause')"/><el-button v-if="row.status==='PAUSED'" size="small" circle :icon="VideoPlay" class="queued-task-action-resume" aria-label="继续任务" title="继续任务" :loading="queuedTaskCommandId===row.id&&queuedTaskCommand==='resume'" :disabled="Boolean(queuedTaskCommandId&&queuedTaskCommandId!==row.id)||queuedTasksReordering||Boolean(queuedTaskPrioritizingId)" @click="commandCurrentTask(row,'resume')"/><el-button v-if="row.status==='WAITING'" size="small" round class="queued-task-action-prioritize" :loading="queuedTaskPrioritizingId===row.id" :disabled="queuedTasksReordering||Boolean(queuedTaskCommandId)||Boolean(queuedTaskPrioritizingId&&queuedTaskPrioritizingId!==row.id)" @click="prioritizeQueuedTask(row)">优先</el-button><el-button v-if="['RUNNING','WAITING','PAUSED'].includes(row.status)" size="small" round class="queued-task-action-cancel" :loading="queuedTaskCommandId===row.id&&queuedTaskCommand==='cancel'" :disabled="Boolean(queuedTaskCommandId&&queuedTaskCommandId!==row.id)||queuedTasksReordering||Boolean(queuedTaskPrioritizingId)" @click="commandCurrentTask(row,'cancel')">取消</el-button></div></template></el-table-column>
       </el-table>
       <el-empty v-if="!queuedTasksLoading&&!queuedTasks.length" description="当前没有运行、等待或暂停的任务" />
       <div v-if="queuedTasks.length" class="queued-task-pagination"><span>当前显示 {{ pagedQueuedTasks.length }} 项</span><el-pagination v-model:current-page="queuedTaskPage" v-model:page-size="queuedTaskPageSize" :page-sizes="[10,20,50]" :total="queuedTasks.length" layout="total, sizes, prev, pager, next, jumper" background small @size-change="handleQueuedTaskSizeChange" /></div>
@@ -1662,7 +1662,7 @@
             </p>
           </template>
         </el-table-column>
-        <el-table-column label="结果" width="130" fixed="right" align="right">
+        <el-table-column label="结果" width="130" :fixed="isMobileCrawlerLayout ? false : 'right'" align="right">
           <template #default="{ row }">
             <el-button
               v-if="row.eventType === 'DISCOVERY_SCAN' && row.taskId"
@@ -1884,7 +1884,7 @@
                 {{ formatTime(row.crawlStartedAt ? row.crawlFinishedAt : row.crawlTime) }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="220" fixed="right">
+            <el-table-column label="操作" width="220" :fixed="isMobileCrawlerLayout ? false : 'right'">
               <template #default="{ row }">
                 <el-button
                   v-if="row.crawlStatus === 'COMPLETED'"
@@ -2248,6 +2248,24 @@ const chapterDetail = ref<{
   failedResponseHttpStatus?: number
 }>()
 const downloadingChapterHtml = ref(false)
+// 与全局手机样式共用断点，包含横屏手机。
+const crawlerMobileMedia = window.matchMedia(
+  '(max-width: 768px), (max-width: 1024px) and (max-height: 500px) and (pointer: coarse)',
+)
+const isMobileCrawlerLayout = ref(crawlerMobileMedia.matches)
+
+function updateCrawlerMobileLayout(event:MediaQueryListEvent) {
+  isMobileCrawlerLayout.value = event.matches
+}
+
+onMounted(() => {
+  isMobileCrawlerLayout.value = crawlerMobileMedia.matches
+  crawlerMobileMedia.addEventListener('change', updateCrawlerMobileLayout)
+})
+onUnmounted(() => {
+  crawlerMobileMedia.removeEventListener('change', updateCrawlerMobileLayout)
+})
+
 const discoveryCategory = ref<string>()
 const discoveryTag = ref<string>()
 const discoveryFilterOptions = ref<{categories:string[]; tags:string[]}>({categories:[], tags:[]})
