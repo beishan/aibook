@@ -1,3 +1,4 @@
+import type { StatisticsGranularity } from './crawlerStatistics'
 import api from '@/utils/api'
 
 export interface CrawlerRule {
@@ -238,7 +239,15 @@ export interface CrawlerDashboard { siteCount:number; enabledSiteCount:number; b
 export interface CrawlerDailyStatistics { date:string; newChapters:number; successfulChapters:number; newBooks:number; finishedTasks:number; successfulTasks:number; successfulBooks:number; failedTasks:number }
 export interface CrawlerSiteContribution { siteId:number; siteName:string; newBooks:number; newChapters:number }
 export interface CrawlerFunnel { discoveredBooks:number; taskedBooks:number; completedBooks:number; importedBooks:number }
-export interface CrawlerDashboardStatistics { days:number; daily:CrawlerDailyStatistics[]; siteContributions:CrawlerSiteContribution[]; funnel:CrawlerFunnel }
+export interface CrawlerDashboardStatistics {
+  granularity:StatisticsGranularity
+  range:number
+  start:string
+  end:string
+  daily:CrawlerDailyStatistics[]
+  siteContributions:CrawlerSiteContribution[]
+  funnel:CrawlerFunnel
+}
 export interface CrawlerChapterAttemptDaily {
   date:string
   attempts:number
@@ -266,7 +275,10 @@ export interface CrawlerChapterAttempt {
   outcome:string
 }
 export interface CrawlerChapterAttemptStatistics {
-  days:number
+  granularity:StatisticsGranularity
+  range:number
+  start:string
+  end:string
   daily:CrawlerChapterAttemptDaily[]
   attempts:PageResult<CrawlerChapterAttempt>
 }
@@ -291,11 +303,16 @@ export interface CrawlerTaskQuery { page:number; size:number; failedOnly?:boolea
 export const crawlerApi = {
   dashboard: () => api.get<CrawlerDashboard>('/api/crawler/dashboard').then(r => r.data),
   crawlerPollingIntervalOptions: () => api.get<number[]>('/api/crawler-settings/polling-interval-options').then(r => r.data),
-  dashboardStatistics: (days:7|30|90) => api.get<CrawlerDashboardStatistics>('/api/crawler/dashboard/statistics',{params:{days}}).then(r => r.data),
-  chapterAttemptStatistics: (days:7|30|90, page:number, size=20) =>
-    api.get<CrawlerChapterAttemptStatistics>('/api/crawler/dashboard/chapter-attempts', {
-      params:{days, page, size},
+  dashboardStatistics: (range:number, granularity:StatisticsGranularity = 'day') =>
+    api.get<CrawlerDashboardStatistics>('/api/crawler/dashboard/statistics', {
+      params: { range, granularity },
     }).then(r => r.data),
+  chapterAttemptStatistics: (
+    range:number, page:number, size=20,
+    granularity:StatisticsGranularity = 'day', end?:string,
+  ) => api.get<CrawlerChapterAttemptStatistics>('/api/crawler/dashboard/chapter-attempts', {
+    params: { range, granularity, end, page, size },
+  }).then(r => r.data),
   sites: () => api.get<CrawlerSite[]>('/api/crawler/sites').then(r => r.data),
   siteActivities: (siteId:number, page:number, size:number, eventType?:CrawlerSiteActivity['eventType']) =>
     api.get<PageResult<CrawlerSiteActivity>>(`/api/crawler/sites/${siteId}/activities`, {

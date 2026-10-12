@@ -21,6 +21,22 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void persistsStatisticsWindowAndRejectsInvalidCombinations() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder().username("reader").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        when(repository.save(user)).thenReturn(user);
+        UserService service = new UserService(repository);
+        UserPreferencesDTO result = service.updatePreferences("reader",
+                UserPreferencesDTO.builder().crawlerStatisticsWindow("minute:60").build());
+        assertEquals("minute:60", result.getCrawlerStatisticsWindow());
+        assertEquals("minute:60", service.getPreferences("reader").getCrawlerStatisticsWindow());
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                UserPreferencesDTO.builder().crawlerStatisticsWindow("hour:90").build()));
+        assertEquals("minute:60", user.getCrawlerStatisticsWindow());
+    }
+
+    @Test
     void updatesOnlyProvidedPreferences() {
         UserRepository repository = mock(UserRepository.class);
         User user = User.builder()

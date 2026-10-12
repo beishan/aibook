@@ -25,6 +25,7 @@ public class UserPreferencesDTO {
     private Integer authorPageSize;
     private Integer categoryPageSize;
     private Integer scanThreadCount;
+    private String crawlerStatisticsWindow;
     private Integer crawlerPollingIntervalSeconds;
     private Boolean crawlerFollowCurrentChapter;
     private Integer crawlerChapterPageSize;
@@ -148,6 +149,14 @@ public class UserPreferencesDTO {
 
     public void setScanThreadCount(Integer scanThreadCount) {
         this.scanThreadCount = scanThreadCount;
+    }
+
+    public String getCrawlerStatisticsWindow() {
+        return crawlerStatisticsWindow;
+    }
+
+    public void setCrawlerStatisticsWindow(String value) {
+        crawlerStatisticsWindow = value;
     }
 
     public Integer getCrawlerPollingIntervalSeconds() {
@@ -335,6 +344,11 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder scanThreadCount(Integer scanThreadCount) {
             value.setScanThreadCount(scanThreadCount);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder crawlerStatisticsWindow(String value) {
+            this.value.setCrawlerStatisticsWindow(value);
             return this;
         }
 

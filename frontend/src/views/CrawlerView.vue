@@ -43,14 +43,68 @@
     </section>
 
     <section v-else-if="activeTab === 'statistics'" v-loading="statisticsLoading" class="panel crawler-statistics" role="tabpanel" aria-labelledby="crawler-statistics-title">
-      <header class="crawler-statistics-heading"><div><p class="eyebrow">COLLECTION ANALYTICS</p><h2 id="crawler-statistics-title">采集统计</h2><span>观察新增、处理能力与入库转化</span></div><div class="statistics-range" role="tablist" aria-label="统计时间范围" @keydown="handleStatisticsRangeKey"><span :style="{transform:`translateX(${statisticsRangeIndex*100}%)`}" aria-hidden="true"/><button v-for="days in statisticsRangeOptions" :key="days" type="button" role="tab" :aria-selected="statisticsDays===days" :tabindex="statisticsDays===days?0:-1" :class="{active:statisticsDays===days}" @click="setStatisticsDays(days)">近 {{ days }} 天</button></div></header>
+      <header class="crawler-statistics-heading">
+        <div>
+          <p class="eyebrow">COLLECTION ANALYTICS</p>
+          <h2 id="crawler-statistics-title">采集统计</h2>
+          <span>观察新增、处理能力与入库转化</span>
+        </div>
+        <div class="statistics-filters">
+          <div class="statistics-filter-scroll">
+            <div class="statistics-range statistics-granularity" role="tablist"
+              aria-label="统计时间维度" @keydown="handleStatisticsGranularityKey">
+              <span :style="{ transform: `translateX(${statisticsGranularityIndex * 100}%)` }"
+                aria-hidden="true" />
+              <button v-for="option in statisticsGranularityOptions" :key="option.value"
+                type="button" role="tab" :aria-selected="statisticsGranularity === option.value"
+                :tabindex="statisticsGranularity === option.value ? 0 : -1"
+                :class="{ active: statisticsGranularity === option.value }"
+                @click="setStatisticsGranularity(option.value)">
+                {{ option.label }}
+              </button>
+            </div>
+          </div>
+          <div class="statistics-filter-scroll">
+            <div class="statistics-range" role="tablist" aria-label="统计时间范围"
+              @keydown="handleStatisticsRangeKey">
+              <span :style="{ transform: `translateX(${statisticsRangeIndex * 100}%)` }"
+                aria-hidden="true" />
+              <button v-for="range in statisticsRangeOptions" :key="range"
+                type="button" role="tab" :aria-selected="statisticsRange === range"
+                :tabindex="statisticsRange === range ? 0 : -1"
+                :class="{ active: statisticsRange === range }" @click="setStatisticsRange(range)">
+                近 {{ range }} {{ statisticsUnitLabel }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
       <div v-if="statistics" class="crawler-statistics-grid">
-        <article class="statistics-card statistics-card-wide"><header><div><h3>章节新增与采集趋势</h3><p>新增章节与成功获取正文的变化对比</p></div><div class="statistics-summary"><span><i class="stat-dot stat-dot-primary"/>新增 <b>{{ statisticsChapterTotals.newChapters }}</b></span><span><i class="stat-dot stat-dot-success"/>成功 <b>{{ statisticsChapterTotals.successfulChapters }}</b></span></div></header><div ref="chapterTrendChartRef" class="statistics-chart statistics-chart-large" role="img" aria-label="每日新增章节数与成功采集章节数双折线图"/></article>
+        <article class="statistics-card statistics-card-wide">
+          <header>
+            <div>
+              <h3>章节新增与采集趋势</h3>
+              <p>新增章节与成功获取正文的变化对比</p>
+            </div>
+            <div class="statistics-summary">
+              <span>
+                <i class="stat-dot stat-dot-primary"/>新增
+                <b>{{ statisticsChapterTotals.newChapters }}</b>
+              </span>
+              <span>
+                <i class="stat-dot stat-dot-success"/>成功
+                <b>{{ statisticsChapterTotals.successfulChapters }}</b>
+              </span>
+            </div>
+          </header>
+          <div ref="chapterTrendChartRef" class="statistics-chart statistics-chart-large"
+            role="img" :aria-label="`${statisticsPeriodLabel}新增章节数与成功采集章节数双折线图`" />
+        </article>
         <article class="statistics-card statistics-card-wide">
           <header>
             <div>
               <h3>采集任务数量</h3>
-              <p>按完成日期统计；总数包含部分成功任务，取消任务不计入</p>
+              <p>按完成时间统计；总数包含部分成功任务，取消任务不计入</p>
             </div>
             <div class="statistics-summary">
               <span><i class="stat-dot stat-dot-primary"/>总数 <b>{{ statisticsTaskTotals.finished }}</b></span>
@@ -58,25 +112,52 @@
               <span><i class="stat-dot stat-dot-danger"/>失败 <b>{{ statisticsTaskTotals.failed }}</b></span>
             </div>
           </header>
-          <div ref="taskCountChartRef" class="statistics-chart statistics-chart-large" role="img" aria-label="每日采集任务总数折线图，以及成功和失败任务数柱形图"/>
+          <div ref="taskCountChartRef" class="statistics-chart statistics-chart-large" role="img" :aria-label="`${statisticsPeriodLabel}采集任务总数折线图，以及成功和失败任务数柱形图`"/>
         </article>
-        <article class="statistics-card"><header><div><h3>每日新增书籍</h3><p>首次进入采集中心的书籍</p></div><strong>{{ statisticsBookTotal }}</strong></header><div ref="bookTrendChartRef" class="statistics-chart" role="img" aria-label="每日新增书籍数折线图"/></article>
-        <article class="statistics-card"><header><div><h3>每日采集成功书籍</h3><p>按完整采集成功时间统计</p></div><strong>{{ statisticsSuccessfulBooksTotal }}</strong></header><div ref="successfulBooksChartRef" class="statistics-chart" role="img" aria-label="每日采集成功书籍数量折线图"/></article>
-        <article class="statistics-card"><header><div><h3>采集成功率</h3><p>成功任务占已结束任务比例</p></div><strong>{{ statisticsSuccessRate }}%</strong></header><div ref="successRateChartRef" class="statistics-chart" role="img" aria-label="每日采集任务成功率折线图"/></article>
+        <article class="statistics-card">
+          <header>
+            <div>
+              <h3>{{ statisticsPeriodLabel }}新增书籍</h3>
+              <p>首次进入采集中心的书籍</p>
+            </div>
+            <strong>{{ statisticsBookTotal }}</strong>
+          </header>
+          <div ref="bookTrendChartRef" class="statistics-chart" role="img" :aria-label="`${statisticsPeriodLabel}新增书籍数折线图`"/>
+        </article>
+        <article class="statistics-card">
+          <header>
+            <div>
+              <h3>{{ statisticsPeriodLabel }}采集成功书籍</h3>
+              <p>按完整采集成功时间统计</p>
+            </div>
+            <strong>{{ statisticsSuccessfulBooksTotal }}</strong>
+          </header>
+          <div ref="successfulBooksChartRef" class="statistics-chart" role="img" :aria-label="`${statisticsPeriodLabel}采集成功书籍数量折线图`"/>
+        </article>
+        <article class="statistics-card">
+          <header>
+            <div>
+              <h3>采集成功率</h3>
+              <p>成功任务占已结束任务比例</p>
+            </div>
+            <strong>{{ statisticsSuccessRate }}%</strong>
+          </header>
+          <div ref="successRateChartRef" class="statistics-chart" role="img" :aria-label="`${statisticsPeriodLabel}采集任务成功率折线图`"/>
+        </article>
         <article class="statistics-card"><header><div><h3>来源网站贡献</h3><p>周期内新增内容最多的前五个网站</p></div></header><div ref="siteContributionChartRef" class="statistics-chart" role="img" aria-label="来源网站新增书籍和章节贡献横向柱状图"/></article>
         <article class="statistics-card"><header><div><h3>采集转化漏斗</h3><p>累计发现、建任务、完成与入库</p></div></header><div ref="funnelChartRef" class="statistics-chart" role="img" aria-label="采集书籍转化漏斗图"/></article>
         <article class="statistics-card statistics-card-wide attempt-statistics-card">
           <header>
             <div>
               <h3>章节采集耗时</h3>
-              <p>按天展示每次章节尝试的平均耗时；各执行器独立计算请求间隔，robots 检查、重定向和重试请求会累计。其他等待包含自适应延迟、重试退避与访问时段等待</p>
+              <p>按{{ statisticsUnitLabel }}展示每次章节尝试的平均耗时；各执行器独立计算请求间隔，robots 检查、重定向和重试请求会累计。其他等待包含自适应延迟、重试退避与访问时段等待</p>
             </div>
             <div class="statistics-summary">
               <span>记录 <b>{{ chapterAttemptStatistics?.attempts.totalElements || 0 }}</b> 次</span>
               <span>保留 180 天</span>
             </div>
           </header>
-          <div ref="chapterAttemptChartRef" class="statistics-chart statistics-chart-large" role="img" aria-label="每日章节采集平均耗时拆分图" />
+          <div ref="chapterAttemptChartRef" class="statistics-chart statistics-chart-large" role="img" :aria-label="`${statisticsPeriodLabel}章节采集平均耗时拆分图`" />
           <el-table
             :data="chapterAttemptStatistics?.attempts.content || []"
             class="data-table attempt-data-table"
@@ -1944,6 +2025,12 @@
 </template>
 
 <script setup lang="ts">
+import {
+  parseStatisticsWindow,
+  statisticsRanges,
+  statisticsTimeLabel,
+  type StatisticsGranularity,
+} from '../utils/crawlerStatistics'
 import '@/assets/crawlerChapterProgress.css'
 import {
   CHAPTER_PROGRESS_STAGES,
@@ -2112,13 +2199,19 @@ type SiteEditorTab='basic'|'request'|'validation'|'proxy'|'automation'
 type DiscoveryViewMode='table'|'card'
 type LoadOptions={silent?:boolean;preserveSelection?:boolean}
 type ChapterReaderTheme='paper'|'light'|'night'
-type StatisticsDays=7|30|90
+const statisticsGranularityOptions: { value: StatisticsGranularity; label: string }[] = [
+  { value: 'day', label: '按天' },
+  { value: 'hour', label: '按小时' },
+  { value: 'minute', label: '按分钟' },
+]
 const router=useRouter()
 const preferencesStore=usePreferencesStore()
 const {crawlerFollowCurrentChapter:followCurrentChapter,crawlerChapterPageSize:chapterPageSize,crawlerDiscoveryViewMode:discoveryViewMode,crawlerBookViewMode:bookViewMode,crawlerPollingIntervalSeconds:pollingIntervalSeconds,readerSettings}=storeToRefs(preferencesStore)
 const pollingIntervalOptions = ref<number[]>([...CRAWLER_POLLING_INTERVAL_OPTIONS])
 const activeTab=ref<TabKey>('overview'), dashboard=ref<CrawlerDashboard>(), sites=ref<CrawlerSite[]>([]), books=ref<CrawlerBook[]>([]), discoveredBooks=ref<CrawlerBook[]>([]), tasks=ref<CrawlerTask[]>([]), failedTasks=ref<CrawlerTask[]>([])
-const statistics=ref<CrawlerDashboardStatistics>(), statisticsLoading=ref(false), statisticsDays=ref<StatisticsDays>(30)
+const statistics = ref<CrawlerDashboardStatistics>()
+const statisticsLoading = ref(false)
+const statisticsRange = ref<number>(30)
 const chapterAttemptStatistics = ref<CrawlerChapterAttemptStatistics>()
 const chapterAttemptPage = ref(0)
 const chapterAttemptPageSize = 20
@@ -2514,8 +2607,14 @@ const activeBookTaskIds=computed(()=>new Set(currentCrawlerTasks.value.flatMap(t
 const runningCurrentTaskCount=computed(()=>currentCrawlerTasks.value.filter(task=>task.status==='RUNNING').length)
 const pagedQueuedTasks=computed(()=>queuedTasks.value.slice((queuedTaskPage.value-1)*queuedTaskPageSize.value,queuedTaskPage.value*queuedTaskPageSize.value))
 const metrics=computed(()=>[{label:'采集网站',value:dashboard.value?.siteCount||0,note:`${dashboard.value?.enabledSiteCount||0} 个启用`,icon:Connection},{label:'采集书籍',value:dashboard.value?.bookCount||0,note:`今日 +${dashboard.value?.todayNewBooks||0}`,icon:Collection},{label:'已采集完成',value:dashboard.value?.completedBookCount||0,note:`${dashboard.value?.readyToImportCount||0} 本待入库`,icon:Document},{label:'今日成功采集章节',value:dashboard.value?.todaySuccessfulChapters||0,note:`${dashboard.value?.crawlingBookCount||0} 本采集中`,icon:Tickets}])
-const statisticsRangeOptions:StatisticsDays[]=[7,30,90]
-const statisticsRangeIndex=computed(()=>statisticsRangeOptions.indexOf(statisticsDays.value))
+const statisticsGranularity = ref<StatisticsGranularity>('day')
+const statisticsUnitLabel = computed(() => ({ day: '天', hour: '小时', minute: '分钟' })[statisticsGranularity.value])
+const statisticsPeriodLabel = computed(() => `每${statisticsUnitLabel.value}`)
+const statisticsGranularityIndex = computed(() =>
+  statisticsGranularityOptions.findIndex(option => option.value === statisticsGranularity.value),
+)
+const statisticsRangeOptions = computed(() => statisticsRanges[statisticsGranularity.value])
+const statisticsRangeIndex = computed(() => statisticsRangeOptions.value.indexOf(statisticsRange.value))
 const statisticsChapterTotals=computed(()=>statistics.value?.daily.reduce((totals,item)=>({newChapters:totals.newChapters+item.newChapters,successfulChapters:totals.successfulChapters+item.successfulChapters}),{newChapters:0,successfulChapters:0})||{newChapters:0,successfulChapters:0})
 const statisticsBookTotal=computed(()=>statistics.value?.daily.reduce((total,item)=>total+item.newBooks,0)||0)
 const statisticsSuccessfulBooksTotal=computed(()=>statistics.value?.daily.reduce((total,item)=>total+item.successfulBooks,0)||0)
@@ -2527,7 +2626,15 @@ let statisticsRequestSequence=0
 let chapterRequestSequence=0
 let chapterReaderRequestSequence=0
 let statisticsCharts:import('echarts').ECharts[]=[]
-onMounted(async()=>{document.addEventListener('keydown',handleChapterReaderKeydown);window.addEventListener('resize',resizeStatisticsCharts);await preferencesStore.hydrate();await loadPollingIntervalOptions();await Promise.all([refresh(),loadCrawlerStatistics()]);restartPolling()})
+onMounted(async () => {
+  document.addEventListener('keydown', handleChapterReaderKeydown)
+  window.addEventListener('resize', resizeStatisticsCharts)
+  await preferencesStore.hydrate()
+  restoreStatisticsWindow()
+  await loadPollingIntervalOptions()
+  await Promise.all([refresh(), loadCrawlerStatistics()])
+  restartPolling()
+})
 onUnmounted(()=>{if(timer)window.clearInterval(timer);document.removeEventListener('keydown',handleChapterReaderKeydown);window.removeEventListener('resize',resizeStatisticsCharts);disposeStatisticsCharts()})
 watch(activeTab, value => {
   if (value === 'statistics') void loadCrawlerStatistics()
@@ -2548,25 +2655,72 @@ async function loadPollingIntervalOptions() {
 }
 function setPollingInterval(value:number){if(!pollingIntervalOptions.value.includes(value))return;preferencesStore.setCrawlerPollingIntervalSeconds(value);restartPolling();void pollCrawlerProgress()}
 async function refreshOverview(){await Promise.all([refresh(),loadCrawlerStatistics()])}
-async function setStatisticsDays(days:StatisticsDays) {
-  if (statisticsDays.value === days) return
-  statisticsDays.value = days
+function restoreStatisticsWindow() {
+  const saved = parseStatisticsWindow(preferencesStore.crawlerStatisticsWindow)
+  if (!saved) return
+  statisticsGranularity.value = saved.granularity
+  statisticsRange.value = saved.range
+}
+
+async function changeStatisticsWindow(granularity: StatisticsGranularity, range: number) {
+  if (statisticsGranularity.value === granularity && statisticsRange.value === range) return
+  statisticsGranularity.value = granularity
+  statisticsRange.value = range
+  preferencesStore.setCrawlerStatisticsWindow(`${granularity}:${range}`)
   chapterAttemptPage.value = 0
+  disposeStatisticsCharts()
+  statistics.value = undefined
+  chapterAttemptStatistics.value = undefined
   await loadCrawlerStatistics()
 }
-function handleStatisticsRangeKey(event:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();let index=statisticsRangeIndex.value;if(event.key==='ArrowRight')index=(index+1)%statisticsRangeOptions.length;else if(event.key==='ArrowLeft')index=(index-1+statisticsRangeOptions.length)%statisticsRangeOptions.length;else index=event.key==='Home'?0:statisticsRangeOptions.length-1;void setStatisticsDays(statisticsRangeOptions[index]);requestAnimationFrame(()=>document.querySelectorAll<HTMLButtonElement>('.statistics-range button')[index]?.focus())}
+
+async function setStatisticsRange(range: number) {
+  await changeStatisticsWindow(statisticsGranularity.value, range)
+}
+
+async function setStatisticsGranularity(granularity: StatisticsGranularity) {
+  if (granularity === statisticsGranularity.value) return
+  await changeStatisticsWindow(granularity, { day: 30, hour: 24, minute: 60 }[granularity])
+}
+
+function statisticsKeyIndex(event: KeyboardEvent, index: number, length: number) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  if (event.key === 'Home') return 0
+  if (event.key === 'End') return length - 1
+  return (index + (event.key === 'ArrowRight' ? 1 : -1) + length) % length
+}
+
+function focusStatisticsOption(event: KeyboardEvent, index: number) {
+  const group = event.currentTarget as HTMLElement
+  requestAnimationFrame(() => group.querySelectorAll<HTMLButtonElement>('button')[index]?.focus())
+}
+
+function handleStatisticsRangeKey(event: KeyboardEvent) {
+  const index = statisticsKeyIndex(event, statisticsRangeIndex.value, statisticsRangeOptions.value.length)
+  if (index === undefined) return
+  void setStatisticsRange(statisticsRangeOptions.value[index])
+  focusStatisticsOption(event, index)
+}
+
+function handleStatisticsGranularityKey(event: KeyboardEvent) {
+  const index = statisticsKeyIndex(event, statisticsGranularityIndex.value, statisticsGranularityOptions.length)
+  if (index === undefined) return
+  void setStatisticsGranularity(statisticsGranularityOptions[index].value)
+  focusStatisticsOption(event, index)
+}
+
 async function loadCrawlerStatistics(options:{silent?:boolean} = {}) {
   const requestSequence = ++statisticsRequestSequence
   if (!options.silent) statisticsLoading.value = true
   try {
-    const [dashboardStats, attemptStats] = await Promise.all([
-      crawlerApi.dashboardStatistics(statisticsDays.value),
-      crawlerApi.chapterAttemptStatistics(
-        statisticsDays.value,
-        chapterAttemptPage.value,
-        chapterAttemptPageSize,
-      ),
-    ])
+    const range = statisticsRange.value
+    const granularity = statisticsGranularity.value
+    const dashboardStats = await crawlerApi.dashboardStatistics(range, granularity)
+    if (requestSequence !== statisticsRequestSequence) return
+    const attemptStats = await crawlerApi.chapterAttemptStatistics(
+      range, chapterAttemptPage.value, chapterAttemptPageSize, granularity, dashboardStats.end,
+    )
     if (requestSequence !== statisticsRequestSequence) return
     statistics.value = dashboardStats
     chapterAttemptStatistics.value = attemptStats
@@ -2585,16 +2739,22 @@ async function loadCrawlerStatistics(options:{silent?:boolean} = {}) {
   }
 }
 
-async function loadChapterAttemptPage(page:number) {
+async function loadChapterAttemptPage(page: number) {
+  const requestSequence = ++statisticsRequestSequence
   chapterAttemptPage.value = page - 1
   try {
-    chapterAttemptStatistics.value = await crawlerApi.chapterAttemptStatistics(
-      statisticsDays.value,
-      chapterAttemptPage.value,
-      chapterAttemptPageSize,
+    const result = await crawlerApi.chapterAttemptStatistics(
+      statisticsRange.value, chapterAttemptPage.value, chapterAttemptPageSize,
+      statisticsGranularity.value, statistics.value?.end,
     )
-  } catch (error:any) {
-    message.error(error.response?.data?.message || '章节采集耗时加载失败')
+    if (requestSequence !== statisticsRequestSequence) return
+    chapterAttemptStatistics.value = result
+  } catch (error: any) {
+    if (requestSequence === statisticsRequestSequence) {
+      message.error(error.response?.data?.message || '章节采集耗时加载失败')
+    }
+  } finally {
+    if (requestSequence === statisticsRequestSequence) statisticsLoading.value = false
   }
 }
 
@@ -2636,52 +2796,542 @@ function attemptOutcomeType(outcome:string) {
 function disposeStatisticsCharts(){statisticsCharts.forEach(chart=>chart.dispose());statisticsCharts=[]}
 function resizeStatisticsCharts(){statisticsCharts.forEach(chart=>chart.resize())}
 function chartCssColor(name:string,fallback:string){return getComputedStyle(document.documentElement).getPropertyValue(name).trim()||fallback}
-async function renderStatisticsCharts(){
-  if(!statistics.value||activeTab.value!=='statistics')return
-  const echarts=await import('echarts')
-  if(!statistics.value||activeTab.value!=='statistics')return
-  disposeStatisticsCharts()
-  const text=chartCssColor('--text-secondary','#667085'),line=chartCssColor('--border-color-light','#e4e7ec'),primary=chartCssColor('--primary','#4f6bed'),success=chartCssColor('--success','#23a26d'),warning=chartCssColor('--warning','#d9901a'),danger=chartCssColor('--danger','#dc4c64')
-  const animation=!window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  const dates=statistics.value.daily.map(item=>item.date.slice(5).replace('-','/'))
-  const axis={axisLine:{lineStyle:{color:line}},axisTick:{show:false},axisLabel:{color:text,fontSize:10},splitLine:{lineStyle:{color:line,type:'dashed' as const}}}
-  const tooltip={trigger:'axis' as const,backgroundColor:chartCssColor('--surface-elevated','#fff'),borderColor:line,textStyle:{color:chartCssColor('--text-primary','#1d2939')}}
-  const init=(element:HTMLElement|undefined,option:Record<string,unknown>)=>{if(!element)return;const chart=echarts.init(element);chart.setOption({animation,...option});statisticsCharts.push(chart)}
-  init(chapterTrendChartRef.value,{color:[primary,success],tooltip,legend:{top:0,right:0,textStyle:{color:text,fontSize:11}},grid:{left:45,right:18,top:38,bottom:28},xAxis:{type:'category',data:dates,boundaryGap:false,...axis,axisLabel:{...axis.axisLabel,interval:statisticsDays.value===90?9:statisticsDays.value===30?3:0}},yAxis:{type:'value',minInterval:1,...axis},series:[{name:'新增章节',type:'line',smooth:true,symbol:'circle',symbolSize:5,data:statistics.value.daily.map(item=>item.newChapters),areaStyle:{opacity:.08},lineStyle:{width:2}},{name:'成功采集',type:'line',smooth:true,symbol:'circle',symbolSize:5,data:statistics.value.daily.map(item=>item.successfulChapters),areaStyle:{opacity:.07},lineStyle:{width:2}}]})
-  init(taskCountChartRef.value,{color:[primary,success,danger],tooltip,legend:{top:0,right:0,textStyle:{color:text,fontSize:11}},grid:{left:42,right:18,top:38,bottom:28},xAxis:{type:'category',data:dates,boundaryGap:true,...axis,axisLabel:{...axis.axisLabel,interval:statisticsDays.value===90?9:statisticsDays.value===30?3:0}},yAxis:{type:'value',minInterval:1,...axis},series:[{name:'任务总数',type:'line',smooth:true,symbol:'circle',symbolSize:5,data:statistics.value.daily.map(item=>item.finishedTasks),lineStyle:{width:2},z:3},{name:'成功任务',type:'bar',barMaxWidth:14,data:statistics.value.daily.map(item=>item.successfulTasks),itemStyle:{borderRadius:[4,4,0,0]}},{name:'失败任务',type:'bar',barMaxWidth:14,data:statistics.value.daily.map(item=>item.failedTasks),itemStyle:{borderRadius:[4,4,0,0]}}]})
-  init(bookTrendChartRef.value,{color:[warning],tooltip,grid:{left:42,right:14,top:18,bottom:28},xAxis:{type:'category',data:dates,boundaryGap:false,...axis,axisLabel:{...axis.axisLabel,interval:statisticsDays.value===90?14:statisticsDays.value===30?5:0}},yAxis:{type:'value',minInterval:1,...axis},series:[{name:'新增书籍',type:'line',smooth:true,showSymbol:statisticsDays.value===7,symbolSize:6,data:statistics.value.daily.map(item=>item.newBooks),areaStyle:{opacity:.14},lineStyle:{width:2}}]})
-  init(successfulBooksChartRef.value,{color:[success],tooltip,grid:{left:42,right:14,top:18,bottom:28},xAxis:{type:'category',data:dates,boundaryGap:false,...axis,axisLabel:{...axis.axisLabel,interval:statisticsDays.value===90?14:statisticsDays.value===30?5:0}},yAxis:{type:'value',minInterval:1,...axis},series:[{name:'采集成功书籍',type:'line',smooth:true,showSymbol:statisticsDays.value===7,symbolSize:6,data:statistics.value.daily.map(item=>item.successfulBooks),areaStyle:{opacity:.14},lineStyle:{width:2}}]})
-  init(successRateChartRef.value,{color:[success],tooltip:{...tooltip,valueFormatter:(value:number)=>`${value}%`},grid:{left:42,right:18,top:18,bottom:28},xAxis:{type:'category',data:dates,boundaryGap:false,...axis,axisLabel:{...axis.axisLabel,interval:statisticsDays.value===90?14:statisticsDays.value===30?5:0}},yAxis:{type:'value',min:0,max:100,axisLabel:{color:text,fontSize:10,formatter:'{value}%'},axisLine:axis.axisLine,axisTick:axis.axisTick,splitLine:axis.splitLine},series:[{name:'成功率',type:'line',smooth:true,connectNulls:false,showSymbol:statisticsDays.value===7,symbolSize:6,data:statistics.value.daily.map(item=>item.finishedTasks?Math.round(item.successfulTasks/item.finishedTasks*100):null),areaStyle:{opacity:.12},lineStyle:{width:2}}]})
-  const sites=[...statistics.value.siteContributions].reverse()
-  init(siteContributionChartRef.value,{color:[primary,warning],tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:chartCssColor('--surface-elevated','#fff'),borderColor:line,textStyle:{color:chartCssColor('--text-primary','#1d2939')}},legend:{top:0,right:0,textStyle:{color:text,fontSize:11}},grid:{left:92,right:16,top:38,bottom:18},xAxis:{type:'value',minInterval:1,...axis},yAxis:{type:'category',data:sites.map(item=>item.siteName),...axis,axisLabel:{color:text,fontSize:10,width:76,overflow:'truncate'}},series:[{name:'新增章节',type:'bar',barMaxWidth:13,data:sites.map(item=>item.newChapters),itemStyle:{borderRadius:[0,5,5,0]}},{name:'新增书籍',type:'bar',barMaxWidth:13,data:sites.map(item=>item.newBooks),itemStyle:{borderRadius:[0,5,5,0]}}]})
-  const funnel=statistics.value.funnel
-  init(funnelChartRef.value,{color:[primary,'#7088e8',success,warning],tooltip:{trigger:'item',formatter:'{b}：{c}',backgroundColor:chartCssColor('--surface-elevated','#fff'),borderColor:line,textStyle:{color:chartCssColor('--text-primary','#1d2939')}},series:[{type:'funnel',top:8,bottom:8,left:'8%',width:'84%',minSize:'28%',maxSize:'100%',sort:'descending',gap:3,label:{color:text,fontSize:11,formatter:'{b}  {c}'},labelLine:{lineStyle:{color:line}},itemStyle:{borderColor:chartCssColor('--surface-card','#fff'),borderWidth:2},data:[{name:'已发现',value:funnel.discoveredBooks},{name:'已建任务',value:funnel.taskedBooks},{name:'采集完成',value:funnel.completedBooks},{name:'已入库',value:funnel.importedBooks}]}]})
-  const attemptDaily=chapterAttemptStatistics.value?.daily||[]
-  const attemptDates=attemptDaily.map(item=>item.date.slice(5).replace('-','/'))
-  const attemptSeries=[
-    {name:'采集',key:'collectionMillis',color:primary},
-    {name:'固定等待',key:'fixedWaitMillis',color:warning},
-    {name:'随机等待',key:'randomWaitMillis',color:success},
-    {name:'其他等待',key:'otherWaitMillis',color:danger},
-  ]
-  init(chapterAttemptChartRef.value,{
-    color:attemptSeries.map(item=>item.color),
-    tooltip:{...tooltip,formatter:(items:any[])=>{
-      const date=items?.[0]?.axisValue||''
-      const dayIndex=items?.[0]?.dataIndex??-1
-      const attemptCount=attemptDaily[dayIndex]?.attempts||0
-      const lines=items.map(item=>`${item.marker}${item.seriesName}：${Number(item.value).toFixed(2)} 秒`)
-      return `${date} · ${attemptCount} 次尝试<br/>${lines.join('<br/>')}`
-    }},
-    legend:{top:0,right:0,textStyle:{color:text,fontSize:11}},
-    grid:{left:54,right:18,top:38,bottom:28},
-    xAxis:{type:'category',data:attemptDates,boundaryGap:true,...axis,axisLabel:{...axis.axisLabel,interval:statisticsDays.value===90?9:statisticsDays.value===30?3:0}},
-    yAxis:{type:'value',min:0,axisLabel:{color:text,fontSize:10,formatter:'{value}s'},axisLine:axis.axisLine,axisTick:axis.axisTick,splitLine:axis.splitLine},
-    series:[
-      ...attemptSeries.map(item=>({name:item.name,type:'bar',stack:'duration',barMaxWidth:18,data:attemptDaily.map(day=>day[item.key as keyof typeof day] as number/1000),itemStyle:{borderRadius:[3,3,0,0]}})),
-      {name:'总耗时',type:'line',smooth:true,symbol:'circle',symbolSize:5,data:attemptDaily.map(day=>day.totalElapsedMillis/1000),lineStyle:{width:2}},
+async function renderStatisticsCharts() {
+  if (!statistics.value || activeTab.value !== 'statistics')
+    return;
+  const echarts = await import('echarts');
+  if (!statistics.value || activeTab.value !== 'statistics')
+    return;
+  disposeStatisticsCharts();
+  const text = chartCssColor('--text-secondary', '#667085'), line = chartCssColor('--border-color-light', '#e4e7ec'), primary = chartCssColor('--primary', '#4f6bed'), success = chartCssColor('--success', '#23a26d'), warning = chartCssColor('--warning', '#d9901a'), danger = chartCssColor('--danger', '#dc4c64');
+  const animation = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const dates = statistics.value.daily.map(item => item.date.replace('T', ' '));
+  const axis = {
+    axisLine: {
+      lineStyle: {
+        color: line
+      }
+    },
+    axisTick: {
+      show: false
+    },
+    axisLabel: {
+      color: text,
+      fontSize: 10
+    },
+    splitLine: {
+      lineStyle: {
+        color: line,
+        type: 'dashed' as const
+      }
+    }
+  };
+  const tooltip = {
+    trigger: 'axis' as const,
+    backgroundColor: chartCssColor('--surface-elevated', '#fff'),
+    borderColor: line,
+    textStyle: {
+      color: chartCssColor('--text-primary', '#1d2939')
+    }
+  };
+  const init = (element: HTMLElement | undefined, option: Record<string, unknown>) => {
+    if (!element)
+      return;
+    const chart = echarts.init(element);
+    chart.setOption({
+      animation,
+      ...option
+    });
+    statisticsCharts.push(chart);
+  };
+  init(chapterTrendChartRef.value, {
+    color: [primary, success],
+    tooltip,
+    legend: {
+      top: 0,
+      right: 0,
+      textStyle: {
+        color: text,
+        fontSize: 11
+      }
+    },
+    grid: {
+      left: 45,
+      right: 18,
+      top: 38,
+      bottom: 28
+    },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      boundaryGap: false,
+      ...axis,
+      axisLabel: {
+        ...axis.axisLabel,
+        formatter: (value: string) => statisticsTimeLabel(value.replace(' ', 'T'), statisticsGranularity.value),
+        interval: Math.max(0, Math.ceil(statisticsRange.value / 8) - 1)
+      }
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      ...axis
+    },
+    series: [{
+        name: '新增章节',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 5,
+        data: statistics.value.daily.map(item => item.newChapters),
+        areaStyle: {
+          opacity: .08
+        },
+        lineStyle: {
+          width: 2
+        }
+      }, {
+        name: '成功采集',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 5,
+        data: statistics.value.daily.map(item => item.successfulChapters),
+        areaStyle: {
+          opacity: .07
+        },
+        lineStyle: {
+          width: 2
+        }
+      }]
+  });
+  init(taskCountChartRef.value, {
+    color: [
+      primary, success, danger
     ],
-  })
+    tooltip,
+    legend: {
+      top: 0,
+      right: 0,
+      textStyle: {
+        color: text,
+        fontSize: 11
+      }
+    },
+    grid: {
+      left: 42,
+      right: 18,
+      top: 38,
+      bottom: 28
+    },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      boundaryGap: true,
+      ...axis,
+      axisLabel: {
+        ...axis.axisLabel,
+        formatter: (value: string) => statisticsTimeLabel(value.replace(' ', 'T'), statisticsGranularity.value),
+        interval: Math.max(0, Math.ceil(statisticsRange.value / 8) - 1)
+      }
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      ...axis
+    },
+    series: [
+      {
+        name: '任务总数',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 5,
+        data: statistics.value.daily.map(item => item.finishedTasks),
+        lineStyle: {
+          width: 2
+        },
+        z: 3
+      },
+      {
+        name: '成功任务',
+        type: 'bar',
+        barMaxWidth: 14,
+        data: statistics.value.daily.map(item => item.successfulTasks),
+        itemStyle: {
+          borderRadius: [
+            4, 4, 0, 0
+          ]
+        }
+      },
+      {
+        name: '失败任务',
+        type: 'bar',
+        barMaxWidth: 14,
+        data: statistics.value.daily.map(item => item.failedTasks),
+        itemStyle: {
+          borderRadius: [
+            4, 4, 0, 0
+          ]
+        }
+      }
+    ]
+  });
+  init(bookTrendChartRef.value, {
+    color: [warning],
+    tooltip,
+    grid: {
+      left: 42,
+      right: 14,
+      top: 18,
+      bottom: 28
+    },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      boundaryGap: false,
+      ...axis,
+      axisLabel: {
+        ...axis.axisLabel,
+        formatter: (value: string) => statisticsTimeLabel(value.replace(' ', 'T'), statisticsGranularity.value),
+        interval: Math.max(0, Math.ceil(statisticsRange.value / 5) - 1)
+      }
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      ...axis
+    },
+    series: [{
+        name: '新增书籍',
+        type: 'line',
+        smooth: true,
+        showSymbol: statisticsRange.value <= 30,
+        symbolSize: 6,
+        data: statistics.value.daily.map(item => item.newBooks),
+        areaStyle: {
+          opacity: .14
+        },
+        lineStyle: {
+          width: 2
+        }
+      }]
+  });
+  init(successfulBooksChartRef.value, {
+    color: [success],
+    tooltip,
+    grid: {
+      left: 42,
+      right: 14,
+      top: 18,
+      bottom: 28
+    },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      boundaryGap: false,
+      ...axis,
+      axisLabel: {
+        ...axis.axisLabel,
+        formatter: (value: string) => statisticsTimeLabel(value.replace(' ', 'T'), statisticsGranularity.value),
+        interval: Math.max(0, Math.ceil(statisticsRange.value / 5) - 1)
+      }
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      ...axis
+    },
+    series: [{
+        name: '采集成功书籍',
+        type: 'line',
+        smooth: true,
+        showSymbol: statisticsRange.value <= 30,
+        symbolSize: 6,
+        data: statistics.value.daily.map(item => item.successfulBooks),
+        areaStyle: {
+          opacity: .14
+        },
+        lineStyle: {
+          width: 2
+        }
+      }]
+  });
+  init(successRateChartRef.value, {
+    color: [success],
+    tooltip: {
+      ...tooltip,
+      valueFormatter: (value: number) => `${value}%`
+    },
+    grid: {
+      left: 42,
+      right: 18,
+      top: 18,
+      bottom: 28
+    },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      boundaryGap: false,
+      ...axis,
+      axisLabel: {
+        ...axis.axisLabel,
+        formatter: (value: string) => statisticsTimeLabel(value.replace(' ', 'T'), statisticsGranularity.value),
+        interval: Math.max(0, Math.ceil(statisticsRange.value / 5) - 1)
+      }
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      max: 100,
+      axisLabel: {
+        color: text,
+        fontSize: 10,
+        formatter: '{value}%'
+      },
+      axisLine: axis.axisLine,
+      axisTick: axis.axisTick,
+      splitLine: axis.splitLine
+    },
+    series: [{
+        name: '成功率',
+        type: 'line',
+        smooth: true,
+        connectNulls: false,
+        showSymbol: statisticsRange.value <= 30,
+        symbolSize: 6,
+        data: statistics.value.daily.map(item => item.finishedTasks ? Math.round(item.successfulTasks / item.finishedTasks * 100) : null),
+        areaStyle: {
+          opacity: .12
+        },
+        lineStyle: {
+          width: 2
+        }
+      }]
+  });
+  const sites = [...statistics.value.siteContributions].reverse();
+  init(siteContributionChartRef.value, {
+    color: [primary, warning],
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow'
+      },
+      backgroundColor: chartCssColor('--surface-elevated', '#fff'),
+      borderColor: line,
+      textStyle: {
+        color: chartCssColor('--text-primary', '#1d2939')
+      }
+    },
+    legend: {
+      top: 0,
+      right: 0,
+      textStyle: {
+        color: text,
+        fontSize: 11
+      }
+    },
+    grid: {
+      left: 92,
+      right: 16,
+      top: 38,
+      bottom: 18
+    },
+    xAxis: {
+      type: 'value',
+      minInterval: 1,
+      ...axis
+    },
+    yAxis: {
+      type: 'category',
+      data: sites.map(item => item.siteName),
+      ...axis,
+      axisLabel: {
+        color: text,
+        fontSize: 10,
+        width: 76,
+        overflow: 'truncate'
+      }
+    },
+    series: [{
+        name: '新增章节',
+        type: 'bar',
+        barMaxWidth: 13,
+        data: sites.map(item => item.newChapters),
+        itemStyle: {
+          borderRadius: [
+            0, 5, 5, 0
+          ]
+        }
+      }, {
+        name: '新增书籍',
+        type: 'bar',
+        barMaxWidth: 13,
+        data: sites.map(item => item.newBooks),
+        itemStyle: {
+          borderRadius: [
+            0, 5, 5, 0
+          ]
+        }
+      }]
+  });
+  const funnel = statistics.value.funnel;
+  init(funnelChartRef.value, {
+    color: [
+      primary, '#7088e8', success, warning
+    ],
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}：{c}',
+      backgroundColor: chartCssColor('--surface-elevated', '#fff'),
+      borderColor: line,
+      textStyle: {
+        color: chartCssColor('--text-primary', '#1d2939')
+      }
+    },
+    series: [{
+        type: 'funnel',
+        top: 8,
+        bottom: 8,
+        left: '8%',
+        width: '84%',
+        minSize: '28%',
+        maxSize: '100%',
+        sort: 'descending',
+        gap: 3,
+        label: {
+          color: text,
+          fontSize: 11,
+          formatter: '{b}  {c}'
+        },
+        labelLine: {
+          lineStyle: {
+            color: line
+          }
+        },
+        itemStyle: {
+          borderColor: chartCssColor('--surface-card', '#fff'),
+          borderWidth: 2
+        },
+        data: [
+          {
+            name: '已发现',
+            value: funnel.discoveredBooks
+          },
+          {
+            name: '已建任务',
+            value: funnel.taskedBooks
+          },
+          {
+            name: '采集完成',
+            value: funnel.completedBooks
+          },
+          {
+            name: '已入库',
+            value: funnel.importedBooks
+          }
+        ]
+      }]
+  });
+  const attemptDaily = chapterAttemptStatistics.value?.daily || [];
+  const attemptDates = attemptDaily.map(item => item.date.replace('T', ' '));
+  const attemptSeries = [
+    {
+      name: '采集',
+      key: 'collectionMillis',
+      color: primary
+    },
+    {
+      name: '固定等待',
+      key: 'fixedWaitMillis',
+      color: warning
+    },
+    {
+      name: '随机等待',
+      key: 'randomWaitMillis',
+      color: success
+    },
+    {
+      name: '其他等待',
+      key: 'otherWaitMillis',
+      color: danger
+    },
+  ];
+  init(chapterAttemptChartRef.value, {
+    color: attemptSeries.map(item => item.color),
+    tooltip: {
+      ...tooltip,
+      formatter: (items: any[]) => {
+        const date = items?.[0]?.axisValue || '';
+        const dayIndex = items?.[0]?.dataIndex ?? -1;
+        const attemptCount = attemptDaily[dayIndex]?.attempts || 0;
+        const lines = items.map(item => `${item.marker}${item.seriesName}：${Number(item.value).toFixed(2)} 秒`);
+        return `${date} · ${attemptCount} 次尝试<br/>${lines.join('<br/>')}`;
+      }
+    },
+    legend: {
+      top: 0,
+      right: 0,
+      textStyle: {
+        color: text,
+        fontSize: 11
+      }
+    },
+    grid: {
+      left: 54,
+      right: 18,
+      top: 38,
+      bottom: 28
+    },
+    xAxis: {
+      type: 'category',
+      data: attemptDates,
+      boundaryGap: true,
+      ...axis,
+      axisLabel: {
+        ...axis.axisLabel,
+        formatter: (value: string) => statisticsTimeLabel(value.replace(' ', 'T'), statisticsGranularity.value),
+        interval: Math.max(0, Math.ceil(statisticsRange.value / 8) - 1)
+      }
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      axisLabel: {
+        color: text,
+        fontSize: 10,
+        formatter: '{value}s'
+      },
+      axisLine: axis.axisLine,
+      axisTick: axis.axisTick,
+      splitLine: axis.splitLine
+    },
+    series: [
+      ...attemptSeries.map(item => ({
+        name: item.name,
+        type: 'bar',
+        stack: 'duration',
+        barMaxWidth: 18,
+        data: attemptDaily.map(day => day[item.key as keyof typeof day] as number / 1000),
+        itemStyle: {
+          borderRadius: [
+            3, 3, 0, 0
+          ]
+        }
+      })),
+      {
+        name: '总耗时',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 5,
+        data: attemptDaily.map(day => day.totalElapsedMillis / 1000),
+        lineStyle: {
+          width: 2
+        }
+      },
+    ]
+  });
 }
 async function refresh(){const [dashboardData,siteData]=await Promise.all([crawlerApi.dashboard(),crawlerApi.sites(),loadBooks(),loadTasks(),loadFailedTasks(),loadDiscoveredBooks(),loadTaskQueues(),loadCurrentCrawlerTasks()]);dashboard.value=dashboardData;sites.value=siteData;await loadDiscoveryPages()}
 async function loadCurrentCrawlerTasks(){currentCrawlerTasks.value=await crawlerApi.currentTasks()}
@@ -5180,6 +5830,45 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 @media (max-width: 640px) {
   .chapter-duration-segments {
     min-width: 240px;
+  }
+}
+</style>
+
+<style scoped>
+.statistics-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.statistics-filter-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 2px;
+}
+
+.statistics-range {
+  min-width: max-content;
+}
+
+.statistics-range button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-radius: 9px;
+}
+
+@media (max-width: 640px) {
+  .statistics-filters {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .statistics-range > span {
+    transition: none;
   }
 }
 </style>

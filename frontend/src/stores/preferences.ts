@@ -1,3 +1,4 @@
+import { parseStatisticsWindow } from '../utils/crawlerStatistics'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/utils/api'
@@ -95,6 +96,7 @@ interface UserPreferences {
   authorPageSize: number | null
   categoryPageSize: number | null
   scanThreadCount: number | null
+  crawlerStatisticsWindow: string | null
   crawlerPollingIntervalSeconds: number | null
   crawlerFollowCurrentChapter: boolean | null
   crawlerChapterPageSize: number | null
@@ -351,6 +353,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const authorPageSize = ref<AuthorPageSize>(
     isAuthorPageSize(storedAuthorPageSize) ? storedAuthorPageSize : DEFAULT_AUTHOR_PAGE_SIZE
   )
+  const crawlerStatisticsWindow = ref('day:30')
   const scanThreadCount = ref(DEFAULT_SCAN_THREAD_COUNT)
   const storedCrawlerPollingIntervalSeconds = Number(
     localStorage.getItem(CRAWLER_POLLING_INTERVAL_KEY),
@@ -454,6 +457,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
     crawlerFollowCurrentChapter.value = value
     localStorage.setItem(CRAWLER_FOLLOW_CURRENT_CHAPTER_KEY, String(value))
     if (syncRemote) persistRemote({ crawlerFollowCurrentChapter: value })
+  }
+
+  const setCrawlerStatisticsWindow = (value: string, syncRemote = true) => {
+    if (!parseStatisticsWindow(value)) return
+    crawlerStatisticsWindow.value = value
+    if (syncRemote) persistRemote({ crawlerStatisticsWindow: value })
   }
 
   const setCrawlerPollingIntervalSeconds = (value: number, syncRemote = true) => {
@@ -779,6 +788,14 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.crawlerFollowCurrentChapter = crawlerFollowCurrentChapter.value
       }
 
+      setCrawlerStatisticsWindow(
+        parseStatisticsWindow(data.crawlerStatisticsWindow) ? data.crawlerStatisticsWindow! : 'day:30',
+        false,
+      )
+      if (!parseStatisticsWindow(data.crawlerStatisticsWindow)) {
+        missingPreferences.crawlerStatisticsWindow = 'day:30'
+      }
+
       if (isCrawlerPollingIntervalSeconds(data.crawlerPollingIntervalSeconds)) {
         setCrawlerPollingIntervalSeconds(data.crawlerPollingIntervalSeconds, false)
       } else {
@@ -882,6 +899,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   const resetHydration = () => {
     categoryPageSize.value = 20
+    crawlerStatisticsWindow.value = 'day:30'
     hydrated.value = false
     dockNavigationItems.value = DEFAULT_DOCK_NAVIGATION_ITEMS.map(item => ({ ...item }))
     if (readerSettingsSaveTimer) {
@@ -908,6 +926,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     authorPageSize,
     categoryPageSize,
     scanThreadCount,
+    crawlerStatisticsWindow,
+    setCrawlerStatisticsWindow,
     crawlerPollingIntervalSeconds,
     crawlerFollowCurrentChapter,
     crawlerChapterPageSize,

@@ -65,6 +65,8 @@ public class UserPreference {
     private Integer categoryPageSize;
     @Column(name = "scan_thread_count")
     private Integer scanThreadCount;
+    @Column(name = "crawler_statistics_window", length = 20)
+    private String crawlerStatisticsWindow;
     @Column(name = "crawler_polling_interval_seconds")
     private Integer crawlerPollingIntervalSeconds;
     @Column(name = "crawler_follow_current_chapter")

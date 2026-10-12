@@ -368,6 +368,22 @@ public final class CrawlerDtos {
             long todayNewBooks, long todaySuccessfulChapters, long readyToImportCount,
             long importedCount, List<TaskView> recentTasks) { }
 
+    public record TimeBucketStatisticsView(String date, long newChapters,
+            long successfulChapters, long newBooks, long finishedTasks,
+            long successfulTasks, long successfulBooks, long failedTasks) { }
+
+    public record TimeBucketDashboardView(String granularity, int range, int days,
+            LocalDateTime start, LocalDateTime end, List<TimeBucketStatisticsView> daily,
+            List<SiteContributionView> siteContributions, CrawlerFunnelView funnel) { }
+
+    public record TimeBucketAttemptView(String date, long attempts,
+            long collectionMillis, long fixedWaitMillis, long randomWaitMillis,
+            long otherWaitMillis, long totalElapsedMillis) { }
+
+    public record TimeBucketAttemptStatisticsView(String granularity, int range, int days,
+            LocalDateTime start, LocalDateTime end, List<TimeBucketAttemptView> daily,
+            org.springframework.data.domain.Page<ChapterAttemptView> attempts) { }
+
     public record DailyStatisticsView(LocalDate date, long newChapters,
             long successfulChapters, long newBooks, long finishedTasks,
             long successfulTasks, long successfulBooks, long failedTasks) { }

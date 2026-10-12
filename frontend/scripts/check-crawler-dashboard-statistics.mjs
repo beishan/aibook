@@ -8,11 +8,12 @@ const [view, api] = await Promise.all([
 
 for (const text of [
   '章节新增与采集趋势',
-  '每日新增书籍',
+  '{{ statisticsPeriodLabel }}新增书籍',
   '采集成功率',
   '来源网站贡献',
   '采集转化漏斗',
-  'statisticsRangeOptions:StatisticsDays[]=[7,30,90]',
+  'statisticsRanges[statisticsGranularity.value]',
+  '@keydown="handleStatisticsGranularityKey"',
   '@keydown="handleStatisticsRangeKey"',
   "await import('echarts')",
   'newChapters',
@@ -30,8 +31,8 @@ for (const text of [
 ]) assert.ok(api.includes(text), `missing crawler dashboard statistics contract: ${text}`)
 
 assert.match(view, /statistics-card statistics-card-wide[\s\S]*?chapterTrendChartRef/, 'chapter comparison chart must span the full statistics row')
-assert.match(view, /finishedTasks\?Math\.round\(item\.successfulTasks\/item\.finishedTasks\*100\):null/, 'daily success rate must avoid treating days without finished tasks as zero-percent failures')
+assert.match(view, /finishedTasks\s*\?\s*Math\.round\(item\.successfulTasks\s*\/\s*item\.finishedTasks\s*\*\s*100\)\s*:\s*null/, 'daily success rate must avoid treating days without finished tasks as zero-percent failures')
 assert.match(view, /disposeStatisticsCharts\(\)[\s\S]*?echarts\.init/, 'statistics charts must dispose detached instances before reinitializing')
-assert.match(view, /window\.addEventListener\('resize',resizeStatisticsCharts\)/, 'statistics charts must resize with the page')
+assert.match(view, /window\.addEventListener\('resize',\s*resizeStatisticsCharts\)/, 'statistics charts must resize with the page')
 
-console.log('crawler dashboard renders five account-scoped statistics cards with shared ranges')
+console.log('crawler dashboard renders account-scoped statistics with shared day/hour/minute ranges')

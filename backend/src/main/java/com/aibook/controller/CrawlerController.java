@@ -34,22 +34,34 @@ public class CrawlerController {
     private final CrawlerRuleHealthService ruleHealthService;
     private final CrawlerDiscoveryPageService discoveryPageService;
     private final CrawlerSiteConfigurationService siteConfigurationService;
-    private final CrawlerChapterAttemptMetricService chapterAttemptMetricService;
+    private final CrawlerStatisticsService statisticsService;
     private final CrawlerChapterRepository chapterRepository;
     private final CrawlerSiteIconService siteIconService;
 
     @GetMapping("/dashboard") public DashboardView dashboard(Authentication auth) { return managementService.dashboard(user(auth)); }
-    @GetMapping("/dashboard/statistics") public DashboardStatisticsView dashboardStatistics(
-            Authentication auth, @RequestParam(defaultValue = "30") int days) {
-        return managementService.dashboardStatistics(user(auth), days);
-    }
-    @GetMapping("/dashboard/chapter-attempts")
-    public ChapterAttemptStatisticsView chapterAttemptStatistics(
+    @GetMapping("/dashboard/statistics")
+    public TimeBucketDashboardView dashboardStatistics(
             Authentication auth,
             @RequestParam(defaultValue = "30") int days,
+            @RequestParam(defaultValue = "day") String granularity,
+            @RequestParam(required = false) Integer range) {
+        return statisticsService.dashboard(user(auth), granularity, range == null ? days : range);
+    }
+
+    @GetMapping("/dashboard/chapter-attempts")
+    public TimeBucketAttemptStatisticsView chapterAttemptStatistics(
+            Authentication auth,
+            @RequestParam(defaultValue = "30") int days,
+            @RequestParam(defaultValue = "day") String granularity,
+            @RequestParam(required = false) Integer range,
+            @RequestParam(required = false)
+            @org.springframework.format.annotation.DateTimeFormat(iso =
+                    org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME)
+            java.time.LocalDateTime end,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return chapterAttemptMetricService.statistics(user(auth), days, page, size);
+        return statisticsService.attempts(user(auth), granularity,
+                range == null ? days : range, end, page, size);
     }
     @GetMapping("/sites") public List<SiteView> sites(Authentication auth) { return managementService.sites(user(auth)); }
     @GetMapping("/sites/{id}/activities")

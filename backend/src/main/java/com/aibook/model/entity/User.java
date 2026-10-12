@@ -219,6 +219,14 @@ public class User implements UserDetails {
         preference().setScanThreadCount(value);
     }
 
+    public String getCrawlerStatisticsWindow() {
+        return preference().getCrawlerStatisticsWindow();
+    }
+
+    public void setCrawlerStatisticsWindow(String value) {
+        preference().setCrawlerStatisticsWindow(value);
+    }
+
     public Integer getCrawlerPollingIntervalSeconds() {
         return preference().getCrawlerPollingIntervalSeconds();
     }

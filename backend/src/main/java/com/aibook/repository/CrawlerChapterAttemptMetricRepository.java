@@ -23,6 +23,18 @@ public interface CrawlerChapterAttemptMetricRepository
             Pageable pageable);
 
     @Query("""
+            select metric from CrawlerChapterAttemptMetric metric
+            where metric.userId = :userId
+              and metric.attemptStartedAt >= :start
+              and metric.attemptStartedAt < :end
+            """)
+    Page<CrawlerChapterAttemptMetric> findInWindow(
+            @Param("userId") Long userId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            Pageable pageable);
+
+    @Query("""
             select cast(metric.attemptStartedAt as LocalDate), count(metric),
                 avg(metric.collectionMillis), avg(metric.fixedWaitMillis),
                 avg(metric.randomWaitMillis), avg(metric.otherWaitMillis),

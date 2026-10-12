@@ -190,6 +190,12 @@ public class UserService implements UserDetailsService {
         if (request.getCrawlerFollowCurrentChapter() != null) {
             user.setCrawlerFollowCurrentChapter(request.getCrawlerFollowCurrentChapter());
         }
+        if (request.getCrawlerStatisticsWindow() != null) {
+            requireAllowed("采集统计时间范围", request.getCrawlerStatisticsWindow(), Set.of(
+                    "day:7", "day:30", "day:90", "hour:24", "hour:48", "hour:72",
+                    "minute:30", "minute:60", "minute:180"));
+            user.setCrawlerStatisticsWindow(request.getCrawlerStatisticsWindow());
+        }
         if (request.getCrawlerPollingIntervalSeconds() != null) {
             Set<Integer> allowedIntervals = crawlerPollingIntervalOptionsService == null
                     ? DEFAULT_CRAWLER_POLLING_INTERVALS
@@ -305,6 +311,7 @@ public class UserService implements UserDetailsService {
                         && CATEGORY_PAGE_SIZES.contains(user.getCategoryPageSize()) ? user.getCategoryPageSize() : 20)
                 .scanThreadCount(
                         ScanSettings.normalizeThreadCount(user.getScanThreadCount()))
+                .crawlerStatisticsWindow(user.getCrawlerStatisticsWindow())
                 .crawlerPollingIntervalSeconds(user.getCrawlerPollingIntervalSeconds())
                 .crawlerFollowCurrentChapter(user.getCrawlerFollowCurrentChapter())
                 .crawlerChapterPageSize(user.getCrawlerChapterPageSize())
