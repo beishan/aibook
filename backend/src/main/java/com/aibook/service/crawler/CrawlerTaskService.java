@@ -1184,9 +1184,9 @@ public class CrawlerTaskService {
             dispatchLegacyWaitingTasks();
             return;
         }
-        queueExecutorService.finalizePendingDeletes(new HashSet<>(activeTaskExecutors.values()));
         List<CrawlerTaskQueue> queues = taskQueueRepository.findAll();
         if (queues.isEmpty()) return;
+        queueExecutorService.finalizePendingDeletes(new HashSet<>(activeTaskExecutors.values()));
         Map<Long, CrawlerTaskQueue> queuesBySite = new HashMap<>();
         Map<Long, CrawlerTaskQueue> queuesById = new HashMap<>();
         for (CrawlerTaskQueue queue : queues) {
