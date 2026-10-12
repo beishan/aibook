@@ -288,7 +288,16 @@ export interface CrawlerRuleSave { version:number; changeSummary:string; rule:Cr
 export interface CrawlerRuleExport { schemaVersion:number; siteCode:string; version:number; changeSummary:string; rule:CrawlerRule; enabled?:boolean }
 export interface CrawlerSiteConfiguration { schemaVersion:number; type:'AIBOOK_CRAWLER_SITE'; site:CrawlerSitePayload; rules:CrawlerRuleSave[]; discoveryPages:CrawlerDiscoveryPagePayload[] }
 export interface PageResult<T> { content:T[]; totalElements:number; totalPages:number; number:number; size:number; first:boolean; last:boolean }
-export interface CrawlerDiscoveryQuery { page:number; size:number; keyword?:string; siteId?:number; favoriteOnly?:boolean; sort:string }
+export interface CrawlerDiscoveryQuery {
+  page:number
+  size:number
+  keyword?:string
+  siteId?:number
+  category?:string
+  tag?:string
+  favoriteOnly?:boolean
+  sort:string
+}
 export interface CrawlerBookQuery { page:number; size:number; keyword?:string; siteId?:number; crawlStatus?:string; importStatus?:string; favoriteOnly?:boolean; sort:string }
 export type CrawlerChapterStatus = 'NOT_CRAWLED' | 'WAITING' | 'CRAWLING' | 'COMPLETED'
   | 'PENDING_RELEASE' | 'FAILED' | 'CONTENT_SUSPECTED' | 'IGNORED'
@@ -357,6 +366,11 @@ export const crawlerApi = {
       '/api/crawler/books/categories/cleanup', data, {timeout:120000},
     ).then(r=>r.data),
   book: (bookId:number) => api.get<CrawlerBook>(`/api/crawler/books/${bookId}`).then(r => r.data),
+  discoveryFilters: (siteId?:number) => api
+    .get<{categories:string[]; tags:string[]}>(
+      '/api/crawler/books/discovered/filters', {params:{siteId}},
+    )
+    .then(r => r.data),
   discoveredBooks: (params:CrawlerDiscoveryQuery) => api.get<PageResult<CrawlerBook>>('/api/crawler/books/discovered', {params}).then(r => r.data),
   chapters: (bookId:number, params:CrawlerChapterQuery) => api.get<PageResult<CrawlerChapter>>(`/api/crawler/books/${bookId}/chapters`, {params}).then(r => r.data),
   currentChapter: (bookId:number, size:number) => api.get<CrawlerChapterFocus|undefined>(`/api/crawler/books/${bookId}/chapters/current`, {params:{size}}).then(r => r.data||undefined),

@@ -767,6 +767,41 @@ class CrawlerManagementServiceTest {
     }
 
     @Test
+    void discoveryFiltersDeduplicateAndNormalizeMetadataAcrossPages() {
+        User user = user();
+        when(books.discoveryFilterMetadata(user, CrawlerBook.DiscoveryStatus.ACTIVE,
+                CrawlerBook.CrawlStatus.DISCOVERED, 7L)).thenReturn(List.of(
+                        new Object[]{" 科幻 ", "太空\n冒险， 太空、成长"},
+                        new Object[]{"科幻", "冒险\r\n成长"},
+                        new Object[]{null, null}));
+
+        var result = service.discoveryFilters(user, 7L);
+
+        assertThat(result.categories()).containsExactly("科幻");
+        assertThat(result.tags()).containsExactlyInAnyOrder("太空", "冒险", "成长");
+    }
+
+    @Test
+    void discoveredCategoryAndTagFiltersAreAppliedBeforePagination() {
+        User user = user();
+        when(books.searchFilteredDiscoveredBooks(eq(user),
+                eq(CrawlerBook.DiscoveryStatus.ACTIVE), eq(CrawlerBook.CrawlStatus.DISCOVERED),
+                eq("三体"), eq(7L), eq(true), eq("科幻"), eq("太空"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        var result = service.discoveredBooks(user, 2, 50, " 三体 ", 7L, true,
+                "BOOK_NAME_ASC", " 科幻 ", " 太空 ");
+
+        assertThat(result).isEmpty();
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(books).searchFilteredDiscoveredBooks(eq(user),
+                eq(CrawlerBook.DiscoveryStatus.ACTIVE), eq(CrawlerBook.CrawlStatus.DISCOVERED),
+                eq("三体"), eq(7L), eq(true), eq("科幻"), eq("太空"), pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(50);
+    }
+
+    @Test
     void paginatesAndSearchesManagedBooksOnly() {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(7L).user(user).siteName("示例站").build();

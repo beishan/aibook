@@ -53,6 +53,36 @@ class CrawlerBookRepositoryQueryTest {
         assertThat(countFilters).isEqualTo(contentFilters);
     }
 
+    @Test
+    void discoveryFilterQueryParsesWithPostgresDialect() throws Exception {
+        var registry = new org.hibernate.boot.registry.StandardServiceRegistryBuilder()
+                .applySetting("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect")
+                .applySetting("hibernate.boot.allow_jdbc_metadata_access", false)
+                .applySetting("hibernate.temp.use_jdbc_metadata_defaults", false)
+                .build();
+        try {
+            var sources = new org.hibernate.boot.MetadataSources(registry);
+            var scanner = new org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider(false);
+            scanner.addIncludeFilter(new org.springframework.core.type.filter.AnnotationTypeFilter(
+                    jakarta.persistence.Entity.class));
+            for (var entity : scanner.findCandidateComponents("com.aibook.model.entity")) {
+                sources.addAnnotatedClass(Class.forName(entity.getBeanClassName()));
+            }
+            try (var factory = sources.buildMetadata().buildSessionFactory();
+                    var session = factory.openSession()) {
+                Method method = CrawlerBookRepository.class.getMethod("searchFilteredDiscoveredBooks",
+                        User.class, CrawlerBook.DiscoveryStatus.class, CrawlerBook.CrawlStatus.class,
+                        String.class, Long.class, boolean.class, String.class, String.class, Pageable.class);
+                var query = session.createQuery(method.getAnnotation(Query.class).value(), CrawlerBook.class);
+                assertThat(query.getParameters()).extracting(jakarta.persistence.Parameter::getName)
+                        .containsExactlyInAnyOrder("user", "discoveryStatus", "crawlStatus", "keyword",
+                                "siteId", "favoriteOnly", "category", "tag");
+            }
+        } finally {
+            org.hibernate.boot.registry.StandardServiceRegistryBuilder.destroy(registry);
+        }
+    }
+
     private Set<String> namedParameters(String query) {
         return Pattern.compile(":([A-Za-z][A-Za-z0-9_]*)").matcher(query).results()
                 .map(match -> match.group(1))

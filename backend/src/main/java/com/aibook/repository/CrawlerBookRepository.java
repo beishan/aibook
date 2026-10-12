@@ -164,6 +164,48 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
         return searchDiscoveredBooks(user, discoveryStatus, crawlStatus, keyword, siteId, false, pageable);
     }
     @Query("""
+            select b from CrawlerBook b
+            where b.site.user = :user
+              and b.discoveryStatus = :discoveryStatus
+              and b.crawlStatus = :crawlStatus
+              and (:siteId is null or b.site.id = :siteId)
+              and (:favoriteOnly = false or b.favorite = true)
+              and (:category = '' or trim(b.category) = :category)
+              and (:tag = '' or function('array_position',
+                   function('regexp_split_to_array', trim(coalesce(b.tags, '')),
+                            '[[:space:]]*[\\r\\n,，、]+[[:space:]]*'), :tag) is not null)
+              and (:keyword = ''
+                   or lower(b.bookName) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
+                   or lower(b.site.siteName) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.discoveryPageName, '')) like lower(concat('%', :keyword, '%'))
+                   or lower(b.externalBookId) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.latestChapter, '')) like lower(concat('%', :keyword, '%')))
+            """)
+    Page<CrawlerBook> searchFilteredDiscoveredBooks(
+            @Param("user") User user,
+            @Param("discoveryStatus") CrawlerBook.DiscoveryStatus discoveryStatus,
+            @Param("crawlStatus") CrawlerBook.CrawlStatus crawlStatus,
+            @Param("keyword") String keyword,
+            @Param("siteId") Long siteId,
+            @Param("favoriteOnly") boolean favoriteOnly,
+            @Param("category") String category,
+            @Param("tag") String tag,
+            Pageable pageable);
+    @Query("""
+            select distinct b.category, b.tags from CrawlerBook b
+            where b.site.user = :user
+              and b.discoveryStatus = :discoveryStatus
+              and b.crawlStatus = :crawlStatus
+              and (:siteId is null or b.site.id = :siteId)
+            """)
+    List<Object[]> discoveryFilterMetadata(
+            @Param("user") User user,
+            @Param("discoveryStatus") CrawlerBook.DiscoveryStatus discoveryStatus,
+            @Param("crawlStatus") CrawlerBook.CrawlStatus crawlStatus,
+            @Param("siteId") Long siteId);
+
+    @Query("""
             select lower(trim(b.bookName)) as normalizedTitle, b.id as recordId
             from CrawlerBook b
             where b.site.user = :user

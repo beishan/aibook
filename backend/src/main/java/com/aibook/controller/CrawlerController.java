@@ -135,8 +135,16 @@ public class CrawlerController {
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String keyword, @RequestParam(required = false) Long siteId,
             @RequestParam(defaultValue = "false") boolean favoriteOnly,
-            @RequestParam(defaultValue = "DISCOVER_TIME_DESC") String sort) {
-        return managementService.discoveredBooks(user(auth), page, size, keyword, siteId, favoriteOnly, sort);
+            @RequestParam(defaultValue = "DISCOVER_TIME_DESC") String sort,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String tag) {
+        return managementService.discoveredBooks(user(auth), page, size, keyword, siteId,
+                favoriteOnly, sort, category, tag);
+    }
+    @GetMapping("/books/discovered/filters")
+    public CrawlerManagementService.DiscoveryFilters discoveryFilters(Authentication auth,
+            @RequestParam(required = false) Long siteId) {
+        return managementService.discoveryFilters(user(auth), siteId);
     }
     @GetMapping("/books/{id}") public BookView book(Authentication auth, @PathVariable Long id) { return managementService.book(user(auth), id); }
     @GetMapping("/books/{id}/chapters") public Page<ChapterView> chapters(

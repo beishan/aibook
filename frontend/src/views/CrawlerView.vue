@@ -379,6 +379,12 @@
       <div class="discovery-toolbar">
         <el-input v-model="discoveryKeyword" clearable :prefix-icon="Search" placeholder="搜索书名、作者、网站、发现页、编码或最新章节" @keyup.enter="applyDiscoveryFilters" />
         <el-select v-model="discoverySiteId" clearable placeholder="全部采集网站"><el-option v-for="site in sites" :key="site.id" :label="site.siteName" :value="site.id" /></el-select>
+        <el-select v-model="discoveryCategory" clearable filterable placeholder="全部分类" aria-label="发现书籍分类" @visible-change="loadDiscoveryFilterOptions" @change="applyDiscoveryFilters">
+          <el-option v-for="category in discoveryFilterOptions.categories" :key="category" :label="category" :value="category" />
+        </el-select>
+        <el-select v-model="discoveryTag" clearable filterable placeholder="全部标签" aria-label="发现书籍标签" @visible-change="loadDiscoveryFilterOptions" @change="applyDiscoveryFilters">
+          <el-option v-for="tag in discoveryFilterOptions.tags" :key="tag" :label="tag" :value="tag" />
+        </el-select>
         <el-select v-model="discoverySort" aria-label="发现书籍排序"><el-option v-for="item in discoverySortOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
         <el-checkbox v-model="discoveryFavoriteOnly" border @change="applyDiscoveryFilters">只看已收藏</el-checkbox>
         <el-button type="primary" :icon="Search" @click="applyDiscoveryFilters">查询</el-button><el-button @click="resetDiscoveryFilters">重置</el-button>
@@ -2242,6 +2248,27 @@ const chapterDetail = ref<{
   failedResponseHttpStatus?: number
 }>()
 const downloadingChapterHtml = ref(false)
+const discoveryCategory = ref<string>()
+const discoveryTag = ref<string>()
+const discoveryFilterOptions = ref<{categories:string[]; tags:string[]}>({categories:[], tags:[]})
+let discoveryFilterRequest = 0
+let discoveryBooksRequest = 0
+
+async function loadDiscoveryFilterOptions(visible:boolean) {
+  if (!visible) return
+  const request = ++discoveryFilterRequest
+  const siteId = discoverySiteId.value
+  discoveryFilterOptions.value = {categories:[], tags:[]}
+  try {
+    const result = await crawlerApi.discoveryFilters(siteId)
+    if (request === discoveryFilterRequest && siteId === discoverySiteId.value) {
+      discoveryFilterOptions.value = result
+    }
+  } catch {
+    ElMessage.error('加载分类和标签失败，请重试')
+  }
+}
+
 const siteDialog=ref(false), siteProtectionDialog=ref(false), protectionDetailSite=ref<CrawlerSite>(), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'|'metadata'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
 const chapterReaderSurface=ref<HTMLElement>(), chapterReaderActive=ref<CrawlerChapter>(), chapterReaderChapters=ref<CrawlerChapter[]>([]), chapterReaderBookId=ref<number>(), chapterReaderLoading=ref(false), chapterReaderSettingsOpen=ref(false), chapterEditing=ref(false), chapterEditContent=ref(''), savingChapter=ref(false)
 const discoveryPagesBySite=ref<Record<number,CrawlerDiscoveryPage[]>>({})
@@ -3882,7 +3909,33 @@ function handleScanResultFilterKey(event: KeyboardEvent) {
 async function handleScanResultSizeChange(){scanResultsPage.value=1;await loadScanResults()}
 async function loadFailedTasks(options:LoadOptions={}){if(!options.silent){failedTaskLoading.value=true;selectedFailedTasks.value=[]}try{const result=await crawlerApi.tasks({page:failedTaskPage.value-1,size:failedTaskPageSize.value,failedOnly:true});const lastPage=Math.max(1,Math.ceil(result.totalElements/failedTaskPageSize.value));if(failedTaskPage.value>lastPage){failedTaskPage.value=lastPage;return await loadFailedTasks(options)}failedTasks.value=result.content;failedTaskTotal.value=result.totalElements}finally{if(!options.silent)failedTaskLoading.value=false}}
 async function handleFailedTaskSizeChange(){failedTaskPage.value=1;await loadFailedTasks()}
-async function loadDiscoveredBooks(options:LoadOptions={}){if(!options.silent)discoveryLoading.value=true;if(!options.preserveSelection)selectedDiscoveries.value=[];try{const result=await crawlerApi.discoveredBooks({page:discoveryPage.value-1,size:discoveryPageSize.value,keyword:discoveryKeyword.value.trim()||undefined,siteId:discoverySiteId.value,favoriteOnly:discoveryFavoriteOnly.value||undefined,sort:discoverySort.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/discoveryPageSize.value));if(discoveryPage.value>lastPage){discoveryPage.value=lastPage;return await loadDiscoveredBooks(options)}discoveredBooks.value=result.content;discoveredTotal.value=result.totalElements}finally{if(!options.silent)discoveryLoading.value=false}}
+async function loadDiscoveredBooks(options:LoadOptions={}) {
+  const request = ++discoveryBooksRequest
+  if (!options.silent) discoveryLoading.value = true
+  if (!options.preserveSelection) selectedDiscoveries.value = []
+  try {
+    const result = await crawlerApi.discoveredBooks({
+      page: discoveryPage.value - 1,
+      size: discoveryPageSize.value,
+      keyword: discoveryKeyword.value.trim() || undefined,
+      siteId: discoverySiteId.value,
+      category: discoveryCategory.value || undefined,
+      tag: discoveryTag.value || undefined,
+      favoriteOnly: discoveryFavoriteOnly.value || undefined,
+      sort: discoverySort.value,
+    })
+    if (request !== discoveryBooksRequest) return
+    const lastPage = Math.max(1, Math.ceil(result.totalElements / discoveryPageSize.value))
+    if (discoveryPage.value > lastPage) {
+      discoveryPage.value = lastPage
+      return await loadDiscoveredBooks(options)
+    }
+    discoveredBooks.value = result.content
+    discoveredTotal.value = result.totalElements
+  } finally {
+    if (request === discoveryBooksRequest) discoveryLoading.value = false
+  }
+}
 function setDiscoveryViewMode(mode:DiscoveryViewMode){if(discoveryViewMode.value===mode)return;preferencesStore.setCrawlerDiscoveryViewMode(mode);selectedDiscoveries.value=[]}
 function handleDiscoveryViewKey(event:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();setDiscoveryViewMode(event.key==='ArrowLeft'||event.key==='Home'?'table':'card');requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>(`.discovery-view-switch button:nth-of-type(${discoveryViewMode.value==='table'?1:2})`)?.focus())}
 function setBookViewMode(mode:DiscoveryViewMode){if(bookViewMode.value===mode)return;preferencesStore.setCrawlerBookViewMode(mode);selectedBooks.value=[]}
@@ -3898,7 +3951,16 @@ function handleBookTableRowClick(row:CrawlerBook,column:{type?:string}){if(colum
 function hideBrokenCover(event:Event){(event.target as HTMLImageElement).style.display='none'}
 async function handleDiscoverySizeChange(){discoveryPage.value=1;await loadDiscoveredBooks()}
 async function applyDiscoveryFilters(){discoveryPage.value=1;await loadDiscoveredBooks()}
-async function resetDiscoveryFilters(){discoveryKeyword.value='';discoverySiteId.value=undefined;discoveryFavoriteOnly.value=false;discoverySort.value='DISCOVER_TIME_DESC';discoveryPage.value=1;await loadDiscoveredBooks()}
+async function resetDiscoveryFilters() {
+  discoveryKeyword.value = ''
+  discoverySiteId.value = undefined
+  discoveryCategory.value = undefined
+  discoveryTag.value = undefined
+  discoveryFavoriteOnly.value = false
+  discoverySort.value = 'DISCOVER_TIME_DESC'
+  discoveryPage.value = 1
+  await loadDiscoveredBooks()
+}
 async function openRobotsTxt(){
   if(!editingSite.value)return
   robotsTxtView.value=undefined
@@ -4719,7 +4781,21 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 @media(max-width:520px){.discovery-card-grid{grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:10px}.discovery-card-cover{height:154px}}
 @media(hover:none){.discovery-card-action-overlay{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){.discovery-card-action-overlay{transition:none}}
-.discovery-toolbar{display:grid;grid-template-columns:minmax(260px,1.6fr) minmax(160px,.8fr) minmax(190px,.9fr) auto auto auto;gap:10px;align-items:center;margin-bottom:16px;padding:14px;border:1px solid var(--border-color-light);border-radius:15px;background:var(--surface-elevated)}.book-filter-toolbar{display:grid;grid-template-columns:minmax(230px,1.5fr) repeat(3,minmax(140px,.8fr)) minmax(190px,1fr) auto auto auto;gap:10px;align-items:center;margin-bottom:16px;padding:14px;border:1px solid var(--border-color-light);border-radius:15px;background:var(--surface-elevated)}@media(max-width:1200px){.book-filter-toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}.book-filter-toolbar .el-button{margin-left:0}}@media(max-width:980px){.discovery-toolbar{grid-template-columns:2fr 1fr 1fr}.discovery-toolbar .el-button{margin-left:0}}@media(max-width:640px){.discovery-toolbar,.book-filter-toolbar{grid-template-columns:minmax(0,1fr)}.discovery-toolbar .el-button,.book-filter-toolbar .el-button{width:100%}}
+.discovery-toolbar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 15px;
+  background: var(--surface-elevated);
+}
+.discovery-toolbar .el-button {
+  margin-left: 0;
+}
+.book-filter-toolbar{display:grid;grid-template-columns:minmax(230px,1.5fr) repeat(3,minmax(140px,.8fr)) minmax(190px,1fr) auto auto auto;gap:10px;align-items:center;margin-bottom:16px;padding:14px;border:1px solid var(--border-color-light);border-radius:15px;background:var(--surface-elevated)}@media(max-width:1200px){.book-filter-toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}.book-filter-toolbar .el-button{margin-left:0}}@media(max-width:980px){.discovery-toolbar{grid-template-columns:2fr 1fr 1fr}.discovery-toolbar .el-button{margin-left:0}}@media(max-width:640px){.discovery-toolbar,.book-filter-toolbar{grid-template-columns:minmax(0,1fr)}.discovery-toolbar .el-button,.book-filter-toolbar .el-button{width:100%}}
 .crawler-book-list-dialog{display:grid;gap:14px}.crawler-book-list-options{display:grid;max-height:50vh;gap:8px;overflow-y:auto}.crawler-book-list-options :deep(.el-checkbox){box-sizing:border-box;width:100%;height:auto;margin:0;padding:12px 14px}.crawler-book-list-options :deep(.el-checkbox__label){display:grid;min-width:0;gap:3px}.crawler-book-list-options strong{color:var(--text-primary)}.crawler-book-list-options small{overflow:hidden;color:var(--text-tertiary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
 .marker-list{display:grid;gap:2px}.marker-row{display:grid;width:100%;grid-template-columns:minmax(0,1fr) 132px auto;gap:8px;align-items:center}.marker-status{width:132px}.marker-row .el-button{margin-left:0}@media(max-width:640px){.marker-row{grid-template-columns:minmax(0,1fr)}.marker-status{width:100%}.marker-row .el-button{justify-self:end}}
 :global(.site-editor-dialog){display:flex;width:min(860px,calc(100vw - 32px))!important;max-height:calc(100dvh - 32px);flex-direction:column;margin-top:max(16px,3vh)!important;margin-bottom:16px}

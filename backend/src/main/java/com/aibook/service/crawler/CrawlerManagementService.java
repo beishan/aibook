@@ -298,6 +298,37 @@ public class CrawlerManagementService {
         return discoveredBooks.map(book -> bookView(book, suspectedDuplicateIds.contains(book.getId())));
     }
 
+    @Transactional(readOnly = true)
+    public Page<BookView> discoveredBooks(User user, int page, int size, String keyword, Long siteId,
+            boolean favoriteOnly, String sort, String category, String tag) {
+        if (blank(category) && blank(tag)) {
+            return discoveredBooks(user, page, size, keyword, siteId, favoriteOnly, sort);
+        }
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+                discoverySort(sort));
+        Page<CrawlerBook> result = bookRepository.searchFilteredDiscoveredBooks(user,
+                CrawlerBook.DiscoveryStatus.ACTIVE, CrawlerBook.CrawlStatus.DISCOVERED,
+                blank(keyword) ? "" : keyword.trim(), siteId, favoriteOnly,
+                blank(category) ? "" : category.trim(), blank(tag) ? "" : tag.trim(), pageable);
+        Set<Long> duplicateIds = findSuspectedDuplicateBookIds(user, result.getContent());
+        return result.map(book -> bookView(book, duplicateIds.contains(book.getId())));
+    }
+
+    public record DiscoveryFilters(List<String> categories, List<String> tags) {}
+
+    @Transactional(readOnly = true)
+    public DiscoveryFilters discoveryFilters(User user, Long siteId) {
+        Set<String> categories = new TreeSet<>();
+        Set<String> tags = new TreeSet<>();
+        for (Object[] metadata : bookRepository.discoveryFilterMetadata(user,
+                CrawlerBook.DiscoveryStatus.ACTIVE, CrawlerBook.CrawlStatus.DISCOVERED, siteId)) {
+            String category = (String) metadata[0];
+            if (!blank(category)) categories.add(category.trim());
+            tags.addAll(splitTags((String) metadata[1]));
+        }
+        return new DiscoveryFilters(List.copyOf(categories), List.copyOf(tags));
+    }
+
     private Set<Long> findSuspectedDuplicateBookIds(User user, List<CrawlerBook> discoveredBooks) {
         Set<String> normalizedTitles = discoveredBooks.stream()
                 .map(book -> normalizeBookTitle(book.getBookName()))
