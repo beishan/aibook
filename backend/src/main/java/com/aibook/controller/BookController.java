@@ -97,30 +97,26 @@ public class BookController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(defaultValue = "false") boolean includeChildren,
-            @RequestParam(required = false) Long tagId) {
+            @RequestParam(required = false) Long tagId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String sourceType,
+            @RequestParam(required = false) String sourceSiteName) {
 
         User user = userService.findByUsername(authentication.getName());
 
         Sort sort = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         PageRequest pageRequest = PageRequest.of(page, size, sort);
 
-        Page<BookDTO> books;
-
-        if (format != null && !format.isEmpty()) {
-            books = bookService.getBooksByFormat(user, format, pageRequest);
-        } else if (status != null && !status.isEmpty()) {
-            Book.ReadingStatus readingStatus = Book.ReadingStatus.valueOf(status);
-            books = bookService.getBooksByStatus(user, readingStatus, pageRequest);
-        } else if (categoryId != null) {
-            books = bookService.getBooksByCategory(
-                    user, categoryId, includeChildren, pageRequest);
-        } else if (tagId != null) {
-            books = bookService.getBooksByTag(user, tagId, pageRequest);
-        } else {
-            books = bookService.getBooks(user, pageRequest);
-        }
+        Page<BookDTO> books = bookService.filterBooks(user, keyword, format, status, categoryId,
+                includeChildren, tagId, sourceType, sourceSiteName, pageRequest);
 
         return ResponseEntity.ok(books);
+    }
+
+    @GetMapping("/source-sites")
+    public ResponseEntity<List<String>> sourceSites(Authentication authentication) {
+        User user = userService.findByUsername(authentication.getName());
+        return ResponseEntity.ok(bookService.sourceSites(user));
     }
 
     /**

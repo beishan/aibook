@@ -3,6 +3,7 @@ package com.aibook.service;
 import com.aibook.dto.BookDTO;
 import com.aibook.dto.TagDTO;
 import com.aibook.model.entity.Book;
+import com.aibook.model.entity.BookScanSource;
 import com.aibook.model.entity.Category;
 import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.Tag;
@@ -14,16 +15,19 @@ import com.aibook.repository.BookRepository;
 import com.aibook.repository.BookmarkRepository;
 import com.aibook.repository.ReadingProgressRepository;
 import com.aibook.repository.RewriteProjectRepository;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -47,6 +51,82 @@ public class BookService {
     private final TagService tagService;
     private final AuthorService authorService;
     private final OperationLogService operationLogService;
+
+    @Transactional(readOnly = true)
+    public List<String> sourceSites(User user) {
+        return bookRepository.findSourceSites(user, Book.SourceType.CRAWLER);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<BookDTO> filterBooks(User user, String keyword, String format, String status,
+            Long categoryId, boolean includeChildren, Long tagId, String sourceType,
+            String sourceSiteName, Pageable pageable) {
+        Book.SourceType source = parseFilterEnum(sourceType, Book.SourceType.class, "书籍来源");
+        Book.ReadingStatus readingStatus = parseFilterEnum(status, Book.ReadingStatus.class, "阅读状态");
+        if (sourceSiteName != null && !sourceSiteName.isBlank()
+                && source != Book.SourceType.CRAWLER) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "网站来源必须选择爬取类型");
+        }
+        List<Long> categoryIds = null;
+        if (categoryId != null) {
+            categoryService.getOwnedCategory(categoryId, user);
+            categoryIds = includeChildren
+                    ? categoryService.getCategoryAndDescendantIds(categoryId, user)
+                    : List.of(categoryId);
+        }
+        List<Long> ownedCategoryIds = categoryIds;
+        Specification<Book> specification = (root, query, cb) -> {
+            var predicates = new ArrayList<Predicate>();
+            predicates.add(cb.equal(root.get("user"), user));
+            predicates.add(cb.isNull(root.get("deletedAt")));
+            var scanSources = query.subquery(Long.class);
+            var scanSource = scanSources.from(BookScanSource.class);
+            scanSources.select(cb.literal(1L)).where(cb.equal(scanSource.get("book"), root));
+            var visibleSources = query.subquery(Long.class);
+            var visibleSource = visibleSources.from(BookScanSource.class);
+            visibleSources.select(cb.literal(1L)).where(
+                    cb.equal(visibleSource.get("book"), root),
+                    cb.or(cb.isTrue(visibleSource.get("scanDirectory").get("libraryVisible")),
+                            cb.isNull(visibleSource.get("scanDirectory").get("libraryVisible"))));
+            predicates.add(cb.or(cb.not(cb.exists(scanSources)), cb.exists(visibleSources)));
+            if (format != null && !format.isBlank()) {
+                predicates.add(cb.equal(root.get("format"), format));
+            }
+            if (readingStatus != null) {
+                predicates.add(cb.equal(root.get("readingStatus"), readingStatus));
+            }
+            if (ownedCategoryIds != null) {
+                predicates.add(root.get("category").get("id").in(ownedCategoryIds));
+            }
+            if (tagId != null) {
+                query.distinct(true);
+                predicates.add(cb.equal(root.join("tags").get("id"), tagId));
+            }
+            if (source != null) predicates.add(cb.equal(root.get("sourceType"), source));
+            if (sourceSiteName != null && !sourceSiteName.isBlank()) {
+                predicates.add(cb.equal(root.get("sourceSiteName"), sourceSiteName));
+            }
+            if (keyword != null && !keyword.isBlank()) {
+                String pattern = "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("title")), pattern),
+                        cb.like(cb.lower(root.get("author")), pattern),
+                        cb.like(cb.lower(root.get("isbn")), pattern),
+                        cb.like(cb.lower(root.get("description")), pattern)));
+            }
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+        return bookRepository.findAll(specification, pageable).map(this::convertToDTO);
+    }
+
+    private <E extends Enum<E>> E parseFilterEnum(String value, Class<E> type, String label) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return Enum.valueOf(type, value.trim());
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, label + "无效");
+        }
+    }
 
     /**
      * 获取用户书籍列表

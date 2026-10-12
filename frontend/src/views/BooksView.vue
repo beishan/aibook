@@ -119,6 +119,27 @@
             :label="tag.name"
           />
         </el-select>
+        <el-select
+          v-model="filterSource"
+          class="select-input"
+          filterable
+          placeholder="全部来源"
+          aria-label="书籍来源筛选"
+          @visible-change="loadSourceSites"
+          @change="handleFilterChange('source')"
+        >
+          <template #prefix><span class="filter-select-label">来源</span></template>
+          <el-option label="全部来源" value="" />
+          <el-option label="上传" value="UPLOAD" />
+          <el-option label="目录扫描" value="DIRECTORY_SCAN" />
+          <el-option label="爬取（全部网站）" value="CRAWLER" />
+          <el-option
+            v-for="site in sourceSites"
+            :key="site"
+            :label="`爬取 · ${site}`"
+            :value="`site:${site}`"
+          />
+        </el-select>
         <el-select v-model="sortBy" class="select-input" aria-label="排序方式" @change="loadBooks">
           <template #prefix><span class="filter-select-label">排序</span></template>
           <el-option label="添加时间" value="createdAt" />
@@ -631,6 +652,7 @@ import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { Hide, MoreFilled, View } from '@element-plus/icons-vue'
 import { message, confirm } from '@/utils/message'
+import api from '@/utils/api'
 import { formatChinaDate } from '@/utils/dateTime'
 import { useBookStore, type Book } from '@/stores/book'
 import { useCategoryStore } from '@/stores/category'
@@ -684,6 +706,19 @@ const pageSize = computed<LibraryPageSize>({
 })
 
 const searchKeyword = ref('')
+const filterSource = ref('')
+const sourceSites = ref<string[]>([])
+
+async function loadSourceSites(visible:boolean) {
+  if (!visible) return
+  try {
+    const {data} = await api.get<string[]>('/api/books/source-sites')
+    sourceSites.value = data
+  } catch {
+    message.error('加载来源网站失败，请重试')
+  }
+}
+
 const filterFormat = ref('')
 const filterStatus = ref('')
 const filterCategoryId = ref('')
@@ -889,15 +924,17 @@ const loadBooks = async () => {
   const sequence = ++loadBooksSequence
   coversPreparing.value = true
   try {
-    const data = searchKeyword.value
-      ? await bookStore.searchBooks(searchKeyword.value, currentPage.value - 1, pageSize.value)
-      : await bookStore.fetchBooks(currentPage.value - 1, pageSize.value, sortBy.value, 'desc', {
-        format: filterFormat.value || undefined,
-        status: filterStatus.value || undefined,
-        categoryId: filterCategoryId.value ? Number(filterCategoryId.value) : undefined,
-        includeChildren: Boolean(filterCategoryId.value),
-        tagId: filterTagId.value ? Number(filterTagId.value) : undefined,
-      })
+    const siteSource = filterSource.value.startsWith('site:')
+    const data = await bookStore.fetchBooks(currentPage.value - 1, pageSize.value, sortBy.value, 'desc', {
+      keyword: searchKeyword.value.trim() || undefined,
+      format: filterFormat.value || undefined,
+      status: filterStatus.value || undefined,
+      categoryId: filterCategoryId.value ? Number(filterCategoryId.value) : undefined,
+      includeChildren: Boolean(filterCategoryId.value),
+      tagId: filterTagId.value ? Number(filterTagId.value) : undefined,
+      sourceType: siteSource ? 'CRAWLER' : (filterSource.value || undefined) as Book['sourceType'],
+      sourceSiteName: siteSource ? filterSource.value.slice(5) : undefined,
+    })
     if (sequence !== loadBooksSequence) return
     await prepareBookCovers(data.content)
   } finally {
@@ -910,16 +947,13 @@ const handleSearch = () => {
   loadBooks()
 }
 
-const handleFilterChange = (type: 'format' | 'status' | 'category' | 'tag') => {
-  if (type !== 'format') filterFormat.value = ''
-  if (type !== 'status') filterStatus.value = ''
-  if (type !== 'category') filterCategoryId.value = ''
-  if (type !== 'tag') filterTagId.value = ''
+const handleFilterChange = (_type: 'format' | 'status' | 'category' | 'tag' | 'source') => {
   currentPage.value = 1
   loadBooks()
 }
 
 const resetFilters = () => {
+  filterSource.value = ''
   searchKeyword.value = ''
   filterFormat.value = ''
   filterStatus.value = ''
@@ -1386,6 +1420,7 @@ onMounted(async () => {
     minmax(0, 0.82fr)
     minmax(0, 0.92fr)
     minmax(0, 0.86fr)
+    minmax(0, 1.1fr)
     minmax(0, 0.9fr)
     auto;
   gap: 10px;

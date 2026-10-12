@@ -93,6 +93,9 @@ export const useBookStore = defineStore('book', () => {
       categoryId?: number
       includeChildren?: boolean
       tagId?: number
+      keyword?: string
+      sourceType?: Book['sourceType']
+      sourceSiteName?: string
     } = {},
   ) {
     loading.value = true

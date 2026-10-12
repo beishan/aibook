@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
@@ -25,7 +26,9 @@ import org.springframework.stereotype.Repository;
  * 书籍 Repository
  */
 @Repository
-public interface BookRepository extends JpaRepository<Book, Long> {
+public interface BookRepository
+        extends JpaRepository<Book, Long>, JpaSpecificationExecutor<Book> {
+
     @Modifying
     @Query("update Book b set b.category = null where b.id = :bookId and b.user = :user "
             + "and b.deletedAt is null and b.category.id = :categoryId")
@@ -36,6 +39,14 @@ public interface BookRepository extends JpaRepository<Book, Long> {
             + "WHERE source.book = b) OR EXISTS (SELECT source FROM BookScanSource source "
             + "WHERE source.book = b AND (source.scanDirectory.libraryVisible = true "
             + "OR source.scanDirectory.libraryVisible IS NULL))) ";
+
+    @Query("select distinct b.sourceSiteName from Book b where b.user = :user "
+            + "and b.deletedAt is null and b.sourceType = :sourceType "
+            + "and b.sourceSiteName is not null and trim(b.sourceSiteName) <> '' "
+            + "and " + LIBRARY_VISIBLE + "order by b.sourceSiteName")
+    List<String> findSourceSites(@Param("user") User user,
+            @Param("sourceType") Book.SourceType sourceType);
+
 
     @Query("SELECT b.seriesName AS name, COUNT(b) AS bookCount, "
             + "SUM(CASE WHEN b.readingStatus = :finished THEN 1 ELSE 0 END) AS finishedCount "
