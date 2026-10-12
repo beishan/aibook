@@ -958,6 +958,31 @@ class CrawlerTaskManagementTest {
         }
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void deletingRunningExecutorDefersDeletionWithoutChangingItsTaskAssignment() {
+        var service = spy(service(mock(CrawlerTaskRepository.class), mock(CrawlerBookRepository.class),
+                mock(CrawlerManagementService.class)));
+        var queueExecutors = mock(CrawlerQueueExecutorService.class);
+        var queues = mock(com.aibook.repository.CrawlerTaskQueueRepository.class);
+        when(queues.findAll()).thenReturn(List.of(
+                com.aibook.model.entity.CrawlerTaskQueue.builder().id(2L).maxConcurrentTasks(1).build()));
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "taskQueueRepository", queues);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "queueExecutorService", queueExecutors);
+        Map<String, Long> assignments = (Map<String, Long>) org.springframework.test.util.ReflectionTestUtils
+                .getField(service, "activeTaskExecutors");
+        assignments.put("running-task", 3L);
+        doNothing().when(service).dispatchWaitingTasks();
+        try {
+            service.deleteQueueExecutor(user(), 2L, 3L);
+            verify(queueExecutors).delete(user(), 2L, 3L, true);
+            assertThat(assignments).containsEntry("running-task", 3L);
+        } finally {
+            assignments.clear();
+            service.shutdown();
+        }
+    }
+
     private CrawlerTaskService service(CrawlerTaskRepository tasks, CrawlerManagementService management) {
         return service(tasks, mock(CrawlerBookRepository.class), management);
     }

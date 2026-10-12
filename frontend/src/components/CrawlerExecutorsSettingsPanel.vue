@@ -3,7 +3,7 @@
     <header class="panel-heading">
       <div>
         <h3>执行器配置</h3>
-        <p>配置普通代理或引用系统 Mihomo 节点组；保存后下一章节使用新配置，当前章节及重试继续使用原配置。</p>
+        <p>配置普通代理或引用系统 Mihomo 节点组；新增后需在爬取任务的队列配置里手动添加。保存后下一章节使用新配置，当前章节及重试继续使用原配置。</p>
       </div>
       <el-button type="primary" :disabled="!queueId || executors.length >= 16" @click="create">新增执行器</el-button>
     </header>
@@ -25,13 +25,13 @@
         <template #default="{ row }">{{ row.proxyMode === 'MIHOMO' ? 'Mihomo 节点组' : row.proxyMode === 'SELECTED' ? '指定普通代理' : '默认代理' }}</template>
       </el-table-column>
       <el-table-column label="状态" width="95">
-        <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '已启用' : '已停用' }}</el-tag></template>
+        <template #default="{ row }"><el-tag :type="row.deletionPending ? 'warning' : row.assigned && row.enabled ? 'success' : 'info'">{{ row.deletionPending ? '待删除' : !row.assigned ? '待添加' : row.enabled ? '已启用' : '已停用' }}</el-tag></template>
       </el-table-column>
       <el-table-column label="操作" width="270">
         <template #default="{ row }">
           <el-button size="small" @click="openExecutionDetails(row)">执行详情</el-button>
-          <el-button size="small" @click="edit(row)">配置</el-button>
-          <el-button v-if="!row.defaultExecutor" size="small" type="danger" plain @click="remove(row)">删除</el-button>
+          <el-button size="small" :disabled="row.deletionPending" @click="edit(row)">配置</el-button>
+          <el-button v-if="!row.deletionPending" size="small" type="danger" plain @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -606,7 +606,7 @@ async function save() {
       applyPolicy(await crawlerApi.saveMihomoSelection(queueId.value, editingId.value, reference.value))
     }
     await crawlerApi.updateQueueExecutor(queueId.value, editingId.value, payload)
-    message.success('执行器配置已保存，下一章节使用新配置')
+    message.success('执行器配置已保存；新执行器需在任务队列中手动添加')
     dialog.value = false
   } catch (e) {
     error(e)
@@ -637,7 +637,7 @@ async function unbind() {
 }
 
 async function remove(item:CrawlerQueueExecutor) {
-  if (!queueId.value || !await confirm(`删除执行器“${item.name}”？`)) return
+  if (!queueId.value || !await confirm(`删除执行器“${item.name}”？当前任务继续完成，后续任务不再使用此执行器。`)) return
   try {
     await crawlerApi.deleteQueueExecutor(queueId.value, item.id)
     await loadExecutors()

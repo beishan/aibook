@@ -271,12 +271,16 @@ public class CrawlerTaskService {
         return updated;
     }
 
+    public synchronized QueueExecutorView assignQueueExecutor(User user, Long queueId, Long executorId) {
+        QueueExecutorView assigned = queueExecutorService.assign(user, queueId, executorId);
+        applyConcurrencyLimit(configuredQueueConcurrency());
+        dispatchWaitingTasks();
+        return assigned;
+    }
+
     public synchronized void deleteQueueExecutor(User user, Long queueId, Long executorId) {
-        if (activeTaskExecutors.containsValue(executorId)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "执行器正在运行任务，请等待任务结束后删除");
-        }
-        queueExecutorService.delete(user, queueId, executorId);
+        queueExecutorService.delete(user, queueId, executorId,
+                activeTaskExecutors.containsValue(executorId));
         applyConcurrencyLimit(configuredQueueConcurrency());
         dispatchWaitingTasks();
     }
@@ -1180,6 +1184,7 @@ public class CrawlerTaskService {
             dispatchLegacyWaitingTasks();
             return;
         }
+        queueExecutorService.finalizePendingDeletes(new HashSet<>(activeTaskExecutors.values()));
         List<CrawlerTaskQueue> queues = taskQueueRepository.findAll();
         if (queues.isEmpty()) return;
         Map<Long, CrawlerTaskQueue> queuesBySite = new HashMap<>();

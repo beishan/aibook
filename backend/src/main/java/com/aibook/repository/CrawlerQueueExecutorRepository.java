@@ -5,5 +5,6 @@ import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CrawlerQueueExecutorRepository extends JpaRepository<CrawlerQueueExecutor, Long> {
+    List<CrawlerQueueExecutor> findByDeletionPendingTrue();
     List<CrawlerQueueExecutor> findByQueueIdOrderBySortOrderAscIdAsc(Long queueId);
 }

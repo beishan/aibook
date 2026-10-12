@@ -39,6 +39,8 @@ public class CrawlerTaskQueue {
 
     private Integer sortOrder;
 
+    private Boolean executorsInitialized;
+
     private LocalDateTime lastTaskStartedAt;
 
     @CreationTimestamp

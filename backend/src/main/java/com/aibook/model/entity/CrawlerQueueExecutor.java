@@ -34,6 +34,13 @@ public class CrawlerQueueExecutor {
     @Builder.Default
     private Boolean enabled = true;
 
+    // NULL 保持旧执行器已加入队列的行为，新建执行器显式设为 false。
+    @Builder.Default
+    private Boolean assigned = true;
+
+    @Builder.Default
+    private Boolean deletionPending = false;
+
     @Column(nullable = false)
     private int sortOrder;
 

@@ -350,6 +350,12 @@ public class CrawlerController {
             @PathVariable Long executorId, @RequestBody QueueExecutorPayload request) {
         return taskService.updateQueueExecutor(user(auth), queueId, executorId, request);
     }
+    @PostMapping("/tasks/queues/{queueId}/executors/{executorId}/assign")
+    public QueueExecutorView assignQueueExecutor(Authentication auth, @PathVariable Long queueId,
+            @PathVariable Long executorId) {
+        return taskService.assignQueueExecutor(user(auth), queueId, executorId);
+    }
+
     @DeleteMapping("/tasks/queues/{queueId}/executors/{executorId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteQueueExecutor(Authentication auth, @PathVariable Long queueId,

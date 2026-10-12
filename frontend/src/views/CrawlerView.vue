@@ -1480,12 +1480,14 @@
       width="min(700px, 96vw)"
       append-to-body
     >
-      <p class="field-hint">启用的执行器各占一个并发槽位。禁用后不会接收新任务，已运行任务会继续完成。</p>
+      <p class="field-hint">新增执行器需手动添加到此队列，已添加且启用的执行器各占一个并发槽位。删除后停止接收新任务，当前任务完成后清理。</p>
       <div v-loading="queueExecutorsLoading" class="queue-executor-list">
         <article v-for="item in queueExecutors" :key="item.id" class="queue-executor-card">
           <div>
             <strong>{{ item.name }}</strong>
             <el-tag v-if="item.defaultExecutor" size="small" effect="plain">默认</el-tag>
+            <el-tag v-if="item.deletionPending" type="warning" size="small">待删除 · 当前任务完成后清理</el-tag>
+            <el-tag v-else-if="!item.assigned" type="info" size="small">待添加到队列</el-tag>
             <el-tag v-if="item.enabled === false" type="info" size="small">已禁用</el-tag>
             <p>{{ item.description || '暂无描述' }}</p>
             <small>
@@ -1500,9 +1502,10 @@
             <small v-if="item.nextAvailableAt">最近恢复：{{ formatTime(item.nextAvailableAt) }}</small>
           </div>
           <div class="queue-executor-actions">
-            <el-button size="small" @click="openExecutorSettings(item)">配置执行器</el-button>
+            <el-button v-if="!item.assigned && !item.deletionPending" size="small" type="primary" @click="assignQueueExecutor(item)">添加到队列</el-button>
+            <el-button size="small" :disabled="item.deletionPending" @click="openExecutorSettings(item)">配置执行器</el-button>
             <el-button
-              v-if="!item.defaultExecutor"
+              v-if="!item.deletionPending"
               size="small"
               type="danger"
               plain
@@ -1513,7 +1516,7 @@
       </div>
       <template #footer>
         <el-button @click="queueExecutorsDialog=false">关闭</el-button>
-        <el-button type="primary" :disabled="queueExecutors.length >= 16" @click="openExecutorSettings()">添加执行器</el-button>
+        <el-button type="primary" :disabled="queueExecutors.length >= 16" @click="openExecutorSettings()">配置新执行器</el-button>
       </template>
     </el-dialog>
 
@@ -3573,12 +3576,23 @@ function openExecutorSettings(item?: CrawlerQueueExecutor) {
   })
 }
 
+async function assignQueueExecutor(item:CrawlerQueueExecutor) {
+  try {
+    await crawlerApi.assignQueueExecutor(item.queueId, item.id)
+    message.success('执行器已添加到队列')
+    await Promise.all([openQueueExecutors(), loadTaskQueues()])
+    queueSettingsTarget.value = taskQueues.value.find(entry => entry.id === item.queueId)
+  } catch (error:any) {
+    message.error(error.response?.data?.message || '添加执行器失败')
+  }
+}
+
 async function removeQueueExecutor(item: CrawlerQueueExecutor) {
   const queue = queueSettingsTarget.value
-  if (!queue || !await confirm(`确定删除执行器“${item.name}”吗？`)) return
+  if (!queue || !await confirm(`确定删除执行器“${item.name}”吗？当前任务会继续完成，后续任务不再使用此执行器。`)) return
   try {
     await crawlerApi.deleteQueueExecutor(queue.id, item.id)
-    message.success('执行器已删除')
+    message.success('已停止接收新任务；若正在运行，将在当前任务结束后删除')
     await Promise.all([openQueueExecutors(), loadTaskQueues()])
     queueSettingsTarget.value = taskQueues.value.find(entry => entry.id === queue.id)
   } catch (error: any) {

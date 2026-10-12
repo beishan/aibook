@@ -260,7 +260,8 @@ public final class CrawlerDtos {
             boolean available, int consecutiveFailures, String freezeReason) { }
     public record QueueExecutorView(
             Long id, Long queueId, String name, String description,
-            boolean defaultExecutor, boolean enabled, String proxyMode, String selectionStrategy,
+            boolean defaultExecutor, boolean enabled, boolean assigned, boolean deletionPending,
+            String proxyMode, String selectionStrategy,
             Integer defaultProxyCooldownSeconds,
             List<QueueExecutorProxyView> proxies,
             int availableProxyCount, java.time.Instant nextAvailableAt,

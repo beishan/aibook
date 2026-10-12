@@ -149,7 +149,11 @@ public class CrawlerQueueExecutorService {
     public void ensureQueueExecutors(CrawlerTaskQueue queue) {
         List<CrawlerQueueExecutor> existing =
                 executorRepository.findByQueueIdOrderBySortOrderAscIdAsc(queue.getId());
-        if (!existing.isEmpty()) {
+        if (!existing.isEmpty() || Boolean.TRUE.equals(queue.getExecutorsInitialized())) {
+            if (!Boolean.TRUE.equals(queue.getExecutorsInitialized())) {
+                queue.setExecutorsInitialized(true);
+                queueRepository.save(queue);
+            }
             syncQueueConcurrency(queue, existing);
             return;
         }
@@ -165,6 +169,8 @@ public class CrawlerQueueExecutorService {
                     .build());
         }
         executorRepository.saveAll(executors);
+        queue.setExecutorsInitialized(true);
+        queueRepository.save(queue);
         syncQueueConcurrency(queue, executors);
     }
 
@@ -249,6 +255,7 @@ public class CrawlerQueueExecutorService {
                 .description(normalizeDescription(payload.description()))
                 .defaultExecutor(false)
                 .enabled(payload.enabled() == null || payload.enabled())
+                .assigned(false)
                 .sortOrder(existing.size())
                 .proxyMode(payload.proxyMode())
                 .selectionStrategy(payload.selectionStrategy())
@@ -265,6 +272,7 @@ public class CrawlerQueueExecutorService {
             QueueExecutorPayload payload) {
         CrawlerTaskQueue queue = ownedQueue(user, queueId);
         CrawlerQueueExecutor executor = ownedExecutor(queueId, executorId);
+        rejectPendingDeletion(executor);
         validate(payload);
         executor.setName(payload.name().trim());
         executor.setDescription(normalizeDescription(payload.description()));
@@ -283,12 +291,50 @@ public class CrawlerQueueExecutorService {
     }
 
     @Transactional
-    public void delete(User user, Long queueId, Long executorId) {
+    public QueueExecutorView assign(User user, Long queueId, Long executorId) {
         CrawlerTaskQueue queue = ownedQueue(user, queueId);
         CrawlerQueueExecutor executor = ownedExecutor(queueId, executorId);
-        if (executor.isDefaultExecutor()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "默认执行器不能删除");
+        rejectPendingDeletion(executor);
+        executor.setAssigned(true);
+        executorRepository.save(executor);
+        syncQueueConcurrency(queue, executors(queueId));
+        return view(executor, queue.getSite(), proxyMap(), cooldowns(queueId));
+    }
+
+    private void rejectPendingDeletion(CrawlerQueueExecutor executor) {
+        if (Boolean.TRUE.equals(executor.getDeletionPending())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "执行器待删除，不能修改或添加到队列");
         }
+    }
+
+    @Transactional
+    public void delete(User user, Long queueId, Long executorId, boolean running) {
+        CrawlerTaskQueue queue = ownedQueue(user, queueId);
+        CrawlerQueueExecutor executor = ownedExecutor(queueId, executorId);
+        queue.setExecutorsInitialized(true);
+        queueRepository.save(queue);
+        if (running) {
+            executor.setDeletionPending(true);
+            executor.setAssigned(false);
+            executorRepository.save(executor);
+            syncQueueConcurrency(queue, executors(queueId));
+            return;
+        }
+        deleteExecutorData(queue, executor);
+    }
+
+    @Transactional
+    public void finalizePendingDeletes(Set<Long> activeExecutorIds) {
+        for (CrawlerQueueExecutor executor : executorRepository.findByDeletionPendingTrue()) {
+            if (!activeExecutorIds.contains(executor.getId())) {
+                deleteExecutorData(executor.getQueue(), executor);
+            }
+        }
+    }
+
+    private void deleteExecutorData(CrawlerTaskQueue queue, CrawlerQueueExecutor executor) {
+        Long executorId = executor.getId();
+        Long queueId = queue.getId();
         bindingRepository.deleteByExecutorId(executorId);
         mihomoService.delete(executorId);
         executorRepository.delete(executor);
@@ -413,7 +459,9 @@ public class CrawlerQueueExecutorService {
                 .min(Comparator.naturalOrder()).orElse(null);
         return new QueueExecutorView(executor.getId(), executor.getQueue().getId(),
                 executor.getName(), executor.getDescription(), executor.isDefaultExecutor(),
-                isExecutorEnabled(executor),
+                !Boolean.FALSE.equals(executor.getEnabled()),
+                !Boolean.FALSE.equals(executor.getAssigned()),
+                Boolean.TRUE.equals(executor.getDeletionPending()),
                 executor.getProxyMode().name(), executor.getSelectionStrategy().name(),
                 executor.getDefaultProxyCooldownSeconds(), bindingViews,
                 availableCount, nextAvailable, proxyStates);
@@ -443,7 +491,9 @@ public class CrawlerQueueExecutorService {
 
     private boolean isExecutorEnabled(CrawlerQueueExecutor executor) {
         // Existing rows without the new column retain their previous active behavior.
-        return !Boolean.FALSE.equals(executor.getEnabled());
+        return !Boolean.FALSE.equals(executor.getEnabled())
+                && !Boolean.FALSE.equals(executor.getAssigned())
+                && !Boolean.TRUE.equals(executor.getDeletionPending());
     }
 
     private void syncQueueConcurrency(CrawlerTaskQueue queue,

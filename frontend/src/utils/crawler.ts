@@ -129,6 +129,8 @@ export interface CrawlerQueueExecutor {
   description:string|null
   defaultExecutor:boolean
   enabled:boolean
+  assigned:boolean
+  deletionPending:boolean
   proxyMode:'DEFAULT'|'SELECTED'|'MIHOMO'
   selectionStrategy:'ORDERED'|'RANDOM'
   defaultProxyCooldownSeconds:number|null
@@ -424,6 +426,7 @@ export const crawlerApi = {
   mihomoSwitch: (queueId:number,executorId:number,name:string) => api.post<MihomoPolicyView>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo/switch`,{name}).then(r => r.data),
   createQueueExecutor: (queueId:number,payload:CrawlerQueueExecutorPayload) => api.post<CrawlerQueueExecutor>(`/api/crawler/tasks/queues/${queueId}/executors`,payload).then(r => r.data),
   updateQueueExecutor: (queueId:number,executorId:number,payload:CrawlerQueueExecutorPayload) => api.put<CrawlerQueueExecutor>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}`,payload).then(r => r.data),
+  assignQueueExecutor: (queueId:number,executorId:number) => api.post<CrawlerQueueExecutor>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/assign`).then(r => r.data),
   deleteQueueExecutor: (queueId:number,executorId:number) => api.delete(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}`),
   queuedTasks: (queueId?:number) => api.get<CrawlerTask[]>('/api/crawler/tasks/queued',{params:queueId?{queueId}:undefined}).then(r => r.data),
   currentTasks: (queueId?:number) => api.get<CrawlerTask[]>('/api/crawler/tasks/current',{params:queueId?{queueId}:undefined}).then(r => r.data),
