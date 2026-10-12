@@ -1987,9 +1987,17 @@
           </div>
         </header>
         <div class="chapter-reader-stage">
-          <section ref="chapterReaderSurface" class="chapter-reader-surface" :style="chapterReaderArticleStyle">
+          <section
+            ref="chapterReaderSurface"
+            class="chapter-reader-surface"
+            :class="{ 'chapter-reader-surface--editing': chapterEditing }"
+            :style="chapterReaderArticleStyle"
+          >
             <div v-if="chapterReaderLoading" class="chapter-reader-state" role="status"><i/><p>正在展开书页…</p></div>
-            <article v-else>
+            <article
+              v-else
+              :class="{ 'chapter-reader-article--editing': chapterEditing }"
+            >
               <p class="chapter-reader-kicker"><span>{{ selectedBook?.author || '未知作者' }}</span><SiteSourceTag :name="selectedBook?.siteName || '来源网站'" :color="selectedBook?.siteThemeColor" /></p>
               <div class="chapter-reader-rule"><span>◆</span></div>
               <textarea v-if="chapterEditing" v-model="chapterEditContent" class="chapter-reader-editor" :readonly="savingChapter" aria-label="编辑章节正文" spellcheck="false" />
@@ -5505,10 +5513,32 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   font-size: 12px;
 }
 
+.chapter-reader-surface--editing {
+  overflow: hidden;
+}
+
+.chapter-reader-surface article.chapter-reader-article--editing {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 12px 0;
+}
+
+.chapter-reader-article--editing > .chapter-reader-kicker,
+.chapter-reader-article--editing > .chapter-reader-rule {
+  flex-shrink: 0;
+}
+
+.chapter-reader-article--editing > .chapter-reader-rule {
+  margin: 4px auto 12px;
+}
+
 .chapter-reader-editor {
   display: block;
   width: 100%;
-  min-height: 52vh;
+  flex: 1 1 0;
+  min-height: 0;
   box-sizing: border-box;
   padding: 18px;
   border: 1px solid var(--reader-line);
@@ -5520,7 +5550,8 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   font-size: var(--chapter-reader-font-size);
   line-height: var(--chapter-reader-line-height);
   letter-spacing: .025em;
-  resize: vertical;
+  overflow-y: auto;
+  resize: none;
 }
 
 .chapter-reader-editor:focus-visible {
