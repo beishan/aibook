@@ -21,12 +21,15 @@ public interface CrawlerQueueProxyCooldownRepository
             INSERT INTO crawler_queue_proxy_cooldowns
                 (queue_id, proxy_key, blocked_until, reason, consecutive_failures)
             VALUES (:queueId, :proxyKey,
-                CASE WHEN :threshold <= 1 THEN :until ELSE :now END, :reason, 1)
+                CASE WHEN :threshold <= 1
+                    THEN CAST(:until AS timestamp with time zone)
+                    ELSE CAST(:now AS timestamp with time zone) END, :reason, 1)
             ON CONFLICT (queue_id, proxy_key) DO UPDATE SET
                 consecutive_failures = COALESCE(crawler_queue_proxy_cooldowns.consecutive_failures, 0) + 1,
                 blocked_until = CASE
                     WHEN COALESCE(crawler_queue_proxy_cooldowns.consecutive_failures, 0) + 1 >= :threshold
-                    THEN GREATEST(crawler_queue_proxy_cooldowns.blocked_until, :until)
+                    THEN GREATEST(crawler_queue_proxy_cooldowns.blocked_until,
+                        CAST(:until AS timestamp with time zone))
                     ELSE crawler_queue_proxy_cooldowns.blocked_until END,
                 reason = :reason
             """, nativeQuery = true)
@@ -45,7 +48,7 @@ public interface CrawlerQueueProxyCooldownRepository
     @Query(value = """
             INSERT INTO crawler_queue_proxy_cooldowns
                 (queue_id, proxy_key, blocked_until, reason)
-            VALUES (:queueId, :proxyKey, :blockedUntil, :reason)
+            VALUES (:queueId, :proxyKey, CAST(:blockedUntil AS timestamp with time zone), :reason)
             ON CONFLICT (queue_id, proxy_key)
             DO UPDATE SET blocked_until = GREATEST(
                     crawler_queue_proxy_cooldowns.blocked_until, EXCLUDED.blocked_until),
