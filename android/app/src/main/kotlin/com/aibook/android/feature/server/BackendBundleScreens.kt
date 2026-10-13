@@ -159,14 +159,13 @@ fun BackendCollectionScreen(
     val resolvedTitle = if (section == ServerLibrarySection.LISTS) {
         state.bookLists.firstOrNull { it.id == listId }?.name ?: title
     } else title
-    val compactHeader = section == ServerLibrarySection.ALL || section == ServerLibrarySection.FAVORITES
     DesignPage(
         title = resolvedTitle,
-        compactHeader = compactHeader,
+        compactHeader = true,
         modifier = Modifier.fillMaxSize(),
         navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
         actions = {
-            if (section == ServerLibrarySection.ALL) {
+            if (section == ServerLibrarySection.ALL || section == ServerLibrarySection.LISTS) {
                 Box {
                     IconButton(onClick = { viewMenuExpanded = true }) {
                         Icon(
@@ -205,7 +204,7 @@ fun BackendCollectionScreen(
         }
     ) {
         CloudMockNotice()
-        Spacer(Modifier.height(if (compactHeader) DesignTokens.Space4 else DesignTokens.Space12))
+        Spacer(Modifier.height(DesignTokens.Space4))
         if (searchVisible) {
             OutlinedTextField(
                 value = query,
@@ -234,13 +233,6 @@ fun BackendCollectionScreen(
                 onSelected = { shelfFilter = it }
             )
             Spacer(Modifier.height(DesignTokens.Space12))
-        } else if (section != ServerLibrarySection.ALL) {
-            SlidingSegmentedControl(
-                options = listOf("卡片", "列表"),
-                selectedIndex = if (showList) 1 else 0,
-                onSelected = { showList = it == 1 }
-            )
-            Spacer(Modifier.height(DesignTokens.Space12))
         }
         if (section == ServerLibrarySection.LISTS && collectionState is BookCollectionState.Content) {
             BackendBooklistContent(
@@ -248,6 +240,7 @@ fun BackendCollectionScreen(
                 coverUrl = viewModel::coverUrl,
                 shelfIds = state.shelfBookIds,
                 listMode = showList,
+                columns = columns,
                 onBookClick = { it.id?.let(onBookClick) },
                 onToggleShelf = viewModel::toggleShelf
             )
@@ -277,6 +270,7 @@ private fun BackendBooklistContent(
     coverUrl: (BookDTO) -> String?,
     shelfIds: Set<Long>,
     listMode: Boolean,
+    columns: Int,
     onBookClick: (BookDTO) -> Unit,
     onToggleShelf: (BookDTO) -> Unit
 ) {
@@ -288,7 +282,7 @@ private fun BackendBooklistContent(
         }
     } else {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Fixed(columns),
             horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
             verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)
         ) {
