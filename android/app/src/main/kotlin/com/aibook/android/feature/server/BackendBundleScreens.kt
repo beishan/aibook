@@ -159,9 +159,10 @@ fun BackendCollectionScreen(
     val resolvedTitle = if (section == ServerLibrarySection.LISTS) {
         state.bookLists.firstOrNull { it.id == listId }?.name ?: title
     } else title
+    val compactHeader = section == ServerLibrarySection.ALL || section == ServerLibrarySection.FAVORITES
     DesignPage(
         title = resolvedTitle,
-        compactHeader = section == ServerLibrarySection.ALL,
+        compactHeader = compactHeader,
         modifier = Modifier.fillMaxSize(),
         navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
         actions = {
@@ -204,7 +205,7 @@ fun BackendCollectionScreen(
         }
     ) {
         CloudMockNotice()
-        Spacer(Modifier.height(if (section == ServerLibrarySection.ALL) DesignTokens.Space4 else DesignTokens.Space12))
+        Spacer(Modifier.height(if (compactHeader) DesignTokens.Space4 else DesignTokens.Space12))
         if (searchVisible) {
             OutlinedTextField(
                 value = query,
