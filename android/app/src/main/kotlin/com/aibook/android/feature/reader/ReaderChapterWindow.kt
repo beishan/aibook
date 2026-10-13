@@ -3,6 +3,12 @@ package com.aibook.android.feature.reader
 import com.aibook.android.core.reader.ReaderChapter
 
 object ReaderChapterWindow {
+    fun isPositionReady(
+        initialized: Boolean,
+        appliedRequestId: Long?,
+        requestId: Long?
+    ): Boolean = initialized && appliedRequestId == requestId
+
     fun shouldNavigateToPage(
         initialized: Boolean,
         appliedRequestId: Long?,

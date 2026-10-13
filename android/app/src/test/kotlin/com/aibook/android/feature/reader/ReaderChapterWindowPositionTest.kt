@@ -9,6 +9,14 @@ import kotlin.test.assertTrue
 class ReaderChapterWindowPositionTest {
 
     @Test
+    fun doesNotTrackOrPreloadUntilSavedPositionHasBeenRestored() {
+        assertFalse(ReaderChapterWindow.isPositionReady(false, null, null))
+        assertTrue(ReaderChapterWindow.isPositionReady(true, null, null))
+        assertFalse(ReaderChapterWindow.isPositionReady(true, 42L, 43L))
+        assertTrue(ReaderChapterWindow.isPositionReady(true, 43L, 43L))
+    }
+
+    @Test
     fun requestsPreviousChapterOnlyAtTheTopOfTheCurrentWindow() {
         assertTrue(ReaderChapterWindow.shouldPrependPrevious(firstVisibleItemIndex = 0, scrollOffset = 0))
         assertFalse(ReaderChapterWindow.shouldPrependPrevious(firstVisibleItemIndex = 0, scrollOffset = 1))
