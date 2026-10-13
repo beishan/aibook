@@ -3,6 +3,7 @@ package com.aibook.android.feature.server
 import android.app.Application
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -52,6 +53,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -65,6 +67,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -277,7 +280,7 @@ private fun BackendBooklistContent(
     if (listMode) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
             items(books, key = { it.id ?: it.title }) { book ->
-                BackendBooklistCard(book, coverUrl(book), book.id in shelfIds, onBookClick, onToggleShelf)
+                BackendBooklistRow(book, coverUrl(book), book.id in shelfIds, onBookClick, onToggleShelf)
             }
         }
     } else {
@@ -294,6 +297,46 @@ private fun BackendBooklistContent(
 }
 
 @Composable
+private fun BackendBooklistRow(
+    book: BookDTO,
+    coverUrl: String?,
+    onShelf: Boolean,
+    onBookClick: (BookDTO) -> Unit,
+    onToggleShelf: (BookDTO) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onBookClick(book) }
+            .padding(vertical = DesignTokens.Space8),
+        horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        BookCover(book.title, imageUri = coverUrl, width = 56.dp, height = 80.dp)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space4)
+        ) {
+            Text(book.title, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                book.description?.ifBlank { "暂无简介" } ?: "暂无简介",
+                color = DesignTokens.SoftText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        TextButton(onClick = { onToggleShelf(book) }) {
+            Text(if (onShelf) "已在书架" else "加入书架")
+        }
+    }
+}
+
+@Composable
 private fun BackendBooklistCard(
     book: BookDTO,
     coverUrl: String?,
@@ -301,31 +344,32 @@ private fun BackendBooklistCard(
     onBookClick: (BookDTO) -> Unit,
     onToggleShelf: (BookDTO) -> Unit
 ) {
-    SoftCard(contentPadding = DesignTokens.Space12, modifier = Modifier.clickable(
+    SoftCard(contentPadding = DesignTokens.Space8, modifier = Modifier.clickable(
         interactionSource = remember { MutableInteractionSource() }, indication = null
     ) { onBookClick(book) }) {
-        BookCover(book.title, imageUri = coverUrl, width = null, height = 190.dp)
-        Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.padding(top = DesignTokens.Space8))
-        Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1)
+        BookCover(book.title, imageUri = coverUrl, width = null, height = 128.dp)
+        Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = DesignTokens.Space8))
+        Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Icon(Icons.Default.Star, null, tint = DesignTokens.Warning, modifier = Modifier.size(16.dp))
             Text(" ${book.rating ?: 0}.0", color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
         }
-        Text(
-            book.description?.ifBlank { "暂无简介" } ?: "暂无简介",
-            color = DesignTokens.SoftText,
-            maxLines = 2,
-            style = MaterialTheme.typography.bodySmall
-        )
         Button(
             onClick = { onToggleShelf(book) },
             modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = if (onShelf) MaterialTheme.colorScheme.surfaceVariant else DesignTokens.Accent,
                 contentColor = if (onShelf) DesignTokens.Accent else androidx.compose.ui.graphics.Color.White
             ),
             elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
-        ) { Text(if (onShelf) "已在书架" else "+ 加入书架") }
+        ) {
+            Text(
+                if (onShelf) "已在书架" else "加入书架",
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1
+            )
+        }
     }
 }
 
