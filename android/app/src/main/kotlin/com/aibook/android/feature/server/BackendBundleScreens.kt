@@ -30,6 +30,9 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
@@ -111,6 +114,7 @@ fun BackendCollectionScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     var showList by rememberSaveable { mutableStateOf(listMode) }
+    var viewMenuExpanded by remember { mutableStateOf(false) }
     var shelfFilter by rememberSaveable { mutableIntStateOf(0) }
     var searchVisible by rememberSaveable { mutableStateOf(false) }
     var filtersVisible by rememberSaveable { mutableStateOf(false) }
@@ -160,6 +164,40 @@ fun BackendCollectionScreen(
         modifier = Modifier.fillMaxSize(),
         navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
         actions = {
+            if (section == ServerLibrarySection.ALL) {
+                Box {
+                    IconButton(onClick = { viewMenuExpanded = true }) {
+                        Icon(
+                            imageVector = if (showList) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
+                            contentDescription = "切换视图，当前为${if (showList) "列表" else "卡片"}视图"
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = viewMenuExpanded,
+                        onDismissRequest = { viewMenuExpanded = false }
+                    ) {
+                        listOf("卡片视图", "列表视图").forEachIndexed { index, label ->
+                            val selected = showList == (index == 1)
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = if (index == 1) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
+                                        contentDescription = null
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (selected) Icon(Icons.Default.Check, contentDescription = "已选中")
+                                },
+                                onClick = {
+                                    showList = index == 1
+                                    viewMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
             IconButton(onClick = { searchVisible = !searchVisible }) { Icon(Icons.Default.Search, "搜索") }
             IconButton(onClick = { filtersVisible = !filtersVisible }) { Icon(Icons.Default.FilterList, "筛选") }
         }
@@ -194,7 +232,7 @@ fun BackendCollectionScreen(
                 onSelected = { shelfFilter = it }
             )
             Spacer(Modifier.height(DesignTokens.Space12))
-        } else {
+        } else if (section != ServerLibrarySection.ALL) {
             SlidingSegmentedControl(
                 options = listOf("卡片", "列表"),
                 selectedIndex = if (showList) 1 else 0,
