@@ -161,6 +161,7 @@ fun BackendCollectionScreen(
     } else title
     DesignPage(
         title = resolvedTitle,
+        compactHeader = section == ServerLibrarySection.ALL,
         modifier = Modifier.fillMaxSize(),
         navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
         actions = {
@@ -203,7 +204,7 @@ fun BackendCollectionScreen(
         }
     ) {
         CloudMockNotice()
-        Spacer(Modifier.height(DesignTokens.Space12))
+        Spacer(Modifier.height(if (section == ServerLibrarySection.ALL) DesignTokens.Space4 else DesignTokens.Space12))
         if (searchVisible) {
             OutlinedTextField(
                 value = query,

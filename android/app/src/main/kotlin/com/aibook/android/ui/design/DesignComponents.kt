@@ -42,9 +42,16 @@ fun DesignPage(
     centerTitle: Boolean = false,
     navigation: @Composable RowScope.() -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
+    compactHeader: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val topPadding = if (title.isNotEmpty()) DesignTokens.Space16 else 0.dp
+    val topPadding = when {
+        title.isEmpty() -> 0.dp
+        compactHeader -> DesignTokens.Space4
+        else -> DesignTokens.Space16
+    }
+    val headerTopPadding = if (compactHeader) 0.dp else DesignTokens.Space8
+    val headerBottomPadding = if (compactHeader) DesignTokens.Space4 else DesignTokens.Space16
     Column(
         modifier = modifier
             .background(MaterialTheme.colorScheme.background)
@@ -52,7 +59,7 @@ fun DesignPage(
     ) {
         if (title.isNotEmpty()) {
             if (centerTitle) {
-                Box(Modifier.fillMaxWidth().padding(top = DesignTokens.Space8, bottom = DesignTokens.Space16)) {
+                Box(Modifier.fillMaxWidth().padding(top = headerTopPadding, bottom = headerBottomPadding)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Row(verticalAlignment = Alignment.CenterVertically, content = navigation)
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), content = actions)
@@ -66,7 +73,7 @@ fun DesignPage(
                 }
             } else {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = DesignTokens.Space8, bottom = DesignTokens.Space16),
+                    modifier = Modifier.fillMaxWidth().padding(top = headerTopPadding, bottom = headerBottomPadding),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
