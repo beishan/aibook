@@ -76,6 +76,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aibook.android.core.data.repository.ServerRepository
+import com.aibook.android.core.data.repository.BookRepository
+import com.aibook.android.core.data.repository.DownloadTaskRepository
 import com.aibook.android.background.DownloadQueueManager
 import com.aibook.android.core.network.api.dto.BookDTO
 import com.aibook.android.core.network.api.dto.ReadingProgressDTO
@@ -102,6 +104,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 @Composable
@@ -470,12 +476,25 @@ data class BackendBookDetailState(
 
 class BackendBookDetailViewModel(
     private val repository: ServerRepository,
-    private val downloadQueue: DownloadQueueManager
+    private val downloadQueue: DownloadQueueManager,
+    private val bookRepository: BookRepository,
+    private val downloadTaskRepository: DownloadTaskRepository
 ) : ViewModel() {
     private val _state = MutableStateFlow(BackendBookDetailState())
     val state: StateFlow<BackendBookDetailState> = _state.asStateFlow()
+    private val _downloadState = MutableStateFlow(BackendBookDownloadState.CHECKING)
+    internal val downloadState = _downloadState.asStateFlow()
+    private var downloadObserver: Job? = null
+    private var enqueueing = false
 
     fun load(id: Long) {
+        downloadObserver?.cancel()
+        _downloadState.value = BackendBookDownloadState.CHECKING
+        downloadObserver = viewModelScope.launch {
+            combine(bookRepository.observeBooks(), downloadTaskRepository.observeAll()) { books, tasks ->
+                resolveBackendBookDownloadState(id, books, tasks)
+            }.flowOn(Dispatchers.IO).collect { _downloadState.value = it }
+        }
         if (CloudMockData.enabled) {
             val book = CloudMockData.book(id)
             _state.value = if (book == null) {
@@ -551,6 +570,18 @@ class BackendBookDetailViewModel(
             _state.update { it.copy(message = "Mock 数据暂不提供文件下载") }
             return
         }
+        if (enqueueing) return
+        if (!_downloadState.value.canDownload) {
+            val message = when (_downloadState.value) {
+                BackendBookDownloadState.DOWNLOADED -> "已下载到本地，可直接离线阅读"
+                BackendBookDownloadState.PAUSED -> "下载已暂停，请在下载管理中继续"
+                BackendBookDownloadState.CHECKING -> "正在检查本地下载状态"
+                else -> "已在下载队列，请在下载管理中查看进度"
+            }
+            _state.update { it.copy(message = message) }
+            return
+        }
+        enqueueing = true
         viewModelScope.launch {
             runCatching { downloadQueue.enqueueServer(id, book.title, book.format) }
                 .onSuccess {
@@ -559,6 +590,7 @@ class BackendBookDetailViewModel(
                 .onFailure { error ->
                     _state.update { state -> state.copy(message = error.message ?: "加入下载队列失败") }
                 }
+            enqueueing = false
         }
     }
 
@@ -568,7 +600,9 @@ class BackendBookDetailViewModel(
                 val app = this[APPLICATION_KEY] as Application
                 BackendBookDetailViewModel(
                     ServiceLocator.get(app).serverRepository,
-                    DownloadQueueManager(app)
+                    DownloadQueueManager(app),
+                    ServiceLocator.get(app).bookRepository,
+                    ServiceLocator.get(app).downloadTaskRepository
                 )
             }
         }
@@ -583,6 +617,7 @@ fun BackendBookDetailScreen(
     viewModel: BackendBookDetailViewModel = viewModel(factory = BackendBookDetailViewModel.Factory)
 ) {
     val state by viewModel.state.collectAsState()
+    val downloadState by viewModel.downloadState.collectAsState()
     val context = LocalContext.current
     var showMore by remember { mutableStateOf(false) }
     var localMessage by remember { mutableStateOf<String?>(null) }
@@ -650,7 +685,11 @@ fun BackendBookDetailScreen(
                         book.isFavorite == true,
                         viewModel::toggleFavorite
                     )
-                    DetailActionButton(Icons.Default.CloudDownload, "下载到本地") {
+                    DetailActionButton(
+                        if (downloadState == BackendBookDownloadState.DOWNLOADED) Icons.Default.Check else Icons.Default.CloudDownload,
+                        downloadState.label,
+                        downloadState == BackendBookDownloadState.DOWNLOADED
+                    ) {
                         localMessage = null
                         viewModel.downloadToLocal()
                     }
