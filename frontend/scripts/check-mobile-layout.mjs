@@ -85,13 +85,16 @@ const browser = await chromium.launch({
 })
 const themes = (process.env.MOBILE_THEMES || 'macos26,warm,modern').split(',')
 const widths = (process.env.MOBILE_WIDTHS || '320,390,768').split(',').map(Number)
-const paths = ['/', '/books', '/books/1', '/shelf', '/rewrite', '/rewrite/1', '/reader/2',
+let paths = ['/', '/books', '/books/1', '/shelf', '/rewrite', '/rewrite/1', '/reader/2',
   '/crawler/books/1/trial', '/text-repair', '/format-conversion', '/crawler', '/statistics', '/settings', '/settings?tab=backups']
 if (process.env.MOBILE_EXTENDED === 'true') {
   const tabs = ['theme', 'fonts', 'cover-display', 'reader-backgrounds', 'directories', 'covers',
     'categories', 'tags', 'authors', 'trash', 'scheduler', 'metadata-scraping', 'connections',
     'proxies', 'crawler-settings', 'users', 'logs', 'crawler-refresh-options', 'website', 'info']
   paths.push(...tabs.map(tab => `/settings?tab=${tab}`), '/series', '/books/1/repair', '/booklists/1')
+}
+if (process.env.MOBILE_PATHS) {
+  paths = process.env.MOBILE_PATHS.split(',')
 }
 try {
   if (output) await mkdir(output, { recursive: true })
@@ -160,6 +163,15 @@ try {
             await page.waitForTimeout(100)
             const bounds = await page.locator('.crawler-page').boundingBox()
             assert(bounds && bounds.width <= width)
+            assert.equal(
+              await page.locator('.crawler-page .el-table__cell.is-fixed-column--left, .crawler-page .el-table__cell.is-fixed-column--right').count(),
+              0,
+              `${label} has no frozen columns on mobile`,
+            )
+            const panel = page.locator('.crawler-page .panel').first()
+            if (await panel.count()) {
+              assert.equal(await panel.evaluate(element => getComputedStyle(element).paddingLeft), '6px')
+            }
           }
           if (errors.length) failures.push({ theme, width, path: 'crawler tabs', errors: errors.splice(0) })
         }

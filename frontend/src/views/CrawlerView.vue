@@ -2144,12 +2144,22 @@ const TaskTable = defineComponent({
       onSelectionChange: (rows: CrawlerTask[]) => emit('selection-change', rows),
     },
     () => [
-  props.selectable?h(ElTableColumn,{type:'selection',width:48,reserveSelection:true,fixed:'left'}):null,
-  h(ElTableColumn,{label:'收藏',width:58,fixed:'left',align:'center'},{default:({row}:{row:CrawlerTask})=>row.bookId?h(ElButton,{size:'small',circle:true,icon:row.favorite?StarFilled:Star,class:['favorite-action','row-hover-action',row.favorite?'is-favorite':''],'aria-label':row.favorite?'取消收藏':'加入收藏',title:row.favorite?'取消收藏':'加入收藏',onClick:(event:MouseEvent)=>{event.stopPropagation();emit('toggle-favorite',row)}}):null}),
+  props.selectable ? h(ElTableColumn, {
+    type: 'selection',
+    width: 48,
+    reserveSelection: true,
+    fixed: isMobileCrawlerLayout.value ? false : 'left',
+  }) : null,
+  h(ElTableColumn, {
+    label: '收藏',
+    width: 58,
+    align: 'center',
+    fixed: isMobileCrawlerLayout.value ? false : 'left',
+  }, {default:({row}:{row:CrawlerTask})=>row.bookId?h(ElButton,{size:'small',circle:true,icon:row.favorite?StarFilled:Star,class:['favorite-action','row-hover-action',row.favorite?'is-favorite':''],'aria-label':row.favorite?'取消收藏':'加入收藏',title:row.favorite?'取消收藏':'加入收藏',onClick:(event:MouseEvent)=>{event.stopPropagation();emit('toggle-favorite',row)}}):null}),
   h(ElTableColumn, {
     label: '自动入库',
     width: 110,
-    fixed: 'left',
+    fixed: isMobileCrawlerLayout.value ? false : 'left',
     align: 'center',
   }, {
     default: ({ row }: { row: CrawlerTask }) => row.bookId
@@ -2166,7 +2176,11 @@ const TaskTable = defineComponent({
       }, () => row.autoImportEnabled ? '已开启' : '设置')
       : null,
   }),
-  h(ElTableColumn,{label:'任务',minWidth:240,fixed:'left'},{default:({row}:{row:CrawlerTask})=>h('div',{class:'task-open',role:'button',tabindex:0,onClick:()=>emit('open',row),onKeydown:(event:KeyboardEvent)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();emit('open',row)}}},[row.siteName?h('span',{class:'task-site-mark',style:{'--site-theme-color':siteThemeColor(row.siteThemeColor)},title:row.siteName,'aria-label':`来源网站：${row.siteName}`},row.siteName.slice(0,1)):null,h('strong',{title:row.bookName||row.discoveryPageName||taskTypeLabel(row.type)},row.bookName||row.discoveryPageName||taskTypeLabel(row.type))])}),
+  h(ElTableColumn, {
+    label: '任务',
+    minWidth: 240,
+    fixed: isMobileCrawlerLayout.value ? false : 'left',
+  }, {default:({row}:{row:CrawlerTask})=>h('div',{class:'task-open',role:'button',tabindex:0,onClick:()=>emit('open',row),onKeydown:(event:KeyboardEvent)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();emit('open',row)}}},[row.siteName?h('span',{class:'task-site-mark',style:{'--site-theme-color':siteThemeColor(row.siteThemeColor)},title:row.siteName,'aria-label':`来源网站：${row.siteName}`},row.siteName.slice(0,1)):null,h('strong',{title:row.bookName||row.discoveryPageName||taskTypeLabel(row.type)},row.bookName||row.discoveryPageName||taskTypeLabel(row.type))])}),
   h(ElTableColumn,{label:'任务类型',width:120},{default:({row}:{row:CrawlerTask})=>taskTypeLabel(row.type)}),
   h(ElTableColumn,{label:'进度 / 扫描结果',minWidth:300},{default:({row}:{row:CrawlerTask})=>row.status==='SUCCESS'&&row.type==='SITE_SCAN'?h('div',{class:'task-scan-progress task-scan-completed'},[h('div',{class:'task-success-progress'},[h('strong','✓ 已完成'),h('span',`扫描 ${row.scannedPageCount} 页，发现 ${row.totalCount} 本`)]),h('div',{class:'task-scan-summary'},[h('i',`新增 ${row.newBookCount}`),h('em',`重复 ${row.duplicateCount}`),row.failedCount?h('strong',`失败 ${row.failedCount}`):null])]):row.status==='SUCCESS'?h('div',{class:'task-success-progress'},[h('strong','✓ 已完成'),h('span',`成功处理 ${row.successCount} 项`)]):row.type==='SITE_SCAN'?h('div',{class:'task-scan-progress'},[h(ElProgress,{class:row.status==='RUNNING'?'crawler-running-progress':undefined,percentage:scanTaskPercentage(row),strokeWidth:7}),h('small',scanTaskProgressText(row)),h('div',{class:'task-scan-summary'},[`扫描到 ${row.totalCount}`,h('b',`成功 ${row.successCount}`),h('i',`新增 ${row.newBookCount}`),h('em',`重复 ${row.duplicateCount}`),row.failedCount?h('strong',`失败 ${row.failedCount}`):null])]):h(ElProgress,{class:row.status==='RUNNING'?'crawler-running-progress':undefined,percentage:row.totalCount?Math.round(row.successCount/row.totalCount*100):0,strokeWidth:7})}),
   h(ElTableColumn,{label:'状态',width:130},{default:({row}:{row:CrawlerTask})=>h(ElTag,{type:statusType(row.status)},()=>statusLabel(row.status))}),
@@ -2188,7 +2202,7 @@ const TaskTable = defineComponent({
   h(ElTableColumn, {
     label: '操作',
     width: 260,
-    fixed: 'right',
+    fixed: isMobileCrawlerLayout.value ? false : 'right',
     align: 'right',
   }, {default:({row}:{row:CrawlerTask})=>{
     const actions=moreActions(row)
