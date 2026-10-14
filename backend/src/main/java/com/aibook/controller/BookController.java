@@ -5,6 +5,7 @@ import com.aibook.dto.BookCategoryRequest;
 import com.aibook.dto.BookIdsRequest;
 import com.aibook.dto.BookTagsRequest;
 import com.aibook.dto.BookDTO;
+import com.aibook.dto.BookComparisonDTO;
 import com.aibook.dto.BookSimilarityScanDTO;
 import com.aibook.dto.BookTocItemDTO;
 import com.aibook.dto.BookVersionRebuildTaskDTO;
@@ -18,6 +19,7 @@ import com.aibook.service.BookCoverService;
 import com.aibook.service.BookHtmlSanitizer;
 import com.aibook.service.BookParsingService;
 import com.aibook.service.BookService;
+import com.aibook.service.BookComparisonService;
 import com.aibook.service.BookSimilarityScanService;
 import com.aibook.service.BookVersionRebuildTaskService;
 import com.aibook.service.BookVersionService;
@@ -32,6 +34,8 @@ import com.aibook.service.scraper.MetadataScrapingService;
 import com.aibook.util.MimeTypeUtil;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
@@ -82,6 +86,7 @@ public class BookController {
     private final BookVersionService bookVersionService;
     private final BookVersionRebuildTaskService bookVersionRebuildTaskService;
     private final BookSimilarityScanService bookSimilarityScanService;
+    private final BookComparisonService bookComparisonService;
     private final OperationLogService operationLogService;
     private final BookHtmlSanitizer bookHtmlSanitizer;
     private final StructuredPublicationService structuredPublicationService;
@@ -307,6 +312,28 @@ public class BookController {
     /**
      * 获取书籍章节目录。
      */
+    @GetMapping("/{id}/comparison")
+    public ResponseEntity<BookComparisonDTO> getBookComparison(
+            Authentication authentication, @PathVariable Long id,
+            @RequestParam(required = false) Long versionId) {
+        User user = userService.findByUsername(authentication.getName());
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(id, user)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "书籍不存在"));
+        return ResponseEntity.ok(bookComparisonService.describe(
+                book, bookVersionService.resolveVersion(book, versionId)));
+    }
+
+    @GetMapping("/{id}/comparison/chapters/{index}")
+    public ResponseEntity<BookComparisonDTO.Chapter> getBookComparisonChapter(
+            Authentication authentication, @PathVariable Long id, @PathVariable int index,
+            @RequestParam(required = false) Long versionId) {
+        User user = userService.findByUsername(authentication.getName());
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(id, user)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "书籍不存在"));
+        return ResponseEntity.ok(bookComparisonService.chapter(
+                bookVersionService.resolveVersion(book, versionId), index));
+    }
+
     @GetMapping("/{id}/toc")
     public ResponseEntity<List<BookTocItemDTO>> getBookTableOfContents(
             Authentication authentication,

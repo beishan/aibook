@@ -24,8 +24,18 @@
         </template>
       </span>
       <span v-else>正在创建扫描任务…</span>
-      <el-button :loading="starting" :disabled="running || busy || !!loadingGroup" @click="startScan">
+      <el-button :loading="starting" :disabled="running || busy || !!loadingGroup || selectingAll || showBatchMerge || showComparison" @click="startScan">
         重新扫描
+      </el-button>
+    </div>
+
+    <div v-if="task?.status === 'COMPLETED' && task.totalGroups" class="batch-toolbar">
+      <span>已选 {{ batchPlans.size }} 组（可跨页选择）</span>
+      <el-button :disabled="busy || selectingAll" @click="selectCurrentGroups">选中本页分组</el-button>
+      <el-button :loading="selectingAll" :disabled="busy" @click="selectAllGroups">选择全部结果</el-button>
+      <el-button :disabled="selectingAll" @click="batchPlans.clear()">清空分组</el-button>
+      <el-button type="primary" :disabled="!batchPlans.size || selectingAll || busy" @click="openBatchMerge">
+        批量合并 {{ batchPlans.size }} 组
       </el-button>
     </div>
 
@@ -46,25 +56,36 @@
       <section v-for="group in task.groups" :key="group.id" class="similarity-group">
         <header class="group-header">
           <div>
-            <strong>{{ group.books[0]?.title }}</strong>
+            <el-checkbox
+              :model-value="batchPlans.has(group.id)"
+              :disabled="busy || selectingAll || (selections[group.id]?.length || 0) < 2"
+              :aria-label="`批量选择分组 ${group.books[0]?.title}`"
+              @change="value => toggleBatchGroup(group, Boolean(value))"
+            >{{ group.books[0]?.title }}</el-checkbox>
             <p>{{ group.books.length }} 本 · {{ group.similarity === 100 ? '规范化后同名' : `匹配相似度 ${group.similarity}% 起` }}</p>
           </div>
-          <el-button
-            type="primary"
-            :disabled="busy || !!loadingGroup || (selections[group.id]?.length || 0) < 2"
-            :loading="loadingGroup === group.id"
-            @click="openMerge(group)"
-          >
-            合并所选 {{ selections[group.id]?.length || 0 }} 本
-          </el-button>
+          <div class="group-actions">
+            <el-button :disabled="busy || !!loadingGroup || selectingAll" @click="openComparison(group)">对比书籍</el-button>
+            <el-button
+              type="primary"
+              :disabled="busy || !!loadingGroup || selectingAll || (selections[group.id]?.length || 0) < 2"
+              :loading="loadingGroup === group.id"
+              @click="openMerge(group)"
+            >
+              合并所选 {{ selections[group.id]?.length || 0 }} 本
+            </el-button>
+          </div>
         </header>
         <p v-if="hasDifferentAuthors(group)" class="author-warning">作者不同，请确认是否为同一本书。</p>
-        <el-checkbox-group v-model="selections[group.id]" class="candidate-list" :disabled="!!loadingGroup || busy">
+        <el-checkbox-group v-model="selections[group.id]" class="candidate-list" :disabled="!!loadingGroup || busy || selectingAll" @change="updateBatchGroup(group)">
           <div v-for="book in group.books" :key="book.id" class="candidate-row">
             <el-checkbox :value="book.id" class="candidate-selection">
               <span class="candidate-copy">
                 <strong>{{ book.title }}</strong>
                 <small>{{ book.author || '未知作者' }} · {{ formatLabel(book.format) }} · #{{ book.id }}</small>
+                <small :title="book.sourceType === 'DIRECTORY_SCAN' ? book.sourcePath : undefined">
+                  {{ sourceLabel(book) }} · {{ chapterCountLabel(book.chapterCount) }} · {{ sizeLabel(book.fileSize) }}
+                </small>
               </span>
             </el-checkbox>
             <router-link :to="`/books/${book.id}`" target="_blank">详情</router-link>
@@ -74,16 +95,16 @@
     </div>
 
     <div v-if="task && task.totalGroups > pageSize" class="scan-pagination">
-      <el-button :disabled="busy || currentPage === 0 || !!loadingGroup" @click="loadPage(currentPage - 1)">上一页</el-button>
+      <el-button :disabled="busy || currentPage === 0 || !!loadingGroup || selectingAll" @click="loadPage(currentPage - 1)">上一页</el-button>
       <span>{{ currentPage + 1 }} / {{ Math.ceil(task.totalGroups / pageSize) }}</span>
       <el-button
-        :disabled="busy || (currentPage + 1) * pageSize >= task.totalGroups || !!loadingGroup"
+        :disabled="busy || (currentPage + 1) * pageSize >= task.totalGroups || !!loadingGroup || selectingAll"
         @click="loadPage(currentPage + 1)"
       >下一页</el-button>
     </div>
 
     <template #footer>
-      <el-button :disabled="!!loadingGroup || showMerge" @click="handleClose">
+      <el-button :disabled="!!loadingGroup || showMerge || showBatchMerge || showComparison" @click="handleClose">
         {{ running ? '后台运行' : '关闭' }}
       </el-button>
     </template>
@@ -95,6 +116,13 @@
     @close="showMerge = false"
     @complete="handleMerged"
   />
+  <BookBatchMergeDialog
+    :visible="showBatchMerge"
+    :groups="batchReviewPlans"
+    @close="showBatchMerge = false"
+    @complete="handleBatchComplete"
+  />
+  <BookComparisonDialog :visible="showComparison" :books="comparisonBooks" @close="showComparison = false" />
 </template>
 
 <script setup lang="ts">
@@ -103,18 +131,17 @@ import type { Book } from '@/stores/book'
 import api from '@/utils/api'
 import { message } from '@/utils/message'
 import BookMergeDialog from '@/components/BookMergeDialog.vue'
-
-interface Candidate {
-  id: number
-  title: string
-  author?: string
-  format: string
-}
+import BookBatchMergeDialog from '@/components/BookBatchMergeDialog.vue'
+import BookComparisonDialog from '@/components/BookComparisonDialog.vue'
+import {
+  chapterCountLabel, sizeLabel, sourceLabel, suggestedTarget, validateBatchPlans,
+  type BatchMergePlan, type BatchMergeResult, type ComparisonCandidate,
+} from '@/utils/bookComparison'
 
 interface SimilarityGroup {
   id: string
   similarity: number
-  books: Candidate[]
+  books: ComparisonCandidate[]
 }
 
 interface ScanTask {
@@ -140,6 +167,12 @@ const selections = ref<Record<string, number[]>>({})
 const loadingGroup = ref<string | null>(null)
 const showMerge = ref(false)
 const mergeBooks = ref<Book[]>([])
+const batchPlans = ref<Map<string, BatchMergePlan>>(new Map())
+const batchReviewPlans = ref<BatchMergePlan[]>([])
+const selectingAll = ref(false)
+const showBatchMerge = ref(false)
+const showComparison = ref(false)
+const comparisonBooks = ref<ComparisonCandidate[]>([])
 let timer: ReturnType<typeof setTimeout> | undefined
 let generation = 0
 
@@ -160,7 +193,9 @@ const stopPolling = () => {
 const acceptTask = (data: ScanTask) => {
   task.value = data
   if (data.status === 'COMPLETED') {
-    selections.value = Object.fromEntries(data.groups.map(group => [group.id, group.books.map(book => book.id)]))
+    for (const group of data.groups) {
+      if (!selections.value[group.id]) selections.value[group.id] = group.books.map(book => book.id)
+    }
   } else if (data.status === 'FAILED') {
     error.value = data.message
   }
@@ -176,6 +211,7 @@ const startScan = async () => {
   error.value = ''
   task.value = null
   selections.value = {}
+  batchPlans.value.clear()
   currentPage.value = 0
   try {
     const { data } = await api.post<ScanTask>('/api/books/similarity-scans')
@@ -210,6 +246,91 @@ const loadPage = async (page: number) => {
   }
 }
 
+const toggleBatchGroup = (group: SimilarityGroup, selected: boolean) => {
+  if (!selected) {
+    batchPlans.value.delete(group.id)
+    return
+  }
+  const ids = new Set(selections.value[group.id] || group.books.map(book => book.id))
+  const books = group.books.filter(book => ids.has(book.id))
+  if (books.length < 2) return
+  batchPlans.value.set(group.id, {
+    groupId: group.id, title: group.books[0]?.title || '相似书籍', books,
+    targetBookId: suggestedTarget(books),
+  })
+}
+
+const updateBatchGroup = (group: SimilarityGroup) => {
+  if (!batchPlans.value.has(group.id)) return
+  const ids = selections.value[group.id] || []
+  if (ids.length < 2) batchPlans.value.delete(group.id)
+  else toggleBatchGroup(group, true)
+}
+
+const selectCurrentGroups = () => {
+  task.value?.groups.forEach(group => toggleBatchGroup(group, true))
+}
+
+const selectAllGroups = async () => {
+  if (!task.value || selectingAll.value) return
+  stopPolling()
+  const request = ++generation
+  const taskId = task.value.taskId
+  const total = task.value.totalGroups
+  selectingAll.value = true
+  error.value = ''
+  try {
+    const all = new Map<string, BatchMergePlan>()
+    for (let page = 0; page * 50 < total; page++) {
+      const { data } = await api.get<ScanTask>(`/api/books/similarity-scans/${taskId}`, { params: { page, size: 50 } })
+      if (request !== generation) return
+      for (const group of data.groups) {
+        const ids = new Set(selections.value[group.id] || group.books.map(book => book.id))
+        const books = group.books.filter(book => ids.has(book.id))
+        if (books.length >= 2) all.set(group.id, {
+          groupId: group.id, title: group.books[0]?.title || '相似书籍', books,
+          targetBookId: suggestedTarget(books),
+        })
+      }
+    }
+    batchPlans.value = all
+  } catch (cause: any) {
+    if (request === generation) error.value = cause.response?.data?.message || '获取全部分组失败，请重试'
+  } finally {
+    if (request === generation) selectingAll.value = false
+  }
+}
+
+const openBatchMerge = () => {
+  const plans = [...batchPlans.value.values()]
+  try {
+    validateBatchPlans(plans)
+  } catch (cause: any) {
+    message.warning(cause.message)
+    return
+  }
+  batchReviewPlans.value = plans
+  showBatchMerge.value = true
+}
+
+const openComparison = (group: SimilarityGroup) => {
+  comparisonBooks.value = group.books
+  showComparison.value = true
+}
+
+const handleBatchComplete = (results: BatchMergeResult[]) => {
+  const successes = results.filter(result => result.status === 'completed').length
+  const failures = results.length - successes
+  const remaining = batchReviewPlans.value.length - results.length
+  if (failures || remaining) {
+    message.warning(`批量处理完成：成功 ${successes} 组，失败 ${failures} 组，未执行 ${remaining} 组；请查看处理结果`)
+  } else {
+    message.success(`已批量合并 ${successes} 组`)
+  }
+  emit('merged')
+  startScan()
+}
+
 const openMerge = async (group: SimilarityGroup) => {
   const ids = selections.value[group.id] || []
   if (ids.length < 2) return
@@ -234,7 +355,7 @@ const handleMerged = () => {
 }
 
 const handleClose = () => {
-  if (loadingGroup.value || showMerge.value) return
+  if (loadingGroup.value || showMerge.value || showBatchMerge.value || showComparison.value) return
   emit('close')
 }
 
@@ -243,6 +364,7 @@ watch(() => props.visible, visible => {
   generation++
   starting.value = false
   busy.value = false
+  selectingAll.value = false
   if (!visible) return
   if (!task.value) startScan()
   else loadPage(currentPage.value)
@@ -277,6 +399,28 @@ onUnmounted(() => {
 
 .scan-status {
   color: var(--text-secondary);
+}
+
+.batch-toolbar,
+.group-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.batch-toolbar {
+  margin: 14px 0;
+}
+
+.group-header :deep(.el-checkbox) {
+  height: auto;
+  margin: 0;
+}
+
+.group-header :deep(.el-checkbox__label) {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .similarity-groups {

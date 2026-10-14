@@ -71,6 +71,40 @@ public class EpubTextExtractor {
         }
     }
 
+    /** 对比时只保留章节标题，不在内存中拼接整本正文。 */
+    public List<String> comparisonChapterTitles(Path epubPath) throws Exception {
+        try (ZipFile zip = new ZipFile(epubPath.toFile(), StandardCharsets.UTF_8)) {
+            List<String> titles = new ArrayList<>();
+            for (SpineItem item : comparisonSpine(zip)) {
+                String html = new String(readEntry(zip, item.path(), MAX_DOCUMENT_BYTES), StandardCharsets.UTF_8);
+                titles.add(extractChapter(html, titles.size() + 1).title());
+            }
+            return List.copyOf(titles);
+        }
+    }
+
+    /** 按阅读顺序读取一个章节；索引来自服务端目录，不接收客户端资源路径。 */
+    public ComparisonChapter comparisonChapter(Path epubPath, int index) throws Exception {
+        try (ZipFile zip = new ZipFile(epubPath.toFile(), StandardCharsets.UTF_8)) {
+            List<SpineItem> spine = comparisonSpine(zip);
+            if (index < 0 || index >= spine.size()) {
+                throw new IndexOutOfBoundsException("章节不存在");
+            }
+            String html = new String(readEntry(zip, spine.get(index).path(), MAX_DOCUMENT_BYTES), StandardCharsets.UTF_8);
+            ChapterText chapter = extractChapter(html, index + 1);
+            return new ComparisonChapter(chapter.title(), chapter.content());
+        }
+    }
+
+    private List<SpineItem> comparisonSpine(ZipFile zip) throws Exception {
+        String opfPath = locateOpf(zip);
+        var opf = parseXml(readEntry(zip, opfPath, 8L * 1024 * 1024));
+        return spine(opf, manifest(opf, parentPath(opfPath))).stream()
+                .filter(item -> !item.properties().contains("nav")).toList();
+    }
+
+    public record ComparisonChapter(String title, String content) {}
+
     private Map<String, ManifestItem> manifest(org.w3c.dom.Document opf, String base) {
         Map<String, ManifestItem> result = new LinkedHashMap<>();
         NodeList items = opf.getElementsByTagNameNS("*", "item");

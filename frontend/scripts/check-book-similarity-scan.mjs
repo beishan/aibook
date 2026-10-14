@@ -108,7 +108,7 @@ try {
       await mkdir(process.env.SIMILARITY_SCREENSHOT_DIR, { recursive: true })
       await page.screenshot({ path: `${process.env.SIMILARITY_SCREENSHOT_DIR}/scan-${width}.png`, fullPage: true })
     }
-    const checkboxes = scan.getByRole('checkbox')
+    const checkboxes = scan.locator('.candidate-list').getByRole('checkbox')
     await checkboxes.nth(2).focus()
     await page.keyboard.press('Space')
     await scan.getByRole('button', { name: '合并所选 2 本', exact: true }).click()

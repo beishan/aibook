@@ -30,7 +30,8 @@ import org.springframework.stereotype.Repository;
 public interface BookRepository
         extends JpaRepository<Book, Long>, JpaSpecificationExecutor<Book> {
 
-    @Query("SELECT new com.aibook.dto.SimilarBookDTO(b.id, b.title, b.author, b.format) "
+    @Query("SELECT new com.aibook.dto.SimilarBookDTO(b.id, b.title, b.author, b.format, "
+            + "b.sourceType, b.sourceSiteName, b.filePath, b.chapterCount, b.fileSize) "
             + "FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL AND "
             + LIBRARY_VISIBLE + "ORDER BY b.id")
     List<SimilarBookDTO> findSimilarityScanBooks(@Param("user") User user);

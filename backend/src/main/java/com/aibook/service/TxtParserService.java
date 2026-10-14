@@ -106,7 +106,7 @@ public class TxtParserService {
 
     // ==================== 章节检测 ====================
 
-    private List<ChapterInfo> detectChapters(String text) {
+    public List<ChapterInfo> detectChapters(String text) {
         String[] lines = text.split("\n", -1);
 
         // Tier 1: 正则匹配
