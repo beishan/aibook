@@ -339,29 +339,7 @@ public class BookVersionAggregationService {
     }
 
     private double levenshteinSimilarity(String left, String right) {
-        if (left.equals(right)) {
-            return 1;
-        }
-        int[] previous = new int[right.length() + 1];
-        int[] current = new int[right.length() + 1];
-        for (int column = 0; column <= right.length(); column++) {
-            previous[column] = column;
-        }
-        for (int row = 1; row <= left.length(); row++) {
-            current[0] = row;
-            for (int column = 1; column <= right.length(); column++) {
-                int replacementCost =
-                        left.charAt(row - 1) == right.charAt(column - 1) ? 0 : 1;
-                current[column] = Math.min(
-                        Math.min(current[column - 1] + 1, previous[column] + 1),
-                        previous[column - 1] + replacementCost);
-            }
-            int[] swap = previous;
-            previous = current;
-            current = swap;
-        }
-        int maximumLength = Math.max(left.length(), right.length());
-        return 1.0 - ((double) previous[right.length()] / maximumLength);
+        return BookTitleSimilarity.score(left, right);
     }
 
     private String normalizeText(String value) {

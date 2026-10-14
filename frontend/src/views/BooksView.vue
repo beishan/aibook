@@ -33,6 +33,14 @@
           <span>🧩</span>
           <span>重建多版本</span>
         </button>
+        <button
+          class="btn"
+          title="扫描整个书库的相似书名，核对后选择合并"
+          @click="showSimilarityScanDialog = true"
+        >
+          <span aria-hidden="true">🔎</span>
+          <span>扫描相似书名</span>
+        </button>
         <button class="btn btn-primary" @click="showUploadDialog = true">
           <span>📤</span>
           <span>上传书籍</span>
@@ -642,6 +650,12 @@
       @complete="handleBookMergeComplete"
     />
 
+    <BookSimilarityScanDialog
+      :visible="showSimilarityScanDialog"
+      @close="showSimilarityScanDialog = false"
+      @merged="loadBooks"
+    />
+
     <BookQuickReader ref="quickReader" @closed="loadBooks" />
   </div>
 </template>
@@ -670,6 +684,7 @@ import ScraperDialog from '@/components/ScraperDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import BookVersionRebuildDialog from '@/components/BookVersionRebuildDialog.vue'
 import BookMergeDialog from '@/components/BookMergeDialog.vue'
+import BookSimilarityScanDialog from '@/components/BookSimilarityScanDialog.vue'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import {
@@ -736,6 +751,7 @@ const processingBookId = ref<number | null>(null)
 const downloadingBookId = ref<number | null>(null)
 const showVersionRebuildDialog = ref(false)
 const showBookMergeDialog = ref(false)
+const showSimilarityScanDialog = ref(false)
 const quickReader = ref<InstanceType<typeof BookQuickReader> | null>(null)
 const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 const coversPreparing = ref(false)

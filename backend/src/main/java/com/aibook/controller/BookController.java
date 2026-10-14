@@ -5,6 +5,7 @@ import com.aibook.dto.BookCategoryRequest;
 import com.aibook.dto.BookIdsRequest;
 import com.aibook.dto.BookTagsRequest;
 import com.aibook.dto.BookDTO;
+import com.aibook.dto.BookSimilarityScanDTO;
 import com.aibook.dto.BookTocItemDTO;
 import com.aibook.dto.BookVersionRebuildTaskDTO;
 import com.aibook.dto.ScrapeTaskDTO;
@@ -17,6 +18,7 @@ import com.aibook.service.BookCoverService;
 import com.aibook.service.BookHtmlSanitizer;
 import com.aibook.service.BookParsingService;
 import com.aibook.service.BookService;
+import com.aibook.service.BookSimilarityScanService;
 import com.aibook.service.BookVersionRebuildTaskService;
 import com.aibook.service.BookVersionService;
 import com.aibook.service.OperationLogService;
@@ -79,6 +81,7 @@ public class BookController {
     private final RandomBookCoverService randomBookCoverService;
     private final BookVersionService bookVersionService;
     private final BookVersionRebuildTaskService bookVersionRebuildTaskService;
+    private final BookSimilarityScanService bookSimilarityScanService;
     private final OperationLogService operationLogService;
     private final BookHtmlSanitizer bookHtmlSanitizer;
     private final StructuredPublicationService structuredPublicationService;
@@ -119,9 +122,24 @@ public class BookController {
         return ResponseEntity.ok(bookService.sourceSites(user));
     }
 
-    /**
-     * 遍历当前用户书库，将历史独立记录中的同一本书聚合为多个版本。
-     */
+    /** 只读扫描当前用户整个可见书库的相似书名。 */
+    @PostMapping("/similarity-scans")
+    public ResponseEntity<BookSimilarityScanDTO> scanSimilarBookTitles(Authentication authentication) {
+        User user = userService.findByUsername(authentication.getName());
+        return ResponseEntity.accepted().body(bookSimilarityScanService.start(user));
+    }
+
+    @GetMapping("/similarity-scans/{taskId}")
+    public ResponseEntity<BookSimilarityScanDTO> getSimilarBookTitles(
+            Authentication authentication,
+            @PathVariable String taskId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        User user = userService.findByUsername(authentication.getName());
+        return ResponseEntity.ok(bookSimilarityScanService.get(taskId, user, page, size));
+    }
+
+    /** 遍历当前用户书库，将历史独立记录中的同一本书聚合为多个版本。 */
     @PostMapping("/versions/rebuild")
     public ResponseEntity<BookVersionRebuildTaskDTO> rebuildBookVersions(
             Authentication authentication) {

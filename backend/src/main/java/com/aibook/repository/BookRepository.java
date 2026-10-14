@@ -1,5 +1,6 @@
 package com.aibook.repository;
 
+import com.aibook.dto.SimilarBookDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.Category;
 import com.aibook.model.entity.Tag;
@@ -28,6 +29,11 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface BookRepository
         extends JpaRepository<Book, Long>, JpaSpecificationExecutor<Book> {
+
+    @Query("SELECT new com.aibook.dto.SimilarBookDTO(b.id, b.title, b.author, b.format) "
+            + "FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL AND "
+            + LIBRARY_VISIBLE + "ORDER BY b.id")
+    List<SimilarBookDTO> findSimilarityScanBooks(@Param("user") User user);
 
     @Modifying
     @Query("update Book b set b.category = null where b.id = :bookId and b.user = :user "
