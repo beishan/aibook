@@ -1126,9 +1126,11 @@ class ReaderViewModel(
         }
         val chapterIds = publication.chapters.mapIndexed { index, entry -> index to entry.chapterId }.toMap()
         val progress = _state.value.remoteProgress
-        val preferredIndex = progress?.chapterIndex?.takeIf { it in chapters.indices }
-            ?: chapters.indexOfFirst { it.href == progress?.chapterHref }.takeIf { it >= 0 }
-            ?: 0
+        val preferredIndex = ReaderChapterSelection.selectInitialIndex(
+            chapters = chapters,
+            preferredHref = progress?.chapterHref,
+            preferredIndex = progress?.chapterIndex
+        )
 
         _state.update {
             it.copy(

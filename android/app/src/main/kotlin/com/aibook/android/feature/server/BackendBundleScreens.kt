@@ -3,6 +3,7 @@ package com.aibook.android.feature.server
 import android.app.Application
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,6 +31,9 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
@@ -49,6 +53,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -62,6 +67,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -111,6 +117,7 @@ fun BackendCollectionScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     var showList by rememberSaveable { mutableStateOf(listMode) }
+    var viewMenuExpanded by remember { mutableStateOf(false) }
     var shelfFilter by rememberSaveable { mutableIntStateOf(0) }
     var searchVisible by rememberSaveable { mutableStateOf(false) }
     var filtersVisible by rememberSaveable { mutableStateOf(false) }
@@ -157,15 +164,50 @@ fun BackendCollectionScreen(
     } else title
     DesignPage(
         title = resolvedTitle,
+        compactHeader = true,
         modifier = Modifier.fillMaxSize(),
         navigation = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
         actions = {
+            if (section == ServerLibrarySection.ALL || section == ServerLibrarySection.LISTS) {
+                Box {
+                    IconButton(onClick = { viewMenuExpanded = true }) {
+                        Icon(
+                            imageVector = if (showList) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
+                            contentDescription = "切换视图，当前为${if (showList) "列表" else "卡片"}视图"
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = viewMenuExpanded,
+                        onDismissRequest = { viewMenuExpanded = false }
+                    ) {
+                        listOf("卡片视图", "列表视图").forEachIndexed { index, label ->
+                            val selected = showList == (index == 1)
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = if (index == 1) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
+                                        contentDescription = null
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (selected) Icon(Icons.Default.Check, contentDescription = "已选中")
+                                },
+                                onClick = {
+                                    showList = index == 1
+                                    viewMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
             IconButton(onClick = { searchVisible = !searchVisible }) { Icon(Icons.Default.Search, "搜索") }
             IconButton(onClick = { filtersVisible = !filtersVisible }) { Icon(Icons.Default.FilterList, "筛选") }
         }
     ) {
         CloudMockNotice()
-        Spacer(Modifier.height(DesignTokens.Space12))
+        Spacer(Modifier.height(DesignTokens.Space4))
         if (searchVisible) {
             OutlinedTextField(
                 value = query,
@@ -194,13 +236,6 @@ fun BackendCollectionScreen(
                 onSelected = { shelfFilter = it }
             )
             Spacer(Modifier.height(DesignTokens.Space12))
-        } else {
-            SlidingSegmentedControl(
-                options = listOf("卡片", "列表"),
-                selectedIndex = if (showList) 1 else 0,
-                onSelected = { showList = it == 1 }
-            )
-            Spacer(Modifier.height(DesignTokens.Space12))
         }
         if (section == ServerLibrarySection.LISTS && collectionState is BookCollectionState.Content) {
             BackendBooklistContent(
@@ -208,6 +243,7 @@ fun BackendCollectionScreen(
                 coverUrl = viewModel::coverUrl,
                 shelfIds = state.shelfBookIds,
                 listMode = showList,
+                columns = columns,
                 onBookClick = { it.id?.let(onBookClick) },
                 onToggleShelf = viewModel::toggleShelf
             )
@@ -237,24 +273,65 @@ private fun BackendBooklistContent(
     coverUrl: (BookDTO) -> String?,
     shelfIds: Set<Long>,
     listMode: Boolean,
+    columns: Int,
     onBookClick: (BookDTO) -> Unit,
     onToggleShelf: (BookDTO) -> Unit
 ) {
     if (listMode) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)) {
             items(books, key = { it.id ?: it.title }) { book ->
-                BackendBooklistCard(book, coverUrl(book), book.id in shelfIds, onBookClick, onToggleShelf)
+                BackendBooklistRow(book, coverUrl(book), book.id in shelfIds, onBookClick, onToggleShelf)
             }
         }
     } else {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Fixed(columns),
             horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
             verticalArrangement = Arrangement.spacedBy(DesignTokens.Space12)
         ) {
             gridItems(books, key = { it.id ?: it.title }) { book ->
                 BackendBooklistCard(book, coverUrl(book), book.id in shelfIds, onBookClick, onToggleShelf)
             }
+        }
+    }
+}
+
+@Composable
+private fun BackendBooklistRow(
+    book: BookDTO,
+    coverUrl: String?,
+    onShelf: Boolean,
+    onBookClick: (BookDTO) -> Unit,
+    onToggleShelf: (BookDTO) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onBookClick(book) }
+            .padding(vertical = DesignTokens.Space8),
+        horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space12),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        BookCover(book.title, imageUri = coverUrl, width = 56.dp, height = 80.dp)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.Space4)
+        ) {
+            Text(book.title, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                book.description?.ifBlank { "暂无简介" } ?: "暂无简介",
+                color = DesignTokens.SoftText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        TextButton(onClick = { onToggleShelf(book) }) {
+            Text(if (onShelf) "已在书架" else "加入书架")
         }
     }
 }
@@ -267,31 +344,32 @@ private fun BackendBooklistCard(
     onBookClick: (BookDTO) -> Unit,
     onToggleShelf: (BookDTO) -> Unit
 ) {
-    SoftCard(contentPadding = DesignTokens.Space12, modifier = Modifier.clickable(
+    SoftCard(contentPadding = DesignTokens.Space8, modifier = Modifier.clickable(
         interactionSource = remember { MutableInteractionSource() }, indication = null
     ) { onBookClick(book) }) {
-        BookCover(book.title, imageUri = coverUrl, width = null, height = 190.dp)
-        Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.padding(top = DesignTokens.Space8))
-        Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1)
+        BookCover(book.title, imageUri = coverUrl, width = null, height = 128.dp)
+        Text(book.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = DesignTokens.Space8))
+        Text(book.author ?: "未知作者", color = DesignTokens.SoftText, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Icon(Icons.Default.Star, null, tint = DesignTokens.Warning, modifier = Modifier.size(16.dp))
             Text(" ${book.rating ?: 0}.0", color = DesignTokens.SoftText, style = MaterialTheme.typography.bodySmall)
         }
-        Text(
-            book.description?.ifBlank { "暂无简介" } ?: "暂无简介",
-            color = DesignTokens.SoftText,
-            maxLines = 2,
-            style = MaterialTheme.typography.bodySmall
-        )
         Button(
             onClick = { onToggleShelf(book) },
             modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = if (onShelf) MaterialTheme.colorScheme.surfaceVariant else DesignTokens.Accent,
                 contentColor = if (onShelf) DesignTokens.Accent else androidx.compose.ui.graphics.Color.White
             ),
             elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp)
-        ) { Text(if (onShelf) "已在书架" else "+ 加入书架") }
+        ) {
+            Text(
+                if (onShelf) "已在书架" else "加入书架",
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1
+            )
+        }
     }
 }
 

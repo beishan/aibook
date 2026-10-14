@@ -144,6 +144,7 @@ import com.aibook.android.ui.design.DesignTokens
 import com.aibook.android.ui.design.WarmProgress
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
@@ -377,10 +378,14 @@ private fun ReaderMainPage(
         state.chapterWindowNavigation?.requestId,
         state.book?.id,
         state.remoteBookId,
+        state.isLoading,
         settings.pageTurnMode
     ) {
-        if (state.loadedChapters.size == 1 && !settings.pageTurnMode.usesPagedReading()) {
+        if (!state.isLoading && state.loadedChapters.isNotEmpty() && !settings.pageTurnMode.usesPagedReading()) {
             val navigationId = state.chapterWindowNavigation?.requestId
+            if (!ReaderChapterWindow.shouldNavigateToPage(restoredInitialPosition, appliedChapterNavigationId, navigationId)) {
+                return@LaunchedEffect
+            }
             val restore = !restoredInitialPosition && navigationId == appliedChapterNavigationId
             val targetItem = if (restore && (state.currentLineIndex > 0 || state.currentScrollOffset > 0)) {
                 state.currentLineIndex + 1
@@ -388,6 +393,12 @@ private fun ReaderMainPage(
                 0
             }
             val targetOffset = if (restore) state.currentScrollOffset else 0
+            val firstChapterIndex = state.loadedChapters.first().index
+            snapshotFlow {
+                scrollState.layoutInfo.visibleItemsInfo.any {
+                    ReaderChapterWindow.positionForItemKey(it.key)?.first == firstChapterIndex
+                }
+            }.first { it }
             scrollState.scrollToItem(targetItem.coerceAtLeast(0), targetOffset.coerceAtLeast(0))
             restoredInitialPosition = true
             appliedChapterNavigationId = navigationId
@@ -435,6 +446,11 @@ private fun ReaderMainPage(
                     state = state,
                     settings = settings,
                     scrollState = scrollState,
+                    positionReady = ReaderChapterWindow.isPositionReady(
+                        restoredInitialPosition,
+                        appliedChapterNavigationId,
+                        state.chapterWindowNavigation?.requestId
+                    ),
                     foreground = colors.foreground,
                     onLoadNextChapter = onLoadNextChapter,
                     onLoadPreviousChapter = onLoadPreviousChapter,
@@ -743,6 +759,7 @@ private fun ReaderTextContent(
     state: ReaderUiState,
     settings: ReaderSettings,
     scrollState: androidx.compose.foundation.lazy.LazyListState,
+    positionReady: Boolean,
     foreground: Color,
     onLoadNextChapter: () -> Unit,
     onLoadPreviousChapter: () -> Unit,
@@ -790,8 +807,8 @@ private fun ReaderTextContent(
             totalItems > 0 && lastVisible >= totalItems - 3
         }
     }
-    LaunchedEffect(shouldLoadMore.value) {
-        if (shouldLoadMore.value) onLoadNextChapter()
+    LaunchedEffect(shouldLoadMore.value, positionReady) {
+        if (positionReady && shouldLoadMore.value) onLoadNextChapter()
     }
 
     val isDragging by scrollState.interactionSource.collectIsDraggedAsState()
@@ -805,13 +822,13 @@ private fun ReaderTextContent(
                 "title_${loadedChapters.firstOrNull()?.index}"
         }
     }
-    LaunchedEffect(shouldLoadPrevious.value) {
-        if (shouldLoadPrevious.value) onLoadPreviousChapter()
+    LaunchedEffect(shouldLoadPrevious.value, positionReady) {
+        if (positionReady && shouldLoadPrevious.value) onLoadPreviousChapter()
     }
 
     val density = LocalDensity.current.density
-    LaunchedEffect(autoPlaying, settings.autoScrollSpeed, loadedChapters.size) {
-        if (!autoPlaying) return@LaunchedEffect
+    LaunchedEffect(autoPlaying, settings.autoScrollSpeed, loadedChapters.size, positionReady) {
+        if (!autoPlaying || !positionReady) return@LaunchedEffect
         while (true) {
             val consumed = scrollState.scrollBy(
                 ReaderAutoPlayPolicy.scrollStepPx(settings.autoScrollSpeed, density)
@@ -832,7 +849,8 @@ private fun ReaderTextContent(
     }
 
     // 追踪当前所在章节与章节内行号
-    LaunchedEffect(scrollState, loadedChapters) {
+    LaunchedEffect(scrollState, loadedChapters, positionReady) {
+        if (!positionReady) return@LaunchedEffect
         snapshotFlow {
             val position = ReaderChapterWindow.positionForItemKey(
                 scrollState.layoutInfo.visibleItemsInfo.firstOrNull()?.key

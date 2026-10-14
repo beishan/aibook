@@ -435,7 +435,7 @@ fun AiBookApp(initialDebugRoute: String? = null) {
                     BackendCollectionScreen(
                         section = ServerLibrarySection.ALL,
                         title = "最近加入",
-                        columns = 2,
+                        columns = 3,
                         onBack = { navController.popBackStack() },
                         onBookClick = { navController.navigate(Screen.RemoteBookDetail.createRoute(it)) }
                     )
@@ -470,7 +470,7 @@ fun AiBookApp(initialDebugRoute: String? = null) {
                         section = ServerLibrarySection.LISTS,
                         title = "书单详情",
                         listId = entry.arguments?.getLong("listId"),
-                        columns = 2,
+                        columns = 3,
                         onBack = { navController.popBackStack() },
                         onBookClick = { navController.navigate(Screen.RemoteBookDetail.createRoute(it)) }
                     )
