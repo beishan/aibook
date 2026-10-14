@@ -176,42 +176,16 @@ class ReaderViewModel(
 
             _state.value = _state.value.copy(
                 book = book,
-                isRemote = book.remoteBookId != null,
-                remoteBookId = book.remoteBookId,
+                isRemote = false,
+                remoteBookId = null,
                 currentChapterIndex = book.progress.chapterIndex ?: 0,
                 currentLineIndex = book.progress.lineIndex ?: 0,
                 currentScrollOffset = book.progress.scrollOffset,
                 scrollProgress = book.progress.percent
             )
-            val linkedRemoteBookId = book.remoteBookId
-            if (linkedRemoteBookId != null) {
-                serverRepository.getReadingProgress(linkedRemoteBookId).getOrNull()?.let { saved ->
-                    val locator = saved.locator?.let(::decodeRemoteLocator)
-                    _state.update {
-                        it.copy(
-                            remoteVersionId = saved.versionId,
-                            remoteProgress = ReadingProgress(
-                                chapterHref = saved.currentChapter,
-                                chapterTitle = saved.currentChapterTitle,
-                                chapterIndex = locator?.chapterIndex,
-                                lineIndex = locator?.lineIndex,
-                                scrollOffset = locator?.scrollOffset ?: 0,
-                                percent = (saved.totalProgress / 100f).coerceIn(0f, 1f)
-                            ),
-                            currentChapterIndex = locator?.chapterIndex ?: book.progress.chapterIndex ?: 0,
-                            currentLineIndex = locator?.lineIndex ?: book.progress.lineIndex ?: 0,
-                            currentScrollOffset = locator?.scrollOffset ?: book.progress.scrollOffset,
-                            scrollProgress = (saved.totalProgress / 100f).coerceIn(0f, 1f)
-                        )
-                    }
-                }
-            }
-            if (linkedRemoteBookId != null) {
-                loadCloudAnnotations(linkedRemoteBookId)
-            } else {
-                observeBookmarks(book.id)
-                observeHighlights(book.id)
-            }
+            // 下载书籍的正文、进度和批注均先从本地恢复，打开时不等待后台服务。
+            observeBookmarks(book.id)
+            observeHighlights(book.id)
 
             try {
                 val file = File(book.uri)
@@ -994,20 +968,33 @@ class ReaderViewModel(
                 scrollOffset = state.currentScrollOffset
             )
         }
-        if (state.isRemote && state.remoteBookId != null) {
+        val linkedRemoteBookId = state.remoteBookId ?: state.book?.remoteBookId
+        if (linkedRemoteBookId != null) {
             val chapterLineCount = chapter?.content?.lineSequence()?.count()?.coerceAtLeast(1) ?: 1
             val chapterProgress = ((state.currentLineIndex.toFloat() / chapterLineCount) * 100)
                 .toInt()
                 .coerceIn(0, 100)
-            serverRepository.saveReadingProgress(
-                bookId = state.remoteBookId,
-                versionId = state.remoteVersionId,
-                chapter = chapter?.href,
-                chapterTitle = chapter?.title,
-                chapterProgress = chapterProgress,
-                totalProgress = (percent * 100).toInt(),
-                locator = encodeRemoteLocator(state)
-            )
+            if (state.book != null) {
+                // 先持久化待同步进度，离线退出阅读不等待网络请求。
+                serverRepository.queueReadingProgress(
+                    bookId = linkedRemoteBookId,
+                    chapter = chapter?.href,
+                    chapterTitle = chapter?.title,
+                    chapterProgress = chapterProgress,
+                    totalProgress = (percent * 100).toInt(),
+                    locator = encodeRemoteLocator(state)
+                )
+            } else {
+                serverRepository.saveReadingProgress(
+                    bookId = linkedRemoteBookId,
+                    versionId = state.remoteVersionId,
+                    chapter = chapter?.href,
+                    chapterTitle = chapter?.title,
+                    chapterProgress = chapterProgress,
+                    totalProgress = (percent * 100).toInt(),
+                    locator = encodeRemoteLocator(state)
+                )
+            }
         }
     }
 
@@ -1017,8 +1004,10 @@ class ReaderViewModel(
         if (startedAt == 0L) return
         val seconds = ((System.currentTimeMillis() - startedAt) / 1000).coerceAtLeast(0)
         state.book?.id?.let { bookRepository.addReadingDuration(it, seconds) }
-        state.remoteBookId?.takeIf { state.isRemote }?.let {
-            serverRepository.addReadingTime(it, seconds, state.remoteVersionId)
+        (state.remoteBookId ?: state.book?.remoteBookId)?.let { remoteId ->
+            viewModelScope.launch {
+                serverRepository.addReadingTime(remoteId, seconds, state.remoteVersionId)
+            }
         }
         readingStartedAtMillis = System.currentTimeMillis()
     }

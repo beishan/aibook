@@ -41,7 +41,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibook.android.feature.opds.OpdsScreen
 import com.aibook.android.feature.opds.OpdsAddSourceScreen
 import com.aibook.android.feature.importer.ImportBooksScreen
-import com.aibook.android.feature.reader.ReaderScreen
+import com.aibook.android.feature.reader.RemoteBookReaderRoute
 import com.aibook.android.feature.reader.BookReaderRoute
 import com.aibook.android.feature.settings.AboutScreen
 import com.aibook.android.feature.settings.BackupRestoreScreen
@@ -751,9 +751,8 @@ fun AiBookApp(initialDebugRoute: String? = null) {
                 arguments = listOf(navArgument("bookId") { type = NavType.LongType })
             ) { backStackEntry ->
                 val bookId = backStackEntry.arguments?.getLong("bookId") ?: 0L
-                ReaderScreen(
-                    bookId = bookId.toString(),
-                    isRemote = true,
+                RemoteBookReaderRoute(
+                    bookId = bookId,
                     onBack = { navController.popBackStack() }
                 )
             }

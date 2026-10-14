@@ -361,12 +361,26 @@ class ServerRepository(
         if (result.isSuccess) {
             serverConfigStore.clearPendingReadingProgress(bookId)
         } else {
-            serverConfigStore.savePendingReadingProgress(
+            queueReadingProgress(
                 bookId, versionId, chapter, chapterTitle, chapterProgress, totalProgress, locator
             )
-            onPendingProgress()
         }
         return result.map { }
+    }
+
+    suspend fun queueReadingProgress(
+        bookId: Long,
+        versionId: Long? = null,
+        chapter: String?,
+        chapterTitle: String? = null,
+        chapterProgress: Int,
+        totalProgress: Int,
+        locator: String? = null
+    ) {
+        serverConfigStore.savePendingReadingProgress(
+            bookId, versionId, chapter, chapterTitle, chapterProgress, totalProgress, locator
+        )
+        onPendingProgress()
     }
 
     suspend fun getReadingProgress(
