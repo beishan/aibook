@@ -2,6 +2,7 @@ package com.aibook.controller;
 
 import com.aibook.dto.TagDTO;
 import com.aibook.dto.TagRequest;
+import com.aibook.dto.TagLibraryScanPageDTO;
 import com.aibook.model.entity.User;
 import com.aibook.service.TagService;
 import com.aibook.service.UserService;
@@ -33,6 +34,35 @@ public class TagController {
         User user = userService.findByUsername(authentication.getName());
         List<TagDTO> tags = tagService.getTags(user);
         return ResponseEntity.ok(tags);
+    }
+
+    /** 按页扫描当前账户书库内的标签，前端可据此展示实际扫描进度。 */
+    @GetMapping("/library-scan")
+    public ResponseEntity<TagLibraryScanPageDTO> scanLibraryTags(
+            Authentication authentication,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        User user = userService.findByUsername(authentication.getName());
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.max(1, Math.min(size, 200));
+        return ResponseEntity.ok(tagService.scanLibraryTags(user, safePage, safeSize));
+    }
+
+    @PostMapping("/library-scan/import")
+    public ResponseEntity<List<TagDTO>> addScannedTags(
+            Authentication authentication,
+            @RequestBody TagNamesRequest request) {
+        User user = userService.findByUsername(authentication.getName());
+        return ResponseEntity.ok(tagService.addScannedTags(request.names(), user));
+    }
+
+    @PostMapping("/batch-delete")
+    public ResponseEntity<BatchDeleteResponse> deleteTags(
+            Authentication authentication,
+            @RequestBody TagIdsRequest request) {
+        User user = userService.findByUsername(authentication.getName());
+        int deletedCount = tagService.deleteTags(request.ids(), user);
+        return ResponseEntity.ok(new BatchDeleteResponse(deletedCount));
     }
 
     /**
@@ -72,4 +102,10 @@ public class TagController {
         tagService.deleteTag(id, user);
         return ResponseEntity.noContent().build();
     }
+
+    public record TagNamesRequest(List<String> names) {}
+
+    public record TagIdsRequest(List<Long> ids) {}
+
+    public record BatchDeleteResponse(int deletedCount) {}
 }

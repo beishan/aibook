@@ -106,6 +106,10 @@ public interface BookRepository
     @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE)
     Page<Book> findByUserAndDeletedAtIsNull(@Param("user") User user, Pageable pageable);
 
+    /** 标签扫描使用账户内全部未删除书籍，不受书架可见性过滤影响。 */
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL ORDER BY b.id")
+    Page<Book> findAllForTagLibraryScan(@Param("user") User user, Pageable pageable);
+
     /**
      * 根据用户和格式查询书籍
      */

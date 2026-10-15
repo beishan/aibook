@@ -464,7 +464,8 @@ public class MetadataScrapingService {
                 && (forceUpdate || overrides.contains("tags") || overwriteFields == null || book.getTags().isEmpty())) {
             LinkedHashSet<Tag> scrapedTags = new LinkedHashSet<>(
                     tagService.getOrCreateTags(
-                            java.util.Arrays.asList(metadata.getTags()), book.getUser()));
+                            java.util.Arrays.asList(metadata.getTags()), book.getUser(),
+                            sources.get("tags")));
             if (forceUpdate || overrides.contains("tags")) book.setTags(scrapedTags);
             else book.getTags().addAll(scrapedTags);
             BookMetadataSources.mark(book, "tags", sources.get("tags"));

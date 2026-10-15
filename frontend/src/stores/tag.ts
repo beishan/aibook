@@ -6,6 +6,8 @@ export interface Tag {
   id: number
   name: string
   color: string
+  sourceType?: string
+  sourceDetail?: string
   bookCount?: number
   createdAt?: string
 }
@@ -51,6 +53,29 @@ export const useTagStore = defineStore('tag', () => {
     tags.value = tags.value.filter((t) => t.id !== id)
   }
 
+  async function scanLibraryPage(page: number, size = 100) {
+    const response = await api.get('/api/tags/library-scan', { params: { page, size } })
+    return response.data as {
+      tags: string[]
+      scannedBooks: number
+      totalBooks: number
+      complete: boolean
+    }
+  }
+
+  async function addScannedTags(names: string[]) {
+    const response = await api.post('/api/tags/library-scan/import', { names })
+    await fetchTags()
+    return response.data as Tag[]
+  }
+
+  async function deleteTags(ids: number[]) {
+    const response = await api.post('/api/tags/batch-delete', { ids })
+    const deletedIds = new Set(ids)
+    tags.value = tags.value.filter(tag => !deletedIds.has(tag.id))
+    return response.data as { deletedCount: number }
+  }
+
   return {
     tags,
     loading,
@@ -58,5 +83,8 @@ export const useTagStore = defineStore('tag', () => {
     createTag,
     updateTag,
     deleteTag,
+    scanLibraryPage,
+    addScannedTags,
+    deleteTags,
   }
 })

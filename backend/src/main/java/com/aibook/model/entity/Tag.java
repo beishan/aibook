@@ -35,6 +35,15 @@ public class Tag {
      */
     private String color;
 
+    /** 标签首次进入标签库的来源。 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type", length = 30)
+    private SourceType sourceType;
+
+    /** 刮削标签的来源网站名称。 */
+    @Column(name = "source_detail", length = 120)
+    private String sourceDetail;
+
     /**
      * 所属用户
      */
@@ -44,4 +53,11 @@ public class Tag {
 
     @CreationTimestamp
     private LocalDateTime createdAt;
+
+    public enum SourceType {
+        SYSTEM_BUILTIN,
+        MANUAL,
+        LIBRARY_SCAN,
+        SCRAPER
+    }
 }

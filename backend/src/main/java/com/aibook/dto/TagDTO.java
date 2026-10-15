@@ -19,6 +19,8 @@ public class TagDTO {
     private Long id;
     private String name;
     private String color;
+    private String sourceType;
+    private String sourceDetail;
     private Long bookCount;
     private LocalDateTime createdAt;
 }

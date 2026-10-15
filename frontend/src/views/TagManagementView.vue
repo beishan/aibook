@@ -5,7 +5,11 @@
         <h1 class="page-title">书籍标签</h1>
         <p class="page-subtitle">使用标签灵活标记题材、来源、用途或阅读偏好</p>
       </div>
-      <button class="btn btn-primary" @click="openCreate">新增标签</button>
+      <div class="header-actions">
+        <button class="btn" @click="startLibraryScan">书库扫描新增</button>
+        <button class="btn" @click="openManage">一键整理</button>
+        <button class="btn btn-primary" @click="openCreate">新增标签</button>
+      </div>
     </div>
 
     <div class="summary-grid">
@@ -73,6 +77,13 @@
               >
                 {{ tag.name }}
               </span>
+            </div>
+            <div class="tag-source">
+              <span class="source-label">来源</span>
+              <el-tag size="small" effect="plain">{{ sourceLabel(tag) }}</el-tag>
+              <small v-if="tag.sourceType === 'SCRAPER' && tag.sourceDetail">
+                {{ tag.sourceDetail }}
+              </small>
             </div>
             <span class="tag-count">{{ tag.bookCount || 0 }} 本</span>
             <div class="tag-actions">
@@ -156,6 +167,119 @@
         </div>
       </Transition>
     </Teleport>
+
+    <el-dialog
+      v-model="scanDialogVisible"
+      title="书库扫描新增"
+      width="min(920px, 94vw)"
+      :close-on-click-modal="!scanLoading"
+      :close-on-press-escape="!scanLoading"
+      :show-close="!scanLoading"
+      destroy-on-close
+    >
+      <div class="scan-dialog-content">
+        <p class="dialog-intro">
+          扫描书库中所有书籍的标签，只列出标签库中尚不存在的标签。选择后确认即可添加。
+        </p>
+        <div v-if="scanLoading || scanError" class="scan-progress-card">
+          <div class="scan-progress-heading">
+            <strong>{{ scanError ? '扫描未完成' : '正在扫描书库' }}</strong>
+            <span>{{ scanScannedBooks }} / {{ scanTotalBooks }} 本</span>
+          </div>
+          <el-progress :percentage="scanProgress" :status="scanError ? 'exception' : undefined" />
+          <p v-if="scanError" class="scan-error">{{ scanError }}</p>
+        </div>
+        <template v-if="!scanLoading && scanComplete">
+          <div v-if="scanCandidates.length" class="scan-transfer-wrap">
+            <div class="transfer-heading">
+              <strong>发现 {{ scanCandidates.length }} 个未入库标签</strong>
+              <span>从左侧勾选并移到右侧，再确认添加</span>
+            </div>
+            <el-transfer
+              v-model="selectedScannedTags"
+              :data="scanCandidates"
+              :titles="['待选择', '确认添加']"
+              :button-texts="['移除', '添加']"
+              filterable
+              filter-placeholder="搜索标签"
+              target-order="push"
+            />
+          </div>
+          <el-empty v-else description="扫描完成，没有发现新的标签" />
+        </template>
+      </div>
+      <template #footer>
+        <el-button :disabled="scanLoading" @click="scanDialogVisible = false">关闭</el-button>
+        <el-button
+          type="primary"
+          :disabled="scanLoading || selectedScannedTags.length === 0"
+          :loading="addingScannedTags"
+          @click="confirmAddScannedTags"
+        >
+          添加所选标签（{{ selectedScannedTags.length }}）
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="manageDialogVisible" title="一键整理标签" width="min(900px, 94vw)">
+      <div class="manage-tools">
+        <el-input
+          v-model="manageKeyword"
+          clearable
+          placeholder="搜索标签名称"
+          aria-label="搜索待整理标签"
+        />
+        <el-select v-model="manageSourceFilter" clearable placeholder="全部来源">
+          <el-option
+            v-for="source in sourceOptions"
+            :key="source.value"
+            :label="source.label"
+            :value="source.value"
+          />
+        </el-select>
+        <span class="manage-count">已选 {{ selectedManageTagIds.length }} 个</span>
+      </div>
+      <el-table :data="filteredManageTags" height="460" row-key="id">
+        <el-table-column label="选择" width="70" align="center">
+          <template #default="{ row }">
+            <el-checkbox
+              :model-value="selectedManageTagIds.includes(row.id)"
+              :aria-label="`选择标签 ${row.name}`"
+              @change="toggleManageTag(row.id, Boolean($event))"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column label="标签" min-width="180">
+          <template #default="{ row }">
+            <span class="tag-preview" :style="tagStyle(row.color)">{{ row.name }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="来源" min-width="150">
+          <template #default="{ row }">
+            <div class="manage-source-cell">
+              <el-tag size="small" effect="plain">{{ sourceLabel(row) }}</el-tag>
+              <small v-if="row.sourceType === 'SCRAPER' && row.sourceDetail">
+                {{ row.sourceDetail }}
+              </small>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="使用书籍" prop="bookCount" width="110" align="right">
+          <template #default="{ row }">{{ row.bookCount || 0 }} 本</template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="manageDialogVisible = false">关闭</el-button>
+        <el-button
+          type="danger"
+          :disabled="selectedManageTagIds.length === 0"
+          :loading="deletingManageTags"
+          @click="deleteSelectedTags"
+        >
+          批量删除（{{ selectedManageTagIds.length }}）
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -169,9 +293,29 @@ const dialogVisible = ref(false)
 const editingId = ref<number>()
 const saving = ref(false)
 const searchKeyword = ref('')
+const scanDialogVisible = ref(false)
+const scanLoading = ref(false)
+const scanComplete = ref(false)
+const scanError = ref('')
+const scanScannedBooks = ref(0)
+const scanTotalBooks = ref(0)
+const scanCandidates = ref<Array<{ key: string; label: string }>>([])
+const selectedScannedTags = ref<string[]>([])
+const addingScannedTags = ref(false)
+const manageDialogVisible = ref(false)
+const manageKeyword = ref('')
+const manageSourceFilter = ref('')
+const selectedManageTagIds = ref<number[]>([])
+const deletingManageTags = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const pageSizeOptions = [10, 20, 50]
+const sourceOptions = [
+  { value: 'SYSTEM_BUILTIN', label: '系统内置' },
+  { value: 'MANUAL', label: '人工添加' },
+  { value: 'LIBRARY_SCAN', label: '书籍扫描' },
+  { value: 'SCRAPER', label: '刮削' },
+]
 const form = reactive({ name: '', color: '#64748B' })
 const presetColors = [
   { name: '石板灰', value: '#64748B' },
@@ -220,6 +364,18 @@ const pagedTags = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return filteredTags.value.slice(start, start + pageSize.value)
 })
+const scanProgress = computed(() => scanTotalBooks.value === 0
+  ? (scanComplete.value ? 100 : 0)
+  : Math.min(100, Math.round(scanScannedBooks.value / scanTotalBooks.value * 100)))
+const filteredManageTags = computed(() => {
+  const keyword = manageKeyword.value.trim().toLocaleLowerCase()
+  return tagStore.tags.filter(tag => {
+    const matchesName = !keyword || tag.name.toLocaleLowerCase().includes(keyword)
+    const matchesSource = !manageSourceFilter.value
+      || (tag.sourceType || 'MANUAL') === manageSourceFilter.value
+    return matchesName && matchesSource
+  })
+})
 
 const tagStyle = (color?: string) => {
   const safeColor = /^#[0-9a-fA-F]{6}$/.test(color || '') ? color! : '#64748B'
@@ -227,6 +383,97 @@ const tagStyle = (color?: string) => {
     color: safeColor,
     borderColor: `${safeColor}88`,
     backgroundColor: `${safeColor}16`,
+  }
+}
+
+const sourceLabel = (tag: Tag) => ({
+  SYSTEM_BUILTIN: '系统内置',
+  MANUAL: '人工添加',
+  LIBRARY_SCAN: '书籍扫描',
+  SCRAPER: '刮削',
+}[tag.sourceType || 'MANUAL'] || '人工添加')
+
+const startLibraryScan = async () => {
+  scanDialogVisible.value = true
+  scanLoading.value = true
+  scanComplete.value = false
+  scanError.value = ''
+  scanScannedBooks.value = 0
+  scanTotalBooks.value = 0
+  scanCandidates.value = []
+  selectedScannedTags.value = []
+
+  try {
+    await tagStore.fetchTags()
+    const existingNames = new Set(tagStore.tags.map(tag => tag.name.toLocaleLowerCase()))
+    const found = new Map<string, string>()
+    let page = 0
+    let complete = false
+    while (!complete) {
+      const result = await tagStore.scanLibraryPage(page, 100)
+      scanScannedBooks.value = result.scannedBooks
+      scanTotalBooks.value = result.totalBooks
+      for (const name of result.tags) {
+        const normalized = name.trim().toLocaleLowerCase()
+        if (normalized && !existingNames.has(normalized)) found.set(normalized, name.trim())
+      }
+      complete = result.complete
+      page += 1
+    }
+    scanCandidates.value = [...found.values()]
+      .sort((a, b) => a.localeCompare(b, 'zh-CN'))
+      .map(name => ({ key: name, label: name }))
+    scanComplete.value = true
+  } catch (error: any) {
+    scanError.value = error.response?.data?.message || '书库扫描失败，请稍后重试。'
+  } finally {
+    scanLoading.value = false
+  }
+}
+
+const confirmAddScannedTags = async () => {
+  if (!selectedScannedTags.value.length) return
+  addingScannedTags.value = true
+  try {
+    const added = await tagStore.addScannedTags(selectedScannedTags.value)
+    message.success(`已添加 ${added.length} 个标签`)
+    scanDialogVisible.value = false
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '添加标签失败')
+  } finally {
+    addingScannedTags.value = false
+  }
+}
+
+const openManage = () => {
+  manageKeyword.value = ''
+  manageSourceFilter.value = ''
+  selectedManageTagIds.value = []
+  manageDialogVisible.value = true
+}
+
+const toggleManageTag = (id: number, checked: boolean) => {
+  selectedManageTagIds.value = checked
+    ? [...new Set([...selectedManageTagIds.value, id])]
+    : selectedManageTagIds.value.filter(selectedId => selectedId !== id)
+}
+
+const deleteSelectedTags = async () => {
+  const ids = [...selectedManageTagIds.value]
+  if (!ids.length) return
+  const accepted = await confirm(
+    `确定删除选中的 ${ids.length} 个标签吗？标签将从关联书籍中移除。`,
+  )
+  if (!accepted) return
+  deletingManageTags.value = true
+  try {
+    const result = await tagStore.deleteTags(ids)
+    selectedManageTagIds.value = []
+    message.success(`已删除 ${result.deletedCount} 个标签`)
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '批量删除失败')
+  } finally {
+    deletingManageTags.value = false
   }
 }
 
@@ -311,7 +558,8 @@ onMounted(() => tagStore.fetchTags())
 .page-header,
 .tag-card-header,
 .tag-actions,
-.color-field {
+.color-field,
+.header-actions {
   display: flex;
   align-items: center;
 }
@@ -319,6 +567,12 @@ onMounted(() => tagStore.fetchTags())
 .page-header,
 .tag-card-header {
   justify-content: space-between;
+}
+
+.header-actions {
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .summary-grid {
@@ -391,10 +645,32 @@ onMounted(() => tagStore.fetchTags())
 
 .tag-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 90px auto;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, 230px) 90px auto;
   align-items: center;
   min-height: 64px;
   border-bottom: 1px solid var(--border-color);
+}
+
+.tag-source,
+.manage-source-cell {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.tag-source small,
+.manage-source-cell small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-label {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .tag-preview {
@@ -500,6 +776,80 @@ onMounted(() => tagStore.fetchTags())
   width: 118px;
 }
 
+.scan-dialog-content {
+  display: grid;
+  gap: 16px;
+}
+
+.dialog-intro,
+.transfer-heading span {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.scan-progress-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.scan-progress-heading,
+.transfer-heading,
+.manage-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scan-progress-heading span,
+.manage-count {
+  color: var(--text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.scan-error {
+  margin: 0;
+  color: var(--el-color-danger);
+  font-size: 13px;
+}
+
+.scan-transfer-wrap {
+  display: grid;
+  gap: 14px;
+}
+
+.transfer-heading {
+  justify-content: flex-start;
+}
+
+.scan-transfer-wrap :deep(.el-transfer) {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.scan-transfer-wrap :deep(.el-transfer-panel) {
+  width: min(360px, calc((100% - 80px) / 2));
+}
+
+.manage-tools {
+  margin-bottom: 14px;
+}
+
+.manage-tools .el-input {
+  flex: 1;
+}
+
+.manage-tools .el-select {
+  width: 180px;
+}
+
 @media (max-width: 640px) {
   .summary-grid {
     grid-template-columns: 1fr;
@@ -529,13 +879,26 @@ onMounted(() => tagStore.fetchTags())
     padding: 12px 0;
   }
 
+  .tag-source {
+    grid-column: 1;
+  }
+
   .tag-count {
     grid-column: 1;
   }
 
   .tag-actions {
     grid-column: 2;
-    grid-row: 1 / span 2;
+    grid-row: 1 / span 3;
+  }
+
+  .manage-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .manage-tools .el-select {
+    width: 100%;
   }
 }
 </style>
