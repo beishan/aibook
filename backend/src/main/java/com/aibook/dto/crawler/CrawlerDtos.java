@@ -367,7 +367,8 @@ public final class CrawlerDtos {
     public record DashboardView(long siteCount, long enabledSiteCount, long bookCount,
             long completedBookCount, long crawlingBookCount, long failedBookCount,
             long todayNewBooks, long todaySuccessfulChapters, long readyToImportCount,
-            long importedCount, List<TaskView> recentTasks) { }
+            long importedCount, long runningTaskCount, long unfinishedTaskCount,
+            List<TaskView> recentTasks) { }
 
     public record TimeBucketStatisticsView(String date, long newChapters,
             long successfulChapters, long newBooks, long finishedTasks,

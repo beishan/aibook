@@ -19,10 +19,29 @@
 
     <section v-if="activeTab === 'overview'" class="panel" role="tabpanel">
       <div class="metric-grid">
-        <article v-for="metric in metrics" :key="metric.label" class="metric-card">
+        <article
+          v-for="metric in metrics"
+          :key="metric.label"
+          class="metric-card"
+          :class="{ 'metric-card-dual': metric.secondaryValue !== undefined }"
+        >
           <span class="metric-icon"><el-icon><component :is="metric.icon" /></el-icon></span>
-          <div><strong>{{ metric.value }}</strong><p>{{ metric.label }}</p></div>
-          <small>{{ metric.note }}</small>
+          <template v-if="metric.secondaryValue !== undefined">
+            <div class="metric-dual-values">
+              <div>
+                <strong>{{ metric.value }}</strong>
+                <p>{{ metric.label }}</p>
+              </div>
+              <div>
+                <strong>{{ metric.secondaryValue }}</strong>
+                <p>{{ metric.secondaryLabel }}</p>
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <div><strong>{{ metric.value }}</strong><p>{{ metric.label }}</p></div>
+            <small>{{ metric.note }}</small>
+          </template>
         </article>
       </div>
       <div class="section-heading"><div><p class="eyebrow">LIVE QUEUE</p><h2>最近任务</h2></div><el-button text :icon="Refresh" @click="refreshOverview">刷新</el-button></div>
@@ -2676,7 +2695,13 @@ const activeSiteTabIndex=computed(()=>siteEditorTabs.findIndex(tab=>tab.key===ac
 const activeBookTaskIds=computed(()=>new Set(currentCrawlerTasks.value.flatMap(task=>task.bookId?[task.bookId]:[])))
 const runningCurrentTaskCount=computed(()=>currentCrawlerTasks.value.filter(task=>task.status==='RUNNING').length)
 const pagedQueuedTasks=computed(()=>queuedTasks.value.slice((queuedTaskPage.value-1)*queuedTaskPageSize.value,queuedTaskPage.value*queuedTaskPageSize.value))
-const metrics=computed(()=>[{label:'采集网站',value:dashboard.value?.siteCount||0,note:`${dashboard.value?.enabledSiteCount||0} 个启用`,icon:Connection},{label:'采集书籍',value:dashboard.value?.bookCount||0,note:`今日 +${dashboard.value?.todayNewBooks||0}`,icon:Collection},{label:'已采集完成',value:dashboard.value?.completedBookCount||0,note:`${dashboard.value?.readyToImportCount||0} 本待入库`,icon:Document},{label:'今日成功采集章节',value:dashboard.value?.todaySuccessfulChapters||0,note:`${dashboard.value?.crawlingBookCount||0} 本采集中`,icon:Tickets}])
+const metrics=computed(()=>[
+  {label:'采集网站',value:dashboard.value?.siteCount||0,note:`${dashboard.value?.enabledSiteCount||0} 个启用`,icon:Connection,secondaryValue:undefined as number|undefined,secondaryLabel:''},
+  {label:'采集书籍',value:dashboard.value?.bookCount||0,note:`今日 +${dashboard.value?.todayNewBooks||0}`,icon:Collection,secondaryValue:undefined as number|undefined,secondaryLabel:''},
+  {label:'已采集完成',value:dashboard.value?.completedBookCount||0,note:`${dashboard.value?.readyToImportCount||0} 本待入库`,icon:Document,secondaryValue:undefined as number|undefined,secondaryLabel:''},
+  {label:'今日成功采集章节',value:dashboard.value?.todaySuccessfulChapters||0,note:`${dashboard.value?.crawlingBookCount||0} 本采集中`,icon:Tickets,secondaryValue:undefined as number|undefined,secondaryLabel:''},
+  {label:'正在运行',value:dashboard.value?.runningTaskCount||0,note:'',icon:List,secondaryValue:dashboard.value?.unfinishedTaskCount||0,secondaryLabel:'未完成处理'},
+])
 const statisticsGranularity = ref<StatisticsGranularity>('day')
 const statisticsUnitLabel = computed(() => ({ day: '天', hour: '小时', minute: '分钟' })[statisticsGranularity.value])
 const statisticsPeriodLabel = computed(() => `每${statisticsUnitLabel.value}`)
@@ -5989,12 +6014,62 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 </style>
 
 <style scoped>
+.metric-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.metric-card-dual {
+  align-items: center;
+}
+
+.metric-dual-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric-dual-values > div + div {
+  padding-left: 12px;
+  border-left: 1px solid var(--border-color-light);
+}
+
+.metric-dual-values strong {
+  color: var(--primary);
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.metric-dual-values p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .statistics-filters {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
   min-width: 0;
+}
+
+@media (max-width: 1200px) {
+  .metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .metric-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .statistics-filter-scroll {

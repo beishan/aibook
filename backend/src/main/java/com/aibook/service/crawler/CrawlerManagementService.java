@@ -826,7 +826,13 @@ public class CrawlerManagementService {
                 chapterRepository.countByCrawlerBookSiteUserAndCrawlStatusAndCrawlTimeAfter(
                         user, CrawlerChapter.CrawlStatus.COMPLETED, today),
                 bookRepository.countBySiteUserAndImportStatus(user, CrawlerBook.ImportStatus.READY),
-                bookRepository.countBySiteUserAndImportStatus(user, CrawlerBook.ImportStatus.IMPORTED), recentTasks(user, 8));
+                bookRepository.countBySiteUserAndImportStatus(user, CrawlerBook.ImportStatus.IMPORTED),
+                taskRepository.countByUserAndStatus(user, CrawlerTask.TaskStatus.RUNNING),
+                taskRepository.countByUserAndStatusIn(user, List.of(
+                        CrawlerTask.TaskStatus.WAITING,
+                        CrawlerTask.TaskStatus.RUNNING,
+                        CrawlerTask.TaskStatus.PAUSED)),
+                recentTasks(user, 8));
     }
 
     @Transactional(readOnly = true)
