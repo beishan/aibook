@@ -31,6 +31,13 @@ const api = {
   },
   async post(url) {
     requests.push({ url })
+    if (url.endsWith('/confirm')) {
+      failureResult = { ...failureResult, status: 'APPLIED', applied: true, updatedFields: ['description'] }
+      return { data: { success: true } }
+    }
+    if (url.includes('/candidates/')) {
+      return { data: { ...failureResult, finished: false, status: 'RUNNING' } }
+    }
     return { data: { taskId: 'task-1' } }
   },
 }
@@ -124,4 +131,27 @@ assert.equal(state.taskId.value, '')
 assert.match(state.pollError.value, /过期/)
 assert(emitted.some(([event, value]) => event === 'running' && value === true))
 assert(emitted.some(([event, value]) => event === 'running' && value === false))
-console.log('Scraper trial: filters, stale searches, view switching, selection retention, selection lock, duplicate prevention, polling, failure diagnostics and expiration passed')
+// Candidate preview must remain read-only until the user explicitly confirms.
+failPoll = false
+state.taskId.value = 'candidate-task'
+const candidate = { id: '123', title: '活着（纪念版）', author: '余华', publishDate: '2024', sourceUrl: 'https://book.douban.com/subject/123/' }
+failureResult = {
+  finished: true, status: 'REVIEW_REQUIRED', elapsedMs: 3000, logs: [],
+  metadata: { title: candidate.title, description: '候选简介' },
+  candidates: [candidate], selectedCandidateId: '123', applied: false,
+}
+const beforeConfirmation = requests.filter(request => request.url.endsWith('/confirm')).length
+await state.loadCandidate('123')
+await Promise.resolve()
+assert.equal(state.snapshot.value.status, 'REVIEW_REQUIRED')
+assert.equal(requests.filter(request => request.url.endsWith('/confirm')).length, beforeConfirmation)
+await state.confirmCandidate()
+assert.equal(state.snapshot.value.applied, true)
+assert.equal(state.snapshot.value.status, 'APPLIED')
+assert.equal(state.snapshot.value.updatedFields[0], 'description')
+await state.confirmCandidate()
+assert.equal(requests.filter(request => request.url.endsWith('/confirm')).length, beforeConfirmation + 1)
+state.selectBook({id: 99, title: '另一本书'})
+assert.equal(state.snapshot.value, null, 'changing the target book must discard the previous candidate review')
+assert.equal(state.taskId.value, '')
+console.log('Scraper trial: filters, stale searches, view switching, selection retention, selection lock, duplicate prevention, polling, failure diagnostics, candidate confirmation and expiration passed')

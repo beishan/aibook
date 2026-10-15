@@ -19,7 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-/** 独立来源试验：只查询远端，不使用元信息缓存，不修改或保存书籍。 */
+/** 独立来源试验默认只查询；豆瓣候选经详情预览与显式确认后才允许补全书籍。 */
 @Service
 @RequiredArgsConstructor
 public class ScraperTrialService {
@@ -46,7 +46,7 @@ public class ScraperTrialService {
         query.setTitle(original.getTitle());
         query.setAuthor(original.getAuthor());
         query.setIsbn(original.getIsbn());
-        Trial trial = new Trial(userId);
+        Trial trial = new Trial(userId, original.getId(), scraper);
         String id = UUID.randomUUID().toString();
         trial.log("已排队：" + scraper.getName() + " / " + query.getTitle());
         trials.put(id, trial);
@@ -60,11 +60,80 @@ public class ScraperTrialService {
     }
 
     public TrialSnapshot get(String id, Long userId) {
+        return ownedTrial(id, userId).snapshot();
+    }
+
+    private Trial ownedTrial(String id, Long userId) {
         Trial trial = trials.getIfPresent(id);
-        if (trial == null || !Objects.equals(userId, trial.userId)) {
+        if (trial == null || !Objects.equals(trial.userId, userId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "试刮削不存在或已过期");
         }
-        return trial.snapshot();
+        return trial;
+    }
+
+    /** 候选编号只能来自该账户任务中的服务端候选集合，不能传入任意 URL。 */
+    public synchronized TrialSnapshot selectCandidate(String id, Long userId, String candidateId) {
+        Trial trial = ownedTrial(id, userId);
+        synchronized (trial) {
+            if (!(trial.scraper instanceof DoubanScraper douban)
+                    || trial.candidates.stream().noneMatch(item -> item.id().equals(candidateId))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "候选不存在");
+            }
+            if (!trial.snapshot().finished() || trial.applied) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "任务正在执行或已经应用");
+            }
+            if (trials.asMap().values().stream().anyMatch(other -> other != trial
+                    && Objects.equals(other.userId, userId) && !other.snapshot().finished())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "已有试刮削正在执行");
+            }
+            String previousStatus = trial.status;
+            try {
+                trial.status = "RUNNING";
+                trial.ended = 0;
+                executor.execute(() -> {
+                    try (var diagnostics = ScrapeDiagnostics.open(trial::log)) {
+                        diagnostics.stage("候选详情");
+                        trial.log("正在加载豆瓣候选 " + candidateId + " 的完整元信息");
+                        try {
+                            var metadata = douban.getBookDetail(candidateId);
+                            synchronized (trial) {
+                                trial.selectedCandidateId = candidateId;
+                                trial.finish(hasResult(metadata) ? "REVIEW_REQUIRED" : "NO_RESULT",
+                                        hasResult(metadata) ? "候选详情已加载，请核对后确认补全；尚未写入书库" : "候选详情获取失败",
+                                        metadata, diagnostics);
+                            }
+                        } catch (Exception exception) {
+                            ScrapeDiagnostics.exception(exception);
+                            trial.finish("FAILED", "候选详情获取失败", null, diagnostics);
+                        }
+                    }
+                });
+            } catch (RejectedExecutionException exception) {
+                trial.status = previousStatus;
+                trial.ended = System.currentTimeMillis();
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "试刮削繁忙，请稍后重试");
+            }
+            return trial.snapshot();
+        }
+    }
+
+    public MetadataScrapingService.ScrapeResult confirmCandidate(
+            String id, Long userId, String candidateId,
+            java.util.function.BiFunction<Long, MetadataScraper.BookMetadata,
+                    MetadataScrapingService.ScrapeResult> apply) {
+        Trial trial = ownedTrial(id, userId);
+        synchronized (trial) {
+            if (!"REVIEW_REQUIRED".equals(trial.status) || trial.applied || trial.metadata == null
+                    || !Objects.equals(candidateId, trial.selectedCandidateId)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "请先加载并核对当前候选详情，或该候选已经应用");
+            }
+            var result = apply.apply(trial.bookId, trial.metadata);
+            trial.applied = true;
+            trial.status = "APPLIED";
+            trial.updatedFields = List.copyOf(result.getUpdatedFields());
+            trial.log("已人工确认并补全书籍；保留已有字段。" + result.getMessage());
+            return result;
+        }
     }
 
     private void run(Trial trial, MetadataScraper scraper, Book book) {
@@ -78,6 +147,19 @@ public class ScraperTrialService {
                                     ? "服务器未取得有效的 Google Books API Key。"
                                     : "此来源不支持当前书名的查询条件。");
                     trial.finish("UNSUPPORTED", "配置或来源支持检查未通过", null, diagnostics);
+                    return;
+                }
+                if (scraper instanceof DoubanScraper douban) {
+                    diagnostics.stage("豆瓣候选搜索");
+                    trial.log("正在按书名搜索备选元信息：" + MetadataScraper.cleanSearchTitle(book.getTitle()));
+                    var candidates = douban.searchCandidates(book.getTitle());
+                    synchronized (trial) {
+                        trial.candidates = List.copyOf(candidates);
+                        trial.finish(candidates.isEmpty() ? "NO_RESULT" : "AWAITING_SELECTION",
+                                candidates.isEmpty() ? "未取得候选书籍"
+                                        : "找到 " + candidates.size() + " 个候选，请选择后加载详情；未写入书库",
+                                null, diagnostics);
+                    }
                     return;
                 }
                 MetadataScraper.BookMetadata result = null;
@@ -123,10 +205,18 @@ public class ScraperTrialService {
     public record TrialLog(Instant time, String message) {}
     public record TrialSnapshot(String status, boolean finished, long elapsedMs,
             List<TrialLog> logs, MetadataScraper.BookMetadata metadata,
-            ScrapeDiagnostics.Failure failure, List<ScrapeDiagnostics.Failure> diagnostics) {}
+            ScrapeDiagnostics.Failure failure, List<ScrapeDiagnostics.Failure> diagnostics,
+            List<DoubanScraper.Candidate> candidates, String selectedCandidateId,
+            boolean applied, List<String> updatedFields) {}
 
     private static final class Trial {
         private final Long userId;
+        private final Long bookId;
+        private final MetadataScraper scraper;
+        private List<DoubanScraper.Candidate> candidates = List.of();
+        private String selectedCandidateId;
+        private boolean applied;
+        private List<String> updatedFields = List.of();
         private final long started = System.currentTimeMillis();
         private final List<TrialLog> logs = new ArrayList<>();
         private String status = "RUNNING";
@@ -135,18 +225,24 @@ public class ScraperTrialService {
         private ScrapeDiagnostics.Failure failure;
         private List<ScrapeDiagnostics.Failure> diagnostics = List.of();
 
-        private Trial(Long userId) {
+        private Trial(Long userId, Long bookId, MetadataScraper scraper) {
             this.userId = userId;
+            this.bookId = bookId;
+            this.scraper = scraper;
         }
 
         synchronized void log(String message) {
+            if (logs.size() == 500) logs.remove(0);
             logs.add(new TrialLog(Instant.now(), message));
         }
 
         synchronized void finish(String status, String message, MetadataScraper.BookMetadata metadata,
                 ScrapeDiagnostics context) {
-            failure = "MATCHED".equals(status) ? null : context.primaryFailure();
-            diagnostics = context.failures();
+            failure = List.of("MATCHED", "AWAITING_SELECTION", "REVIEW_REQUIRED").contains(status)
+                    ? null : context.primaryFailure();
+            List<ScrapeDiagnostics.Failure> combined = new ArrayList<>(diagnostics);
+            combined.addAll(context.failures());
+            diagnostics = combined.stream().limit(100).toList();
             log(failure == null ? message : message + "：" + failure.label() + "；"
                     + failure.detail() + " " + failure.suggestion());
             this.metadata = metadata;
@@ -157,7 +253,8 @@ public class ScraperTrialService {
         synchronized TrialSnapshot snapshot() {
             return new TrialSnapshot(status, ended != 0,
                     (ended == 0 ? System.currentTimeMillis() : ended) - started,
-                    List.copyOf(logs), metadata, failure, diagnostics);
+                    List.copyOf(logs), metadata, failure, diagnostics, candidates, selectedCandidateId,
+                    applied, updatedFields);
         }
     }
 }

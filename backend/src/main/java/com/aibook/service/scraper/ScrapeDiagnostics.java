@@ -29,6 +29,7 @@ public final class ScrapeDiagnostics implements AutoCloseable {
     private Integer httpStatus;
 
     public enum Code {
+        CONFIRMATION_REQUIRED("候选需要人工确认", "请在试刮削中核对并选择候选书籍。", 15),
         NO_MATCH("未搜索到匹配书籍", "尝试核对 ISBN、书名或更换来源。", 0),
         UNKNOWN("原因未确认", "检查来源配置或稍后重试；不能据此断定配置可用。", 10),
         UNRECOGNIZED_RESPONSE("响应结构无法识别", "来源可能调整了响应结构，或返回了未识别的拦截页；请更换来源或检查解析规则。", 20),

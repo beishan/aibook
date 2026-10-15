@@ -110,6 +110,30 @@ public class MetadataScrapingService {
                 .build();
     }
 
+    /** 只应用服务端已加载并经用户确认的候选，保留现有非空字段。 */
+    @Transactional
+    public ScrapeResult applyConfirmedCandidate(Long bookId, com.aibook.model.entity.User user,
+            MetadataScraper.BookMetadata metadata) {
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "书籍不存在或无权访问"));
+        Map<String, Object> before = snapshot(book);
+        Map<String, String> sources = new LinkedHashMap<>();
+        for (String field : List.of("title", "author", "isbn", "publisher", "publishDate",
+                "description", "coverUrl", "language", "rating", "tags")) {
+            sources.put(field, "豆瓣读书（人工确认）");
+        }
+        applyMetadata(book, metadata, sources, false);
+        bookRepository.save(book);
+        authorService.synchronizeBook(book);
+        evictBookCache(book);
+        List<String> fields = changedFields(before, book);
+        return ScrapeResult.builder().book(book).matched(true).success(true)
+                .updatedFields(fields).sources(List.of("豆瓣读书（人工确认）"))
+                .message(fields.isEmpty() ? "已有字段已保留，没有需要补全的字段" : "已补全 " + fields.size() + " 个字段")
+                .build();
+    }
+
     @Transactional
     public Book scrapeBook(Book book, boolean forceUpdate) {
         return scrapeBookWithResult(book, forceUpdate).getBook();

@@ -57,6 +57,25 @@ public class ScraperController {
         return trialService.get(taskId, user.getId());
     }
 
+    @PostMapping("/trial/{taskId}/candidates/{candidateId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public com.aibook.service.scraper.ScraperTrialService.TrialSnapshot selectTrialCandidate(
+            @PathVariable String taskId, @PathVariable String candidateId,
+            @AuthenticationPrincipal User user) {
+        return trialService.selectCandidate(taskId, user.getId(), candidateId);
+    }
+
+    @PostMapping("/trial/{taskId}/candidates/{candidateId}/confirm")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public Map<String, Object> confirmTrialCandidate(
+            @PathVariable String taskId, @PathVariable String candidateId,
+            @AuthenticationPrincipal User user) {
+        var result = trialService.confirmCandidate(taskId, user.getId(), candidateId,
+                (bookId, metadata) -> scrapingService.applyConfirmedCandidate(bookId, user, metadata));
+        return Map.of("success", result.isSuccess(), "message", result.getMessage(),
+                "updatedFields", result.getUpdatedFields());
+    }
+
     /**
      * 刮削单本书籍
      */

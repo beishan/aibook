@@ -97,7 +97,13 @@ public class DoubanScraper implements MetadataScraper {
             if (root.isArray() && !root.isEmpty()) {
                 JsonNode bookNode = root.get(0);
                 String doubanId = bookNode.get("id").asText();
-                return getBookDetail(doubanId);
+                BookMetadata metadata = getBookDetail(doubanId);
+                if (metadata != null && metadata.getIsbn() != null
+                        && metadata.getIsbn().replaceAll("[^0-9Xx]", "")
+                                .equalsIgnoreCase(isbn.replaceAll("[^0-9Xx]", ""))) return metadata;
+                ScrapeDiagnostics.report(ScrapeDiagnostics.Code.CONFIRMATION_REQUIRED,
+                        "ISBN 查询的详情未能确认 ISBN 完全一致，请人工核对候选。");
+                return null;
             }
 
             reportSuggestEmpty(root);
@@ -110,83 +116,121 @@ public class DoubanScraper implements MetadataScraper {
         }
     }
 
-    /**
-     * 通过书名搜索
-     */
+    /** 书名自动刮削只接受归一化后完全一致的候选；模糊结果交由用户确认。 */
     public BookMetadata searchByTitle(String title) {
-        String searchTitle = MetadataScraper.cleanSearchTitle(title);
+        List<Candidate> candidates = searchCandidates(title);
+        String expected = normalizedTitle(title);
+        List<Candidate> exact = candidates.stream()
+                .filter(candidate -> normalizedTitle(candidate.title()).equals(expected)).toList();
+        if (exact.size() == 1) {
+            BookMetadata metadata = getBookDetail(exact.get(0).id());
+            if (metadata != null && normalizedTitle(metadata.getTitle()).equals(expected)) return metadata;
+        }
+        if (!candidates.isEmpty()) {
+            ScrapeDiagnostics.report(ScrapeDiagnostics.Code.CONFIRMATION_REQUIRED,
+                    "已找到备选书籍，但书名未能确认完全一致，请在试刮削中选择并人工确认。");
+        }
+        return null;
+    }
+
+    public record Candidate(String id, String title, String author, String publishDate,
+            String coverUrl, String sourceUrl) {}
+
+    /** 最多返回 8 个独立候选，不请求详情、不保存书籍。 */
+    public List<Candidate> searchCandidates(String title) {
+        String query = MetadataScraper.cleanSearchTitle(title);
+        if (query == null || query.isBlank()) return List.of();
         try {
-            // 添加随机延迟
             addRandomDelay();
-
-            // 尝试使用豆瓣搜索页面
-            String searchUrl = DOUBAN_SEARCH_URL + "?cat=1001&q=" + searchTitle;
-            log.info("搜索豆瓣: {} (原始: {})", searchTitle, title);
-
-            String response = makeRequest(searchUrl);
-            if (response == null) {
-                // 尝试备用 API
-                return searchByTitleFallback(searchTitle, title);
+            String url = org.springframework.web.util.UriComponentsBuilder.fromHttpUrl(DOUBAN_SUGGEST_URL)
+                    .queryParam("q", query).queryParam("type", "book")
+                    .build().encode().toUriString();
+            String response = makeRequest(url);
+            if (response != null) {
+                List<Candidate> candidates = parseSuggestCandidates(objectMapper.readTree(response));
+                if (!candidates.isEmpty()) return candidates;
             }
-
-            // 解析搜索结果页面
-            Document doc = Jsoup.parse(response);
-
-            // 查找书籍链接
-            Elements bookLinks = doc.select("a[href*='book.douban.com/subject/']");
-            if (!bookLinks.isEmpty()) {
-                String href = bookLinks.first().attr("href");
-                Pattern pattern = Pattern.compile("subject/(\\d+)");
-                Matcher matcher = pattern.matcher(href);
-                if (matcher.find()) {
-                    String doubanId = matcher.group(1);
-                    log.info("豆瓣找到: {} (ID: {})", searchTitle, doubanId);
-                    return getBookDetail(doubanId);
-                }
-            }
-
-            ScrapeDiagnostics.emptySearchPage(doc);
-            log.warn("豆瓣未找到: {}", searchTitle);
-            return null;
-        } catch (Exception e) {
-            ScrapeDiagnostics.exception(e);
-            log.error("豆瓣搜索失败: {}", searchTitle, e);
-            // 尝试备用方法
-            return searchByTitleFallback(searchTitle, title);
+        } catch (Exception exception) {
+            ScrapeDiagnostics.exception(exception);
+        }
+        try {
+            addRandomDelay();
+            ScrapeDiagnostics.note("suggest 未取得候选，尝试网页搜索");
+            String url = org.springframework.web.util.UriComponentsBuilder.fromHttpUrl(DOUBAN_SEARCH_URL)
+                    .queryParam("cat", "1001").queryParam("q", query)
+                    .build().encode().toUriString();
+            String response = makeRequest(url);
+            if (response == null) return List.of();
+            Document document = Jsoup.parse(response);
+            List<Candidate> candidates = parseSearchCandidates(document);
+            if (candidates.isEmpty()) ScrapeDiagnostics.emptySearchPage(document);
+            return candidates;
+        } catch (Exception exception) {
+            ScrapeDiagnostics.exception(exception);
+            return List.of();
         }
     }
 
-    /**
-     * 备用搜索方法 - 使用 suggest API
-     */
-    private BookMetadata searchByTitleFallback(String searchTitle, String originalTitle) {
-        try {
-            addRandomDelay();
-
-            String url = DOUBAN_SUGGEST_URL + "?q=" + searchTitle + "&type=book";
-            ScrapeDiagnostics.note("主搜索未取得元信息，尝试备用 suggest 接口");
-            log.info("豆瓣备用搜索: {}", searchTitle);
-
-            String response = makeRequest(url);
-            if (response == null) {
-                return null;
-            }
-
-            JsonNode root = objectMapper.readTree(response);
-            if (root.isArray() && !root.isEmpty()) {
-                JsonNode bookNode = root.get(0);
-                String doubanId = bookNode.get("id").asText();
-                log.info("豆瓣备用找到: {} (ID: {})", searchTitle, doubanId);
-                return getBookDetail(doubanId);
-            }
-
+    List<Candidate> parseSuggestCandidates(JsonNode root) {
+        if (root == null || !root.isArray()) {
             reportSuggestEmpty(root);
-            return null;
-        } catch (Exception e) {
-            ScrapeDiagnostics.exception(e);
-            log.error("豆瓣备用搜索失败: {}", searchTitle, e);
+            return List.of();
+        }
+        java.util.LinkedHashMap<String, Candidate> candidates = new java.util.LinkedHashMap<>();
+        for (JsonNode node : root) {
+            String id = node.path("id").asText();
+            String title = node.path("title").asText();
+            if (!id.matches("\\d{1,20}") || title.isBlank()
+                    || "movie".equals(node.path("type").asText())) continue;
+            candidates.putIfAbsent(id, new Candidate(id, title, node.path("author_name").asText(),
+                    node.path("year").asText(), node.path("pic").asText(), DOUBAN_BOOK_URL + id + "/"));
+            if (candidates.size() == 8) break;
+        }
+        if (candidates.isEmpty()) reportSuggestEmpty(root);
+        return List.copyOf(candidates.values());
+    }
+
+    List<Candidate> parseSearchCandidates(Document document) {
+        java.util.LinkedHashMap<String, Candidate> candidates = new java.util.LinkedHashMap<>();
+        for (Element link : document.select(".result .title a[href], a[href*='book.douban.com/subject/']")) {
+            String id = subjectId(link.attr("href"));
+            String title = link.text().trim();
+            if (id == null || title.isBlank()) continue;
+            Element result = link.closest(".result");
+            Element info = result == null ? null : result.selectFirst(".subject-cast");
+            Element image = result == null ? null : result.selectFirst("img[src]");
+            candidates.putIfAbsent(id, new Candidate(id, title, info == null ? "" : info.text(),
+                    "", image == null ? "" : image.attr("src"), DOUBAN_BOOK_URL + id + "/"));
+            if (candidates.size() == 8) break;
+        }
+        return List.copyOf(candidates.values());
+    }
+
+    private String subjectId(String href) {
+        try {
+            java.net.URI uri = java.net.URI.create(href.startsWith("//") ? "https:" + href : href);
+            if ("www.douban.com".equals(uri.getHost()) && "/link2/".equals(uri.getPath())) {
+                String query = uri.getRawQuery();
+                if (query == null) return null;
+                for (String parameter : query.split("&")) {
+                    if (parameter.startsWith("url=")) {
+                        uri = java.net.URI.create(java.net.URLDecoder.decode(
+                                parameter.substring(4), java.nio.charset.StandardCharsets.UTF_8));
+                        break;
+                    }
+                }
+            }
+            if (!"book.douban.com".equals(uri.getHost())) return null;
+            Matcher matcher = Pattern.compile("^/subject/(\\d{1,20})/?$").matcher(uri.getPath());
+            return matcher.matches() ? matcher.group(1) : null;
+        } catch (IllegalArgumentException exception) {
             return null;
         }
+    }
+
+    static String normalizedTitle(String title) {
+        return title == null ? "" : title.replaceAll("[\\s\\p{P}]+", "")
+                .toLowerCase(java.util.Locale.ROOT);
     }
 
     private void reportSuggestEmpty(JsonNode root) {
@@ -239,7 +283,10 @@ public class DoubanScraper implements MetadataScraper {
     /**
      * 获取书籍详情（解析 HTML 页面）
      */
-    private BookMetadata getBookDetail(String doubanId) {
+    public BookMetadata getBookDetail(String doubanId) {
+        if (doubanId == null || !doubanId.matches("\\d{1,20}")) {
+            throw new IllegalArgumentException("豆瓣候选编号无效");
+        }
         try {
             addRandomDelay();
 

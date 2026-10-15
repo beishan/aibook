@@ -9,7 +9,7 @@
     :close-on-click-modal="false"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <p>使用服务器已保存的配置，仅测试所选来源（包括未启用来源）。绕过缓存，结果仅供预览，不修改书籍。</p>
+    <p>使用服务器已保存的配置，仅测试所选来源（包括未启用来源）。绕过缓存，查询与选择阶段不修改书籍；豆瓣候选需加载详情并人工确认后，才会补全书籍，保留已有字段。</p>
     <fieldset :disabled="running" class="trial-filters">
       <el-input v-model="filters.keyword" placeholder="搜索书名、作者、ISBN" clearable @keyup.enter="search" />
       <el-select :disabled="running" v-model="filters.sourceType" placeholder="全部来源" clearable>
@@ -76,9 +76,9 @@
             <input
               type="radio"
               :checked="selected?.id === row.id"
-              :disabled="running"
+              :disabled="running || confirming"
               :aria-label="`选择${row.title}`"
-              @change="selected = row"
+              @change="selectBook(row)"
             />
           </template>
         </el-table-column>
@@ -126,7 +126,7 @@
     />
     <div class="trial-actions">
       <span>{{ selected ? `已选择：${selected.title}` : '请选择一本书籍' }}</span>
-      <el-button type="primary" :disabled="!selected || loading || running" :loading="running" @click="start">
+      <el-button type="primary" :disabled="!selected || loading || running || confirming" :loading="running" @click="start">
         {{ running ? '试刮削中' : '开始试刮削' }}
       </el-button>
       <el-button v-if="pollError && taskId" @click="resumePolling">重新连接进度</el-button>
@@ -142,17 +142,54 @@
       <p v-if="pollError" role="alert">{{ pollError }}</p>
       <template v-if="snapshot?.finished">
         <h3>刮削结果</h3>
+        <section v-if="snapshot.candidates?.length" class="trial-candidates">
+          <h4>备选元信息 · 请核对作者、出版年份和版次后选择</h4>
+          <p>目标书籍：{{ selected?.title }} · {{ selected?.author || '未知作者' }}</p>
+          <p>书名可能包含副标题或不同版本，候选排序不代表已确认匹配。</p>
+          <div class="trial-candidate-list">
+            <article
+              v-for="candidate in snapshot.candidates"
+              :key="candidate.id"
+              class="trial-candidate"
+              :class="{ 'is-selected': snapshot.selectedCandidateId === candidate.id }"
+            >
+              <div>
+                <strong>{{ candidate.title }}</strong>
+                <p>{{ candidate.author || '作者待加载详情' }} · {{ candidate.publishDate || '出版年份待核对' }}</p>
+                <a :href="candidate.sourceUrl" target="_blank" rel="noopener noreferrer">查看豆瓣原书页</a>
+              </div>
+              <el-button
+                :disabled="running || confirming || snapshot.applied"
+                @click="loadCandidate(candidate.id)"
+              >
+                {{ snapshot.selectedCandidateId === candidate.id ? '重新加载详情' : '选择并加载详情' }}
+              </el-button>
+            </article>
+          </div>
+        </section>
         <div v-if="snapshot.failure" class="trial-failure" role="status">
           <strong>{{ snapshot.failure.label }}</strong>
           <p>{{ snapshot.failure.detail }}</p>
           <p>建议：{{ snapshot.failure.suggestion }}</p>
         </div>
-        <p v-else-if="!snapshot.metadata">{{ snapshot.logs[snapshot.logs.length - 1]?.message }}</p>
+        <p v-else-if="!snapshot.metadata && !snapshot.candidates?.length">{{ snapshot.logs[snapshot.logs.length - 1]?.message }}</p>
+        <p v-if="snapshot.metadata && snapshot.selectedCandidateId" class="trial-candidate-note">
+          当前预览：{{ snapshot.metadata.title }} · {{ snapshot.metadata.author || '未知作者' }}
+          {{ snapshot.applied ? '（已确认补全）' : '（尚未写入，请核对后确认）' }}
+        </p>
         <el-descriptions v-if="snapshot.metadata" :column="1" border>
           <el-descriptions-item v-for="(label, field) in fields" :key="field" :label="label">
             <span class="trial-value">{{ formatValue(snapshot.metadata[field]) }}</span>
           </el-descriptions-item>
         </el-descriptions>
+        <p v-if="snapshot.status === 'REVIEW_REQUIRED'">上方展示候选的完整元信息；确认时只补全空字段，已有书名、作者、ISBN、封面等信息均保留。</p>
+        <div v-if="snapshot.status === 'REVIEW_REQUIRED'" class="trial-actions">
+          <el-button type="primary" :loading="confirming" @click="confirmCandidate">
+            确认此候选并补全书籍（保留已有字段）
+          </el-button>
+        </div>
+        <p v-if="snapshot.applied" role="status">已补全书籍，已有字段保持不变。更新字段：{{ snapshot.updatedFields?.join('、') || '无（现有信息完整）' }}</p>
+        <p v-if="candidateError" role="alert">{{ candidateError }}</p>
         <section v-if="snapshot.diagnostics?.length" class="trial-diagnostics">
           <h4>{{ snapshot.metadata ? '查询中遇到的问题（后续查询已取得元信息）' : '各查询步骤的诊断' }}</h4>
           <ol>
@@ -209,6 +246,14 @@ interface ScrapeFailure {
   httpStatus: number | null
   endpoint: string
 }
+interface MetadataCandidate {
+  id: string
+  title: string
+  author: string
+  publishDate: string
+  coverUrl: string
+  sourceUrl: string
+}
 interface TrialSnapshot {
   status: string
   finished: boolean
@@ -217,6 +262,10 @@ interface TrialSnapshot {
   metadata: Record<string, unknown> | null
   failure?: ScrapeFailure | null
   diagnostics?: ScrapeFailure[]
+  candidates?: MetadataCandidate[]
+  selectedCandidateId?: string | null
+  applied?: boolean
+  updatedFields?: string[]
 }
 const preferences = usePreferencesStore()
 const viewMode = computed(() => preferences.scraperTrialViewMode)
@@ -261,10 +310,12 @@ const loadError = ref('')
 const page = ref(0)
 const total = ref(0)
 const running = ref(false)
-watch(running, value => emit('running', value))
+const confirming = ref(false)
+watch(() => running.value || confirming.value, value => emit('running', value))
 const snapshot = ref<TrialSnapshot | null>(null)
 const pollError = ref('')
 const taskId = ref('')
+const candidateError = ref('')
 let timer: ReturnType<typeof setTimeout> | undefined
 let generation = 0
 let searchGeneration = 0
@@ -276,16 +327,31 @@ const statusLabels: Record<string, string> = {
   NO_RESULT: '未取得元信息',
   UNSUPPORTED: '不支持 / 配置缺失',
   FAILED: '失败',
+  AWAITING_SELECTION: '待选择候选',
+  REVIEW_REQUIRED: '待人工确认',
+  APPLIED: '已确认补全',
 }
 const statusLabel = computed(() => pollError.value
   ? '连接异常'
   : statusLabels[snapshot.value?.status || 'RUNNING'])
 const formatValue = (value: unknown) => Array.isArray(value) ? value.join('、') : String(value ?? '—')
 
+function resetCandidateReview() {
+  if (!snapshot.value?.candidates?.length) return
+  clearTimeout(timer)
+  generation++
+  snapshot.value = null
+  taskId.value = ''
+  candidateError.value = ''
+}
 function selectBook(book: BookChoice | null) {
-  if (book && !running.value && !loading.value) selected.value = book
+  if (!book || running.value || loading.value || confirming.value) return
+  if (selected.value?.id !== book.id) resetCandidateReview()
+  selected.value = book
 }
 async function loadBooks() {
+  if (running.value || confirming.value) return
+  resetCandidateReview()
   const request = ++searchGeneration
   loading.value = true
   loadError.value = ''
@@ -340,11 +406,46 @@ function resumePolling() {
   clearTimeout(timer)
   void poll(++generation)
 }
+async function loadCandidate(candidateId: string) {
+  if (running.value || confirming.value || !taskId.value) return
+  running.value = true
+  candidateError.value = ''
+  try {
+    const { data } = await api.post<TrialSnapshot>(`/api/scraper/trial/${taskId.value}/candidates/${candidateId}`)
+    if (disposed) return
+    snapshot.value = data
+    running.value = !data.finished
+    resumePolling()
+  } catch (error: any) {
+    running.value = false
+    candidateError.value = error.response?.data?.message || '候选详情加载失败，请重试。'
+  }
+}
+async function confirmCandidate() {
+  if (confirming.value || running.value || snapshot.value?.status !== 'REVIEW_REQUIRED'
+      || !snapshot.value.selectedCandidateId) return
+  confirming.value = true
+  candidateError.value = ''
+  const request = generation
+  try {
+    await api.post(`/api/scraper/trial/${taskId.value}/candidates/${snapshot.value.selectedCandidateId}/confirm`)
+    if (disposed || request !== generation) return
+    await poll(request)
+  } catch (error: any) {
+    if (!disposed && request === generation) {
+      candidateError.value = error.response?.data?.message || '确认补全请求未完成，正在核对服务器状态。'
+      await poll(request)
+    }
+  } finally {
+    confirming.value = false
+  }
+}
 async function start() {
-  if (!selected.value || !props.source || running.value) return
+  if (!selected.value || !props.source || running.value || confirming.value) return
   running.value = true
   snapshot.value = null
   pollError.value = ''
+  candidateError.value = ''
   try {
     const { data } = await api.post(`/api/scraper/trial/${props.source.configKey}/books/${selected.value.id}`)
     taskId.value = data.taskId
@@ -358,7 +459,7 @@ watch(() => props.modelValue, async (open) => {
   if (!open) return
   void preferences.hydrate()
   if (taskId.value && running.value) resumePolling()
-  if (!running.value) search()
+  if (!running.value && !confirming.value && !snapshot.value?.candidates?.length) search()
   const results = await Promise.allSettled([api.get('/api/categories'), api.get('/api/tags')])
   if (disposed) return
   if (results[0].status === 'fulfilled') categories.value = results[0].value.data
@@ -366,7 +467,7 @@ watch(() => props.modelValue, async (open) => {
   if (results.some(result => result.status === 'rejected')) loadError.value = '分类或标签加载失败，请关闭弹窗后重试。'
 })
 watch(() => props.source?.configKey, () => {
-  if (running.value) return
+  if (running.value || confirming.value) return
   snapshot.value = null
   taskId.value = ''
   pollError.value = ''
@@ -555,6 +656,36 @@ onBeforeUnmount(() => {
 }
 .trial-logs time {
   font-variant-numeric: tabular-nums;
+}
+.trial-candidate-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+.trial-candidate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+.trial-candidate.is-selected {
+  border-color: var(--primary);
+  background: var(--surface-hover);
+}
+.trial-candidate p {
+  margin: 8px 0;
+  color: var(--text-secondary);
+}
+.trial-candidate a {
+  color: var(--primary);
+}
+.trial-candidate-note {
+  margin: 16px 0;
+  font-weight: 600;
 }
 .trial-failure {
   padding: 14px 16px;
