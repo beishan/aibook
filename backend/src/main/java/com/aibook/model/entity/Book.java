@@ -85,6 +85,10 @@ public class Book {
      */
     private String coverUrl;
 
+    /** 单书封面显示策略：null 沿用账户默认，true 隐藏，false 显示；优先于账户设置。 */
+    @Column(name = "cover_hidden")
+    private Boolean coverHidden;
+
     /**
      * 文件格式 (epub, txt, pdf, mobi, azw3, docx, html, md)
      */

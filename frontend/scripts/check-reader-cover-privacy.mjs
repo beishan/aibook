@@ -19,7 +19,7 @@ const readerCover = readerSource.match(
 assert.ok(readerCover, 'ReaderView header cover container must exist')
 assert.match(
   readerCover,
-  /<img\s+v-if="book\.coverUrl && shouldLoadBookCover\(book\.id\)"\s+:src="getCoverUrl\(book\.coverUrl\)"\s+alt=""\s*\/?>/,
+  /<img\s+v-if="book\.coverUrl && shouldLoadBookCover\(book\.id\)"\s+:src="getCover(?:Thumbnail)?Url\(book\.coverUrl(?:, 'detail')?\)"\s+alt=""\s*\/?>/,
   'cover img/src must only be created when image privacy permits loading',
 )
 assert.match(

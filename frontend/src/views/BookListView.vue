@@ -34,7 +34,7 @@
           />
           <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
           <BookCoverPrivacyButton
-            v-if="book.coverUrl && !allBookCoversHidden"
+            v-if="book.coverUrl"
             :book-id="book.id"
             :book-title="book.title"
           />
@@ -60,7 +60,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/utils/api'
 import { getCoverThumbnailUrl } from '@/utils/cover'
-import { allBookCoversHidden, shouldLoadBookCover } from '@/utils/imagePrivacy'
+import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 
 const route = useRoute()

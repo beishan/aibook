@@ -4,7 +4,7 @@
       <span class="settings-icon" aria-hidden="true">🖼️</span>
       <div>
         <h2>书籍封面显示</h2>
-        <p>选择“不显示”后，网页端所有页面将使用文字占位，并停止加载书籍封面图片。</p>
+        <p>设置书籍封面的默认显示方式。单本书保存的显示或隐藏状态优先生效。</p>
       </div>
     </div>
 
@@ -39,8 +39,8 @@
     </div>
 
     <div class="behavior-note" :class="{ active: allBookCoversHidden }">
-      <strong>{{ allBookCoversHidden ? '当前不会加载封面' : '当前正常加载封面' }}</strong>
-      <span>{{ allBookCoversHidden ? '已有封面数据不会被删除，重新选择“显示”即可恢复。' : '单本书仍可使用封面上的按钮单独隐藏。' }}</span>
+      <strong>{{ allBookCoversHidden ? '默认不加载封面' : '默认显示封面' }}</strong>
+      <span>{{ allBookCoversHidden ? '未单独设置的书籍使用文字占位；明确设为显示的书籍仍加载封面。' : '明确设为隐藏的书籍仍不加载封面。单书状态保存到书籍并跨设备恢复。' }}</span>
     </div>
 
     <section class="size-settings" aria-labelledby="cover-size-heading">

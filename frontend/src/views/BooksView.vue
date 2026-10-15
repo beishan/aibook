@@ -11,11 +11,11 @@
           class="btn image-privacy-button"
           :class="{ active: allBookCoversHidden }"
           :aria-pressed="allBookCoversHidden"
-          :title="allBookCoversHidden ? '恢复显示所有页面的书籍封面' : '停止加载所有页面的书籍封面'"
+          :title="allBookCoversHidden ? '默认显示书籍封面，单书设置优先' : '默认隐藏书籍封面，单书设置优先'"
           @click="toggleAllBookCovers"
         >
           <el-icon aria-hidden="true"><View v-if="allBookCoversHidden" /><Hide v-else /></el-icon>
-          <span>{{ allBookCoversHidden ? '显示全部封面' : '隐藏全部封面' }}</span>
+          <span>{{ allBookCoversHidden ? '默认显示封面' : '默认隐藏封面' }}</span>
         </button>
         <button
           class="btn"
@@ -329,7 +329,7 @@
             <span>{{ book.title.charAt(0) }}</span>
           </div>
           <BookCoverPrivacyButton
-            v-if="book.coverUrl && !allBookCoversHidden"
+            v-if="book.coverUrl"
             :book-id="book.id"
             :book-title="book.title"
           />
@@ -454,7 +454,7 @@
           />
           <div v-else class="no-cover-small">{{ row.title.charAt(0) }}</div>
           <BookCoverPrivacyButton
-            v-if="row.coverUrl && !allBookCoversHidden"
+            v-if="row.coverUrl"
             :book-id="row.id"
             :book-title="row.title"
             compact
@@ -914,7 +914,6 @@ const preloadCoverImage = (url: string) => {
 }
 
 const prepareBookCovers = async (books: Book[]) => {
-  if (allBookCoversHidden.value) return
   const coverUrls = Array.from(new Set(
     books
       .slice(0, PRIORITY_COVER_COUNT)

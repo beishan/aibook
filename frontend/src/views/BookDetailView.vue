@@ -91,13 +91,15 @@
             <div v-else class="no-cover">
               <span>{{ book.title.charAt(0) }}</span>
             </div>
-            <BookCoverPrivacyButton
-              v-if="book.coverUrl && !allBookCoversHidden"
-              :book-id="book.id"
-              :book-title="book.title"
-            />
           </div>
           <div class="cover-action-row">
+            <BookCoverPrivacyButton
+              v-if="book.coverUrl"
+              :book-id="book.id"
+              :book-title="book.title"
+              inline
+            />
+            <small v-if="book.coverUrl" class="cover-visibility-note">保存到本书，优先于全局封面设置</small>
             <button
               class="btn cover-action-button"
               type="button"
@@ -1006,7 +1008,7 @@ import { formatChinaDateTime } from '@/utils/dateTime'
 import ScraperDialog from '@/components/ScraperDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
-import { allBookCoversHidden, shouldLoadBookCover } from '@/utils/imagePrivacy'
+import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { downloadBookToLocal } from '@/utils/bookDownload'
 
 const route = useRoute()
@@ -2583,6 +2585,14 @@ onMounted(() => {
   width: 230px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
+}
+
+.cover-visibility-note {
+  grid-column: 1 / -1;
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.6;
+  text-align: center;
 }
 
 .cover-action-button {

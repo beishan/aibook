@@ -124,7 +124,7 @@ import { useBookStore, type Book } from '@/stores/book'
 import { useCategoryStore } from '@/stores/category'
 import { useTagStore } from '@/stores/tag'
 import { getCoverThumbnailUrl } from '@/utils/cover'
-import { allBookCoversHidden } from '@/utils/imagePrivacy'
+import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import api from '@/utils/api'
 
 const props = defineProps<{
@@ -167,8 +167,8 @@ const dialogVisible = computed({
 })
 
 const previewUrl = computed(() =>
-  localPreviewUrl.value || (allBookCoversHidden.value
-    ? '' : getCoverThumbnailUrl(props.book?.coverUrl, 'detail'))
+  localPreviewUrl.value || (shouldLoadBookCover(props.book?.id)
+    ? getCoverThumbnailUrl(props.book?.coverUrl, 'detail') : '')
 )
 
 const hydrateForm = () => {

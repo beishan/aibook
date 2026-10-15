@@ -38,6 +38,17 @@ public class CoverPrivacyController {
                 currentUser(authentication), request));
     }
 
+    public record BookCoverVisibilityRequest(Boolean hidden) {}
+
+    @PutMapping("/books/{bookId}")
+    public ResponseEntity<CoverPrivacyService.BookCoverVisibility> updateBookCoverVisibility(
+            Authentication authentication,
+            @org.springframework.web.bind.annotation.PathVariable Long bookId,
+            @RequestBody BookCoverVisibilityRequest request) {
+        return ResponseEntity.ok(coverPrivacyService.updateBookCoverVisibility(
+                currentUser(authentication), bookId, request.hidden()));
+    }
+
     @GetMapping("/book-image-sizes")
     public ResponseEntity<BookCoverImageSizesDTO> getBookCoverImageSizes(
             Authentication authentication) {

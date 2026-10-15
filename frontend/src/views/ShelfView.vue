@@ -204,7 +204,7 @@
               />
               <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
               <BookCoverPrivacyButton
-                v-if="book.coverUrl && !allBookCoversHidden"
+                v-if="book.coverUrl"
                 :book-id="book.id"
                 :book-title="book.title"
                 :compact="viewMode === 'list'"
@@ -333,7 +333,7 @@
             />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
             <BookCoverPrivacyButton
-              v-if="book.coverUrl && !allBookCoversHidden"
+              v-if="book.coverUrl"
               :book-id="book.id"
               :book-title="book.title"
               :compact="viewMode === 'list'"
@@ -403,7 +403,7 @@
             />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
             <BookCoverPrivacyButton
-              v-if="book.coverUrl && !allBookCoversHidden"
+              v-if="book.coverUrl"
               :book-id="book.id"
               :book-title="book.title"
               :compact="viewMode === 'list'"
@@ -491,7 +491,7 @@
             />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
             <BookCoverPrivacyButton
-              v-if="book.coverUrl && !allBookCoversHidden"
+              v-if="book.coverUrl"
               :book-id="book.id"
               :book-title="book.title"
               :compact="viewMode === 'list'"
@@ -561,7 +561,7 @@
             />
             <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
             <BookCoverPrivacyButton
-              v-if="book.coverUrl && !allBookCoversHidden"
+              v-if="book.coverUrl"
               :book-id="book.id"
               :book-title="book.title"
               :compact="viewMode === 'list'"
@@ -637,7 +637,7 @@
               />
               <div v-else class="no-cover-small">{{ book.title.charAt(0) }}</div>
               <BookCoverPrivacyButton
-                v-if="book.coverUrl && !allBookCoversHidden"
+                v-if="book.coverUrl"
                 :book-id="book.id"
                 :book-title="book.title"
                 compact
@@ -741,7 +741,7 @@ import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import api from '@/utils/api'
 import { getCoverThumbnailUrl } from '@/utils/cover'
-import { allBookCoversHidden, shouldLoadBookCover } from '@/utils/imagePrivacy'
+import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import ShelfBookActions from '@/components/ShelfBookActions.vue'
 import BookQuickReader from '@/components/BookQuickReader.vue'
 import BookEditDialog from '@/components/BookEditDialog.vue'

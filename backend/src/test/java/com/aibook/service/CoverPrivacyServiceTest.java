@@ -24,7 +24,7 @@ class CoverPrivacyServiceTest {
     @BeforeEach
     void setUp() {
         userRepository = mock(UserRepository.class);
-        service = new CoverPrivacyService(userRepository, new ObjectMapper());
+        service = new CoverPrivacyService(userRepository, new ObjectMapper(), mock(com.aibook.repository.BookRepository.class));
         user = User.builder().id(7L).username("reader").build();
         when(userRepository.save(user)).thenReturn(user);
     }

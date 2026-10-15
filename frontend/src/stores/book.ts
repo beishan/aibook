@@ -16,6 +16,7 @@ export interface Book {
   metadataSources?: Record<string, string>
   metadataSource?: string
   coverUrl?: string
+  coverHidden?: boolean | null
   format: string
   filePath: string
   sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN' | 'CRAWLER'

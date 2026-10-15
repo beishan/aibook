@@ -29,10 +29,14 @@ public class CoverPrivacyService {
 
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final com.aibook.repository.BookRepository bookRepository;
 
     @Transactional(readOnly = true)
     public CoverPrivacyScopeDTO getBookCoverSettings(User user) {
-        return toScope(user.getAllBookCoversHidden(), user.getBookCoverVisibilityOverrides());
+        var defaults = toScope(user.getAllBookCoversHidden(), user.getBookCoverVisibilityOverrides());
+        Map<Long, Boolean> explicit = new LinkedHashMap<>();
+        bookRepository.findCoverVisibilityOverrides(user).forEach(item -> explicit.put(item.getId(), item.getHidden()));
+        return new CoverPrivacyScopeDTO(defaults.initialized(), defaults.allHidden(), defaults.overrides(), explicit);
     }
 
     @Transactional
@@ -42,6 +46,18 @@ public class CoverPrivacyService {
         user.setAllBookCoversHidden(request.allHidden());
         user.setBookCoverVisibilityOverrides(write(overrides));
         return getBookCoverSettings(userRepository.save(user));
+    }
+
+    public record BookCoverVisibility(Long bookId, Boolean hidden) {}
+
+    @Transactional
+    public BookCoverVisibility updateBookCoverVisibility(User user, Long bookId, Boolean hidden) {
+        var book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "书籍不存在或无权访问"));
+        book.setCoverHidden(hidden);
+        bookRepository.save(book);
+        return new BookCoverVisibility(book.getId(), book.getCoverHidden());
     }
 
     @Transactional(readOnly = true)

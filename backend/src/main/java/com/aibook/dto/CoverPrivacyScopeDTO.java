@@ -6,4 +6,9 @@ import java.util.Map;
 public record CoverPrivacyScopeDTO(
         boolean initialized,
         boolean allHidden,
-        Map<Long, Boolean> overrides) {}
+        Map<Long, Boolean> overrides,
+        Map<Long, Boolean> bookOverrides) {
+    public CoverPrivacyScopeDTO(boolean initialized, boolean allHidden, Map<Long, Boolean> overrides) {
+        this(initialized, allHidden, overrides, Map.of());
+    }
+}

@@ -31,6 +31,7 @@ public class BookDTO {
     /** 仅用于写入元信息时标识所选结果来源，不直接持久化。 */
     private String metadataSource;
     private String coverUrl;
+    private Boolean coverHidden;
     private String format;
     private String filePath;
     private String sourceType;

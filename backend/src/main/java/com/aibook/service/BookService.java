@@ -592,6 +592,7 @@ public class BookService {
                 .description(book.getDescription())
                 .metadataSources(BookMetadataSources.read(book))
                 .coverUrl(book.getCoverUrl())
+                .coverHidden(book.getCoverHidden())
                 .format(book.getFormat())
                 .filePath(book.getFilePath())
                 .sourceType(book.getSourceType() == null ? null : book.getSourceType().name())

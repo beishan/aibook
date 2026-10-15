@@ -30,6 +30,16 @@ import org.springframework.stereotype.Repository;
 public interface BookRepository
         extends JpaRepository<Book, Long>, JpaSpecificationExecutor<Book> {
 
+    interface CoverVisibility {
+        Long getId();
+        Boolean getHidden();
+    }
+
+    @Query("SELECT b.id AS id, b.coverHidden AS hidden FROM Book b "
+            + "WHERE b.user = :user AND b.deletedAt IS NULL AND b.coverHidden IS NOT NULL")
+    List<CoverVisibility> findCoverVisibilityOverrides(@Param("user") User user);
+
+
     @Query("SELECT new com.aibook.dto.SimilarBookDTO(b.id, b.title, b.author, b.format, "
             + "b.sourceType, b.sourceSiteName, b.filePath, b.chapterCount, b.fileSize) "
             + "FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL AND "

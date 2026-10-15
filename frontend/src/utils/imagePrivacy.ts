@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import api from '@/utils/api'
+import { explicitBookCoverOverrides } from '@/utils/bookCoverVisibility'
 
 const ALL_BOOK_COVERS_HIDDEN_STORAGE_KEY = 'aibook-cover-images-hidden'
 const BOOK_COVER_OVERRIDES_STORAGE_KEY = 'aibook-book-cover-visibility-overrides'
@@ -34,6 +35,7 @@ interface CoverPrivacyScope {
   initialized: boolean
   allHidden: boolean
   overrides: Record<string, boolean>
+  bookOverrides?: Record<string, boolean>
 }
 
 const persistLocal = (storageKey: string, value: string) => {
@@ -80,16 +82,14 @@ const persistRemote = () => {
     .catch(error => console.error('Failed to persist book cover privacy:', error))
 }
 
+/** 单书显式设置优先；未设置的书籍继续使用账户默认与旧版单书偏好。 */
 export const isBookCoverHidden = (bookId: number) =>
-  allBookCoversHidden.value || (bookCoverOverrides.value[String(bookId)] ?? false)
+  explicitBookCoverOverrides.value[String(bookId)]
+  ?? (allBookCoversHidden.value || (bookCoverOverrides.value[String(bookId)] ?? false))
 
-/**
- * 模板必须在创建 img/src 或主动预加载前调用此方法。
- * 全局关闭时返回 false，确保浏览器不会发起任何书籍封面请求。
- */
+/** 创建 img/src 或预加载前统一判断；单书显式显示允许覆盖全局默认隐藏。 */
 export const shouldLoadBookCover = (bookId?: number | null) =>
-  !allBookCoversHidden.value
-  && (bookId == null || !isBookCoverHidden(bookId))
+  bookId == null ? !allBookCoversHidden.value : !isBookCoverHidden(bookId)
 
 export const setAllBookCoversHidden = (hidden: boolean) => {
   if (allBookCoversHidden.value === hidden && Object.keys(bookCoverOverrides.value).length === 0) {
@@ -106,28 +106,28 @@ export const toggleAllBookCovers = () => {
   setAllBookCoversHidden(!allBookCoversHidden.value)
 }
 
-export const toggleBookCover = (bookId: number) => {
-  if (allBookCoversHidden.value) return
-  const nextHidden = !isBookCoverHidden(bookId)
-  const nextOverrides = { ...bookCoverOverrides.value }
-
-  if (nextHidden === allBookCoversHidden.value) {
-    delete nextOverrides[String(bookId)]
-  } else {
-    nextOverrides[String(bookId)] = nextHidden
-  }
-
-  bookCoverOverrides.value = nextOverrides
-  persistLocal(BOOK_COVER_OVERRIDES_STORAGE_KEY, JSON.stringify(nextOverrides))
-  persistRemote()
+export const toggleBookCover = async (bookId: number) => {
+  const activeToken = localStorage.getItem('token')
+  if (!activeToken) throw new Error('请先登录后再设置书籍封面')
+  const { data } = await api.put<{ bookId: number; hidden: boolean | null }>(
+    `/api/cover-privacy/books/${bookId}`, { hidden: !isBookCoverHidden(bookId) },
+  )
+  if (localStorage.getItem('token') !== activeToken) return
+  const next = { ...explicitBookCoverOverrides.value }
+  if (typeof data.hidden === 'boolean') next[String(bookId)] = data.hidden
+  else delete next[String(bookId)]
+  explicitBookCoverOverrides.value = next
 }
 
 export const hydrateBookCoverPrivacy = async (userId: number) => {
-  if (!localStorage.getItem('token')) return
+  const activeToken = localStorage.getItem('token')
+  if (!activeToken) return
   try {
     const { data } = await api.get<CoverPrivacyScope>('/api/cover-privacy/books', {
       headers: { 'X-Suppress-Error-Toast': 'true' },
     })
+    if (localStorage.getItem('token') !== activeToken) return
+    explicitBookCoverOverrides.value = normalizeOverrides(data.bookOverrides)
     if (data.initialized) {
       applyBookCoverSettings(Boolean(data.allHidden), normalizeOverrides(data.overrides))
     } else {
@@ -150,5 +150,6 @@ export const hydrateBookCoverPrivacy = async (userId: number) => {
 export const resetBookCoverPrivacy = () => {
   allBookCoversHidden.value = false
   bookCoverOverrides.value = {}
+  explicitBookCoverOverrides.value = {}
   saveQueue = Promise.resolve()
 }

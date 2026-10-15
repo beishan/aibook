@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { captureBookCoverVisibility } from '@/utils/bookCoverVisibility'
 import router from '@/router'
 import { clearStoredAuthSession } from '@/utils/authSession'
 import { message as notification } from '@/utils/message'
@@ -29,6 +30,12 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
+    const activeToken = localStorage.getItem('token')
+    const authorization = response.config.headers?.get?.('Authorization')
+      ?? response.config.headers?.Authorization
+    if (activeToken && authorization === `Bearer ${activeToken}`) {
+      captureBookCoverVisibility(response.data)
+    }
     if (isAuthEndpoint(response.config.url)) {
       authExpiryHandled = false
     }
