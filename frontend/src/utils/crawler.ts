@@ -1,3 +1,4 @@
+import type { CrawlerImportJob } from './crawlerImport'
 import type { StatisticsGranularity } from './crawlerStatistics'
 import api from '@/utils/api'
 
@@ -405,6 +406,14 @@ export const crawlerApi = {
   setDiscoveryStatus: (bookIds:number[], status:'ACTIVE'|'IGNORED'|'BLACKLISTED') => api.put<CrawlerBook[]>('/api/crawler/books/batch/discovery-status', {bookIds,status}).then(r => r.data),
   generate: (bookId:number, formats:string[]) => api.post<CrawlerExport[]>(`/api/crawler/books/${bookId}/exports`, { formats }).then(r => r.data),
   exports: (bookId:number) => api.get<CrawlerExport[]>(`/api/crawler/books/${bookId}/exports`).then(r => r.data),
+  batchImport: (bookIds:number[], formats:string[]) => api.post<CrawlerImportJob>(
+    '/api/crawler/books/batch/import', {bookIds, formats},
+    {headers: {'X-Suppress-Error-Toast': 'true'}},
+  ).then(r => r.data),
+  batchImportProgress: (jobId:string) => api.get<CrawlerImportJob>(
+    `/api/crawler/books/batch/import/${jobId}`,
+    {headers: {'X-Suppress-Error-Toast': 'true'}},
+  ).then(r => r.data),
   importBook: (bookId:number, formats:string[]) => api.post<{bookId:number}>(
     `/api/crawler/books/${bookId}/import`,
     { formats },

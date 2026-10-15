@@ -1223,7 +1223,7 @@
       <div v-if="importTargets.length" class="import-book-dialog">
         <div v-if="importTarget" class="status-book"><span class="mini-cover">{{ importTarget.bookName.slice(0,1) }}</span><div><strong>{{ importTarget.bookName }}</strong><p>{{ importTarget.author || '未知作者' }} · 已有正文 {{ importTarget.crawledChapterCount }} / {{ importTarget.chapterCount }} 章</p></div></div>
         <div v-else class="status-book"><span class="mini-cover">批</span><div><strong>批量处理 {{ importTargets.length }} 本书</strong><p>其中 {{ importTargets.filter(book=>book.importStatus==='IMPORTED').length }} 本已入库，将同步为新版本</p></div></div>
-        <div><p class="field-label">选择入库方式与附加导出</p><el-checkbox-group v-model="importFormats" :disabled="importing" class="crawler-multiselect-group format-options"><el-checkbox-button class="crawler-multiselect" v-for="option in importFormatOptions" :key="option.value" :value="option.value"><strong>{{ option.label }}</strong><small>{{ option.description }}</small></el-checkbox-button></el-checkbox-group></div>
+        <div><p class="field-label">选择入库方式与附加导出</p><el-checkbox-group v-model="importFormats" :disabled="importing||Boolean(importResumeJobId)" class="crawler-multiselect-group format-options"><el-checkbox-button class="crawler-multiselect" v-for="option in importFormatOptions" :key="option.value" :value="option.value"><strong>{{ option.label }}</strong><small>{{ option.description }}</small></el-checkbox-button></el-checkbox-group></div>
         <el-alert v-if="importTargets.some(book=>book.crawlStatus!=='COMPLETED')" type="warning" :closable="false" :title="importTargets.length>1?'未完整采集的书籍只会加入已有正文；没有可用正文的书籍会显示失败原因。':'当前书籍尚未完整采集，所选格式只会包含已有正文。'" />
         <el-alert v-else type="info" :closable="false" :title="importTarget?.importStatus==='IMPORTED'?'结构化版本直接同步章节快照；内容未变化时不会重复创建版本。':'结构化章节可直接阅读，不生成书籍文件；TXT/EPUB 仅在额外勾选时生成。'" />
         <div v-if="importing" aria-live="polite">
@@ -1249,7 +1249,7 @@
           :disabled="importing||!importFormats.length||!importTargets.length"
           @click="submitImport"
         >
-          {{ importFailures.length?'重试未成功书籍':importTargets.length>1?'确认批量入库':importTarget?.importStatus==='IMPORTED'?'同步所选格式':'确认入库' }}
+          {{ importResumeJobId?'继续查询入库结果':importFailures.length?'重试未成功书籍':importTargets.length>1?'确认批量入库':importTarget?.importStatus==='IMPORTED'?'同步所选格式':'确认入库' }}
         </el-button>
       </template>
     </el-dialog>
@@ -2508,6 +2508,7 @@ watch([categoryCleanupSiteId, categoryCleanupNames, categoryCleanupSyncLibrary],
   categoryCleanupPreview.value = undefined
 })
 const importProgress=ref({completed:0,total:0})
+const importResumeJobId=ref<string>()
 const discoveryFavoriteOnly=ref(false)
 const bookListDialog=ref(false), bookListLoading=ref(false), bookListSaving=ref(false), bookListTarget=ref<CrawlerBook>(), availableBookLists=ref<BookListOption[]>([]), selectedBookListIds=ref<number[]>([])
 const importTarget=computed(()=>importTargets.value.length===1?importTargets.value[0]:undefined)
@@ -4541,6 +4542,7 @@ function importBook(book:CrawlerBook){
   importTargets.value=[book]
   importFormats.value=['STRUCTURED']
   importFailures.value=[]
+  importResumeJobId.value=undefined
   importDialog.value=true
 }
 function openBatchImport(){
@@ -4548,6 +4550,7 @@ function openBatchImport(){
   importTargets.value=[...selectedBooks.value]
   importFormats.value=['STRUCTURED']
   importFailures.value=[]
+  importResumeJobId.value=undefined
   importDialog.value=true
 }
 async function submitImport(){
@@ -4557,14 +4560,20 @@ async function submitImport(){
   importing.value=true
   importFailures.value=[]
   try{
-    const result=await runCrawlerImports(targets,async book=>{
-      const imported=await crawlerApi.importBook(book.id,formats)
-      markCrawlerBookImported(book,imported.bookId)
-    },(completed,total)=>{importProgress.value={completed,total}})
+    const result=await runCrawlerImports(targets, {
+      submit: ids => crawlerApi.batchImport(ids, formats),
+      progress: id => crawlerApi.batchImportProgress(id),
+      onImported: (book, libraryId) => markCrawlerBookImported(book, libraryId),
+      onProgress: (completed, total) => { importProgress.value={completed,total} },
+      resumeJobId: importResumeJobId.value,
+    })
+    importResumeJobId.value=result.pendingJobId
     importFailures.value=result.failures
     if(result.failures.length){
-      importTargets.value=result.failures.map(failure=>failure.book)
-      const summary=`成功 ${result.succeeded.length} 本，未成功 ${result.failures.length} 本；可在当前窗口重试未成功书籍`
+      importTargets.value=result.pendingJobId?targets:result.failures.map(failure=>failure.book)
+      const summary=result.pendingJobId
+        ? '进度查询中断，服务端可能仍在处理；可继续查询原批次，无需重复提交'
+        : `成功 ${result.succeeded.length} 本，未成功 ${result.failures.length} 本；可在当前窗口重试未成功书籍`
       if(result.succeeded.length)message.warning(summary)
       else message.error(summary)
     }else{
