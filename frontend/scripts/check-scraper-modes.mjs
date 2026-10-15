@@ -41,6 +41,13 @@ state.changeMode('manual')
 for (let index = 0; index < 8; index++) await Promise.resolve()
 assert.equal(state.selectedSource.value.configKey, 'douban')
 assert.equal(writes.length, 0, 'choosing a manual source never invokes automatic save')
+state.manualVisible.value = true
+assert.equal(state.dialogVisible.value, false, 'entering the workbench hides the mode chooser')
+state.dialogVisible.value = false
+assert.equal(events.filter(([event]) => event === 'close').length, 0, 'hiding the chooser must not close the flow')
+state.manualVisible.value = false
+assert.equal(state.dialogVisible.value, true, 'returning from the workbench restores the mode chooser')
+
 await state.switchModeByKeyboard({ key: 'Home', preventDefault() {}, currentTarget: { querySelector: () => ({ focus() {} }) } })
 assert.equal(state.mode.value, 'auto')
 const pending = state.handleScrape()
