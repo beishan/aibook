@@ -22,6 +22,18 @@
 
 ## 变更记录
 
+### REQ-20261015-007 · 兼容豆瓣读书当前搜索入口及内嵌结果
+
+- 需求时间：2026-10-15
+- 完成时间：2026-10-15
+- 状态：已完成
+- 应用版本：`1.45.231`
+- 需求内容：豆瓣目前无法刮削；用户提供“凡人修仙传”的 search.douban.com/book/subject_search 搜索页及 book.douban.com/subject/4192766/ 详情页作为真实样例。
+- 完成情况：候选搜索优先使用用户提供的读书搜索入口与 search_text/cat 参数，解析当前 HTML 内 window.__DATA__.items 数据，不再只依赖静态结果链接；过滤丛书、更多搜索等非书籍记录，提取书名、作者摘要、年份、封面与受校验的详情链接；保留最多 8 个候选及原有人工确认补全流程，未取得搜索页候选时使用 suggest 后备接口。
+- 主要改动：复用现有 Jsoup 与 Jackson，只读取 JSON 数据，不执行页面脚本，无新依赖、浏览器运行时或解密逻辑；兼容新版已渲染 .item-root 与旧版 HTML；明确区分 total=0、不可识别/不透明内嵌数据、JSON 解析异常；日志脱敏端点加入 /book/subject_search；详情字段兼容标签内外及中英文冒号，修复真实页面作者漏读，并优先读取展开的完整简介；请求仅声明现有客户端支持的 gzip/deflate 压缩。
+- 验证结果：JDK 21 编译及 DoubanSubjectSearchTest（5）、DoubanCandidatesTest（5）、DoubanCandidateConfirmationTest（1）、ConfirmedMetadataApplicationTest（2）、ScrapeDiagnosticsTest（8）、ScraperSourceDiagnosticsTest（4）、ScraperTrialServiceTest（8）共 33 项测试通过；前端试刮削交互回归脚本与 git diff --check 通过。对用户提供两页实际下载的 HTTP 200 HTML 回放成功，返回 8 个候选且包含 4192766，详情作者“忘语”、ISBN 9787806807583 正确；进一步使用项目现有 Java/Jsoup 客户端实时请求同一搜索词及详情，两个端点均 HTTP 200，返回 8 个候选并通过详情 ISBN 断言。未写入真实书库，未执行 NAS 部署或 NAS 网络环境验证；本次未修改前端界面，未重复执行前端生产构建。
+
+
 ### REQ-20261015-006 · 豆瓣备选元信息与人工确认补全
 
 - 需求时间：2026-10-15

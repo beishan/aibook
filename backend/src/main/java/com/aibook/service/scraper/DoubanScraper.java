@@ -29,7 +29,7 @@ public class DoubanScraper implements MetadataScraper {
     private final ObjectMapper objectMapper;
     private final Random random = new Random();
 
-    private static final String DOUBAN_SEARCH_URL = "https://www.douban.com/search";
+    private static final String DOUBAN_SEARCH_URL = "https://search.douban.com/book/subject_search";
     private static final String DOUBAN_BOOK_URL = "https://book.douban.com/subject/";
     private static final String DOUBAN_SUGGEST_URL = "https://book.douban.com/j/subject_suggest";
 
@@ -142,12 +142,13 @@ public class DoubanScraper implements MetadataScraper {
         if (query == null || query.isBlank()) return List.of();
         try {
             addRandomDelay();
-            String url = org.springframework.web.util.UriComponentsBuilder.fromHttpUrl(DOUBAN_SUGGEST_URL)
-                    .queryParam("q", query).queryParam("type", "book")
+            ScrapeDiagnostics.note("通过豆瓣读书搜索页查询候选");
+            String url = org.springframework.web.util.UriComponentsBuilder.fromHttpUrl(DOUBAN_SEARCH_URL)
+                    .queryParam("search_text", query).queryParam("cat", "1001")
                     .build().encode().toUriString();
             String response = makeRequest(url);
             if (response != null) {
-                List<Candidate> candidates = parseSuggestCandidates(objectMapper.readTree(response));
+                List<Candidate> candidates = parseSearchCandidates(Jsoup.parse(response));
                 if (!candidates.isEmpty()) return candidates;
             }
         } catch (Exception exception) {
@@ -155,16 +156,12 @@ public class DoubanScraper implements MetadataScraper {
         }
         try {
             addRandomDelay();
-            ScrapeDiagnostics.note("suggest 未取得候选，尝试网页搜索");
-            String url = org.springframework.web.util.UriComponentsBuilder.fromHttpUrl(DOUBAN_SEARCH_URL)
-                    .queryParam("cat", "1001").queryParam("q", query)
+            ScrapeDiagnostics.note("搜索页未取得候选，尝试 suggest 备用接口");
+            String url = org.springframework.web.util.UriComponentsBuilder.fromHttpUrl(DOUBAN_SUGGEST_URL)
+                    .queryParam("q", query).queryParam("type", "book")
                     .build().encode().toUriString();
             String response = makeRequest(url);
-            if (response == null) return List.of();
-            Document document = Jsoup.parse(response);
-            List<Candidate> candidates = parseSearchCandidates(document);
-            if (candidates.isEmpty()) ScrapeDiagnostics.emptySearchPage(document);
-            return candidates;
+            return response == null ? List.of() : parseSuggestCandidates(objectMapper.readTree(response));
         } catch (Exception exception) {
             ScrapeDiagnostics.exception(exception);
             return List.of();
@@ -191,18 +188,62 @@ public class DoubanScraper implements MetadataScraper {
     }
 
     List<Candidate> parseSearchCandidates(Document document) {
+        // 当前搜索页由前端渲染，但候选已经以 JSON 嵌入 HTML；只读取数据，不执行页面脚本。
+        Pattern assignment = Pattern.compile("(?:^|[;\\s])window\\.__DATA__\\s*=\\s*");
+        for (Element script : document.select("script:not([src])")) {
+            Matcher matcher = assignment.matcher(script.data());
+            if (!matcher.find()) continue;
+            try {
+                JsonNode data = objectMapper.readTree(script.data().substring(matcher.end()));
+                if (data == null || !data.isObject() || !data.path("items").isArray()
+                        || !data.path("error_info").asText().isBlank()) {
+                    ScrapeDiagnostics.report(ScrapeDiagnostics.Code.UNRECOGNIZED_RESPONSE,
+                            "豆瓣搜索页数据不是预期的 items 列表或包含来源错误，无法确认搜索结果。");
+                    return List.of();
+                }
+                java.util.LinkedHashMap<String, Candidate> candidates = new java.util.LinkedHashMap<>();
+                for (JsonNode item : data.get("items")) {
+                    // 跳过丛书、搜索更多等非书籍条目，仅使用受校验的 subject 链接。
+                    String id = subjectId(item.path("url").asText());
+                    String title = item.path("title").asText();
+                    if (id == null || title.isBlank()) continue;
+                    String[] info = item.path("abstract").asText().split("\\s+/\\s+");
+                    String date = "";
+                    for (String part : info) {
+                        if (part.matches("\\d{4}(?:-\\d{1,2}){0,2}")) date = part;
+                    }
+                    candidates.putIfAbsent(id, new Candidate(id, title, info.length == 0 ? "" : info[0],
+                            date, item.path("cover_url").asText(), DOUBAN_BOOK_URL + id + "/"));
+                    if (candidates.size() == 8) break;
+                }
+                if (candidates.isEmpty()) {
+                    boolean empty = data.path("total").isNumber() && data.path("total").asInt() == 0;
+                    ScrapeDiagnostics.report(empty ? ScrapeDiagnostics.Code.NO_MATCH
+                                    : ScrapeDiagnostics.Code.UNRECOGNIZED_RESPONSE,
+                            empty ? "豆瓣读书搜索页明确返回 total=0，未找到匹配书籍。"
+                                    : "搜索页未返回可识别的单本书籍条目，不能认定没有搜索结果。");
+                }
+                return List.copyOf(candidates.values());
+            } catch (Exception exception) {
+                ScrapeDiagnostics.exception(exception);
+                return List.of();
+            }
+        }
+        // 同时兼容已经渲染的新版结果和旧版 HTML 结果。
         java.util.LinkedHashMap<String, Candidate> candidates = new java.util.LinkedHashMap<>();
-        for (Element link : document.select(".result .title a[href], a[href*='book.douban.com/subject/']")) {
+        for (Element link : document.select(".item-root a.title[href], .item-root .title a[href], "
+                + ".result .title a[href], a[href*='book.douban.com/subject/']")) {
             String id = subjectId(link.attr("href"));
             String title = link.text().trim();
             if (id == null || title.isBlank()) continue;
-            Element result = link.closest(".result");
-            Element info = result == null ? null : result.selectFirst(".subject-cast");
+            Element result = link.closest(".result, .item-root");
+            Element info = result == null ? null : result.selectFirst(".subject-cast, .abstract");
             Element image = result == null ? null : result.selectFirst("img[src]");
             candidates.putIfAbsent(id, new Candidate(id, title, info == null ? "" : info.text(),
                     "", image == null ? "" : image.attr("src"), DOUBAN_BOOK_URL + id + "/"));
             if (candidates.size() == 8) break;
         }
+        if (candidates.isEmpty()) ScrapeDiagnostics.emptySearchPage(document);
         return List.copyOf(candidates.values());
     }
 
@@ -258,7 +299,7 @@ public class DoubanScraper implements MetadataScraper {
                     .referrer("https://book.douban.com/")
                     .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
                     .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
-                    .header("Accept-Encoding", "gzip, deflate, br")
+                    .header("Accept-Encoding", "gzip, deflate")
                     .header("Connection", "keep-alive")
                     .header("Upgrade-Insecure-Requests", "1")
                     .header("Sec-Fetch-Dest", "document")
@@ -377,7 +418,8 @@ public class DoubanScraper implements MetadataScraper {
             }
 
             // 内容简介
-            Element summaryElement = doc.selectFirst("#link-report .intro");
+            Element summaryElement = doc.selectFirst("#link-report .all .intro");
+            if (summaryElement == null) summaryElement = doc.selectFirst("#link-report .intro");
             if (summaryElement != null) {
                 Elements paragraphs = summaryElement.select("p");
                 StringBuilder summary = new StringBuilder();
@@ -424,7 +466,8 @@ public class DoubanScraper implements MetadataScraper {
     private String extractInfoField(Element infoElement, String fieldName) {
         try {
             String html = infoElement.html();
-            Pattern pattern = Pattern.compile(fieldName + ":</span>\\s*(.*?)(?:<br|</div|$)", Pattern.DOTALL);
+            Pattern pattern = Pattern.compile(Pattern.quote(fieldName)
+                    + "\\s*[:：]?\\s*</span>\\s*[:：]?\\s*(.*?)(?:<br|</div|$)", Pattern.DOTALL);
             Matcher matcher = pattern.matcher(html);
 
             if (matcher.find()) {

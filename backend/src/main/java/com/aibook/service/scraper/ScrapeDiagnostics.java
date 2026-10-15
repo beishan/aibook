@@ -194,7 +194,7 @@ public final class ScrapeDiagnostics implements AutoCloseable {
             String path = uri.getPath();
             // 仅展示已知端点路径；不返回查询参数、用户信息、片段或未知重定向路径。
             boolean known = path != null && path.matches(
-                    "/(api/books|search\\.json|books/v1/volumes|search|Search|j/subject_suggest|subject/\\d+/?|\\d+\\.html)");
+                    "/(api/books|search\\.json|books/v1/volumes|search|Search|book/subject_search|j/subject_suggest|subject/\\d+/?|\\d+\\.html)");
             return uri.getHost() == null ? "" : uri.getScheme() + "://" + uri.getHost() + (known ? path : "/");
         } catch (IllegalArgumentException exception) {
             return "";
