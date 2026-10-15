@@ -405,7 +405,7 @@
           <el-option v-for="tag in discoveryFilterOptions.tags" :key="tag" :label="tag" :value="tag" />
         </el-select>
         <el-select v-model="discoverySort" aria-label="发现书籍排序"><el-option v-for="item in discoverySortOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
-        <el-checkbox v-model="discoveryFavoriteOnly" border @change="applyDiscoveryFilters">只看已收藏</el-checkbox>
+        <el-checkbox class="crawler-multiselect" v-model="discoveryFavoriteOnly" border @change="applyDiscoveryFilters">只看已收藏</el-checkbox>
         <el-button type="primary" :icon="Search" @click="applyDiscoveryFilters">查询</el-button><el-button @click="resetDiscoveryFilters">重置</el-button>
       </div>
       <el-table v-if="discoveryViewMode==='table'" v-loading="discoveryLoading" :data="discoveredBooks" class="data-table" @selection-change="selectedDiscoveries=$event">
@@ -496,7 +496,7 @@
         </el-table-column>
       </el-table>
       <div v-else v-loading="discoveryLoading" class="discovery-card-panel">
-        <div v-if="discoveredBooks.length" class="discovery-card-selection"><el-checkbox :model-value="allDiscoveredSelected" :indeterminate="someDiscoveredSelected&&!allDiscoveredSelected" @change="toggleCurrentDiscoveryPage(Boolean($event))">选择当前页</el-checkbox><span>已选择 {{ selectedDiscoveries.length }} 本</span></div>
+        <div v-if="discoveredBooks.length" class="discovery-card-selection"><el-checkbox class="crawler-multiselect" :model-value="allDiscoveredSelected" :indeterminate="someDiscoveredSelected&&!allDiscoveredSelected" @change="toggleCurrentDiscoveryPage(Boolean($event))">选择当前页</el-checkbox><span>已选择 {{ selectedDiscoveries.length }} 本</span></div>
         <div class="discovery-card-grid">
           <article v-for="book in discoveredBooks" :key="book.id" class="discovery-card" :class="{selected:isDiscoverySelected(book)}">
             <div class="discovery-card-action-overlay" role="group" :aria-label="`${book.bookName}快捷操作`" @click.stop>
@@ -517,7 +517,7 @@
                 :name="book.siteName"
                 :color="book.siteThemeColor"
               />
-              <el-checkbox class="discovery-card-check" :model-value="isDiscoverySelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleDiscoverySelection(book,Boolean($event))"/>
+              <el-checkbox class="crawler-multiselect discovery-card-check" :model-value="isDiscoverySelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleDiscoverySelection(book,Boolean($event))"/>
             </div>
             <div v-if="book.category||book.tags?.length" class="discovery-card-body discovery-card-category crawler-book-tag-list"><el-tag v-if="book.category" size="small" type="info" effect="plain">{{ book.category }}</el-tag><el-tag v-for="tag in book.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></div>
           </article>
@@ -568,7 +568,7 @@
           <el-option v-for="tag in bookTagOptions" :key="tag" :label="tag" :value="tag" />
         </el-select>
         <el-select v-model="bookSort" aria-label="采集书籍排序"><el-option v-for="item in managedBookSortOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
-        <el-checkbox v-model="bookFavoriteOnly" border @change="applyBookFilters">只看已收藏</el-checkbox>
+        <el-checkbox class="crawler-multiselect" v-model="bookFavoriteOnly" border @change="applyBookFilters">只看已收藏</el-checkbox>
         <el-button type="primary" :icon="Search" @click="applyBookFilters">查询</el-button>
         <el-button @click="resetBookFilters">重置</el-button>
       </div>
@@ -633,7 +633,7 @@
         </el-table-column>
       </el-table>
       <div v-else v-loading="bookLoading" class="discovery-card-panel">
-        <div v-if="books.length" class="discovery-card-selection"><el-checkbox :model-value="allBooksSelected" :indeterminate="someBooksSelected&&!allBooksSelected" @change="toggleCurrentBookPage(Boolean($event))">选择当前页</el-checkbox><span>已选择 {{ selectedBooks.length }} 本</span></div>
+        <div v-if="books.length" class="discovery-card-selection"><el-checkbox class="crawler-multiselect" :model-value="allBooksSelected" :indeterminate="someBooksSelected&&!allBooksSelected" @change="toggleCurrentBookPage(Boolean($event))">选择当前页</el-checkbox><span>已选择 {{ selectedBooks.length }} 本</span></div>
         <div class="discovery-card-grid">
           <article v-for="book in books" :key="book.id" class="discovery-card crawler-book-card" :class="{selected:isBookSelected(book)}" @click="openBook(book)">
             <div class="discovery-card-action-overlay crawler-book-action-overlay" role="group" :aria-label="`${book.bookName}快捷操作`" @click.stop>
@@ -645,7 +645,7 @@
                 <template #dropdown><el-dropdown-menu><el-dropdown-item command="details">详细信息</el-dropdown-item><el-dropdown-item command="book-lists">加入书单</el-dropdown-item><el-dropdown-item command="website">查看网站</el-dropdown-item><el-dropdown-item command="updates" divided>检查更新</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(book)">刷新分类标签</el-dropdown-item><el-dropdown-item command="generate">生成文件</el-dropdown-item><el-dropdown-item command="import">{{ book.importStatus==='IMPORTED'?'同步入库':'加入书库' }}</el-dropdown-item><el-dropdown-item command="status">修改状态</el-dropdown-item></el-dropdown-menu></template>
               </el-dropdown>
             </div>
-            <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><div class="crawler-book-cover-badges"><el-tag :type="statusType(book.crawlStatus)" effect="dark" size="small">{{ statusLabel(book.crawlStatus) }}</el-tag><el-tag :type="importStatusType(book.importStatus)" effect="dark" size="small">{{ importStatusLabel(book.importStatus) }}</el-tag></div><el-checkbox class="discovery-card-check crawler-book-card-check" :model-value="isBookSelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleBookSelection(book,Boolean($event))"/></div>
+            <div class="discovery-card-cover"><span>{{ book.bookName.slice(0,1) }}</span><img v-if="book.coverUrl && shouldLoadBookCover()" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" :alt="`${book.bookName}封面`" loading="lazy" @error="hideBrokenCover"/><div class="crawler-book-cover-badges"><el-tag :type="statusType(book.crawlStatus)" effect="dark" size="small">{{ statusLabel(book.crawlStatus) }}</el-tag><el-tag :type="importStatusType(book.importStatus)" effect="dark" size="small">{{ importStatusLabel(book.importStatus) }}</el-tag></div><el-checkbox class="crawler-multiselect discovery-card-check crawler-book-card-check" :model-value="isBookSelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleBookSelection(book,Boolean($event))"/></div>
             <div class="discovery-card-body crawler-book-card-body"><div class="discovery-card-title"><div><button type="button" class="crawler-book-title-button" :title="book.bookName" @click.stop="openBook(book)">{{ book.bookName }}</button><p>{{ book.author || '未知作者' }}</p></div><el-tag v-if="book.category" size="small" effect="plain">{{ book.category }}</el-tag></div><div v-if="book.tags?.length" class="crawler-book-tag-list"><el-tag v-for="tag in book.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></div><dl><div><dt>来源网站</dt><dd><SiteSourceTag :name="book.siteName" :color="book.siteThemeColor" /></dd></div></dl><div v-if="isBookCompleted(book)" class="book-crawl-result card-result"><div><span>采集结果</span><strong>采集完成</strong></div><small>正文 {{ book.crawledChapterCount }} · 待开放 {{ book.pendingReleaseChapterCount }} · 失败 {{ book.failedChapterCount }}</small><el-button text type="primary" size="small" @click.stop="openBook(book)">采集结果详情</el-button></div><div v-else class="crawler-book-progress"><div><span>采集进度</span><strong>正文 {{ book.crawledChapterCount }} · 待开放 {{ book.pendingReleaseChapterCount }} / 共 {{ book.chapterCount }} 章</strong></div><el-progress :class="{'crawler-running-progress':isBookRunning(book)}" :percentage="progress(book)" :stroke-width="7" /></div></div>
           </article>
         </div>
@@ -663,7 +663,7 @@
         <el-select v-model="taskTypeFilter" clearable placeholder="全部任务类型" aria-label="任务类型筛选" @change="handleTaskTypeFilter">
           <el-option v-for="type in taskTypeOptions" :key="type" :label="taskTypeLabel(type)" :value="type" />
         </el-select>
-        <el-checkbox v-model="taskFavoriteOnly" border @change="handleTaskFavoriteFilter">只看已收藏</el-checkbox>
+        <el-checkbox class="crawler-multiselect" v-model="taskFavoriteOnly" border @change="handleTaskFavoriteFilter">只看已收藏</el-checkbox>
         <el-button
           type="primary"
           plain
@@ -1129,8 +1129,8 @@
           <el-switch v-model="autoImportForm.enabled" />
         </el-form-item>
         <el-form-item label="入库格式（可多选）">
-          <el-checkbox-group v-model="autoImportForm.formats" class="format-options">
-            <el-checkbox v-for="option in importFormatOptions" :key="option.value" :value="option.value">
+          <el-checkbox-group v-model="autoImportForm.formats" class="crawler-multiselect-group format-options">
+            <el-checkbox class="crawler-multiselect" v-for="option in importFormatOptions" :key="option.value" :value="option.value">
               {{ option.label }}
             </el-checkbox>
           </el-checkbox-group>
@@ -1157,8 +1157,8 @@
           <el-switch v-model="crawlForm.autoImportEnabled" />
         </el-form-item>
         <el-form-item v-if="crawlForm.autoImportEnabled" label="自动入库格式（可多选）">
-          <el-checkbox-group v-model="crawlForm.autoImportFormats">
-            <el-checkbox v-for="option in importFormatOptions" :key="option.value" :value="option.value">
+          <el-checkbox-group class="crawler-multiselect-group" v-model="crawlForm.autoImportFormats">
+            <el-checkbox class="crawler-multiselect" v-for="option in importFormatOptions" :key="option.value" :value="option.value">
               {{ option.label }}
             </el-checkbox>
           </el-checkbox-group>
@@ -1187,7 +1187,7 @@
           <el-form-item label="额外清理的错误分类名称（可选，每行一个，最多 100 个）">
             <el-input v-model="categoryCleanupNames" type="textarea" :rows="3" placeholder="填入其他错误分类名称；正常分类请不要填写" />
           </el-form-item>
-          <el-checkbox v-model="categoryCleanupSyncLibrary">同时清理已入库书籍中相同的错误分类</el-checkbox>
+          <el-checkbox class="crawler-multiselect" v-model="categoryCleanupSyncLibrary">同时清理已入库书籍中相同的错误分类</el-checkbox>
         </el-form>
         <p>清理后分类为空；书籍和正文会保留。书库中已手动改成其他分类的书籍会保留当前分类，分类目录条目也会保留。</p>
         <template v-if="categoryCleanupPreview">
@@ -1223,7 +1223,7 @@
       <div v-if="importTargets.length" class="import-book-dialog">
         <div v-if="importTarget" class="status-book"><span class="mini-cover">{{ importTarget.bookName.slice(0,1) }}</span><div><strong>{{ importTarget.bookName }}</strong><p>{{ importTarget.author || '未知作者' }} · 已有正文 {{ importTarget.crawledChapterCount }} / {{ importTarget.chapterCount }} 章</p></div></div>
         <div v-else class="status-book"><span class="mini-cover">批</span><div><strong>批量处理 {{ importTargets.length }} 本书</strong><p>其中 {{ importTargets.filter(book=>book.importStatus==='IMPORTED').length }} 本已入库，将同步为新版本</p></div></div>
-        <div><p class="field-label">选择入库方式与附加导出</p><el-checkbox-group v-model="importFormats" :disabled="importing" class="format-options"><el-checkbox-button v-for="option in importFormatOptions" :key="option.value" :value="option.value"><strong>{{ option.label }}</strong><small>{{ option.description }}</small></el-checkbox-button></el-checkbox-group></div>
+        <div><p class="field-label">选择入库方式与附加导出</p><el-checkbox-group v-model="importFormats" :disabled="importing" class="crawler-multiselect-group format-options"><el-checkbox-button class="crawler-multiselect" v-for="option in importFormatOptions" :key="option.value" :value="option.value"><strong>{{ option.label }}</strong><small>{{ option.description }}</small></el-checkbox-button></el-checkbox-group></div>
         <el-alert v-if="importTargets.some(book=>book.crawlStatus!=='COMPLETED')" type="warning" :closable="false" :title="importTargets.length>1?'未完整采集的书籍只会加入已有正文；没有可用正文的书籍会显示失败原因。':'当前书籍尚未完整采集，所选格式只会包含已有正文。'" />
         <el-alert v-else type="info" :closable="false" :title="importTarget?.importStatus==='IMPORTED'?'结构化版本直接同步章节快照；内容未变化时不会重复创建版本。':'结构化章节可直接阅读，不生成书籍文件；TXT/EPUB 仅在额外勾选时生成。'" />
         <div v-if="importing" aria-live="polite">
@@ -1258,8 +1258,8 @@
       <div v-loading="bookListLoading" class="crawler-book-list-dialog">
         <el-alert type="info" :closable="false" title="现在选择书单；书籍入库时会自动加入。已入库书籍会立即同步书单。" />
         <el-empty v-if="!bookListLoading&&!availableBookLists.length" description="暂无书单，请先在书库中创建书单" />
-        <el-checkbox-group v-else v-model="selectedBookListIds" class="crawler-book-list-options">
-          <el-checkbox v-for="list in availableBookLists" :key="list.id" :value="list.id" border>
+        <el-checkbox-group v-else v-model="selectedBookListIds" class="crawler-multiselect-group crawler-book-list-options">
+          <el-checkbox class="crawler-multiselect" v-for="list in availableBookLists" :key="list.id" :value="list.id" border>
             <strong>{{ list.name }}</strong><small>{{ list.description || '暂无描述' }}</small>
           </el-checkbox>
         </el-checkbox-group>
@@ -6044,6 +6044,77 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 </style>
 
 <style scoped>
+/* 直接标记控件，确保挂到 body 的弹窗也使用相同的点击尺寸。 */
+.crawler-multiselect.el-checkbox {
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  height: auto;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.crawler-multiselect.el-checkbox:not(.is-disabled):hover {
+  background: var(--primary-alpha-10);
+}
+
+.crawler-multiselect:has(input:focus-visible) {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.crawler-multiselect :deep(.el-checkbox__inner) {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+}
+
+.crawler-multiselect :deep(.el-checkbox__inner::after) {
+  width: 5px;
+  height: 10px;
+}
+
+.crawler-multiselect :deep(.el-checkbox__input.is-indeterminate .el-checkbox__inner::before) {
+  top: 8px;
+}
+
+.crawler-multiselect :deep(.el-checkbox__label) {
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.5;
+}
+
+.crawler-multiselect.el-checkbox-button :deep(.el-checkbox-button__inner) {
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.crawler-multiselect-group:not(.format-options):not(.crawler-book-list-options) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.format-options > .crawler-multiselect.el-checkbox {
+  width: 100%;
+}
+
+.discovery-card-check.crawler-multiselect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+.discovery-source-badge,
+.crawler-book-cover-badges {
+  max-width: calc(100% - 68px);
+}
+
 /* 保留原生全选、半选和键盘交互，仅扩大采集中心表格的选择目标。 */
 :deep(.el-table-column--selection.el-table__cell) {
   padding: 0;
