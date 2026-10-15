@@ -268,12 +268,24 @@ public class BookVersionService {
                 .fileHash(version.getFileHash())
                 .primaryVersion(version.getPrimaryVersion())
                 .chapterCount(version.getChapterCount())
+                .description(version.getDescription())
                 .rewriteProjectId(rewriteProject == null ? null : rewriteProject.getId())
                 .rewriteStatus(rewriteProject == null ? null : rewriteProject.getStatus().name())
                 .sourceVersionId(rewriteProject == null ? null
                         : rewriteProject.getSourceVersion().getId())
                 .createdAt(version.getCreatedAt())
                 .build();
+    }
+
+    @Transactional
+    public com.aibook.dto.BookVersionDTO updateDescription(Book book, Long versionId, String description) {
+        if (description != null && description.length() > 100_000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "版本简介不能超过 100000 个字符");
+        }
+        BookVersion version = bookVersionRepository.findByIdAndBook(versionId, book)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "书籍版本不存在"));
+        version.setDescription(description == null || description.isBlank() ? null : description.strip());
+        return toDTO(bookVersionRepository.save(version));
     }
 
     private void migrateLegacyProgress(Book book, BookVersion version) {

@@ -196,6 +196,7 @@ public class BookVersionImportService {
                     .fileHash(null)
                     .primaryVersion(false)
                     .chapterInfo(source.getChapterInfo())
+                    .description(source.getDescription())
                     .chapterCount(source.getChapterCount())
                     .sourceType(IMPORT_SOURCE_TYPE)
                     .sourceId(sourceId)

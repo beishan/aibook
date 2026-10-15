@@ -152,7 +152,10 @@ import ScraperTrialDialog from '@/components/ScraperTrialDialog.vue'
 import { scrapeBook, type ScrapeResponse } from '@/utils/scraper'
 import { getScraperStatus, type ScraperStatus } from '@/utils/config'
 
-const props = defineProps<{ visible: boolean; book: { id: number; title: string; author?: string } | null }>()
+const props = defineProps<{
+  visible: boolean
+  book: { id: number; title: string; author?: string; versionId?: number; displayName?: string } | null
+}>()
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'refresh'): void

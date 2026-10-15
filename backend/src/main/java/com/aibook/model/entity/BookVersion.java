@@ -58,6 +58,10 @@ public class BookVersion {
     @Column(columnDefinition = "TEXT")
     private String chapterInfo;
 
+    /** 仅属于当前文件版本的简介；系列公共简介仍存放在 Book.description。 */
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
     private Integer chapterCount;
 
     /** 可追溯的版本来源；爬虫导入时指向采集中心记录。 */

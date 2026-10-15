@@ -12,6 +12,7 @@ import com.aibook.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -32,6 +33,8 @@ import java.util.List;
 @CrossOrigin(origins = "*")
 public class BookVersionController {
 
+    public record DescriptionRequest(String description) {}
+
     private final BookVersionService bookVersionService;
     private final BookVersionImportService bookVersionImportService;
     private final BookService bookService;
@@ -43,6 +46,17 @@ public class BookVersionController {
             @PathVariable Long bookId) {
         Book book = ownedBook(authentication, bookId);
         return ResponseEntity.ok(bookVersionService.getVersions(book));
+    }
+
+    @PutMapping("/{versionId}/description")
+    public ResponseEntity<BookVersionDTO> updateDescription(
+            Authentication authentication,
+            @PathVariable Long bookId,
+            @PathVariable Long versionId,
+            @RequestBody DescriptionRequest request) {
+        Book book = ownedBook(authentication, bookId);
+        return ResponseEntity.ok(bookVersionService.updateDescription(
+                book, versionId, request.description()));
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

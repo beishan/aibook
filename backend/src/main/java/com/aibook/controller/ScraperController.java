@@ -81,7 +81,12 @@ public class ScraperController {
         return trialService.selectCandidate(taskId, user.getId(), candidateId);
     }
 
-    public record ConfirmationRequest(java.util.Set<String> overwriteFields) {
+    public record ConfirmationRequest(java.util.Set<String> overwriteFields,
+            String descriptionTarget, Long versionId) {
+        public ConfirmationRequest(java.util.Set<String> overwriteFields) {
+            this(overwriteFields, "SERIES", null);
+        }
+
         java.util.Set<String> fields() {
             return overwriteFields == null ? java.util.Set.of() : overwriteFields;
         }
@@ -95,7 +100,9 @@ public class ScraperController {
             @RequestBody(required = false) ConfirmationRequest request) {
         var fields = request == null ? java.util.Set.<String>of() : request.fields();
         var result = trialService.confirmCandidate(taskId, user.getId(), candidateId,
-                (bookId, metadata) -> scrapingService.applyConfirmedCandidate(bookId, user, metadata, fields));
+                (bookId, metadata) -> scrapingService.applyConfirmedCandidate(bookId, user, metadata,
+                        fields, request == null ? "SERIES" : request.descriptionTarget(),
+                        request == null ? null : request.versionId()));
         return Map.of("success", result.isSuccess(), "message", result.getMessage(),
                 "updatedFields", result.getUpdatedFields());
     }
@@ -126,7 +133,9 @@ public class ScraperController {
             @RequestBody(required = false) ConfirmationRequest request) {
         var fields = request == null ? java.util.Set.<String>of() : request.fields();
         var result = trialService.confirmManual(taskId, user.getId(),
-                (bookId, metadata, source) -> scrapingService.applyConfirmedMetadata(bookId, user, metadata, source, fields));
+                (bookId, metadata, source) -> scrapingService.applyConfirmedMetadata(bookId, user,
+                        metadata, source, fields, request == null ? "SERIES" : request.descriptionTarget(),
+                        request == null ? null : request.versionId()));
         return Map.of("success", result.isSuccess(), "message", result.getMessage(),
                 "updatedFields", result.getUpdatedFields());
     }

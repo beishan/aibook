@@ -3,6 +3,7 @@ package com.aibook.service.scraper;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.Tag;
 import com.aibook.repository.BookRepository;
+import com.aibook.repository.BookVersionRepository;
 import com.aibook.service.AuthorService;
 import com.aibook.service.SystemConfigService;
 import com.aibook.service.TagService;
@@ -39,6 +40,8 @@ public class MetadataScrapingService {
     private final TagService tagService;
     @org.springframework.beans.factory.annotation.Autowired
     private ScraperProxyService proxyService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private BookVersionRepository bookVersionRepository;
 
     @Transactional
     public ScrapeResult scrapeBookWithResult(Book book, boolean forceUpdate) {
@@ -133,6 +136,14 @@ public class MetadataScrapingService {
     }
 
     @Transactional
+    public ScrapeResult applyConfirmedCandidate(Long bookId, com.aibook.model.entity.User user,
+            MetadataScraper.BookMetadata metadata, Set<String> overwriteFields,
+            String descriptionTarget, Long versionId) {
+        return applyConfirmedMetadata(bookId, user, metadata, "豆瓣读书", overwriteFields,
+                descriptionTarget, versionId);
+    }
+
+    @Transactional
     public ScrapeResult applyConfirmedMetadata(Long bookId, com.aibook.model.entity.User user,
             MetadataScraper.BookMetadata metadata, String source) {
         return applyConfirmedMetadata(bookId, user, metadata, source, Set.of());
@@ -141,11 +152,35 @@ public class MetadataScrapingService {
     @Transactional
     public ScrapeResult applyConfirmedMetadata(Long bookId, com.aibook.model.entity.User user,
             MetadataScraper.BookMetadata metadata, String source, Set<String> requestedFields) {
+        return applyConfirmedMetadata(bookId, user, metadata, source, requestedFields, "SERIES", null);
+    }
+
+    @Transactional
+    public ScrapeResult applyConfirmedMetadata(Long bookId, com.aibook.model.entity.User user,
+            MetadataScraper.BookMetadata metadata, String source, Set<String> requestedFields,
+            String descriptionTarget, Long versionId) {
         Set<String> overwriteFields = validateOverwriteFields(metadata, requestedFields);
         String attribution = source + "（人工确认）";
         Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
                         org.springframework.http.HttpStatus.NOT_FOUND, "书籍不存在或无权访问"));
+        String target = descriptionTarget == null ? "SERIES" : descriptionTarget.toUpperCase(java.util.Locale.ROOT);
+        if (!Set.of("SERIES", "VERSION").contains(target)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "简介保存位置无效");
+        }
+        com.aibook.model.entity.BookVersion version = null;
+        String oldVersionDescription = null;
+        if ("VERSION".equals(target)) {
+            if (versionId == null || bookVersionRepository == null) {
+                throw new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.BAD_REQUEST, "请选择当前书籍版本后再保存版本简介");
+            }
+            version = bookVersionRepository.findByIdAndBook(versionId, book)
+                    .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                            org.springframework.http.HttpStatus.NOT_FOUND, "书籍版本不存在或不属于当前书籍"));
+            oldVersionDescription = version.getDescription();
+        }
         Map<String, Object> before = snapshot(book);
         Map<String, String> sources = new LinkedHashMap<>();
         for (String field : List.of("title", "author", "isbn", "publisher", "publishDate",
@@ -153,7 +188,29 @@ public class MetadataScrapingService {
             sources.put(field, attribution);
         }
         evictBookCache(book);
-        applyMetadata(book, metadata, sources, false, overwriteFields);
+        MetadataScraper.BookMetadata bookMetadata = metadata;
+        if (version != null) {
+            bookMetadata = MetadataScraper.BookMetadata.builder()
+                    .title(metadata.getTitle())
+                    .author(metadata.getAuthor())
+                    .isbn(metadata.getIsbn())
+                    .publisher(metadata.getPublisher())
+                    .publishDate(metadata.getPublishDate())
+                    .coverUrl(metadata.getCoverUrl())
+                    .language(metadata.getLanguage())
+                    .rating(metadata.getRating())
+                    .tags(metadata.getTags())
+                    .metadataSources(metadata.getMetadataSources())
+                    .build();
+        }
+        applyMetadata(book, bookMetadata, sources, false, overwriteFields);
+        boolean versionDescriptionUpdated = false;
+        if (version != null && hasText(metadata.getDescription())
+                && (overwriteFields.contains("description") || !hasText(oldVersionDescription))) {
+            version.setDescription(metadata.getDescription().strip());
+            bookVersionRepository.save(version);
+            versionDescriptionUpdated = !Objects.equals(oldVersionDescription, version.getDescription());
+        }
         bookRepository.save(book);
         authorService.synchronizeBook(book);
         if (!Objects.equals(before.get("coverUrl"), book.getCoverUrl())
@@ -161,10 +218,13 @@ public class MetadataScrapingService {
             coverDownloadService.downloadCover(book);
         }
         evictBookCache(book);
-        List<String> fields = changedFields(before, book);
+        List<String> fields = new ArrayList<>(changedFields(before, book));
+        if (versionDescriptionUpdated && !fields.contains("description")) fields.add("description");
         return ScrapeResult.builder().book(book).matched(true).success(true)
                 .updatedFields(fields).sources(List.of(attribution))
-                .message(fields.isEmpty() ? "没有字段需要更新" : "已保存 " + fields.size() + " 个字段")
+                .message(fields.isEmpty() ? "没有字段需要更新"
+                        : "已保存 " + fields.size() + " 个字段（简介保存到"
+                                + (version == null ? "系列" : "当前版本") + "）")
                 .build();
     }
 

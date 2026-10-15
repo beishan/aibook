@@ -15,6 +15,7 @@ public class BookVersionDTO {
     private String fileHash;
     private Boolean primaryVersion;
     private Integer chapterCount;
+    private String description;
     private Long rewriteProjectId;
     private String rewriteStatus;
     private Long sourceVersionId;

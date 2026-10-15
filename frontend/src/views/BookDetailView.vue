@@ -446,10 +446,10 @@
           <div class="book-description">
             <div class="description-panel-header">
               <div>
-                <h2>内容简介</h2>
-                <p>{{ editingDescription ? '修改这本书的简介，支持保留段落与换行。' : '了解这本书的主要内容。' }}</p>
+                <h2>系列简介</h2>
+                <p>书籍公共简介，对该书的所有文件版本生效。</p>
               </div>
-              <div v-if="editingDescription" class="description-edit-actions">
+              <div v-if="editingDescriptionTarget === 'series'" class="description-edit-actions">
                 <button
                   class="btn"
                   type="button"
@@ -467,25 +467,25 @@
                   {{ savingDescription ? '保存中...' : '保存简介' }}
                 </button>
               </div>
-              <button
-                v-else
+              <button v-else
                 class="btn description-edit-button"
                 type="button"
-                @click="startEditDescription"
+                :disabled="editingDescriptionTarget !== null"
+                @click="startEditDescription('series')"
               >
                 <span aria-hidden="true">✎</span>
-                <span>编辑简介</span>
+                <span>编辑系列简介</span>
               </button>
             </div>
-            <div v-if="editingDescription" class="description-editor">
+            <div v-if="editingDescriptionTarget === 'series'" class="description-editor">
               <el-input
                 ref="descriptionInput"
                 v-model="descriptionEditValue"
                 type="textarea"
                 :autosize="{ minRows: 8, maxRows: 18 }"
-                placeholder="输入这本书的内容简介..."
+                placeholder="输入系列简介..."
                 :disabled="savingDescription"
-                aria-label="书籍简介"
+                aria-label="系列简介"
                 @keydown.ctrl.enter.prevent="saveDescription"
                 @keydown.meta.enter.prevent="saveDescription"
                 @keydown.esc.prevent="cancelEditDescription"
@@ -494,7 +494,7 @@
             </div>
             <p v-else-if="book.description" class="book-description-text">{{ book.description }}</p>
             <div v-else class="no-description">
-              <span>暂无简介</span>
+              <span>暂无系列简介</span>
               <button
                 v-if="selectedVersion?.primaryVersion"
                 class="btn btn-sm"
@@ -506,6 +506,49 @@
               <small v-if="selectedVersionFormat === 'epub'">
                 可尝试从 EPUB 的简介章节中提取。
               </small>
+            </div>
+          </div>
+          <div class="book-description version-description">
+            <div class="description-panel-header">
+              <div>
+                <h2>版本简介</h2>
+                <p>{{ selectedVersion ? `仅属于当前版本：${selectedVersion.displayName}` : '选择一个文件版本后查看简介。' }}</p>
+              </div>
+              <div v-if="editingDescriptionTarget === 'version'" class="description-edit-actions">
+                <button class="btn" type="button" :disabled="savingDescription" @click="cancelEditDescription">取消</button>
+                <button class="btn btn-primary" type="button" :disabled="savingDescription" @click="saveDescription">
+                  {{ savingDescription ? '保存中...' : '保存简介' }}
+                </button>
+              </div>
+              <button
+                v-else
+                class="btn description-edit-button"
+                type="button"
+                :disabled="!selectedVersion || editingDescriptionTarget !== null"
+                @click="startEditDescription('version')"
+              >
+                <span aria-hidden="true">✎</span>
+                <span>编辑版本简介</span>
+              </button>
+            </div>
+            <div v-if="editingDescriptionTarget === 'version'" class="description-editor">
+              <el-input
+                ref="descriptionInput"
+                v-model="descriptionEditValue"
+                type="textarea"
+                :autosize="{ minRows: 8, maxRows: 18 }"
+                placeholder="输入当前版本简介..."
+                :disabled="savingDescription"
+                aria-label="版本简介"
+                @keydown.ctrl.enter.prevent="saveDescription"
+                @keydown.meta.enter.prevent="saveDescription"
+                @keydown.esc.prevent="cancelEditDescription"
+              />
+              <span class="description-shortcut">Ctrl / ⌘ + Enter 保存 · Esc 取消</span>
+            </div>
+            <p v-else-if="selectedVersion?.description" class="book-description-text">{{ selectedVersion.description }}</p>
+            <div v-else class="no-description">
+              <span>{{ selectedVersion ? '当前版本暂无简介' : '尚未选择版本' }}</span>
             </div>
           </div>
         </div>
@@ -817,7 +860,7 @@
 
     <!-- 刮削对话框 -->
     <ScraperDialog
-      :book="book"
+      :book="scraperTargetBook"
       :visible="showScraperDialog"
       @running="scraping = $event"
       @close="showScraperDialog = false"
@@ -992,7 +1035,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, onMounted, nextTick } from 'vue'
+import { computed, reactive, ref, onMounted, nextTick, watch } from 'vue'
 import BookSeriesPanel from '@/components/BookSeriesPanel.vue'
 import MetadataSearch from '@/components/MetadataSearch.vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -1079,6 +1122,7 @@ interface BookVersion {
   fileHash?: string
   primaryVersion: boolean
   chapterCount?: number
+  description?: string | null
   rewriteProjectId?: number
   rewriteStatus?: string
   sourceVersionId?: number
@@ -1159,6 +1203,13 @@ const allImportVersionsSelected = computed(() => importSources.value.length > 0
 const selectedVersion = computed(() =>
   versions.value.find(version => version.id === selectedVersionId.value) || null,
 )
+const scraperTargetBook = computed(() => book.value ? {
+  id: book.value.id,
+  title: book.value.title,
+  author: book.value.author,
+  versionId: selectedVersionId.value || undefined,
+  displayName: selectedVersion.value?.displayName,
+} : null)
 const selectedVersionFormat = computed(() =>
   selectedVersion.value?.format || book.value?.format || '',
 )
@@ -1204,7 +1255,7 @@ const showAddToListDialog = ref(false)
 const editingTitle = ref(false)
 const editTitleValue = ref('')
 const savingTitle = ref(false)
-const editingDescription = ref(false)
+const editingDescriptionTarget = ref<'series' | 'version' | null>(null)
 const descriptionEditValue = ref('')
 const savingDescription = ref(false)
 const descriptionInput = ref<any>(null)
@@ -1861,39 +1912,60 @@ const saveTitle = async () => {
   }
 }
 
-const startEditDescription = async () => {
-  descriptionEditValue.value = book.value?.description || ''
-  editingDescription.value = true
+const currentDescription = (target: 'series' | 'version') =>
+  target === 'series' ? book.value?.description || '' : selectedVersion.value?.description || ''
+
+const startEditDescription = async (target: 'series' | 'version') => {
+  if (target === 'version' && !selectedVersion.value) return
+  descriptionEditValue.value = currentDescription(target)
+  editingDescriptionTarget.value = target
   await nextTick()
   descriptionInput.value?.focus()
 }
 
 const cancelEditDescription = () => {
-  descriptionEditValue.value = book.value?.description || ''
-  editingDescription.value = false
+  if (editingDescriptionTarget.value) {
+    descriptionEditValue.value = currentDescription(editingDescriptionTarget.value)
+  }
+  editingDescriptionTarget.value = null
 }
 
 const saveDescription = async () => {
-  if (!book.value || savingDescription.value) return
+  const target = editingDescriptionTarget.value
+  if (!book.value || !target || savingDescription.value) return
 
   const description = descriptionEditValue.value.trim()
-  if (description === (book.value.description || '').trim()) {
-    editingDescription.value = false
+  if (description === currentDescription(target).trim()) {
+    editingDescriptionTarget.value = null
     return
   }
 
   savingDescription.value = true
   try {
-    book.value = await bookStore.updateBookMetadata(book.value.id, { description })
-    descriptionEditValue.value = book.value.description || ''
-    editingDescription.value = false
-    message.success(description ? '书籍简介已保存' : '书籍简介已清除')
+    if (target === 'series') {
+      book.value = await bookStore.updateBookMetadata(book.value.id, { description })
+    } else if (selectedVersion.value) {
+      const { data } = await api.put<BookVersion>(
+        `/api/books/${book.value.id}/versions/${selectedVersion.value.id}/description`,
+        { description },
+      )
+      versions.value = versions.value.map(version => version.id === data.id ? data : version)
+    }
+    descriptionEditValue.value = description
+    editingDescriptionTarget.value = null
+    message.success(description ? `${target === 'series' ? '系列' : '版本'}简介已保存` : '简介已清除')
   } catch (error: any) {
-    message.error(error.response?.data?.message || '书籍简介保存失败')
+    message.error(error.response?.data?.message || '简介保存失败')
   } finally {
     savingDescription.value = false
   }
 }
+
+watch(selectedVersionId, (nextVersionId, previousVersionId) => {
+  if (nextVersionId !== previousVersionId && editingDescriptionTarget.value === 'version') {
+    cancelEditDescription()
+  }
+})
 
 const hydrateInfoEditForm = () => {
   if (!book.value) return
@@ -3350,6 +3422,12 @@ onMounted(() => {
   line-height: 1.8;
   color: var(--text-secondary);
   font-size: var(--font-size-base);
+}
+
+.book-description + .book-description {
+  padding-top: 24px;
+  margin-top: 24px;
+  border-top: 1px solid var(--border-color-light);
 }
 
 .description-panel-header {

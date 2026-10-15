@@ -390,6 +390,32 @@
                   >覆盖已有</el-checkbox>
                 </span>
               </div>
+              <div v-if="manual && book?.versionId && hasFieldValue('description')" class="trial-description-target">
+                <div class="trial-description-target-header">
+                  <strong>简介保存位置</strong>
+                  <span>默认保存到系列简介</span>
+                </div>
+                <div
+                  class="trial-description-target-switch"
+                  :class="{ 'is-version': descriptionTarget === 'VERSION' }"
+                  role="radiogroup"
+                  aria-label="简介保存位置"
+                  @keydown="switchDescriptionTargetByKeyboard"
+                >
+                  <span class="trial-description-target-indicator" aria-hidden="true"></span>
+                  <button
+                    v-for="option in descriptionTargetOptions"
+                    :key="option.value"
+                    type="button"
+                    role="radio"
+                    :aria-checked="descriptionTarget === option.value"
+                    :tabindex="descriptionTarget === option.value ? 0 : -1"
+                    :disabled="!canConfirm || confirming || running"
+                    @click="descriptionTarget = option.value"
+                  >{{ option.label }}</button>
+                </div>
+                <small>{{ descriptionTarget === 'SERIES' ? '对这本书的所有版本生效。' : `只保存到当前版本：${book.displayName || '已选版本'}。` }}</small>
+              </div>
               <el-input
                 :model-value="formatValue(snapshot.metadata.description)"
                 aria-label="内容简介"
@@ -472,6 +498,8 @@ interface BookChoice {
   id: number
   title: string
   author?: string
+  versionId?: number
+  displayName?: string
   format?: string
   categoryName?: string
   coverUrl?: string
@@ -621,6 +649,12 @@ const pollError = ref('')
 const taskId = ref('')
 const candidateError = ref('')
 const overwriteFields = ref<string[]>([])
+type DescriptionTarget = 'SERIES' | 'VERSION'
+const descriptionTarget = ref<DescriptionTarget>('SERIES')
+const descriptionTargetOptions: { value: DescriptionTarget; label: string }[] = [
+  { value: 'SERIES', label: '系列简介' },
+  { value: 'VERSION', label: '当前版本简介' },
+]
 const overwriteFieldLabels = computed(() => overwriteFields.value
   .map(field => fields[field as keyof typeof fields]).join('、'))
 function hasFieldValue(field: string) {
@@ -649,6 +683,20 @@ const canConfirm = computed(() => snapshot.value?.status === 'REVIEW_REQUIRED'
 watch([taskId, () => snapshot.value?.selectedCandidateId, () => selected.value?.id, () => props.source?.configKey], () => {
   overwriteFields.value = []
 })
+watch([taskId, () => props.book?.id, () => props.book?.versionId, () => props.source?.configKey], () => {
+  descriptionTarget.value = 'SERIES'
+})
+async function switchDescriptionTargetByKeyboard(event: KeyboardEvent) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)
+      || !canConfirm.value || confirming.value || running.value) return
+  event.preventDefault()
+  const index = event.key === 'Home' ? 0 : event.key === 'End' ? 1
+    : descriptionTarget.value === 'SERIES' ? 1 : 0
+  const group = event.currentTarget as HTMLElement
+  descriptionTarget.value = descriptionTargetOptions[index].value
+  await nextTick()
+  group.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus()
+}
 let savedTask = ''
 watch([resultCover, () => snapshot.value?.selectedCandidateId, () => selected.value?.id, taskId], () => {
   resultCoverFailed.value = false
@@ -780,7 +828,11 @@ async function confirmCandidate() {
   try {
     const url = props.manual ? `${apiPrefix.value}/${taskId.value}/confirm`
       : `${apiPrefix.value}/${taskId.value}/candidates/${snapshot.value?.selectedCandidateId}/confirm`
-    await api.post(url, { overwriteFields: [...overwriteFields.value] })
+    await api.post(url, {
+      overwriteFields: [...overwriteFields.value],
+      descriptionTarget: descriptionTarget.value,
+      versionId: descriptionTarget.value === 'VERSION' ? props.book?.versionId : undefined,
+    })
     if (disposed || request !== generation) return
     await poll(request)
   } catch (error: any) {
@@ -1251,6 +1303,80 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--primary) 5%, transparent);
   color: var(--primary);
 }
+.trial-description-target {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-card);
+}
+.trial-description-target-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.trial-description-target-header strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.trial-description-target-header > span,
+.trial-description-target > small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.trial-description-target-switch {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 420px;
+  padding: 3px;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  background: var(--surface-hover);
+}
+.trial-description-target-indicator {
+  position: absolute;
+  z-index: -1;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / 2);
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border-color));
+  border-radius: 8px;
+  background: var(--surface-card);
+  transition: transform 200ms ease;
+}
+.trial-description-target-switch.is-version .trial-description-target-indicator {
+  transform: translateX(100%);
+}
+.trial-description-target-switch button {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.trial-description-target-switch button[aria-checked="true"] {
+  color: var(--primary);
+  font-weight: 600;
+}
+.trial-description-target-switch button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.trial-description-target-switch button:disabled {
+  cursor: not-allowed;
+  opacity: .6;
+}
 .trial-result-confirm {
   display: flex;
   align-items: center;
@@ -1702,7 +1828,8 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
   .trial-tab-indicator,
   .trial-candidate,
-  .trial-view-indicator {
+  .trial-view-indicator,
+  .trial-description-target-indicator {
     transition: none;
   }
   :deep(.el-progress-bar__inner) {
