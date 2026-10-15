@@ -409,7 +409,7 @@
         <el-button type="primary" :icon="Search" @click="applyDiscoveryFilters">查询</el-button><el-button @click="resetDiscoveryFilters">重置</el-button>
       </div>
       <el-table v-if="discoveryViewMode==='table'" v-loading="discoveryLoading" :data="discoveredBooks" class="data-table" @selection-change="selectedDiscoveries=$event">
-        <el-table-column type="selection" width="48" :fixed="isMobileCrawlerLayout ? false : 'left'" />
+        <el-table-column type="selection" width="60" :fixed="isMobileCrawlerLayout ? false : 'left'" />
         <el-table-column label="自动入库" width="110">
           <template #default="{row}">
             <el-button size="small" :type="row.autoImportEnabled ? 'primary' : 'default'" plain
@@ -579,7 +579,7 @@
         </div>
       </transition>
       <el-table v-if="bookViewMode==='table'" ref="bookTableRef" v-loading="bookLoading" :data="books" row-key="id" @selection-change="selectedBooks=$event" @row-click="handleBookTableRowClick" class="data-table">
-        <el-table-column type="selection" width="48" reserve-selection :fixed="isMobileCrawlerLayout ? false : 'left'" />
+        <el-table-column type="selection" width="60" reserve-selection :fixed="isMobileCrawlerLayout ? false : 'left'" />
         <el-table-column label="自动入库" width="110">
           <template #default="{row}">
             <el-button size="small" :type="row.autoImportEnabled ? 'primary' : 'default'" plain
@@ -2176,7 +2176,7 @@ const TaskTable = defineComponent({
     () => [
   props.selectable ? h(ElTableColumn, {
     type: 'selection',
-    width: 48,
+    width: 60,
     reserveSelection: true,
     fixed: isMobileCrawlerLayout.value ? false : 'left',
   }) : null,
@@ -6044,6 +6044,53 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 </style>
 
 <style scoped>
+/* 保留原生全选、半选和键盘交互，仅扩大采集中心表格的选择目标。 */
+:deep(.el-table-column--selection.el-table__cell) {
+  padding: 0;
+}
+
+:deep(.el-table-column--selection .cell) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0;
+}
+
+:deep(.el-table-column--selection .el-checkbox) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  border-radius: 8px;
+}
+
+:deep(.el-table-column--selection .el-checkbox:not(.is-disabled):hover) {
+  background: var(--primary-alpha-10);
+}
+
+:deep(.el-table-column--selection .el-checkbox:has(input:focus-visible)) {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+:deep(.el-table-column--selection .el-checkbox .el-checkbox__inner) {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+}
+
+:deep(.el-table-column--selection .el-checkbox .el-checkbox__inner::after) {
+  width: 5px;
+  height: 10px;
+}
+
+:deep(.el-table-column--selection .el-checkbox__input.is-indeterminate .el-checkbox__inner::before) {
+  top: 8px;
+}
+
 .metric-grid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
