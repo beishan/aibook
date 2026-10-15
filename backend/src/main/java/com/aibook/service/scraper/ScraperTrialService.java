@@ -24,6 +24,8 @@ import org.springframework.web.server.ResponseStatusException;
 @RequiredArgsConstructor
 public class ScraperTrialService {
     private final List<MetadataScraper> scrapers;
+    @org.springframework.beans.factory.annotation.Autowired
+    private ScraperProxyService proxyService;
     private final Cache<String, Trial> trials = Caffeine.newBuilder()
             .maximumSize(100).expireAfterWrite(Duration.ofMinutes(30)).build();
     private final ThreadPoolExecutor executor = new ThreadPoolExecutor(
@@ -96,6 +98,7 @@ public class ScraperTrialService {
                         trial.log("正在加载豆瓣候选 " + candidateId + " 的完整元信息");
                         try {
                             var metadata = douban.getBookDetail(candidateId);
+                            if (hasResult(metadata) && proxyService != null) proxyService.taskSucceeded("douban");
                             synchronized (trial) {
                                 trial.selectedCandidateId = candidateId;
                                 trial.finish(hasResult(metadata) ? "REVIEW_REQUIRED" : "NO_RESULT",
@@ -153,6 +156,7 @@ public class ScraperTrialService {
                     diagnostics.stage("豆瓣候选搜索");
                     trial.log("正在按书名搜索备选元信息：" + MetadataScraper.cleanSearchTitle(book.getTitle()));
                     var candidates = douban.searchCandidates(book.getTitle());
+                    if (!candidates.isEmpty() && proxyService != null) proxyService.taskSucceeded("douban");
                     synchronized (trial) {
                         trial.candidates = List.copyOf(candidates);
                         trial.finish(candidates.isEmpty() ? "NO_RESULT" : "AWAITING_SELECTION",
@@ -175,6 +179,7 @@ public class ScraperTrialService {
                     result = scraper.scrape(book);
                 }
                 if (hasResult(result)) {
+                    if (proxyService != null) proxyService.taskSucceeded(scraper.getConfigKey());
                     trial.finish("MATCHED", "已取得元信息，请核对是否为目标书籍；未写入书库", result, diagnostics);
                 } else {
                     trial.finish("NO_RESULT", "未取得元信息", null, diagnostics);

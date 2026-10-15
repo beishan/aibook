@@ -27,6 +27,9 @@ import java.util.regex.Pattern;
 public class JdBookScraper implements MetadataScraper {
 
     private final ObjectMapper objectMapper;
+    @org.springframework.beans.factory.annotation.Autowired
+    private ScraperProxyService proxyService;
+
     private final Random random = new Random();
 
     private static final String JD_SEARCH_URL = "https://search.jd.com/Search";
@@ -173,7 +176,7 @@ public class JdBookScraper implements MetadataScraper {
             ScrapeDiagnostics.request(url);
             String userAgent = USER_AGENTS[random.nextInt(USER_AGENTS.length)];
 
-            Connection.Response response = createConnection(url)
+            Connection request = createConnection(url)
                     .userAgent(userAgent)
                     .referrer("https://www.jd.com/")
                     .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
@@ -187,12 +190,16 @@ public class JdBookScraper implements MetadataScraper {
                     .header("Sec-Fetch-User", "?1")
                     .timeout(15000)
                     .ignoreContentType(true)
-                    .ignoreHttpErrors(true)
-                    .execute();
+                    .ignoreHttpErrors(true);
 
-            String body = response.body();
-            return ScrapeDiagnostics.response(response.statusCode(), response.url().toString(), body)
-                    ? body : null;
+            ScraperProxyService.Request<String> action = proxy -> {
+                Connection.Response response = request.proxy(proxy).execute();
+                String body = response.body();
+                boolean accepted = ScrapeDiagnostics.response(response.statusCode(), response.url().toString(), body);
+                return new ScraperProxyService.Outcome<>(accepted ? body : null, accepted);
+            };
+            return proxyService == null ? action.run(java.net.Proxy.NO_PROXY).value()
+                    : proxyService.execute(getConfigKey(), action).value();
         } catch (Exception e) {
             ScrapeDiagnostics.exception(e);
             log.error("请求京东失败: {}", url, e);

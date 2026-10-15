@@ -100,6 +100,17 @@ class CrawlerMihomoServiceTest {
     }
 
     @Test
+    void refusesBindingASelectorAlreadyControlledByScraper() throws Exception {
+        var references = mock(com.aibook.service.scraper.ScraperProxyConfigStore.class);
+        ReflectionTestUtils.setField(service, "scraperProxyStore", references);
+        when(references.controls(anyString(), anyString(), isNull())).thenReturn(true);
+        var payload = new PolicyPayload("http://localhost:9111", null, false,
+                "http://localhost:7895", "crawler", List.of("A", "B"), true,
+                2, 300, 0, 0, 0, false);
+        assertThrows(ResponseStatusException.class, () -> service.save(user, 2L, 4L, payload));
+    }
+
+    @Test
     void configurationSaveDoesNotWaitAndCurrentChapterKeepsItsSnapshot() throws Exception {
         SystemMihomoService shared = sharedSource();
         service.saveReference(user, 2L, 4L, reference("MANUAL", "A"));

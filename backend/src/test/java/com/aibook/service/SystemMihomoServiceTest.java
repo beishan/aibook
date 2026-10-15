@@ -40,6 +40,18 @@ class SystemMihomoServiceTest {
     }
 
     @Test
+    void scraperReferencesPreventDeletingOrChangingControlledGroup() {
+        var references = mock(com.aibook.service.scraper.ScraperProxyConfigStore.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "scraperProxyStore", references);
+        when(references.usesNodeGroup(8L)).thenReturn(true);
+        when(groups.findById(8L)).thenReturn(Optional.of(group(1L)));
+        assertThrows(ResponseStatusException.class, () -> service.delete(7L, 8L, 1L));
+        assertThrows(ResponseStatusException.class, () -> service.save(7L, 8L, 1L,
+                new NodeGroupPayload("改名", "other", "http://mihomo:7895", List.of("A", "B"))));
+        verify(groups, never()).delete(any());
+    }
+
+    @Test
     void storesOrderedAccountOwnedGroupAndResolvesLiveCredentials() throws Exception {
         var view = service.save(7L, null, 1L, new NodeGroupPayload("备用", "crawler", "http://mihomo:7895", List.of("B", "A")));
         assertEquals(List.of("B", "A"), view.nodes());

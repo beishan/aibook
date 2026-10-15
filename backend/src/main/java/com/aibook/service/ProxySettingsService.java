@@ -23,6 +23,8 @@ public class ProxySettingsService {
     private final CrawlerProxyConfigRepository crawlerRepository;
     @Autowired
     private CrawlerMihomoPolicyRepository mihomoPolicies;
+    @Autowired
+    private com.aibook.service.scraper.ScraperProxyConfigStore scraperProxyStore;
 
     @Transactional(readOnly = true)
     public List<SystemProxyView> systemProxies() {
@@ -64,6 +66,9 @@ public class ProxySettingsService {
 
     @Transactional
     public void deleteSystemProxy(Long id) {
+        if (scraperProxyStore != null && scraperProxyStore.usesSystemProxy(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "代理正在被刮削来源使用，请先解除引用");
+        }
         if (!systemRepository.existsById(id))
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "系统代理配置不存在");
         systemRepository.deleteById(id);
@@ -140,6 +145,10 @@ public class ProxySettingsService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "未知的代理类型");
             }
         }
+        if (config.getId() != null && type != config.getProxyType()
+                && scraperProxyStore != null && scraperProxyStore.usesSystemProxy(config.getId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "代理已绑定刮削来源，请先解除绑定再修改类型");
+        }
         if (type == SystemProxyConfig.ProxyType.MIHOMO) {
             String controller = request.controllerUrl() == null
                     ? config.getControllerUrl() : CrawlerMihomoService.normalizeUrl(request.controllerUrl(), false);
@@ -147,8 +156,9 @@ public class ProxySettingsService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请输入 Mihomo 控制 API 地址");
             }
             if (config.getId() != null && !Objects.equals(controller, config.getControllerUrl())
-                    && mihomoPolicies != null && mihomoPolicies.existsBySystemProxyId(config.getId())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "代理已绑定执行器，请先解除绑定再修改控制地址");
+                    && (mihomoPolicies != null && mihomoPolicies.existsBySystemProxyId(config.getId())
+                    || scraperProxyStore != null && scraperProxyStore.usesSystemProxy(config.getId()))) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "代理已绑定执行器或刮削来源，请先解除绑定再修改控制地址");
             }
             config.setControllerUrl(controller);
             if (request.clearSecret()) config.setControllerSecret(null);

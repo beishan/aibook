@@ -22,6 +22,9 @@ public class GoogleBooksScraper implements MetadataScraper {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    @org.springframework.beans.factory.annotation.Autowired
+    private ScraperProxyService proxyService;
+
     private final SystemConfigService configService;
 
     @Value("${scraper.google-books.api-key:}")
@@ -30,6 +33,7 @@ public class GoogleBooksScraper implements MetadataScraper {
     public GoogleBooksScraper(SystemConfigService configService) {
         org.springframework.http.client.SimpleClientHttpRequestFactory requestFactory =
                 new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        requestFactory.setProxy(java.net.Proxy.NO_PROXY);
         requestFactory.setConnectTimeout(10000);
         requestFactory.setReadTimeout(20000);
         this.restTemplate = new RestTemplate(requestFactory);
@@ -46,6 +50,13 @@ public class GoogleBooksScraper implements MetadataScraper {
             return dbKey;
         }
         return fallbackApiKey;
+    }
+
+    private String requestJson(String url) throws Exception {
+        if (proxyService != null) return proxyService.getJson(getConfigKey(), url);
+        var response = restTemplate.getForEntity(url, String.class);
+        return ScrapeDiagnostics.response(response.getStatusCode().value(), url, response.getBody())
+                ? response.getBody() : null;
     }
 
     @Override
@@ -90,10 +101,8 @@ public class GoogleBooksScraper implements MetadataScraper {
 
             log.info("查询 Google Books ISBN: {}", isbn);
             ScrapeDiagnostics.request(url);
-            org.springframework.http.ResponseEntity<String> httpResponse =
-                    restTemplate.getForEntity(url, String.class);
-            String response = httpResponse.getBody();
-            if (!ScrapeDiagnostics.response(httpResponse.getStatusCode().value(), url, response)) return null;
+            String response = requestJson(url);
+            if (response == null) return null;
 
             JsonNode root = objectMapper.readTree(response);
             JsonNode items = root.get("items");
@@ -132,10 +141,8 @@ public class GoogleBooksScraper implements MetadataScraper {
 
             log.info("搜索 Google Books: {} (原始: {})", searchTitle, title);
             ScrapeDiagnostics.request(url);
-            org.springframework.http.ResponseEntity<String> httpResponse =
-                    restTemplate.getForEntity(url, String.class);
-            String response = httpResponse.getBody();
-            if (!ScrapeDiagnostics.response(httpResponse.getStatusCode().value(), url, response)) return null;
+            String response = requestJson(url);
+            if (response == null) return null;
 
             JsonNode root = objectMapper.readTree(response);
             JsonNode items = root.get("items");

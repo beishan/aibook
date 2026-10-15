@@ -23,6 +23,32 @@ import org.springframework.web.server.ResponseStatusException;
 
 class ProxySettingsServiceTest {
     @Test
+    void protectsReferencedProxyIdentityButAllowsDisablingIt() {
+        var systems = mock(SystemProxyConfigRepository.class);
+        var service = new ProxySettingsService(systems, mock(CrawlerProxyConfigRepository.class));
+        var references = mock(com.aibook.service.scraper.ScraperProxyConfigStore.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "scraperProxyStore", references);
+        when(references.usesSystemProxy(1L)).thenReturn(true);
+        assertThatThrownBy(() -> service.deleteSystemProxy(1L))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        var proxy = SystemProxyConfig.builder().id(1L).name("代理")
+                .proxyType(SystemProxyConfig.ProxyType.MIHOMO).controllerUrl("http://mihomo:9090")
+                .url("http://mihomo:7890").enabled(true).build();
+        when(systems.findById(1L)).thenReturn(Optional.of(proxy));
+        when(systems.save(any())).thenAnswer(call -> call.getArgument(0));
+        assertThatThrownBy(() -> service.updateSystemProxy(1L,
+                new SystemProxyRequest("代理", "http://mihomo:7890", true, 1,
+                        "SIMPLE", null, null, false)))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("修改类型");
+        assertThatThrownBy(() -> service.updateSystemProxy(1L,
+                new SystemProxyRequest("代理", "http://mihomo:7890", true, 1,
+                        "MIHOMO", "http://other:9090", null, false)))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("修改控制地址");
+        assertThat(service.updateSystemProxy(1L,
+                new SystemProxyRequest("新名称", "http://mihomo:7890", false, 2)).enabled()).isFalse();
+    }
+
+    @Test
     void legacySystemProxyDefaultsToSimpleAndMihomoTogglePreservesSecret() {
         SystemProxyConfigRepository systems = mock(SystemProxyConfigRepository.class);
         CrawlerProxyConfigRepository crawlers = mock(CrawlerProxyConfigRepository.class);

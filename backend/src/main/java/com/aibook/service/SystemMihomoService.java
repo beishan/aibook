@@ -25,6 +25,8 @@ public class SystemMihomoService {
     private final CrawlerMihomoPolicyRepository policies;
     private final MihomoApiClient api;
     private final ObjectMapper mapper;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.aibook.service.scraper.ScraperProxyConfigStore scraperProxyStore;
 
     public record ConnectionPayload(Long id, SystemProxyRequest config) { }
     public record ResolvedConnection(String controllerUrl, String secret, String proxyUrl,
@@ -81,7 +83,8 @@ public class SystemMihomoService {
         if (payload.name() == null || payload.name().isBlank() || payload.name().length() > 100) bad("节点组名称需填写且最多 100 字符");
         if (payload.controlGroup() == null || payload.controlGroup().isBlank() || payload.controlGroup().length() > 200) bad("请选择受控 Selector 代理组");
         String proxyUrl = CrawlerMihomoService.normalizeUrl(payload.proxyUrl(), true);
-        if (groupId != null && policies.existsByNodeGroupId(groupId)
+        if (groupId != null && (policies.existsByNodeGroupId(groupId)
+                || scraperProxyStore != null && scraperProxyStore.usesNodeGroup(groupId))
                 && (!Objects.equals(group.getControlGroup(), payload.controlGroup())
                 || !Objects.equals(group.getProxyUrl(), proxyUrl))) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "节点组已绑定执行器，请先解除绑定再修改受控组或入口");
@@ -108,8 +111,9 @@ public class SystemMihomoService {
 
     public void delete(Long proxyId, Long groupId, Long userId) {
         MihomoNodeGroup group = ownedGroup(proxyId, groupId, userId);
-        if (policies.existsByNodeGroupId(groupId)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "节点组正在被执行器使用，请先更换执行器配置");
+        if (policies.existsByNodeGroupId(groupId)
+                || scraperProxyStore != null && scraperProxyStore.usesNodeGroup(groupId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "节点组正在被执行器或刮削来源使用，请先解除引用");
         }
         groups.delete(group);
     }

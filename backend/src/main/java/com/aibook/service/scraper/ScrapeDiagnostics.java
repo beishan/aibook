@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.function.Consumer;
 import javax.net.ssl.SSLException;
 import org.jsoup.Jsoup;
@@ -29,6 +30,7 @@ public final class ScrapeDiagnostics implements AutoCloseable {
     private Integer httpStatus;
 
     public enum Code {
+        PROXY_ERROR("代理配置或节点不可用", "检查来源代理配置、系统代理和节点组状态，不会自动改为直连。", 85),
         CONFIRMATION_REQUIRED("候选需要人工确认", "请在试刮削中核对并选择候选书籍。", 15),
         NO_MATCH("未搜索到匹配书籍", "尝试核对 ISBN、书名或更换来源。", 0),
         UNKNOWN("原因未确认", "检查来源配置或稍后重试；不能据此断定配置可用。", 10),
@@ -131,6 +133,10 @@ public final class ScrapeDiagnostics implements AutoCloseable {
     }
 
     public static void exception(Throwable error) {
+        if (error instanceof org.springframework.web.server.ResponseStatusException status) {
+            report(Code.PROXY_ERROR, Objects.toString(status.getReason(), "来源代理不可用"));
+            return;
+        }
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
             if (cause instanceof RestClientResponseException response) {
                 response(response.getStatusCode().value(), currentEndpoint(), response.getResponseBodyAsString());

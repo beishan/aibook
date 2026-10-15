@@ -36,6 +36,8 @@ public class MetadataScrapingService {
     private final SystemConfigService configService;
     private final AuthorService authorService;
     private final TagService tagService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private ScraperProxyService proxyService;
 
     @Transactional
     public ScrapeResult scrapeBookWithResult(Book book, boolean forceUpdate) {
@@ -63,6 +65,7 @@ public class MetadataScrapingService {
             try {
                 MetadataScraper.BookMetadata found = scraper.scrape(book);
                 if (hasMetadata(found)) {
+                    if (proxyService != null) proxyService.taskSucceeded(scraper.getConfigKey());
                     int knownFieldCount = sources.size();
                     merge(combined, sources, found, null, scraper.getName());
                     if (sources.size() > knownFieldCount) usedSources.add(scraper.getName());

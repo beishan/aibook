@@ -394,6 +394,7 @@
               </div>
             </div>
             <div class="scraper-source-controls">
+              <button type="button" class="btn btn-secondary" @click="openScraperProxy(source)">代理配置</button>
               <button
                 class="btn btn-secondary"
                 :disabled="trialRunningSource !== null && trialRunningSource !== source.configKey"
@@ -707,6 +708,7 @@
       @close="showScanHistory = false"
     />
   </div>
+  <ScraperProxyDialog v-model="proxyVisible" :source="proxySource" />
   <ScraperTrialDialog
     v-model="trialVisible"
     :source="trialSource"
@@ -722,6 +724,7 @@ import { message, confirm } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import api from '@/utils/api'
 import ScraperTrialDialog from '@/components/ScraperTrialDialog.vue'
+import ScraperProxyDialog from '@/components/ScraperProxyDialog.vue'
 import DirectoryBrowser from '@/components/DirectoryBrowser.vue'
 import ScanHistoryDialog from '@/components/ScanHistoryDialog.vue'
 import ConnectionsView from '@/views/ConnectionsView.vue'
@@ -1075,6 +1078,12 @@ const schedulerConfig = reactive({
 })
 const loadingSchedulerConfig = ref(false)
 const savingSchedulerConfig = ref(false)
+const proxyVisible = ref(false)
+const proxySource = ref<ScraperStatus | null>(null)
+function openScraperProxy(source: ScraperStatus) {
+  proxySource.value = source
+  proxyVisible.value = true
+}
 const trialVisible = ref(false)
 const trialSource = ref<ScraperStatus | null>(null)
 const trialRunningSource = ref<string | null>(null)

@@ -37,7 +37,23 @@ public class ScraperController {
     private final BookService bookService;
     private final SystemConfigService configService;
     private final List<MetadataScraper> scrapers;
+    private final com.aibook.service.scraper.ScraperProxyService proxyService;
     private final com.aibook.service.scraper.ScraperTrialService trialService;
+
+    @GetMapping("/proxy-settings/{source}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public com.aibook.service.scraper.ScraperProxyService.View getProxySettings(@PathVariable String source) {
+        return proxyService.get(source);
+    }
+
+    @PutMapping("/proxy-settings/{source}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public com.aibook.service.scraper.ScraperProxyService.View saveProxySettings(
+            @PathVariable String source,
+            @RequestBody com.aibook.service.scraper.ScraperProxyConfigStore.Settings settings,
+            @AuthenticationPrincipal User user) throws Exception {
+        return proxyService.save(source, user.getId(), settings);
+    }
 
     @PostMapping("/trial/{configKey}/books/{bookId}")
     @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")

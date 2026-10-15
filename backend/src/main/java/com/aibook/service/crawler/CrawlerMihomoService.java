@@ -48,6 +48,8 @@ public class CrawlerMihomoService {
     private SystemMihomoService systemMihomoService;
     @Autowired
     private ProxySettingsService proxySettingsService;
+    @Autowired
+    private com.aibook.service.scraper.ScraperProxyConfigStore scraperProxyStore;
     private final ThreadLocal<SystemMihomoService.ResolvedConnection> referenceConnection = new ThreadLocal<>();
     private final Map<Long, ReentrantLock> locks = new ConcurrentHashMap<>();
     private final Map<Long, ReentrantLock> configurationLocks = new ConcurrentHashMap<>();
@@ -178,6 +180,14 @@ public class CrawlerMihomoService {
 
     private PolicyView saveConfigured(User user, Long queueId, Long id, PolicyPayload payload,
             ReferencePayload reference) throws Exception {
+        if (scraperProxyStore == null) return saveConfiguredExclusive(user, queueId, id, payload, reference);
+        synchronized (scraperProxyStore) {
+            return saveConfiguredExclusive(user, queueId, id, payload, reference);
+        }
+    }
+
+    private PolicyView saveConfiguredExclusive(User user, Long queueId, Long id, PolicyPayload payload,
+            ReferencePayload reference) throws Exception {
         owned(user, queueId, id);
         // Validate without holding the running-request gate or a database write lock.
         CrawlerMihomoPolicy validation = connection(id, payload);
@@ -202,6 +212,10 @@ public class CrawlerMihomoService {
             if (payload.groupName() == null || payload.groupName().isBlank()
                     || payload.groupName().length() > 200) bad("请选择受控代理组");
             config.setGroupName(payload.groupName());
+            if (scraperProxyStore != null && scraperProxyStore.controls(
+                    config.getControllerUrl(), config.getGroupName(), null)) {
+                bad("此控制器的代理组已绑定刮削来源，请使用独立代理组");
+            }
             if (policies.existsByControllerUrlAndGroupNameAndExecutorIdNot(
                     config.getControllerUrl(), config.getGroupName(), id)) {
                 bad("此控制器的代理组已由其他执行器管理，请使用独立代理组");
