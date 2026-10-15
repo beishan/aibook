@@ -83,6 +83,18 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
     Optional<CrawlerBook> findBySiteAndExternalBookId(CrawlerSite site, String externalBookId);
     Optional<CrawlerBook> findFirstBySiteOrderByLastCrawlTimeDesc(CrawlerSite site);
     Page<CrawlerBook> findBySiteUser(User user, Pageable pageable);
+    @Query("""
+            select distinct b.tags from CrawlerBook b
+            where b.site.user = :user
+              and b.discoveryStatus = :discoveryStatus
+              and b.crawlStatus <> :excludedStatus
+              and (:siteId is null or b.site.id = :siteId)
+            """)
+    List<String> managedTagMetadata(@Param("user") User user,
+            @Param("discoveryStatus") CrawlerBook.DiscoveryStatus discoveryStatus,
+            @Param("excludedStatus") CrawlerBook.CrawlStatus excludedStatus,
+            @Param("siteId") Long siteId);
+
     // Keep the sorting parameter bindable in the count query without filtering any status.
     @Query(value = """
             select b from CrawlerBook b
@@ -93,6 +105,9 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
               and (:crawlStatus is null or b.crawlStatus = :crawlStatus)
               and (:importStatus is null or b.importStatus = :importStatus)
               and (:favoriteOnly = false or b.favorite = true)
+              and (:tag = '' or function('array_position',
+                   function('regexp_split_to_array', trim(coalesce(b.tags, '')),
+                            '[[:space:]]*[\\r\\n,，、]+[[:space:]]*'), :tag) is not null)
               and (:keyword = ''
                    or lower(b.bookName) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
@@ -108,6 +123,9 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
               and (:crawlStatus is null or b.crawlStatus = :crawlStatus)
               and (:importStatus is null or b.importStatus = :importStatus)
               and (:favoriteOnly = false or b.favorite = true)
+              and (:tag = '' or function('array_position',
+                   function('regexp_split_to_array', trim(coalesce(b.tags, '')),
+                            '[[:space:]]*[\\r\\n,，、]+[[:space:]]*'), :tag) is not null)
               and (:keyword = ''
                    or lower(b.bookName) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
@@ -125,6 +143,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
             @Param("crawlStatus") CrawlerBook.CrawlStatus crawlStatus,
             @Param("importStatus") CrawlerBook.ImportStatus importStatus,
             @Param("favoriteOnly") boolean favoriteOnly,
+            @Param("tag") String tag,
             @Param("runningStatuses") Collection<CrawlerBook.CrawlStatus> runningStatuses,
             Pageable pageable);
     default Page<CrawlerBook> searchManagedBooks(
@@ -133,7 +152,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
             CrawlerBook.CrawlStatus crawlStatus, CrawlerBook.ImportStatus importStatus,
             Collection<CrawlerBook.CrawlStatus> runningStatuses, Pageable pageable) {
         return searchManagedBooks(user, discoveryStatus, excludedCrawlStatus, keyword, siteId,
-                crawlStatus, importStatus, false, runningStatuses, pageable);
+                crawlStatus, importStatus, false, "", runningStatuses, pageable);
     }
     @Query("""
             select b from CrawlerBook b

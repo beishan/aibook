@@ -21,7 +21,7 @@ class CrawlerBookRepositoryQueryTest {
         Method method = CrawlerBookRepository.class.getMethod("searchManagedBooks",
                 User.class, CrawlerBook.DiscoveryStatus.class, CrawlerBook.CrawlStatus.class,
                 String.class, Long.class, CrawlerBook.CrawlStatus.class,
-                CrawlerBook.ImportStatus.class, boolean.class, Collection.class, Pageable.class);
+                CrawlerBook.ImportStatus.class, boolean.class, String.class, Collection.class, Pageable.class);
         Query query = method.getAnnotation(Query.class);
         Set<String> declaredParameters = Arrays.stream(method.getParameters())
                 .filter(parameter -> parameter.isAnnotationPresent(Param.class))
@@ -54,7 +54,7 @@ class CrawlerBookRepositoryQueryTest {
     }
 
     @Test
-    void discoveryFilterQueryParsesWithPostgresDialect() throws Exception {
+    void discoveryAndManagedFilterQueriesParseWithPostgresDialect() throws Exception {
         var registry = new org.hibernate.boot.registry.StandardServiceRegistryBuilder()
                 .applySetting("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect")
                 .applySetting("hibernate.boot.allow_jdbc_metadata_access", false)
@@ -77,6 +77,11 @@ class CrawlerBookRepositoryQueryTest {
                 assertThat(query.getParameters()).extracting(jakarta.persistence.Parameter::getName)
                         .containsExactlyInAnyOrder("user", "discoveryStatus", "crawlStatus", "keyword",
                                 "siteId", "favoriteOnly", "category", "tag");
+                Query managed = managedBookQuery();
+                assertThat(session.createQuery(managed.value(), CrawlerBook.class).getParameters())
+                        .extracting(jakarta.persistence.Parameter::getName).contains("tag");
+                assertThat(session.createQuery(managed.countQuery(), Long.class).getParameters())
+                        .extracting(jakarta.persistence.Parameter::getName).contains("tag");
             }
         } finally {
             org.hibernate.boot.registry.StandardServiceRegistryBuilder.destroy(registry);
@@ -84,7 +89,8 @@ class CrawlerBookRepositoryQueryTest {
     }
 
     private Set<String> namedParameters(String query) {
-        return Pattern.compile(":([A-Za-z][A-Za-z0-9_]*)").matcher(query).results()
+        String withoutLiterals = query.replaceAll("'(?:''|[^'])*'", "''");
+        return Pattern.compile(":([A-Za-z][A-Za-z0-9_]*)").matcher(withoutLiterals).results()
                 .map(match -> match.group(1))
                 .collect(Collectors.toSet());
     }

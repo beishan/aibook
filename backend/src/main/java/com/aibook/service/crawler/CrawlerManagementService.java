@@ -251,6 +251,12 @@ public class CrawlerManagementService {
     @Transactional(readOnly = true)
     public Page<BookView> books(User user, int page, int size, String keyword, Long siteId,
             String crawlStatus, String importStatus, boolean favoriteOnly, String sort) {
+        return books(user, page, size, keyword, siteId, crawlStatus, importStatus, favoriteOnly, sort, "");
+    }
+
+    @Transactional(readOnly = true)
+    public Page<BookView> books(User user, int page, int size, String keyword, Long siteId,
+            String crawlStatus, String importStatus, boolean favoriteOnly, String sort, String tag) {
         CrawlerBook.CrawlStatus normalizedCrawlStatus = enumValue(
                 crawlStatus, CrawlerBook.CrawlStatus.class, "采集状态");
         CrawlerBook.ImportStatus normalizedImportStatus = enumValue(
@@ -259,8 +265,19 @@ public class CrawlerManagementService {
                 managedBookSort(sort));
         return bookRepository.searchManagedBooks(user, CrawlerBook.DiscoveryStatus.ACTIVE,
                 CrawlerBook.CrawlStatus.DISCOVERED, blank(keyword) ? "" : keyword.trim(), siteId,
-                normalizedCrawlStatus, normalizedImportStatus, favoriteOnly, RUNNING_BOOK_STATUSES, pageable)
+                normalizedCrawlStatus, normalizedImportStatus, favoriteOnly,
+                blank(tag) ? "" : tag.trim(), RUNNING_BOOK_STATUSES, pageable)
                 .map(this::bookView);
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> managedBookTags(User user, Long siteId) {
+        Set<String> tags = new TreeSet<>();
+        for (String metadata : bookRepository.managedTagMetadata(user,
+                CrawlerBook.DiscoveryStatus.ACTIVE, CrawlerBook.CrawlStatus.DISCOVERED, siteId)) {
+            tags.addAll(splitTags(metadata));
+        }
+        return List.copyOf(tags);
     }
 
     private Sort managedBookSort(String value) {

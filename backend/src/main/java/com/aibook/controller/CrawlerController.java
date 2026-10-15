@@ -127,9 +127,15 @@ public class CrawlerController {
             @RequestParam(required = false) String crawlStatus,
             @RequestParam(required = false) String importStatus,
             @RequestParam(defaultValue = "false") boolean favoriteOnly,
-            @RequestParam(defaultValue = "CREATED_DESC") String sort) {
+            @RequestParam(defaultValue = "CREATED_DESC") String sort,
+            @RequestParam(required = false) String tag) {
         return managementService.books(user(auth), page, size, keyword, siteId,
-                crawlStatus, importStatus, favoriteOnly, sort);
+                crawlStatus, importStatus, favoriteOnly, sort, tag);
+    }
+    @GetMapping("/books/tags")
+    public List<String> managedBookTags(Authentication auth,
+            @RequestParam(required = false) Long siteId) {
+        return managementService.managedBookTags(user(auth), siteId);
     }
     @GetMapping("/books/discovered") public Page<BookView> discoveredBooks(Authentication auth,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,

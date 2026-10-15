@@ -813,7 +813,7 @@ class CrawlerManagementServiceTest {
         when(books.searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
                 eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
                 eq(CrawlerBook.CrawlStatus.COMPLETED), eq(CrawlerBook.ImportStatus.READY),
-                eq(false),
+                eq(false), eq("科幻"),
                 eq(List.of(CrawlerBook.CrawlStatus.CRAWLING_METADATA,
                         CrawlerBook.CrawlStatus.CRAWLING_CHAPTER_LIST,
                         CrawlerBook.CrawlStatus.CRAWLING_CONTENT,
@@ -822,14 +822,14 @@ class CrawlerManagementServiceTest {
                 .thenReturn(new PageImpl<>(List.of(book)));
 
         var result = service.books(user, 2, 50, "  三体  ", 7L,
-                "completed", "ready", "CRAWL_STARTED_DESC");
+                "completed", "ready", false, "CRAWL_STARTED_DESC", "  科幻  ");
 
         assertThat(result.getContent()).hasSize(1);
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
         verify(books).searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
                 eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
                 eq(CrawlerBook.CrawlStatus.COMPLETED), eq(CrawlerBook.ImportStatus.READY),
-                eq(false),
+                eq(false), eq("科幻"),
                 eq(List.of(CrawlerBook.CrawlStatus.CRAWLING_METADATA,
                         CrawlerBook.CrawlStatus.CRAWLING_CHAPTER_LIST,
                         CrawlerBook.CrawlStatus.CRAWLING_CONTENT,

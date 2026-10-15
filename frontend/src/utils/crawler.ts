@@ -300,7 +300,7 @@ export interface CrawlerDiscoveryQuery {
   favoriteOnly?:boolean
   sort:string
 }
-export interface CrawlerBookQuery { page:number; size:number; keyword?:string; siteId?:number; crawlStatus?:string; importStatus?:string; favoriteOnly?:boolean; sort:string }
+export interface CrawlerBookQuery { page:number; size:number; keyword?:string; siteId?:number; crawlStatus?:string; importStatus?:string; tag?:string; favoriteOnly?:boolean; sort:string }
 export type CrawlerChapterStatus = 'NOT_CRAWLED' | 'WAITING' | 'CRAWLING' | 'COMPLETED'
   | 'PENDING_RELEASE' | 'FAILED' | 'CONTENT_SUSPECTED' | 'IGNORED'
 export interface CrawlerChapterQuery {
@@ -368,6 +368,7 @@ export const crawlerApi = {
       '/api/crawler/books/categories/cleanup', data, {timeout:120000},
     ).then(r=>r.data),
   book: (bookId:number) => api.get<CrawlerBook>(`/api/crawler/books/${bookId}`).then(r => r.data),
+  bookTags: (siteId?:number) => api.get<string[]>('/api/crawler/books/tags', {params:{siteId}}).then(r => r.data),
   discoveryFilters: (siteId?:number) => api
     .get<{categories:string[]; tags:string[]}>(
       '/api/crawler/books/discovered/filters', {params:{siteId}},
