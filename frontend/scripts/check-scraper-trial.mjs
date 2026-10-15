@@ -29,8 +29,8 @@ const api = {
     }
     return { data: [] }
   },
-  async post(url) {
-    requests.push({ url })
+  async post(url, payload) {
+    requests.push({ url, payload })
     if (url.endsWith('/confirm')) {
       failureResult = { ...failureResult, status: 'APPLIED', applied: true, updatedFields: ['description'] }
       return { data: { success: true } }
@@ -198,7 +198,20 @@ await vue.nextTick()
 assert.equal(state.resultCoverFailed.value, false, 'a new cover clears the prior image error')
 assert.equal(state.previewCoverOverride.value, null, 'changing the result cover clears its temporary visibility override')
 assert.equal(requests.filter(request => request.url.endsWith('/confirm')).length, beforeConfirmation)
+assert.deepEqual(Array.from(state.overwriteFields.value), [], 'overwrite defaults to no selected fields')
+state.setOverwriteField('description', true)
+assert.deepEqual(Array.from(state.overwriteFields.value), ['description'])
+state.setOverwriteField('isbn', true)
+state.setOverwriteField('coverHidden', true)
+assert.deepEqual(Array.from(state.overwriteFields.value), ['description'], 'missing or non-metadata fields cannot be selected')
+state.selectAllOverwriteFields()
+assert.deepEqual(Array.from(state.overwriteFields.value).sort(), ['title', 'description', 'coverUrl', 'tags'].sort())
+state.clearOverwriteFields()
+state.setOverwriteField('description', true)
+await state.poll(2)
+assert.deepEqual(Array.from(state.overwriteFields.value), ['description'], 'polling the same result retains overwrite choices')
 await state.confirmCandidate()
+assert.deepEqual(Array.from(requests.findLast(request => request.url.endsWith('/confirm')).payload.overwriteFields), ['description'])
 assert.equal(state.snapshot.value.applied, true)
 assert.equal(state.snapshot.value.status, 'APPLIED')
 assert.equal(state.snapshot.value.updatedFields[0], 'description')
@@ -208,6 +221,7 @@ assert.equal(requests.filter(request => request.url.endsWith('/confirm')).length
 state.selectBook({id: 99, title: '另一本书'})
 assert.equal(state.snapshot.value, null, 'changing the target book must discard the previous candidate review')
 assert.equal(state.taskId.value, '')
+assert.equal(state.overwriteFields.value.length, 0, 'changing books resets overwrite choices')
 console.log('Scraper trial: filters, stale searches, view switching, selection retention, selection lock, duplicate prevention, polling, failure diagnostics, candidate confirmation, visual result fields, tab routing, keyboard navigation and expiration passed')
 
 // The library/detail manual flow fixes the target and uses account-scoped manual APIs.
@@ -239,7 +253,9 @@ assert(requests.some(request => request.url === '/api/scraper/manual/jd/books/42
 assert.equal(manualState.canConfirm.value, true, 'a single-source result can be explicitly saved')
 assert.equal(manualState.activeTab.value, 'result')
 assert.equal(requests.filter(request => request.url.endsWith('/confirm')).length, priorWrites)
+manualState.setOverwriteField('title', true)
 await manualState.confirmCandidate()
+assert.deepEqual(Array.from(requests.findLast(request => request.url.endsWith('/confirm')).payload.overwriteFields), ['title'])
 assert(requests.some(request => request.url === '/api/scraper/manual/task-1/confirm'))
 assert.equal(manualEvents.filter(([event]) => event === 'saved').length, 1)
 await manualState.poll(1)

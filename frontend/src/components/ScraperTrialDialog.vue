@@ -38,7 +38,7 @@
         {{ snapshot ? '重新查询' : '开始查询' }}
       </el-button>
     </div>
-    <p v-else class="trial-intro">选择书籍，查看来源查询过程，再核对结果。使用已保存配置，绕过缓存；确认补全时保留已有字段。</p>
+    <p v-else class="trial-intro">选择书籍，查看来源查询过程，再核对结果。使用已保存配置，绕过缓存；默认补全空字段，也可选择覆盖已有内容。</p>
     <div class="trial-tab-scroll">
       <div
         ref="tabList"
@@ -285,9 +285,19 @@
           <div>
             <span class="trial-result-eyebrow">{{ source?.name }} · 元信息预览</span>
             <h3>{{ formatValue(snapshot.metadata.title) }}</h3>
-            <p>{{ snapshot.applied ? '已确认补全，已有字段保持不变' : '仅预览，尚未写入书籍' }}</p>
+            <p>{{ snapshot.applied ? '已保存到这本书的公共元信息' : '仅预览，尚未写入书籍' }}</p>
           </div>
           <el-tag :type="snapshot.applied ? 'success' : 'info'">{{ statusLabel }}</el-tag>
+        </div>
+        <div v-if="canConfirm" class="trial-overwrite-toolbar">
+          <div>
+            <strong>选择需要覆盖的字段</strong>
+            <p>勾选项会替换已有内容，未勾选项只补全空值；简介等信息由所有版本共享。</p>
+          </div>
+          <div class="trial-overwrite-actions">
+            <el-button text type="primary" :disabled="running || confirming" @click="selectAllOverwriteFields">全选可用字段</el-button>
+            <el-button text :disabled="running || confirming || !overwriteFields.length" @click="clearOverwriteFields">清空选择</el-button>
+          </div>
         </div>
         <div class="trial-result-layout">
           <aside class="trial-result-cover">
@@ -314,24 +324,72 @@
               @click="toggleResultCover"
             >{{ resultCoverVisible ? '关闭封面' : '显示封面' }}</el-button>
             <small>仅本次预览，不修改后续封面显示设置</small>
+            <el-checkbox
+              v-if="canConfirm || snapshot.applied"
+              :model-value="overwriteFields.includes('coverUrl')"
+              :disabled="!canConfirm || confirming || running || !hasFieldValue('coverUrl')"
+              aria-label="覆盖已有封面"
+              @change="setOverwriteField('coverUrl', Boolean($event))"
+            >覆盖已有封面</el-checkbox>
           </aside>
           <el-form label-position="top" class="trial-metadata-form">
             <div class="trial-section-title trial-field-wide">
               <h4>书籍信息</h4>
               <span>来自 {{ source?.name }}</span>
             </div>
-            <el-form-item v-for="(label, field) in summaryFields" :key="field" :label="label">
-              <el-input :model-value="formatValue(snapshot.metadata[field])" readonly />
+            <el-form-item
+              v-for="(label, field) in summaryFields"
+              :key="field"
+              :class="{ 'is-overwrite': overwriteFields.includes(field) }"
+            >
+              <div class="trial-field-header">
+                <span class="trial-field-label">
+                  <span>{{ label }}</span>
+                  <el-checkbox
+                    v-if="canConfirm || snapshot.applied"
+                    :model-value="overwriteFields.includes(field)"
+                    :disabled="!canConfirm || confirming || running || !hasFieldValue(field)"
+                    :aria-label="`覆盖已有${label}`"
+                    @change="setOverwriteField(field, Boolean($event))"
+                  >覆盖已有</el-checkbox>
+                </span>
+              </div>
+              <el-input :model-value="formatValue(snapshot.metadata[field])" :aria-label="label" readonly />
             </el-form-item>
-            <el-form-item label="标签" class="trial-field-wide">
+            <el-form-item class="trial-field-wide" :class="{ 'is-overwrite': overwriteFields.includes('tags') }">
+              <div class="trial-field-header">
+                <span class="trial-field-label">
+                  <span>标签</span>
+                  <el-checkbox
+                    v-if="canConfirm || snapshot.applied"
+                    :model-value="overwriteFields.includes('tags')"
+                    :disabled="!canConfirm || confirming || running || !hasFieldValue('tags')"
+                    aria-label="覆盖已有标签"
+                    @change="setOverwriteField('tags', Boolean($event))"
+                  >覆盖已有</el-checkbox>
+                </span>
+              </div>
               <div class="trial-result-tags">
                 <el-tag v-for="tag in resultTags" :key="tag" effect="plain">{{ tag }}</el-tag>
                 <span v-if="!resultTags.length" class="trial-muted">来源未提供标签</span>
               </div>
             </el-form-item>
-            <el-form-item label="内容简介" class="trial-field-wide">
+            <el-form-item class="trial-field-wide" :class="{ 'is-overwrite': overwriteFields.includes('description') }">
+              <div class="trial-field-header">
+                <span class="trial-field-label">
+                  <span>内容简介</span>
+                  <el-checkbox
+                    v-if="canConfirm || snapshot.applied"
+                    :model-value="overwriteFields.includes('description')"
+                    :disabled="!canConfirm || confirming || running || !hasFieldValue('description')"
+                    aria-label="覆盖已有内容简介"
+                    @change="setOverwriteField('description', Boolean($event))"
+                  >覆盖已有</el-checkbox>
+                </span>
+              </div>
               <el-input
                 :model-value="formatValue(snapshot.metadata.description)"
+                aria-label="内容简介"
                 type="textarea"
                 :autosize="{ minRows: 5, maxRows: 14 }"
                 resize="none"
@@ -343,11 +401,11 @@
         <div v-if="canConfirm" class="trial-result-confirm">
           <div>
             <strong>核对无误后，保存这份元信息</strong>
-            <p>仅补全空字段，保留已有书名、作者与封面等内容。</p>
+            <p>{{ overwriteFields.length ? `允许覆盖：${overwriteFieldLabels}；其余字段仅补全空值。` : '未选择覆盖字段，仅补全空值，保留已有内容。' }}</p>
           </div>
           <div class="trial-confirm-buttons">
             <el-button type="primary" :loading="confirming" :disabled="running" @click="confirmCandidate">
-              {{ manual ? '保存元信息（保留已有字段）' : '确认此候选并补全书籍（保留已有字段）' }}
+              {{ overwriteFields.length ? '保存并覆盖所选字段' : '确认保存（仅补全空值）' }}
             </el-button>
             <el-button v-if="snapshot.candidates?.length" :disabled="confirming" @click="activeTab = 'process'">返回备选选择</el-button>
           </div>
@@ -356,7 +414,7 @@
           v-if="snapshot.applied"
           type="success"
           :closable="false"
-          :title="`已补全书籍 · 更新字段：${updatedFieldLabels}`"
+          :title="`已保存书籍 · 更新字段：${updatedFieldLabels}`"
           show-icon
         />
       </div>
@@ -377,7 +435,7 @@
     <template #footer>
       <div class="trial-workbench-footer">
         <span v-if="!book && activeTab === 'books'">{{ selected ? `已选择：${selected.title}` : '请选择一本书籍开始查询' }}</span>
-        <span v-else>{{ running ? '关闭后服务器仍会完成查询，重新打开可查看' : snapshot?.applied ? '已保存，已有字段保持不变' : '仅在确认保存后补全书籍' }}</span>
+        <span v-else>{{ running ? '关闭后服务器仍会完成查询，重新打开可查看' : snapshot?.applied ? '已保存到本书公共元信息' : '仅在确认保存后补全书籍' }}</span>
         <div class="trial-footer-actions">
           <el-button @click="emit('update:modelValue', false)">{{ manual ? '返回模式选择' : '关闭工作台' }}</el-button>
           <el-button
@@ -535,7 +593,7 @@ const resultTags = computed<string[]>(() => {
     : typeof value === 'string' && value.trim() ? [value] : []
 })
 const updatedFieldLabels = computed(() => snapshot.value?.updatedFields?.map(field =>
-  fields[field as keyof typeof fields] || field).join('、') || '无（现有信息完整）')
+  fields[field as keyof typeof fields] || field).join('、') || '无（值未变化或已有内容被保留）')
 const filters = reactive({
   keyword: '',
   sourceType: '',
@@ -559,8 +617,35 @@ const snapshot = ref<TrialSnapshot | null>(null)
 const pollError = ref('')
 const taskId = ref('')
 const candidateError = ref('')
+const overwriteFields = ref<string[]>([])
+const overwriteFieldLabels = computed(() => overwriteFields.value
+  .map(field => fields[field as keyof typeof fields]).join('、'))
+function hasFieldValue(field: string) {
+  const value = snapshot.value?.metadata?.[field]
+  if (Array.isArray(value)) return value.some(item => typeof item === 'string' && item.trim())
+  if (typeof value === 'number') return Number.isFinite(value)
+  return typeof value === 'string' && Boolean(value.trim())
+}
+function setOverwriteField(field: string, checked: boolean) {
+  if (!canConfirm.value || confirming.value || running.value
+      || !Object.prototype.hasOwnProperty.call(fields, field) || !hasFieldValue(field)) return
+  overwriteFields.value = checked
+    ? [...new Set([...overwriteFields.value, field])]
+    : overwriteFields.value.filter(value => value !== field)
+}
+function selectAllOverwriteFields() {
+  if (!canConfirm.value || confirming.value || running.value) return
+  overwriteFields.value = Object.keys(fields).filter(hasFieldValue)
+}
+function clearOverwriteFields() {
+  if (confirming.value || running.value) return
+  overwriteFields.value = []
+}
 const canConfirm = computed(() => snapshot.value?.status === 'REVIEW_REQUIRED'
   || props.manual && snapshot.value?.status === 'MATCHED' && Boolean(snapshot.value.metadata))
+watch([taskId, () => snapshot.value?.selectedCandidateId, () => selected.value?.id, () => props.source?.configKey], () => {
+  overwriteFields.value = []
+})
 let savedTask = ''
 watch([resultCover, () => snapshot.value?.selectedCandidateId, () => selected.value?.id, taskId], () => {
   resultCoverFailed.value = false
@@ -579,7 +664,7 @@ const statusLabels: Record<string, string> = {
   FAILED: '失败',
   AWAITING_SELECTION: '待选择候选',
   REVIEW_REQUIRED: '待人工确认',
-  APPLIED: '已确认补全',
+  APPLIED: '已确认保存',
 }
 const statusLabel = computed(() => pollError.value
   ? '连接异常'
@@ -587,6 +672,7 @@ const statusLabel = computed(() => pollError.value
 const formatValue = (value: unknown) => Array.isArray(value) ? value.join('、') : String(value ?? '—')
 
 function resetCandidateReview() {
+  overwriteFields.value = []
   if (!snapshot.value) return
   clearTimeout(timer)
   generation++
@@ -668,6 +754,7 @@ async function loadCandidate(candidateId: string) {
   if (running.value || confirming.value || !taskId.value) return
   running.value = true
   activeTab.value = 'process'
+  overwriteFields.value = []
   candidateError.value = ''
   try {
     const { data } = await api.post<TrialSnapshot>(`${apiPrefix.value}/${taskId.value}/candidates/${candidateId}`)
@@ -690,7 +777,7 @@ async function confirmCandidate() {
   try {
     const url = props.manual ? `${apiPrefix.value}/${taskId.value}/confirm`
       : `${apiPrefix.value}/${taskId.value}/candidates/${snapshot.value?.selectedCandidateId}/confirm`
-    await api.post(url)
+    await api.post(url, { overwriteFields: [...overwriteFields.value] })
     if (disposed || request !== generation) return
     await poll(request)
   } catch (error: any) {
@@ -707,6 +794,7 @@ async function start() {
   running.value = true
   activeTab.value = 'process'
   snapshot.value = null
+  overwriteFields.value = []
   pollError.value = ''
   candidateError.value = ''
   try {
@@ -720,7 +808,10 @@ async function start() {
 }
 watch(() => props.modelValue, async (open) => {
   previewCoverOverride.value = null
-  if (!open) return
+  if (!open) {
+    overwriteFields.value = []
+    return
+  }
   if (props.book) {
     selected.value = props.book
     if (taskId.value && running.value) resumePolling()
@@ -978,6 +1069,67 @@ onBeforeUnmount(() => {
 .trial-status-dot.is-running {
   background: var(--warning);
 }
+.trial-overwrite-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 4%, var(--surface-card));
+}
+.trial-overwrite-toolbar strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.trial-overwrite-toolbar p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.trial-overwrite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.trial-overwrite-actions .el-button + .el-button {
+  margin-left: 0;
+}
+.trial-metadata-form :deep(.el-form-item__content) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  line-height: 1.5;
+}
+.trial-field-header {
+  width: 100%;
+}
+.trial-field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.trial-field-label :deep(.el-checkbox) {
+  height: 20px;
+}
+.trial-field-label :deep(.el-checkbox__label) {
+  padding-left: 5px;
+  font-size: 11px;
+}
+.trial-metadata-form .is-overwrite :deep(.el-input__wrapper),
+.trial-metadata-form .is-overwrite :deep(.el-textarea__inner) {
+  border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+}
 .trial-result-layout {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
@@ -1036,6 +1188,7 @@ onBeforeUnmount(() => {
   margin-bottom: 16px;
 }
 .trial-metadata-form :deep(.el-form-item__label) {
+  height: auto;
   margin-bottom: 7px;
   color: var(--text-secondary);
   font-size: 11px;

@@ -15,6 +15,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.Builder;
 import lombok.Data;
@@ -122,12 +123,25 @@ public class MetadataScrapingService {
     @Transactional
     public ScrapeResult applyConfirmedCandidate(Long bookId, com.aibook.model.entity.User user,
             MetadataScraper.BookMetadata metadata) {
-        return applyConfirmedMetadata(bookId, user, metadata, "豆瓣读书");
+        return applyConfirmedCandidate(bookId, user, metadata, Set.of());
+    }
+
+    @Transactional
+    public ScrapeResult applyConfirmedCandidate(Long bookId, com.aibook.model.entity.User user,
+            MetadataScraper.BookMetadata metadata, Set<String> overwriteFields) {
+        return applyConfirmedMetadata(bookId, user, metadata, "豆瓣读书", overwriteFields);
     }
 
     @Transactional
     public ScrapeResult applyConfirmedMetadata(Long bookId, com.aibook.model.entity.User user,
             MetadataScraper.BookMetadata metadata, String source) {
+        return applyConfirmedMetadata(bookId, user, metadata, source, Set.of());
+    }
+
+    @Transactional
+    public ScrapeResult applyConfirmedMetadata(Long bookId, com.aibook.model.entity.User user,
+            MetadataScraper.BookMetadata metadata, String source, Set<String> requestedFields) {
+        Set<String> overwriteFields = validateOverwriteFields(metadata, requestedFields);
         String attribution = source + "（人工确认）";
         Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
@@ -138,10 +152,11 @@ public class MetadataScrapingService {
                 "description", "coverUrl", "language", "rating", "tags")) {
             sources.put(field, attribution);
         }
-        applyMetadata(book, metadata, sources, false);
+        evictBookCache(book);
+        applyMetadata(book, metadata, sources, false, overwriteFields);
         bookRepository.save(book);
         authorService.synchronizeBook(book);
-        if ((before.get("coverUrl") == null || before.get("coverUrl").toString().isBlank())
+        if (!Objects.equals(before.get("coverUrl"), book.getCoverUrl())
                 && book.getCoverUrl() != null && book.getCoverUrl().startsWith("http")) {
             coverDownloadService.downloadCover(book);
         }
@@ -149,8 +164,38 @@ public class MetadataScrapingService {
         List<String> fields = changedFields(before, book);
         return ScrapeResult.builder().book(book).matched(true).success(true)
                 .updatedFields(fields).sources(List.of(attribution))
-                .message(fields.isEmpty() ? "已有字段已保留，没有需要补全的字段" : "已补全 " + fields.size() + " 个字段")
+                .message(fields.isEmpty() ? "没有字段需要更新" : "已保存 " + fields.size() + " 个字段")
                 .build();
+    }
+
+    private Set<String> validateOverwriteFields(MetadataScraper.BookMetadata metadata, Set<String> requested) {
+        if (requested == null || requested.isEmpty()) return Set.of();
+        Set<String> allowed = Set.of("title", "author", "isbn", "publisher", "publishDate",
+                "description", "coverUrl", "language", "rating", "tags");
+        if (requested.stream().anyMatch(field -> field == null || !allowed.contains(field))) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "包含不支持覆盖的字段");
+        }
+        for (String field : requested) {
+            boolean available = switch (field) {
+                case "title" -> hasText(metadata.getTitle());
+                case "author" -> hasText(metadata.getAuthor());
+                case "isbn" -> hasText(metadata.getIsbn());
+                case "publisher" -> hasText(metadata.getPublisher());
+                case "publishDate" -> hasText(metadata.getPublishDate());
+                case "description" -> hasText(metadata.getDescription());
+                case "coverUrl" -> hasText(metadata.getCoverUrl());
+                case "language" -> hasText(metadata.getLanguage());
+                case "rating" -> metadata.getRating() != null;
+                case "tags" -> hasTags(metadata.getTags());
+                default -> false;
+            };
+            if (!available) {
+                throw new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.BAD_REQUEST, "所选覆盖字段缺少有效的来源数据，请重新核对结果");
+            }
+        }
+        return Set.copyOf(requested);
     }
 
     @Transactional
@@ -320,39 +365,46 @@ public class MetadataScrapingService {
             MetadataScraper.BookMetadata metadata,
             Map<String, String> sources,
             boolean forceUpdate) {
+        applyMetadata(book, metadata, sources, forceUpdate, null);
+    }
+
+    private void applyMetadata(Book book, MetadataScraper.BookMetadata metadata,
+            Map<String, String> sources, boolean forceUpdate, Set<String> overwriteFields) {
+        Set<String> overrides = overwriteFields == null ? Set.of() : overwriteFields;
         applyText(
-                book.getTitle(), metadata.getTitle(), forceUpdate,
+                book.getTitle(), metadata.getTitle(), forceUpdate || overrides.contains("title"),
                 book::setTitle, "title", sources, book);
         applyText(
-                book.getAuthor(), metadata.getAuthor(), forceUpdate,
+                book.getAuthor(), metadata.getAuthor(), forceUpdate || overrides.contains("author"),
                 book::setAuthor, "author", sources, book);
         applyText(
-                book.getIsbn(), metadata.getIsbn(), forceUpdate,
+                book.getIsbn(), metadata.getIsbn(), forceUpdate || overrides.contains("isbn"),
                 book::setIsbn, "isbn", sources, book);
         applyText(
-                book.getPublisher(), metadata.getPublisher(), forceUpdate,
+                book.getPublisher(), metadata.getPublisher(), forceUpdate || overrides.contains("publisher"),
                 book::setPublisher, "publisher", sources, book);
         applyText(
-                book.getPublishDate(), metadata.getPublishDate(), forceUpdate,
+                book.getPublishDate(), metadata.getPublishDate(), forceUpdate || overrides.contains("publishDate"),
                 book::setPublishDate, "publishDate", sources, book);
         applyText(
-                book.getDescription(), metadata.getDescription(), forceUpdate,
+                book.getDescription(), metadata.getDescription(), forceUpdate || overrides.contains("description"),
                 book::setDescription, "description", sources, book);
         applyText(
-                book.getCoverUrl(), metadata.getCoverUrl(), forceUpdate,
+                book.getCoverUrl(), metadata.getCoverUrl(), forceUpdate || overrides.contains("coverUrl"),
                 book::setCoverUrl, "coverUrl", sources, book);
         applyText(
-                book.getLanguage(), metadata.getLanguage(), forceUpdate,
+                book.getLanguage(), metadata.getLanguage(), forceUpdate || overrides.contains("language"),
                 book::setLanguage, "language", sources, book);
-        if (metadata.getRating() != null && (forceUpdate || book.getRating() == null)) {
+        if (metadata.getRating() != null && (forceUpdate || overrides.contains("rating") || book.getRating() == null)) {
             book.setRating(metadata.getRating().intValue());
             BookMetadataSources.mark(book, "rating", sources.get("rating"));
         }
-        if (hasTags(metadata.getTags()) && book.getUser() != null) {
+        if (hasTags(metadata.getTags()) && book.getUser() != null
+                && (forceUpdate || overrides.contains("tags") || overwriteFields == null || book.getTags().isEmpty())) {
             LinkedHashSet<Tag> scrapedTags = new LinkedHashSet<>(
                     tagService.getOrCreateTags(
                             java.util.Arrays.asList(metadata.getTags()), book.getUser()));
-            if (forceUpdate) book.setTags(scrapedTags);
+            if (forceUpdate || overrides.contains("tags")) book.setTags(scrapedTags);
             else book.getTags().addAll(scrapedTags);
             BookMetadataSources.mark(book, "tags", sources.get("tags"));
         }

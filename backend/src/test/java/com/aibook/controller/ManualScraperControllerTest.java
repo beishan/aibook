@@ -34,4 +34,28 @@ class ManualScraperControllerTest {
         assertThat(controller.startManual("douban", 7L, user)).containsEntry("taskId", "owned-task");
         verify(trials).startManual("douban", book, 1L);
     }
+    @Test
+    void confirmationForwardsOnlySelectedFieldsAndSupportsOlderRequestsWithoutABody() {
+        var trials = mock(ScraperTrialService.class);
+        var scraping = mock(MetadataScrapingService.class);
+        var controller = new ScraperController(scraping, mock(CoverDownloadService.class),
+                mock(MetadataCacheService.class), mock(BookRepository.class), mock(BookService.class),
+                mock(SystemConfigService.class), List.of(), mock(ScraperProxyService.class), trials);
+        var user = User.builder().id(1L).build();
+        var metadata = MetadataScraper.BookMetadata.builder().description("新简介").build();
+        var result = MetadataScrapingService.ScrapeResult.builder().success(true)
+                .updatedFields(List.of("description")).message("已保存").build();
+        when(scraping.applyConfirmedMetadata(eq(7L), eq(user), same(metadata), eq("京东读书"), anySet()))
+                .thenReturn(result);
+        when(trials.confirmManual(eq("owned-task"), eq(1L), any())).thenAnswer(call -> {
+            ScraperTrialService.ManualApply apply = call.getArgument(2);
+            return apply.apply(7L, metadata, "京东读书");
+        });
+        controller.confirmManual("owned-task", user,
+                new ScraperController.ConfirmationRequest(java.util.Set.of("description")));
+        verify(scraping).applyConfirmedMetadata(7L, user, metadata, "京东读书", java.util.Set.of("description"));
+        controller.confirmManual("owned-task", user, null);
+        verify(scraping).applyConfirmedMetadata(7L, user, metadata, "京东读书", java.util.Set.of());
+    }
+
 }

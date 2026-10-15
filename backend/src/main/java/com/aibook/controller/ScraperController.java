@@ -81,13 +81,21 @@ public class ScraperController {
         return trialService.selectCandidate(taskId, user.getId(), candidateId);
     }
 
+    public record ConfirmationRequest(java.util.Set<String> overwriteFields) {
+        java.util.Set<String> fields() {
+            return overwriteFields == null ? java.util.Set.of() : overwriteFields;
+        }
+    }
+
     @PostMapping("/trial/{taskId}/candidates/{candidateId}/confirm")
     @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
     public Map<String, Object> confirmTrialCandidate(
             @PathVariable String taskId, @PathVariable String candidateId,
-            @AuthenticationPrincipal User user) {
+            @AuthenticationPrincipal User user,
+            @RequestBody(required = false) ConfirmationRequest request) {
+        var fields = request == null ? java.util.Set.<String>of() : request.fields();
         var result = trialService.confirmCandidate(taskId, user.getId(), candidateId,
-                (bookId, metadata) -> scrapingService.applyConfirmedCandidate(bookId, user, metadata));
+                (bookId, metadata) -> scrapingService.applyConfirmedCandidate(bookId, user, metadata, fields));
         return Map.of("success", result.isSuccess(), "message", result.getMessage(),
                 "updatedFields", result.getUpdatedFields());
     }
@@ -114,9 +122,11 @@ public class ScraperController {
     }
 
     @PostMapping("/manual/{taskId}/confirm")
-    public Map<String, Object> confirmManual(@PathVariable String taskId, @AuthenticationPrincipal User user) {
+    public Map<String, Object> confirmManual(@PathVariable String taskId, @AuthenticationPrincipal User user,
+            @RequestBody(required = false) ConfirmationRequest request) {
+        var fields = request == null ? java.util.Set.<String>of() : request.fields();
         var result = trialService.confirmManual(taskId, user.getId(),
-                (bookId, metadata, source) -> scrapingService.applyConfirmedMetadata(bookId, user, metadata, source));
+                (bookId, metadata, source) -> scrapingService.applyConfirmedMetadata(bookId, user, metadata, source, fields));
         return Map.of("success", result.isSuccess(), "message", result.getMessage(),
                 "updatedFields", result.getUpdatedFields());
     }

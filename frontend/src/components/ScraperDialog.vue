@@ -32,7 +32,7 @@
         <strong>{{ book?.title || '尚未选择书籍' }}</strong>
         <span>{{ book?.author || '作者信息待补全' }}</span>
       </div>
-      <span class="scrape-safe-badge">保留已有字段</span>
+      <span class="scrape-safe-badge">{{ mode === 'auto' ? '保留已有字段' : '按字段确认保存' }}</span>
     </div>
     <div class="scrape-mode-scroll">
       <div class="scrape-mode-switch" role="radiogroup" aria-label="刮削模式" @keydown="switchModeByKeyboard">
@@ -94,7 +94,7 @@
     <div v-else class="scraper-content">
       <div class="scrape-section-heading">
         <h3>由你决定采用哪份信息</h3>
-        <p>选择来源，核对备选、封面和元信息，再手动保存。</p>
+        <p>选择来源，核对备选、封面和元信息，可按字段选择覆盖后保存。</p>
       </div>
       <el-form label-position="top">
         <el-form-item label="指定刮削器">

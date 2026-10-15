@@ -113,7 +113,7 @@ public class ScraperTrialService {
         trial.applied = true;
         trial.status = "APPLIED";
         trial.updatedFields = List.copyOf(result.getUpdatedFields());
-        trial.log("已人工确认并补全书籍；保留已有字段。" + result.getMessage());
+        trial.log("已人工确认并保存书籍元信息。" + result.getMessage());
     }
 
     private Trial ownedTrial(String id, Long userId) {
