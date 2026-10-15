@@ -358,6 +358,13 @@
               <p>{{ scraperSourceDescription(source.configKey) }}</p>
             </div>
             <div class="scraper-source-controls">
+              <button
+                class="btn btn-secondary"
+                :disabled="trialRunningSource !== null && trialRunningSource !== source.configKey"
+                @click="openScraperTrial(source)"
+              >
+                试刮削
+              </button>
               <label class="scraper-enable-control">
                 <input v-model="source.enabled" type="checkbox" :aria-label="`启用${source.name}`" />
                 <span>启用</span>
@@ -675,6 +682,11 @@
       @close="showScanHistory = false"
     />
   </div>
+  <ScraperTrialDialog
+    v-model="trialVisible"
+    :source="trialSource"
+    @running="trialRunningSource = $event ? trialSource?.configKey || null : null"
+  />
 </template>
 
 <script setup lang="ts">
@@ -684,6 +696,7 @@ import { Brush, Monitor, Operation, Picture } from '@element-plus/icons-vue'
 import { message, confirm } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import api from '@/utils/api'
+import ScraperTrialDialog from '@/components/ScraperTrialDialog.vue'
 import DirectoryBrowser from '@/components/DirectoryBrowser.vue'
 import ScanHistoryDialog from '@/components/ScanHistoryDialog.vue'
 import ConnectionsView from '@/views/ConnectionsView.vue'
@@ -1037,6 +1050,13 @@ const schedulerConfig = reactive({
 })
 const loadingSchedulerConfig = ref(false)
 const savingSchedulerConfig = ref(false)
+const trialVisible = ref(false)
+const trialSource = ref<ScraperStatus | null>(null)
+const trialRunningSource = ref<string | null>(null)
+function openScraperTrial(source: ScraperStatus) {
+  trialSource.value = source
+  trialVisible.value = true
+}
 const scraperSources = ref<ScraperStatus[]>([])
 const loadingScraperSettings = ref(false)
 const savingScraperSettings = ref(false)

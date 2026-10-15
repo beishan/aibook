@@ -61,6 +61,17 @@ public class BookService {
     public Page<BookDTO> filterBooks(User user, String keyword, String format, String status,
             Long categoryId, boolean includeChildren, Long tagId, String sourceType,
             String sourceSiteName, Pageable pageable) {
+        return filterBooks(user, keyword, format, status, categoryId, includeChildren, tagId,
+                sourceType, sourceSiteName, pageable, null, null);
+    }
+
+    public Page<BookDTO> filterBooks(User user, String keyword, String format, String status,
+            Long categoryId, boolean includeChildren, Long tagId, String sourceType,
+            String sourceSiteName, Pageable pageable, java.time.LocalDate addedFrom,
+            java.time.LocalDate addedTo) {
+        if (addedFrom != null && addedTo != null && addedFrom.isAfter(addedTo)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "入库时间范围无效");
+        }
         Book.SourceType source = parseFilterEnum(sourceType, Book.SourceType.class, "书籍来源");
         Book.ReadingStatus readingStatus = parseFilterEnum(status, Book.ReadingStatus.class, "阅读状态");
         if (sourceSiteName != null && !sourceSiteName.isBlank()
@@ -89,6 +100,12 @@ public class BookService {
                     cb.or(cb.isTrue(visibleSource.get("scanDirectory").get("libraryVisible")),
                             cb.isNull(visibleSource.get("scanDirectory").get("libraryVisible"))));
             predicates.add(cb.or(cb.not(cb.exists(scanSources)), cb.exists(visibleSources)));
+            if (addedFrom != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), addedFrom.atStartOfDay()));
+            }
+            if (addedTo != null) {
+                predicates.add(cb.lessThan(root.get("createdAt"), addedTo.plusDays(1).atStartOfDay()));
+            }
             if (format != null && !format.isBlank()) {
                 predicates.add(cb.equal(root.get("format"), format));
             }

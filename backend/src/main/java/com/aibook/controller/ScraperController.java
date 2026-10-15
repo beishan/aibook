@@ -37,6 +37,25 @@ public class ScraperController {
     private final BookService bookService;
     private final SystemConfigService configService;
     private final List<MetadataScraper> scrapers;
+    private final com.aibook.service.scraper.ScraperTrialService trialService;
+
+    @PostMapping("/trial/{configKey}/books/{bookId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public Map<String, String> startTrial(
+            @PathVariable String configKey, @PathVariable Long bookId,
+            @AuthenticationPrincipal User user) {
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "书籍不存在"));
+        return Map.of("taskId", trialService.start(configKey, book, user.getId()));
+    }
+
+    @GetMapping("/trial/{taskId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public com.aibook.service.scraper.ScraperTrialService.TrialSnapshot getTrial(
+            @PathVariable String taskId, @AuthenticationPrincipal User user) {
+        return trialService.get(taskId, user.getId());
+    }
 
     /**
      * 刮削单本书籍

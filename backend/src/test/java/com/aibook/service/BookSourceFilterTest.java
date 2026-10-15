@@ -78,6 +78,27 @@ class BookSourceFilterTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void filtersFullDaysOnServerAndRejectsReversedDates() {
+        Pageable pageable = PageRequest.of(0, 20);
+        var start = java.time.LocalDate.of(2026, 10, 1);
+        var end = start.plusDays(3);
+        when(repository.findAll(any(Specification.class), eq(pageable))).thenReturn(Page.empty());
+        service.filterBooks(user, null, null, null, null, false, null, null, null,
+                pageable, start, end);
+        ArgumentCaptor<Specification<Book>> captor = ArgumentCaptor.forClass(Specification.class);
+        verify(repository).findAll(captor.capture(), eq(pageable));
+        Root<Book> root = mock(Root.class, RETURNS_DEEP_STUBS);
+        CriteriaQuery<?> query = mock(CriteriaQuery.class, RETURNS_DEEP_STUBS);
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        captor.getValue().toPredicate(root, query, cb);
+        verify(cb).greaterThanOrEqualTo(root.get("createdAt"), start.atStartOfDay());
+        verify(cb).lessThan(root.get("createdAt"), end.plusDays(1).atStartOfDay());
+        assertThatThrownBy(() -> service.filterBooks(user, null, null, null, null, false,
+                null, null, null, pageable, end, start)).isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
     void sourceOptionsAreScopedToCurrentAccountAndCrawlerType() {
         when(repository.findSourceSites(user, Book.SourceType.CRAWLER)).thenReturn(List.of("示例网站"));
         assertThat(service.sourceSites(user)).containsExactly("示例网站");

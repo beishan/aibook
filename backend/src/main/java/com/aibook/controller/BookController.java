@@ -108,7 +108,11 @@ public class BookController {
             @RequestParam(required = false) Long tagId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String sourceType,
-            @RequestParam(required = false) String sourceSiteName) {
+            @RequestParam(required = false) String sourceSiteName,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso =
+                    org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate addedFrom,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso =
+                    org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate addedTo) {
 
         User user = userService.findByUsername(authentication.getName());
 
@@ -116,7 +120,7 @@ public class BookController {
         PageRequest pageRequest = PageRequest.of(page, size, sort);
 
         Page<BookDTO> books = bookService.filterBooks(user, keyword, format, status, categoryId,
-                includeChildren, tagId, sourceType, sourceSiteName, pageRequest);
+                includeChildren, tagId, sourceType, sourceSiteName, pageRequest, addedFrom, addedTo);
 
         return ResponseEntity.ok(books);
     }
