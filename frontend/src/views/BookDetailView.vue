@@ -435,7 +435,7 @@
           </div>
         </div>
 
-        <!-- 简介 -->
+        <!-- 系列简介 -->
         <div
           id="detail-panel-description"
           v-show="activeTab === 'description'"
@@ -508,6 +508,16 @@
               </small>
             </div>
           </div>
+        </div>
+
+        <!-- 当前版本简介 -->
+        <div
+          id="detail-panel-versionDescription"
+          v-show="activeTab === 'versionDescription'"
+          class="tab-content"
+          role="tabpanel"
+          aria-labelledby="detail-tab-versionDescription"
+        >
           <div class="book-description version-description">
             <div class="description-panel-header">
               <div>
@@ -1063,10 +1073,11 @@ const tagStore = useTagStore()
 const book = ref<any>(null)
 const loading = ref(true)
 const notes = ref('')
-type DetailTabKey = 'description' | 'toc' | 'bookmarks' | 'info' | 'notes'
+type DetailTabKey = 'description' | 'versionDescription' | 'toc' | 'bookmarks' | 'info' | 'notes'
 
 const detailTabs: Array<{ key: DetailTabKey; label: string }> = [
-  { key: 'description', label: '简介' },
+  { key: 'description', label: '系列简介' },
+  { key: 'versionDescription', label: '版本简介' },
   { key: 'toc', label: '目录' },
   { key: 'bookmarks', label: '书签' },
   { key: 'info', label: '详细信息' },
