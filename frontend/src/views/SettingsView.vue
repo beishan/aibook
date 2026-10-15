@@ -707,13 +707,13 @@
       :directories="directories"
       @close="showScanHistory = false"
     />
+    <ScraperProxyDialog v-model="proxyVisible" :source="proxySource" />
+    <ScraperTrialDialog
+      v-model="trialVisible"
+      :source="trialSource"
+      @running="trialRunningSource = $event ? trialSource?.configKey || null : null"
+    />
   </div>
-  <ScraperProxyDialog v-model="proxyVisible" :source="proxySource" />
-  <ScraperTrialDialog
-    v-model="trialVisible"
-    :source="trialSource"
-    @running="trialRunningSource = $event ? trialSource?.configKey || null : null"
-  />
 </template>
 
 <script setup lang="ts">

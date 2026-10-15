@@ -1,6 +1,6 @@
 {
   "name": "aibook-frontend",
-  "version": "1.45.232",
+  "version": "1.45.233",
   "description": "汗牛充栋 - 阅读书籍管理系统前端",
   "type": "module",
   "scripts": {
@@ -61,7 +61,8 @@
     "test:route-load-recovery": "node scripts/check-route-load-recovery.mjs",
     "test:crawler-statistics-window": "node scripts/check-crawler-statistics-window.mjs",
     "test:scraper-trial": "node scripts/check-scraper-trial.mjs",
-    "test:scraper-proxy": "node scripts/check-scraper-proxy.mjs"
+    "test:scraper-proxy": "node scripts/check-scraper-proxy.mjs",
+    "test:settings-route-transition": "node scripts/check-settings-route-transition.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
