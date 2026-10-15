@@ -405,19 +405,6 @@
                 <input v-model="source.enabled" type="checkbox" :aria-label="`启用${source.name}`" />
                 <span>启用</span>
               </label>
-              <label class="scraper-priority-control">
-                <span>优先级</span>
-                <input
-                  v-model.number="source.priority"
-                  type="number"
-                  min="1"
-                  max="999"
-                  step="1"
-                  :aria-label="`${source.name}优先级，数字越小越先查询`"
-                  :disabled="savingScraperSettings || draggedScraperKey !== null"
-                  @change="sortScraperPriorities"
-                />
-              </label>
             </div>
           </article>
 
@@ -1169,12 +1156,6 @@ async function moveScraperByKeyboard(key: string, offset: number) {
   row?.querySelector<HTMLButtonElement>('.scraper-drag-handle')?.focus()
 }
 
-function sortScraperPriorities() {
-  if (scraperSources.value.some(source => !Number.isInteger(source.priority)
-      || source.priority < 1 || source.priority > 999)) return
-  scraperSources.value.sort((left, right) => left.priority - right.priority)
-}
-
 const googleApiKeyDraft = ref('')
 const clearGoogleApiKey = ref(false)
 const googleScraperSource = computed(() =>
@@ -1214,20 +1195,12 @@ const toggleClearGoogleApiKey = () => {
 }
 
 const handleSaveScraperSettings = async () => {
-  const invalidPriority = scraperSources.value.find(source =>
-    !Number.isInteger(source.priority) || source.priority < 1 || source.priority > 999,
-  )
-  if (invalidPriority) {
-    message.warning(`${invalidPriority.name}的优先级需为 1–999 的整数`)
-    return
-  }
-
   savingScraperSettings.value = true
   try {
     const configs: Record<string, string> = {}
-    scraperSources.value.forEach(source => {
+    scraperSources.value.forEach((source, index) => {
       configs[`scraper.${source.configKey}.enabled`] = String(source.enabled)
-      configs[`scraper.${source.configKey}.priority`] = String(source.priority)
+      configs[`scraper.${source.configKey}.priority`] = String(index + 1)
     })
     if (clearGoogleApiKey.value) {
       configs['scraper.google.api-key'] = ''
@@ -2024,7 +1997,6 @@ onUnmounted(() => {
 .scraper-source-heading,
 .scraper-source-controls,
 .scraper-enable-control,
-.scraper-priority-control,
 .scraper-api-key-controls {
   display: flex;
   align-items: center;
@@ -2053,8 +2025,7 @@ onUnmounted(() => {
   gap: var(--spacing-lg);
 }
 
-.scraper-enable-control,
-.scraper-priority-control {
+.scraper-enable-control {
   gap: var(--spacing-sm);
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
@@ -2065,16 +2036,6 @@ onUnmounted(() => {
   width: 16px;
   height: 16px;
   accent-color: var(--primary);
-}
-
-.scraper-priority-control input {
-  width: 76px;
-  padding: 7px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--surface-card);
-  color: var(--text-primary);
-  font: inherit;
 }
 
 .scraper-api-key-panel {
