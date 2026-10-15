@@ -396,7 +396,7 @@
         </div>
       </div>
       <div class="discovery-toolbar">
-        <el-input v-model="discoveryKeyword" clearable :prefix-icon="Search" placeholder="搜索书名、作者、网站、发现页、编码或最新章节" @keyup.enter="applyDiscoveryFilters" />
+        <el-input v-model="discoveryKeyword" clearable :prefix-icon="Search" placeholder="搜索书名、作者、标签、网站、发现页、编码或最新章节" @keyup.enter="applyDiscoveryFilters" />
         <el-select v-model="discoverySiteId" clearable placeholder="全部采集网站"><el-option v-for="site in sites" :key="site.id" :label="site.siteName" :value="site.id" /></el-select>
         <el-select v-model="discoveryCategory" clearable filterable placeholder="全部分类" aria-label="发现书籍分类" @visible-change="loadDiscoveryFilterOptions" @change="applyDiscoveryFilters">
           <el-option v-for="category in discoveryFilterOptions.categories" :key="category" :label="category" :value="category" />
@@ -552,7 +552,7 @@
         </div>
       </div>
       <div class="book-filter-toolbar">
-        <el-input v-model="bookKeyword" clearable placeholder="搜索书名、作者、网站或编码" :prefix-icon="Search" @keyup.enter="applyBookFilters" @clear="applyBookFilters" />
+        <el-input v-model="bookKeyword" clearable placeholder="搜索书名、作者、标签、网站或编码" :prefix-icon="Search" @keyup.enter="applyBookFilters" @clear="applyBookFilters" />
         <el-select v-model="bookSiteId" clearable placeholder="全部来源"><el-option v-for="site in sites" :key="site.id" :label="site.siteName" :value="site.id" /></el-select>
         <el-select v-model="bookCrawlStatus" clearable placeholder="全部书籍状态"><el-option v-for="item in managedBookStatusOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
         <el-select v-model="bookImportStatus" clearable placeholder="全部入库状态"><el-option v-for="item in bookImportStatusOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>

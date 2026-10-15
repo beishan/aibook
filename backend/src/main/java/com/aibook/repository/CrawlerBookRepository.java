@@ -111,6 +111,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
               and (:keyword = ''
                    or lower(b.bookName) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.tags, '')) like lower(concat('%', :keyword, '%'))
                    or lower(b.site.siteName) like lower(concat('%', :keyword, '%'))
                    or lower(b.externalBookId) like lower(concat('%', :keyword, '%')))
             order by case when b.crawlStatus in :runningStatuses then 0 else 1 end
@@ -129,6 +130,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
               and (:keyword = ''
                    or lower(b.bookName) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.tags, '')) like lower(concat('%', :keyword, '%'))
                    or lower(b.site.siteName) like lower(concat('%', :keyword, '%'))
                    or lower(b.externalBookId) like lower(concat('%', :keyword, '%')))
               and (b.crawlStatus in :runningStatuses
@@ -164,6 +166,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
               and (:keyword = ''
                    or lower(b.bookName) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.tags, '')) like lower(concat('%', :keyword, '%'))
                    or lower(b.site.siteName) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.discoveryPageName, '')) like lower(concat('%', :keyword, '%'))
                    or lower(b.externalBookId) like lower(concat('%', :keyword, '%'))
@@ -196,6 +199,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
               and (:keyword = ''
                    or lower(b.bookName) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.tags, '')) like lower(concat('%', :keyword, '%'))
                    or lower(b.site.siteName) like lower(concat('%', :keyword, '%'))
                    or lower(coalesce(b.discoveryPageName, '')) like lower(concat('%', :keyword, '%'))
                    or lower(b.externalBookId) like lower(concat('%', :keyword, '%'))
