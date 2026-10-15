@@ -46,7 +46,9 @@ class SelectedMetadataOverwriteTest {
         when(books.findByIdAndUserAndDeletedAtIsNull(7L, user)).thenReturn(Optional.of(book));
         when(cache.titleKey(any())).thenAnswer(call -> "title:" + call.getArgument(0));
         when(cache.isbnKey(any())).thenAnswer(call -> "isbn:" + call.getArgument(0));
-        when(tags.getOrCreateTags(List.of("新标签"), user)).thenReturn(Set.of(newTag));
+        when(tags.getOrCreateTags(
+                List.of("新标签"), user, "京东读书（人工确认）"))
+                .thenReturn(Set.of(newTag));
     }
 
     @Test
