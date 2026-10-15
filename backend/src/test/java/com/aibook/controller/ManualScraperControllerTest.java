@@ -45,7 +45,8 @@ class ManualScraperControllerTest {
         var metadata = MetadataScraper.BookMetadata.builder().description("新简介").build();
         var result = MetadataScrapingService.ScrapeResult.builder().success(true)
                 .updatedFields(List.of("description")).message("已保存").build();
-        when(scraping.applyConfirmedMetadata(eq(7L), eq(user), same(metadata), eq("京东读书"), anySet()))
+        when(scraping.applyConfirmedMetadata(eq(7L), eq(user), same(metadata), eq("京东读书"),
+                anySet(), eq("SERIES"), isNull()))
                 .thenReturn(result);
         when(trials.confirmManual(eq("owned-task"), eq(1L), any())).thenAnswer(call -> {
             ScraperTrialService.ManualApply apply = call.getArgument(2);
@@ -53,9 +54,11 @@ class ManualScraperControllerTest {
         });
         controller.confirmManual("owned-task", user,
                 new ScraperController.ConfirmationRequest(java.util.Set.of("description")));
-        verify(scraping).applyConfirmedMetadata(7L, user, metadata, "京东读书", java.util.Set.of("description"));
+        verify(scraping).applyConfirmedMetadata(7L, user, metadata, "京东读书",
+                java.util.Set.of("description"), "SERIES", null);
         controller.confirmManual("owned-task", user, null);
-        verify(scraping).applyConfirmedMetadata(7L, user, metadata, "京东读书", java.util.Set.of());
+        verify(scraping).applyConfirmedMetadata(7L, user, metadata, "京东读书",
+                java.util.Set.of(), "SERIES", null);
     }
 
 }
