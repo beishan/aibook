@@ -397,7 +397,7 @@
                 </div>
                 <div
                   class="trial-description-target-switch"
-                  :class="{ 'is-version': descriptionTarget === 'VERSION' }"
+                  :class="`is-${descriptionTarget.toLowerCase()}`"
                   role="radiogroup"
                   aria-label="简介保存位置"
                   @keydown="switchDescriptionTargetByKeyboard"
@@ -414,7 +414,7 @@
                     @click="descriptionTarget = option.value"
                   >{{ option.label }}</button>
                 </div>
-                <small>{{ descriptionTarget === 'SERIES' ? '对这本书的所有版本生效。' : `只保存到当前版本：${book.displayName || '已选版本'}。` }}</small>
+                <small>{{ descriptionTargetHint }}</small>
               </div>
               <el-input
                 :model-value="formatValue(snapshot.metadata.description)"
@@ -649,12 +649,22 @@ const pollError = ref('')
 const taskId = ref('')
 const candidateError = ref('')
 const overwriteFields = ref<string[]>([])
-type DescriptionTarget = 'SERIES' | 'VERSION'
+type DescriptionTarget = 'SERIES' | 'VERSION' | 'BOTH'
 const descriptionTarget = ref<DescriptionTarget>('SERIES')
 const descriptionTargetOptions: { value: DescriptionTarget; label: string }[] = [
   { value: 'SERIES', label: '系列简介' },
   { value: 'VERSION', label: '当前版本简介' },
+  { value: 'BOTH', label: '同时保存' },
 ]
+const descriptionTargetHint = computed(() => {
+  if (descriptionTarget.value === 'VERSION') {
+    return `只保存到当前版本：${props.book?.displayName || '已选版本'}。`
+  }
+  if (descriptionTarget.value === 'BOTH') {
+    return `分别保存到系列简介和当前版本：${props.book?.displayName || '已选版本'}。`
+  }
+  return '对这本书的所有版本生效。'
+})
 const overwriteFieldLabels = computed(() => overwriteFields.value
   .map(field => fields[field as keyof typeof fields]).join('、'))
 function hasFieldValue(field: string) {
@@ -690,8 +700,14 @@ async function switchDescriptionTargetByKeyboard(event: KeyboardEvent) {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)
       || !canConfirm.value || confirming.value || running.value) return
   event.preventDefault()
-  const index = event.key === 'Home' ? 0 : event.key === 'End' ? 1
-    : descriptionTarget.value === 'SERIES' ? 1 : 0
+  const currentIndex = descriptionTargetOptions.findIndex(
+    option => option.value === descriptionTarget.value,
+  )
+  const index = event.key === 'Home' ? 0
+    : event.key === 'End' ? descriptionTargetOptions.length - 1
+      : event.key === 'ArrowRight'
+        ? (currentIndex + 1) % descriptionTargetOptions.length
+        : (currentIndex - 1 + descriptionTargetOptions.length) % descriptionTargetOptions.length
   const group = event.currentTarget as HTMLElement
   descriptionTarget.value = descriptionTargetOptions[index].value
   await nextTick()
@@ -831,7 +847,7 @@ async function confirmCandidate() {
     await api.post(url, {
       overwriteFields: [...overwriteFields.value],
       descriptionTarget: descriptionTarget.value,
-      versionId: descriptionTarget.value === 'VERSION' ? props.book?.versionId : undefined,
+      versionId: descriptionTarget.value === 'SERIES' ? undefined : props.book?.versionId,
     })
     if (disposed || request !== generation) return
     await poll(request)
@@ -1332,7 +1348,7 @@ onBeforeUnmount(() => {
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   max-width: 420px;
   padding: 3px;
   border: 1px solid var(--border-color);
@@ -1345,7 +1361,7 @@ onBeforeUnmount(() => {
   top: 3px;
   bottom: 3px;
   left: 3px;
-  width: calc((100% - 6px) / 2);
+  width: calc((100% - 6px) / 3);
   border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border-color));
   border-radius: 8px;
   background: var(--surface-card);
@@ -1353,6 +1369,9 @@ onBeforeUnmount(() => {
 }
 .trial-description-target-switch.is-version .trial-description-target-indicator {
   transform: translateX(100%);
+}
+.trial-description-target-switch.is-both .trial-description-target-indicator {
+  transform: translateX(200%);
 }
 .trial-description-target-switch button {
   min-height: 34px;

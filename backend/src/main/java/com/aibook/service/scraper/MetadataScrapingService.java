@@ -165,13 +165,13 @@ public class MetadataScrapingService {
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
                         org.springframework.http.HttpStatus.NOT_FOUND, "书籍不存在或无权访问"));
         String target = descriptionTarget == null ? "SERIES" : descriptionTarget.toUpperCase(java.util.Locale.ROOT);
-        if (!Set.of("SERIES", "VERSION").contains(target)) {
+        if (!Set.of("SERIES", "VERSION", "BOTH").contains(target)) {
             throw new org.springframework.web.server.ResponseStatusException(
                     org.springframework.http.HttpStatus.BAD_REQUEST, "简介保存位置无效");
         }
         com.aibook.model.entity.BookVersion version = null;
         String oldVersionDescription = null;
-        if ("VERSION".equals(target)) {
+        if ("VERSION".equals(target) || "BOTH".equals(target)) {
             if (versionId == null || bookVersionRepository == null) {
                 throw new org.springframework.web.server.ResponseStatusException(
                         org.springframework.http.HttpStatus.BAD_REQUEST, "请选择当前书籍版本后再保存版本简介");
@@ -189,7 +189,7 @@ public class MetadataScrapingService {
         }
         evictBookCache(book);
         MetadataScraper.BookMetadata bookMetadata = metadata;
-        if (version != null) {
+        if ("VERSION".equals(target)) {
             bookMetadata = MetadataScraper.BookMetadata.builder()
                     .title(metadata.getTitle())
                     .author(metadata.getAuthor())
@@ -224,7 +224,8 @@ public class MetadataScrapingService {
                 .updatedFields(fields).sources(List.of(attribution))
                 .message(fields.isEmpty() ? "没有字段需要更新"
                         : "已保存 " + fields.size() + " 个字段（简介保存到"
-                                + (version == null ? "系列" : "当前版本") + "）")
+                                + ("BOTH".equals(target) ? "系列和当前版本"
+                                        : version == null ? "系列" : "当前版本") + "）")
                 .build();
     }
 
