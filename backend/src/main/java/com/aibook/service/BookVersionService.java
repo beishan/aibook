@@ -100,6 +100,8 @@ public class BookVersionService {
                             .displayName(displayName)
                             .format(book.getFormat())
                             .filePath(book.getFilePath())
+                            .sourceType(book.getSourceType() == null
+                                    ? null : book.getSourceType().name())
                             .fileSize(book.getFileSize())
                             .fileHash(book.getFileHash())
                             .primaryVersion(true)
@@ -151,6 +153,7 @@ public class BookVersionService {
                     .filePath(target.toString())
                     .fileSize(Files.size(target))
                     .fileHash(hash)
+                    .sourceType("UPLOAD")
                     .primaryVersion(false)
                     .chapterInfo(chapterInfo)
                     .chapterCount(chapterCount)
@@ -211,6 +214,7 @@ public class BookVersionService {
                     .filePath(target.toString())
                     .fileSize(Files.size(target))
                     .fileHash(hash)
+                    .sourceType("UPLOAD")
                     .primaryVersion(false)
                     .chapterInfo(chapterInfo)
                     .chapterCount(chapterCount)
@@ -264,6 +268,18 @@ public class BookVersionService {
                 .id(version.getId())
                 .displayName(version.getDisplayName())
                 .format(version.getFormat())
+                .filePath(version.getFilePath())
+                .sourceType(version.getSourceType() != null
+                        ? version.getSourceType()
+                        : Boolean.TRUE.equals(version.getPrimaryVersion())
+                                && version.getBook().getSourceType() != null
+                                ? version.getBook().getSourceType().name()
+                                : "UPLOAD")
+                .sourceSiteName("CRAWLER".equals(version.getSourceType())
+                        ? version.getBook().getSourceSiteName()
+                        : version.getSourceSite() != null
+                                ? version.getSourceSite()
+                                : version.getBook().getSourceSiteName())
                 .fileSize(version.getFileSize())
                 .fileHash(version.getFileHash())
                 .primaryVersion(version.getPrimaryVersion())
@@ -312,6 +328,9 @@ public class BookVersionService {
         version.setFilePath(book.getFilePath());
         version.setFileSize(book.getFileSize());
         version.setFileHash(book.getFileHash());
+        version.setSourceType(book.getSourceType() == null
+                ? null : book.getSourceType().name());
+        version.setSourceSite(book.getSourceSiteName());
         version.setChapterInfo(book.getChapterInfo());
         version.setChapterCount(book.getChapterCount());
         return bookVersionRepository.save(version);

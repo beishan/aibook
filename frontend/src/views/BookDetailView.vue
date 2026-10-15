@@ -777,7 +777,7 @@
               />
               <span v-else class="info-value">{{ book.publishDate || '未知' }}</span>
             </div>
-            <div v-if="book.sourceType === 'CRAWLER'" class="info-item list-item">
+            <div v-if="selectedVersionSourceType === 'CRAWLER'" class="info-item list-item">
               <span class="info-label">来源状态</span>
               <span class="info-value">{{ book.sourceBookStatus || '未识别' }}</span>
             </div>
@@ -787,14 +787,16 @@
             </div>
             <div class="info-item list-item">
               <span class="info-label">来源</span>
-              <span class="info-value">{{ formatSourceType(book.sourceType, book.sourceSiteName) }}</span>
+              <span class="info-value">
+                {{ formatSourceType(selectedVersionSourceType, selectedVersion?.sourceSiteName) }}
+              </span>
             </div>
             <div
-              v-if="book.sourceType === 'DIRECTORY_SCAN' && book.sourcePath"
+              v-if="selectedVersionPath"
               class="info-item list-item"
             >
-              <span class="info-label">扫描路径</span>
-              <span class="info-value source-path">{{ book.sourcePath }}</span>
+              <span class="info-label">路径</span>
+              <span class="info-value source-path">{{ selectedVersionPath }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">语言</span>
@@ -1129,6 +1131,9 @@ interface BookVersion {
   id: number
   displayName: string
   format: string
+  filePath?: string
+  sourceType?: string
+  sourceSiteName?: string
   fileSize?: number
   fileHash?: string
   primaryVersion: boolean
@@ -1214,6 +1219,10 @@ const allImportVersionsSelected = computed(() => importSources.value.length > 0
 const selectedVersion = computed(() =>
   versions.value.find(version => version.id === selectedVersionId.value) || null,
 )
+const selectedVersionSourceType = computed(() => selectedVersion.value?.sourceType
+  || (selectedVersion.value?.primaryVersion ? book.value?.sourceType : 'UPLOAD'))
+const selectedVersionPath = computed(() => selectedVersion.value?.filePath
+  || (selectedVersion.value?.primaryVersion ? book.value?.sourcePath || book.value?.filePath : ''))
 const scraperTargetBook = computed(() => book.value ? {
   id: book.value.id,
   title: book.value.title,
@@ -2154,12 +2163,13 @@ const formatFileSize = (bytes?: number) => {
 }
 
 const formatSourceType = (
-  sourceType?: 'UPLOAD' | 'DIRECTORY_SCAN' | 'CRAWLER',
+  sourceType?: string,
   sourceSiteName?: string,
 ) => {
   if (sourceType === 'UPLOAD') return '上传'
   if (sourceType === 'DIRECTORY_SCAN') return '目录扫描'
   if (sourceType === 'CRAWLER') return sourceSiteName ? `网站采集 · ${sourceSiteName}` : '网站采集'
+  if (sourceType === 'LIBRARY_VERSION_IMPORT') return '导入版本'
   return '未知'
 }
 

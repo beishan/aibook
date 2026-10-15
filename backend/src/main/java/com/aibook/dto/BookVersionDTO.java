@@ -11,6 +11,9 @@ public class BookVersionDTO {
     private Long id;
     private String displayName;
     private String format;
+    private String filePath;
+    private String sourceType;
+    private String sourceSiteName;
     private Long fileSize;
     private String fileHash;
     private Boolean primaryVersion;
