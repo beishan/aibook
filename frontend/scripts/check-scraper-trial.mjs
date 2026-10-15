@@ -94,7 +94,14 @@ assert.equal(state.selected.value.id, 2, 'table teardown must not clear selectio
 await state.switchViewByKeyboard({key: 'Home', preventDefault() {}, currentTarget: {querySelector: () => ({focus() {}})}})
 assert.equal(state.viewMode.value, 'table')
 assert.equal(state.selected.value.id, 2)
+assert.equal(state.activeTab.value, 'books')
+assert.equal(state.tabs.value[1].label, '刮削过程', 'candidate controls must not appear without candidates')
+await state.switchTabByKeyboard({ key: 'End', preventDefault() {}, currentTarget: { querySelector: () => ({ focus() {} }) } })
+assert.equal(state.activeTab.value, 'result')
+await state.switchTabByKeyboard({ key: 'ArrowRight', preventDefault() {}, currentTarget: { querySelector: () => ({ focus() {} }) } })
+assert.equal(state.activeTab.value, 'books', 'tab keyboard navigation wraps around')
 await state.start()
+assert.equal(state.activeTab.value, 'process', 'starting a trial opens progress')
 await vue.nextTick()
 await Promise.resolve()
 assert.equal(state.running.value, true)
@@ -110,6 +117,7 @@ await Promise.resolve()
 await vue.nextTick()
 assert.equal(state.running.value, false)
 assert.equal(state.snapshot.value.status, 'MATCHED')
+assert.equal(state.activeTab.value, 'result', 'a completed lookup opens results')
 const restriction = {
   code: 'ACCESS_DENIED', label: '访问被拒绝（疑似反爬或权限限制）',
   detail: '来源返回 HTTP 403；无法仅凭状态码确认是否为反爬。',
@@ -134,24 +142,44 @@ assert(emitted.some(([event, value]) => event === 'running' && value === false))
 // Candidate preview must remain read-only until the user explicitly confirms.
 failPoll = false
 state.taskId.value = 'candidate-task'
+failureResult = {
+  finished: true, status: 'AWAITING_SELECTION', elapsedMs: 2000, logs: [], metadata: null,
+  candidates: [{ id: '123', title: '活着（纪念版）' }],
+}
+await state.poll(1)
+assert.equal(state.activeTab.value, 'process', 'a candidate search stays on the selection step')
+assert.match(state.tabs.value[1].label, /备选选择/)
+state.activeTab.value = 'books'
+await state.poll(1)
+assert.equal(state.activeTab.value, 'books', 'repeated polling must not override manual tab navigation')
 const candidate = { id: '123', title: '活着（纪念版）', author: '余华', publishDate: '2024', sourceUrl: 'https://book.douban.com/subject/123/' }
 failureResult = {
   finished: true, status: 'REVIEW_REQUIRED', elapsedMs: 3000, logs: [],
-  metadata: { title: candidate.title, description: '候选简介' },
+  metadata: { title: candidate.title, description: '候选简介', coverUrl: 'covers/candidate.jpg', tags: ['小说', '文学'] },
   candidates: [candidate], selectedCandidateId: '123', applied: false,
 }
 const beforeConfirmation = requests.filter(request => request.url.endsWith('/confirm')).length
 await state.loadCandidate('123')
 await Promise.resolve()
 assert.equal(state.snapshot.value.status, 'REVIEW_REQUIRED')
+assert.equal(state.activeTab.value, 'result', 'candidate detail opens the visual result preview')
+assert.equal(state.resultCover.value, 'covers/candidate.jpg')
+assert.deepEqual(Array.from(state.resultTags.value), ['小说', '文学'])
+assert.equal(state.coverAllowed.value, true)
+state.resultCoverFailed.value = true
+failureResult = { ...failureResult, metadata: { ...failureResult.metadata, coverUrl: 'covers/new.jpg' } }
+await state.poll(2)
+await vue.nextTick()
+assert.equal(state.resultCoverFailed.value, false, 'a new cover clears the prior image error')
 assert.equal(requests.filter(request => request.url.endsWith('/confirm')).length, beforeConfirmation)
 await state.confirmCandidate()
 assert.equal(state.snapshot.value.applied, true)
 assert.equal(state.snapshot.value.status, 'APPLIED')
 assert.equal(state.snapshot.value.updatedFields[0], 'description')
+assert.equal(state.updatedFieldLabels.value, '简介')
 await state.confirmCandidate()
 assert.equal(requests.filter(request => request.url.endsWith('/confirm')).length, beforeConfirmation + 1)
 state.selectBook({id: 99, title: '另一本书'})
 assert.equal(state.snapshot.value, null, 'changing the target book must discard the previous candidate review')
 assert.equal(state.taskId.value, '')
-console.log('Scraper trial: filters, stale searches, view switching, selection retention, selection lock, duplicate prevention, polling, failure diagnostics, candidate confirmation and expiration passed')
+console.log('Scraper trial: filters, stale searches, view switching, selection retention, selection lock, duplicate prevention, polling, failure diagnostics, candidate confirmation, visual result fields, tab routing, keyboard navigation and expiration passed')
