@@ -330,32 +330,68 @@
         <div class="card-header">
           <div>
             <strong>书籍信息刮削</strong>
-            <p class="scraper-settings-description">设置外部元信息来源及查询顺序，配置对所有账户生效。</p>
+            <p class="scraper-settings-description">拖动条目前的手柄调整查询顺序，越靠前优先级越高；点击“保存配置”后对所有账户生效。</p>
           </div>
           <button
             type="button"
             class="btn btn-primary"
-            :disabled="loadingScraperSettings || savingScraperSettings || scraperSources.length === 0"
+            :disabled="loadingScraperSettings || savingScraperSettings || draggedScraperKey !== null || scraperSources.length === 0"
             @click="handleSaveScraperSettings"
           >
             {{ savingScraperSettings ? '保存中…' : '保存配置' }}
           </button>
         </div>
 
+        <p class="scraper-order-announcement" role="status" aria-live="polite">{{ scraperOrderAnnouncement }}</p>
         <div v-if="loadingScraperSettings" class="scraper-settings-message">正在加载刮削配置…</div>
         <div v-else-if="scraperSources.length === 0" class="scraper-settings-message">
           暂无可用的元信息来源。
         </div>
-        <div v-else class="scraper-source-list">
-          <article v-for="source in scraperSources" :key="source.configKey" class="scraper-source-row">
-            <div class="scraper-source-main">
-              <div class="scraper-source-heading">
-                <strong>{{ source.name }}</strong>
-                <span v-if="source.needsApiKey" class="scraper-api-status" :class="{ configured: source.hasApiKey }">
-                  {{ source.hasApiKey ? 'API Key 已配置' : '需要 API Key' }}
-                </span>
+        <div
+          v-else
+          ref="scraperSourceList"
+          class="scraper-source-list"
+          @pointermove="moveScraperDrag"
+          @pointerup="endScraperDrag"
+          @pointercancel="endScraperDrag"
+          @lostpointercapture="endScraperDrag"
+        >
+          <article
+            v-for="source in scraperSources"
+            :key="source.configKey"
+            class="scraper-source-row"
+            :class="{ 'is-dragging': draggedScraperKey === source.configKey }"
+            :data-scraper-key="source.configKey"
+          >
+            <div class="scraper-source-identity">
+              <button
+                type="button"
+                class="scraper-drag-handle"
+                :disabled="loadingScraperSettings || savingScraperSettings"
+                :aria-label="`调整${source.name}顺序，按上下方向键移动`"
+                title="拖动调整优先级，也可使用上下方向键"
+                @pointerdown="startScraperDrag($event, source.configKey)"
+                @keydown.up.prevent="moveScraperByKeyboard(source.configKey, -1)"
+                @keydown.down.prevent="moveScraperByKeyboard(source.configKey, 1)"
+              >
+                <svg width="20" height="24" viewBox="0 0 20 24" fill="currentColor" aria-hidden="true">
+                  <circle cx="7" cy="6" r="1.5" />
+                  <circle cx="13" cy="6" r="1.5" />
+                  <circle cx="7" cy="12" r="1.5" />
+                  <circle cx="13" cy="12" r="1.5" />
+                  <circle cx="7" cy="18" r="1.5" />
+                  <circle cx="13" cy="18" r="1.5" />
+                </svg>
+              </button>
+              <div class="scraper-source-main">
+                <div class="scraper-source-heading">
+                  <strong>{{ source.name }}</strong>
+                  <span v-if="source.needsApiKey" class="scraper-api-status" :class="{ configured: source.hasApiKey }">
+                    {{ source.hasApiKey ? 'API Key 已配置' : '需要 API Key' }}
+                  </span>
+                </div>
+                <p>{{ scraperSourceDescription(source.configKey) }}</p>
               </div>
-              <p>{{ scraperSourceDescription(source.configKey) }}</p>
             </div>
             <div class="scraper-source-controls">
               <button
@@ -378,6 +414,8 @@
                   max="999"
                   step="1"
                   :aria-label="`${source.name}优先级，数字越小越先查询`"
+                  :disabled="savingScraperSettings || draggedScraperKey !== null"
+                  @change="sortScraperPriorities"
                 />
               </label>
             </div>
@@ -690,7 +728,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, computed, watch, defineAsyncComponent } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch, defineAsyncComponent, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Brush, Monitor, Operation, Picture } from '@element-plus/icons-vue'
 import { message, confirm } from '@/utils/message'
@@ -1060,6 +1098,83 @@ function openScraperTrial(source: ScraperStatus) {
 const scraperSources = ref<ScraperStatus[]>([])
 const loadingScraperSettings = ref(false)
 const savingScraperSettings = ref(false)
+const scraperSourceList = ref<HTMLElement | null>(null)
+const draggedScraperKey = ref<string | null>(null)
+const scraperOrderAnnouncement = ref('')
+let scraperPointerId: number | null = null
+let scraperDragStartY = 0
+let scraperDragMoved = false
+
+function reorderScraper(key: string, targetIndex: number) {
+  if (savingScraperSettings.value || loadingScraperSettings.value) return
+  const fromIndex = scraperSources.value.findIndex(source => source.configKey === key)
+  if (fromIndex < 0 || targetIndex < 0 || targetIndex >= scraperSources.value.length
+      || fromIndex === targetIndex) return
+  const [source] = scraperSources.value.splice(fromIndex, 1)
+  scraperSources.value.splice(targetIndex, 0, source)
+  scraperSources.value.forEach((item, index) => {
+    item.priority = index + 1
+  })
+  scraperOrderAnnouncement.value = `${source.name}已移至第 ${targetIndex + 1} 位，请保存配置`
+}
+
+function startScraperDrag(event: PointerEvent, key: string) {
+  if (!event.isPrimary || event.button !== 0 || scraperPointerId !== null
+      || loadingScraperSettings.value || savingScraperSettings.value) return
+  const list = scraperSourceList.value
+  if (!list) return
+  event.preventDefault()
+  const handle = event.currentTarget as HTMLButtonElement
+  handle.focus()
+  scraperPointerId = event.pointerId
+  scraperDragStartY = event.clientY
+  scraperDragMoved = false
+  draggedScraperKey.value = key
+  // Capture on the stable list: reordering its child rows must not lose the pointer.
+  list.setPointerCapture(event.pointerId)
+}
+
+function moveScraperDrag(event: PointerEvent) {
+  if (event.pointerId !== scraperPointerId || !draggedScraperKey.value) return
+  if (!scraperDragMoved && Math.abs(event.clientY - scraperDragStartY) < 5) return
+  scraperDragMoved = true
+  event.preventDefault()
+  const row = document.elementFromPoint(event.clientX, event.clientY)
+    ?.closest<HTMLElement>('[data-scraper-key]')
+  if (!row || !scraperSourceList.value?.contains(row)) return
+  const fromIndex = scraperSources.value.findIndex(source => source.configKey === draggedScraperKey.value)
+  const targetIndex = scraperSources.value.findIndex(source => source.configKey === row.dataset.scraperKey)
+  const bounds = row.getBoundingClientRect()
+  const midpoint = bounds.top + bounds.height / 2
+  if ((targetIndex > fromIndex && event.clientY < midpoint)
+      || (targetIndex < fromIndex && event.clientY > midpoint)) return
+  reorderScraper(draggedScraperKey.value, targetIndex)
+}
+
+function endScraperDrag(event: PointerEvent) {
+  if (event.pointerId !== scraperPointerId) return
+  const list = scraperSourceList.value
+  scraperPointerId = null
+  draggedScraperKey.value = null
+  if (list?.hasPointerCapture(event.pointerId)) list.releasePointerCapture(event.pointerId)
+}
+
+async function moveScraperByKeyboard(key: string, offset: number) {
+  if (scraperPointerId !== null) return
+  const index = scraperSources.value.findIndex(source => source.configKey === key)
+  reorderScraper(key, index + offset)
+  await nextTick()
+  const row = Array.from(scraperSourceList.value?.querySelectorAll<HTMLElement>('[data-scraper-key]') || [])
+    .find(item => item.dataset.scraperKey === key)
+  row?.querySelector<HTMLButtonElement>('.scraper-drag-handle')?.focus()
+}
+
+function sortScraperPriorities() {
+  if (scraperSources.value.some(source => !Number.isInteger(source.priority)
+      || source.priority < 1 || source.priority > 999)) return
+  scraperSources.value.sort((left, right) => left.priority - right.priority)
+}
+
 const googleApiKeyDraft = ref('')
 const clearGoogleApiKey = ref(false)
 const googleScraperSource = computed(() =>
@@ -1840,6 +1955,66 @@ onUnmounted(() => {
   gap: var(--spacing-lg);
   padding: var(--spacing-lg);
   border-bottom: 1px solid var(--border-color-light);
+}
+
+.scraper-source-identity {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: var(--spacing-md);
+}
+
+.scraper-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.scraper-drag-handle:hover,
+.scraper-drag-handle:active {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.scraper-drag-handle:active {
+  cursor: grabbing;
+}
+
+.scraper-drag-handle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.scraper-drag-handle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.scraper-source-row.is-dragging {
+  background: var(--surface-hover);
+  outline: 1px solid var(--primary);
+  outline-offset: -1px;
+}
+
+.scraper-order-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .scraper-source-main {
