@@ -815,8 +815,9 @@
 
     <!-- 刮削对话框 -->
     <ScraperDialog
-      ref="scraperDialog"
+      :book="book"
       :visible="showScraperDialog"
+      @running="scraping = $event"
       @close="showScraperDialog = false"
       @refresh="loadBook"
     />
@@ -999,7 +1000,7 @@ import { useBookStore } from '@/stores/book'
 import { useCategoryStore } from '@/stores/category'
 import { useTagStore } from '@/stores/tag'
 import api from '@/utils/api'
-import { scrapeBook, downloadCover } from '@/utils/scraper'
+import { downloadCover } from '@/utils/scraper'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import ScraperDialog from '@/components/ScraperDialog.vue'
@@ -1196,7 +1197,6 @@ const hasReadingProgress = computed(() => Boolean(
 ))
 // 书单相关
 const showAddToListDialog = ref(false)
-const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
 
 // 编辑书名相关
 const editingTitle = ref(false)
@@ -1817,27 +1817,9 @@ const handleSaveNotes = async () => {
   }
 }
 
-const handleScrape = async () => {
-  if (!book.value) return
-
+const handleScrape = () => {
+  if (!book.value || scraping.value) return
   showScraperDialog.value = true
-  scraping.value = true
-
-  // 等待对话框渲染
-  await nextTick()
-
-  if (scraperDialog.value) {
-    scraperDialog.value.startScrape(async () => {
-      const result = await scrapeBook(book.value.id)
-      // 刷新书籍数据
-      if (result.success && result.book) {
-        book.value = result.book
-      }
-      return result
-    })
-  }
-
-  scraping.value = false
 }
 
 // 编辑书名

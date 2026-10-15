@@ -183,3 +183,43 @@ state.selectBook({id: 99, title: '另一本书'})
 assert.equal(state.snapshot.value, null, 'changing the target book must discard the previous candidate review')
 assert.equal(state.taskId.value, '')
 console.log('Scraper trial: filters, stale searches, view switching, selection retention, selection lock, duplicate prevention, polling, failure diagnostics, candidate confirmation, visual result fields, tab routing, keyboard navigation and expiration passed')
+
+// The library/detail manual flow fixes the target and uses account-scoped manual APIs.
+const manualProps = vue.reactive({
+  modelValue: false, manual: true,
+  book: { id: 42, title: '指定目标', author: '原作者' },
+  source: { configKey: 'jd', name: '京东读书' },
+})
+const manualEvents = []
+const manualState = context.exports.default.setup(manualProps, {
+  expose() {}, emit: (...args) => manualEvents.push(args),
+})
+const priorBookQueries = requests.filter(request => request.url === '/api/books').length
+manualProps.modelValue = true
+await vue.nextTick()
+assert.equal(manualState.selected.value.id, 42)
+assert.equal(manualState.tabs.value.length, 2)
+assert.equal(manualState.activeTab.value, 'process')
+assert.equal(requests.filter(request => request.url === '/api/books').length, priorBookQueries)
+failureResult = { finished: true, status: 'MATCHED', elapsedMs: 12, logs: [], metadata: { title: '指定元信息' } }
+// Reuse the mock response for either API namespace.
+const originalGet = api.get
+api.get = async (url, options) => url.startsWith('/api/scraper/manual/')
+  ? { data: failureResult } : originalGet(url, options)
+const priorWrites = requests.filter(request => request.url.endsWith('/confirm')).length
+await manualState.start()
+for (let index = 0; index < 8; index++) await Promise.resolve()
+assert(requests.some(request => request.url === '/api/scraper/manual/jd/books/42'))
+assert.equal(manualState.canConfirm.value, true, 'a single-source result can be explicitly saved')
+assert.equal(manualState.activeTab.value, 'result')
+assert.equal(requests.filter(request => request.url.endsWith('/confirm')).length, priorWrites)
+await manualState.confirmCandidate()
+assert(requests.some(request => request.url === '/api/scraper/manual/task-1/confirm'))
+assert.equal(manualEvents.filter(([event]) => event === 'saved').length, 1)
+await manualState.poll(1)
+assert.equal(manualEvents.filter(([event]) => event === 'saved').length, 1, 'refresh once per applied task')
+manualProps.book = { id: 43, title: '新的固定目标' }
+await vue.nextTick()
+assert.equal(manualState.snapshot.value, null)
+assert.equal(manualState.selected.value.id, 43)
+console.log('Manual scraping: fixed target, scoped APIs, no writes until confirmation, single-result save and refresh passed')

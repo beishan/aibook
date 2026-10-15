@@ -1,0 +1,37 @@
+package com.aibook.controller;
+
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+import com.aibook.model.entity.Book;
+import com.aibook.model.entity.User;
+import com.aibook.repository.BookRepository;
+import com.aibook.service.BookService;
+import com.aibook.service.SystemConfigService;
+import com.aibook.service.scraper.*;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+import org.springframework.web.server.ResponseStatusException;
+
+class ManualScraperControllerTest {
+    @Test
+    void manualStartChecksCurrentOwnersNonDeletedBookBeforeCreatingTask() {
+        var books = mock(BookRepository.class);
+        var trials = mock(ScraperTrialService.class);
+        var controller = new ScraperController(mock(MetadataScrapingService.class),
+                mock(CoverDownloadService.class), mock(MetadataCacheService.class), books,
+                mock(BookService.class), mock(SystemConfigService.class), List.of(),
+                mock(ScraperProxyService.class), trials);
+        var user = User.builder().id(1L).build();
+        when(books.findByIdAndUserAndDeletedAtIsNull(7L, user)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> controller.startManual("douban", 7L, user))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("404");
+        verifyNoInteractions(trials);
+        var book = Book.builder().id(7L).title("目标书籍").user(user).build();
+        when(books.findByIdAndUserAndDeletedAtIsNull(7L, user)).thenReturn(Optional.of(book));
+        when(trials.startManual("douban", book, 1L)).thenReturn("owned-task");
+        assertThat(controller.startManual("douban", 7L, user)).containsEntry("taskId", "owned-task");
+        verify(trials).startManual("douban", book, 1L);
+    }
+}

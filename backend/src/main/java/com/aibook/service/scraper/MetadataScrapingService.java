@@ -41,6 +41,11 @@ public class MetadataScrapingService {
 
     @Transactional
     public ScrapeResult scrapeBookWithResult(Book book, boolean forceUpdate) {
+        return scrapeBookWithResult(book, forceUpdate, false);
+    }
+
+    @Transactional
+    public ScrapeResult scrapeBookWithResult(Book book, boolean forceUpdate, boolean bypassCache) {
         if (book.getId() != null) {
             book = bookRepository.findById(book.getId()).orElse(book);
         }
@@ -52,7 +57,7 @@ public class MetadataScrapingService {
 
         if (forceUpdate) {
             evictBookCache(book);
-        } else {
+        } else if (!bypassCache) {
             MetadataScraper.BookMetadata cached = getCachedMetadata(book);
             if (cached != null) {
                 merge(combined, sources, cached, cached.getMetadataSources(), "缓存");
@@ -117,6 +122,13 @@ public class MetadataScrapingService {
     @Transactional
     public ScrapeResult applyConfirmedCandidate(Long bookId, com.aibook.model.entity.User user,
             MetadataScraper.BookMetadata metadata) {
+        return applyConfirmedMetadata(bookId, user, metadata, "豆瓣读书");
+    }
+
+    @Transactional
+    public ScrapeResult applyConfirmedMetadata(Long bookId, com.aibook.model.entity.User user,
+            MetadataScraper.BookMetadata metadata, String source) {
+        String attribution = source + "（人工确认）";
         Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
                         org.springframework.http.HttpStatus.NOT_FOUND, "书籍不存在或无权访问"));
@@ -124,15 +136,19 @@ public class MetadataScrapingService {
         Map<String, String> sources = new LinkedHashMap<>();
         for (String field : List.of("title", "author", "isbn", "publisher", "publishDate",
                 "description", "coverUrl", "language", "rating", "tags")) {
-            sources.put(field, "豆瓣读书（人工确认）");
+            sources.put(field, attribution);
         }
         applyMetadata(book, metadata, sources, false);
         bookRepository.save(book);
         authorService.synchronizeBook(book);
+        if ((before.get("coverUrl") == null || before.get("coverUrl").toString().isBlank())
+                && book.getCoverUrl() != null && book.getCoverUrl().startsWith("http")) {
+            coverDownloadService.downloadCover(book);
+        }
         evictBookCache(book);
         List<String> fields = changedFields(before, book);
         return ScrapeResult.builder().book(book).matched(true).success(true)
-                .updatedFields(fields).sources(List.of("豆瓣读书（人工确认）"))
+                .updatedFields(fields).sources(List.of(attribution))
                 .message(fields.isEmpty() ? "已有字段已保留，没有需要补全的字段" : "已补全 " + fields.size() + " 个字段")
                 .build();
     }

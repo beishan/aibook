@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="modelValue"
-    :title="`${source?.name || ''} · 试刮削`"
+    :title="`${source?.name || ''} · ${manual ? '手动刮削' : '试刮削'}`"
     width="1120px"
     top="5vh"
     style="max-width: calc(100vw - 24px)"
@@ -9,9 +9,17 @@
     :close-on-click-modal="false"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <p>使用服务器已保存的配置，仅测试所选来源（包括未启用来源）。绕过缓存，查询与选择阶段不修改书籍；豆瓣候选需加载详情并人工确认后，才会补全书籍，保留已有字段。</p>
+    <p v-if="!manual">使用服务器已保存的配置，仅测试所选来源（包括未启用来源）。绕过缓存，查询与选择阶段不修改书籍；豆瓣候选需加载详情并人工确认后，才会补全书籍，保留已有字段。</p>
+    <p v-if="manual">仅使用指定刮削器查询，不自动写入。核对备选元信息和封面后点击保存，只补全空字段并保留已有内容。</p>
+    <div v-if="book" class="trial-actions">
+      <strong>目标书籍：{{ book.title }}</strong>
+      <span>{{ book.author || '未知作者' }}</span>
+      <el-button type="primary" :disabled="running || confirming" :loading="running" @click="start">
+        {{ snapshot ? '重新查询' : '开始查询' }}
+      </el-button>
+    </div>
     <div class="trial-tab-scroll">
-      <div class="trial-tabs" role="tablist" aria-label="试刮削步骤" @keydown="switchTabByKeyboard">
+      <div class="trial-tabs" :style="{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }" role="tablist" :aria-label="manual ? '手动刮削步骤' : '试刮削步骤'" @keydown="switchTabByKeyboard">
         <span class="trial-tab-indicator" :style="tabIndicatorStyle" aria-hidden="true"></span>
         <button
           v-for="tab in tabs"
@@ -27,6 +35,7 @@
       </div>
     </div>
     <section
+      v-if="!book"
       v-show="activeTab === 'books'"
       id="trial-panel-books"
       class="trial-panel"
@@ -164,7 +173,7 @@
       aria-labelledby="trial-tab-process"
       tabindex="0"
     >
-      <el-empty v-if="!snapshot && !running && !pollError" description="选择书籍并开始试刮削后，在这里查看过程" />
+      <el-empty v-if="!snapshot && !running && !pollError" :description="book ? '点击开始查询，在这里查看过程和备选' : '选择书籍并开始试刮削后，在这里查看过程'" />
       <template v-else>
         <div class="trial-stage-heading" aria-live="polite">
           <div>
@@ -277,10 +286,10 @@
             </el-form-item>
           </el-form>
         </div>
-        <div v-if="snapshot.status === 'REVIEW_REQUIRED'" class="trial-result-confirm">
+        <div v-if="canConfirm" class="trial-result-confirm">
           <p>核对封面和元信息后确认。只补全空字段，保留已有书名、作者、ISBN、封面等信息。</p>
           <el-button type="primary" :loading="confirming" :disabled="running" @click="confirmCandidate">
-            确认此候选并补全书籍（保留已有字段）
+            {{ manual ? '保存元信息（保留已有字段）' : '确认此候选并补全书籍（保留已有字段）' }}
           </el-button>
           <el-button v-if="snapshot.candidates?.length" :disabled="confirming" @click="activeTab = 'process'">返回备选选择</el-button>
         </div>
@@ -307,7 +316,7 @@
       <p v-if="candidateError" role="alert">{{ candidateError }}</p>
     </section>
     <template #footer>
-      <span v-if="running">关闭弹窗后服务器仍会完成本次试验；重新打开可查看。</span>
+      <span v-if="running">关闭弹窗后服务器仍会完成本次查询；重新打开可查看。</span>
       <el-button @click="emit('update:modelValue', false)">关闭</el-button>
     </template>
   </el-dialog>
@@ -321,10 +330,11 @@ import { usePreferencesStore, type ScraperTrialViewMode } from '@/stores/prefere
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 
-const props = defineProps<{ modelValue: boolean; source: ScraperStatus | null }>()
+const props = defineProps<{ modelValue: boolean; source: ScraperStatus | null; book?: BookChoice | null; manual?: boolean }>()
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
   (event: 'running', value: boolean): void
+  (event: 'saved'): void
 }>()
 interface BookChoice {
   id: number
@@ -376,13 +386,15 @@ const viewOptions: { value: ScraperTrialViewMode; label: string }[] = [
   { value: 'card', label: '卡片视图' },
 ]
 type TrialTab = 'books' | 'process' | 'result'
-const activeTab = ref<TrialTab>('books')
+const activeTab = ref<TrialTab>(props.book ? 'process' : 'books')
+const apiPrefix = computed(() => props.manual ? '/api/scraper/manual' : '/api/scraper/trial')
 const tabs = computed(() => [
-  { value: 'books' as const, label: '书籍选择' },
+  ...(!props.book ? [{ value: 'books' as const, label: '书籍选择' }] : []),
   { value: 'process' as const, label: snapshot.value?.candidates?.length ? '刮削过程 & 备选选择' : '刮削过程' },
   { value: 'result' as const, label: '刮削结果' },
 ])
 const tabIndicatorStyle = computed(() => ({
+  width: `calc((100% - 8px) / ${tabs.value.length})`,
   transform: `translateX(${tabs.value.findIndex(tab => tab.value === activeTab.value) * 100}%)`,
 }))
 async function switchTabByKeyboard(event: KeyboardEvent) {
@@ -454,6 +466,9 @@ const snapshot = ref<TrialSnapshot | null>(null)
 const pollError = ref('')
 const taskId = ref('')
 const candidateError = ref('')
+const canConfirm = computed(() => snapshot.value?.status === 'REVIEW_REQUIRED'
+  || props.manual && snapshot.value?.status === 'MATCHED' && Boolean(snapshot.value.metadata))
+let savedTask = ''
 watch(resultCover, () => { resultCoverFailed.value = false })
 let timer: ReturnType<typeof setTimeout> | undefined
 let generation = 0
@@ -524,7 +539,7 @@ function changePage(value: number) {
 }
 async function poll(request: number) {
   try {
-    const { data } = await api.get<TrialSnapshot>(`/api/scraper/trial/${taskId.value}`)
+    const { data } = await api.get<TrialSnapshot>(`${apiPrefix.value}/${taskId.value}`)
     if (request !== generation || disposed) return
     const previous = snapshot.value
     snapshot.value = data
@@ -532,6 +547,10 @@ async function poll(request: number) {
       activeTab.value = data.candidates?.length && !data.metadata ? 'process' : 'result'
     }
     pollError.value = ''
+    if (data.applied && savedTask !== taskId.value) {
+      savedTask = taskId.value
+      emit('saved')
+    }
     running.value = !data.finished
     if (!data.finished) timer = setTimeout(() => void poll(request), 1000)
   } catch (error: any) {
@@ -555,7 +574,7 @@ async function loadCandidate(candidateId: string) {
   activeTab.value = 'process'
   candidateError.value = ''
   try {
-    const { data } = await api.post<TrialSnapshot>(`/api/scraper/trial/${taskId.value}/candidates/${candidateId}`)
+    const { data } = await api.post<TrialSnapshot>(`${apiPrefix.value}/${taskId.value}/candidates/${candidateId}`)
     if (disposed) return
     snapshot.value = data
     if (data.finished && data.metadata) activeTab.value = 'result'
@@ -567,13 +586,15 @@ async function loadCandidate(candidateId: string) {
   }
 }
 async function confirmCandidate() {
-  if (confirming.value || running.value || snapshot.value?.status !== 'REVIEW_REQUIRED'
-      || !snapshot.value.selectedCandidateId) return
+  if (confirming.value || running.value || !canConfirm.value
+      || !props.manual && !snapshot.value?.selectedCandidateId) return
   confirming.value = true
   candidateError.value = ''
   const request = generation
   try {
-    await api.post(`/api/scraper/trial/${taskId.value}/candidates/${snapshot.value.selectedCandidateId}/confirm`)
+    const url = props.manual ? `${apiPrefix.value}/${taskId.value}/confirm`
+      : `${apiPrefix.value}/${taskId.value}/candidates/${snapshot.value?.selectedCandidateId}/confirm`
+    await api.post(url)
     if (disposed || request !== generation) return
     await poll(request)
   } catch (error: any) {
@@ -593,7 +614,7 @@ async function start() {
   pollError.value = ''
   candidateError.value = ''
   try {
-    const { data } = await api.post(`/api/scraper/trial/${props.source.configKey}/books/${selected.value.id}`)
+    const { data } = await api.post(`${apiPrefix.value}/${props.source.configKey}/books/${selected.value.id}`)
     taskId.value = data.taskId
     if (!disposed) resumePolling()
   } catch {
@@ -603,6 +624,11 @@ async function start() {
 }
 watch(() => props.modelValue, async (open) => {
   if (!open) return
+  if (props.book) {
+    selected.value = props.book
+    if (taskId.value && running.value) resumePolling()
+    return
+  }
   void preferences.hydrate()
   if (taskId.value && running.value) resumePolling()
   if (!running.value && !confirming.value && !snapshot.value) search()
@@ -617,7 +643,14 @@ watch(() => props.source?.configKey, () => {
   snapshot.value = null
   taskId.value = ''
   pollError.value = ''
-  activeTab.value = 'books'
+  activeTab.value = props.book ? 'process' : 'books'
+  selected.value = props.book || null
+})
+watch(() => props.book?.id, () => {
+  if (running.value || confirming.value) return
+  resetCandidateReview()
+  selected.value = props.book || null
+  activeTab.value = props.book ? 'process' : 'books'
 })
 onBeforeUnmount(() => {
   disposed = true

@@ -92,6 +92,35 @@ public class ScraperController {
                 "updatedFields", result.getUpdatedFields());
     }
 
+    @PostMapping("/manual/{configKey}/books/{bookId}")
+    public Map<String, String> startManual(@PathVariable String configKey, @PathVariable Long bookId,
+            @AuthenticationPrincipal User user) {
+        Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(bookId, user)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "书籍不存在"));
+        return Map.of("taskId", trialService.startManual(configKey, book, user.getId()));
+    }
+
+    @GetMapping("/manual/{taskId}")
+    public com.aibook.service.scraper.ScraperTrialService.TrialSnapshot getManual(
+            @PathVariable String taskId, @AuthenticationPrincipal User user) {
+        return trialService.getManual(taskId, user.getId());
+    }
+
+    @PostMapping("/manual/{taskId}/candidates/{candidateId}")
+    public com.aibook.service.scraper.ScraperTrialService.TrialSnapshot selectManualCandidate(
+            @PathVariable String taskId, @PathVariable String candidateId, @AuthenticationPrincipal User user) {
+        return trialService.selectManualCandidate(taskId, user.getId(), candidateId);
+    }
+
+    @PostMapping("/manual/{taskId}/confirm")
+    public Map<String, Object> confirmManual(@PathVariable String taskId, @AuthenticationPrincipal User user) {
+        var result = trialService.confirmManual(taskId, user.getId(),
+                (bookId, metadata, source) -> scrapingService.applyConfirmedMetadata(bookId, user, metadata, source));
+        return Map.of("success", result.isSuccess(), "message", result.getMessage(),
+                "updatedFields", result.getUpdatedFields());
+    }
+
     /**
      * 刮削单本书籍
      */
@@ -109,7 +138,7 @@ public class ScraperController {
 
         try {
             MetadataScrapingService.ScrapeResult result =
-                    scrapingService.scrapeBookWithResult(book, false);
+                    scrapingService.scrapeBookWithResult(book, false, true);
             return ResponseEntity.ok(Map.of(
                     "success", result.isSuccess(),
                     "matched", result.isMatched(),

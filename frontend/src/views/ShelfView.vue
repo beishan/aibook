@@ -724,8 +724,13 @@
       @close="editingBook=null" @saved="applyBookUpdate" />
     <AddToBookListDialog :visible="bookToAddToList !== null" :book="bookToAddToList"
       @close="bookToAddToList=null" />
-    <ScraperDialog ref="scraperDialog" :visible="scrapingBookId !== null"
-      @close="scrapingBookId=null" />
+    <ScraperDialog
+      :book="scrapingBook"
+      :visible="scrapingBook !== null"
+      @close="scrapingBook = null"
+      @running="setScrapeRunning"
+      @refresh="scrapingBook && refreshBookFromServer(scrapingBook.id)"
+    />
   </div>
 </template>
 
@@ -742,7 +747,6 @@ import BookQuickReader from '@/components/BookQuickReader.vue'
 import BookEditDialog from '@/components/BookEditDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import ScraperDialog from '@/components/ScraperDialog.vue'
-import { scrapeBook } from '@/utils/scraper'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import type { Book } from '@/stores/book'
 import { downloadBookToLocal } from '@/utils/bookDownload'
@@ -753,8 +757,12 @@ const pendingBookActions = ref(new Set<number>())
 const quickReader = ref<InstanceType<typeof BookQuickReader> | null>(null)
 const editingBook = ref<Book | null>(null)
 const bookToAddToList = ref<Book | null>(null)
-const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
-const scrapingBookId = ref<number | null>(null)
+const scrapingBook = ref<Book | null>(null)
+function setScrapeRunning(running: boolean) {
+  if (!scrapingBook.value) return
+  if (running) pendingBookActions.value.add(scrapingBook.value.id)
+  else pendingBookActions.value.delete(scrapingBook.value.id)
+}
 
 function applyBookUpdate(updated:Book) {
   const replace = (books:Book[]) => books.map(book => book.id === updated.id ? { ...book, ...updated } : book)
@@ -848,14 +856,8 @@ async function handleBookAction(command:string, book:Book) {
         break
       }
       case 'scrape':
-        if (scrapingBookId.value !== null) return
-        scrapingBookId.value = book.id
-        await nextTick()
-        await scraperDialog.value?.startScrape(async () => {
-          const result = await scrapeBook(book.id)
-          if (result.success) await refreshBookFromServer(book.id)
-          return result
-        })
+        if (scrapingBook.value !== null) return
+        scrapingBook.value = book
         break
       case 'delete':
         if (!await confirm(`确定将《${book.title}》移入回收站吗？原始文件会保留，可从回收站恢复。`, '移入回收站')) return

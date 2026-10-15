@@ -35,7 +35,15 @@ public class ScraperTrialService {
                 return thread;
             });
 
-    public synchronized String start(String configKey, Book original, Long userId) {
+    public String start(String configKey, Book original, Long userId) {
+        return start(configKey, original, userId, false);
+    }
+
+    public String startManual(String configKey, Book original, Long userId) {
+        return start(configKey, original, userId, true);
+    }
+
+    private synchronized String start(String configKey, Book original, Long userId, boolean manual) {
         MetadataScraper scraper = scrapers.stream()
                 .filter(item -> item.getConfigKey().equals(configKey)).findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "刮削配置不存在"));
@@ -48,7 +56,7 @@ public class ScraperTrialService {
         query.setTitle(original.getTitle());
         query.setAuthor(original.getAuthor());
         query.setIsbn(original.getIsbn());
-        Trial trial = new Trial(userId, original.getId(), scraper);
+        Trial trial = new Trial(userId, original.getId(), scraper, manual);
         String id = UUID.randomUUID().toString();
         trial.log("已排队：" + scraper.getName() + " / " + query.getTitle());
         trials.put(id, trial);
@@ -63,6 +71,49 @@ public class ScraperTrialService {
 
     public TrialSnapshot get(String id, Long userId) {
         return ownedTrial(id, userId).snapshot();
+    }
+
+    public TrialSnapshot getManual(String id, Long userId) {
+        return manualTrial(id, userId).snapshot();
+    }
+
+    private Trial manualTrial(String id, Long userId) {
+        Trial trial = ownedTrial(id, userId);
+        if (!trial.manual) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "手动刮削任务不存在或已过期");
+        return trial;
+    }
+
+    public TrialSnapshot selectManualCandidate(String id, Long userId, String candidateId) {
+        manualTrial(id, userId);
+        return selectCandidate(id, userId, candidateId);
+    }
+
+    @FunctionalInterface
+    public interface ManualApply {
+        MetadataScrapingService.ScrapeResult apply(Long bookId, MetadataScraper.BookMetadata metadata, String source);
+    }
+
+    public MetadataScrapingService.ScrapeResult confirmManual(String id, Long userId, ManualApply apply) {
+        Trial trial = manualTrial(id, userId);
+        synchronized (trial) {
+            boolean reviewReady = "REVIEW_REQUIRED".equals(trial.status)
+                    && trial.selectedCandidateId != null;
+            boolean singleReady = !(trial.scraper instanceof DoubanScraper) && "MATCHED".equals(trial.status);
+            if (trial.applied || trial.metadata == null || !(reviewReady || singleReady)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "请先查询并核对元信息，或该结果已经保存");
+            }
+            var result = apply.apply(trial.bookId, trial.metadata, trial.scraper.getName());
+            markApplied(trial, result);
+            return result;
+        }
+    }
+
+    private void markApplied(Trial trial, MetadataScrapingService.ScrapeResult result) {
+        if (!result.isSuccess()) throw new ResponseStatusException(HttpStatus.CONFLICT, "元信息保存未完成，请重试");
+        trial.applied = true;
+        trial.status = "APPLIED";
+        trial.updatedFields = List.copyOf(result.getUpdatedFields());
+        trial.log("已人工确认并补全书籍；保留已有字段。" + result.getMessage());
     }
 
     private Trial ownedTrial(String id, Long userId) {
@@ -131,10 +182,7 @@ public class ScraperTrialService {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "请先加载并核对当前候选详情，或该候选已经应用");
             }
             var result = apply.apply(trial.bookId, trial.metadata);
-            trial.applied = true;
-            trial.status = "APPLIED";
-            trial.updatedFields = List.copyOf(result.getUpdatedFields());
-            trial.log("已人工确认并补全书籍；保留已有字段。" + result.getMessage());
+            markApplied(trial, result);
             return result;
         }
     }
@@ -218,6 +266,7 @@ public class ScraperTrialService {
         private final Long userId;
         private final Long bookId;
         private final MetadataScraper scraper;
+        private final boolean manual;
         private List<DoubanScraper.Candidate> candidates = List.of();
         private String selectedCandidateId;
         private boolean applied;
@@ -230,10 +279,11 @@ public class ScraperTrialService {
         private ScrapeDiagnostics.Failure failure;
         private List<ScrapeDiagnostics.Failure> diagnostics = List.of();
 
-        private Trial(Long userId, Long bookId, MetadataScraper scraper) {
+        private Trial(Long userId, Long bookId, MetadataScraper scraper, boolean manual) {
             this.userId = userId;
             this.bookId = bookId;
             this.scraper = scraper;
+            this.manual = manual;
         }
 
         synchronized void log(String message) {

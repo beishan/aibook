@@ -618,8 +618,9 @@
     />
 
     <ScraperDialog
-      ref="scraperDialog"
+      :book="scrapingBook"
       :visible="showScraperDialog"
+      @running="processingBookId = $event ? scrapingBook?.id || null : null"
       @close="showScraperDialog = false"
       @refresh="loadBooks"
     />
@@ -692,7 +693,6 @@ import {
   shouldLoadBookCover,
   toggleAllBookCovers,
 } from '@/utils/imagePrivacy'
-import { scrapeBook } from '@/utils/scraper'
 import { downloadBookToLocal } from '@/utils/bookDownload'
 
 const route = useRoute()
@@ -753,7 +753,7 @@ const showVersionRebuildDialog = ref(false)
 const showBookMergeDialog = ref(false)
 const showSimilarityScanDialog = ref(false)
 const quickReader = ref<InstanceType<typeof BookQuickReader> | null>(null)
-const scraperDialog = ref<InstanceType<typeof ScraperDialog> | null>(null)
+const scrapingBook = ref<Book | null>(null)
 const coversPreparing = ref(false)
 const libraryLoading = computed(() => bookStore.loading || coversPreparing.value)
 const coverImageCache = new Map<string, HTMLImageElement>()
@@ -1231,15 +1231,10 @@ const closeAddToListDialog = () => {
   bookToAddToList.value = null
 }
 
-const handleScrapeBook = async (book: Book) => {
+const handleScrapeBook = (book: Book) => {
+  if (processingBookId.value) return
+  scrapingBook.value = book
   showScraperDialog.value = true
-  processingBookId.value = book.id
-  await nextTick()
-  try {
-    await scraperDialog.value?.startScrape(() => scrapeBook(book.id))
-  } finally {
-    processingBookId.value = null
-  }
 }
 
 const handleReparseBook = async (book: Book) => {
