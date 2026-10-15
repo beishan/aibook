@@ -17,12 +17,14 @@ const requests = []
 let pendingBook
 let failPoll = false
 let finishPoll = false
+let failureResult = null
 const api = {
   async get(url, options) {
     requests.push({ url, options })
     if (url === '/api/books') return new Promise(resolve => { pendingBook = resolve })
     if (url.startsWith('/api/scraper/trial/')) {
       if (failPoll) throw { response: { status: 404 } }
+      if (failureResult) return { data: failureResult }
       return { data: { finished: finishPoll, status: finishPoll ? 'MATCHED' : 'RUNNING', elapsedMs: 1200, logs: [], metadata: null } }
     }
     return { data: [] }
@@ -101,10 +103,25 @@ await Promise.resolve()
 await vue.nextTick()
 assert.equal(state.running.value, false)
 assert.equal(state.snapshot.value.status, 'MATCHED')
+const restriction = {
+  code: 'ACCESS_DENIED', label: '访问被拒绝（疑似反爬或权限限制）',
+  detail: '来源返回 HTTP 403；无法仅凭状态码确认是否为反爬。',
+  suggestion: '检查来源访问要求或更换来源。', stage: 'ISBN 查询',
+  httpStatus: 403, endpoint: 'https://example.com/search',
+}
+failureResult = {
+  finished: true, status: 'NO_RESULT', elapsedMs: 2400, logs: [], metadata: null,
+  failure: restriction, diagnostics: [restriction],
+}
+await state.poll(1)
+assert.equal(state.snapshot.value.failure.code, 'ACCESS_DENIED')
+assert.equal(state.snapshot.value.diagnostics[0].httpStatus, 403)
+assert.equal(state.snapshot.value.failure.suggestion, restriction.suggestion)
+assert.equal(state.statusLabel.value, '未取得元信息')
 failPoll = true
 await state.poll(1)
 assert.equal(state.taskId.value, '')
 assert.match(state.pollError.value, /过期/)
 assert(emitted.some(([event, value]) => event === 'running' && value === true))
 assert(emitted.some(([event, value]) => event === 'running' && value === false))
-console.log('Scraper trial: filters, stale searches, view switching, selection retention, selection lock, duplicate prevention, polling and expiration passed')
+console.log('Scraper trial: filters, stale searches, view switching, selection retention, selection lock, duplicate prevention, polling, failure diagnostics and expiration passed')

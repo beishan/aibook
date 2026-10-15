@@ -108,9 +108,11 @@ public class JdBookScraper implements MetadataScraper {
                 }
             }
 
+            ScrapeDiagnostics.emptySearchPage(doc);
             log.warn("京东未找到 ISBN: {}", isbn);
             return null;
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("京东 ISBN 查询失败: {}", isbn, e);
             return null;
         }
@@ -149,9 +151,11 @@ public class JdBookScraper implements MetadataScraper {
                 }
             }
 
+            ScrapeDiagnostics.emptySearchPage(doc);
             log.warn("京东未找到: {}", searchTitle);
             return null;
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("京东搜索失败: {}", searchTitle, e);
             return null;
         }
@@ -160,11 +164,16 @@ public class JdBookScraper implements MetadataScraper {
     /**
      * 发送 HTTP 请求
      */
+    Connection createConnection(String url) {
+        return Jsoup.connect(url);
+    }
+
     private String makeRequest(String url) {
         try {
+            ScrapeDiagnostics.request(url);
             String userAgent = USER_AGENTS[random.nextInt(USER_AGENTS.length)];
 
-            Connection.Response response = Jsoup.connect(url)
+            Connection.Response response = createConnection(url)
                     .userAgent(userAgent)
                     .referrer("https://www.jd.com/")
                     .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
@@ -181,16 +190,11 @@ public class JdBookScraper implements MetadataScraper {
                     .ignoreHttpErrors(true)
                     .execute();
 
-            if (response.statusCode() == 200) {
-                return response.body();
-            } else if (response.statusCode() == 403) {
-                log.warn("京东返回 403，可能被反爬拦截: {}", url);
-                return null;
-            } else {
-                log.warn("京东返回状态码 {}: {}", response.statusCode(), url);
-                return null;
-            }
+            String body = response.body();
+            return ScrapeDiagnostics.response(response.statusCode(), response.url().toString(), body)
+                    ? body : null;
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("请求京东失败: {}", url, e);
             return null;
         }
@@ -214,6 +218,7 @@ public class JdBookScraper implements MetadataScraper {
             Document doc = Jsoup.parse(response);
             return parseBookPage(doc, jdId);
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("获取京东书籍详情失败: {}", jdId, e);
             return null;
         }
@@ -228,6 +233,11 @@ public class JdBookScraper implements MetadataScraper {
 
             // 标题
             Element titleElement = doc.selectFirst(".sku-name");
+            if (titleElement == null || titleElement.text().isBlank()) {
+                ScrapeDiagnostics.report(ScrapeDiagnostics.Code.UNRECOGNIZED_RESPONSE,
+                        "详情页缺少预期的书名节点，无法确认页面为正常书籍详情；未生成仅含语言的伪结果。");
+                return null;
+            }
             if (titleElement != null) {
                 builder.title(titleElement.text().trim());
             }
@@ -285,6 +295,7 @@ public class JdBookScraper implements MetadataScraper {
 
             return builder.build();
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("解析京东页面失败", e);
             return null;
         }

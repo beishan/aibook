@@ -142,12 +142,29 @@
       <p v-if="pollError" role="alert">{{ pollError }}</p>
       <template v-if="snapshot?.finished">
         <h3>刮削结果</h3>
-        <p v-if="!snapshot.metadata">{{ snapshot.logs[snapshot.logs.length - 1]?.message }}</p>
-        <el-descriptions v-else :column="1" border>
+        <div v-if="snapshot.failure" class="trial-failure" role="status">
+          <strong>{{ snapshot.failure.label }}</strong>
+          <p>{{ snapshot.failure.detail }}</p>
+          <p>建议：{{ snapshot.failure.suggestion }}</p>
+        </div>
+        <p v-else-if="!snapshot.metadata">{{ snapshot.logs[snapshot.logs.length - 1]?.message }}</p>
+        <el-descriptions v-if="snapshot.metadata" :column="1" border>
           <el-descriptions-item v-for="(label, field) in fields" :key="field" :label="label">
             <span class="trial-value">{{ formatValue(snapshot.metadata[field]) }}</span>
           </el-descriptions-item>
         </el-descriptions>
+        <section v-if="snapshot.diagnostics?.length" class="trial-diagnostics">
+          <h4>{{ snapshot.metadata ? '查询中遇到的问题（后续查询已取得元信息）' : '各查询步骤的诊断' }}</h4>
+          <ol>
+            <li v-for="(item, index) in snapshot.diagnostics" :key="index">
+              <strong>{{ item.stage }} · {{ item.label }}</strong>
+              <span v-if="item.httpStatus"> · HTTP {{ item.httpStatus }}</span>
+              <p>{{ item.detail }}</p>
+              <p v-if="item.endpoint" class="trial-diagnostic-endpoint">请求端点：{{ item.endpoint }}</p>
+              <p>建议：{{ item.suggestion }}</p>
+            </li>
+          </ol>
+        </section>
       </template>
     </section>
     <template #footer>
@@ -183,12 +200,23 @@ interface Option {
   name: string
   path?: string
 }
+interface ScrapeFailure {
+  code: string
+  label: string
+  detail: string
+  suggestion: string
+  stage: string
+  httpStatus: number | null
+  endpoint: string
+}
 interface TrialSnapshot {
   status: string
   finished: boolean
   elapsedMs: number
   logs: { time: string; message: string }[]
   metadata: Record<string, unknown> | null
+  failure?: ScrapeFailure | null
+  diagnostics?: ScrapeFailure[]
 }
 const preferences = usePreferencesStore()
 const viewMode = computed(() => preferences.scraperTrialViewMode)
@@ -527,6 +555,26 @@ onBeforeUnmount(() => {
 }
 .trial-logs time {
   font-variant-numeric: tabular-nums;
+}
+.trial-failure {
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-hover);
+}
+.trial-failure p,
+.trial-diagnostics p {
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+.trial-diagnostics ol {
+  display: grid;
+  gap: 14px;
+  padding-left: 24px;
+}
+.trial-diagnostic-endpoint {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 .trial-value {
   white-space: pre-wrap;

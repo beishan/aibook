@@ -89,18 +89,29 @@ public class GoogleBooksScraper implements MetadataScraper {
                     .toUriString();
 
             log.info("查询 Google Books ISBN: {}", isbn);
-            String response = restTemplate.getForObject(url, String.class);
+            ScrapeDiagnostics.request(url);
+            org.springframework.http.ResponseEntity<String> httpResponse =
+                    restTemplate.getForEntity(url, String.class);
+            String response = httpResponse.getBody();
+            if (!ScrapeDiagnostics.response(httpResponse.getStatusCode().value(), url, response)) return null;
 
             JsonNode root = objectMapper.readTree(response);
             JsonNode items = root.get("items");
 
             if (items == null || items.isEmpty()) {
+                ScrapeDiagnostics.report(root.path("totalItems").isNumber()
+                                && root.path("totalItems").asLong() == 0
+                                ? ScrapeDiagnostics.Code.NO_MATCH : ScrapeDiagnostics.Code.UNRECOGNIZED_RESPONSE,
+                        root.path("totalItems").isNumber() && root.path("totalItems").asLong() == 0
+                                ? "Google Books 接口明确返回 totalItems=0，未搜索到匹配书籍。"
+                                : "Google Books 未返回预期的 items 及明确的零结果标记。");
                 log.warn("Google Books 未找到 ISBN: {}", isbn);
                 return null;
             }
 
             return parseVolumeInfo(items.get(0).get("volumeInfo"));
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("Google Books ISBN 查询失败: {}", isbn, e);
             return null;
         }
@@ -120,18 +131,29 @@ public class GoogleBooksScraper implements MetadataScraper {
                     .toUriString();
 
             log.info("搜索 Google Books: {} (原始: {})", searchTitle, title);
-            String response = restTemplate.getForObject(url, String.class);
+            ScrapeDiagnostics.request(url);
+            org.springframework.http.ResponseEntity<String> httpResponse =
+                    restTemplate.getForEntity(url, String.class);
+            String response = httpResponse.getBody();
+            if (!ScrapeDiagnostics.response(httpResponse.getStatusCode().value(), url, response)) return null;
 
             JsonNode root = objectMapper.readTree(response);
             JsonNode items = root.get("items");
 
             if (items == null || items.isEmpty()) {
+                ScrapeDiagnostics.report(root.path("totalItems").isNumber()
+                                && root.path("totalItems").asLong() == 0
+                                ? ScrapeDiagnostics.Code.NO_MATCH : ScrapeDiagnostics.Code.UNRECOGNIZED_RESPONSE,
+                        root.path("totalItems").isNumber() && root.path("totalItems").asLong() == 0
+                                ? "Google Books 接口明确返回 totalItems=0，未搜索到匹配书籍。"
+                                : "Google Books 未返回预期的 items 及明确的零结果标记。");
                 log.warn("Google Books 未找到: {}", title);
                 return null;
             }
 
             return parseVolumeInfo(items.get(0).get("volumeInfo"));
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("Google Books 搜索失败: {}", title, e);
             return null;
         }
@@ -142,6 +164,12 @@ public class GoogleBooksScraper implements MetadataScraper {
      */
     private BookMetadata parseVolumeInfo(JsonNode node) {
         try {
+            if (node == null || !node.isObject() || !node.hasNonNull("title")
+                    || node.path("title").asText().isBlank()) {
+                ScrapeDiagnostics.report(ScrapeDiagnostics.Code.UNRECOGNIZED_RESPONSE,
+                        "书籍响应缺少预期的标题字段，无法确认其为正常书籍数据。");
+                return null;
+            }
             BookMetadata.BookMetadataBuilder builder = BookMetadata.builder();
 
             // 标题
@@ -236,6 +264,7 @@ public class GoogleBooksScraper implements MetadataScraper {
 
             return builder.build();
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("解析 Google Books 数据失败", e);
             return null;
         }

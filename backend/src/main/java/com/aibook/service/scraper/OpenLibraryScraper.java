@@ -74,18 +74,28 @@ public class OpenLibraryScraper implements MetadataScraper {
                     .toUriString();
 
             log.info("查询 Open Library ISBN: {}", isbn);
-            String response = restTemplate.getForObject(url, String.class);
+            ScrapeDiagnostics.request(url);
+            org.springframework.http.ResponseEntity<String> httpResponse =
+                    restTemplate.getForEntity(url, String.class);
+            String response = httpResponse.getBody();
+            if (!ScrapeDiagnostics.response(httpResponse.getStatusCode().value(), url, response)) return null;
 
             JsonNode root = objectMapper.readTree(response);
             JsonNode bookNode = root.get("ISBN:" + isbn);
 
             if (bookNode == null) {
+                ScrapeDiagnostics.report(root.isObject() && root.isEmpty()
+                                ? ScrapeDiagnostics.Code.NO_MATCH : ScrapeDiagnostics.Code.UNRECOGNIZED_RESPONSE,
+                        root.isObject() && root.isEmpty()
+                                ? "Open Library ISBN 接口返回空对象，未找到该 ISBN。"
+                                : "Open Library ISBN 响应缺少预期书籍节点。");
                 log.warn("Open Library 未找到 ISBN: {}", isbn);
                 return null;
             }
 
             return parseBookData(bookNode);
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("Open Library ISBN 查询失败: {}", isbn, e);
             return null;
         }
@@ -104,12 +114,21 @@ public class OpenLibraryScraper implements MetadataScraper {
                     .toUriString();
 
             log.info("搜索 Open Library: {} (原始: {})", searchTitle, title);
-            String response = restTemplate.getForObject(url, String.class);
+            ScrapeDiagnostics.request(url);
+            org.springframework.http.ResponseEntity<String> httpResponse =
+                    restTemplate.getForEntity(url, String.class);
+            String response = httpResponse.getBody();
+            if (!ScrapeDiagnostics.response(httpResponse.getStatusCode().value(), url, response)) return null;
 
             JsonNode root = objectMapper.readTree(response);
             JsonNode docs = root.get("docs");
 
             if (docs == null || docs.isEmpty()) {
+                ScrapeDiagnostics.report(docs != null && docs.isArray() && docs.isEmpty()
+                                ? ScrapeDiagnostics.Code.NO_MATCH : ScrapeDiagnostics.Code.UNRECOGNIZED_RESPONSE,
+                        docs != null && docs.isArray() && docs.isEmpty()
+                                ? "Open Library 搜索接口返回 docs 空数组，未搜索到匹配书籍。"
+                                : "Open Library 响应缺少预期 docs 搜索列表。");
                 log.warn("Open Library 未找到: {}", title);
                 return null;
             }
@@ -117,6 +136,7 @@ public class OpenLibraryScraper implements MetadataScraper {
             JsonNode firstDoc = docs.get(0);
             return parseSearchResult(firstDoc);
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("Open Library 搜索失败: {}", title, e);
             return null;
         }
@@ -127,6 +147,12 @@ public class OpenLibraryScraper implements MetadataScraper {
      */
     private BookMetadata parseBookData(JsonNode node) {
         try {
+            if (node == null || !node.isObject() || !node.hasNonNull("title")
+                    || node.path("title").asText().isBlank()) {
+                ScrapeDiagnostics.report(ScrapeDiagnostics.Code.UNRECOGNIZED_RESPONSE,
+                        "书籍响应缺少预期的标题字段，无法确认其为正常书籍数据。");
+                return null;
+            }
             BookMetadata.BookMetadataBuilder builder = BookMetadata.builder();
 
             // 标题
@@ -181,6 +207,7 @@ public class OpenLibraryScraper implements MetadataScraper {
 
             return builder.build();
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("解析 Open Library 数据失败", e);
             return null;
         }
@@ -191,6 +218,12 @@ public class OpenLibraryScraper implements MetadataScraper {
      */
     private BookMetadata parseSearchResult(JsonNode node) {
         try {
+            if (node == null || !node.isObject() || !node.hasNonNull("title")
+                    || node.path("title").asText().isBlank()) {
+                ScrapeDiagnostics.report(ScrapeDiagnostics.Code.UNRECOGNIZED_RESPONSE,
+                        "书籍响应缺少预期的标题字段，无法确认其为正常书籍数据。");
+                return null;
+            }
             BookMetadata.BookMetadataBuilder builder = BookMetadata.builder();
 
             // 标题
@@ -250,6 +283,7 @@ public class OpenLibraryScraper implements MetadataScraper {
 
             return builder.build();
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("解析 Open Library 搜索结果失败", e);
             return null;
         }

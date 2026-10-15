@@ -100,9 +100,11 @@ public class DoubanScraper implements MetadataScraper {
                 return getBookDetail(doubanId);
             }
 
+            reportSuggestEmpty(root);
             log.warn("豆瓣未找到 ISBN: {}", isbn);
             return null;
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("豆瓣 ISBN 查询失败: {}", isbn, e);
             return null;
         }
@@ -143,9 +145,11 @@ public class DoubanScraper implements MetadataScraper {
                 }
             }
 
+            ScrapeDiagnostics.emptySearchPage(doc);
             log.warn("豆瓣未找到: {}", searchTitle);
             return null;
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("豆瓣搜索失败: {}", searchTitle, e);
             // 尝试备用方法
             return searchByTitleFallback(searchTitle, title);
@@ -160,6 +164,7 @@ public class DoubanScraper implements MetadataScraper {
             addRandomDelay();
 
             String url = DOUBAN_SUGGEST_URL + "?q=" + searchTitle + "&type=book";
+            ScrapeDiagnostics.note("主搜索未取得元信息，尝试备用 suggest 接口");
             log.info("豆瓣备用搜索: {}", searchTitle);
 
             String response = makeRequest(url);
@@ -175,21 +180,36 @@ public class DoubanScraper implements MetadataScraper {
                 return getBookDetail(doubanId);
             }
 
+            reportSuggestEmpty(root);
             return null;
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("豆瓣备用搜索失败: {}", searchTitle, e);
             return null;
         }
     }
 
+    private void reportSuggestEmpty(JsonNode root) {
+        ScrapeDiagnostics.report(root != null && root.isArray() && root.isEmpty()
+                        ? ScrapeDiagnostics.Code.NO_MATCH : ScrapeDiagnostics.Code.UNRECOGNIZED_RESPONSE,
+                root != null && root.isArray() && root.isEmpty()
+                        ? "豆瓣 suggest 接口返回空数组，未搜索到匹配书籍。"
+                        : "豆瓣 suggest 响应结构不符合预期，不能确认是否有匹配书籍。");
+    }
+
     /**
      * 发送 HTTP 请求
      */
+    Connection createConnection(String url) {
+        return Jsoup.connect(url);
+    }
+
     private String makeRequest(String url) {
         try {
+            ScrapeDiagnostics.request(url);
             String userAgent = USER_AGENTS[random.nextInt(USER_AGENTS.length)];
 
-            Connection.Response response = Jsoup.connect(url)
+            Connection.Response response = createConnection(url)
                     .userAgent(userAgent)
                     .referrer("https://book.douban.com/")
                     .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
@@ -206,16 +226,11 @@ public class DoubanScraper implements MetadataScraper {
                     .ignoreHttpErrors(true)
                     .execute();
 
-            if (response.statusCode() == 200) {
-                return response.body();
-            } else if (response.statusCode() == 403) {
-                log.warn("豆瓣返回 403，可能被反爬拦截: {}", url);
-                return null;
-            } else {
-                log.warn("豆瓣返回状态码 {}: {}", response.statusCode(), url);
-                return null;
-            }
+            String body = response.body();
+            return ScrapeDiagnostics.response(response.statusCode(), response.url().toString(), body)
+                    ? body : null;
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("请求豆瓣失败: {}", url, e);
             return null;
         }
@@ -239,6 +254,7 @@ public class DoubanScraper implements MetadataScraper {
             Document doc = Jsoup.parse(response);
             return parseBookPage(doc, doubanId);
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("获取豆瓣书籍详情失败: {}", doubanId, e);
             return null;
         }
@@ -253,6 +269,11 @@ public class DoubanScraper implements MetadataScraper {
 
             // 标题
             Element titleElement = doc.selectFirst("h1 span");
+            if (titleElement == null || titleElement.text().isBlank()) {
+                ScrapeDiagnostics.report(ScrapeDiagnostics.Code.UNRECOGNIZED_RESPONSE,
+                        "详情页缺少预期的书名节点，无法确认页面为正常书籍详情；未生成仅含语言的伪结果。");
+                return null;
+            }
             if (titleElement != null) {
                 builder.title(titleElement.text().trim());
             }
@@ -344,6 +365,7 @@ public class DoubanScraper implements MetadataScraper {
 
             return builder.build();
         } catch (Exception e) {
+            ScrapeDiagnostics.exception(e);
             log.error("解析豆瓣页面失败", e);
             return null;
         }

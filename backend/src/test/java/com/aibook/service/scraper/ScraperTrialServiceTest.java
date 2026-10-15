@@ -99,6 +99,39 @@ class ScraperTrialServiceTest {
     }
 
     @Test
+    void keepsAccessRestrictionWhenFallbackSearchReturnsNoMatch() throws Exception {
+        Book original = book();
+        when(scraper.scrapeByIsbn(any())).thenAnswer(invocation -> {
+            ScrapeDiagnostics.request("https://example.com/search?key=secret");
+            ScrapeDiagnostics.response(403, "https://example.com/search", "forbidden");
+            return null;
+        });
+        when(scraper.scrape(any())).thenAnswer(invocation -> {
+            ScrapeDiagnostics.report(ScrapeDiagnostics.Code.NO_MATCH, "书名没有匹配结果");
+            return null;
+        });
+        var result = finish(service.start("test", original, 1L));
+        assertThat(result.status()).isEqualTo("NO_RESULT");
+        assertThat(result.failure().code()).isEqualTo(ScrapeDiagnostics.Code.ACCESS_DENIED);
+        assertThat(result.diagnostics()).hasSize(2);
+        assertThat(result.logs().toString() + result.diagnostics()).doesNotContain("secret");
+    }
+
+    @Test
+    void fallbackSuccessRetainsDiagnosticsWithoutReportingOverallFailure() throws Exception {
+        Book original = book();
+        when(scraper.scrapeByIsbn(any())).thenAnswer(invocation -> {
+            ScrapeDiagnostics.report(ScrapeDiagnostics.Code.NO_MATCH, "ISBN 没有匹配结果");
+            return null;
+        });
+        when(scraper.scrape(any())).thenReturn(MetadataScraper.BookMetadata.builder().title("三体").build());
+        var result = finish(service.start("test", original, 1L));
+        assertThat(result.status()).isEqualTo("MATCHED");
+        assertThat(result.failure()).isNull();
+        assertThat(result.diagnostics()).hasSize(1);
+    }
+
+    @Test
     void rejectsDuplicateActiveTaskAndUnknownSource() throws Exception {
         Book original = book();
         CountDownLatch release = new CountDownLatch(1);

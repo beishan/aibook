@@ -68,31 +68,39 @@ public class ScraperTrialService {
     }
 
     private void run(Trial trial, MetadataScraper scraper, Book book) {
-        try {
-            trial.log("检查来源支持情况；使用服务器已保存配置，忽略启用开关及缓存");
-            if (!scraper.supports(book)) {
-                trial.finish("UNSUPPORTED", "该来源不支持此书籍，或缺少必要的 API Key", null);
-                return;
+        try (ScrapeDiagnostics diagnostics = ScrapeDiagnostics.open(trial::log)) {
+            try {
+                trial.log("检查来源支持情况；使用服务器已保存配置，忽略启用开关及缓存");
+                if (!scraper.supports(book)) {
+                    ScrapeDiagnostics.report("google".equals(scraper.getConfigKey())
+                                    ? ScrapeDiagnostics.Code.CONFIG_MISSING : ScrapeDiagnostics.Code.UNSUPPORTED,
+                            "google".equals(scraper.getConfigKey())
+                                    ? "服务器未取得有效的 Google Books API Key。"
+                                    : "此来源不支持当前书名的查询条件。");
+                    trial.finish("UNSUPPORTED", "配置或来源支持检查未通过", null, diagnostics);
+                    return;
+                }
+                MetadataScraper.BookMetadata result = null;
+                if (book.getIsbn() != null && !book.getIsbn().isBlank()) {
+                    diagnostics.stage("ISBN 查询");
+                    trial.log("正在按 ISBN 查询：" + book.getIsbn());
+                    result = scraper.scrapeByIsbn(book.getIsbn());
+                }
+                if (!hasResult(result)) {
+                    diagnostics.stage("书名查询");
+                    trial.log("正在按书名查询：" + MetadataScraper.cleanSearchTitle(book.getTitle()));
+                    book.setIsbn(null);
+                    result = scraper.scrape(book);
+                }
+                if (hasResult(result)) {
+                    trial.finish("MATCHED", "已取得元信息，请核对是否为目标书籍；未写入书库", result, diagnostics);
+                } else {
+                    trial.finish("NO_RESULT", "未取得元信息", null, diagnostics);
+                }
+            } catch (Exception exception) {
+                ScrapeDiagnostics.exception(exception);
+                trial.finish("FAILED", "试刮削失败", null, diagnostics);
             }
-            MetadataScraper.BookMetadata result = null;
-            if (book.getIsbn() != null && !book.getIsbn().isBlank()) {
-                trial.log("正在按 ISBN 查询：" + book.getIsbn());
-                result = scraper.scrapeByIsbn(book.getIsbn());
-            }
-            if (!hasResult(result)) {
-                trial.log("正在按书名查询：" + MetadataScraper.cleanSearchTitle(book.getTitle()));
-                book.setIsbn(null);
-                result = scraper.scrape(book);
-            }
-            if (hasResult(result)) {
-                trial.finish("MATCHED", "已取得元信息，请核对是否为目标书籍；未写入书库", result);
-            } else {
-                trial.finish("NO_RESULT", "未取得元信息：可能无匹配、来源限制或网络异常，不能据此断定配置可用", null);
-            }
-        } catch (Exception exception) {
-            // 不把异常原文返回浏览器，避免上游 URL 中的 API Key 泄露。
-            trial.finish("FAILED", "查询异常（" + exception.getClass().getSimpleName()
-                    + "），请检查服务器网络及来源配置", null);
         }
     }
 
@@ -114,7 +122,8 @@ public class ScraperTrialService {
 
     public record TrialLog(Instant time, String message) {}
     public record TrialSnapshot(String status, boolean finished, long elapsedMs,
-            List<TrialLog> logs, MetadataScraper.BookMetadata metadata) {}
+            List<TrialLog> logs, MetadataScraper.BookMetadata metadata,
+            ScrapeDiagnostics.Failure failure, List<ScrapeDiagnostics.Failure> diagnostics) {}
 
     private static final class Trial {
         private final Long userId;
@@ -123,6 +132,8 @@ public class ScraperTrialService {
         private String status = "RUNNING";
         private long ended;
         private MetadataScraper.BookMetadata metadata;
+        private ScrapeDiagnostics.Failure failure;
+        private List<ScrapeDiagnostics.Failure> diagnostics = List.of();
 
         private Trial(Long userId) {
             this.userId = userId;
@@ -132,8 +143,12 @@ public class ScraperTrialService {
             logs.add(new TrialLog(Instant.now(), message));
         }
 
-        synchronized void finish(String status, String message, MetadataScraper.BookMetadata metadata) {
-            log(message);
+        synchronized void finish(String status, String message, MetadataScraper.BookMetadata metadata,
+                ScrapeDiagnostics context) {
+            failure = "MATCHED".equals(status) ? null : context.primaryFailure();
+            diagnostics = context.failures();
+            log(failure == null ? message : message + "：" + failure.label() + "；"
+                    + failure.detail() + " " + failure.suggestion());
             this.metadata = metadata;
             this.status = status;
             this.ended = System.currentTimeMillis();
@@ -142,7 +157,7 @@ public class ScraperTrialService {
         synchronized TrialSnapshot snapshot() {
             return new TrialSnapshot(status, ended != 0,
                     (ended == 0 ? System.currentTimeMillis() : ended) - started,
-                    List.copyOf(logs), metadata);
+                    List.copyOf(logs), metadata, failure, diagnostics);
         }
     }
 }
