@@ -359,6 +359,7 @@
             :class="{ active: version.id === selectedVersionId }"
             role="button"
             tabindex="0"
+            :aria-disabled="versionSelectionSaving"
             @click="selectVersion(version.id)"
             @keyup.enter="selectVersion(version.id)"
             @keyup.space.prevent="selectVersion(version.id)"
@@ -1137,6 +1138,7 @@ interface BookVersion {
   fileSize?: number
   fileHash?: string
   primaryVersion: boolean
+  selected?: boolean
   chapterCount?: number
   description?: string | null
   rewriteProjectId?: number
@@ -1193,6 +1195,7 @@ const bookmarksLoading = ref(false)
 const bookmarksError = ref('')
 const versions = ref<BookVersion[]>([])
 const selectedVersionId = ref<number | null>(null)
+const versionSelectionSaving = ref(false)
 const uploadingVersion = ref(false)
 const addVersionDialog = ref(false)
 const addVersionMode = ref<'upload' | 'library'>('upload')
@@ -1341,9 +1344,13 @@ const loadVersions = async () => {
   const currentVersion = versions.value.find(version => version.id === selectedVersionId.value)
   selectedVersionId.value = requestedVersion?.id
     || currentVersion?.id
+    || versions.value.find(version => version.selected)?.id
     || versions.value.find(version => version.primaryVersion)?.id
     || versions.value[0]?.id
     || null
+  if (requestedVersion && !requestedVersion.selected) {
+    await api.put(`/api/books/${book.value.id}/versions/${requestedVersion.id}/selection`)
+  }
 }
 
 const loadReadingProgress = async () => {
@@ -1531,14 +1538,22 @@ const openChapter = (chapter: TocItem) => {
 }
 
 const selectVersion = async (versionId: number) => {
-  if (versionId === selectedVersionId.value) return
-  selectedVersionId.value = versionId
-  readingProgress.value = null
-  await router.replace({
-    query: { ...route.query, versionId: String(versionId) },
-  })
-  await Promise.all([loadToc(), loadReadingProgress()])
-  syncTocPageToCurrentChapter()
+  if (!book.value || versionSelectionSaving.value || versionId === selectedVersionId.value) return
+  versionSelectionSaving.value = true
+  try {
+    await api.put(`/api/books/${book.value.id}/versions/${versionId}/selection`)
+    selectedVersionId.value = versionId
+    readingProgress.value = null
+    await router.replace({
+      query: { ...route.query, versionId: String(versionId) },
+    })
+    await Promise.all([loadToc(), loadReadingProgress()])
+    syncTocPageToCurrentChapter()
+  } catch {
+    message.error('版本选择保存失败，请重试')
+  } finally {
+    versionSelectionSaving.value = false
+  }
 }
 
 const openAddVersionDialog = () => {

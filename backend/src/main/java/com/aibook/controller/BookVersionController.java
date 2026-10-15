@@ -35,6 +35,15 @@ public class BookVersionController {
 
     public record DescriptionRequest(String description) {}
 
+    @PutMapping("/{versionId}/selection")
+    public ResponseEntity<BookVersionDTO> selectVersion(
+            Authentication authentication,
+            @PathVariable Long bookId,
+            @PathVariable Long versionId) {
+        return ResponseEntity.ok(bookVersionService.selectVersion(
+                ownedBook(authentication, bookId), versionId));
+    }
+
     private final BookVersionService bookVersionService;
     private final BookVersionImportService bookVersionImportService;
     private final BookService bookService;

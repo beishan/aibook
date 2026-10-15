@@ -101,6 +101,9 @@ public class Book {
     @Column(nullable = false)
     private String filePath;
 
+    /** 当前账户在该书上最后选择的版本；失效时由客户端回退到主版本。 */
+    private Long selectedVersionId;
+
     /**
      * 书籍首次入库方式。历史数据由启动后的独立迁移回填；新书必须在入库时明确设置。
      *

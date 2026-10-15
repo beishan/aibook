@@ -22,6 +22,33 @@ import static org.mockito.Mockito.when;
 class BookVersionServiceTest {
 
     @Test
+    void persistsSelectionWithoutChangingEitherVersionsProgress() {
+        BookVersionRepository versions = mock(BookVersionRepository.class);
+        BookRepository books = mock(BookRepository.class);
+        VersionReadingProgressRepository progress = mock(VersionReadingProgressRepository.class);
+        BookVersionService service = new BookVersionService(
+                versions, books, mock(ReadingProgressRepository.class), progress,
+                mock(ReadingDailyActivityRepository.class), mock(LibraryChapterRepository.class),
+                new TxtParserService(), new ObjectMapper());
+        Book book = Book.builder().id(1L).selectedVersionId(10L).build();
+        BookVersion revised = BookVersion.builder().id(11L).book(book)
+                .displayName("修订版").format("txt").build();
+        when(versions.findByIdAndBook(11L, book)).thenReturn(Optional.of(revised));
+
+        var selected = service.selectVersion(book, 11L);
+
+        assertEquals(11L, book.getSelectedVersionId());
+        org.junit.jupiter.api.Assertions.assertTrue(selected.isSelected());
+        org.mockito.Mockito.verify(books).save(book);
+        org.mockito.Mockito.verifyNoInteractions(progress);
+        when(versions.findByIdAndBook(99L, book)).thenReturn(Optional.empty());
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
+                () -> service.selectVersion(book, 99L));
+        assertEquals(11L, book.getSelectedVersionId());
+    }
+
+    @Test
     void shouldUseOriginalUploadFilenameForPrimaryVersion() {
         BookVersionRepository versionRepository = mock(BookVersionRepository.class);
         ReadingProgressRepository progressRepository = mock(ReadingProgressRepository.class);

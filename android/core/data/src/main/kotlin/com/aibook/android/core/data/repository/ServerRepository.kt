@@ -300,6 +300,14 @@ class ServerRepository(
     suspend fun recordBookOpen(bookId: Long, versionId: Long? = null): Result<Unit> =
         runCatching { getBookApi().recordBookOpen(bookId, versionId) }
 
+    suspend fun getBookVersions(bookId: Long) = runCatching {
+        getBookApi().getVersions(bookId)
+    }
+
+    suspend fun selectBookVersion(bookId: Long, versionId: Long) = runCatching {
+        getBookApi().selectVersion(bookId, versionId)
+    }
+
     suspend fun getProcessedContent(
         bookId: Long,
         versionId: Long? = null
@@ -359,7 +367,7 @@ class ServerRepository(
             )
         }
         if (result.isSuccess) {
-            serverConfigStore.clearPendingReadingProgress(bookId)
+            serverConfigStore.clearPendingReadingProgress(bookId, versionId)
         } else {
             queueReadingProgress(
                 bookId, versionId, chapter, chapterTitle, chapterProgress, totalProgress, locator
@@ -389,10 +397,10 @@ class ServerRepository(
     ): Result<ReadingProgressDTO> {
         val remote = runCatching { getReadingProgressApi().getProgress(bookId, versionId) }
         val current = remote.getOrNull() ?: return remote
-        val pending = serverConfigStore.pendingReadingProgress(bookId) ?: return remote
+        val pending = serverConfigStore.pendingReadingProgress(bookId, versionId) ?: return remote
         val remoteUpdatedAt = current.updatedAt.toEpochMillisOrNull()
         if (remoteUpdatedAt != null && pending.savedAtEpochMillis < remoteUpdatedAt) {
-            serverConfigStore.clearPendingReadingProgress(bookId)
+            serverConfigStore.clearPendingReadingProgress(bookId, versionId)
             return remote
         }
         val flushed = flushPendingReadingProgress(bookId, versionId, pending)
@@ -429,7 +437,7 @@ class ServerRepository(
                     pending.locator
                 )
             )
-        }.onSuccess { serverConfigStore.clearPendingReadingProgress(bookId) }
+        }.onSuccess { serverConfigStore.clearPendingReadingProgress(bookId, versionId) }
 
     suspend fun syncPendingReadingProgress(): ProgressSyncResult {
         val pendingItems = serverConfigStore.pendingReadingProgresses()
@@ -441,7 +449,7 @@ class ServerRepository(
         var failed = 0
         pendingItems.forEach { pending ->
             val result = getReadingProgress(pending.bookId, pending.versionId)
-            if (result.isSuccess && serverConfigStore.pendingReadingProgress(pending.bookId) == null) {
+            if (result.isSuccess && serverConfigStore.pendingReadingProgress(pending.bookId, pending.versionId) == null) {
                 synced += 1
             } else {
                 failed += 1

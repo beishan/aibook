@@ -280,7 +280,13 @@ class ReaderViewModel(
                 remoteProgress = null
             )
             try {
-                serverRepository.getReadingProgress(bookId).getOrNull()?.let { saved ->
+                val versions = serverRepository.getBookVersions(bookId).getOrThrow()
+                val version = versions.firstOrNull { it.selected }
+                    ?: versions.firstOrNull { it.primaryVersion }
+                    ?: versions.firstOrNull()
+                    ?: error("书籍没有可阅读版本")
+                _state.update { it.copy(remoteVersionId = version.id) }
+                serverRepository.getReadingProgress(bookId, version.id).getOrThrow().let { saved ->
                     val locator = saved.locator?.let(::decodeRemoteLocator)
                     _state.update {
                         it.copy(
@@ -298,25 +304,23 @@ class ReaderViewModel(
                     }
                 }
                 loadCloudAnnotations(bookId)
-                val metadata = serverRepository.getBookById(bookId).getOrThrow()
-                _state.update { it.copy(remoteFormat = metadata.format?.lowercase()) }
+                _state.update { it.copy(remoteFormat = version.format.lowercase()) }
                 val versionId = _state.value.remoteVersionId
                 serverRepository.recordBookOpen(bookId, versionId)
-                if (metadata.format.equals("structured", ignoreCase = true)) {
+                if (version.format.equals("structured", ignoreCase = true)) {
                     loadRemoteStructuredBook(bookId, versionId)
                     return@launch
                 }
-                val format = metadata.format
-                    ?.let { BookFormat.fromFileName("book.${it.lowercase()}") }
+                val format = BookFormat.fromFileName("book.${version.format.lowercase()}")
                     ?: throw IllegalArgumentException("暂不支持该书籍格式")
-                val cacheFile = File(appContext.cacheDir, "server-books/$bookId.${format.extension}")
+                val cacheFile = File(appContext.cacheDir, "server-books/$structuredCacheNamespace/$bookId/${version.id}.${format.extension}")
                 val downloaded = serverRepository.downloadBookContent(bookId, cacheFile, versionId)
                 if (downloaded.isFailure && (!cacheFile.exists() || cacheFile.length() == 0L)) {
                     throw downloaded.exceptionOrNull() ?: IllegalStateException("下载书籍失败")
                 }
                 loadRemoteFile(bookId, cacheFile, format)
             } catch (e: Exception) {
-                val cachedPublication = withContext(Dispatchers.IO) {
+                val cachedPublication = if (_state.value.remoteVersionId == null) null else withContext(Dispatchers.IO) {
                     structuredChapterCache.readManifest(
                         structuredCacheNamespace,
                         bookId,
@@ -955,6 +959,9 @@ class ReaderViewModel(
     }
 
     private suspend fun persistProgress(state: ReaderUiState) {
+        // 正文或进度尚未成功加载时，不能用空位置覆盖服务端已有进度。
+        if (state.isLoading || !state.hasReadableContent) return
+        if (state.isRemote && state.remoteVersionId == null) return
         val percent = state.scrollProgress
         val chapter = state.chapters.getOrNull(state.currentChapterIndex)
         state.book?.let { book ->
@@ -1001,7 +1008,7 @@ class ReaderViewModel(
     private suspend fun persistReadingDuration() {
         val startedAt = readingStartedAtMillis
         val state = _state.value
-        if (startedAt == 0L) return
+        if (startedAt == 0L || state.isLoading || !state.hasReadableContent) return
         val seconds = ((System.currentTimeMillis() - startedAt) / 1000).coerceAtLeast(0)
         state.book?.id?.let { bookRepository.addReadingDuration(it, seconds) }
         (state.remoteBookId ?: state.book?.remoteBookId)?.let { remoteId ->
@@ -1038,11 +1045,11 @@ class ReaderViewModel(
                 val loader = contentLoaderRegistry.loaderFor(format)
                 val result = loader?.load(
                     BookContentRequest(
-                        bookId = "remote-$bookId",
+                        bookId = "remote-$bookId-${_state.value.remoteVersionId}",
                         file = file,
                         format = format,
                         preferredChapterHref = preferredHref,
-                        cacheDirectory = bookRepository.parsedBookDirectory("remote-$bookId")
+                        cacheDirectory = bookRepository.parsedBookDirectory("remote-$bookId-${_state.value.remoteVersionId}")
                     )
                 ) ?: BookContentResult.Failure(BookContentError.UnsupportedVariant)
                 when (result) {

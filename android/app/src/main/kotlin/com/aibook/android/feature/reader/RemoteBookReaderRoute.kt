@@ -23,7 +23,11 @@ fun RemoteBookReaderRoute(bookId: Long, onBack: () -> Unit) {
         value = null
         value = withContext(Dispatchers.IO) {
             val books = ServiceLocator.get(context).bookRepository.observeBooks().first()
-            resolveRemoteReaderSource(bookId, books)
+            val versions = ServiceLocator.get(context).serverRepository
+                .getBookVersions(bookId).getOrNull()
+            // 多版本云端书籍必须按选中版本取正文，不能误用仅按书籍关联的本地副本。
+            if (versions == null || versions.size > 1) RemoteReaderSource.Cloud
+            else resolveRemoteReaderSource(bookId, books)
         }
     }
 

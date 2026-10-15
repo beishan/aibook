@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -79,6 +80,7 @@ import com.aibook.android.core.data.repository.ServerRepository
 import com.aibook.android.core.data.repository.BookRepository
 import com.aibook.android.core.data.repository.DownloadTaskRepository
 import com.aibook.android.background.DownloadQueueManager
+import com.aibook.android.core.network.api.dto.BookVersionDTO
 import com.aibook.android.core.network.api.dto.BookDTO
 import com.aibook.android.core.network.api.dto.ReadingProgressDTO
 import com.aibook.android.di.ServiceLocator
@@ -465,6 +467,9 @@ private fun BookDTO.asCollectionBook(cover: String?, onShelf: Boolean) = Collect
 )
 
 data class BackendBookDetailState(
+    val versions: List<BookVersionDTO> = emptyList(),
+    val selectedVersionId: Long? = null,
+    val selectingVersion: Boolean = false,
     val loading: Boolean = true,
     val book: BookDTO? = null,
     val coverUrl: String? = null,
@@ -514,7 +519,15 @@ class BackendBookDetailViewModel(
             _state.update { it.copy(loading = true, error = null) }
             val bookResult = repository.getBookById(id)
             val shelfResult = repository.getShelf()
-            val progressResult = repository.getReadingProgress(id)
+            val versionsResult = repository.getBookVersions(id)
+            if (versionsResult.isFailure) {
+                _state.update { it.copy(loading = false, error = "版本列表读取失败，请重试") }
+                return@launch
+            }
+            val versions = versionsResult.getOrThrow()
+            val selectedVersion = versions.firstOrNull { it.selected }
+                ?: versions.firstOrNull { it.primaryVersion } ?: versions.firstOrNull()
+            val progressResult = repository.getReadingProgress(id, selectedVersion?.id)
             bookResult.onSuccess { book ->
                 val shelfIds = shelfResult.getOrNull()?.let { it.ungroupedBooks + it.groups.flatMap { group -> group.books } }
                     ?.mapNotNull { it.id }.orEmpty()
@@ -523,9 +536,31 @@ class BackendBookDetailViewModel(
                     book = book,
                     coverUrl = repository.resolveCoverUrl(book.coverUrl),
                     progress = progressResult.getOrNull(),
+                    versions = versions,
+                    selectedVersionId = selectedVersion?.id,
                     onShelf = id in shelfIds
                 )
             }.onFailure { _state.update { current -> current.copy(loading = false, error = it.message ?: "加载失败") } }
+        }
+    }
+
+    fun selectVersion(versionId: Long) {
+        val current = _state.value
+        val bookId = current.book?.id ?: return
+        if (current.selectingVersion || current.selectedVersionId == versionId) return
+        viewModelScope.launch {
+            _state.update { it.copy(selectingVersion = true, message = null) }
+            repository.selectBookVersion(bookId, versionId).onSuccess {
+                val progress = repository.getReadingProgress(bookId, versionId)
+                _state.update { state -> state.copy(
+                    selectedVersionId = versionId,
+                    progress = progress.getOrNull(),
+                    message = progress.exceptionOrNull()?.let { "当前版本进度读取失败，请重试" }
+                ) }
+            }.onFailure { error ->
+                _state.update { it.copy(message = error.message ?: "版本选择保存失败") }
+            }
+            _state.update { it.copy(selectingVersion = false) }
         }
     }
 
@@ -650,6 +685,7 @@ fun BackendBookDetailScreen(
             state.error != null -> BookCollectionScreen(BookCollectionState.Error(state.error.orEmpty()), onBookClick = {}, onRetry = { viewModel.load(bookId) })
             state.book != null -> {
                 val book = state.book!!
+                val selectedVersion = state.versions.firstOrNull { it.id == state.selectedVersionId }
                 val progress = state.progress?.totalProgress?.coerceIn(0, 100) ?: 0
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -673,9 +709,24 @@ fun BackendBookDetailScreen(
                         )
                         WarmProgress(progress / 100f, Modifier.fillMaxWidth())
                         DetailPrimaryButton(if (progress > 0) "继续阅读" else "开始阅读") {
-                            if (CloudMockData.enabled) localMessage = "Mock 数据仅用于页面预览，暂不提供正文阅读" else onRead(bookId)
+                            if (CloudMockData.enabled) localMessage = "Mock 数据仅用于页面预览，暂不提供正文阅读"
+                            else if (!state.selectingVersion) onRead(bookId)
                         }
                     }
+                }
+                if (state.versions.isNotEmpty()) {
+                    Text("书籍版本", style = MaterialTheme.typography.titleMedium)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                        SlidingSegmentedControl(
+                            options = state.versions.map { "${it.displayName} · ${it.format.uppercase()}" },
+                            selectedIndex = state.versions.indexOfFirst { it.id == state.selectedVersionId }.coerceAtLeast(0),
+                            onSelected = { index ->
+                                if (!state.selectingVersion) viewModel.selectVersion(state.versions[index].id)
+                            },
+                            modifier = Modifier.width((state.versions.size * 210).dp)
+                        )
+                    }
+                    if (state.selectingVersion) Text("正在保存版本选择…", color = DesignTokens.SoftText)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(DesignTokens.Space8)) {
                     DetailActionButton(Icons.AutoMirrored.Filled.MenuBook, if (state.onShelf) "已在书架" else "加入书架", state.onShelf, viewModel::toggleShelf)
@@ -687,7 +738,7 @@ fun BackendBookDetailScreen(
                     )
                     DetailActionButton(
                         if (downloadState == BackendBookDownloadState.DOWNLOADED) Icons.Default.Check else Icons.Default.CloudDownload,
-                        downloadState.label,
+                        if (selectedVersion?.primaryVersion == false) "下载主版本" else downloadState.label,
                         downloadState == BackendBookDownloadState.DOWNLOADED
                     ) {
                         localMessage = null
@@ -706,8 +757,8 @@ fun BackendBookDetailScreen(
                     items = listOf(
                         DetailInfoItem("作者", book.author ?: "未知作者", Icons.Default.Person),
                         DetailInfoItem("来源", book.categoryName ?: "我的书库", Icons.Default.Cloud),
-                        DetailInfoItem("字数 / 大小", book.fileSize?.let(::backendFileSizeLabel) ?: "未知", Icons.Default.Storage),
-                        DetailInfoItem("格式", book.format ?: "未知", Icons.Default.Description),
+                        DetailInfoItem("字数 / 大小", (selectedVersion?.fileSize ?: book.fileSize)?.let(::backendFileSizeLabel) ?: "未知", Icons.Default.Storage),
+                        DetailInfoItem("格式", selectedVersion?.format ?: book.format ?: "未知", Icons.Default.Description),
                         DetailInfoItem("最后阅读", state.progress?.lastReadAt ?: "尚未阅读", Icons.Default.AccessTime)
                     )
                 )

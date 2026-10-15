@@ -79,6 +79,14 @@ public class BookVersionService {
     }
 
     @Transactional
+    public com.aibook.dto.BookVersionDTO selectVersion(Book book, Long versionId) {
+        BookVersion version = resolveVersion(book, versionId);
+        book.setSelectedVersionId(version.getId());
+        bookRepository.save(book);
+        return toDTO(version);
+    }
+
+    @Transactional
     public BookVersion ensurePrimaryVersion(Book book) {
         return ensurePrimaryVersion(book, null);
     }
@@ -243,6 +251,10 @@ public class BookVersionService {
         dailyActivityRepository.deleteByVersionId(version.getId());
         versionProgressRepository.deleteByVersion(version);
         libraryChapterRepository.deleteByBookVersion(version);
+        if (java.util.Objects.equals(book.getSelectedVersionId(), version.getId())) {
+            book.setSelectedVersionId(null);
+            bookRepository.save(book);
+        }
         bookVersionRepository.delete(version);
     }
 
@@ -283,6 +295,8 @@ public class BookVersionService {
                 .fileSize(version.getFileSize())
                 .fileHash(version.getFileHash())
                 .primaryVersion(version.getPrimaryVersion())
+                .selected(version.getId() != null && java.util.Objects.equals(
+                        version.getId(), version.getBook().getSelectedVersionId()))
                 .chapterCount(version.getChapterCount())
                 .description(version.getDescription())
                 .rewriteProjectId(rewriteProject == null ? null : rewriteProject.getId())

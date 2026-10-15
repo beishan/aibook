@@ -49,7 +49,7 @@ class ServerConfigStore(
     val usageStatistics: Flow<Boolean> =
         context.serverConfigStore.data.map { it[Keys.USAGE_STATISTICS] ?: true }
     val pendingProgressCount: Flow<Int> = context.serverConfigStore.data.map { preferences ->
-        preferences.asMap().keys.count { it.name.matches(Regex("pending_progress_\\d+_total_percent")) }
+        preferences.asMap().keys.count { it.name.matches(Regex("pending_progress_\\d+_(?:v(?:\\d+|primary)_)?total_percent")) }
     }
     val lastProgressSyncAt: Flow<Long?> = context.serverConfigStore.data.map { it[Keys.LAST_PROGRESS_SYNC_AT] }
     val lastProgressSyncError: Flow<String?> = context.serverConfigStore.data.map { it[Keys.LAST_PROGRESS_SYNC_ERROR] }
@@ -121,7 +121,7 @@ class ServerConfigStore(
         locator: String? = null
     ) {
         context.serverConfigStore.edit { prefs ->
-            val prefix = "pending_progress_${bookId}_"
+            val prefix = progressPrefix(bookId, versionId)
             if (versionId == null) prefs.remove(longPreferencesKey("${prefix}version_id"))
             else prefs[longPreferencesKey("${prefix}version_id")] = versionId
             if (chapter == null) prefs.remove(stringPreferencesKey("${prefix}chapter"))
@@ -136,9 +136,15 @@ class ServerConfigStore(
         }
     }
 
-    suspend fun pendingReadingProgress(bookId: Long): PendingReadingProgress? {
+    suspend fun pendingReadingProgress(bookId: Long, versionId: Long? = null): PendingReadingProgress? {
         val prefs = context.serverConfigStore.data.first()
-        val prefix = "pending_progress_${bookId}_"
+        val currentPrefix = progressPrefix(bookId, versionId)
+        val legacyPrefix = "pending_progress_${bookId}_"
+        val prefix = if (prefs[intPreferencesKey("${currentPrefix}total_percent")] != null) {
+            currentPrefix
+        } else if (prefs[longPreferencesKey("${legacyPrefix}version_id")] == versionId) {
+            legacyPrefix
+        } else return null
         val totalKey = intPreferencesKey("${prefix}total_percent")
         val total = prefs[totalKey] ?: return null
         return PendingReadingProgress(
@@ -155,9 +161,9 @@ class ServerConfigStore(
         )
     }
 
-    suspend fun clearPendingReadingProgress(bookId: Long) {
+    suspend fun clearPendingReadingProgress(bookId: Long, versionId: Long? = null) {
         context.serverConfigStore.edit { prefs ->
-            val prefix = "pending_progress_${bookId}_"
+            val prefix = progressPrefix(bookId, versionId)
             prefs.remove(longPreferencesKey("${prefix}version_id"))
             prefs.remove(stringPreferencesKey("${prefix}chapter"))
             prefs.remove(stringPreferencesKey("${prefix}title"))
@@ -165,24 +171,36 @@ class ServerConfigStore(
             prefs.remove(intPreferencesKey("${prefix}total_percent"))
             prefs.remove(stringPreferencesKey("${prefix}locator"))
             prefs.remove(stringPreferencesKey("${prefix}saved_at"))
+            val legacyPrefix = "pending_progress_${bookId}_"
+            if (prefs[longPreferencesKey("${legacyPrefix}version_id")] == versionId) {
+                prefs.asMap().keys.filter { it.name.startsWith(legacyPrefix)
+                    && it.name.removePrefix(legacyPrefix) in listOf(
+                        "version_id", "chapter", "title", "chapter_percent", "total_percent", "locator", "saved_at"
+                    ) }
+                    .forEach { prefs.remove(it) }
+            }
         }
     }
 
     suspend fun pendingReadingProgresses(): List<PendingReadingProgress> {
         val preferences = context.serverConfigStore.data.first()
         return preferences.asMap().keys.mapNotNull { key ->
-            Regex("pending_progress_(\\d+)_total_percent")
-                .matchEntire(key.name)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.toLongOrNull()
-        }.distinct().mapNotNull { pendingReadingProgress(it) }
+            val match = Regex("pending_progress_(\\d+)_(?:v(\\d+|primary)_)?total_percent")
+                .matchEntire(key.name) ?: return@mapNotNull null
+            val bookId = match.groupValues[1].toLongOrNull() ?: return@mapNotNull null
+            val versionId = if (match.groupValues[2].isEmpty()) {
+                preferences[longPreferencesKey("pending_progress_${bookId}_version_id")]
+            } else match.groupValues[2].toLongOrNull()
+            pendingReadingProgress(bookId, versionId)
+        }.distinctBy { it.bookId to it.versionId }
     }
 
     suspend fun clearAllPendingReadingProgress() {
-        val bookIds = pendingReadingProgresses().map { it.bookId }
-        bookIds.forEach { clearPendingReadingProgress(it) }
+        pendingReadingProgresses().forEach { clearPendingReadingProgress(it.bookId, it.versionId) }
     }
+
+    private fun progressPrefix(bookId: Long, versionId: Long?): String =
+        "pending_progress_${bookId}_v${versionId ?: "primary"}_"
 
     suspend fun markProgressSyncSuccess(timestamp: Long = System.currentTimeMillis()) {
         context.serverConfigStore.edit { prefs ->

@@ -837,6 +837,7 @@ interface BookVersion {
   format: string
   fileSize?: number
   primaryVersion: boolean
+  selected?: boolean
   chapterCount?: number
 }
 
@@ -1519,12 +1520,14 @@ const loadBook = async () => {
       version => version.id === requestedVersionId,
     )
     const version = requestedVersion
+      || versions.value.find(item => item.selected)
       || versions.value.find(item => item.primaryVersion)
       || versions.value[0]
     if (!version) {
       throw new Error('书籍没有可阅读版本')
     }
     selectedVersionId.value = version.id
+    await api.put(`/api/books/${id}/versions/${version.id}/selection`)
     book.value = {
       ...book.value,
       format: version.format,
@@ -2152,7 +2155,7 @@ const saveProgress = (
   currentChapter?: string,
   locator: ReaderLocator | null = createCurrentLocator(totalProgress),
 ) => {
-  if (!book.value) return
+  if (!book.value || !selectedVersionId.value || loading.value) return
 
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(async () => {
@@ -3715,7 +3718,7 @@ onBeforeUnmount(() => {
   const token = localStorage.getItem('token')
 
   const finalLocator = createCurrentLocator(progress.value)
-  if (book.value && token) {
+  if (book.value && token && selectedVersionId.value && !loading.value) {
     fetch(withVersion(`/api/reading-progress/book/${book.value.id}`), {
       method: 'POST',
       keepalive: true,
