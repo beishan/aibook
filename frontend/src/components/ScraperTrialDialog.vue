@@ -859,7 +859,8 @@ onBeforeUnmount(() => {
   --el-color-primary-dark-2: var(--primary-dark);
   display: flex;
   flex-direction: column;
-  height: min(900px, 90dvh);
+  height: auto;
+  max-height: 90dvh;
   padding: 0;
   margin-bottom: 0;
   overflow: hidden;
@@ -873,9 +874,10 @@ onBeforeUnmount(() => {
 }
 :global(.scrape-workbench-dialog .el-dialog__body) {
   display: flex;
-  flex: 1;
+  flex: 0 1 auto;
   flex-direction: column;
   min-height: 0;
+  overflow-y: auto;
   padding: 0 28px;
 }
 :global(.scrape-workbench-dialog .el-dialog__footer) {
@@ -1022,9 +1024,9 @@ onBeforeUnmount(() => {
   outline-offset: -2px;
 }
 .trial-panel {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;
   padding: 2px 4px 24px;
   overscroll-behavior: contain;
 }
@@ -1468,11 +1470,15 @@ onBeforeUnmount(() => {
 .trial-candidates {
   min-width: 0;
 }
+.trial-log-column {
+  display: flex;
+  flex-direction: column;
+}
 @media (min-width: 960px) {
   .trial-process-grid.has-candidates {
     display: grid;
     grid-template-columns: minmax(0, .95fr) minmax(0, 1.25fr);
-    align-items: start;
+    align-items: stretch;
     gap: 24px;
   }
   .trial-process-grid.has-candidates .trial-candidates {
@@ -1503,7 +1509,8 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 .trial-logs {
-  max-height: 300px;
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 14px 18px;
   margin: 0 0 24px;
@@ -1611,7 +1618,7 @@ onBeforeUnmount(() => {
     gap: 20px;
   }
   :global(.scrape-workbench-dialog) {
-    height: 92dvh;
+    max-height: 92dvh;
     margin-top: 4dvh !important;
     border-radius: 18px;
   }
