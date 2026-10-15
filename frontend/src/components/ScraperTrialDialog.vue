@@ -252,18 +252,23 @@
           <aside class="trial-result-cover">
             <div class="trial-result-image">
               <img
-                v-if="resultCover && coverAllowed && !resultCoverFailed"
+                v-if="resultCover && resultCoverVisible && !resultCoverFailed"
                 :src="getCoverThumbnailUrl(resultCover)"
                 :alt="`${formatValue(snapshot.metadata.title)}的封面`"
                 @error="resultCoverFailed = true"
               />
               <div v-else class="trial-cover-placeholder">
                 <strong>{{ formatValue(snapshot.metadata.title) }}</strong>
-                <p>{{ !coverAllowed ? '封面已按隐私设置隐藏' : resultCoverFailed ? '封面加载失败' : '来源未提供封面' }}</p>
-                <el-button v-if="resultCoverFailed && coverAllowed" size="small" @click="resultCoverFailed = false">重试加载</el-button>
+                <p>{{ resultCoverMessage }}</p>
+                <el-button v-if="resultCoverFailed && resultCoverVisible" size="small" @click="resultCoverFailed = false">重试加载</el-button>
               </div>
             </div>
-            <span>封面预览</span>
+            <el-button
+              :disabled="!resultCover"
+              :aria-pressed="resultCoverVisible"
+              @click="toggleResultCover"
+            >{{ resultCoverVisible ? '关闭封面' : '显示封面' }}</el-button>
+            <small>仅本次预览，不修改后续封面显示设置</small>
           </aside>
           <el-form label-position="top" class="trial-metadata-form">
             <el-form-item v-for="(label, field) in summaryFields" :key="field" :label="label">
@@ -436,6 +441,21 @@ const resultCover = computed(() => typeof snapshot.value?.metadata?.coverUrl ===
   ? snapshot.value.metadata.coverUrl : '')
 const coverAllowed = computed(() => selected.value ? shouldLoadBookCover(selected.value.id) : false)
 const resultCoverFailed = ref(false)
+const previewCoverOverride = ref<boolean | null>(null)
+const resultCoverVisible = computed(() => Boolean(resultCover.value)
+  && (previewCoverOverride.value ?? coverAllowed.value))
+const resultCoverMessage = computed(() => {
+  if (!resultCover.value) return '来源未提供封面'
+  if (!resultCoverVisible.value) {
+    return previewCoverOverride.value === false ? '封面已临时关闭' : '封面已按隐私设置隐藏'
+  }
+  return resultCoverFailed.value ? '封面加载失败' : ''
+})
+function toggleResultCover() {
+  if (!resultCover.value) return
+  previewCoverOverride.value = !resultCoverVisible.value
+  if (previewCoverOverride.value) resultCoverFailed.value = false
+}
 const resultTags = computed<string[]>(() => {
   const value = snapshot.value?.metadata?.tags
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
@@ -469,7 +489,10 @@ const candidateError = ref('')
 const canConfirm = computed(() => snapshot.value?.status === 'REVIEW_REQUIRED'
   || props.manual && snapshot.value?.status === 'MATCHED' && Boolean(snapshot.value.metadata))
 let savedTask = ''
-watch(resultCover, () => { resultCoverFailed.value = false })
+watch([resultCover, () => snapshot.value?.selectedCandidateId, () => selected.value?.id, taskId], () => {
+  resultCoverFailed.value = false
+  previewCoverOverride.value = null
+})
 let timer: ReturnType<typeof setTimeout> | undefined
 let generation = 0
 let searchGeneration = 0
@@ -623,6 +646,7 @@ async function start() {
   }
 }
 watch(() => props.modelValue, async (open) => {
+  previewCoverOverride.value = null
   if (!open) return
   if (props.book) {
     selected.value = props.book

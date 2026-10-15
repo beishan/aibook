@@ -47,6 +47,7 @@ const preferenceState = vue.reactive({
   hydrate: async () => {},
 })
 const scheduled = []
+const privacyAllowsCover = vue.ref(true)
 const context = {
   exports: {},
   require(name) {
@@ -54,7 +55,7 @@ const context = {
     if (name === '@/utils/api') return { default: api }
     if (name === '@/stores/preferences') return { usePreferencesStore: () => preferenceState }
     if (name === '@/utils/cover') return { getCoverThumbnailUrl: value => value }
-    if (name === '@/utils/imagePrivacy') return { shouldLoadBookCover: () => true }
+    if (name === '@/utils/imagePrivacy') return { shouldLoadBookCover: () => privacyAllowsCover.value }
     throw new Error(name)
   },
   setTimeout: callback => { scheduled.push(callback); return scheduled.length },
@@ -166,11 +167,36 @@ assert.equal(state.activeTab.value, 'result', 'candidate detail opens the visual
 assert.equal(state.resultCover.value, 'covers/candidate.jpg')
 assert.deepEqual(Array.from(state.resultTags.value), ['小说', '文学'])
 assert.equal(state.coverAllowed.value, true)
+props.modelValue = true
+await vue.nextTick()
+for (let index = 0; index < 8; index++) await Promise.resolve()
+const requestsBeforeCoverToggle = requests.length
+state.toggleResultCover()
+assert.equal(state.resultCoverVisible.value, false)
+assert.equal(privacyAllowsCover.value, true, 'temporary hiding must not change the privacy preference')
+state.toggleResultCover()
+assert.equal(state.resultCoverVisible.value, true)
+privacyAllowsCover.value = false
+state.previewCoverOverride.value = null
+assert.equal(state.resultCoverVisible.value, false)
+state.toggleResultCover()
+assert.equal(state.resultCoverVisible.value, true, 'explicit preview can temporarily show a hidden cover')
+assert.equal(privacyAllowsCover.value, false, 'temporary showing must not persist the privacy preference')
+props.modelValue = false
+await vue.nextTick()
+assert.equal(state.previewCoverOverride.value, null, 'closing the dialog clears the temporary choice')
+assert.equal(state.resultCoverVisible.value, false)
+assert.equal(requests.length, requestsBeforeCoverToggle, 'preview visibility must not write to any API')
+privacyAllowsCover.value = true
+state.toggleResultCover()
+assert.equal(state.resultCoverVisible.value, false)
+
 state.resultCoverFailed.value = true
 failureResult = { ...failureResult, metadata: { ...failureResult.metadata, coverUrl: 'covers/new.jpg' } }
 await state.poll(2)
 await vue.nextTick()
 assert.equal(state.resultCoverFailed.value, false, 'a new cover clears the prior image error')
+assert.equal(state.previewCoverOverride.value, null, 'changing the result cover clears its temporary visibility override')
 assert.equal(requests.filter(request => request.url.endsWith('/confirm')).length, beforeConfirmation)
 await state.confirmCandidate()
 assert.equal(state.snapshot.value.applied, true)
