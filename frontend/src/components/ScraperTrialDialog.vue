@@ -242,16 +242,19 @@
                 <span class="trial-candidate-index" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
                 <div class="trial-candidate-copy">
                   <strong>{{ candidate.title }}</strong>
-                  <p>{{ candidate.author || '作者待加载详情' }} · {{ candidate.publishDate || '出版年份待核对' }}</p>
-                  <a :href="candidate.sourceUrl" target="_blank" rel="noopener noreferrer">查看豆瓣原书页</a>
+                  <div class="trial-candidate-meta">
+                    <span>{{ candidate.author || '作者待加载详情' }} · {{ candidate.publishDate || '出版年份待核对' }}</span>
+                    <a :href="candidate.sourceUrl" target="_blank" rel="noopener noreferrer">查看豆瓣原书页</a>
+                  </div>
                 </div>
                 <el-button
+                  size="small"
                   :type="snapshot?.selectedCandidateId === candidate.id ? 'primary' : 'default'"
                   :plain="snapshot?.selectedCandidateId === candidate.id"
                   :disabled="running || confirming || snapshot?.applied"
                   @click="loadCandidate(candidate.id)"
                 >
-                  {{ snapshot?.selectedCandidateId === candidate.id ? '重新加载详情' : '选择并加载详情' }}
+                  加载
                 </el-button>
               </article>
             </div>
@@ -1484,15 +1487,6 @@ onBeforeUnmount(() => {
   .trial-process-grid.has-candidates .trial-candidates {
     padding-top: 24px;
   }
-  .trial-process-grid.has-candidates .trial-candidate {
-    grid-template-columns: 24px minmax(0, 1fr);
-    gap: 10px;
-    padding: 14px;
-  }
-  .trial-process-grid.has-candidates .trial-candidate > .el-button {
-    grid-column: 2;
-    justify-self: start;
-  }
 }
 .trial-log-heading {
   display: flex;
@@ -1563,8 +1557,18 @@ onBeforeUnmount(() => {
   overflow-wrap: anywhere;
 }
 .trial-candidate-copy > strong {
+  display: block;
   color: var(--text-primary);
   font-size: 15px;
+}
+.trial-candidate-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 .trial-candidates > p {
   margin: 0 0 16px;
@@ -1576,7 +1580,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--primary) 5%, var(--surface-card));
 }
 .trial-candidate p {
-  margin: 8px 0;
+  margin: 0;
   color: var(--text-secondary);
 }
 .trial-candidate a {
@@ -1664,13 +1668,14 @@ onBeforeUnmount(() => {
     font-size: 22px;
   }
   .trial-candidate {
-    grid-template-columns: 24px minmax(0, 1fr);
-    gap: 12px;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    gap: 8px;
     padding: 14px;
   }
   .trial-candidate > .el-button {
-    grid-column: 2;
-    justify-self: start;
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
   }
   .trial-logs li {
     grid-template-columns: minmax(0, 1fr);
