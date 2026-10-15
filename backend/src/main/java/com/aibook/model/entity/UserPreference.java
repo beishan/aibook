@@ -78,6 +78,9 @@ public class UserPreference {
     @Column(name = "crawler_book_view_mode")
     private String crawlerBookViewMode;
 
+    @Column(name = "scraper_trial_view_mode")
+    private String scraperTrialViewMode;
+
     @Column(name = "scheduled_scan_enabled")
     private Boolean scheduledScanEnabled;
 

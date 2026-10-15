@@ -32,12 +32,20 @@ const api = {
     return { data: { taskId: 'task-1' } }
   },
 }
+const preferenceState = vue.reactive({
+  scraperTrialViewMode: 'table',
+  setScraperTrialViewMode(value) { this.scraperTrialViewMode = value },
+  hydrate: async () => {},
+})
 const scheduled = []
 const context = {
   exports: {},
   require(name) {
     if (name === 'vue') return { ...vue, onBeforeUnmount: () => {} }
     if (name === '@/utils/api') return { default: api }
+    if (name === '@/stores/preferences') return { usePreferencesStore: () => preferenceState }
+    if (name === '@/utils/cover') return { getCoverThumbnailUrl: value => value }
+    if (name === '@/utils/imagePrivacy') return { shouldLoadBookCover: () => true }
     throw new Error(name)
   },
   setTimeout: callback => { scheduled.push(callback); return scheduled.length },
@@ -69,6 +77,14 @@ assert.equal(params.tagId, 8)
 assert.equal(params.sourceType, 'UPLOAD')
 assert.equal(params.size, 20)
 state.selectBook({ id: 2, title: '活着' })
+state.setViewMode('card')
+assert.equal(state.viewMode.value, 'card')
+assert.equal(state.selected.value.id, 2, 'view switching must retain selection')
+state.selectBook(null)
+assert.equal(state.selected.value.id, 2, 'table teardown must not clear selection')
+await state.switchViewByKeyboard({key: 'Home', preventDefault() {}, currentTarget: {querySelector: () => ({focus() {}})}})
+assert.equal(state.viewMode.value, 'table')
+assert.equal(state.selected.value.id, 2)
 await state.start()
 await vue.nextTick()
 await Promise.resolve()
@@ -91,4 +107,4 @@ assert.equal(state.taskId.value, '')
 assert.match(state.pollError.value, /过期/)
 assert(emitted.some(([event, value]) => event === 'running' && value === true))
 assert(emitted.some(([event, value]) => event === 'running' && value === false))
-console.log('Scraper trial: filters, stale searches, selection lock, duplicate prevention, polling and expiration passed')
+console.log('Scraper trial: filters, stale searches, view switching, selection retention, selection lock, duplicate prevention, polling and expiration passed')

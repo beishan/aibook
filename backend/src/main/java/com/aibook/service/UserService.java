@@ -219,6 +219,12 @@ public class UserService implements UserDetailsService {
                     CRAWLER_BOOK_VIEW_MODES);
             user.setCrawlerBookViewMode(request.getCrawlerBookViewMode());
         }
+
+        if (request.getScraperTrialViewMode() != null) {
+            requireAllowed("试刮削选书显示方式", request.getScraperTrialViewMode(),
+                    CRAWLER_BOOK_VIEW_MODES);
+            user.setScraperTrialViewMode(request.getScraperTrialViewMode());
+        }
         if (request.getModernThemeColor() != null) {
             user.setModernThemeColor(normalizeThemeColor(request.getModernThemeColor()));
         }
@@ -317,6 +323,7 @@ public class UserService implements UserDetailsService {
                 .crawlerChapterPageSize(user.getCrawlerChapterPageSize())
                 .crawlerDiscoveryViewMode(user.getCrawlerDiscoveryViewMode())
                 .crawlerBookViewMode(user.getCrawlerBookViewMode())
+                .scraperTrialViewMode(user.getScraperTrialViewMode())
                 .dockSize(defaultIfNull(user.getDockSize(), DEFAULT_DOCK_SIZE))
                 .dockOpacity(defaultIfNull(user.getDockOpacity(), DEFAULT_DOCK_OPACITY))
                 .dockMagnification(defaultIfNull(

@@ -16,6 +16,7 @@ import { normalizeThemeBackgroundConfig } from '@/utils/themeBackground'
 export type LibraryViewMode = 'card' | 'compact-card' | 'list'
 export type CrawlerDiscoveryViewMode = 'table' | 'card'
 export type CrawlerBookViewMode = 'table' | 'card'
+export type ScraperTrialViewMode = 'table' | 'card'
 export const CRAWLER_POLLING_INTERVAL_OPTIONS = [1, 3, 5, 10, 30] as const
 export type CrawlerPollingIntervalSeconds = number
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
@@ -102,6 +103,7 @@ interface UserPreferences {
   crawlerChapterPageSize: number | null
   crawlerDiscoveryViewMode: CrawlerDiscoveryViewMode | null
   crawlerBookViewMode: CrawlerBookViewMode | null
+  scraperTrialViewMode: ScraperTrialViewMode | null
   modernThemeColor: string | null
   warmThemeColor: string | null
   naturalThemeColor: string | null
@@ -376,6 +378,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const crawlerBookViewMode = ref<CrawlerBookViewMode>(
     localStorage.getItem(CRAWLER_BOOK_VIEW_MODE_KEY) === 'card' ? 'card' : 'table'
   )
+  const scraperTrialViewMode = ref<ScraperTrialViewMode>('table')
   const dockSize = ref(readLocalNumber(DOCK_SIZE_KEY, DEFAULT_DOCK_SIZE, 44, 76))
   const dockOpacity = ref(readLocalNumber(DOCK_OPACITY_KEY, DEFAULT_DOCK_OPACITY, 40, 96))
   const dockMagnification = ref(readLocalNumber(DOCK_MAGNIFICATION_KEY, DEFAULT_DOCK_MAGNIFICATION, 100, 150))
@@ -497,6 +500,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
     crawlerBookViewMode.value = value
     localStorage.setItem(CRAWLER_BOOK_VIEW_MODE_KEY, value)
     if (syncRemote) persistRemote({ crawlerBookViewMode: value })
+  }
+
+  const setScraperTrialViewMode = (value: ScraperTrialViewMode, syncRemote = true) => {
+    if (value !== 'table' && value !== 'card') return
+    scraperTrialViewMode.value = value
+    if (syncRemote) persistRemote({ scraperTrialViewMode: value })
   }
 
   const themeColorPreferenceKey: Record<ThemeId, keyof UserPreferences> = {
@@ -820,6 +829,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.crawlerBookViewMode = crawlerBookViewMode.value
       }
 
+      setScraperTrialViewMode(data.scraperTrialViewMode === 'card' ? 'card' : 'table', false)
+
       const remoteThemeColors: Array<[ThemeId, string | null]> = [
         ['modern', data.modernThemeColor],
         ['warm', data.warmThemeColor],
@@ -933,6 +944,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     crawlerChapterPageSize,
     crawlerDiscoveryViewMode,
     crawlerBookViewMode,
+    scraperTrialViewMode,
     dockSize,
     dockOpacity,
     dockMagnification,
@@ -956,6 +968,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setCrawlerChapterPageSize,
     setCrawlerDiscoveryViewMode,
     setCrawlerBookViewMode,
+    setScraperTrialViewMode,
     setThemeAccentColor,
     resetThemeAccentColor,
     resetAllThemeAccentColors,

@@ -31,6 +31,7 @@ public class UserPreferencesDTO {
     private Integer crawlerChapterPageSize;
     private String crawlerDiscoveryViewMode;
     private String crawlerBookViewMode;
+    private String scraperTrialViewMode;
     private Integer dockSize;
     private Integer dockOpacity;
     private Integer dockMagnification;
@@ -197,6 +198,14 @@ public class UserPreferencesDTO {
 
     public void setCrawlerBookViewMode(String crawlerBookViewMode) {
         this.crawlerBookViewMode = crawlerBookViewMode;
+    }
+
+    public String getScraperTrialViewMode() {
+        return scraperTrialViewMode;
+    }
+
+    public void setScraperTrialViewMode(String scraperTrialViewMode) {
+        this.scraperTrialViewMode = scraperTrialViewMode;
     }
 
     public Integer getDockSize() {
@@ -374,6 +383,11 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder crawlerBookViewMode(String value) {
             this.value.setCrawlerBookViewMode(value);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder scraperTrialViewMode(String value) {
+            this.value.setScraperTrialViewMode(value);
             return this;
         }
 

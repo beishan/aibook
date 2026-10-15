@@ -2,7 +2,8 @@
   <el-dialog
     :model-value="modelValue"
     :title="`${source?.name || ''} · 试刮削`"
-    width="960px"
+    width="1120px"
+    top="5vh"
     style="max-width: calc(100vw - 24px)"
     append-to-body
     :close-on-click-modal="false"
@@ -36,24 +37,89 @@
       <el-button :loading="loading" :disabled="running" @click="search">搜索 / 筛选</el-button>
     </fieldset>
     <p v-if="loadError" role="alert">{{ loadError }}</p>
-    <el-table v-loading="loading" :data="books" max-height="260" empty-text="没有符合条件的书籍" highlight-current-row @current-change="selectBook">
-      <el-table-column label="选择" width="65">
-        <template #default="{ row }">
-          <input
-            type="radio"
-            :checked="selected?.id === row.id"
-            :disabled="running"
-            :aria-label="`选择${row.title}`"
-            @change="selected = row"
-          />
-        </template>
-      </el-table-column>
-      <el-table-column prop="title" label="书名" min-width="180" />
-      <el-table-column prop="author" label="作者" min-width="100" />
-      <el-table-column prop="format" label="类型" width="80" />
-      <el-table-column prop="categoryName" label="分类" min-width="100" />
-      <el-table-column prop="createdAt" label="入库时间" min-width="165" />
-    </el-table>
+    <div class="trial-browser-toolbar">
+      <strong>选择书籍 · 共 {{ total }} 本</strong>
+      <div
+        class="trial-view-switch"
+        :class="{ 'is-card': viewMode === 'card' }"
+        role="radiogroup"
+        aria-label="选书视图"
+        @keydown="switchViewByKeyboard"
+      >
+        <span class="trial-view-indicator" aria-hidden="true"></span>
+        <button
+          v-for="option in viewOptions"
+          :key="option.value"
+          type="button"
+          role="radio"
+          :aria-checked="viewMode === option.value"
+          :tabindex="viewMode === option.value ? 0 : -1"
+          @click="setViewMode(option.value)"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+    </div>
+    <div v-loading="loading" class="trial-book-browser" :aria-busy="loading">
+      <el-table
+        v-if="viewMode === 'table'"
+        :data="books"
+        height="100%"
+        row-key="id"
+        :current-row-key="selected?.id"
+        empty-text="没有符合条件的书籍"
+        highlight-current-row
+        @current-change="selectBook"
+      >
+        <el-table-column label="选择" width="65">
+          <template #default="{ row }">
+            <input
+              type="radio"
+              :checked="selected?.id === row.id"
+              :disabled="running"
+              :aria-label="`选择${row.title}`"
+              @change="selected = row"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column prop="title" label="书名" min-width="180" />
+        <el-table-column prop="author" label="作者" min-width="100" />
+        <el-table-column prop="format" label="类型" width="80" />
+        <el-table-column prop="categoryName" label="分类" min-width="100" />
+        <el-table-column prop="createdAt" label="入库时间" min-width="165" />
+      </el-table>
+      <div v-else class="trial-card-scroll">
+        <el-empty v-if="books.length === 0" description="没有符合条件的书籍" />
+        <div v-else class="trial-card-grid">
+          <button
+            v-for="book in books"
+            :key="book.id"
+            type="button"
+            class="trial-book-card"
+            :class="{ 'is-selected': selected?.id === book.id }"
+            :aria-pressed="selected?.id === book.id"
+            :aria-label="`选择《${book.title}》${book.author ? `，${book.author}` : ''}`"
+            :disabled="running || loading"
+            @click="selectBook(book)"
+          >
+            <span class="trial-card-cover">
+              <img
+                v-if="book.coverUrl && shouldLoadBookCover(book.id) && !failedCovers.has(book.id)"
+                :src="getCoverThumbnailUrl(book.coverUrl)"
+                alt=""
+                loading="lazy"
+                @error="failedCovers.add(book.id)"
+              />
+              <span v-else class="trial-cover-placeholder">{{ book.title }}</span>
+              <span v-if="selected?.id === book.id" class="trial-card-check" aria-hidden="true">✓</span>
+            </span>
+            <span class="trial-card-title" :title="book.title">{{ book.title }}</span>
+            <span class="trial-card-author">{{ book.author || '未知作者' }}</span>
+            <span class="trial-card-meta">{{ book.format?.toUpperCase() || '未知类型' }} · {{ book.categoryName || '未分类' }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
     <el-pagination
       :current-page="page + 1" :page-size="20" :total="total" layout="prev, pager, next, total"
       :disabled="running || loading" small @current-change="changePage"
@@ -92,9 +158,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import api from '@/utils/api'
 import type { ScraperStatus } from '@/utils/config'
+import { usePreferencesStore, type ScraperTrialViewMode } from '@/stores/preferences'
+import { getCoverThumbnailUrl } from '@/utils/cover'
+import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 
 const props = defineProps<{ modelValue: boolean; source: ScraperStatus | null }>()
 const emit = defineEmits<{
@@ -104,6 +173,10 @@ const emit = defineEmits<{
 interface BookChoice {
   id: number
   title: string
+  author?: string
+  format?: string
+  categoryName?: string
+  coverUrl?: string
 }
 interface Option {
   id: number
@@ -116,6 +189,27 @@ interface TrialSnapshot {
   elapsedMs: number
   logs: { time: string; message: string }[]
   metadata: Record<string, unknown> | null
+}
+const preferences = usePreferencesStore()
+const viewMode = computed(() => preferences.scraperTrialViewMode)
+const viewOptions: { value: ScraperTrialViewMode; label: string }[] = [
+  { value: 'table', label: '列表视图' },
+  { value: 'card', label: '卡片视图' },
+]
+const failedCovers = reactive(new Set<number>())
+function setViewMode(value: ScraperTrialViewMode) {
+  preferences.setScraperTrialViewMode(value)
+}
+async function switchViewByKeyboard(event: KeyboardEvent) {
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  const group = event.currentTarget as HTMLElement
+  const value = event.key === 'Home' ? 'table'
+    : event.key === 'End' ? 'card'
+      : viewMode.value === 'table' ? 'card' : 'table'
+  setViewMode(value)
+  await nextTick()
+  group.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus()
 }
 const formats = ['epub', 'pdf', 'txt', 'mobi', 'azw3', 'fb2', 'cbz', 'cbr']
 const fields = {
@@ -161,7 +255,7 @@ const statusLabel = computed(() => pollError.value
 const formatValue = (value: unknown) => Array.isArray(value) ? value.join('、') : String(value ?? '—')
 
 function selectBook(book: BookChoice | null) {
-  if (!running.value) selected.value = book
+  if (book && !running.value && !loading.value) selected.value = book
 }
 async function loadBooks() {
   const request = ++searchGeneration
@@ -175,6 +269,7 @@ async function loadBooks() {
       addedFrom: dates.value?.[0], addedTo: dates.value?.[1],
     } })
     if (request !== searchGeneration || disposed) return
+    failedCovers.clear()
     books.value = data.content
     total.value = data.totalElements
   } catch {
@@ -233,6 +328,7 @@ async function start() {
 }
 watch(() => props.modelValue, async (open) => {
   if (!open) return
+  void preferences.hydrate()
   if (taskId.value && running.value) resumePolling()
   if (!running.value) search()
   const results = await Promise.allSettled([api.get('/api/categories'), api.get('/api/tags')])
@@ -256,6 +352,155 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+
+.trial-browser-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+.trial-view-switch {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(2, 112px);
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--surface-hover);
+}
+.trial-view-indicator {
+  position: absolute;
+  z-index: -1;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 2);
+  border-radius: 10px;
+  background: var(--surface-card);
+  transition: transform 220ms ease;
+}
+.trial-view-switch.is-card .trial-view-indicator {
+  transform: translateX(100%);
+}
+.trial-view-switch button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+.trial-view-switch button[aria-checked="true"] {
+  color: var(--primary);
+  font-weight: 600;
+}
+.trial-view-switch button:focus-visible,
+.trial-book-card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.trial-book-browser {
+  height: clamp(360px, 55vh, 640px);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+.trial-card-scroll {
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.trial-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  align-items: start;
+  gap: 14px;
+  padding: 14px;
+}
+.trial-book-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 6px;
+  padding: 10px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.trial-book-card:hover {
+  background: var(--surface-hover);
+}
+.trial-book-card.is-selected {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface-card));
+}
+.trial-book-card:disabled {
+  cursor: default;
+}
+.trial-card-cover {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--surface-hover);
+}
+.trial-card-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.trial-cover-placeholder {
+  padding: 12px;
+  overflow-wrap: anywhere;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.trial-card-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  place-items: center;
+}
+.trial-card-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.trial-card-author,
+.trial-card-meta {
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .trial-filters {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -291,8 +536,19 @@ onBeforeUnmount(() => {
   .trial-filters {
     grid-template-columns: minmax(0, 1fr);
   }
+  .trial-book-browser {
+    height: clamp(300px, 52vh, 480px);
+  }
+  .trial-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(115px, 1fr));
+    gap: 8px;
+    padding: 8px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
+  .trial-view-indicator {
+    transition: none;
+  }
   :deep(.el-progress-bar__inner) {
     animation: none !important;
     transition: none !important;

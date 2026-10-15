@@ -21,6 +21,26 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void persistsTrialViewModeAndPreservesItOnUnrelatedPartialUpdate() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder().username("reader").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        when(repository.save(user)).thenReturn(user);
+        UserService service = new UserService(repository);
+        var result = service.updatePreferences("reader",
+                UserPreferencesDTO.builder().scraperTrialViewMode("card").build());
+        assertEquals("card", user.getPreferences().getScraperTrialViewMode());
+        assertEquals("card", result.getScraperTrialViewMode());
+        service.updatePreferences("reader", UserPreferencesDTO.builder().libraryViewMode("list").build());
+        assertEquals("card", service.getPreferences("reader").getScraperTrialViewMode());
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                UserPreferencesDTO.builder().scraperTrialViewMode("grid").build()));
+        assertEquals("card", user.getScraperTrialViewMode());
+        service.updatePreferences("reader", UserPreferencesDTO.builder().scraperTrialViewMode("table").build());
+        assertEquals("table", service.getPreferences("reader").getScraperTrialViewMode());
+    }
+
+    @Test
     void persistsStatisticsWindowAndRejectsInvalidCombinations() {
         UserRepository repository = mock(UserRepository.class);
         User user = User.builder().username("reader").build();

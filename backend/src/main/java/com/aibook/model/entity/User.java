@@ -267,6 +267,14 @@ public class User implements UserDetails {
         preference().setCrawlerBookViewMode(value);
     }
 
+    public String getScraperTrialViewMode() {
+        return preference().getScraperTrialViewMode();
+    }
+
+    public void setScraperTrialViewMode(String value) {
+        preference().setScraperTrialViewMode(value);
+    }
+
     public Boolean getScheduledScanEnabled() {
         return preference().getScheduledScanEnabled();
     }
