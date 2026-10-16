@@ -2186,7 +2186,7 @@ import {
   type ReaderSettings,
 } from '@/stores/preferences'
 import { getCoverThumbnailUrl } from '@/utils/cover'
-import { vQueuedCover } from '@/utils/queuedCover'
+import { pauseQueuedCoverLoads, vQueuedCover } from '@/utils/queuedCover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { confirm, message } from '@/utils/message'
 import api from '@/utils/api'
@@ -2584,6 +2584,12 @@ const failedTaskLoading=ref(false), failedTaskPage=ref(1), failedTaskPageSize=re
 const ruleTestSite=ref<CrawlerSite>(), ruleTestDraft=ref<CrawlerRule>(), ruleSite=ref<CrawlerSite>(), editingRule=ref<CrawlerRuleVersion>(), ruleTestUrl=ref(''), ruleTestResult=ref<CrawlerRuleTest>(), ruleVersions=ref<CrawlerRuleVersion[]>([]), importInput=ref<HTMLInputElement>(), importMode=ref<'text'|'file'>('text'), importJsonText=ref(''), importFileName=ref('')
 const siteConfigurationImportInput=ref<HTMLInputElement>(), siteConfigurationImportMode=ref<'text'|'file'>('text'), siteConfigurationJsonText=ref(''), siteConfigurationImportFileName=ref('')
 const importDialog=ref(false), importTargets=ref<CrawlerBook[]>([]), importFormats=ref<string[]>(['STRUCTURED']), importing=ref(false)
+watch(importing, (busy, _previous, onCleanup) => {
+  if (!busy) return
+  // 同步暂停，确保提交和后续进度查询前不再派发封面请求。
+  // 结束、异常以及离开页面时由 watcher 清理恢复，不隐藏已加载封面。
+  onCleanup(pauseQueuedCoverLoads())
+}, { flush: 'sync' })
 const importFailures=ref<CrawlerImportFailure<CrawlerBook>[]>([])
 const categoryCleanupDialog = ref(false)
 const categoryCleanupBusy = ref(false)

@@ -5,6 +5,26 @@ const MAX_CONCURRENT = 3
 const REQUEST_TIMEOUT_MS = 12000
 const pending: CoverRequest[] = []
 let active = 0
+let pauseCount = 0
+const coverControls = new Set<{ cancel: () => void; resume: () => void }>()
+
+/** 批量操作优先使用连接和解码资源；嵌套暂停需全部释放后才恢复。 */
+export function pauseQueuedCoverLoads(): () => void {
+  pauseCount++
+  if (pauseCount === 1) {
+    coverControls.forEach(control => control.cancel())
+  }
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    pauseCount--
+    if (pauseCount === 0) {
+      coverControls.forEach(control => control.resume())
+      drain()
+    }
+  }
+}
 
 interface CoverRequest {
   controller: AbortController
@@ -12,7 +32,7 @@ interface CoverRequest {
 }
 
 function drain() {
-  while (active < MAX_CONCURRENT && pending.length) {
+  while (pauseCount === 0 && active < MAX_CONCURRENT && pending.length) {
     const request = pending.shift()!
     if (request.controller.signal.aborted) continue
     active++
@@ -27,6 +47,7 @@ function observeCover(image: HTMLImageElement, source: string) {
   let disposed = false
   let objectUrl = ''
   let request: CoverRequest | undefined
+  let nearViewport = typeof IntersectionObserver === 'undefined'
   image.removeAttribute('src')
   image.style.visibility = 'hidden'
   image.style.removeProperty('display')
@@ -40,7 +61,7 @@ function observeCover(image: HTMLImageElement, source: string) {
   }
 
   const load = () => {
-    if (disposed || request || objectUrl || !source) return
+    if (disposed || pauseCount > 0 || !nearViewport || request || objectUrl || !source) return
     const controller = new AbortController()
     const current: CoverRequest = {
       controller,
@@ -70,14 +91,18 @@ function observeCover(image: HTMLImageElement, source: string) {
 
   const observer = typeof IntersectionObserver === 'undefined' ? undefined
     : new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) load()
+      nearViewport = entries.some(entry => entry.isIntersecting)
+      if (nearViewport) load()
       else cancel()
     }, { rootMargin: '160px 0px' })
+  const control = { cancel, resume: load }
+  coverControls.add(control)
   if (observer) observer.observe(image)
   else load()
 
   return () => {
     disposed = true
+    coverControls.delete(control)
     observer?.disconnect()
     cancel()
     image.removeAttribute('src')

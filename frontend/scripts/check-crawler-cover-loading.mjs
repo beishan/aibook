@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
+import { effectScope, ref, watch } from 'vue'
 
 const observers = []
 const requests = []
@@ -123,6 +124,80 @@ await finish(requests.at(-1))
 unmount(fallback)
 
 const view = fs.readFileSync(new URL('../src/views/CrawlerView.vue', import.meta.url), 'utf8')
+const pause = context.exports.pauseQueuedCoverLoads
+// 恢复观察器支持，验证暂停期间页面更新、滚动和嵌套操作。
+context.IntersectionObserver = class {
+  constructor(callback) {
+    this.callback = callback
+    observers.push(this)
+  }
+  observe() {}
+  disconnect() {}
+}
+const loaded = mount('/covers/retained')
+enter(loaded)
+await finish(requests.at(-1))
+const retainedUrl = loaded.image.src
+const covers = Array.from({ length: 5 }, (_, index) => mount(`/covers/import-${index}`))
+covers.forEach(enter)
+const activeBeforePause = requests.slice(-3)
+const release = pause()
+const releaseNested = pause()
+await flush()
+assert(activeBeforePause.every(request => request.signal.aborted))
+assert.equal(loaded.image.src, retainedUrl, 'import must preserve displayed covers')
+const countDuringPause = requests.length
+const mountedDuringPause = mount('/covers/during-import')
+enter(mountedDuringPause)
+leave(covers[0])
+unmount(covers[1])
+release()
+release()
+await flush()
+assert.equal(requests.length, countDuringPause, 'nested pause and repeated release must not resume early')
+releaseNested()
+await flush()
+assert.equal(requests.length, countDuringPause + 3)
+assert.deepEqual(requests.slice(-3).map(request => request.url),
+  ['/covers/import-2', '/covers/import-3', '/covers/import-4'],
+  'only still-mounted visible covers resume')
+covers.forEach(unmount)
+unmount(mountedDuringPause)
+unmount(loaded)
+await flush()
+
+// 执行页面真实 watcher，确认入库开始同步暂停，结束及路由卸载均能恢复。
+const importWatcher = view.match(/watch\(importing, \(busy, _previous, onCleanup\) => \{[\s\S]*?\}, \{ flush: 'sync' \}\)/)?.[0]
+assert(importWatcher, 'import state must control cover scheduling')
+const importing = ref(false)
+const scope = effectScope()
+scope.run(() => vm.runInNewContext(importWatcher, {
+  watch, importing, pauseQueuedCoverLoads: pause,
+}))
+const duringJob = mount('/covers/job')
+enter(duringJob)
+const jobRequest = requests.at(-1)
+importing.value = true
+assert(jobRequest.signal.aborted, 'cover requests abort synchronously before import submission')
+await flush()
+const pausedCount = requests.length
+const afterJob = mount('/covers/after-job')
+enter(afterJob)
+assert.equal(requests.length, pausedCount)
+importing.value = false
+await flush()
+assert.equal(requests.length, pausedCount + 2, 'success/error finally restoring importing must resume covers')
+importing.value = true
+await flush()
+const beforeUnmount = requests.length
+scope.stop()
+await flush()
+assert.equal(requests.length, beforeUnmount + 2, 'route unmount releases pause even during an import')
+unmount(duringJob)
+unmount(afterJob)
+await flush()
+assert.equal(timers.size, 0)
+
 assert.equal((view.match(/v-queued-cover="getCoverThumbnailUrl/g) || []).length, 2)
 assert.equal((view.match(/v-if="book.coverUrl && shouldLoadBookCover\(\)"/g) || []).length, 2)
-console.log('Crawler covers: viewport loading, concurrency, page cancellation, scrolling, source updates, timeout, cleanup, fallback and privacy passed')
+console.log('Crawler covers: viewport/concurrency, cancellation, timeout, privacy, import pause/resume, nested pauses, retained images and route cleanup passed')
