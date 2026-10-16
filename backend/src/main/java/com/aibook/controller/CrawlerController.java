@@ -235,6 +235,13 @@ public class CrawlerController {
     @PutMapping("/books/{id}/favorite") public BookView favorite(Authentication auth, @PathVariable Long id, @Valid @RequestBody FavoriteRequest request) { return managementService.setFavorite(user(auth), id, request.favorite()); }
     @PutMapping("/books/{id}/book-lists") public BookView bookLists(Authentication auth, @PathVariable Long id, @Valid @RequestBody BookListSelectionRequest request) { return managementService.setBookLists(user(auth), id, request.bookListIds()); }
     @PostMapping("/books/batch/crawl") @ResponseStatus(HttpStatus.ACCEPTED) public List<TaskView> batchCrawl(Authentication auth, @Valid @RequestBody BatchBookRequest request) { return taskService.batchCrawl(user(auth), request.bookIds()); }
+    @PostMapping("/books/batch/chapter-lists")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public List<TaskView> batchChapterLists(Authentication auth,
+            @Valid @RequestBody BatchBookRequest request) {
+        return taskService.batchChapterLists(user(auth), request.bookIds());
+    }
+
     @PostMapping("/books/batch/refresh-metadata") @ResponseStatus(HttpStatus.ACCEPTED) public List<TaskView> batchRefreshMetadata(Authentication auth, @Valid @RequestBody BatchBookRequest request) { return taskService.batchRefreshMetadata(user(auth), request.bookIds()); }
     @PutMapping("/books/batch/crawl-status") public List<BookView> batchCrawlStatus(
             Authentication auth, @Valid @RequestBody BatchBookStatusRequest request) {

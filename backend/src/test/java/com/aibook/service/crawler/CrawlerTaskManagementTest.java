@@ -39,6 +39,61 @@ import static org.mockito.Mockito.*;
 class CrawlerTaskManagementTest {
 
     @Test
+    void chapterListBatchCreatesOneTaskPerUniqueBookAtItsOwnSite() {
+        User user = user();
+        CrawlerSite firstSite = CrawlerSite.builder().id(2L).user(user).enabled(true).build();
+        CrawlerSite secondSite = CrawlerSite.builder().id(4L).user(user).enabled(true).build();
+        firstSite.attachRule(new com.aibook.model.entity.CrawlerSiteRule());
+        secondSite.attachRule(new com.aibook.model.entity.CrawlerSiteRule());
+        CrawlerBook first = CrawlerBook.builder().id(3L).site(firstSite).build();
+        CrawlerBook second = CrawlerBook.builder().id(5L).site(secondSite).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        when(books.findByIdInAndSiteUser(anyCollection(), eq(user))).thenReturn(List.of(first, second));
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(call -> call.getArgument(0));
+        CrawlerTaskService service = service(tasks, books, mock(CrawlerManagementService.class));
+        TransactionSynchronizationManager.initSynchronization();
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        try {
+            service.batchChapterLists(user, List.of(3L, 5L, 3L));
+            ArgumentCaptor<CrawlerTask> saved = ArgumentCaptor.forClass(CrawlerTask.class);
+            verify(tasks, times(2)).save(saved.capture());
+            assertThat(saved.getAllValues()).extracting(CrawlerTask::getType)
+                    .containsOnly(CrawlerTask.TaskType.BOOK_CHAPTER_LIST);
+            assertThat(saved.getAllValues()).extracting(CrawlerTask::getSite)
+                    .containsExactly(firstSite, secondSite);
+            assertThat(first.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.DISCOVERED);
+            assertThat(TransactionSynchronizationManager.getSynchronizations()).hasSize(2);
+            verify(tasks, never()).findById(anyString());
+        } finally {
+            TransactionSynchronizationManager.clear();
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void chapterListBatchRejectsActiveAndUnownedBooksBeforeCreatingTasks() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).enabled(true).build();
+        site.attachRule(new com.aibook.model.entity.CrawlerSiteRule());
+        CrawlerBook book = CrawlerBook.builder().id(3L).site(site).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerTaskService service = service(tasks, books, mock(CrawlerManagementService.class));
+        try {
+            assertThatThrownBy(() -> service.batchChapterLists(user, List.of(99L)))
+                    .isInstanceOf(ResponseStatusException.class);
+            when(books.findByIdInAndSiteUser(anyCollection(), eq(user))).thenReturn(List.of(book));
+            when(tasks.findActiveBookIds(anyCollection(), anyCollection())).thenReturn(List.of(3L));
+            assertThatThrownBy(() -> service.batchChapterLists(user, List.of(3L)))
+                    .isInstanceOf(ResponseStatusException.class);
+            verify(tasks, never()).save(any());
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void freezingOneSitePreservesProgressAndLeavesOtherSitesAndUserPausedTasksAlone() {
         User user = user();
         CrawlerTask running = task(user, CrawlerTask.TaskStatus.RUNNING);
@@ -402,6 +457,80 @@ class CrawlerTaskManagementTest {
         }
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void collectsOnlyChapterInformationAndPreservesDiscoveryState(boolean separateCatalog) throws Exception {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("春宵阁")
+                .baseUrl("https://www.chunxiaoge.com").enabled(true).build();
+        com.aibook.model.entity.CrawlerSiteRule rule =
+                new com.aibook.model.entity.CrawlerSiteRule();
+        site.attachRule(rule);
+        CrawlerBook book = CrawlerBook.builder().id(8L).site(site).bookName("旧标题")
+                .bookUrl("https://www.chunxiaoge.com/book/499184/")
+                .category("旧分类").tags("旧标签")
+                .crawlStatus(CrawlerBook.CrawlStatus.DISCOVERED).chapterCount(7).build();
+        CrawlerTask task = CrawlerTask.builder().user(user).site(site).crawlerBook(book)
+                .type(CrawlerTask.TaskType.BOOK_CHAPTER_LIST).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerChapterRepository chapters = mock(CrawlerChapterRepository.class);
+        CrawlerHttpClient http = mock(CrawlerHttpClient.class);
+        BookCrawlerParser parser = mock(BookCrawlerParser.class);
+        when(tasks.findById(task.getId())).thenAnswer(invocation -> {
+            if (task.getStatus() != CrawlerTask.TaskStatus.SUCCESS) return Optional.of(task);
+            return Optional.of(CrawlerTask.builder().id(task.getId()).user(user).site(site)
+                    .crawlerBook(book).type(CrawlerTask.TaskType.BOOK_CHAPTER_LIST)
+                    .status(CrawlerTask.TaskStatus.RUNNING).build());
+        });
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(books.save(any(CrawlerBook.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(parser.supports(site)).thenReturn(true);
+        when(http.get(site, book.getBookUrl()))
+                .thenReturn(new CrawlerHttpClient.FetchResult("detail", 200, 10, null, null));
+        String catalogUrl = separateCatalog ? "https://example.com/catalog" : book.getBookUrl();
+        if (separateCatalog) {
+            when(http.get(site, catalogUrl))
+                    .thenReturn(new CrawlerHttpClient.FetchResult("detail", 200, 10, null, null));
+        }
+        when(parser.parseBookDetail("detail", book.getBookUrl(), rule))
+                .thenReturn(new BookCrawlerParser.ParsedBook("499184", "下运河风情", "以泪洗面奶",
+                        "cover", "description", "乡村", List.of("乱交", "村姑"), "已完结",
+                        "第7章", catalogUrl));
+        when(parser.parseChapterList("detail", catalogUrl, rule)).thenReturn(List.of(
+                new BookCrawlerParser.ParsedChapter("1", 0, "第一章", "https://example.com/chapter/1")));
+        when(chapters.countByCrawlerBook(book)).thenReturn(1L);
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
+                chapters, tasks, mock(CrawlerScanResultRepository.class),
+                mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
+                mock(CrawlerChapterAttemptMetricService.class),
+                mock(OperationLogService.class), mock(CrawlerExportService.class), http,
+                List.of(parser), mock(ApplicationContext.class), mock(CrawlerSettingsService.class));
+        try {
+            service.run(task.getId());
+
+            assertThat(book.getBookName()).isEqualTo("旧标题");
+            assertThat(book.getCategory()).isEqualTo("旧分类");
+            assertThat(book.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.DISCOVERED);
+            assertThat(book.getChapterCount()).isEqualTo(1);
+            assertThat(task.getStatus()).isEqualTo(CrawlerTask.TaskStatus.SUCCESS);
+            assertThat(task.getSuccessCount()).isEqualTo(1);
+            ArgumentCaptor<CrawlerChapter> saved = ArgumentCaptor.forClass(CrawlerChapter.class);
+            verify(chapters).save(saved.capture());
+            assertThat(saved.getValue().getChapterName()).isEqualTo("第一章");
+            assertThat(saved.getValue().getChapterIndex()).isZero();
+            assertThat(saved.getValue().getChapterUrl()).isEqualTo("https://example.com/chapter/1");
+            assertThat(saved.getValue().getContent()).isNull();
+            assertThat(saved.getValue().getCrawlStatus()).isEqualTo(CrawlerChapter.CrawlStatus.NOT_CRAWLED);
+            verify(parser, never()).parseChapter(anyString(), anyString(), any());
+            verify(http, times(separateCatalog ? 2 : 1)).get(eq(site), anyString());
+            verify(chapters, never()).findByCrawlerBookOrderByChapterIndexAsc(any());
+        } finally {
+            service.shutdown();
+        }
+    }
+
     @Test
     void refreshesOnlyBookMetadataAndPreservesCompletedCrawlState() throws Exception {
         User user = user();
@@ -454,6 +583,43 @@ class CrawlerTaskManagementTest {
             assertThat(task.getStatus()).isEqualTo(CrawlerTask.TaskStatus.SUCCESS);
             verify(parser, never()).parseChapterList(anyString(), anyString(), any());
             verifyNoInteractions(chapters);
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void failedChapterListPreservesDiscoveryState() throws Exception {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站")
+                .baseUrl("https://example.com").enabled(true).build();
+        site.attachRule(new com.aibook.model.entity.CrawlerSiteRule());
+        CrawlerBook book = CrawlerBook.builder().id(8L).site(site).bookName("状态保护")
+                .bookUrl("https://example.com/book/8")
+                .crawlStatus(CrawlerBook.CrawlStatus.DISCOVERED).build();
+        CrawlerTask task = CrawlerTask.builder().user(user).site(site).crawlerBook(book)
+                .type(CrawlerTask.TaskType.BOOK_CHAPTER_LIST).build();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerHttpClient http = mock(CrawlerHttpClient.class);
+        BookCrawlerParser parser = mock(BookCrawlerParser.class);
+        when(tasks.findById(task.getId())).thenReturn(Optional.of(task));
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(parser.supports(site)).thenReturn(true);
+        when(http.get(site, book.getBookUrl())).thenThrow(new IOException("连接失败"));
+        CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
+                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
+                mock(CrawlerChapterRepository.class), tasks, mock(CrawlerScanResultRepository.class),
+                mock(CrawlerTaskLogRepository.class), mock(CrawlerManagementService.class),
+                mock(CrawlerChapterAttemptMetricService.class),
+                mock(OperationLogService.class), mock(CrawlerExportService.class), http,
+                List.of(parser), mock(ApplicationContext.class), mock(CrawlerSettingsService.class));
+        try {
+            service.run(task.getId());
+
+            assertThat(task.getStatus()).isEqualTo(CrawlerTask.TaskStatus.FAILED);
+            assertThat(book.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.DISCOVERED);
+            verify(books, never()).save(any());
         } finally {
             service.shutdown();
         }

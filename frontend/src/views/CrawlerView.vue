@@ -329,6 +329,7 @@
           <h2>发现书籍</h2>
         </div>
         <div class="discovery-heading-actions">
+          <el-button @click="chapterListPickerOpen = true">采集章节信息</el-button>
           <div
             class="discovery-view-switch"
             role="tablist"
@@ -735,6 +736,15 @@
       <div v-if="activeTab === 'tasks'&&taskTotal" class="list-pagination"><span>当前显示 {{ tasks.length }} 项</span><el-pagination v-model:current-page="taskPage" v-model:page-size="taskPageSize" :page-sizes="[20,50,100]" :total="taskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadTasks()" @size-change="handleTaskSizeChange" /></div>
       <div v-if="activeTab === 'failed'&&failedTaskTotal" class="list-pagination"><span>当前显示 {{ failedTasks.length }} 项</span><el-pagination v-model:current-page="failedTaskPage" v-model:page-size="failedTaskPageSize" :page-sizes="[20,50,100]" :total="failedTaskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadFailedTasks()" @size-change="handleFailedTaskSizeChange" /></div>
     </section>
+
+    <DiscoveryChapterListDialog
+      v-model="chapterListPickerOpen"
+      :sites="sites"
+      :initial-books="selectedDiscoveries"
+      :initial-site-id="discoverySiteId"
+      :is-active="isBookTaskActive"
+      @created="handleChapterListTasksCreated"
+    />
 
     <el-dialog v-model="siteProtectionDialog" :title="`${protectionDetailSite?.siteName || '站点'} · 保护详情`" width="min(680px, 94vw)" append-to-body>
       <div v-if="protectionDetailSite" class="site-protection-detail">
@@ -2110,6 +2120,7 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, MoreFilled, Plus, QuestionFilled, Refresh, Search, Star, StarFilled, Tickets, TrendCharts, Upload, VideoPause, VideoPlay, Warning } from '@element-plus/icons-vue'
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElProgress, ElTable, ElTableColumn, ElTag, ElTooltip, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
+import DiscoveryChapterListDialog from '@/components/DiscoveryChapterListDialog.vue'
 import SiteSourceTag from '@/components/SiteSourceTag.vue'
 import CrawlerSiteIcon from '@/components/CrawlerSiteIcon.vue'
 import {
@@ -2332,6 +2343,18 @@ onMounted(() => {
 onUnmounted(() => {
   crawlerMobileMedia.removeEventListener('change', updateCrawlerMobileLayout)
 })
+
+const chapterListPickerOpen = ref(false)
+
+function handleChapterListTasksCreated(tasks: CrawlerTask[]) {
+  const taskIds = new Set(tasks.map(task => task.id))
+  currentCrawlerTasks.value = [
+    ...tasks,
+    ...currentCrawlerTasks.value.filter(task => !taskIds.has(task.id)),
+  ]
+  selectedDiscoveries.value = []
+  refreshAfterCrawlSubmission()
+}
 
 const discoveryCategory = ref<string>()
 const discoveryTag = ref<string>()

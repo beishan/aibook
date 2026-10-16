@@ -402,6 +402,9 @@ export const crawlerApi = {
   setFavorite: (bookId:number, favorite:boolean) => api.put<CrawlerBook>(`/api/crawler/books/${bookId}/favorite`, {favorite}).then(r => r.data),
   setBookLists: (bookId:number, bookListIds:number[]) => api.put<CrawlerBook>(`/api/crawler/books/${bookId}/book-lists`, {bookListIds}).then(r => r.data),
   batchCrawl: (bookIds:number[]) => api.post<CrawlerTask[]>('/api/crawler/books/batch/crawl', {bookIds}).then(r => r.data),
+  batchChapterLists: (bookIds:number[]) => api
+    .post<CrawlerTask[]>('/api/crawler/books/batch/chapter-lists', {bookIds})
+    .then(r => r.data),
   batchRefreshMetadata: (bookIds:number[]) => api.post<CrawlerTask[]>('/api/crawler/books/batch/refresh-metadata', {bookIds}).then(r => r.data),
   setDiscoveryStatus: (bookIds:number[], status:'ACTIVE'|'IGNORED'|'BLACKLISTED') => api.put<CrawlerBook[]>('/api/crawler/books/batch/discovery-status', {bookIds,status}).then(r => r.data),
   generate: (bookId:number, formats:string[]) => api.post<CrawlerExport[]>(`/api/crawler/books/${bookId}/exports`, { formats }).then(r => r.data),
