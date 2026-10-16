@@ -277,6 +277,10 @@ public final class CrawlerDtos {
             int runningCount, int waitingCount, int pausedCount,
             int activeTaskCount, int progressPercent,
             LocalDateTime lastTaskStartedAt, String siteThemeColor) { }
+    public record DiscoveryCandidatesRequest(
+            @Min(0) int page, @Min(1) @Max(100) int size,
+            String keyword, Long siteId, List<@NotNull @Positive Long> excludedIds) { }
+
     public record BatchBookRequest(@NotEmpty List<@NotNull Long> bookIds) { }
     public record BatchBookStatusRequest(
             @NotEmpty @Size(max = 200) List<@NotNull Long> bookIds,

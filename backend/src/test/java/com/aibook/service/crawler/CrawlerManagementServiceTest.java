@@ -42,6 +42,35 @@ import static org.mockito.Mockito.*;
 
 class CrawlerManagementServiceTest {
     @Test
+    void discoveryCandidatesExcludeSelectedIdsBeforePagination() {
+        User user = user();
+        when(books.searchDiscoveryCandidates(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
+                eq(List.of(1L, 3L)), any(Pageable.class)))
+                .thenAnswer(call -> new PageImpl<CrawlerBook>(List.of(), call.getArgument(6), 41));
+
+        var result = service.discoveryCandidates(user, 1, 20, " 三体 ", 7L, List.of(1L, 3L, 1L));
+
+        assertThat(result.getTotalElements()).isEqualTo(41);
+        assertThat(result.getNumber()).isEqualTo(1);
+        assertThat(result.getSize()).isEqualTo(20);
+        verify(books).searchDiscoveryCandidates(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
+                eq(List.of(1L, 3L)), any(Pageable.class));
+    }
+
+    @Test
+    void discoveryCandidatesUseNonemptyExclusionForEmptySelection() {
+        User user = user();
+        when(books.searchDiscoveryCandidates(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
+                eq(CrawlerBook.CrawlStatus.DISCOVERED), eq(""), isNull(),
+                eq(List.of(-1L)), any(Pageable.class))).thenReturn(Page.empty());
+
+        assertThat(service.discoveryCandidates(user, 0, 20, null, null, List.of())).isEmpty();
+        assertThat(service.discoveryCandidates(user, 0, 20, null, null, null)).isEmpty();
+    }
+
+    @Test
     void siteActivityFilterUsesOwnedSiteAndDatabasePagination() {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(2L).user(user).build();

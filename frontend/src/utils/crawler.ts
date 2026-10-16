@@ -375,6 +375,10 @@ export const crawlerApi = {
       '/api/crawler/books/discovered/filters', {params:{siteId}},
     )
     .then(r => r.data),
+  discoveryCandidates: (params: {
+    page:number; size:number; keyword?:string; siteId?:number; excludedIds:number[]
+  }) => api.post<PageResult<CrawlerBook>>('/api/crawler/books/discovered/candidates', params)
+    .then(r => r.data),
   discoveredBooks: (params:CrawlerDiscoveryQuery) => api.get<PageResult<CrawlerBook>>('/api/crawler/books/discovered', {params}).then(r => r.data),
   chapters: (bookId:number, params:CrawlerChapterQuery) => api.get<PageResult<CrawlerChapter>>(`/api/crawler/books/${bookId}/chapters`, {params}).then(r => r.data),
   currentChapter: (bookId:number, size:number) => api.get<CrawlerChapterFocus|undefined>(`/api/crawler/books/${bookId}/chapters/current`, {params:{size}}).then(r => r.data||undefined),

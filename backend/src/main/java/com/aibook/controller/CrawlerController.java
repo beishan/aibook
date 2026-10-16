@@ -147,6 +147,13 @@ public class CrawlerController {
         return managementService.discoveredBooks(user(auth), page, size, keyword, siteId,
                 favoriteOnly, sort, category, tag);
     }
+    @PostMapping("/books/discovered/candidates")
+    public Page<BookView> discoveryCandidates(Authentication auth,
+            @Valid @RequestBody DiscoveryCandidatesRequest request) {
+        return managementService.discoveryCandidates(user(auth), request.page(), request.size(),
+                request.keyword(), request.siteId(), request.excludedIds());
+    }
+
     @GetMapping("/books/discovered/filters")
     public CrawlerManagementService.DiscoveryFilters discoveryFilters(Authentication auth,
             @RequestParam(required = false) Long siteId) {

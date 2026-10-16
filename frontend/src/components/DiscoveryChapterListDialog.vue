@@ -25,7 +25,7 @@
           <el-alert v-if="loadFailed" title="加载失败，请重新搜索" type="error" :closable="false" />
           <article v-for="book in available" :key="book.id">
             <div><strong>{{ book.bookName }}</strong><small>{{ book.author || '未知作者' }} · {{ book.siteName }}</small></div>
-            <el-button :disabled="submitting || isActive(book)" :aria-label="`添加${book.bookName}`" @click="add(book)">
+            <el-button :disabled="loading || submitting || isActive(book)" :aria-label="`添加${book.bookName}`" @click="add(book)">
               {{ isActive(book) ? '已有任务' : '添加 →' }}
             </el-button>
           </article>
@@ -34,7 +34,7 @@
         <el-pagination v-model:current-page="page" :page-size="20" :total="total" :pager-count="5" layout="prev, pager, next" :disabled="loading || submitting" @current-change="loadBooks" />
       </section>
       <section aria-label="已选书籍">
-        <header><strong>已选书籍 · {{ selected.length }} 本</strong><el-button :disabled="submitting || !selected.length" @click="selected = []">清空</el-button></header>
+        <header><strong>已选书籍 · {{ selected.length }} 本</strong><el-button :disabled="submitting || !selected.length" @click="clearSelection">清空</el-button></header>
         <div class="picker-list selected-list">
           <article v-for="book in selected" :key="book.id">
             <div><strong>{{ book.bookName }}</strong><small>{{ book.author || '未知作者' }} · {{ book.siteName }}</small></div>
@@ -97,14 +97,19 @@ async function loadBooks() {
   loading.value = true
   loadFailed.value = false
   try {
-    const result = await crawlerApi.discoveredBooks({
+    const result = await crawlerApi.discoveryCandidates({
       page: page.value - 1,
       size: 20,
       keyword: keyword.value.trim() || undefined,
       siteId: siteId.value,
-      sort: 'DISCOVER_TIME_DESC',
+      excludedIds: [...selectedIds.value],
     })
     if (request !== requestId) return
+    const lastPage = Math.max(1, Math.ceil(result.totalElements / 20))
+    if (page.value > lastPage) {
+      page.value = lastPage
+      return await loadBooks()
+    }
     books.value = result.content
     total.value = result.totalElements
   } catch {
@@ -123,17 +128,30 @@ function search() {
   void loadBooks()
 }
 
-function add(book: CrawlerBook) {
-  if (submitting.value || props.isActive(book) || selectedIds.value.has(book.id)) return
+async function add(book: CrawlerBook) {
+  if (loading.value || submitting.value || props.isActive(book) || selectedIds.value.has(book.id)) return
   selected.value = [...selected.value, book]
+  await loadBooks()
 }
 
-function addCurrentPage() {
-  available.value.forEach(add)
+async function addCurrentPage() {
+  if (loading.value || submitting.value) return
+  const additions = available.value.filter(book => !props.isActive(book))
+  if (!additions.length) return
+  selected.value = [...selected.value, ...additions]
+  await loadBooks()
 }
 
-function remove(id: number) {
+async function remove(id: number) {
+  if (submitting.value) return
   selected.value = selected.value.filter(book => book.id !== id)
+  await loadBooks()
+}
+
+async function clearSelection() {
+  if (submitting.value) return
+  selected.value = []
+  await loadBooks()
 }
 
 async function submit() {

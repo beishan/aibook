@@ -77,6 +77,16 @@ class CrawlerBookRepositoryQueryTest {
                 assertThat(query.getParameters()).extracting(jakarta.persistence.Parameter::getName)
                         .containsExactlyInAnyOrder("user", "discoveryStatus", "crawlStatus", "keyword",
                                 "siteId", "favoriteOnly", "category", "tag");
+                Method candidates = CrawlerBookRepository.class.getMethod("searchDiscoveryCandidates",
+                        User.class, CrawlerBook.DiscoveryStatus.class, CrawlerBook.CrawlStatus.class,
+                        String.class, Long.class, Collection.class, Pageable.class);
+                String candidateQuery = candidates.getAnnotation(Query.class).value();
+                assertThat(candidateQuery).contains("b.id not in :excludedIds", "b.site.user = :user",
+                        "b.discoveryStatus = :discoveryStatus", "b.crawlStatus = :crawlStatus");
+                assertThat(session.createQuery(candidateQuery, CrawlerBook.class).getParameters())
+                        .extracting(jakarta.persistence.Parameter::getName)
+                        .containsExactlyInAnyOrder("user", "discoveryStatus", "crawlStatus", "keyword",
+                                "siteId", "excludedIds");
                 Query managed = managedBookQuery();
                 assertThat(session.createQuery(managed.value(), CrawlerBook.class).getParameters())
                         .extracting(jakarta.persistence.Parameter::getName).contains("tag");

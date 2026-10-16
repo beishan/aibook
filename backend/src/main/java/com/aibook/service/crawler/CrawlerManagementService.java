@@ -331,6 +331,18 @@ public class CrawlerManagementService {
         return result.map(book -> bookView(book, duplicateIds.contains(book.getId())));
     }
 
+    @Transactional(readOnly = true)
+    public Page<BookView> discoveryCandidates(User user, int page, int size, String keyword,
+            Long siteId, List<Long> excludedIds) {
+        List<Long> exclusions = excludedIds == null || excludedIds.isEmpty()
+                ? List.of(-1L) : excludedIds.stream().distinct().toList();
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+                discoverySort("DISCOVER_TIME_DESC"));
+        return bookRepository.searchDiscoveryCandidates(user, CrawlerBook.DiscoveryStatus.ACTIVE,
+                CrawlerBook.CrawlStatus.DISCOVERED, blank(keyword) ? "" : keyword.trim(),
+                siteId, exclusions, pageable).map(this::bookView);
+    }
+
     public record DiscoveryFilters(List<String> categories, List<String> tags) {}
 
     @Transactional(readOnly = true)

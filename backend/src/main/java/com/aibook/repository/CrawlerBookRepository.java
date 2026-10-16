@@ -180,6 +180,30 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
             @Param("siteId") Long siteId,
             @Param("favoriteOnly") boolean favoriteOnly,
             Pageable pageable);
+    @Query("""
+            select b from CrawlerBook b
+            where b.site.user = :user
+              and b.discoveryStatus = :discoveryStatus
+              and b.crawlStatus = :crawlStatus
+              and (:siteId is null or b.site.id = :siteId)
+              and b.id not in :excludedIds
+              and (:keyword = ''
+                   or lower(b.bookName) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.tags, '')) like lower(concat('%', :keyword, '%'))
+                   or lower(b.site.siteName) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.discoveryPageName, '')) like lower(concat('%', :keyword, '%'))
+                   or lower(b.externalBookId) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.latestChapter, '')) like lower(concat('%', :keyword, '%')))
+            """)
+    Page<CrawlerBook> searchDiscoveryCandidates(
+            @Param("user") User user,
+            @Param("discoveryStatus") CrawlerBook.DiscoveryStatus discoveryStatus,
+            @Param("crawlStatus") CrawlerBook.CrawlStatus crawlStatus,
+            @Param("keyword") String keyword,
+            @Param("siteId") Long siteId,
+            @Param("excludedIds") Collection<Long> excludedIds,
+            Pageable pageable);
     default Page<CrawlerBook> searchDiscoveredBooks(
             User user, CrawlerBook.DiscoveryStatus discoveryStatus,
             CrawlerBook.CrawlStatus crawlStatus, String keyword, Long siteId, Pageable pageable) {
