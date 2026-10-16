@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
-const crawlerViewSource = await readFile(
+const crawlerViewSource = (await readFile(
   new URL('../src/views/CrawlerView.vue', import.meta.url),
   'utf8',
-)
+)).replace(/\r\n/g, '\n')
 const pollingSource = crawlerViewSource.match(
   /async function pollCrawlerProgress\(\)\{([\s\S]*?)\n}\nasync function syncOpenBookProgress/,
 )?.[1]
