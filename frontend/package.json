@@ -1,12 +1,13 @@
 {
   "name": "aibook-frontend",
-  "version": "1.45.263",
+  "version": "1.45.264",
   "description": "汗牛充栋 - 阅读书籍管理系统前端",
   "type": "module",
   "scripts": {
     "test:shelf-pagination": "node scripts/check-shelf-pagination.mjs",
     "dev": "vite",
     "build": "vite build",
+    "test:crawler-batch-crawl": "node scripts/check-crawler-batch-crawl.mjs",
     "test:crawler-import": "node scripts/check-crawler-import.mjs",
     "preview": "vite preview",
     "test:backup-pagination": "node scripts/check-backup-pagination.mjs",

@@ -692,7 +692,12 @@ public class CrawlerTaskService {
                 .filter(book -> discoveryStatus(book) == CrawlerBook.DiscoveryStatus.ACTIVE).toList();
         if (books.isEmpty()) return List.of();
 
-        ensureNoActiveTasks(books);
+        // 已有任务保持原状；返回列表仅包含本次实际创建的任务。
+        Set<Long> activeBookIds = new HashSet<>(taskRepository.findActiveBookIds(
+                books.stream().map(CrawlerBook::getId).toList(), ACTIVE_STATUSES));
+        books = books.stream().filter(book -> !activeBookIds.contains(book.getId())).toList();
+        if (books.isEmpty()) return List.of();
+
         Set<Long> validatedSiteIds = new HashSet<>();
         for (CrawlerBook book : books) {
             if (validatedSiteIds.add(book.getSite().getId())) {

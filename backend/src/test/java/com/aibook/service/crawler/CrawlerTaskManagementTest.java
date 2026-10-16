@@ -39,6 +39,86 @@ import static org.mockito.Mockito.*;
 class CrawlerTaskManagementTest {
 
     @Test
+    void batchCrawlSkipsActiveBooksAndCreatesRemainingTasksOnce() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(2L).user(user).enabled(true).build();
+        site.attachRule(new com.aibook.model.entity.CrawlerSiteRule());
+        CrawlerBook active = CrawlerBook.builder().id(3L).site(site)
+                .crawlStatus(CrawlerBook.CrawlStatus.PAUSED).build();
+        CrawlerBook eligible = CrawlerBook.builder().id(5L).site(site).build();
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        when(books.findByIdInAndSiteUser(anyCollection(), eq(user)))
+                .thenReturn(List.of(active, eligible));
+        when(tasks.findActiveBookIds(anyCollection(), anyCollection())).thenReturn(List.of(3L));
+        when(tasks.save(any(CrawlerTask.class))).thenAnswer(call -> call.getArgument(0));
+        when(management.taskView(any(CrawlerTask.class))).thenCallRealMethod();
+        CrawlerTaskService service = service(tasks, books, management);
+        TransactionSynchronizationManager.initSynchronization();
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        try {
+            var created = service.batchCrawl(user, List.of(3L, 5L, 5L));
+            assertThat(created).hasSize(1);
+            assertThat(created.getFirst().bookId()).isEqualTo(5L);
+            verify(tasks).findActiveBookIds(List.of(3L, 5L), List.of(
+                    CrawlerTask.TaskStatus.WAITING, CrawlerTask.TaskStatus.RUNNING,
+                    CrawlerTask.TaskStatus.PAUSED));
+            ArgumentCaptor<CrawlerTask> saved = ArgumentCaptor.forClass(CrawlerTask.class);
+            verify(tasks).save(saved.capture());
+            assertThat(saved.getValue().getCrawlerBook()).isSameAs(eligible);
+            assertThat(saved.getValue().getType()).isEqualTo(CrawlerTask.TaskType.BOOK_FULL_CRAWL);
+            assertThat(active.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.PAUSED);
+            assertThat(eligible.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.WAITING);
+            assertThat(TransactionSynchronizationManager.getSynchronizations()).hasSize(1);
+            verify(tasks, never()).findAllById(any());
+        } finally {
+            TransactionSynchronizationManager.clear();
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void batchCrawlReturnsZeroWithoutChangingBooksOrDispatchingWhenAllHaveTasks() {
+        User user = user();
+        // 被跳过的书籍无需再次校验网站规则，也不应改变已有任务或采集状态。
+        CrawlerSite disabledSite = CrawlerSite.builder().id(2L).user(user).enabled(false).build();
+        CrawlerBook active = CrawlerBook.builder().id(3L).site(disabledSite)
+                .crawlStatus(CrawlerBook.CrawlStatus.CRAWLING_CONTENT).build();
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        when(books.findByIdInAndSiteUser(anyCollection(), eq(user))).thenReturn(List.of(active));
+        when(tasks.findActiveBookIds(anyCollection(), anyCollection())).thenReturn(List.of(3L));
+        CrawlerTaskService service = service(tasks, books, mock(CrawlerManagementService.class));
+        TransactionSynchronizationManager.initSynchronization();
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        try {
+            assertThat(service.batchCrawl(user, List.of(3L))).isEmpty();
+            assertThat(active.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.CRAWLING_CONTENT);
+            verify(tasks, never()).save(any());
+            assertThat(TransactionSynchronizationManager.getSynchronizations()).isEmpty();
+        } finally {
+            TransactionSynchronizationManager.clear();
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void batchCrawlStillRejectsUnownedBooksBeforeCheckingTasks() {
+        User user = user();
+        CrawlerTaskRepository tasks = mock(CrawlerTaskRepository.class);
+        CrawlerTaskService service = service(tasks, mock(CrawlerBookRepository.class),
+                mock(CrawlerManagementService.class));
+        try {
+            assertThatThrownBy(() -> service.batchCrawl(user, List.of(99L)))
+                    .isInstanceOf(ResponseStatusException.class);
+            verifyNoInteractions(tasks);
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void chapterListBatchCreatesOneTaskPerUniqueBookAtItsOwnSite() {
         User user = user();
         CrawlerSite firstSite = CrawlerSite.builder().id(2L).user(user).enabled(true).build();

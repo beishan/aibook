@@ -4399,6 +4399,11 @@ async function crawlDiscovered(book:CrawlerBook){
   setBookTaskSubmitting(book.id,true)
   try{
     const createdTasks=await crawlerApi.batchCrawl([book.id])
+    if (!createdTasks.length) {
+      message.warning('未创建任务：该书籍已有活动任务或不处于可采集状态')
+      refreshAfterCrawlSubmission()
+      return
+    }
     const taskIds=new Set(createdTasks.map(task=>task.id))
     currentCrawlerTasks.value=[...createdTasks,...currentCrawlerTasks.value.filter(task=>!taskIds.has(task.id))]
     message.success('采集任务已创建')
@@ -4428,7 +4433,10 @@ async function batchCrawl() {
       ...currentCrawlerTasks.value.filter(task => !taskIds.has(task.id)),
     ]
     selectedDiscoveries.value = []
-    message.success(`已创建 ${createdTasks.length} 个采集任务`)
+    const skipped = new Set(selected.map(book => book.id)).size - createdTasks.length
+    const summary = `成功创建 ${createdTasks.length} 个采集任务${skipped ? `，跳过 ${skipped} 本书籍` : ''}`
+    if (createdTasks.length) message.success(summary)
+    else message.warning(summary)
     refreshAfterCrawlSubmission()
   } catch (error: any) {
     message.error(error.response?.data?.message || '批量创建采集任务失败')
