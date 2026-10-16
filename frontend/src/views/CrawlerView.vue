@@ -398,10 +398,30 @@
       <div class="discovery-toolbar">
         <el-input v-model="discoveryKeyword" clearable :prefix-icon="Search" placeholder="搜索书名、作者、标签、网站、发现页、编码或最新章节" @keyup.enter="applyDiscoveryFilters" />
         <el-select v-model="discoverySiteId" clearable placeholder="全部采集网站"><el-option v-for="site in sites" :key="site.id" :label="site.siteName" :value="site.id" /></el-select>
-        <el-select v-model="discoveryCategory" clearable filterable placeholder="全部分类" aria-label="发现书籍分类" @visible-change="loadDiscoveryFilterOptions" @change="applyDiscoveryFilters">
+        <el-select
+          v-model="discoveryCategory"
+          clearable
+          filterable
+          :loading="discoveryFiltersLoading"
+          :no-data-text="discoveryFiltersError ? '加载失败，请关闭后重试' : '暂无分类，请先选择书籍并刷新分类标签'"
+          placeholder="全部分类"
+          aria-label="发现书籍分类"
+          @visible-change="loadDiscoveryFilterOptions"
+          @change="applyDiscoveryFilters"
+        >
           <el-option v-for="category in discoveryFilterOptions.categories" :key="category" :label="category" :value="category" />
         </el-select>
-        <el-select v-model="discoveryTag" clearable filterable placeholder="全部标签" aria-label="发现书籍标签" @visible-change="loadDiscoveryFilterOptions" @change="applyDiscoveryFilters">
+        <el-select
+          v-model="discoveryTag"
+          clearable
+          filterable
+          :loading="discoveryFiltersLoading"
+          :no-data-text="discoveryFiltersError ? '加载失败，请关闭后重试' : '暂无标签，请先选择书籍并刷新分类标签'"
+          placeholder="全部标签"
+          aria-label="发现书籍标签"
+          @visible-change="loadDiscoveryFilterOptions"
+          @change="applyDiscoveryFilters"
+        >
           <el-option v-for="tag in discoveryFilterOptions.tags" :key="tag" :label="tag" :value="tag" />
         </el-select>
         <el-select v-model="discoverySort" aria-label="发现书籍排序"><el-option v-for="item in discoverySortOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
@@ -2316,6 +2336,9 @@ onUnmounted(() => {
 const discoveryCategory = ref<string>()
 const discoveryTag = ref<string>()
 const discoveryFilterOptions = ref<{categories:string[]; tags:string[]}>({categories:[], tags:[]})
+const discoveryFiltersLoading = ref(false)
+const discoveryFiltersError = ref(false)
+let discoveryFilterSiteId: number | undefined
 let discoveryFilterRequest = 0
 let discoveryBooksRequest = 0
 
@@ -2323,14 +2346,24 @@ async function loadDiscoveryFilterOptions(visible:boolean) {
   if (!visible) return
   const request = ++discoveryFilterRequest
   const siteId = discoverySiteId.value
-  discoveryFilterOptions.value = {categories:[], tags:[]}
+  if (discoveryFilterSiteId !== siteId) {
+    discoveryFilterOptions.value = {categories:[], tags:[]}
+  }
+  discoveryFilterSiteId = siteId
+  discoveryFiltersLoading.value = true
+  discoveryFiltersError.value = false
   try {
     const result = await crawlerApi.discoveryFilters(siteId)
     if (request === discoveryFilterRequest && siteId === discoverySiteId.value) {
       discoveryFilterOptions.value = result
     }
   } catch {
-    ElMessage.error('加载分类和标签失败，请重试')
+    if (request === discoveryFilterRequest && siteId === discoverySiteId.value) {
+      discoveryFiltersError.value = true
+      ElMessage.error('加载分类和标签失败，请重试')
+    }
+  } finally {
+    if (request === discoveryFilterRequest) discoveryFiltersLoading.value = false
   }
 }
 
@@ -2764,6 +2797,10 @@ onMounted(async () => {
 onUnmounted(()=>{if(timer)window.clearInterval(timer);document.removeEventListener('keydown',handleChapterReaderKeydown);window.removeEventListener('resize',resizeStatisticsCharts);disposeStatisticsCharts()})
 watch(activeTab, value => {
   if (value === 'statistics') void loadCrawlerStatistics()
+  if (value === 'discovered') void loadDiscoveryFilterOptions(true)
+})
+watch(discoverySiteId, () => {
+  void loadDiscoveryFilterOptions(true)
 })
 function restartPolling(){if(timer)window.clearInterval(timer);timer=window.setInterval(()=>{void pollCrawlerProgress()},pollingIntervalSeconds.value*1000)}
 async function loadPollingIntervalOptions() {

@@ -55,3 +55,43 @@ await oldRequest
 assert.equal(context.discoveredBooks.value[0].id, 10)
 assert.equal(context.discoveryLoading.value, false)
 console.log('发现书籍分类、标签组合筛选、重置、分页与过期请求验证通过')
+
+const filterContext = vm.createContext({
+  discoveryFilterRequest: 0,
+  discoveryFilterSiteId: undefined,
+  discoverySiteId: ref(undefined),
+  discoveryFilterOptions: ref({categories: [], tags: ['旧标签']}),
+  discoveryFiltersLoading: ref(false),
+  discoveryFiltersError: ref(false),
+  ElMessage: {error: () => {}},
+  crawlerApi: {},
+})
+vm.runInContext(extract('loadDiscoveryFilterOptions'), filterContext)
+let finishFilters
+filterContext.crawlerApi.discoveryFilters = () => new Promise(resolve => { finishFilters = resolve })
+const loadingFilters = vm.runInContext('loadDiscoveryFilterOptions(true)', filterContext)
+assert.equal(filterContext.discoveryFiltersLoading.value, true)
+assert.equal(filterContext.discoveryFilterOptions.value.tags[0], '旧标签')
+finishFilters({categories: ['科幻'], tags: ['太空']})
+await loadingFilters
+assert.equal(filterContext.discoveryFiltersLoading.value, false)
+assert.equal(filterContext.discoveryFilterOptions.value.tags[0], '太空')
+const staleFilters = vm.runInContext('loadDiscoveryFilterOptions(true)', filterContext)
+filterContext.discoverySiteId.value = 7
+filterContext.crawlerApi.discoveryFilters = async siteId => {
+  assert.equal(siteId, 7)
+  return {categories: [], tags: ['新网站标签']}
+}
+await vm.runInContext('loadDiscoveryFilterOptions(true)', filterContext)
+finishFilters({categories: [], tags: ['过期标签']})
+await staleFilters
+assert.equal(filterContext.discoveryFilterOptions.value.tags[0], '新网站标签')
+filterContext.crawlerApi.discoveryFilters = async () => { throw new Error('network') }
+await vm.runInContext('loadDiscoveryFilterOptions(true)', filterContext)
+assert.equal(filterContext.discoveryFiltersError.value, true)
+assert.equal(filterContext.discoveryFiltersLoading.value, false)
+filterContext.crawlerApi.discoveryFilters = async () => ({categories: [], tags: []})
+await vm.runInContext('loadDiscoveryFilterOptions(true)', filterContext)
+assert.equal(filterContext.discoveryFiltersError.value, false)
+assert.equal(filterContext.discoveryFilterOptions.value.tags.length, 0)
+console.log('筛选选项加载状态、保留已有标签、网站切换、过期响应与失败重试验证通过')
