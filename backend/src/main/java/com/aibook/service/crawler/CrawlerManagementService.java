@@ -710,8 +710,18 @@ public class CrawlerManagementService {
             User user, int page, int size, boolean failedOnly, String status, String type,
             boolean favoriteOnly, Long siteId, Long queueId, String priority,
             LocalDateTime createdAfter, LocalDateTime createdBefore) {
+        return tasks(user, page, size, failedOnly, status, type, favoriteOnly, siteId, queueId,
+                priority, createdAfter, createdBefore, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TaskView> tasks(
+            User user, int page, int size, boolean failedOnly, String status, String type,
+            boolean favoriteOnly, Long siteId, Long queueId, String priority,
+            LocalDateTime createdAfter, LocalDateTime createdBefore, String keyword) {
+        String normalizedKeyword = blank(keyword) ? "" : keyword.trim().toLowerCase(Locale.ROOT);
         if (siteId == null && queueId == null && (priority == null || priority.isBlank())
-                && createdAfter == null && createdBefore == null) {
+                && createdAfter == null && createdBefore == null && normalizedKeyword.isEmpty()) {
             return tasks(user, page, size, failedOnly, status, type, favoriteOnly);
         }
         if (createdAfter != null && createdBefore != null && createdAfter.isAfter(createdBefore)) {
@@ -726,6 +736,19 @@ public class CrawlerManagementService {
         Specification<CrawlerTask> filters = (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(criteriaBuilder.equal(root.get("user"), user));
+            if (!normalizedKeyword.isEmpty()) {
+                String pattern = "%" + normalizedKeyword.replace("!", "!!")
+                        .replace("%", "!%").replace("_", "!_") + "%";
+                var book = root.join("crawlerBook", JoinType.LEFT);
+                var site = root.join("site", JoinType.LEFT);
+                predicates.add(criteriaBuilder.or(
+                        criteriaBuilder.like(criteriaBuilder.lower(book.get("bookName")), pattern, '!'),
+                        criteriaBuilder.like(criteriaBuilder.lower(book.get("author")), pattern, '!'),
+                        criteriaBuilder.like(criteriaBuilder.lower(book.get("tags")), pattern, '!'),
+                        criteriaBuilder.like(criteriaBuilder.lower(book.get("externalBookId")), pattern, '!'),
+                        criteriaBuilder.like(criteriaBuilder.lower(site.get("siteName")), pattern, '!'),
+                        criteriaBuilder.like(criteriaBuilder.lower(root.get("discoveryPageName")), pattern, '!')));
+            }
             if (siteId != null) {
                 predicates.add(criteriaBuilder.equal(root.get("site").get("id"), siteId));
             }

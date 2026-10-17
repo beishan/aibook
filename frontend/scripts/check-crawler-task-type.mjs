@@ -10,7 +10,7 @@ const [crawlerViewSource, crawlerApiSource, controllerSource, serviceSource, rep
     readFile(new URL('../../backend/src/main/java/com/aibook/repository/CrawlerTaskRepository.java', import.meta.url), 'utf8'),
   ])
 const taskTableSource = crawlerViewSource.match(
-  /const TaskTable = defineComponent\(([\s\S]*?)\n\ntype TabKey=/,
+  /const TaskTable = defineComponent\(([\s\S]*?)\r?\n\r?\ntype TabKey=/,
 )?.[1]
 const queuedTasksSource = crawlerViewSource.match(
   /<el-dialog v-model="queuedTasksDialog"([\s\S]*?)<\/el-dialog>/,
@@ -35,7 +35,7 @@ assert.match(
 )
 assert.match(
   crawlerViewSource,
-  /crawlerApi\.tasks\(\{[^\n]*type:taskTypeFilter\.value\|\|undefined/,
+  /crawlerApi\.tasks\(\{[^}]*type:\s*taskTypeFilter\.value\s*\|\|\s*undefined/,
   'the selected type must be sent with every paginated task query',
 )
 assert.match(crawlerApiSource, /CrawlerTaskQuery \{[^}]*type\?:string/)

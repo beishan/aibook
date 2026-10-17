@@ -287,9 +287,10 @@ public class CrawlerController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
                     java.time.LocalDateTime createdAfter,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-                    java.time.LocalDateTime createdBefore) {
+                    java.time.LocalDateTime createdBefore,
+            @RequestParam(required = false) String keyword) {
         return managementService.tasks(user(auth), page, size, failedOnly, status, type,
-                favoriteOnly, siteId, queueId, priority, createdAfter, createdBefore);
+                favoriteOnly, siteId, queueId, priority, createdAfter, createdBefore, keyword);
     }
     @GetMapping("/tasks/queued") public List<TaskView> queuedTasks(
             Authentication auth, @RequestParam(required = false) Long queueId) {

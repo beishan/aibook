@@ -310,7 +310,20 @@ export interface CrawlerChapterQuery {
   sort: 'INDEX_ASC' | 'INDEX_DESC' | 'CREATED_DESC'
   crawlStatus?: CrawlerChapterStatus
 }
-export interface CrawlerTaskQuery { page:number; size:number; failedOnly?:boolean; status?:string; type?:string; favoriteOnly?:boolean; siteId?:number; queueId?:number; priority?:string; createdAfter?:string; createdBefore?:string }
+export interface CrawlerTaskQuery {
+  page:number
+  size:number
+  keyword?:string
+  failedOnly?:boolean
+  status?:string
+  type?:string
+  favoriteOnly?:boolean
+  siteId?:number
+  queueId?:number
+  priority?:string
+  createdAfter?:string
+  createdBefore?:string
+}
 
 export const crawlerApi = {
   dashboard: () => api.get<CrawlerDashboard>('/api/crawler/dashboard').then(r => r.data),

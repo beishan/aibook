@@ -739,6 +739,15 @@
     <section v-else class="panel" role="tabpanel">
       <div class="section-heading"><div><p class="eyebrow">{{ activeTab === 'failed' ? 'NEEDS ATTENTION' : 'PERSISTENT QUEUE' }}</p><h2>{{ activeTab === 'failed' ? '失败任务' : '采集任务' }}</h2></div><div class="queue-heading-actions"><div v-if="taskQueues.length" class="queue-runtime"><span><i class="running-dot"/>运行 {{ totalQueueRunning }} / {{ totalQueueConcurrency }}</span><button type="button" title="查看各网站的队列和任务" @click="openQueuedTasks">任务队列（{{ runningCurrentTaskCount }}/{{ currentCrawlerTasks.length }}）</button></div><el-button v-if="activeTab==='tasks'" @click="openQueueSettings">队列配置</el-button><el-button text :icon="Refresh" @click="refresh">刷新</el-button></div></div>
       <div v-if="activeTab==='tasks'" class="task-filter-toolbar">
+        <el-input
+          v-model="taskKeyword"
+          clearable
+          placeholder="搜索书名、作者、标签、网站、编码或发现页"
+          aria-label="采集任务关键词"
+          :prefix-icon="Search"
+          @keyup.enter="applyTaskFilters"
+          @clear="applyTaskFilters"
+        />
         <el-select v-model="taskStatusFilter" clearable placeholder="全部任务状态" aria-label="任务状态筛选" @change="handleTaskStatusFilter">
           <el-option v-for="status in taskStatusOptions" :key="status" :label="statusLabel(status)" :value="status" />
         </el-select>
@@ -746,6 +755,7 @@
           <el-option v-for="type in taskTypeOptions" :key="type" :label="taskTypeLabel(type)" :value="type" />
         </el-select>
         <el-checkbox class="crawler-multiselect" v-model="taskFavoriteOnly" border @change="handleTaskFavoriteFilter">只看已收藏</el-checkbox>
+        <el-button type="primary" :icon="Search" @click="applyTaskFilters">查询</el-button>
         <el-button
           type="primary"
           plain
@@ -754,7 +764,7 @@
           @click="resumeAllFailedTasks"
         >恢复所有失败</el-button>
         <el-button :type="taskStatusFilter==='RUNNING'?'primary':undefined" @click="showRunningTasks">只看进行中</el-button>
-        <el-button v-if="taskStatusFilter||taskTypeFilter||taskFavoriteOnly" text @click="clearTaskFilters">清除筛选</el-button>
+        <el-button v-if="taskKeyword||taskStatusFilter||taskTypeFilter||taskFavoriteOnly" text @click="clearTaskFilters">清除筛选</el-button>
       </div>
       <transition name="task-batch-rise">
         <div v-if="selectedTaskRows.length" class="task-batch-bar" role="toolbar" aria-label="采集任务批量管理">
@@ -792,7 +802,7 @@
           @queue="openTaskQueueDialog"
         />
       </div>
-      <el-empty v-if="activeTab === 'tasks'&&!taskLoading&&!tasks.length" :description="taskStatusFilter||taskTypeFilter||taskFavoriteOnly?'暂无符合筛选条件的采集任务':'暂无采集任务'" />
+      <el-empty v-if="activeTab === 'tasks'&&!taskLoading&&!tasks.length" :description="taskKeyword||taskStatusFilter||taskTypeFilter||taskFavoriteOnly?'暂无符合筛选条件的采集任务':'暂无采集任务'" />
       <el-empty v-if="activeTab === 'failed'&&!failedTaskLoading&&!failedTasks.length" description="暂无失败任务" />
       <div v-if="activeTab === 'tasks'&&taskTotal" class="list-pagination"><span>当前显示 {{ tasks.length }} 项</span><el-pagination v-model:current-page="taskPage" v-model:page-size="taskPageSize" :page-sizes="[20,50,100]" :total="taskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadTasks()" @size-change="handleTaskSizeChange" /></div>
       <div v-if="activeTab === 'failed'&&failedTaskTotal" class="list-pagination"><span>当前显示 {{ failedTasks.length }} 项</span><el-pagination v-model:current-page="failedTaskPage" v-model:page-size="failedTaskPageSize" :page-sizes="[20,50,100]" :total="failedTaskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadFailedTasks()" @size-change="handleFailedTaskSizeChange" /></div>
@@ -2518,6 +2528,7 @@ const manualChapterStatusOptions = [
 const currentCrawlingChapter=ref<CrawlerChapter>()
 const taskLoading=ref(false), taskPage=ref(1), taskPageSize=ref(20), taskTotal=ref(0)
 const taskStatusFilter=ref(''), taskTypeFilter=ref(''), taskFavoriteOnly=ref(false)
+const taskKeyword = ref('')
 const selectedTasks=ref<CrawlerTask[]>([]), selectedFailedTasks=ref<CrawlerTask[]>([]), taskTableSelectionVersion=ref(0), batchTaskManaging=ref(false), batchTaskAction=ref<'pause'|'resume'|'cancel'|'delete'|'priority'|'resume-all'>()
 const scanResultsDialog=ref(false), scanResultsLoading=ref(false), scanResultsTask=ref<CrawlerTask>(), scanResults=ref<CrawlerScanResult[]>([]), scanResultsPage=ref(1), scanResultsPageSize=ref(50), scanResultsTotal=ref(0)
 type ScanResultFilter = '' | CrawlerScanResult['resultStatus']
@@ -3943,13 +3954,47 @@ async function loadBooks(options:LoadOptions={}){if(!options.silent)bookLoading.
 async function handleBookSizeChange(){bookPage.value=1;await loadBooks()}
 async function applyBookFilters(){bookPage.value=1;await loadBooks()}
 async function resetBookFilters(){bookTag.value='';bookKeyword.value='';bookSiteId.value=undefined;bookCrawlStatus.value='';bookImportStatus.value='';bookFavoriteOnly.value=false;bookSort.value='CREATED_DESC';bookPage.value=1;await loadBooks()}
-async function loadTasks(options:LoadOptions={}){if(!options.silent){taskLoading.value=true;selectedTasks.value=[]}try{const result=await crawlerApi.tasks({page:taskPage.value-1,size:taskPageSize.value,status:taskStatusFilter.value||undefined,type:taskTypeFilter.value||undefined,favoriteOnly:taskFavoriteOnly.value||undefined});const lastPage=Math.max(1,Math.ceil(result.totalElements/taskPageSize.value));if(taskPage.value>lastPage){taskPage.value=lastPage;return await loadTasks(options)}tasks.value=result.content;taskTotal.value=result.totalElements}finally{if(!options.silent)taskLoading.value=false}}
+async function loadTasks(options:LoadOptions={}) {
+  if (!options.silent) {
+    taskLoading.value = true
+    selectedTasks.value = []
+  }
+  try {
+    const result = await crawlerApi.tasks({
+      page: taskPage.value - 1,
+      size: taskPageSize.value,
+      keyword: taskKeyword.value.trim() || undefined,
+      status: taskStatusFilter.value || undefined,
+      type: taskTypeFilter.value || undefined,
+      favoriteOnly: taskFavoriteOnly.value || undefined,
+    })
+    const lastPage = Math.max(1, Math.ceil(result.totalElements / taskPageSize.value))
+    if (taskPage.value > lastPage) {
+      taskPage.value = lastPage
+      return await loadTasks(options)
+    }
+    tasks.value = result.content
+    taskTotal.value = result.totalElements
+  } finally {
+    if (!options.silent) taskLoading.value = false
+  }
+}
+async function applyTaskFilters() {
+  taskPage.value = 1
+  await loadTasks()
+}
 async function handleTaskSizeChange(){taskPage.value=1;await loadTasks()}
 async function handleTaskStatusFilter(){taskPage.value=1;await loadTasks()}
 async function handleTaskTypeFilter(){taskPage.value=1;await loadTasks()}
 async function handleTaskFavoriteFilter(){taskPage.value=1;await loadTasks()}
 async function showRunningTasks(){taskStatusFilter.value='RUNNING';await handleTaskStatusFilter()}
-async function clearTaskFilters(){taskStatusFilter.value='';taskTypeFilter.value='';taskFavoriteOnly.value=false;taskPage.value=1;await loadTasks()}
+async function clearTaskFilters() {
+  taskKeyword.value = ''
+  taskStatusFilter.value = ''
+  taskTypeFilter.value = ''
+  taskFavoriteOnly.value = false
+  await applyTaskFilters()
+}
 function handleTaskSelectionChange(rows:CrawlerTask[]){if(activeTab.value==='failed')selectedFailedTasks.value=rows;else selectedTasks.value=rows}
 async function resumeAllFailedTasks(){
   if(batchTaskManaging.value)return
@@ -5482,7 +5527,41 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 }
 .queued-order-note{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:11px 13px;border:1px solid var(--primary-alpha-20);border-radius:13px;background:var(--primary-alpha-10)}.queue-drag-mark{display:grid;flex:0 0 32px;height:32px;place-items:center;border-radius:9px;background:var(--surface-card);color:var(--primary);font-size:20px}.queued-order-note div{display:grid;gap:2px}.queued-order-note strong{font-size:12px}.queued-order-note small{color:var(--text-secondary);font-size:11px}.queue-drag-handle{display:grid;width:34px;height:34px;margin:auto;place-items:center;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--text-tertiary);cursor:grab;font-size:20px;line-height:1;transition:color .18s ease,background .18s ease,border-color .18s ease,opacity .18s ease}.queue-drag-handle:hover,.queue-drag-handle:focus-visible{border-color:var(--primary-alpha-20);outline:none;background:var(--primary-alpha-10);color:var(--primary)}.queue-drag-handle:active,.queue-drag-handle.dragging{cursor:grabbing;opacity:.45}.queue-drag-handle.disabled{cursor:not-allowed;opacity:.3}:deep(.queued-task-row-dragging td.el-table__cell){background:var(--primary-alpha-10)!important}.queue-task-link{display:flex;width:100%;min-height:34px;align-items:center;padding:4px 0;border:0;background:transparent;color:var(--text-primary);font:inherit;text-align:left;cursor:pointer}.queue-task-link strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.queue-task-link:hover strong{color:var(--primary)}.queue-task-link:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:6px}.queued-task-actions{display:inline-flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--border-color-light);border-radius:13px;background:color-mix(in srgb,var(--surface-elevated) 88%,transparent);box-shadow:0 3px 10px color-mix(in srgb,var(--text-primary) 5%,transparent);white-space:nowrap}.queued-task-actions :deep(.el-button){height:28px;margin-left:0;padding:5px 10px;border-color:transparent;background:transparent;font-size:11px;font-weight:700;transition:background .18s ease,color .18s ease,box-shadow .18s ease}.queued-task-actions :deep(.queued-task-action-details),.queued-task-actions :deep(.queued-task-action-resume),.queued-task-actions :deep(.queued-task-action-prioritize){background:var(--primary-alpha-10);color:var(--primary)}.queued-task-actions :deep(.queued-task-action-details:hover),.queued-task-actions :deep(.queued-task-action-details:focus-visible),.queued-task-actions :deep(.queued-task-action-resume:hover),.queued-task-actions :deep(.queued-task-action-resume:focus-visible),.queued-task-actions :deep(.queued-task-action-prioritize:hover),.queued-task-actions :deep(.queued-task-action-prioritize:focus-visible){background:var(--primary);color:#fff;box-shadow:0 4px 10px color-mix(in srgb,var(--primary) 22%,transparent)}.queued-task-actions :deep(.queued-task-action-pause){color:var(--text-secondary)}.queued-task-actions :deep(.queued-task-action-pause:hover),.queued-task-actions :deep(.queued-task-action-pause:focus-visible){background:var(--surface-card);color:var(--text-primary)}.queued-task-actions :deep(.queued-task-action-cancel){color:var(--danger)}.queued-task-actions :deep(.queued-task-action-cancel:hover),.queued-task-actions :deep(.queued-task-action-cancel:focus-visible){background:color-mix(in srgb,var(--danger) 10%,transparent);color:var(--danger)}.queued-task-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 2px 0;color:var(--text-tertiary);font-size:12px}.queued-task-pagination :deep(.el-pagination){min-width:0}@media(max-width:720px){.queue-heading-actions{align-items:flex-end;flex-direction:column}.queue-runtime{order:2}.queued-order-note{align-items:flex-start}.queued-task-pagination{align-items:flex-start;flex-direction:column}.queued-task-pagination :deep(.el-pagination){flex-wrap:wrap;justify-content:flex-start}.site-queue-list{grid-template-columns:1fr}.queue-overview-summary{grid-template-columns:1fr}.queue-overview-summary strong{font-size:18px}}@media(max-width:520px){.queue-runtime{width:100%}.queue-runtime span,.queue-runtime button{flex:1;justify-content:center}}
 .muted-text{color:var(--text-tertiary);font-size:11px}
-.task-filter-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:12px 14px;border:1px solid var(--border-color-light);border-radius:14px;background:var(--surface-elevated)}.task-filter-toolbar :deep(.el-select){width:210px}.task-filter-toolbar .el-button{margin-left:0}@media(max-width:520px){.task-filter-toolbar{align-items:stretch;flex-direction:column}.task-filter-toolbar :deep(.el-select),.task-filter-toolbar .el-button{width:100%}}
+.task-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 14px;
+  background: var(--surface-elevated);
+}
+.task-filter-toolbar > .el-input {
+  flex: 1 1 320px;
+  min-width: 200px;
+}
+.task-filter-toolbar :deep(.el-select) {
+  width: 210px;
+}
+.task-filter-toolbar .el-button {
+  margin-left: 0;
+}
+@media (max-width: 520px) {
+  .task-filter-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .task-filter-toolbar > .el-input {
+    flex: auto;
+    min-width: 0;
+  }
+  .task-filter-toolbar :deep(.el-select),
+  .task-filter-toolbar .el-button {
+    width: 100%;
+  }
+}
 .task-batch-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px;padding:11px 12px;border:1px solid color-mix(in srgb,var(--primary) 28%,var(--border-color-light));border-radius:15px;background:linear-gradient(105deg,var(--primary-alpha-10),color-mix(in srgb,var(--surface-elevated) 94%,var(--primary) 6%));box-shadow:0 8px 24px color-mix(in srgb,var(--primary) 8%,transparent)}.task-batch-summary{display:flex;min-width:0;align-items:center;gap:10px}.task-batch-summary>span{display:grid;width:36px;height:36px;flex:0 0 36px;place-items:center;border-radius:11px;background:var(--primary);color:#fff;font-size:14px;font-weight:800;box-shadow:0 6px 14px color-mix(in srgb,var(--primary) 25%,transparent)}.task-batch-summary>div{display:grid;min-width:0;gap:2px}.task-batch-summary strong{font-size:12px}.task-batch-summary small{overflow:hidden;color:var(--text-secondary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.task-batch-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:7px}.task-batch-actions .el-button{margin-left:0}.task-batch-rise-enter-active,.task-batch-rise-leave-active{transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.2,1)}.task-batch-rise-enter-from,.task-batch-rise-leave-to{opacity:0;transform:translateY(-8px)}@media(max-width:760px){.task-batch-bar{align-items:stretch;flex-direction:column}.task-batch-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.task-batch-actions :deep(.el-dropdown),.task-batch-actions :deep(.el-button){width:100%}}@media(max-width:440px){.task-batch-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(prefers-reduced-motion:reduce){.task-batch-rise-enter-active,.task-batch-rise-leave-active{transition:none}}
 :deep(.task-action-cluster){display:inline-flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--border-color-light);border-radius:13px;background:color-mix(in srgb,var(--surface-elevated) 88%,transparent);box-shadow:0 3px 10px color-mix(in srgb,var(--text-primary) 5%,transparent);white-space:nowrap}:deep(.task-action-cluster .el-button){height:28px;margin-left:0;padding:5px 11px;border-color:transparent;background:transparent;font-size:11px;font-weight:700;transition:background .18s ease,color .18s ease,box-shadow .18s ease}:deep(.task-action-cluster .task-action-details),:deep(.task-action-cluster .task-action-resume){background:var(--primary-alpha-10);color:var(--primary)}:deep(.task-action-cluster .task-action-details:hover),:deep(.task-action-cluster .task-action-details:focus-visible),:deep(.task-action-cluster .task-action-resume:hover),:deep(.task-action-cluster .task-action-resume:focus-visible){background:var(--primary);color:#fff;box-shadow:0 4px 10px color-mix(in srgb,var(--primary) 22%,transparent)}:deep(.task-action-cluster .task-action-pause){color:var(--text-secondary)}:deep(.task-action-cluster .task-action-pause:hover),:deep(.task-action-cluster .task-action-pause:focus-visible){background:var(--surface-card);color:var(--text-primary)}:deep(.task-action-cluster .task-action-cancel){color:var(--danger)}:deep(.task-action-cluster .task-action-cancel:hover),:deep(.task-action-cluster .task-action-cancel:focus-visible){background:color-mix(in srgb,var(--danger) 10%,transparent);color:var(--danger)}:deep(.task-action-cluster .el-dropdown){display:inline-flex}:deep(.task-action-cluster .task-action-more){width:28px;padding:0;color:var(--text-tertiary)}:deep(.task-action-cluster .task-action-more:hover),:deep(.task-action-cluster .task-action-more:focus-visible){background:var(--surface-card);color:var(--text-primary)}
 :deep(.crawler-book-action-cluster){display:inline-flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--border-color-light);border-radius:13px;background:color-mix(in srgb,var(--surface-elevated) 88%,transparent);box-shadow:0 3px 10px color-mix(in srgb,var(--text-primary) 5%,transparent);white-space:nowrap}:deep(.crawler-book-action-cluster .el-button){height:28px;margin-left:0;padding:5px 10px;border-color:transparent;background:transparent;font-size:11px;font-weight:700;transition:background .18s ease,color .18s ease,box-shadow .18s ease}:deep(.crawler-book-action-cluster .crawler-book-action-details),:deep(.crawler-book-action-cluster .crawler-book-action-import){background:var(--primary-alpha-10);color:var(--primary)}:deep(.crawler-book-action-cluster .crawler-book-action-details:hover),:deep(.crawler-book-action-cluster .crawler-book-action-details:focus-visible),:deep(.crawler-book-action-cluster .crawler-book-action-import:hover),:deep(.crawler-book-action-cluster .crawler-book-action-import:focus-visible){background:var(--primary);color:#fff;box-shadow:0 4px 10px color-mix(in srgb,var(--primary) 22%,transparent)}:deep(.crawler-book-action-cluster .crawler-book-action-continue){color:var(--text-secondary)}:deep(.crawler-book-action-cluster .crawler-book-action-continue:hover),:deep(.crawler-book-action-cluster .crawler-book-action-continue:focus-visible){background:var(--surface-card);color:var(--text-primary)}:deep(.crawler-book-action-cluster .el-dropdown){display:inline-flex}:deep(.crawler-book-action-cluster .crawler-book-action-more){width:28px;padding:0;color:var(--text-tertiary)}:deep(.crawler-book-action-cluster .crawler-book-action-more:hover),:deep(.crawler-book-action-cluster .crawler-book-action-more:focus-visible){background:var(--surface-card);color:var(--text-primary)}

@@ -42,6 +42,59 @@ import static org.mockito.Mockito.*;
 
 class CrawlerManagementServiceTest {
     @Test
+    @SuppressWarnings("unchecked")
+    void taskKeywordSearchCombinesOwnershipFiltersAndDatabasePagination() {
+        User user = user();
+        when(tasks.findAll(any(org.springframework.data.jpa.domain.Specification.class),
+                any(Pageable.class)))
+                .thenAnswer(call -> new PageImpl<CrawlerTask>(List.of(), call.getArgument(1), 45));
+
+        var result = service.tasks(user, 1, 20, true, "FAILED", "BOOK_CONTENT", true,
+                null, null, null, null, null, " AbC%_! ");
+
+        assertThat(result.getTotalElements()).isEqualTo(45);
+        assertThat(result.getNumber()).isEqualTo(1);
+        ArgumentCaptor<org.springframework.data.jpa.domain.Specification<CrawlerTask>> filter =
+                ArgumentCaptor.forClass(org.springframework.data.jpa.domain.Specification.class);
+        verify(tasks).findAll(filter.capture(), any(Pageable.class));
+        var root = mock(jakarta.persistence.criteria.Root.class, RETURNS_DEEP_STUBS);
+        var query = mock(jakarta.persistence.criteria.CriteriaQuery.class);
+        when(query.getResultType()).thenReturn(Long.class);
+        var cb = mock(jakarta.persistence.criteria.CriteriaBuilder.class, RETURNS_DEEP_STUBS);
+        filter.getValue().toPredicate(root, query, cb);
+
+        verify(cb).equal(root.get("user"), user);
+        verify(cb).equal(root.get("status"), CrawlerTask.TaskStatus.FAILED);
+        verify(cb).equal(root.get("type"), CrawlerTask.TaskType.BOOK_CONTENT);
+        verify(cb).isTrue(root.join("crawlerBook", jakarta.persistence.criteria.JoinType.LEFT)
+                .get("favorite"));
+        verify(root.get("status")).in(List.of(
+                CrawlerTask.TaskStatus.FAILED, CrawlerTask.TaskStatus.PARTIAL_SUCCESS));
+        var book = root.join("crawlerBook", jakarta.persistence.criteria.JoinType.LEFT);
+        for (String field : List.of("bookName", "author", "tags", "externalBookId")) {
+            verify(cb).lower(book.get(field));
+        }
+        verify(cb).lower(root.join("site", jakarta.persistence.criteria.JoinType.LEFT).get("siteName"));
+        verify(cb).lower(root.get("discoveryPageName"));
+        verify(cb, times(6)).like(any(jakarta.persistence.criteria.Expression.class),
+                eq("%abc!%!_!!%"), eq('!'));
+        verify(query, never()).orderBy(any(jakarta.persistence.criteria.Order[].class));
+    }
+
+    @Test
+    void blankTaskKeywordKeepsExistingQuery() {
+        User user = user();
+        when(tasks.findByUserRunningFirst(eq(user), eq(CrawlerTask.TaskStatus.RUNNING),
+                any(Pageable.class))).thenReturn(Page.empty());
+
+        assertThat(service.tasks(user, 0, 20, false, null, null, false,
+                null, null, null, null, null, "   ")).isEmpty();
+
+        verify(tasks).findByUserRunningFirst(eq(user), eq(CrawlerTask.TaskStatus.RUNNING),
+                any(Pageable.class));
+    }
+
+    @Test
     void discoveryCandidatesExcludeSelectedIdsBeforePagination() {
         User user = user();
         when(books.searchDiscoveryCandidates(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
