@@ -36,6 +36,7 @@ export async function runCrawlerImports<T extends CrawlerImportTarget>(
     progress: (jobId: string) => Promise<CrawlerImportJob>
     onProgress: (completed: number, total: number) => void
     onImported?: (book: T, libraryId: number) => void
+    onFailed?: (book: T) => void
     resumeJobId?: string
     waitForPoll?: () => Promise<void>
   },
@@ -58,6 +59,7 @@ export async function runCrawlerImports<T extends CrawlerImportTarget>(
         if (!target || results.has(item.crawlerBookId)) continue
         results.set(item.crawlerBookId, item)
         if (item.success && item.bookId != null) options.onImported?.(target, item.bookId)
+        if (!item.success) options.onFailed?.(target)
       }
       options.onProgress(job.completed, job.total)
       if (job.status === 'COMPLETED') break

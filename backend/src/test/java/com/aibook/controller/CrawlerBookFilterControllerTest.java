@@ -2,11 +2,17 @@ package com.aibook.controller;
 
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.aibook.model.entity.User;
 import com.aibook.service.UserService;
 import com.aibook.service.crawler.CrawlerManagementService;
+import com.aibook.service.crawler.CrawlerLibraryImportService;
+import java.util.List;
+import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +27,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class CrawlerBookFilterControllerTest {
     @Mock private UserService users;
     @Mock private CrawlerManagementService management;
+    @Mock private CrawlerLibraryImportService imports;
     @InjectMocks private CrawlerController controller;
     private MockMvc mvc;
     private final User user = User.builder().id(7L).build();
@@ -31,6 +38,16 @@ class CrawlerBookFilterControllerTest {
     void setup() {
         lenient().when(users.findByUsername("reader")).thenReturn(user);
         mvc = MockMvcBuilders.standaloneSetup(controller).build();
+    }
+
+    @Test
+    void singleImportUsesFailureRecordingEntryPoint() throws Exception {
+        when(imports.importLibrary(user, 3L, List.of("STRUCTURED")))
+                .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "没有可用正文"));
+        mvc.perform(post("/api/crawler/books/3/import").principal(auth)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"formats\":[\"STRUCTURED\"]}"))
+                .andExpect(status().isConflict());
+        verify(imports).importLibrary(user, 3L, List.of("STRUCTURED"));
     }
 
     @Test

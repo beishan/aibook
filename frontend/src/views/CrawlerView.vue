@@ -2850,7 +2850,12 @@ const taskStatusOptions=['WAITING','RUNNING','PAUSED','SUCCESS','PARTIAL_SUCCESS
 const taskTypeOptions=['SITE_SCAN','BOOK_METADATA','BOOK_CHAPTER_LIST','BOOK_CONTENT','BOOK_UPDATE_CHECK','BOOK_FULL_CRAWL','BOOK_EXPORT','BOOK_IMPORT']
 const discoverySortOptions=[{value:'DISCOVER_TIME_DESC',label:'发现时间：最新优先'},{value:'DISCOVER_TIME_ASC',label:'发现时间：最早优先'},{value:'BOOK_NAME_ASC',label:'书名：正序'},{value:'BOOK_NAME_DESC',label:'书名：倒序'},{value:'AUTHOR_ASC',label:'作者：正序'},{value:'AUTHOR_DESC',label:'作者：倒序'}]
 const managedBookStatusOptions=[{value:'WAITING',label:'等待中'},{value:'CRAWLING_METADATA',label:'采集元数据'},{value:'CRAWLING_CHAPTER_LIST',label:'采集目录'},{value:'CRAWLING_CONTENT',label:'采集正文'},{value:'PARTIAL_SUCCESS',label:'部分成功'},{value:'COMPLETED',label:'已完成'},{value:'FAILED',label:'失败'},{value:'UPDATING',label:'更新中'},{value:'PAUSED',label:'已暂停'}]
-const bookImportStatusOptions=[{value:'NOT_IMPORTED',label:'未就绪'},{value:'READY',label:'待入库'},{value:'IMPORTED',label:'已入库'}]
+const bookImportStatusOptions = [
+  { value: 'NOT_IMPORTED', label: '未就绪' },
+  { value: 'READY', label: '待入库' },
+  { value: 'IMPORTED', label: '已入库' },
+  { value: 'FAILED', label: '入库失败' },
+]
 const managedBookSortOptions=[{value:'CREATED_DESC',label:'创建时间：最新优先'},{value:'CREATED_ASC',label:'创建时间：最早优先'},{value:'CRAWL_STARTED_DESC',label:'开始爬取：最新优先'},{value:'CRAWL_STARTED_ASC',label:'开始爬取：最早优先'},{value:'LAST_CRAWL_DESC',label:'完成爬取：最新优先'},{value:'LAST_CRAWL_ASC',label:'完成爬取：最早优先'},{value:'BOOK_NAME_ASC',label:'书名：正序'},{value:'BOOK_NAME_DESC',label:'书名：倒序'}]
 const siteEditorTabs:{key:SiteEditorTab;label:string;description:string}[]=[{key:'basic',label:'基本信息',description:'身份与入口'},{key:'request',label:'请求访问',description:'频率与请求头'},{key:'validation',label:'内容校验',description:'正文特征'},{key:'proxy',label:'代理配置',description:'站点代理'},{key:'automation',label:'运行设置',description:'任务范围'}]
 const activeSiteTab=ref<SiteEditorTab>('basic')
@@ -4619,6 +4624,11 @@ function markCrawlerBookImported(book:CrawlerBook,libraryBookId:number){
     autoSyncLibrary:current.libraryBookId?current.autoSyncLibrary:true,
   })
 }
+function markCrawlerBookImportFailed(book: CrawlerBook) {
+  const current = books.value.find(item => item.id === book.id)
+    ?? (selectedBook.value?.id === book.id ? selectedBook.value : book)
+  applyCrawlerBookUpdate({ ...current, importStatus: 'FAILED' })
+}
 async function toggleFavorite(book:CrawlerBook){
   const updated=await crawlerApi.setFavorite(book.id,!book.favorite)
   applyCrawlerBookUpdate(updated)
@@ -4821,6 +4831,7 @@ async function submitImport(){
       submit: ids => crawlerApi.batchImport(ids, formats),
       progress: id => crawlerApi.batchImportProgress(id),
       onImported: (book, libraryId) => markCrawlerBookImported(book, libraryId),
+      onFailed: book => markCrawlerBookImportFailed(book),
       onProgress: (completed, total) => { importProgress.value={completed,total} },
       resumeJobId: importResumeJobId.value,
     })
@@ -4976,8 +4987,21 @@ function statusLabel(status: string) {
   return labels[status] || status
 }
 function statusType(status:string):''|'success'|'warning'|'info'|'danger'{if(['RUNNING','SUCCESS','COMPLETED'].includes(status))return'success';if(['FAILED','CONTENT_SUSPECTED'].includes(status))return'danger';if(['PARTIAL_SUCCESS','PAUSED','PENDING_RELEASE'].includes(status))return'warning';return'info'}
-function importStatusLabel(status?:string){return ({NOT_IMPORTED:'未就绪',READY:'待入库',IMPORTED:'已入库'} as Record<string,string>)[status||'']||'未知'}
-function importStatusType(status?:string):'success'|'warning'|'info'{if(status==='IMPORTED')return'success';if(status==='READY')return'warning';return'info'}
+function importStatusLabel(status?: string) {
+  const labels: Record<string, string> = {
+    NOT_IMPORTED: '未就绪',
+    READY: '待入库',
+    IMPORTED: '已入库',
+    FAILED: '入库失败',
+  }
+  return labels[status || ''] || '未知'
+}
+function importStatusType(status?: string): 'success' | 'warning' | 'info' | 'danger' {
+  if (status === 'IMPORTED') return 'success'
+  if (status === 'READY') return 'warning'
+  if (status === 'FAILED') return 'danger'
+  return 'info'
+}
 function priorityLabel(priority:string){return({LOW:'低',NORMAL:'普通',HIGH:'高'} as Record<string,string>)[priority]||priority}
 function priorityType(priority:string):''|'success'|'warning'|'info'|'danger'{return priority==='HIGH'?'warning':priority==='LOW'?'info':''}
 function scanTaskPercentage(task:CrawlerTask){return Math.max(0,Math.min(100,task.progressPercent??(['SUCCESS','PARTIAL_SUCCESS'].includes(task.status)?100:0)))}

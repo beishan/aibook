@@ -88,7 +88,7 @@ public class CrawlerBook {
 
     public enum CrawlStatus { DISCOVERED, WAITING, CRAWLING_METADATA, CRAWLING_CHAPTER_LIST, CRAWLING_CONTENT, PARTIAL_SUCCESS, COMPLETED, FAILED, UPDATING, PAUSED }
     public enum DiscoveryStatus { ACTIVE, IGNORED, BLACKLISTED }
-    public enum ImportStatus { NOT_IMPORTED, READY, IMPORTED }
+    public enum ImportStatus { NOT_IMPORTED, READY, IMPORTED, FAILED }
     @PrePersist
     @PreUpdate
     private void sanitizeCategory() {

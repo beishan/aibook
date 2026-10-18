@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import ts from 'typescript'
+import vm from 'node:vm'
 
 const source = readFileSync(new URL('../src/utils/crawlerImport.ts', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, {
@@ -84,4 +85,64 @@ test('提交失败时保留全部书籍，结果不冒充成功', async () => {
   assert.equal(result.succeeded.length, 0)
   assert.equal(result.failures.length, 100)
   assert.match(result.failures[0].reason, /登录已过期/)
+})
+
+test('单本入库失败与混合批次只标记服务端确认失败的书籍，重复轮询不重复通知', async () => {
+  for (const targets of [books.slice(0, 1), books.slice(0, 3)]) {
+    const failed = []
+    const imported = []
+    const job = completed(targets)
+    job.results[0] = { crawlerBookId: targets[0].id, bookId: null, success: false, reason: '入库异常' }
+    await runCrawlerImports(targets, {
+      submit: async () => ({ ...job, status: 'RUNNING' }),
+      progress: async () => job,
+      onFailed: book => failed.push(book.id),
+      onImported: book => imported.push(book.id),
+      onProgress: () => {}, waitForPoll: noWait,
+    })
+    assert.deepEqual(failed, [targets[0].id])
+    assert.deepEqual(imported, targets.slice(1).map(book => book.id))
+  }
+})
+
+test('网络超时与登录失败不把未知入库结果标记为入库失败', async () => {
+  const failed = []
+  for (const error of [{ code: 'ECONNABORTED' }, { response: { status: 401 } }]) {
+    await runCrawlerImports(books.slice(0, 1), {
+      submit: async () => { throw error }, progress: async () => { throw error },
+      onFailed: book => failed.push(book.id), onProgress: () => {},
+    })
+    await runCrawlerImports(books.slice(0, 1), {
+      resumeJobId: 'batch', submit: async () => { throw error },
+      progress: async () => { throw error }, onFailed: book => failed.push(book.id),
+      onProgress: () => {},
+    })
+  }
+  assert.deepEqual(failed, [])
+})
+
+test('失败标记保留书库关联，列表显示红色失败标签并支持筛选', () => {
+  const view = readFileSync(new URL('../src/views/CrawlerView.vue', import.meta.url), 'utf8')
+  const updates = []
+  const original = { id: 1, libraryBookId: 101, importStatus: 'IMPORTED', bookName: '书籍' }
+  const context = vm.createContext({
+    books: { value: [original] }, selectedBook: { value: original },
+    applyCrawlerBookUpdate: book => updates.push(book),
+  })
+  const failed = view.slice(view.indexOf('function markCrawlerBookImportFailed('),
+    view.indexOf('async function toggleFavorite('))
+  const labels = view.slice(view.indexOf('function importStatusLabel('),
+    view.indexOf('function importStatusType('))
+  const colorsStart = view.indexOf('function importStatusType(')
+  const colors = view.slice(colorsStart, view.indexOf('\n}', colorsStart) + 2)
+  vm.runInContext(ts.transpile([failed, labels, colors].join('\n')), context)
+  context.markCrawlerBookImportFailed({ id: 1 })
+  assert.equal(updates[0].importStatus, 'FAILED')
+  assert.equal(updates[0].libraryBookId, 101)
+  assert.equal(context.importStatusLabel('FAILED'), '入库失败')
+  assert.equal(context.importStatusType('FAILED'), 'danger')
+  const options = view.slice(view.indexOf('const bookImportStatusOptions'),
+    view.indexOf(']', view.indexOf('const bookImportStatusOptions')))
+  assert.match(options, /value: 'FAILED', label: '入库失败'/)
+  assert.ok(view.includes('onFailed: book => markCrawlerBookImportFailed(book)'))
 })

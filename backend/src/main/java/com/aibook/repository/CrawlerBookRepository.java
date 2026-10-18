@@ -50,6 +50,14 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
     @Query("select b from CrawlerBook b where b.id = :id and b.site.user = :user")
     Optional<CrawlerBook> findForLibraryImport(@Param("id") Long id, @Param("user") User user);
 
+    /** 入库事务已回滚后单独保存失败状态，不修改已有书库关联。 */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    @Modifying
+    @Query("update CrawlerBook b set b.importStatus = :status "
+            + "where b.id = :id and b.site.user = :user")
+    int updateImportFailure(@Param("id") Long id, @Param("user") User user,
+            @Param("status") CrawlerBook.ImportStatus status);
+
     @Transactional
     @Modifying(flushAutomatically = true)
     @Query("update CrawlerBook b set b.libraryBook = :libraryBook, b.importStatus = :status "

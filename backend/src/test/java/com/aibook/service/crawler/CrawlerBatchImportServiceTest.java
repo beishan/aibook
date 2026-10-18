@@ -5,6 +5,8 @@ import static org.mockito.Mockito.*;
 
 import com.aibook.dto.crawler.CrawlerBatchImportDtos.JobView;
 import com.aibook.model.entity.User;
+import com.aibook.model.entity.CrawlerBook;
+import com.aibook.repository.CrawlerBookRepository;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -15,12 +17,14 @@ class CrawlerBatchImportServiceTest {
     void deduplicatesBatchAndContinuesAfterOneBookFails() throws Exception {
         User user = User.builder().id(1L).build();
         CrawlerExportService exports = mock(CrawlerExportService.class);
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
         List<String> formats = List.of("STRUCTURED", "EPUB");
         when(exports.importLibrary(user, 1L, formats)).thenReturn(101L);
         when(exports.importLibrary(user, 2L, formats)).thenThrow(
                 new ResponseStatusException(HttpStatus.CONFLICT, "没有可用正文"));
         when(exports.importLibrary(user, 3L, formats)).thenReturn(103L);
-        CrawlerBatchImportService service = new CrawlerBatchImportService(exports);
+        CrawlerBatchImportService service = new CrawlerBatchImportService(
+                new CrawlerLibraryImportService(exports, books));
         try {
             JobView job = service.submit(user, List.of(1L, 2L, 1L, 3L), formats);
             long deadline = System.nanoTime() + java.time.Duration.ofSeconds(5).toNanos();
@@ -40,6 +44,8 @@ class CrawlerBatchImportServiceTest {
             verify(exports).importLibrary(user, 2L, formats);
             verify(exports).importLibrary(user, 3L, formats);
             verifyNoMoreInteractions(exports);
+            verify(books).updateImportFailure(2L, user, CrawlerBook.ImportStatus.FAILED);
+            verifyNoMoreInteractions(books);
             String jobId = job.id();
             assertThatThrownBy(() -> service.progress(User.builder().id(2L).build(), jobId))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("404");

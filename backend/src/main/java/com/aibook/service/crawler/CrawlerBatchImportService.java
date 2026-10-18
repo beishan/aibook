@@ -26,7 +26,7 @@ import org.springframework.web.server.ResponseStatusException;
 @RequiredArgsConstructor
 @Slf4j
 public class CrawlerBatchImportService {
-    private final CrawlerExportService exportService;
+    private final CrawlerLibraryImportService importService;
     private final Cache<String, Job> jobs = Caffeine.newBuilder()
             .maximumSize(256).expireAfterAccess(Duration.ofDays(1)).build();
     private final ConcurrentHashMap<String, Job> activeJobs = new ConcurrentHashMap<>();
@@ -62,7 +62,7 @@ public class CrawlerBatchImportService {
         for (Long id : ids) {
             ItemResult result;
             try {
-                Long libraryId = exportService.importLibrary(user, id, formats);
+                Long libraryId = importService.importLibrary(user, id, formats);
                 result = new ItemResult(id, libraryId, true, null);
             } catch (Exception exception) {
                 log.warn("批量入库失败: job={}, book={}", job.id, id, exception);

@@ -34,6 +34,17 @@ class CrawlerBookRepositoryQueryTest {
     }
 
     @Test
+    void failedImportUpdateIsAccountScopedAndDoesNotUnlinkLibraryBook() throws Exception {
+        Method method = CrawlerBookRepository.class.getMethod("updateImportFailure", Long.class,
+                User.class, CrawlerBook.ImportStatus.class);
+        assertThat(method.getAnnotation(Query.class).value())
+                .contains("b.importStatus = :status", "b.id = :id", "b.site.user = :user")
+                .doesNotContain("libraryBook", "crawlStatus");
+        assertThat(method.getAnnotation(org.springframework.transaction.annotation.Transactional.class)
+                .propagation()).isEqualTo(org.springframework.transaction.annotation.Propagation.REQUIRES_NEW);
+    }
+
+    @Test
     void chapterCountFilterIsStrictAndOptionalInContentAndCountQueries() throws Exception {
         Query query = managedBookQuery();
         String predicate = "(:chapterCountGreaterThan is null or b.chapterCount > :chapterCountGreaterThan)";
