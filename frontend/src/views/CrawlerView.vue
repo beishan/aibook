@@ -602,6 +602,21 @@
           <el-option v-for="tag in bookTagOptions" :key="tag" :label="tag" :value="tag" />
         </el-select>
         <el-select v-model="bookSort" aria-label="采集书籍排序"><el-option v-for="item in managedBookSortOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
+        <label class="book-chapter-count-filter">
+          <span>章节数大于</span>
+          <el-input-number
+            v-model="bookChapterCountGreaterThan"
+            :min="0"
+            :max="2147483647"
+            :precision="0"
+            :step="100"
+            :controls="false"
+            placeholder="不限"
+            aria-label="章节数大于（章）"
+            @keyup.enter="applyBookFilters"
+          />
+          <span>章</span>
+        </label>
         <el-checkbox class="crawler-multiselect" v-model="bookFavoriteOnly" border @change="applyBookFilters">只看已收藏</el-checkbox>
         <el-button type="primary" :icon="Search" @click="applyBookFilters">查询</el-button>
         <el-button @click="resetBookFilters">重置</el-button>
@@ -2497,6 +2512,7 @@ watch(chapterTableRef, table => {
 onUnmounted(() => stopChapterProgressViewport())
 const bookTableRef=ref<InstanceType<typeof ElTable>>()
 const bookTag = ref('')
+const bookChapterCountGreaterThan = ref<number | undefined>(undefined)
 const bookTagOptions = ref<string[]>([])
 let bookTagOptionsRequest = 0
 
@@ -3970,10 +3986,50 @@ function chapterRowClassName({ row }: { row: CrawlerChapter }) {
   ].filter(Boolean).join(' ')
 }
 async function scrollToCurrentCrawlingChapter(){await nextTick();const row=document.querySelector<HTMLElement>('.book-detail-drawer .chapters-table .current-crawling-row');if(!row)return;const viewport=row.closest<HTMLElement>('.el-scrollbar__wrap');if(!viewport)return row.scrollIntoView({block:'center',behavior:'smooth'});const rowRect=row.getBoundingClientRect(),viewportRect=viewport.getBoundingClientRect();viewport.scrollTo({top:viewport.scrollTop+rowRect.top-viewportRect.top-(viewport.clientHeight-rowRect.height)/2,behavior:'smooth'})}
-async function loadBooks(options:LoadOptions={}){if(!options.silent)bookLoading.value=true;if(!options.preserveSelection){selectedBooks.value=[];bookTableRef.value?.clearSelection()}try{const result=await crawlerApi.books({page:bookPage.value-1,size:bookPageSize.value,keyword:bookKeyword.value.trim()||undefined,siteId:bookSiteId.value,crawlStatus:bookCrawlStatus.value||undefined,importStatus:bookImportStatus.value||undefined,tag:bookTag.value||undefined,favoriteOnly:bookFavoriteOnly.value||undefined,sort:bookSort.value});const lastPage=Math.max(1,Math.ceil(result.totalElements/bookPageSize.value));if(bookPage.value>lastPage){bookPage.value=lastPage;return await loadBooks(options)}books.value=result.content;bookTotal.value=result.totalElements}finally{if(!options.silent)bookLoading.value=false}}
+async function loadBooks(options: LoadOptions = {}) {
+  if (!options.silent) bookLoading.value = true
+  if (!options.preserveSelection) {
+    selectedBooks.value = []
+    bookTableRef.value?.clearSelection()
+  }
+  try {
+    const result = await crawlerApi.books({
+      page: bookPage.value - 1,
+      size: bookPageSize.value,
+      keyword: bookKeyword.value.trim() || undefined,
+      siteId: bookSiteId.value,
+      crawlStatus: bookCrawlStatus.value || undefined,
+      importStatus: bookImportStatus.value || undefined,
+      tag: bookTag.value || undefined,
+      chapterCountGreaterThan: bookChapterCountGreaterThan.value ?? undefined,
+      favoriteOnly: bookFavoriteOnly.value || undefined,
+      sort: bookSort.value,
+    })
+    const lastPage = Math.max(1, Math.ceil(result.totalElements / bookPageSize.value))
+    if (bookPage.value > lastPage) {
+      bookPage.value = lastPage
+      return await loadBooks(options)
+    }
+    books.value = result.content
+    bookTotal.value = result.totalElements
+  } finally {
+    if (!options.silent) bookLoading.value = false
+  }
+}
 async function handleBookSizeChange(){bookPage.value=1;await loadBooks()}
 async function applyBookFilters(){bookPage.value=1;await loadBooks()}
-async function resetBookFilters(){bookTag.value='';bookKeyword.value='';bookSiteId.value=undefined;bookCrawlStatus.value='';bookImportStatus.value='';bookFavoriteOnly.value=false;bookSort.value='CREATED_DESC';bookPage.value=1;await loadBooks()}
+async function resetBookFilters() {
+  bookTag.value = ''
+  bookChapterCountGreaterThan.value = undefined
+  bookKeyword.value = ''
+  bookSiteId.value = undefined
+  bookCrawlStatus.value = ''
+  bookImportStatus.value = ''
+  bookFavoriteOnly.value = false
+  bookSort.value = 'CREATED_DESC'
+  bookPage.value = 1
+  await loadBooks()
+}
 async function loadTasks(options:LoadOptions={}) {
   if (!options.silent) {
     taskLoading.value = true
@@ -5200,7 +5256,47 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 .discovery-toolbar .el-button {
   margin-left: 0;
 }
-.book-filter-toolbar{display:grid;grid-template-columns:minmax(200px,1.5fr) repeat(4,minmax(110px,.8fr)) minmax(160px,1fr) auto auto auto;gap:10px;align-items:center;margin-bottom:16px;padding:14px;border:1px solid var(--border-color-light);border-radius:15px;background:var(--surface-elevated)}@media(max-width:1200px){.book-filter-toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}.book-filter-toolbar .el-button{margin-left:0}}@media(max-width:640px){.book-filter-toolbar{grid-template-columns:minmax(0,1fr)}.book-filter-toolbar .el-button{width:100%}}
+.book-filter-toolbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 15px;
+  background: var(--surface-elevated);
+}
+
+.book-filter-toolbar .el-button {
+  margin-left: 0;
+}
+
+.book-chapter-count-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.book-chapter-count-filter .el-input-number {
+  flex: 1;
+  width: 0;
+  min-width: 60px;
+}
+
+@media (max-width: 640px) {
+  .book-filter-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .book-filter-toolbar .el-button {
+    width: 100%;
+  }
+}
 .crawler-book-list-dialog{display:grid;gap:14px}.crawler-book-list-options{display:grid;max-height:50vh;gap:8px;overflow-y:auto}.crawler-book-list-options :deep(.el-checkbox){box-sizing:border-box;width:100%;height:auto;margin:0;padding:12px 14px}.crawler-book-list-options :deep(.el-checkbox__label){display:grid;min-width:0;gap:3px}.crawler-book-list-options strong{color:var(--text-primary)}.crawler-book-list-options small{overflow:hidden;color:var(--text-tertiary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
 .marker-list{display:grid;gap:2px}.marker-row{display:grid;width:100%;grid-template-columns:minmax(0,1fr) 132px auto;gap:8px;align-items:center}.marker-status{width:132px}.marker-row .el-button{margin-left:0}@media(max-width:640px){.marker-row{grid-template-columns:minmax(0,1fr)}.marker-status{width:100%}.marker-row .el-button{justify-self:end}}
 :global(.site-editor-dialog){display:flex;width:min(860px,calc(100vw - 32px))!important;max-height:calc(100dvh - 32px);flex-direction:column;margin-top:max(16px,3vh)!important;margin-bottom:16px}

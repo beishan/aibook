@@ -21,7 +21,8 @@ class CrawlerBookRepositoryQueryTest {
         Method method = CrawlerBookRepository.class.getMethod("searchManagedBooks",
                 User.class, CrawlerBook.DiscoveryStatus.class, CrawlerBook.CrawlStatus.class,
                 String.class, Long.class, CrawlerBook.CrawlStatus.class,
-                CrawlerBook.ImportStatus.class, boolean.class, String.class, Collection.class, Pageable.class);
+                CrawlerBook.ImportStatus.class, boolean.class, String.class, Integer.class,
+                Collection.class, Pageable.class);
         Query query = method.getAnnotation(Query.class);
         Set<String> declaredParameters = Arrays.stream(method.getParameters())
                 .filter(parameter -> parameter.isAnnotationPresent(Param.class))
@@ -30,6 +31,14 @@ class CrawlerBookRepositoryQueryTest {
         assertThat(namedParameters(query.value())).isEqualTo(declaredParameters);
         assertThat(namedParameters(query.countQuery())).isEqualTo(declaredParameters);
         return query;
+    }
+
+    @Test
+    void chapterCountFilterIsStrictAndOptionalInContentAndCountQueries() throws Exception {
+        Query query = managedBookQuery();
+        String predicate = "(:chapterCountGreaterThan is null or b.chapterCount > :chapterCountGreaterThan)";
+        assertThat(query.value()).contains(predicate).doesNotContain("b.chapterCount >=");
+        assertThat(query.countQuery()).contains(predicate);
     }
 
     @Test

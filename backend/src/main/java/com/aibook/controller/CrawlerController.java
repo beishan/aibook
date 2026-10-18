@@ -128,9 +128,10 @@ public class CrawlerController {
             @RequestParam(required = false) String importStatus,
             @RequestParam(defaultValue = "false") boolean favoriteOnly,
             @RequestParam(defaultValue = "CREATED_DESC") String sort,
-            @RequestParam(required = false) String tag) {
+            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) Integer chapterCountGreaterThan) {
         return managementService.books(user(auth), page, size, keyword, siteId,
-                crawlStatus, importStatus, favoriteOnly, sort, tag);
+                crawlStatus, importStatus, favoriteOnly, sort, tag, chapterCountGreaterThan);
     }
     @GetMapping("/books/tags")
     public List<String> managedBookTags(Authentication auth,

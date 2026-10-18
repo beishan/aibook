@@ -301,7 +301,18 @@ export interface CrawlerDiscoveryQuery {
   favoriteOnly?:boolean
   sort:string
 }
-export interface CrawlerBookQuery { page:number; size:number; keyword?:string; siteId?:number; crawlStatus?:string; importStatus?:string; tag?:string; favoriteOnly?:boolean; sort:string }
+export interface CrawlerBookQuery {
+  page:number
+  size:number
+  keyword?:string
+  siteId?:number
+  crawlStatus?:string
+  importStatus?:string
+  tag?:string
+  chapterCountGreaterThan?:number
+  favoriteOnly?:boolean
+  sort:string
+}
 export type CrawlerChapterStatus = 'NOT_CRAWLED' | 'WAITING' | 'CRAWLING' | 'COMPLETED'
   | 'PENDING_RELEASE' | 'FAILED' | 'CONTENT_SUSPECTED' | 'IGNORED'
 export interface CrawlerChapterQuery {

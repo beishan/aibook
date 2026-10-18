@@ -104,6 +104,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
               and (:siteId is null or b.site.id = :siteId)
               and (:crawlStatus is null or b.crawlStatus = :crawlStatus)
               and (:importStatus is null or b.importStatus = :importStatus)
+              and (:chapterCountGreaterThan is null or b.chapterCount > :chapterCountGreaterThan)
               and (:favoriteOnly = false or b.favorite = true)
               and (:tag = '' or function('array_position',
                    function('regexp_split_to_array', trim(coalesce(b.tags, '')),
@@ -123,6 +124,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
               and (:siteId is null or b.site.id = :siteId)
               and (:crawlStatus is null or b.crawlStatus = :crawlStatus)
               and (:importStatus is null or b.importStatus = :importStatus)
+              and (:chapterCountGreaterThan is null or b.chapterCount > :chapterCountGreaterThan)
               and (:favoriteOnly = false or b.favorite = true)
               and (:tag = '' or function('array_position',
                    function('regexp_split_to_array', trim(coalesce(b.tags, '')),
@@ -146,6 +148,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
             @Param("importStatus") CrawlerBook.ImportStatus importStatus,
             @Param("favoriteOnly") boolean favoriteOnly,
             @Param("tag") String tag,
+            @Param("chapterCountGreaterThan") Integer chapterCountGreaterThan,
             @Param("runningStatuses") Collection<CrawlerBook.CrawlStatus> runningStatuses,
             Pageable pageable);
     default Page<CrawlerBook> searchManagedBooks(
@@ -154,7 +157,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
             CrawlerBook.CrawlStatus crawlStatus, CrawlerBook.ImportStatus importStatus,
             Collection<CrawlerBook.CrawlStatus> runningStatuses, Pageable pageable) {
         return searchManagedBooks(user, discoveryStatus, excludedCrawlStatus, keyword, siteId,
-                crawlStatus, importStatus, false, "", runningStatuses, pageable);
+                crawlStatus, importStatus, false, "", null, runningStatuses, pageable);
     }
     @Query("""
             select b from CrawlerBook b

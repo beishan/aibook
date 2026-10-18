@@ -895,7 +895,7 @@ class CrawlerManagementServiceTest {
         when(books.searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
                 eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
                 eq(CrawlerBook.CrawlStatus.COMPLETED), eq(CrawlerBook.ImportStatus.READY),
-                eq(false), eq("科幻"),
+                eq(false), eq("科幻"), isNull(),
                 eq(List.of(CrawlerBook.CrawlStatus.CRAWLING_METADATA,
                         CrawlerBook.CrawlStatus.CRAWLING_CHAPTER_LIST,
                         CrawlerBook.CrawlStatus.CRAWLING_CONTENT,
@@ -911,7 +911,7 @@ class CrawlerManagementServiceTest {
         verify(books).searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
                 eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
                 eq(CrawlerBook.CrawlStatus.COMPLETED), eq(CrawlerBook.ImportStatus.READY),
-                eq(false), eq("科幻"),
+                eq(false), eq("科幻"), isNull(),
                 eq(List.of(CrawlerBook.CrawlStatus.CRAWLING_METADATA,
                         CrawlerBook.CrawlStatus.CRAWLING_CHAPTER_LIST,
                         CrawlerBook.CrawlStatus.CRAWLING_CONTENT,
@@ -921,6 +921,38 @@ class CrawlerManagementServiceTest {
         assertThat(pageable.getValue().getPageSize()).isEqualTo(50);
         assertThat(pageable.getValue().getSort().getOrderFor("lastCrawlStartedAt").isDescending())
                 .isTrue();
+    }
+
+    @Test
+    void chapterCountThresholdIsPassedBeforePaginationIncludingZero() {
+        User user = user();
+        for (int threshold : List.of(0, 100, Integer.MAX_VALUE)) {
+            when(books.searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
+                    eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
+                    eq(CrawlerBook.CrawlStatus.COMPLETED), eq(CrawlerBook.ImportStatus.READY),
+                    eq(true), eq("科幻"), eq(threshold), anyCollection(), any(Pageable.class)))
+                    .thenReturn(Page.empty());
+
+            assertThat(service.books(user, 2, 50, " 三体 ", 7L, "COMPLETED", "READY",
+                    true, "CREATED_DESC", " 科幻 ", threshold)).isEmpty();
+
+            ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+            verify(books).searchManagedBooks(eq(user), eq(CrawlerBook.DiscoveryStatus.ACTIVE),
+                    eq(CrawlerBook.CrawlStatus.DISCOVERED), eq("三体"), eq(7L),
+                    eq(CrawlerBook.CrawlStatus.COMPLETED), eq(CrawlerBook.ImportStatus.READY),
+                    eq(true), eq("科幻"), eq(threshold), anyCollection(), pageable.capture());
+            assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
+            assertThat(pageable.getValue().getPageSize()).isEqualTo(50);
+        }
+    }
+
+    @Test
+    void rejectsNegativeChapterCountThreshold() {
+        assertThatThrownBy(() -> service.books(user(), 0, 20, null, null,
+                null, null, false, "CREATED_DESC", null, -1))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400").hasMessageContaining("章节数筛选不能小于 0");
+        verifyNoInteractions(books);
     }
 
     @Test

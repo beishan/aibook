@@ -257,6 +257,17 @@ public class CrawlerManagementService {
     @Transactional(readOnly = true)
     public Page<BookView> books(User user, int page, int size, String keyword, Long siteId,
             String crawlStatus, String importStatus, boolean favoriteOnly, String sort, String tag) {
+        return books(user, page, size, keyword, siteId, crawlStatus, importStatus,
+                favoriteOnly, sort, tag, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<BookView> books(User user, int page, int size, String keyword, Long siteId,
+            String crawlStatus, String importStatus, boolean favoriteOnly, String sort, String tag,
+            Integer chapterCountGreaterThan) {
+        if (chapterCountGreaterThan != null && chapterCountGreaterThan < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "章节数筛选不能小于 0");
+        }
         CrawlerBook.CrawlStatus normalizedCrawlStatus = enumValue(
                 crawlStatus, CrawlerBook.CrawlStatus.class, "采集状态");
         CrawlerBook.ImportStatus normalizedImportStatus = enumValue(
@@ -266,7 +277,7 @@ public class CrawlerManagementService {
         return bookRepository.searchManagedBooks(user, CrawlerBook.DiscoveryStatus.ACTIVE,
                 CrawlerBook.CrawlStatus.DISCOVERED, blank(keyword) ? "" : keyword.trim(), siteId,
                 normalizedCrawlStatus, normalizedImportStatus, favoriteOnly,
-                blank(tag) ? "" : tag.trim(), RUNNING_BOOK_STATUSES, pageable)
+                blank(tag) ? "" : tag.trim(), chapterCountGreaterThan, RUNNING_BOOK_STATUSES, pageable)
                 .map(this::bookView);
     }
 
