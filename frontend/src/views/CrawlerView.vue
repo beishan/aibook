@@ -322,7 +322,7 @@
       <el-empty v-else description="尚未配置采集网站" />
     </section>
 
-    <section v-else-if="activeTab === 'discovered'" class="panel" role="tabpanel">
+    <section v-else-if="activeTab === 'discovered'" ref="tablePanelRef" class="panel" role="tabpanel">
       <div class="section-heading discovery-heading">
         <div>
           <p class="eyebrow">DISCOVERY INBOX</p>
@@ -429,7 +429,14 @@
         <el-checkbox class="crawler-multiselect" v-model="discoveryFavoriteOnly" border @change="applyDiscoveryFilters">只看已收藏</el-checkbox>
         <el-button type="primary" :icon="Search" @click="applyDiscoveryFilters">查询</el-button><el-button @click="resetDiscoveryFilters">重置</el-button>
       </div>
-      <el-table v-if="discoveryViewMode==='table'" v-loading="discoveryLoading" :data="discoveredBooks" class="data-table" @selection-change="selectedDiscoveries=$event">
+      <el-table
+        v-if="discoveryViewMode==='table'"
+        v-loading="discoveryLoading"
+        :data="discoveredBooks"
+        :max-height="tableMaxHeight"
+        class="data-table"
+        @selection-change="selectedDiscoveries=$event"
+      >
         <el-table-column type="selection" width="60" :fixed="isMobileCrawlerLayout ? false : 'left'" />
         <el-table-column label="自动入库" width="110">
           <template #default="{row}">
@@ -554,7 +561,7 @@
       <div v-if="discoveredTotal" class="discovery-pagination"><span>当前显示 {{ discoveredBooks.length }} 本</span><el-pagination v-model:current-page="discoveryPage" v-model:page-size="discoveryPageSize" :page-sizes="[20,50,100]" :total="discoveredTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadDiscoveredBooks()" @size-change="handleDiscoverySizeChange" /></div>
     </section>
 
-    <section v-else-if="activeTab === 'books'" class="panel" role="tabpanel">
+    <section v-else-if="activeTab === 'books'" ref="tablePanelRef" class="panel" role="tabpanel">
       <div class="section-heading discovery-heading">
         <div>
           <p class="eyebrow">STRUCTURED BOOKS</p>
@@ -605,7 +612,17 @@
           <div class="book-batch-actions"><div class="book-batch-task-actions"><el-button :loading="batchBookAction==='continue'" :disabled="batchBookBusy||!selectedBooks.some(book=>!isBookTaskActive(book))" @click="batchContinueBooks">继续</el-button><el-button :loading="batchBookAction==='updates'" :disabled="batchBookBusy||!selectedBooks.some(book=>!isBookTaskActive(book))" @click="batchCheckUpdates">检查更新</el-button><el-button :loading="batchBookAction==='metadata'" :disabled="batchBookBusy||!selectedBooks.some(book=>!isBookTaskActive(book))" @click="batchRefreshBookMetadata">刷新分类标签</el-button><el-button type="primary" plain :disabled="batchBookBusy" @click="openBatchImport">入库</el-button></div><div class="book-batch-status-actions"><el-select v-model="batchBookStatus" aria-label="批量设置采集状态"><el-option v-for="item in manualStatusOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select><el-button type="primary" :loading="batchBookStatusSaving" :disabled="batchBookBusy" @click="saveBatchBookStatus">统一更改状态</el-button></div></div>
         </div>
       </transition>
-      <el-table v-if="bookViewMode==='table'" ref="bookTableRef" v-loading="bookLoading" :data="books" row-key="id" @selection-change="selectedBooks=$event" @row-click="handleBookTableRowClick" class="data-table">
+      <el-table
+        v-if="bookViewMode==='table'"
+        ref="bookTableRef"
+        v-loading="bookLoading"
+        :data="books"
+        :max-height="tableMaxHeight"
+        row-key="id"
+        class="data-table"
+        @selection-change="selectedBooks=$event"
+        @row-click="handleBookTableRowClick"
+      >
         <el-table-column type="selection" width="60" reserve-selection :fixed="isMobileCrawlerLayout ? false : 'left'" />
         <el-table-column label="自动入库" width="110">
           <template #default="{row}">
@@ -2229,8 +2246,11 @@ import {
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import { pauseQueuedCoverLoads, vQueuedCover } from '@/utils/queuedCover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
+import { useViewportTableHeight } from '@/utils/useViewportTableHeight'
 import { confirm, message } from '@/utils/message'
 import api from '@/utils/api'
+
+const { tablePanelRef, tableMaxHeight } = useViewportTableHeight()
 
 interface BookListOption { id:number; name:string; description?:string }
 
