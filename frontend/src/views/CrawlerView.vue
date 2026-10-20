@@ -2510,7 +2510,7 @@ async function loadDiscoveryFilterOptions(visible:boolean) {
   }
 }
 
-const siteDialog=ref(false), siteProtectionDialog=ref(false), protectionDetailSite=ref<CrawlerSite>(), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'|'metadata'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
+const siteDialog=ref(false), siteProtectionDialog=ref(false), protectionDetailSite=ref<CrawlerSite>(), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'|'metadata'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'|'EXTREME'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
 const chapterReaderSurface=ref<HTMLElement>(), chapterReaderActive=ref<CrawlerChapter>(), chapterReaderChapters=ref<CrawlerChapter[]>([]), chapterReaderBookId=ref<number>(), chapterReaderLoading=ref(false), chapterReaderSettingsOpen=ref(false), chapterEditing=ref(false), chapterEditContent=ref(''), savingChapter=ref(false)
 const discoveryPagesBySite=ref<Record<number,CrawlerDiscoveryPage[]>>({})
 const discoveryMetadataRefreshing=ref(false)
@@ -2866,7 +2866,7 @@ const bookDetailTabs:{value:BookDetailTab;label:string}[]=[{value:'chapters',lab
 const chapterSortOptions:{value:ChapterSort;label:string}[]=[{value:'indexAsc',label:'章节正序'},{value:'indexDesc',label:'章节倒序'},{value:'createdDesc',label:'添加时间'}]
 const chapterReaderThemes:{value:ChapterReaderTheme;label:string}[]=[{value:'paper',label:'宣纸'},{value:'light',label:'明亮'},{value:'night',label:'夜读'}]
 const chapterReaderWidths:{value:ReaderContentWidth;label:string}[]=[{value:'narrow',label:'窄'},{value:'medium',label:'适中'},{value:'wide',label:'宽'}]
-const taskPriorityOptions:{value:'LOW'|'NORMAL'|'HIGH';label:string}[]=[{value:'LOW',label:'低'},{value:'NORMAL',label:'普通'},{value:'HIGH',label:'高'}]
+const taskPriorityOptions:{value:'LOW'|'NORMAL'|'HIGH'|'EXTREME';label:string}[]=[{value:'LOW',label:'低'},{value:'NORMAL',label:'普通'},{value:'HIGH',label:'高'},{value:'EXTREME',label:'极高'}]
 const taskStatusOptions=['WAITING','RUNNING','PAUSED','SUCCESS','PARTIAL_SUCCESS','FAILED','CANCELLED']
 const taskTypeOptions=['SITE_SCAN','BOOK_METADATA','BOOK_CHAPTER_LIST','BOOK_CONTENT','BOOK_UPDATE_CHECK','BOOK_FULL_CRAWL','BOOK_EXPORT','BOOK_IMPORT']
 const discoverySortOptions=[{value:'DISCOVER_TIME_DESC',label:'发现时间：最新优先'},{value:'DISCOVER_TIME_ASC',label:'发现时间：最早优先'},{value:'BOOK_NAME_ASC',label:'书名：正序'},{value:'BOOK_NAME_DESC',label:'书名：倒序'},{value:'AUTHOR_ASC',label:'作者：正序'},{value:'AUTHOR_DESC',label:'作者：倒序'}]
@@ -4132,8 +4132,8 @@ async function resumeAllFailedTasks(){
     batchTaskAction.value=undefined
   }
 }
-async function handleBatchTaskPriority(priority:'LOW'|'NORMAL'|'HIGH'){await manageSelectedTasks('priority',priority)}
-async function manageSelectedTasks(action:'pause'|'resume'|'cancel'|'delete'|'priority',priority?:'LOW'|'NORMAL'|'HIGH'){
+async function handleBatchTaskPriority(priority:'LOW'|'NORMAL'|'HIGH'|'EXTREME'){await manageSelectedTasks('priority',priority)}
+async function manageSelectedTasks(action:'pause'|'resume'|'cancel'|'delete'|'priority',priority?:'LOW'|'NORMAL'|'HIGH'|'EXTREME'){
   const selected=[...selectedTaskRows.value]
   if(!selected.length||batchTaskManaging.value)return
   if(action==='cancel'&&!await confirm(`确定取消选中的 ${selected.length} 个采集任务吗？已采集的数据会保留。`))return
@@ -4933,7 +4933,7 @@ async function submitImport(){
 async function openTask(task:CrawlerTask){selectedTask.value=task;taskExecution.value=null;taskDrawer.value=true;await syncOpenTask()}
 async function openTaskBook(task:CrawlerTask){if(!task.bookId)return;const book=await crawlerApi.book(task.bookId);taskDrawer.value=false;await openBook(book)}
 async function runTaskCommand(task:CrawlerTask,command:'pause'|'resume'|'cancel'){const updated=await crawlerApi.taskCommand(task.id,command);if(selectedTask.value?.id===updated.id)selectedTask.value=updated;await refresh();if(queueOverviewDialog.value&&queuePopupTab.value==='tasks')await loadQueueTabTasks();if(taskDrawer.value&&selectedTask.value?.id===updated.id)await syncOpenTask({silent:true})}
-function openTaskEditor(task:CrawlerTask){editingTask.value=task;taskPriority.value=(task.priority as 'LOW'|'NORMAL'|'HIGH')||'NORMAL';taskEditDialog.value=true}
+function openTaskEditor(task:CrawlerTask){editingTask.value=task;taskPriority.value=(task.priority as 'LOW'|'NORMAL'|'HIGH'|'EXTREME')||'NORMAL';taskEditDialog.value=true}
 async function saveTask(){if(!editingTask.value)return;savingTask.value=true;try{const updated=await crawlerApi.updateTask(editingTask.value.id,taskPriority.value);if(selectedTask.value?.id===updated.id)selectedTask.value=updated;taskEditDialog.value=false;message.success('任务优先级已更新');await refresh();if(queueOverviewDialog.value&&queuePopupTab.value==='tasks')await loadQueueTabTasks()}finally{savingTask.value=false}}
 async function removeTask(task:CrawlerTask){if(!await confirm(`确定删除“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”的任务记录吗？关联书籍和章节不会被删除。`))return;await crawlerApi.deleteTask(task.id);if(selectedTask.value?.id===task.id){taskDrawer.value=false;selectedTask.value=undefined}message.success('任务记录已删除');await refresh()}
 async function loadChapterReaderIndex(bookId:number){
@@ -5077,8 +5077,8 @@ function importStatusType(status?: string): 'success' | 'warning' | 'info' | 'da
   if (status === 'FAILED') return 'danger'
   return 'info'
 }
-function priorityLabel(priority:string){return({LOW:'低',NORMAL:'普通',HIGH:'高'} as Record<string,string>)[priority]||priority}
-function priorityType(priority:string):''|'success'|'warning'|'info'|'danger'{return priority==='HIGH'?'warning':priority==='LOW'?'info':''}
+function priorityLabel(priority:string){return({LOW:'低',NORMAL:'普通',HIGH:'高',EXTREME:'极高'} as Record<string,string>)[priority]||priority}
+function priorityType(priority:string):''|'success'|'warning'|'info'|'danger'{return priority==='EXTREME'?'danger':priority==='HIGH'?'warning':priority==='LOW'?'info':''}
 function scanTaskPercentage(task:CrawlerTask){return Math.max(0,Math.min(100,task.progressPercent??(['SUCCESS','PARTIAL_SUCCESS'].includes(task.status)?100:0)))}
 function taskProgress(task:CrawlerTask){return scanTaskPercentage(task)}
 function taskCircleStatus(status:string):'success'|'exception'|'warning'|undefined{if(status==='SUCCESS')return'success';if(status==='FAILED')return'exception';if(['PAUSED','PARTIAL_SUCCESS'].includes(status))return'warning';return undefined}

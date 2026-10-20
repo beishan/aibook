@@ -517,6 +517,7 @@ class CrawlerTaskManagementTest {
                 mock(ApplicationContext.class), settings);
         try {
             var created = service.scanDiscoveryPage(user, page, false);
+            assertThat(created.priority()).isEqualTo("EXTREME");
             assertThat(firstRequestStarted.await(2, TimeUnit.SECONDS)).isTrue();
 
             assertThat(service.command(user, created.id(), "pause").status()).isEqualTo("PAUSED");
@@ -1289,7 +1290,7 @@ class CrawlerTaskManagementTest {
 
             assertThat(result.discoveryPageId()).isEqualTo(7L);
             assertThat(result.discoveryPageName()).isEqualTo("热门");
-            assertThat(result.priority()).isEqualTo("LOW");
+            assertThat(result.priority()).isEqualTo("EXTREME");
             ArgumentCaptor<CrawlerTask> saved = ArgumentCaptor.forClass(CrawlerTask.class);
             verify(tasks).save(saved.capture());
             assertThat(saved.getValue().getScanStartUrl()).isEqualTo("https://example.com/rank/hot/");

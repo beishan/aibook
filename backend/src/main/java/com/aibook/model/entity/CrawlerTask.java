@@ -46,5 +46,10 @@ public class CrawlerTask {
 
     public enum TaskType { SITE_SCAN, BOOK_METADATA, BOOK_CHAPTER_LIST, BOOK_CONTENT, BOOK_UPDATE_CHECK, BOOK_FULL_CRAWL, BOOK_EXPORT, BOOK_IMPORT }
     public enum TaskStatus { WAITING, RUNNING, PAUSED, SUCCESS, PARTIAL_SUCCESS, FAILED, CANCELLED }
-    public enum Priority { LOW, NORMAL, HIGH }
+    public enum Priority {
+        LOW,
+        NORMAL,
+        HIGH,
+        EXTREME
+    }
 }

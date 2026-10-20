@@ -659,7 +659,7 @@ public class CrawlerTaskService {
         }
         CrawlerTask task = CrawlerTask.builder().user(user).site(site)
                 .type(CrawlerTask.TaskType.SITE_SCAN)
-                .priority(automated ? CrawlerTask.Priority.LOW : CrawlerTask.Priority.HIGH)
+                .priority(CrawlerTask.Priority.EXTREME)
                 .discoveryPageId(page.getId()).discoveryPageName(page.getPageName())
                 .scanStartUrl(page.getPageUrl()).scanMaxPages(page.getMaxPages()).build();
         task = taskRepository.save(task);
@@ -2402,7 +2402,14 @@ public class CrawlerTaskService {
         }
     }
     private boolean ownedBy(CrawlerTask task, User user) { return task.getUser() == user || (user.getId() != null && Objects.equals(task.getUser().getId(), user.getId())); }
-    private int priorityRank(CrawlerTask.Priority priority) { return switch (priority) { case HIGH -> 0; case NORMAL -> 1; case LOW -> 2; }; }
+    private int priorityRank(CrawlerTask.Priority priority) {
+        return switch (priority) {
+            case EXTREME -> 0;
+            case HIGH -> 1;
+            case NORMAL -> 2;
+            case LOW -> 3;
+        };
+    }
     private CrawlerBook.DiscoveryStatus discoveryStatus(CrawlerBook book) { return book.getDiscoveryStatus() == null ? CrawlerBook.DiscoveryStatus.ACTIVE : book.getDiscoveryStatus(); }
     private boolean isCoolingDown(CrawlerSite site) {
         CrawlerHttpClient.ProtectionState protection = httpClient.protectionState(site);
