@@ -210,10 +210,10 @@ public final class CrawlerDtos {
             @NotBlank @Size(max = 1000) String pageUrl,
             Boolean autoScanEnabled,
             @Min(5) @Max(10080) Integer scanIntervalMinutes,
-            @Min(1) Integer maxPages) { }
+            @Min(1) Integer maxPages, Boolean autoCrawlEnabled) { }
     public record DiscoveryPageView(Long id, Long siteId, String pageName, String pageUrl,
             boolean autoScanEnabled, int scanIntervalMinutes, int maxPages,
-            LocalDateTime lastScanAt, LocalDateTime createdAt) { }
+            LocalDateTime lastScanAt, LocalDateTime createdAt, boolean autoCrawlEnabled) { }
     public record ExportRequest(@NotEmpty List<@Pattern(regexp = "(?i)TXT|EPUB") String> formats) { }
     public record ImportRequest(
             @NotEmpty List<@Pattern(regexp = "(?i)STRUCTURED|TXT|EPUB") String> formats) { }

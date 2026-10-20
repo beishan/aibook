@@ -26,6 +26,7 @@ public class CrawlerDiscoveryPage {
     @Column(nullable = false, length = 1000)
     private String pageUrl;
     @Builder.Default private Boolean autoScanEnabled = false;
+    @Builder.Default private Boolean autoCrawlEnabled = false;
     @Builder.Default private Integer scanIntervalMinutes = 360;
     @Builder.Default private Integer maxPages = 50;
     private LocalDateTime lastScanAt;

@@ -77,7 +77,7 @@ public class CrawlerSiteConfigurationService {
 
     private DiscoveryPagePayload discoveryPagePayload(DiscoveryPageView page) {
         return new DiscoveryPagePayload(page.pageName(), page.pageUrl(), page.autoScanEnabled(),
-                page.scanIntervalMinutes(), page.maxPages());
+                page.scanIntervalMinutes(), page.maxPages(), page.autoCrawlEnabled());
     }
 
     private <T> List<T> values(List<T> values) {

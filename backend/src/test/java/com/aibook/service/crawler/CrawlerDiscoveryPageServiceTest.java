@@ -17,7 +17,18 @@ import static org.mockito.Mockito.*;
 class CrawlerDiscoveryPageServiceTest {
 
     @Test
-    void createsIndependentPaginatedDiscoveryPage() {
+    void legacyPageDefaultsToManualCrawl() {
+        CrawlerDiscoveryPageService service = new CrawlerDiscoveryPageService(
+                mock(CrawlerDiscoveryPageRepository.class), mock(CrawlerManagementService.class),
+                mock(CrawlerHttpClient.class));
+        CrawlerDiscoveryPage page = CrawlerDiscoveryPage.builder()
+                .site(CrawlerSite.builder().id(2L).build()).autoCrawlEnabled(null).build();
+        assertThat(service.view(page).autoCrawlEnabled()).isFalse();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void createsIndependentPaginatedDiscoveryPage(boolean autoCrawl) {
         User user = User.builder().id(1L).username("owner").build();
         CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("春晓阁")
                 .baseUrl("https://www.chunxiaoge.com").build();
@@ -35,11 +46,12 @@ class CrawlerDiscoveryPageServiceTest {
         CrawlerDiscoveryPageService service = new CrawlerDiscoveryPageService(pages, management, http);
 
         var result = service.create(user, 2L, new DiscoveryPagePayload("热门小说",
-                "https://www.chunxiaoge.com/rank/hot/", true, 120, 50));
+                "https://www.chunxiaoge.com/rank/hot/", true, 120, 50, autoCrawl));
 
         assertThat(result.pageName()).isEqualTo("热门小说");
         assertThat(result.pageUrl()).isEqualTo("https://www.chunxiaoge.com/rank/hot/");
         assertThat(result.autoScanEnabled()).isTrue();
+        assertThat(result.autoCrawlEnabled()).isEqualTo(autoCrawl);
         assertThat(result.scanIntervalMinutes()).isEqualTo(120);
         assertThat(result.maxPages()).isEqualTo(50);
     }

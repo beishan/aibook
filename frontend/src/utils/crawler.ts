@@ -41,7 +41,14 @@ export interface CrawlerSiteActivity {
   description:string
   details?:string
 }
-export interface CrawlerDiscoveryPagePayload { pageName:string; pageUrl:string; autoScanEnabled:boolean; scanIntervalMinutes:number; maxPages:number }
+export interface CrawlerDiscoveryPagePayload {
+  pageName:string
+  pageUrl:string
+  autoScanEnabled:boolean
+  autoCrawlEnabled:boolean
+  scanIntervalMinutes:number
+  maxPages:number
+}
 export interface CrawlerDiscoveryPage extends CrawlerDiscoveryPagePayload { id:number; siteId:number; lastScanAt?:string; createdAt:string }
 export interface CrawlerBook {
   id:number

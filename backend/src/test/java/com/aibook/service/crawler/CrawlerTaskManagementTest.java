@@ -39,6 +39,30 @@ import static org.mockito.Mockito.*;
 class CrawlerTaskManagementTest {
 
     @Test
+    void autoCrawlScanBooksOnlyPassesActiveDiscoveredBooksToExistingBatchQueue() {
+        User user = user();
+        CrawlerBook ready = CrawlerBook.builder().id(1L).build();
+        CrawlerBook completed = CrawlerBook.builder().id(2L)
+                .crawlStatus(CrawlerBook.CrawlStatus.COMPLETED).build();
+        CrawlerBook ignored = CrawlerBook.builder().id(3L)
+                .discoveryStatus(CrawlerBook.DiscoveryStatus.IGNORED).build();
+        CrawlerBook blacklisted = CrawlerBook.builder().id(4L)
+                .discoveryStatus(CrawlerBook.DiscoveryStatus.BLACKLISTED).build();
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        when(books.findByIdInAndSiteUser(anyCollection(), eq(user)))
+                .thenReturn(List.of(ready, completed, ignored, blacklisted));
+        CrawlerTaskService service = spy(service(mock(CrawlerTaskRepository.class), books,
+                mock(CrawlerManagementService.class)));
+        doReturn(List.of()).when(service).batchCrawl(user, List.of(1L));
+        try {
+            service.autoCrawlScanBooks(user, List.of(1L, 2L, 3L, 4L));
+            verify(service).batchCrawl(user, List.of(1L));
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void batchCrawlSkipsActiveBooksAndCreatesRemainingTasksOnce() {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(2L).user(user).enabled(true).build();
@@ -1276,8 +1300,10 @@ class CrawlerTaskManagementTest {
         }
     }
 
-    @Test
-    void recordsNewAndDuplicateBooksInDiscoveryScanResults() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"false,false", "true,false", "true,true"})
+    void recordsNewAndDuplicateBooksInDiscoveryScanResults(boolean autoCrawl,
+            boolean taskCreationFails) throws Exception {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站")
                 .baseUrl("https://example.com").enabled(true).build();
@@ -1296,7 +1322,12 @@ class CrawlerTaskManagementTest {
         BookCrawlerParser parser = mock(BookCrawlerParser.class);
         CrawlerManagementService management = mock(CrawlerManagementService.class);
         when(management.taskView(any(CrawlerTask.class))).thenCallRealMethod();
-        when(tasks.findById(task.getId())).thenReturn(Optional.of(task));
+        when(tasks.findById(task.getId())).thenAnswer(invocation -> {
+            if (task.getStatus() != CrawlerTask.TaskStatus.SUCCESS) return Optional.of(task);
+            return Optional.of(CrawlerTask.builder().id(task.getId()).user(user).site(site)
+                    .type(CrawlerTask.TaskType.SITE_SCAN).discoveryPageId(7L).discoveryPageName("热门榜")
+                    .status(CrawlerTask.TaskStatus.RUNNING).build());
+        });
         when(tasks.save(any(CrawlerTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(books.findBySiteAndExternalBookId(eq(site), anyString()))
                 .thenReturn(Optional.empty(), Optional.of(duplicate));
@@ -1313,17 +1344,34 @@ class CrawlerTaskManagementTest {
                 new BookCrawlerParser.ParsedDiscovery("1", "新书", "作者", "", "", "", "https://example.com/book/1"),
                 new BookCrawlerParser.ParsedDiscovery("2", "重复书", "作者", "", "", "", "https://example.com/book/2")));
         when(parser.parseNextBookListPage("page", "https://example.com/hot", rule)).thenReturn("");
+        var discoveryPages = mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class);
+        var page = com.aibook.model.entity.CrawlerDiscoveryPage.builder().id(7L).site(site)
+                .autoCrawlEnabled(autoCrawl).build();
+        when(discoveryPages.findByIdAndSiteUser(7L, user)).thenReturn(Optional.of(page));
+        ApplicationContext context = mock(ApplicationContext.class);
+        CrawlerTaskService proxy = mock(CrawlerTaskService.class);
+        when(context.getBean(CrawlerTaskService.class)).thenReturn(proxy);
+        when(proxy.autoCrawlScanBooks(eq(user), anyList())).thenAnswer(invocation -> {
+            assertThat(task.getStatus()).isEqualTo(CrawlerTask.TaskStatus.SUCCESS);
+            if (taskCreationFails) throw new IllegalStateException("创建任务失败");
+            return List.of();
+        });
         CrawlerTaskService service = new CrawlerTaskService(mock(CrawlerSiteRepository.class),
-                mock(com.aibook.repository.CrawlerDiscoveryPageRepository.class), books,
+                discoveryPages, books,
                 mock(CrawlerChapterRepository.class), tasks, results, mock(CrawlerTaskLogRepository.class),
                 management,
                 mock(CrawlerChapterAttemptMetricService.class),
                 mock(OperationLogService.class),
-                mock(CrawlerExportService.class), http, List.of(parser), mock(ApplicationContext.class),
+                mock(CrawlerExportService.class), http, List.of(parser), context,
                 mock(com.aibook.service.CrawlerSettingsService.class));
         try {
             service.run(task.getId());
 
+            if (autoCrawl) {
+                verify(proxy).autoCrawlScanBooks(user, List.of(10L, 20L));
+            } else {
+                verifyNoInteractions(proxy);
+            }
             assertThat(task.getTotalCount()).isEqualTo(2);
             assertThat(task.getSuccessCount()).isEqualTo(2);
             assertThat(task.getNewBookCount()).isEqualTo(1);

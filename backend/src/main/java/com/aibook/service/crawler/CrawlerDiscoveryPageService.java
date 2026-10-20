@@ -60,7 +60,8 @@ public class CrawlerDiscoveryPageService {
     public DiscoveryPageView view(CrawlerDiscoveryPage page) {
         return new DiscoveryPageView(page.getId(), page.getSite().getId(), page.getPageName(),
                 page.getPageUrl(), Boolean.TRUE.equals(page.getAutoScanEnabled()),
-                page.getScanIntervalMinutes(), page.getMaxPages(), page.getLastScanAt(), page.getCreatedAt());
+                page.getScanIntervalMinutes(), page.getMaxPages(), page.getLastScanAt(), page.getCreatedAt(),
+                Boolean.TRUE.equals(page.getAutoCrawlEnabled()));
     }
 
     private void apply(CrawlerDiscoveryPage page, DiscoveryPagePayload payload) {
@@ -73,6 +74,7 @@ public class CrawlerDiscoveryPageService {
         page.setPageName(name);
         page.setPageUrl(url);
         page.setAutoScanEnabled(Boolean.TRUE.equals(payload.autoScanEnabled()));
+        page.setAutoCrawlEnabled(Boolean.TRUE.equals(payload.autoCrawlEnabled()));
         page.setScanIntervalMinutes(payload.scanIntervalMinutes() == null ? 360 : payload.scanIntervalMinutes());
         page.setMaxPages(payload.maxPages() == null ? 50 : payload.maxPages());
     }

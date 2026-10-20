@@ -39,12 +39,13 @@ class CrawlerSiteConfigurationServiceTest {
                 3L, 2, "当前规则", true, rulePayload, null, null)));
         when(discoveryPages.pages(user, 7L)).thenReturn(List.of(new DiscoveryPageView(
                 5L, 7L, "热门", "https://example.com/hot", true,
-                360, 50, null, null)));
+                360, 50, null, null, true)));
         CrawlerSiteConfigurationService service =
                 new CrawlerSiteConfigurationService(management, discoveryPages);
 
         SiteConfigurationPayload result = service.exportConfiguration(user, 7L);
 
+        assertThat(result.discoveryPages().getFirst().autoCrawlEnabled()).isTrue();
         assertThat(result.schemaVersion()).isEqualTo(1);
         assertThat(result.type()).isEqualTo("AIBOOK_CRAWLER_SITE");
         assertThat(result.site().siteCode()).isEqualTo("demo");
@@ -71,7 +72,7 @@ class CrawlerSiteConfigurationServiceTest {
                 360, 30, 3, "EPUB", List.of(), false, null, 15000, List.of(), 5, 500, 2500);
         RuleSaveRequest rule = new RuleSaveRequest(1, "初始规则", rulePayload(), true);
         DiscoveryPagePayload page = new DiscoveryPagePayload(
-                "热门", "https://example.com/hot", false, 360, 50);
+                "热门", "https://example.com/hot", false, 360, 50, true);
         SiteView created = new SiteView(9L, "导入站", "imported", "https://example.com", null,
                 true, false, false, false, false, 1000, 0, 1, "UTF-8", null,
                 List.of(), 360, 30, 3, "EPUB", "READY", 0, null, null, null, 1,

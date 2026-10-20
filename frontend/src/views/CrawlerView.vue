@@ -1145,7 +1145,7 @@
       <div class="discovery-manager-toolbar"><div><strong>发现页</strong><p>各发现页可独立手动扫描或开启自动扫描。</p></div><el-button type="primary" :icon="Plus" @click="discoveryManagerSite && openDiscoveryPage(discoveryManagerSite)">新增发现页</el-button></div>
       <div v-if="managedDiscoveryPages.length" class="discovery-pages discovery-pages-dialog-list">
         <article v-for="page in managedDiscoveryPages" :key="page.id" class="discovery-page-row">
-          <div><strong>{{ page.pageName }}</strong><a :href="page.pageUrl" target="_blank" rel="noopener noreferrer">{{ page.pageUrl }}</a><small>最多 {{ page.maxPages }} 页 · 每 {{ page.scanIntervalMinutes }} 分钟 · {{ page.lastScanAt ? `上次 ${formatTime(page.lastScanAt)}` : '尚未扫描' }}</small></div>
+          <div><strong>{{ page.pageName }}</strong><a :href="page.pageUrl" target="_blank" rel="noopener noreferrer">{{ page.pageUrl }}</a><small>最多 {{ page.maxPages }} 页 · 每 {{ page.scanIntervalMinutes }} 分钟 · {{ page.lastScanAt ? `上次 ${formatTime(page.lastScanAt)}` : '尚未扫描' }} · 自动采集{{ page.autoCrawlEnabled ? '已开启' : '已关闭' }}</small></div>
           <el-switch :model-value="page.autoScanEnabled" :disabled="!discoveryManagerSite?.enabled" inline-prompt active-text="自动" inactive-text="手动" aria-label="自动扫描发现页" @change="toggleDiscoveryPageAuto(page,Boolean($event))" />
           <div class="discovery-page-actions"><el-button text size="small" :disabled="!discoveryManagerSite?.enabled || !discoveryManagerSite?.rule?.discoveryItemSelector" @click="scanDiscoveryPage(page)">扫描</el-button><el-button text size="small" @click="discoveryManagerSite && openDiscoveryPage(discoveryManagerSite,page)">编辑</el-button><el-button text size="small" type="danger" @click="removeDiscoveryPage(page)">删除</el-button></div>
         </article>
@@ -1160,7 +1160,11 @@
         <el-form-item label="起始页面 URL"><el-input v-model="discoveryPageForm.pageUrl" placeholder="https://www.chunxiaoge.com/rank/hot/" /><small class="field-hint">扫描会按规则中的“下一页 Selector”持续翻页，直到末页或达到安全上限。</small></el-form-item>
         <div class="form-grid"><el-form-item label="最多扫描页数"><el-input-number v-model="discoveryPageForm.maxPages" :min="1" /></el-form-item><el-form-item label="自动扫描间隔（分钟）"><el-input-number v-model="discoveryPageForm.scanIntervalMinutes" :min="5" :max="10080" :disabled="!discoveryPageForm.autoScanEnabled" /></el-form-item></div>
         <el-switch v-model="discoveryPageForm.autoScanEnabled" active-text="开启自动扫描" inactive-text="仅手动扫描" />
-        <el-alert type="info" :closable="false" title="自动扫描仅提取书籍到“发现书籍”，不会自动采集正文或加入书库。" />
+        <el-form-item label="自动采集">
+          <el-switch v-model="discoveryPageForm.autoCrawlEnabled" aria-label="自动采集" />
+          <small class="field-hint">此发现页扫描完成后，为扫描到的待采集书籍自动创建采集任务，加入所属网站队列；已有任务的书籍会跳过。</small>
+        </el-form-item>
+        <el-alert type="info" :closable="false" title="扫描会提取书籍到“发现书籍”；开启发现页“自动采集”后，扫描完成会自动创建书籍采集任务。" />
       </el-form>
       <template #footer><el-button @click="discoveryPageDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveDiscoveryPage">保存发现页</el-button></template>
     </el-dialog>
@@ -2725,7 +2729,14 @@ async function saveAutoImport() {
     autoImportSaving.value = false
   }
 }
-const discoveryPageForm=reactive<CrawlerDiscoveryPagePayload>({pageName:'',pageUrl:'',autoScanEnabled:false,scanIntervalMinutes:360,maxPages:50})
+const discoveryPageForm = reactive<CrawlerDiscoveryPagePayload>({
+  pageName: '',
+  pageUrl: '',
+  autoScanEnabled: false,
+  autoCrawlEnabled: false,
+  scanIntervalMinutes: 360,
+  maxPages: 50,
+})
 const emptyRule=():CrawlerRule=>({discoveryItemSelector:'',discoveryUrlSelector:'a',discoveryTitleSelector:'.title',discoveryAuthorSelector:'',discoveryCoverSelector:'',discoveryCategorySelector:'',discoveryLatestChapterSelector:'',discoveryNextPageSelector:'',titleSelector:'',authorSelector:'',descriptionSelector:'',categorySelector:'',tagsSelector:'',statusSelector:'',chapterListUrlSelector:'',chapterItemSelector:'',chapterTitleSelector:':scope',chapterUrlSelector:'a',contentTitleSelector:'h1',contentSelector:'',removeSelectors:'',xpathRemoveSelectors:'',stringReplacementsJson:'',regexReplacementsJson:'',removeBlankLines:true,saveOriginalHtml:false,minChapterLength:100})
 const siteThemeColors = [
   { label: '正红', value: '#F44336' },
@@ -2826,7 +2837,7 @@ const siteConfigurationTemplate:CrawlerSiteConfiguration={
     themeColor: '#2196F3',
   },
   rules:[{version:1,changeSummary:'初始规则',enabled:true,rule:{discoveryItemSelector:'.book-list .book',discoveryUrlSelector:'a.book-link',discoveryTitleSelector:'.title',discoveryAuthorSelector:'.author',discoveryCoverSelector:'img.cover::data-src',discoveryCategorySelector:'.category',discoveryLatestChapterSelector:'.latest',discoveryNextPageSelector:'a.next',titleSelector:'h1.book-title',authorSelector:'.author',coverSelector:'img.cover::data-src',descriptionSelector:'#intro',categorySelector:'.book-meta .category',tagsSelector:'.book-meta .tags a',statusSelector:'.book-meta .status',latestChapterSelector:'.latest',chapterListUrlSelector:'a.catalog',chapterItemSelector:'#chapter-list a',chapterTitleSelector:':scope',chapterUrlSelector:':scope',contentTitleSelector:'h1',contentSelector:'#content',removeSelectors:'.ads, .navigation',xpathRemoveSelectors:'',stringReplacementsJson:'',regexReplacementsJson:'',removeBlankLines:true,saveOriginalHtml:false,minChapterLength:100}}],
-  discoveryPages:[{pageName:'热门小说',pageUrl:'https://www.example.com/rank/hot',autoScanEnabled:false,scanIntervalMinutes:360,maxPages:50}],
+  discoveryPages:[{pageName:'热门小说',pageUrl:'https://www.example.com/rank/hot',autoScanEnabled:false,autoCrawlEnabled:false,scanIntervalMinutes:360,maxPages:50}],
 }
 const siteForm=reactive<CrawlerSitePayload>(emptySite())
 const siteFormRef=ref<FormInstance>()
@@ -4367,9 +4378,37 @@ function openSite(site?:CrawlerSite){
 }
 function openCrawl(id:number){crawlForm.siteId=id;crawlDialog.value=true}
 function openDiscoveryPages(site:CrawlerSite){discoveryManagerSite.value=site;discoveryManagerDialog.value=true}
-function openDiscoveryPage(site:CrawlerSite,page?:CrawlerDiscoveryPage){discoveryPageSite.value=site;editingDiscoveryPage.value=page;Object.assign(discoveryPageForm,page?{pageName:page.pageName,pageUrl:page.pageUrl,autoScanEnabled:page.autoScanEnabled,scanIntervalMinutes:page.scanIntervalMinutes,maxPages:page.maxPages}:{pageName:'',pageUrl:site.homeUrl||site.baseUrl,autoScanEnabled:false,scanIntervalMinutes:360,maxPages:50});discoveryPageDialog.value=true}
+function openDiscoveryPage(site: CrawlerSite, page?: CrawlerDiscoveryPage) {
+  discoveryPageSite.value = site
+  editingDiscoveryPage.value = page
+  Object.assign(discoveryPageForm, {
+    pageName: page?.pageName ?? '',
+    pageUrl: page?.pageUrl ?? (site.homeUrl || site.baseUrl),
+    autoScanEnabled: page?.autoScanEnabled ?? false,
+    autoCrawlEnabled: page?.autoCrawlEnabled ?? false,
+    scanIntervalMinutes: page?.scanIntervalMinutes ?? 360,
+    maxPages: page?.maxPages ?? 50,
+  })
+  discoveryPageDialog.value = true
+}
 async function saveDiscoveryPage(){if(!discoveryPageSite.value||!discoveryPageForm.pageName.trim()||!discoveryPageForm.pageUrl.trim())return message.warning('请填写发现页名称和起始页面 URL');saving.value=true;try{editingDiscoveryPage.value?await crawlerApi.updateDiscoveryPage(editingDiscoveryPage.value.id,discoveryPageForm):await crawlerApi.createDiscoveryPage(discoveryPageSite.value.id,discoveryPageForm);discoveryPageDialog.value=false;message.success(editingDiscoveryPage.value?'发现页已更新':'发现页已添加');await loadDiscoveryPages()}finally{saving.value=false}}
-async function toggleDiscoveryPageAuto(page:CrawlerDiscoveryPage,enabled:boolean){try{const updated=await crawlerApi.updateDiscoveryPage(page.id,{pageName:page.pageName,pageUrl:page.pageUrl,autoScanEnabled:enabled,scanIntervalMinutes:page.scanIntervalMinutes,maxPages:page.maxPages});discoveryPagesBySite.value[page.siteId]=discoveryPagesBySite.value[page.siteId].map(item=>item.id===page.id?updated:item);message.success(enabled?'已开启自动扫描':'已关闭自动扫描')}catch{await loadDiscoveryPages()}}
+async function toggleDiscoveryPageAuto(page: CrawlerDiscoveryPage, enabled: boolean) {
+  try {
+    const updated = await crawlerApi.updateDiscoveryPage(page.id, {
+      pageName: page.pageName,
+      pageUrl: page.pageUrl,
+      autoScanEnabled: enabled,
+      autoCrawlEnabled: page.autoCrawlEnabled ?? false,
+      scanIntervalMinutes: page.scanIntervalMinutes,
+      maxPages: page.maxPages,
+    })
+    discoveryPagesBySite.value[page.siteId] = discoveryPagesBySite.value[page.siteId]
+      .map(item => item.id === page.id ? updated : item)
+    message.success(enabled ? '已开启自动扫描' : '已关闭自动扫描')
+  } catch {
+    await loadDiscoveryPages()
+  }
+}
 async function scanDiscoveryPage(page:CrawlerDiscoveryPage){await crawlerApi.scanDiscoveryPage(page.id);discoveryManagerDialog.value=false;activeTab.value='tasks';message.success(`“${page.pageName}”扫描任务已创建`);await refresh()}
 async function removeDiscoveryPage(page:CrawlerDiscoveryPage){if(!await confirm(`确定删除发现页“${page.pageName}”吗？历史扫描任务不会被删除。`))return;await crawlerApi.deleteDiscoveryPage(page.id);message.success('发现页已删除');await loadDiscoveryPages()}
 function siteTabForField(field:string):SiteEditorTab{

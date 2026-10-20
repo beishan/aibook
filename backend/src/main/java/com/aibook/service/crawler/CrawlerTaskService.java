@@ -715,6 +715,15 @@ public class CrawlerTaskService {
     }
 
     @Transactional
+    public List<TaskView> autoCrawlScanBooks(User user, List<Long> bookIds) {
+        List<Long> eligibleIds = ownedBooks(user, bookIds).stream()
+                .filter(book -> discoveryStatus(book) == CrawlerBook.DiscoveryStatus.ACTIVE
+                        && book.getCrawlStatus() == CrawlerBook.CrawlStatus.DISCOVERED)
+                .map(CrawlerBook::getId).toList();
+        return eligibleIds.isEmpty() ? List.of() : batchCrawl(user, eligibleIds);
+    }
+
+    @Transactional
     public List<TaskView> batchChapterLists(User user, List<Long> bookIds) {
         List<CrawlerBook> books = ownedBooks(user, bookIds);
         for (CrawlerBook book : books) {
@@ -1926,6 +1935,7 @@ public class CrawlerTaskService {
         int maxPages = task.getScanMaxPages() == null
                 ? value(site.getMaxDiscoveryPages(), 3) : Math.max(1, task.getScanMaxPages());
         Set<String> visitedPages = new HashSet<>();
+        Set<Long> discoveredBookIds = new LinkedHashSet<>();
         int succeeded = 0;
         int newBooks = 0;
         int duplicates = 0;
@@ -1990,6 +2000,10 @@ public class CrawlerTaskService {
                     if (existing.isPresent()) duplicates++; else newBooks++;
                     succeeded++;
                     saveScanResult(task, book.getId(), bookName(book), validatedUrl, resultStatus, null);
+                    if (discoveryStatus(book) == CrawlerBook.DiscoveryStatus.ACTIVE
+                            && book.getCrawlStatus() == CrawlerBook.CrawlStatus.DISCOVERED) {
+                        discoveredBookIds.add(book.getId());
+                    }
                     log.info("[采集任务] 发现书籍: taskId={}, site={}, page={}, book={}, url={}",
                             task.getId(), site.getSiteName(), pages + 1, bookName(book), validatedUrl);
                     recordCrawlerEvent(task, "发现书籍", "页码：" + (pages + 1) + "；书籍："
@@ -2035,7 +2049,7 @@ public class CrawlerTaskService {
         recordCrawlerEvent(task, task.getDiscoveryPageName() == null ? "网站扫描完毕" : "发现页扫描完毕",
                 "扫描页数：" + pages + "；扫描到：" + task.getTotalCount() + "；成功：" + succeeded
                         + "；新增：" + newBooks + "；重复：" + duplicates + "；失败：" + failed
-                        + "；后续采集需人工触发");
+                        + "；自动采集按该发现页配置执行");
         String activityDescription = task.getDiscoveryPageName() == null
                 ? site.getSiteName() + " 网站扫描完成"
                 : task.getDiscoveryPageName() + " 发现页扫描完成";
@@ -2043,6 +2057,25 @@ public class CrawlerTaskService {
                 activityDescription, "扫描页数：" + pages + "；扫描到：" + task.getTotalCount()
                         + "；成功：" + succeeded + "；新增：" + newBooks + "；重复：" + duplicates
                         + "；失败：" + failed + "；扫描结果可查看逐书明细");
+        createAutoCrawlTasksAfterScan(task, discoveredBookIds);
+    }
+
+    private void createAutoCrawlTasksAfterScan(CrawlerTask scanTask, Set<Long> bookIds) {
+        if (scanTask.getDiscoveryPageId() == null || bookIds.isEmpty()) return;
+        boolean enabled = discoveryPageRepository
+                .findByIdAndSiteUser(scanTask.getDiscoveryPageId(), scanTask.getUser())
+                .filter(page -> Objects.equals(page.getSite().getId(), scanTask.getSite().getId()))
+                .map(page -> Boolean.TRUE.equals(page.getAutoCrawlEnabled())).orElse(false);
+        if (!enabled) return;
+        try {
+            List<TaskView> created = applicationContext.getBean(CrawlerTaskService.class)
+                    .autoCrawlScanBooks(scanTask.getUser(), List.copyOf(bookIds));
+            recordCrawlerEvent(scanTask, "发现页自动采集任务已创建", "创建：" + created.size()
+                    + "；跳过：" + (bookIds.size() - created.size()) + "；已加入所属网站队列");
+        } catch (Exception exception) {
+            log.warn("发现页扫描完成，但自动创建书籍采集任务失败: taskId={}", scanTask.getId(), exception);
+            recordCrawlerError(scanTask, "发现页自动采集任务创建失败", userMessage(exception));
+        }
     }
 
     private void saveScanResult(CrawlerTask task, Long bookId, String bookName, String bookUrl,
