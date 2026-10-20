@@ -2041,23 +2041,28 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="耗时(秒：总/采/固/随/其)" width="260" align="center">
+            <el-table-column label="耗时" width="110" align="center">
               <template #default="{ row }">
-                <div
+                <el-tooltip
                   v-if="row.crawlStatus==='COMPLETED' && row.totalElapsedMillis!=null"
-                  class="chapter-duration-segments"
-                  :aria-label="`总时间 ${formatAttemptDuration(row.totalElapsedMillis)}，采集耗时 ${formatAttemptDuration(row.collectionMillis||0)}，固定等待 ${formatAttemptDuration(row.fixedWaitMillis||0)}，随机等待 ${formatAttemptDuration(row.randomWaitMillis||0)}，其他等待 ${formatAttemptDuration(row.otherWaitMillis||0)}`"
+                  :trigger="['hover', 'focus']"
+                  placement="top"
                 >
-                  <span class="chapter-duration-total" :title="`总时间 ${formatAttemptDuration(row.totalElapsedMillis)}`">{{ formatChapterSeconds(row.totalElapsedMillis) }}</span>
-                  <i>/</i>
-                  <span class="chapter-duration-collection" :title="`采集耗时 ${formatAttemptDuration(row.collectionMillis||0)}`">{{ formatChapterSeconds(row.collectionMillis) }}</span>
-                  <i>/</i>
-                  <span class="chapter-duration-fixed" :title="`固定等待 ${formatAttemptDuration(row.fixedWaitMillis||0)}`">{{ formatChapterSeconds(row.fixedWaitMillis) }}</span>
-                  <i>/</i>
-                  <span class="chapter-duration-random" :title="`随机等待 ${formatAttemptDuration(row.randomWaitMillis||0)}`">{{ formatChapterSeconds(row.randomWaitMillis) }}</span>
-                  <i>/</i>
-                  <span class="chapter-duration-other" :title="`其他等待 ${formatAttemptDuration(row.otherWaitMillis||0)}`">{{ formatChapterSeconds(row.otherWaitMillis) }}</span>
-                </div>
+                  <template #content>
+                    <dl class="chapter-duration-breakdown">
+                      <dt>总耗时</dt><dd>{{ formatAttemptDuration(row.totalElapsedMillis) }}</dd>
+                      <dt>采集耗时</dt><dd>{{ formatAttemptDuration(row.collectionMillis || 0) }}</dd>
+                      <dt>固定等待</dt><dd>{{ formatAttemptDuration(row.fixedWaitMillis || 0) }}</dd>
+                      <dt>随机等待</dt><dd>{{ formatAttemptDuration(row.randomWaitMillis || 0) }}</dd>
+                      <dt>其他等待</dt><dd>{{ formatAttemptDuration(row.otherWaitMillis || 0) }}</dd>
+                    </dl>
+                  </template>
+                  <span
+                    class="chapter-duration-total"
+                    tabindex="0"
+                    :aria-label="`总耗时 ${formatAttemptDuration(row.totalElapsedMillis)}，查看耗时明细`"
+                  >{{ formatChapterSeconds(row.totalElapsedMillis) }} 秒</span>
+                </el-tooltip>
                 <span v-else class="chapter-duration-empty">—</span>
               </template>
             </el-table-column>
@@ -6577,37 +6582,38 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   content: '';
 }
 
-.chapter-duration-segments {
-  display: flex;
-  min-width: 240px;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
+.chapter-duration-total {
+  color: var(--primary);
   font-size: 12px;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  cursor: help;
+  border-bottom: 1px dotted currentColor;
 }
 
-.chapter-duration-segments span {
-  font-weight: 650;
+.chapter-duration-total:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
-.chapter-duration-segments i {
-  color: var(--text-quaternary, var(--text-tertiary));
-  font-style: normal;
+.chapter-duration-breakdown {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 6px 20px;
+  margin: 0;
+  font-size: 12px;
 }
 
-.chapter-duration-total { color: var(--primary); }
-.chapter-duration-collection { color: var(--success); }
-.chapter-duration-fixed { color: var(--warning); }
-.chapter-duration-random { color: var(--info); }
-.chapter-duration-other { color: #8b5cf6; }
-.chapter-duration-empty { color: var(--text-tertiary); }
+.chapter-duration-breakdown dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 
-@media (max-width: 640px) {
-  .chapter-duration-segments {
-    min-width: 240px;
-  }
+.chapter-duration-empty {
+  color: var(--text-tertiary);
 }
 </style>
 
