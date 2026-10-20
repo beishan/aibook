@@ -1146,8 +1146,21 @@
       <div v-if="managedDiscoveryPages.length" class="discovery-pages discovery-pages-dialog-list">
         <article v-for="page in managedDiscoveryPages" :key="page.id" class="discovery-page-row">
           <div><strong>{{ page.pageName }}</strong><a :href="page.pageUrl" target="_blank" rel="noopener noreferrer">{{ page.pageUrl }}</a><small>最多 {{ page.maxPages }} 页 · 每 {{ page.scanIntervalMinutes }} 分钟 · {{ page.lastScanAt ? `上次 ${formatTime(page.lastScanAt)}` : '尚未扫描' }} · 自动采集{{ page.autoCrawlEnabled ? '已开启' : '已关闭' }}</small></div>
-          <el-switch :model-value="page.autoScanEnabled" :disabled="!discoveryManagerSite?.enabled" inline-prompt active-text="自动" inactive-text="手动" aria-label="自动扫描发现页" @change="toggleDiscoveryPageAuto(page,Boolean($event))" />
-          <div class="discovery-page-actions"><el-button text size="small" :disabled="!discoveryManagerSite?.enabled || !discoveryManagerSite?.rule?.discoveryItemSelector" @click="scanDiscoveryPage(page)">扫描</el-button><el-button text size="small" @click="discoveryManagerSite && openDiscoveryPage(discoveryManagerSite,page)">编辑</el-button><el-button text size="small" type="danger" @click="removeDiscoveryPage(page)">删除</el-button></div>
+          <el-switch :model-value="page.autoScanEnabled" :disabled="!discoveryManagerSite?.enabled || discoveryPageSavingIds.has(page.id)" inline-prompt active-text="自动" inactive-text="手动" aria-label="自动扫描发现页" @change="toggleDiscoveryPageAuto(page,Boolean($event))" />
+          <div class="discovery-page-actions">
+            <label class="discovery-auto-crawl">
+              <span>自动采集</span>
+              <el-switch
+                :model-value="page.autoCrawlEnabled"
+                :loading="discoveryPageSavingIds.has(page.id)"
+                aria-label="自动采集"
+                @change="toggleDiscoveryPageCrawl(page, Boolean($event))"
+              />
+            </label>
+            <el-button text size="small" :disabled="!discoveryManagerSite?.enabled || !discoveryManagerSite?.rule?.discoveryItemSelector" @click="scanDiscoveryPage(page)">扫描</el-button>
+            <el-button text size="small" :disabled="discoveryPageSavingIds.has(page.id)" @click="discoveryManagerSite && openDiscoveryPage(discoveryManagerSite,page)">编辑</el-button>
+            <el-button text size="small" type="danger" :disabled="discoveryPageSavingIds.has(page.id)" @click="removeDiscoveryPage(page)">删除</el-button>
+          </div>
         </article>
       </div>
       <el-empty v-else description="尚未添加发现页" />
@@ -1160,10 +1173,6 @@
         <el-form-item label="起始页面 URL"><el-input v-model="discoveryPageForm.pageUrl" placeholder="https://www.chunxiaoge.com/rank/hot/" /><small class="field-hint">扫描会按规则中的“下一页 Selector”持续翻页，直到末页或达到安全上限。</small></el-form-item>
         <div class="form-grid"><el-form-item label="最多扫描页数"><el-input-number v-model="discoveryPageForm.maxPages" :min="1" /></el-form-item><el-form-item label="自动扫描间隔（分钟）"><el-input-number v-model="discoveryPageForm.scanIntervalMinutes" :min="5" :max="10080" :disabled="!discoveryPageForm.autoScanEnabled" /></el-form-item></div>
         <el-switch v-model="discoveryPageForm.autoScanEnabled" active-text="开启自动扫描" inactive-text="仅手动扫描" />
-        <el-form-item label="自动采集">
-          <el-switch v-model="discoveryPageForm.autoCrawlEnabled" aria-label="自动采集" />
-          <small class="field-hint">此发现页扫描完成后，为扫描到的待采集书籍自动创建采集任务，加入所属网站队列；已有任务的书籍会跳过。</small>
-        </el-form-item>
         <el-alert type="info" :closable="false" title="扫描会提取书籍到“发现书籍”；开启发现页“自动采集”后，扫描完成会自动创建书籍采集任务。" />
       </el-form>
       <template #footer><el-button @click="discoveryPageDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveDiscoveryPage">保存发现页</el-button></template>
@@ -2729,6 +2738,7 @@ async function saveAutoImport() {
     autoImportSaving.value = false
   }
 }
+const discoveryPageSavingIds = ref(new Set<number>())
 const discoveryPageForm = reactive<CrawlerDiscoveryPagePayload>({
   pageName: '',
   pageUrl: '',
@@ -4392,7 +4402,31 @@ function openDiscoveryPage(site: CrawlerSite, page?: CrawlerDiscoveryPage) {
   discoveryPageDialog.value = true
 }
 async function saveDiscoveryPage(){if(!discoveryPageSite.value||!discoveryPageForm.pageName.trim()||!discoveryPageForm.pageUrl.trim())return message.warning('请填写发现页名称和起始页面 URL');saving.value=true;try{editingDiscoveryPage.value?await crawlerApi.updateDiscoveryPage(editingDiscoveryPage.value.id,discoveryPageForm):await crawlerApi.createDiscoveryPage(discoveryPageSite.value.id,discoveryPageForm);discoveryPageDialog.value=false;message.success(editingDiscoveryPage.value?'发现页已更新':'发现页已添加');await loadDiscoveryPages()}finally{saving.value=false}}
+async function toggleDiscoveryPageCrawl(page: CrawlerDiscoveryPage, enabled: boolean) {
+  if (discoveryPageSavingIds.value.has(page.id)) return
+  discoveryPageSavingIds.value.add(page.id)
+  try {
+    const updated = await crawlerApi.updateDiscoveryPage(page.id, {
+      pageName: page.pageName,
+      pageUrl: page.pageUrl,
+      autoScanEnabled: page.autoScanEnabled,
+      autoCrawlEnabled: enabled,
+      scanIntervalMinutes: page.scanIntervalMinutes,
+      maxPages: page.maxPages,
+    })
+    discoveryPagesBySite.value[page.siteId] = discoveryPagesBySite.value[page.siteId]
+      .map(item => item.id === page.id ? updated : item)
+    message.success(enabled ? '已开启自动采集' : '已关闭自动采集')
+  } catch {
+    await loadDiscoveryPages()
+  } finally {
+    discoveryPageSavingIds.value.delete(page.id)
+  }
+}
+
 async function toggleDiscoveryPageAuto(page: CrawlerDiscoveryPage, enabled: boolean) {
+  if (discoveryPageSavingIds.value.has(page.id)) return
+  discoveryPageSavingIds.value.add(page.id)
   try {
     const updated = await crawlerApi.updateDiscoveryPage(page.id, {
       pageName: page.pageName,
@@ -4407,6 +4441,8 @@ async function toggleDiscoveryPageAuto(page: CrawlerDiscoveryPage, enabled: bool
     message.success(enabled ? '已开启自动扫描' : '已关闭自动扫描')
   } catch {
     await loadDiscoveryPages()
+  } finally {
+    discoveryPageSavingIds.value.delete(page.id)
   }
 }
 async function scanDiscoveryPage(page:CrawlerDiscoveryPage){await crawlerApi.scanDiscoveryPage(page.id);discoveryManagerDialog.value=false;activeTab.value='tasks';message.success(`“${page.pageName}”扫描任务已创建`);await refresh()}
@@ -5381,7 +5417,22 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 .chapter-heading-tools{display:flex;align-items:center;gap:10px}.chapter-follow{box-sizing:border-box;display:flex;min-width:132px;height:38px;align-items:center;justify-content:space-between;gap:10px;padding:2px 10px;border:1px solid var(--border-color);border-radius:12px;background:var(--bg-page);cursor:pointer;transition:border-color .2s ease,background .2s ease}.chapter-follow strong{color:var(--text-secondary);font-size:11px}.chapter-follow.active{border-color:color-mix(in srgb,var(--primary) 38%,var(--border-color));background:var(--primary-alpha-10)}.chapter-follow.active strong{color:var(--primary)}.chapter-sort.disabled{opacity:.5}.chapter-sort button:disabled{cursor:not-allowed}.chapter-name-cell{display:flex;min-width:0;align-items:center;gap:8px}.chapter-name-cell>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chapter-name-cell em{display:inline-flex;flex:0 0 auto;align-items:center;gap:5px;padding:3px 7px;border-radius:99px;background:var(--primary-alpha-10);color:var(--primary);font-size:9px;font-style:normal;font-weight:800}.chapter-name-cell em i{width:6px;height:6px;border-radius:50%;background:var(--primary);box-shadow:0 0 0 4px var(--primary-alpha-10);animation:chapter-follow-pulse 1.5s ease-out infinite}.chapters-table :deep(.current-crawling-row>td.el-table__cell){background:color-mix(in srgb,var(--primary) 11%,var(--surface-elevated))!important}.chapters-table :deep(.current-crawling-row:hover>td.el-table__cell){background:color-mix(in srgb,var(--primary) 15%,var(--surface-elevated))!important}@keyframes chapter-follow-pulse{70%,100%{box-shadow:0 0 0 8px transparent}}@media(max-width:720px){.chapter-heading-tools{align-items:stretch;flex-direction:column}.chapter-follow{width:100%}}@media(prefers-reduced-motion:reduce){.chapter-follow{transition:none}.chapter-name-cell em i{animation:none}}
 .crawler-header-actions{display:flex;align-items:center;gap:10px}.polling-setting{display:flex;align-items:center;gap:10px;padding:7px 9px 7px 12px;border:1px solid var(--border-color);border-radius:13px;background:color-mix(in srgb,var(--surface-elevated) 88%,transparent);box-shadow:var(--shadow-sm);backdrop-filter:blur(14px)}.polling-setting>span{display:flex;align-items:center;gap:7px;color:var(--text-secondary);font-size:11px;font-weight:700;white-space:nowrap}.polling-setting>span i{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 0 4px var(--success-alpha-15);animation:live-pulse 1.8s ease-out infinite}.polling-setting :deep(.el-select){width:84px}.polling-setting :deep(.el-select__wrapper){border-radius:9px;background:var(--surface-card);box-shadow:none}@media(max-width:640px){.crawler-header{gap:var(--spacing-md);flex-direction:column}.crawler-header-actions{width:100%;flex-wrap:wrap}.polling-setting{justify-content:space-between}.crawler-header-actions>.el-button{margin-left:0}}@media(prefers-reduced-motion:reduce){.polling-setting>span i{animation:none}}
 .import-book-dialog{display:grid;gap:20px}.format-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.format-options :deep(.el-checkbox-button){width:100%}.format-options :deep(.el-checkbox-button__inner){display:grid;width:100%;gap:4px;padding:16px;border:1px solid var(--border-color)!important;border-radius:13px!important;background:var(--surface-elevated);box-shadow:none!important;text-align:left}.format-options :deep(.el-checkbox-button__inner strong){font-size:15px}.format-options :deep(.el-checkbox-button__inner small){color:var(--text-tertiary);font-size:11px;font-weight:400}.format-options :deep(.el-checkbox-button.is-checked .el-checkbox-button__inner){border-color:var(--primary)!important;background:var(--primary-alpha-10);color:var(--primary)}.format-options :deep(.el-checkbox-button.is-focus .el-checkbox-button__inner){outline:2px solid var(--primary);outline-offset:2px}@media(max-width:480px){.format-options{grid-template-columns:minmax(0,1fr)}}
-.discovery-manager-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;margin-bottom:14px;border-radius:14px;background:var(--primary-alpha-10)}.discovery-manager-toolbar>div{display:grid;gap:3px}.discovery-manager-toolbar p{color:var(--text-secondary);font-size:12px}.discovery-pages{display:grid;gap:8px}.discovery-pages-dialog-list{max-height:58vh;overflow-y:auto;padding-right:4px}.discovery-page-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center;padding:12px 14px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-card)}.discovery-page-row>div:first-child{display:grid;min-width:0;gap:3px}.discovery-page-row a{overflow:hidden;color:var(--text-secondary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.discovery-page-row small{color:var(--text-tertiary);font-size:10px}.discovery-page-actions{grid-column:1/-1;display:flex;justify-content:flex-end}.discovery-page-actions .el-button{margin-left:0}.discovery-page-form{display:grid;gap:14px}.discovery-page-form .el-form-item{margin-bottom:0}@media(max-width:520px){.discovery-manager-toolbar{align-items:stretch;flex-direction:column}.discovery-page-row{grid-template-columns:minmax(0,1fr)}.discovery-page-row>.el-switch{justify-self:start}.discovery-page-actions{justify-content:flex-start}}
+.discovery-manager-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;margin-bottom:14px;border-radius:14px;background:var(--primary-alpha-10)}.discovery-manager-toolbar>div{display:grid;gap:3px}.discovery-manager-toolbar p{color:var(--text-secondary);font-size:12px}.discovery-pages{display:grid;gap:8px}.discovery-pages-dialog-list{max-height:58vh;overflow-y:auto;padding-right:4px}.discovery-page-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center;padding:12px 14px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-card)}.discovery-page-row>div:first-child{display:grid;min-width:0;gap:3px}.discovery-page-row a{overflow:hidden;color:var(--text-secondary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.discovery-page-row small{color:var(--text-tertiary);font-size:10px}.discovery-page-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.discovery-auto-crawl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  color: var(--text-secondary);
+  font-size: 12px;
+}.discovery-page-actions .el-button{margin-left:0}.discovery-page-form{display:grid;gap:14px}.discovery-page-form .el-form-item{margin-bottom:0}@media(max-width:520px){.discovery-manager-toolbar{align-items:stretch;flex-direction:column}.discovery-page-row{grid-template-columns:minmax(0,1fr)}.discovery-page-row>.el-switch{justify-self:start}.discovery-page-actions{justify-content:flex-start}}
 .task-scan-progress{display:grid;gap:5px}.task-scan-progress>small{color:var(--text-tertiary);font-size:10px}.task-scan-summary{display:flex;flex-wrap:wrap;gap:5px;color:var(--text-secondary);font-size:11px}.task-scan-summary>*{padding:2px 6px;border-radius:99px;font-style:normal;font-weight:700}.task-scan-summary b{background:var(--success-alpha-15);color:var(--success)}.task-scan-summary i{background:var(--primary-alpha-10);color:var(--primary)}.task-scan-summary em{background:color-mix(in srgb,var(--warning) 15%,transparent);color:var(--warning)}.task-scan-summary strong{background:color-mix(in srgb,var(--danger) 10%,transparent);color:var(--danger)}.scan-result-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:16px}.scan-result-summary span{display:grid;gap:3px;padding:12px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-elevated)}.scan-result-summary small{color:var(--text-tertiary);font-size:10px}.scan-result-summary strong{font-size:20px}.scan-results-table a{color:var(--primary)}.scan-results-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;color:var(--text-tertiary);font-size:12px}@media(max-width:640px){.scan-result-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.scan-results-pagination{align-items:flex-start;flex-direction:column}}
 .crawler-book-metadata{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}.crawler-book-metadata>span{display:grid;gap:4px;padding:11px 13px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-elevated)}.crawler-book-metadata small{color:var(--text-tertiary);font-size:10px}.crawler-book-metadata .metadata-tag-row{grid-column:1/-1}.metadata-tags{display:flex;flex-wrap:wrap;gap:6px}.test-result>.metadata-tags{margin-top:14px}@media(max-width:520px){.crawler-book-metadata{grid-template-columns:minmax(0,1fr)}.crawler-book-metadata .metadata-tag-row{grid-column:auto}}
 :deep(.task-open){display:flex;width:100%;min-width:0;align-items:center;gap:8px;margin:0;padding:5px 0;appearance:none;border:0;background:transparent;color:var(--text-primary);font:inherit;text-align:left;cursor:pointer}:deep(.task-open strong){overflow:hidden;min-width:0;text-overflow:ellipsis;white-space:nowrap}:deep(.task-site-mark){display:inline-grid;width:22px;height:22px;flex:0 0 22px;place-items:center;border:1px solid color-mix(in srgb,var(--primary) 22%,var(--border-color-light));border-radius:7px;background:var(--primary-alpha-10);color:var(--primary);font-size:11px;font-weight:800}:deep(.task-open:hover strong){color:var(--primary)}:deep(.task-open:focus-visible){outline:2px solid var(--primary);outline-offset:2px;border-radius:6px}.task-detail-content{display:grid;gap:16px}.task-detail-hero{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:18px;border-radius:18px;background:var(--primary-alpha-10)}.task-detail-hero h2{overflow:hidden;margin-bottom:4px;text-overflow:ellipsis;white-space:nowrap}.task-detail-hero>div:nth-child(2)>p:last-child{color:var(--text-secondary);font-size:12px}.task-detail-mark{position:relative;display:grid;width:72px;height:72px;place-items:center;border:7px solid var(--surface-card);border-radius:50%;background:var(--surface-elevated);box-shadow:var(--shadow-sm)}.task-detail-mark>span{position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:var(--text-tertiary)}.task-detail-mark>span.state-running{background:var(--success);box-shadow:0 0 0 5px var(--success-alpha-15);animation:live-pulse 1.8s ease-out infinite}.task-detail-mark>span.state-failed{background:var(--danger)}.task-detail-mark>span.state-paused,.task-detail-mark>span.state-partial_success{background:var(--warning)}.task-progress-card{display:grid;gap:11px;padding:16px;border:1px solid var(--border-color-light);border-radius:15px;background:var(--surface-elevated)}.task-progress-card>div{display:flex;align-items:center;justify-content:space-between}.task-progress-card>p{color:var(--text-secondary);font-size:12px}.task-stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.task-stat-grid>span{display:grid;gap:3px;padding:12px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-card)}.task-stat-grid small,.task-detail-list span{color:var(--text-tertiary);font-size:10px}.task-stat-grid strong{font-size:20px}.task-detail-list{overflow:hidden;border:1px solid var(--border-color-light);border-radius:14px}.task-detail-list>div{display:grid;grid-template-columns:130px minmax(0,1fr);gap:12px;padding:11px 14px;border-bottom:1px solid var(--border-color-light)}.task-detail-list>div:last-child{border-bottom:0}.task-detail-list strong{overflow-wrap:anywhere;font-size:12px}.task-detail-actions{display:flex;flex-wrap:wrap;gap:8px;padding-top:4px}.task-detail-actions .el-button{margin-left:0}@media(max-width:520px){.task-detail-hero{grid-template-columns:auto minmax(0,1fr)}.task-detail-hero>.el-tag{grid-column:1/-1;justify-self:start}.task-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.task-detail-list>div{grid-template-columns:90px minmax(0,1fr)}}@media(prefers-reduced-motion:reduce){.task-detail-mark>span.state-running{animation:none}}

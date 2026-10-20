@@ -20,7 +20,7 @@ const ref = value => ({value})
 const calls = []
 const context = vm.createContext({
   discoveryPageSite: ref(), editingDiscoveryPage: ref(), discoveryPageDialog: ref(false),
-  discoveryPageForm: {}, saving: ref(false),
+  discoveryPageForm: {}, saving: ref(false), discoveryPageSavingIds: ref(new Set()),
   discoveryPagesBySite: ref({7: [{id: 9}]}),
   loadDiscoveryPages: async () => {},
   message: {success() {}, warning() {}},
@@ -32,7 +32,7 @@ const context = vm.createContext({
     createDiscoveryPage: async (id, payload) => calls.push({id, payload: {...payload}}),
   },
 })
-vm.runInContext(['openDiscoveryPage', 'toggleDiscoveryPageAuto', 'saveDiscoveryPage'].map(extract).join('\n'), context)
+vm.runInContext(['openDiscoveryPage', 'toggleDiscoveryPageAuto', 'toggleDiscoveryPageCrawl', 'saveDiscoveryPage'].map(extract).join('\n'), context)
 const site = {id: 7, baseUrl: 'https://example.com'}
 context.site = site
 context.page = {id: 9, siteId: 7, pageName: '热门', pageUrl: 'https://example.com/hot', autoScanEnabled: false, autoCrawlEnabled: true, scanIntervalMinutes: 360, maxPages: 50}
@@ -52,5 +52,14 @@ assert.equal(calls.at(-1).payload.autoCrawlEnabled, true)
 context.page.autoCrawlEnabled = undefined
 vm.runInContext('openDiscoveryPage(site, page)', context)
 assert.equal(context.discoveryPageForm.autoCrawlEnabled, false)
-assert.match(source, /<el-form-item label="自动采集">\s*<el-switch v-model="discoveryPageForm.autoCrawlEnabled" aria-label="自动采集"/)
-console.log('发现页自动采集：默认关闭、历史数据兼容、新增/编辑保存、自动扫描切换保留设置验证通过')
+await vm.runInContext('toggleDiscoveryPageCrawl(page, false)', context)
+assert.equal(calls.at(-1).payload.autoCrawlEnabled, false)
+assert.equal(calls.at(-1).payload.autoScanEnabled, false)
+assert.equal(context.discoveryPagesBySite.value[7][0].autoCrawlEnabled, false)
+assert.equal(context.discoveryPageSavingIds.value.size, 0)
+context.crawlerApi.updateDiscoveryPage = async () => { throw new Error('network') }
+await vm.runInContext('toggleDiscoveryPageCrawl(page, true)', context)
+assert.equal(context.discoveryPageSavingIds.value.size, 0)
+assert.equal(context.discoveryPagesBySite.value[7][0].autoCrawlEnabled, false)
+assert.match(source, /class="discovery-page-actions">\s*<label class="discovery-auto-crawl">\s*<span>自动采集<\/span>/)
+console.log('发现页自动采集：默认关闭、卡片直接切换保存、保留扫描设置、失败复原与位置验证通过')
