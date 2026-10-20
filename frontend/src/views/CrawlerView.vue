@@ -2043,26 +2043,13 @@
             </el-table-column>
             <el-table-column label="耗时" width="110" align="center">
               <template #default="{ row }">
-                <el-tooltip
+                <span
                   v-if="row.crawlStatus==='COMPLETED' && row.totalElapsedMillis!=null"
-                  :trigger="['hover', 'focus']"
-                  placement="top"
-                >
-                  <template #content>
-                    <dl class="chapter-duration-breakdown">
-                      <dt>总耗时</dt><dd>{{ formatAttemptDuration(row.totalElapsedMillis) }}</dd>
-                      <dt>采集耗时</dt><dd>{{ formatAttemptDuration(row.collectionMillis || 0) }}</dd>
-                      <dt>固定等待</dt><dd>{{ formatAttemptDuration(row.fixedWaitMillis || 0) }}</dd>
-                      <dt>随机等待</dt><dd>{{ formatAttemptDuration(row.randomWaitMillis || 0) }}</dd>
-                      <dt>其他等待</dt><dd>{{ formatAttemptDuration(row.otherWaitMillis || 0) }}</dd>
-                    </dl>
-                  </template>
-                  <span
-                    class="chapter-duration-total"
-                    tabindex="0"
-                    :aria-label="`总耗时 ${formatAttemptDuration(row.totalElapsedMillis)}，查看耗时明细`"
-                  >{{ formatChapterSeconds(row.totalElapsedMillis) }} 秒</span>
-                </el-tooltip>
+                  class="chapter-duration-total"
+                  tabindex="0"
+                  :title="chapterDurationDetails(row)"
+                  :aria-label="chapterDurationDetails(row)"
+                >{{ formatChapterSeconds(row.totalElapsedMillis) }} 秒</span>
                 <span v-else class="chapter-duration-empty">—</span>
               </template>
             </el-table-column>
@@ -3117,6 +3104,16 @@ function formatAttemptDuration(milliseconds:number) {
 
 function formatChapterSeconds(milliseconds?:number|null) {
   return (Math.max(0, milliseconds || 0) / 1000).toFixed(2)
+}
+
+function chapterDurationDetails(chapter: CrawlerChapter) {
+  return [
+    `总耗时：${formatAttemptDuration(chapter.totalElapsedMillis ?? 0)}`,
+    `采集耗时：${formatAttemptDuration(chapter.collectionMillis ?? 0)}`,
+    `固定等待：${formatAttemptDuration(chapter.fixedWaitMillis ?? 0)}`,
+    `随机等待：${formatAttemptDuration(chapter.randomWaitMillis ?? 0)}`,
+    `其他等待：${formatAttemptDuration(chapter.otherWaitMillis ?? 0)}`,
+  ].join('\n')
 }
 
 function formatAttemptTimestamp(value?:string) {
@@ -6596,20 +6593,6 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   outline: 2px solid var(--primary);
   outline-offset: 3px;
   border-radius: 2px;
-}
-
-.chapter-duration-breakdown {
-  display: grid;
-  grid-template-columns: auto auto;
-  gap: 6px 20px;
-  margin: 0;
-  font-size: 12px;
-}
-
-.chapter-duration-breakdown dd {
-  margin: 0;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 
 .chapter-duration-empty {
