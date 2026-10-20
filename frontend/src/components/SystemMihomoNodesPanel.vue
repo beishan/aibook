@@ -217,6 +217,7 @@
             <div class="transfer-list">
               <article v-for="(name, index) in draft.nodes" :key="name" class="transfer-node">
                 <el-checkbox
+                  class="node-selection-checkbox"
                   :model-value="selectedConfiguredNames.includes(name)"
                   :aria-label="`选择已选节点 ${name}`"
                   @change="checked => setConfiguredSelection(name, Boolean(checked))"
@@ -300,6 +301,7 @@
             <div class="transfer-list">
               <article v-for="node in availableNodes" :key="node.name" class="transfer-node">
                 <el-checkbox
+                  class="node-selection-checkbox"
                   :model-value="selectedAvailableNames.includes(node.name)"
                   :aria-label="`选择备选节点 ${node.name}`"
                   @change="checked => setAvailableSelection(node.name, Boolean(checked))"
@@ -609,7 +611,70 @@ function handleTabKeydown(event: KeyboardEvent) {
 onMounted(load)
 </script>
 
+<style>
+.node-group-editor-dialog.el-dialog {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 24px);
+  height: calc(100dvh - 24px);
+  max-height: none;
+  margin: 12px auto;
+}
+.node-group-editor-dialog > .el-dialog__header,
+.node-group-editor-dialog > .el-dialog__footer {
+  flex: 0 0 auto;
+}
+.node-group-editor-dialog > .el-dialog__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+</style>
+
 <style scoped>
+.group-editor {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(240px, 1fr);
+  gap: 12px;
+}
+
+.node-selection-checkbox {
+  display: inline-flex;
+  flex: 0 0 44px;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  border-radius: 8px;
+}
+.node-selection-checkbox:hover {
+  background: var(--el-fill-color-light);
+}
+.node-selection-checkbox :deep(.el-checkbox__inner) {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--el-text-color-regular);
+  border-radius: 5px;
+  background: var(--el-bg-color);
+}
+.node-selection-checkbox :deep(.is-checked .el-checkbox__inner) {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary);
+}
+.node-selection-checkbox :deep(.el-checkbox__inner::after) {
+  top: 2px;
+  left: 6px;
+  width: 5px;
+  height: 10px;
+  border-width: 2px;
+}
+.node-selection-checkbox :deep(.el-checkbox__input.is-focus .el-checkbox__inner) {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 3px;
+}
+
 .nodes-refresh-toolbar {
   display: flex;
   justify-content: flex-end;
@@ -889,6 +954,7 @@ onMounted(load)
 
 .node-transfer {
   display: grid;
+  min-height: 0;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: stretch;
   gap: 12px;
@@ -897,7 +963,8 @@ onMounted(load)
 .transfer-pane {
   display: grid;
   min-width: 0;
-  grid-template-rows: auto 1fr;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 9px;
   padding: 12px;
   border: 1px solid var(--el-border-color);
@@ -927,8 +994,7 @@ onMounted(load)
 
 .transfer-list {
   min-width: 0;
-  max-height: min(42vh, 360px);
-  min-height: 180px;
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
   padding: 3px;
@@ -1019,10 +1085,7 @@ onMounted(load)
 @media (max-width: 720px) {
   .node-transfer {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .transfer-list {
-    max-height: 260px;
+    grid-template-rows: minmax(240px, 1fr) auto minmax(240px, 1fr);
   }
 
   .transfer-controls {
