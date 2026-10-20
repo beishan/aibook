@@ -24,6 +24,7 @@ class CrawlerSiteConfigurationServiceTest {
     void exportsSiteRulesAndDiscoveryPages() {
         User user = User.builder().id(1L).username("owner").build();
         CrawlerSite site = CrawlerSite.builder().id(7L).user(user).build();
+        site.setAutoImportRulesJson(com.aibook.util.CrawlerAutoImportRules.encode(autoImportConfiguration()));
         CrawlerManagementService management = mock(CrawlerManagementService.class);
         CrawlerDiscoveryPageService discoveryPages = mock(CrawlerDiscoveryPageService.class);
         SiteView siteView = new SiteView(7L, "示例站", "demo", "https://example.com", null,
@@ -47,6 +48,7 @@ class CrawlerSiteConfigurationServiceTest {
 
         assertThat(result.discoveryPages().getFirst().autoCrawlEnabled()).isTrue();
         assertThat(result.schemaVersion()).isEqualTo(1);
+        assertThat(result.autoImport()).isEqualTo(autoImportConfiguration());
         assertThat(result.type()).isEqualTo("AIBOOK_CRAWLER_SITE");
         assertThat(result.site().siteCode()).isEqualTo("demo");
         assertThat(result.site().respectRobotsTxt()).isFalse();
@@ -62,8 +64,9 @@ class CrawlerSiteConfigurationServiceTest {
                 .extracting(DiscoveryPagePayload::pageName).isEqualTo("热门");
     }
 
-    @Test
-    void importsSiteBeforeRulesAndDiscoveryPages() {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+    void importsSiteBeforeRulesAndDiscoveryPages(boolean includeAutoImport) {
         User user = User.builder().id(1L).username("owner").build();
         CrawlerManagementService management = mock(CrawlerManagementService.class);
         CrawlerDiscoveryPageService discoveryPages = mock(CrawlerDiscoveryPageService.class);
@@ -82,7 +85,8 @@ class CrawlerSiteConfigurationServiceTest {
         when(management.ownedSite(user, 9L)).thenReturn(importedEntity);
         when(management.siteView(importedEntity)).thenReturn(created);
         SiteConfigurationPayload configuration = new SiteConfigurationPayload(
-                1, "AIBOOK_CRAWLER_SITE", sitePayload, List.of(rule), List.of(page));
+                1, "AIBOOK_CRAWLER_SITE", sitePayload, List.of(rule), List.of(page),
+                includeAutoImport ? autoImportConfiguration() : null);
         CrawlerSiteConfigurationService service =
                 new CrawlerSiteConfigurationService(management, discoveryPages);
 
@@ -91,6 +95,21 @@ class CrawlerSiteConfigurationServiceTest {
         assertThat(result).isSameAs(created);
         verify(management).createRule(user, 9L, rule);
         verify(discoveryPages).create(user, 9L, page);
+        if (includeAutoImport) {
+            verify(management).setSiteAutoImport(user, 9L, autoImportConfiguration());
+        } else {
+            org.mockito.Mockito.verify(management, org.mockito.Mockito.never())
+                    .setSiteAutoImport(org.mockito.ArgumentMatchers.any(),
+                            org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+        }
+    }
+
+    private com.aibook.dto.crawler.CrawlerAutoImportDtos.Configuration autoImportConfiguration() {
+        return new com.aibook.dto.crawler.CrawlerAutoImportDtos.Configuration(true, List.of("TXT"),
+                List.of(new com.aibook.dto.crawler.CrawlerAutoImportDtos.Rule("神话", List.of(
+                        new com.aibook.dto.crawler.CrawlerAutoImportDtos.Expression(
+                                com.aibook.dto.crawler.CrawlerAutoImportDtos.ExpressionType.KEYWORD,
+                                List.of("神话", "传说"), null, null)))));
     }
 
     private RulePayload rulePayload() {

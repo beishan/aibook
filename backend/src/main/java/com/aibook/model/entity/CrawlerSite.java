@@ -46,6 +46,9 @@ public class CrawlerSite {
     @Builder.Default private Boolean autoCrawl = false;
     @Builder.Default private Boolean autoUpdate = true;
     @Builder.Default private Boolean autoImportLibrary = false;
+    // Independently updated so stale crawler/site editor entities cannot overwrite these rules.
+    @Column(columnDefinition = "TEXT", updatable = false)
+    private String autoImportRulesJson;
     @Builder.Default private Integer scanIntervalMinutes = 360;
     @Builder.Default private Integer updateIntervalMinutes = 30;
     @Builder.Default private Integer maxDiscoveryPages = 3;

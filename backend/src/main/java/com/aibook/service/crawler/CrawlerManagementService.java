@@ -71,6 +71,23 @@ public class CrawlerManagementService {
     public List<SiteView> sites(User user) { return siteRepository.findByUserOrderByCreatedAtDesc(user).stream().map(this::siteView).toList(); }
 
     @Transactional(readOnly = true)
+    public com.aibook.dto.crawler.CrawlerAutoImportDtos.Configuration siteAutoImport(User user, Long id) {
+        return com.aibook.util.CrawlerAutoImportRules.decode(ownedSite(user, id).getAutoImportRulesJson());
+    }
+
+    @Transactional
+    public com.aibook.dto.crawler.CrawlerAutoImportDtos.Configuration setSiteAutoImport(User user,
+            Long id, com.aibook.dto.crawler.CrawlerAutoImportDtos.Configuration configuration) {
+        ownedSite(user, id);
+        var normalized = com.aibook.util.CrawlerAutoImportRules.normalize(configuration);
+        if (siteRepository.updateAutoImportRules(id, user,
+                com.aibook.util.CrawlerAutoImportRules.encode(normalized)) != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "网站已发生变化，请刷新后重试");
+        }
+        return normalized;
+    }
+
+    @Transactional(readOnly = true)
     public Page<SiteActivityView> siteActivities(User user, Long id, int page, int size,
             CrawlerSiteActivity.EventType eventType) {
         CrawlerSite site = ownedSite(user, id);

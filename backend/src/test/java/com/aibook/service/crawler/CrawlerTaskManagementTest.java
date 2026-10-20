@@ -824,8 +824,10 @@ class CrawlerTaskManagementTest {
         }
     }
 
-    @Test
-    void pendingReleaseMarkerCompletesBookWithoutCountingChapterAsFailure() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"false,false", "true,false", "true,true"})
+    void pendingReleaseMarkerCompletesBookWithoutCountingChapterAsFailure(
+            boolean alreadyImported, boolean automaticallyImported) throws Exception {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(2L).user(user).siteName("示例站")
                 .contentMarkersJson("[{\"marker\":\"VIP专属\",\"status\":\"PENDING_RELEASE\"}]")
@@ -834,6 +836,7 @@ class CrawlerTaskManagementTest {
                 new com.aibook.model.entity.CrawlerSiteRule();
         site.attachRule(rule);
         CrawlerBook book = CrawlerBook.builder().id(8L).site(site).bookName("待开放测试").build();
+        if (alreadyImported) book.setLibraryBook(com.aibook.model.entity.Book.builder().id(9L).build());
         CrawlerChapter chapter = CrawlerChapter.builder().id(10L).crawlerBook(book)
                 .chapterIndex(1).chapterName("第一章")
                 .chapterUrl("https://example.com/chapter/1").build();
@@ -874,6 +877,10 @@ class CrawlerTaskManagementTest {
         try {
             org.springframework.test.util.ReflectionTestUtils.setField(service,
                     "queueExecutorService", mock(CrawlerQueueExecutorService.class));
+            CrawlerExportService exports = (CrawlerExportService)
+                    org.springframework.test.util.ReflectionTestUtils.getField(service, "exportService");
+            when(exports.autoImportCompleted(user, book.getId()))
+                    .thenReturn(automaticallyImported ? 9L : null);
             service.run(task.getId());
 
             assertThat(chapter.getCrawlStatus())
@@ -881,6 +888,10 @@ class CrawlerTaskManagementTest {
             assertThat(chapter.getAccessStatus()).isEqualTo(CrawlerChapter.AccessStatus.LOCKED);
             assertThat(chapter.getContent()).isNull();
             assertThat(book.getPendingReleaseChapterCount()).isEqualTo(1);
+            assertThat(book.getAutoImportEnabled()).isFalse();
+            verify(exports).autoImportCompleted(user, book.getId());
+            verify(exports, times(alreadyImported && !automaticallyImported ? 1 : 0))
+                    .syncImportedBook(user, book.getId());
             assertThat(book.getFailedChapterCount()).isZero();
             assertThat(book.getCrawlStatus()).isEqualTo(CrawlerBook.CrawlStatus.COMPLETED);
             assertThat(task.getStatus()).isEqualTo(CrawlerTask.TaskStatus.SUCCESS);

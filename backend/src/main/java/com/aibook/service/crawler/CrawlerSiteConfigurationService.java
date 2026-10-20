@@ -45,7 +45,8 @@ public class CrawlerSiteConfigurationService {
         List<DiscoveryPagePayload> discoveryPages = discoveryPageService.pages(user, siteId).stream()
                 .map(this::discoveryPagePayload).toList();
         return new SiteConfigurationPayload(SCHEMA_VERSION, CONFIGURATION_TYPE,
-                sitePayload, rules, discoveryPages);
+                sitePayload, rules, discoveryPages,
+                com.aibook.util.CrawlerAutoImportRules.decode(site.getAutoImportRulesJson()));
     }
 
     @Transactional
@@ -67,6 +68,9 @@ public class CrawlerSiteConfigurationService {
         }
         for (DiscoveryPagePayload page : values(configuration.discoveryPages())) {
             discoveryPageService.create(user, importedSite.id(), page);
+        }
+        if (configuration.autoImport() != null) {
+            managementService.setSiteAutoImport(user, importedSite.id(), configuration.autoImport());
         }
         return managementService.siteView(managementService.ownedSite(user, importedSite.id()));
     }

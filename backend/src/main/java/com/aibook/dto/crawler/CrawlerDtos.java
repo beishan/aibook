@@ -309,7 +309,13 @@ public final class CrawlerDtos {
             @NotBlank @Pattern(regexp = "AIBOOK_CRAWLER_SITE") String type,
             @Valid @NotNull SitePayload site,
             @Size(max = 100) List<@Valid @NotNull RuleSaveRequest> rules,
-            @Size(max = 100) List<@Valid @NotNull DiscoveryPagePayload> discoveryPages) { }
+            @Size(max = 100) List<@Valid @NotNull DiscoveryPagePayload> discoveryPages,
+            @Valid CrawlerAutoImportDtos.Configuration autoImport) {
+        public SiteConfigurationPayload(int schemaVersion, String type, SitePayload site,
+                List<RuleSaveRequest> rules, List<DiscoveryPagePayload> discoveryPages) {
+            this(schemaVersion, type, site, rules, discoveryPages, null);
+        }
+    }
 
     public record BookView(Long id, Long siteId, String siteName, String externalBookId,
             String bookUrl, String bookName, String author, String coverUrl, String description,

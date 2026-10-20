@@ -315,6 +315,7 @@
           <p class="health-line" :class="{error:site.status==='RULE_ERROR'}">{{ site.ruleVersion ? `生效规则 v${site.ruleVersion}` : '暂无生效规则' }} · 共 {{ site.ruleCount }} 个版本</p>
           <div class="site-activity-action-row">
             <el-button type="primary" plain @click="openSiteActivities(site)">查看网站行为记录</el-button>
+            <el-button type="primary" plain @click="openSiteAutoImport(site)">自动入库配置</el-button>
           </div>
           <footer><el-button v-if="hasSiteProtection(site)" text type="warning" @click="resetSiteProtection(site)">解除保护</el-button><el-button type="primary" plain @click="openDiscoveryPages(site)">发现页管理（{{ discoveryPagesBySite[site.id]?.length || 0 }}）</el-button><el-button type="primary" plain @click="openRuleManager(site)">规则管理</el-button><el-button text :icon="Download" @click="exportSiteConfiguration(site)">导出配置</el-button><el-button text @click="openSite(site)">编辑网站</el-button><el-button text @click="openCrawl(site.id)">采集 URL</el-button><el-button text type="danger" @click="removeSite(site)">删除</el-button></footer>
         </article>
@@ -1088,7 +1089,14 @@
           <section class="site-form-section"><header class="section-with-action"><span>05</span><div><h3>代理配置</h3><p>可保存多组代理，同一时间最多生效一组</p></div><el-button :icon="Plus" @click="addProxy">添加代理</el-button></header><div v-if="siteForm.proxies.length" class="proxy-list"><article v-for="(proxy,index) in siteForm.proxies" :key="index" class="proxy-row" :class="{active:proxy.enabled}"><el-form-item label="代理名称" :prop="`proxies.${index}.name`" :rules="proxyNameRules"><el-input v-model="proxy.name" placeholder="例如：家庭网关" /></el-form-item><el-form-item label="代理地址" :prop="`proxies.${index}.url`" :rules="proxyUrlRules"><el-input v-model="proxy.url" placeholder="http://127.0.0.1:7890" /></el-form-item><div class="proxy-state"><el-switch v-model="proxy.enabled" active-text="生效" inactive-text="停用" @change="setActiveProxy(index,Boolean($event))"/><el-button text type="danger" @click="removeProxy(index)">删除</el-button></div></article></div><el-empty v-else :image-size="54" description="未配置代理，将直接连接目标网站" /></section>
         </div>
         <div v-show="activeSiteTab==='automation'" id="site-editor-panel-automation" class="site-tab-panel" role="tabpanel" aria-labelledby="site-editor-tab-automation">
-          <section class="site-form-section"><header><span>06</span><div><h3>运行设置</h3><p>网站总开关与任务范围</p></div></header><el-form-item label="网站状态"><el-switch v-model="siteForm.enabled" active-text="启用网站" inactive-text="停用网站" /></el-form-item><el-alert type="info" :closable="false" title="发现页可独立开启自动扫描；书籍正文采集、检查更新、生成文件和入库仍只由人工触发。" /></section>
+          <section class="site-form-section">
+            <header><span>06</span><div><h3>运行设置</h3><p>网站总开关与任务范围</p></div></header>
+            <el-form-item label="网站状态">
+              <el-switch v-model="siteForm.enabled" active-text="启用网站" inactive-text="停用网站" />
+            </el-form-item>
+            <el-alert type="info" :closable="false"
+              title="发现页可独立开启自动扫描与自动采集；书籍可按网站规则或单本设置，在正文采集成功后自动入库。网站自动入库规则请在网站卡片的“自动入库配置”中设置。" />
+          </section>
           <el-alert type="warning" :closable="false" title="仅采集你有权阅读的免费内容；系统不会绕过登录、付费、验证码或访问控制。" />
         </div>
       </el-form>
@@ -2214,6 +2222,10 @@
         </footer>
       </div>
     </el-dialog>
+    <CrawlerSiteAutoImportDialog
+      v-model="siteAutoImportOpen"
+      :site="siteAutoImportSite"
+    />
   </main>
 </template>
 
@@ -2237,6 +2249,7 @@ import { useRouter } from 'vue-router'
 import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, List, MoreFilled, Plus, QuestionFilled, Refresh, Search, Star, StarFilled, Tickets, TrendCharts, Upload, VideoPause, VideoPlay, Warning } from '@element-plus/icons-vue'
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElProgress, ElTable, ElTableColumn, ElTag, ElTooltip, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
 import DiscoveryChapterListDialog from '@/components/DiscoveryChapterListDialog.vue'
+import CrawlerSiteAutoImportDialog from '@/components/CrawlerSiteAutoImportDialog.vue'
 import SiteSourceTag from '@/components/SiteSourceTag.vue'
 import CrawlerSiteIcon from '@/components/CrawlerSiteIcon.vue'
 import {
@@ -2512,6 +2525,12 @@ async function loadDiscoveryFilterOptions(visible:boolean) {
 
 const siteDialog=ref(false), siteProtectionDialog=ref(false), protectionDetailSite=ref<CrawlerSite>(), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'|'metadata'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'|'EXTREME'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
 const chapterReaderSurface=ref<HTMLElement>(), chapterReaderActive=ref<CrawlerChapter>(), chapterReaderChapters=ref<CrawlerChapter[]>([]), chapterReaderBookId=ref<number>(), chapterReaderLoading=ref(false), chapterReaderSettingsOpen=ref(false), chapterEditing=ref(false), chapterEditContent=ref(''), savingChapter=ref(false)
+const siteAutoImportOpen = ref(false)
+const siteAutoImportSite = ref<CrawlerSite>()
+function openSiteAutoImport(site: CrawlerSite) {
+  siteAutoImportSite.value = site
+  siteAutoImportOpen.value = true
+}
 const discoveryPagesBySite=ref<Record<number,CrawlerDiscoveryPage[]>>({})
 const discoveryMetadataRefreshing=ref(false)
 const batchDiscoveryCrawling = ref(false)
@@ -6173,6 +6192,8 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 
 .site-activity-action-row {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: flex-end;
   margin-top: 12px;
 }

@@ -40,6 +40,13 @@ class CrawlerLibraryImportMappingTest {
                 assertThat(propertyNames).contains("libraryBook", "importStatus");
                 assertThat(persister.getPropertyUpdateability()[propertyNames.indexOf("libraryBook")]).isFalse();
                 assertThat(persister.getPropertyUpdateability()[propertyNames.indexOf("importStatus")]).isFalse();
+                var sitePersister = factory.getRuntimeMetamodels().getMappingMetamodel()
+                        .getEntityDescriptor(com.aibook.model.entity.CrawlerSite.class);
+                int rulesIndex = Arrays.asList(sitePersister.getPropertyNames()).indexOf("autoImportRulesJson");
+                assertThat(sitePersister.getPropertyUpdateability()[rulesIndex]).isFalse();
+                String siteRulesQuery = CrawlerSiteRepository.class.getMethod("updateAutoImportRules",
+                        Long.class, User.class, String.class).getAnnotation(Query.class).value();
+                session.createMutationQuery(siteRulesQuery);
 
                 String linkQuery = CrawlerBookRepository.class.getMethod("linkLibraryBook",
                         Long.class, User.class, Book.class, CrawlerBook.ImportStatus.class)

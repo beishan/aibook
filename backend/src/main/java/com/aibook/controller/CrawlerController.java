@@ -65,6 +65,18 @@ public class CrawlerController {
                 range == null ? days : range, end, page, size);
     }
     @GetMapping("/sites") public List<SiteView> sites(Authentication auth) { return managementService.sites(user(auth)); }
+    @GetMapping("/sites/{id}/auto-import")
+    public com.aibook.dto.crawler.CrawlerAutoImportDtos.Configuration siteAutoImport(
+            Authentication auth, @PathVariable Long id) {
+        return managementService.siteAutoImport(user(auth), id);
+    }
+
+    @PutMapping("/sites/{id}/auto-import")
+    public com.aibook.dto.crawler.CrawlerAutoImportDtos.Configuration setSiteAutoImport(
+            Authentication auth, @PathVariable Long id,
+            @Valid @RequestBody com.aibook.dto.crawler.CrawlerAutoImportDtos.Configuration configuration) {
+        return managementService.setSiteAutoImport(user(auth), id, configuration);
+    }
     @GetMapping("/sites/{id}/activities")
     public Page<SiteActivityView> siteActivities(Authentication auth, @PathVariable Long id,
             @RequestParam(defaultValue = "0") int page,

@@ -41,6 +41,74 @@ class CrawlerExportServiceTest {
     @TempDir Path temporaryDirectory;
 
     @Test
+    void importsMatchedCompletedBookWithSiteFormatsAndPrefersExplicitBookSettings() {
+        User user = User.builder().id(1L).build();
+        CrawlerBook book = book(user);
+        book.setCrawlStatus(CrawlerBook.CrawlStatus.COMPLETED);
+        book.setBookName("神话传说");
+        book.setChapterCount(11);
+        book.getSite().setAutoImportRulesJson("""
+                {"enabled":true,"formats":["TXT","EPUB"],"rules":[
+                  {"name":"神话","expressions":[
+                    {"type":"KEYWORD","values":["神话","传说"]},
+                    {"type":"CHAPTER_COUNT","comparison":"GT","chapterCount":10}
+                  ]}
+                ]}
+                """);
+        CrawlerExportService service = spy(service(mock(CrawlerManagementService.class),
+                mock(CrawlerChapterRepository.class), mock(CrawlerBookExportRepository.class)));
+        CrawlerBookRepository repository = (CrawlerBookRepository)
+                ReflectionTestUtils.getField(service, "crawlerBookRepository");
+        when(repository.findForLibraryImport(3L, user)).thenReturn(Optional.of(book));
+        doReturn(9L).when(service).importLibrary(eq(user), eq(3L), anyList());
+
+        assertThat(service.autoImportCompleted(user, 3L)).isEqualTo(9L);
+        verify(service).importLibrary(user, 3L, List.of("TXT", "EPUB"));
+        book.setAutoImportEnabled(true);
+        book.setAutoImportFormats("STRUCTURED");
+        assertThat(service.autoImportCompleted(user, 3L)).isEqualTo(9L);
+        verify(service).importLibrary(user, 3L, List.of("STRUCTURED"));
+    }
+
+    @Test
+    void skipsUnmatchedOrIncompleteBooksAndUsesLatestRulesOnTheNextCompletion() {
+        User user = User.builder().id(1L).build();
+        CrawlerBook book = book(user);
+        book.setAutoImportEnabled(false);
+        book.setCrawlStatus(CrawlerBook.CrawlStatus.COMPLETED);
+        book.getSite().setAutoImportRulesJson("""
+                {"enabled":true,"formats":["STRUCTURED"],"rules":[
+                  {"name":"章节","expressions":[
+                    {"type":"CHAPTER_COUNT","comparison":"GT","chapterCount":20}
+                  ]}
+                ]}
+                """);
+        CrawlerExportService service = spy(service(mock(CrawlerManagementService.class),
+                mock(CrawlerChapterRepository.class), mock(CrawlerBookExportRepository.class)));
+        CrawlerBookRepository repository = (CrawlerBookRepository)
+                ReflectionTestUtils.getField(service, "crawlerBookRepository");
+        when(repository.findForLibraryImport(3L, user)).thenReturn(Optional.of(book));
+
+        assertThat(service.autoImportCompleted(user, 3L)).isNull();
+        book.setChapterCount(21);
+        book.setCrawlStatus(CrawlerBook.CrawlStatus.PARTIAL_SUCCESS);
+        assertThat(service.autoImportCompleted(user, 3L)).isNull();
+        verify(service, never()).importLibrary(any(), anyLong(), anyList());
+        book.setCrawlStatus(CrawlerBook.CrawlStatus.COMPLETED);
+        doReturn(9L).when(service).importLibrary(user, 3L, List.of("STRUCTURED"));
+        assertThat(service.autoImportCompleted(user, 3L)).isEqualTo(9L);
+        verify(service).importLibrary(user, 3L, List.of("STRUCTURED"));
+    }
+
+    @Test
+    void autoImportStillRejectsAnUnownedBook() {
+        CrawlerExportService service = service(mock(CrawlerManagementService.class),
+                mock(CrawlerChapterRepository.class), mock(CrawlerBookExportRepository.class));
+        assertThatThrownBy(() -> service.autoImportCompleted(User.builder().id(2L).build(), 3L))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("不存在");
+    }
+
+    @Test
     void generatesPartialBookUsingOnlyChaptersWithContent() throws Exception {
         User user = User.builder().id(1L).username("owner").build();
         CrawlerBook book = book(user);

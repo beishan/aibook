@@ -1859,14 +1859,16 @@ public class CrawlerTaskService {
         bookRepository.refreshImportStatus(book.getId(), contentFailed == 0
                 ? CrawlerBook.ImportStatus.READY : CrawlerBook.ImportStatus.NOT_IMPORTED);
         book = bookRepository.findById(book.getId()).orElse(book);
-        if (contentFailed == 0 && taskFailed == 0 && Boolean.TRUE.equals(book.getAutoImportEnabled())) {
+        boolean automaticImportHandled = false;
+        if (contentFailed == 0 && taskFailed == 0) {
             try {
                 Long libraryBookId = exportService.autoImportCompleted(task.getUser(), book.getId());
                 if (libraryBookId != null) {
-                    recordCrawlerEvent(task, "自动入库完成", "书库ID：" + libraryBookId
-                            + "；格式：" + book.getAutoImportFormats());
+                    automaticImportHandled = true;
+                    recordCrawlerEvent(task, "自动入库完成", "书库ID：" + libraryBookId);
                 }
             } catch (Exception exception) {
+                automaticImportHandled = true;
                 task.setStatus(CrawlerTask.TaskStatus.PARTIAL_SUCCESS);
                 task.setErrorMessage("采集完成，但自动入库失败：" + userMessage(exception));
                 taskRepository.save(task);
@@ -1874,7 +1876,8 @@ public class CrawlerTaskService {
                 log.warn("[采集任务] 自动入库失败: taskId={}, bookId={}",
                         task.getId(), book.getId(), exception);
             }
-        } else if (contentFailed == 0 && taskFailed == 0 && book.getLibraryBook() != null
+        }
+        if (!automaticImportHandled && contentFailed == 0 && taskFailed == 0 && book.getLibraryBook() != null
                 && !Boolean.FALSE.equals(book.getAutoSyncLibrary())) {
             try {
                 int publishedVersions = exportService.syncImportedBook(task.getUser(), book.getId());

@@ -21,6 +21,23 @@ export interface CrawlerSiteAccessWindow { startTime:string; endTime:string }
 export interface CrawlerProtectionState { coolingDown:boolean; blockedUntil?:string; reason?:string; pageUrl?:string; consecutiveFailures:number; adaptiveDelayMillis:number }
 export interface CrawlerRobotsTxt { url:string; statusCode:number; content:string; fetchedAt:string }
 export interface CrawlerSiteFreeze { frozen:boolean; until?:string; durationMinutes:number }
+export type CrawlerAutoImportExpressionType = 'KEYWORD' | 'TAG' | 'CHAPTER_COUNT'
+export type CrawlerAutoImportComparison = 'GT' | 'GTE' | 'EQ' | 'NE' | 'LT' | 'LTE'
+export interface CrawlerAutoImportExpression {
+  type: CrawlerAutoImportExpressionType
+  values: string[]
+  comparison?: CrawlerAutoImportComparison | null
+  chapterCount?: number | null
+}
+export interface CrawlerAutoImportRule {
+  name: string
+  expressions: CrawlerAutoImportExpression[]
+}
+export interface CrawlerSiteAutoImport {
+  enabled: boolean
+  formats: string[]
+  rules: CrawlerAutoImportRule[]
+}
 export interface CrawlerSitePayload {
   siteName: string; siteCode: string; baseUrl: string; homeUrl?: string; enabled: boolean
   autoScan: boolean; autoCrawl: boolean; autoUpdate: boolean; autoImportLibrary: boolean
@@ -296,7 +313,14 @@ export interface CrawlerRuleTest { success:boolean; title?:string; author?:strin
 export interface CrawlerRuleVersion { id:number; version:number; changeSummary:string; enabled:boolean; rule:CrawlerRule; createdAt:string; updatedAt?:string }
 export interface CrawlerRuleSave { version:number; changeSummary:string; rule:CrawlerRule; enabled:boolean }
 export interface CrawlerRuleExport { schemaVersion:number; siteCode:string; version:number; changeSummary:string; rule:CrawlerRule; enabled?:boolean }
-export interface CrawlerSiteConfiguration { schemaVersion:number; type:'AIBOOK_CRAWLER_SITE'; site:CrawlerSitePayload; rules:CrawlerRuleSave[]; discoveryPages:CrawlerDiscoveryPagePayload[] }
+export interface CrawlerSiteConfiguration {
+  schemaVersion: number
+  type: 'AIBOOK_CRAWLER_SITE'
+  site: CrawlerSitePayload
+  rules: CrawlerRuleSave[]
+  discoveryPages: CrawlerDiscoveryPagePayload[]
+  autoImport?: CrawlerSiteAutoImport
+}
 export interface PageResult<T> { content:T[]; totalElements:number; totalPages:number; number:number; size:number; first:boolean; last:boolean }
 export interface CrawlerDiscoveryQuery {
   page:number
@@ -357,6 +381,12 @@ export const crawlerApi = {
     params: { range, granularity, end, page, size },
   }).then(r => r.data),
   sites: () => api.get<CrawlerSite[]>('/api/crawler/sites').then(r => r.data),
+  siteAutoImport: (id: number) => api.get<CrawlerSiteAutoImport>(
+    `/api/crawler/sites/${id}/auto-import`,
+  ).then(r => r.data),
+  setSiteAutoImport: (id: number, configuration: CrawlerSiteAutoImport) =>
+    api.put<CrawlerSiteAutoImport>(`/api/crawler/sites/${id}/auto-import`, configuration)
+      .then(r => r.data),
   siteActivities: (siteId:number, page:number, size:number, eventType?:CrawlerSiteActivity['eventType']) =>
     api.get<PageResult<CrawlerSiteActivity>>(`/api/crawler/sites/${siteId}/activities`, {
       params:{page, size, eventType},

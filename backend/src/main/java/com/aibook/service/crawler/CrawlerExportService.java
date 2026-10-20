@@ -97,12 +97,19 @@ public class CrawlerExportService {
     public Long autoImportCompleted(User user, Long bookId) {
         CrawlerBook book = crawlerBookRepository.findForLibraryImport(bookId, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "采集书籍不存在"));
-        if (!Boolean.TRUE.equals(book.getAutoImportEnabled())
-                || book.getCrawlStatus() != CrawlerBook.CrawlStatus.COMPLETED) {
+        if (book.getCrawlStatus() != CrawlerBook.CrawlStatus.COMPLETED) {
             return null;
         }
-        return importLibrary(user, bookId,
-                com.aibook.util.CrawlerImportFormats.decode(book.getAutoImportFormats()));
+        List<String> formats;
+        if (Boolean.TRUE.equals(book.getAutoImportEnabled())) {
+            formats = com.aibook.util.CrawlerImportFormats.decode(book.getAutoImportFormats());
+        } else {
+            var configuration = com.aibook.util.CrawlerAutoImportRules.decode(
+                    book.getSite().getAutoImportRulesJson());
+            if (!com.aibook.util.CrawlerAutoImportRules.matches(configuration, book)) return null;
+            formats = configuration.formats();
+        }
+        return importLibrary(user, bookId, formats);
     }
 
     @Transactional

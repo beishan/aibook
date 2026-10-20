@@ -42,6 +42,40 @@ import static org.mockito.Mockito.*;
 
 class CrawlerManagementServiceTest {
     @Test
+    void persistsSiteAutoImportRulesIndependentlyAndScopesThemToTheOwner() {
+        User user = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(user).build();
+        when(sites.findByIdAndUser(7L, user)).thenReturn(Optional.of(site));
+        when(sites.updateAutoImportRules(eq(7L), eq(user), anyString())).thenReturn(1);
+        var configuration = new com.aibook.dto.crawler.CrawlerAutoImportDtos.Configuration(
+                false, List.of("STRUCTURED"), List.of());
+
+        assertThat(service.siteAutoImport(user, 7L)).isEqualTo(configuration);
+        assertThat(service.setSiteAutoImport(user, 7L, configuration)).isEqualTo(configuration);
+        ArgumentCaptor<String> saved = ArgumentCaptor.forClass(String.class);
+        verify(sites).updateAutoImportRules(eq(7L), eq(user), saved.capture());
+        assertThat(com.aibook.util.CrawlerAutoImportRules.decode(saved.getValue())).isEqualTo(configuration);
+        verify(sites, never()).save(any());
+        assertThatThrownBy(() -> service.setSiteAutoImport(user, 8L, configuration))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("不存在");
+        verify(sites, never()).updateAutoImportRules(eq(8L), any(), anyString());
+    }
+
+    @Test
+    void rejectsEmptyEnabledSiteRulesAndReportsConcurrentDeletion() {
+        User user = user();
+        when(sites.findByIdAndUser(7L, user)).thenReturn(Optional.of(CrawlerSite.builder().id(7L).build()));
+        var enabledWithoutRules = new com.aibook.dto.crawler.CrawlerAutoImportDtos.Configuration(
+                true, List.of("STRUCTURED"), List.of());
+        assertThatThrownBy(() -> service.setSiteAutoImport(user, 7L, enabledWithoutRules))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("至少配置一条");
+        verify(sites, never()).updateAutoImportRules(anyLong(), any(), anyString());
+        assertThatThrownBy(() -> service.setSiteAutoImport(user, 7L,
+                com.aibook.util.CrawlerAutoImportRules.defaults()))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("已发生变化");
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void taskKeywordSearchCombinesOwnershipFiltersAndDatabasePagination() {
         User user = user();
