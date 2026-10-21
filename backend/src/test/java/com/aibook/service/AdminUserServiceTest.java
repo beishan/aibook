@@ -145,9 +145,30 @@ class AdminUserServiceTest {
         service.deleteUser(2L, administrator);
 
         verify(jdbcTemplate, atLeastOnce()).update(anyString(), any(Object[].class));
+        verify(jdbcTemplate).update(
+                org.mockito.ArgumentMatchers.eq("DELETE FROM operation_logs WHERE user_id = ? AND COALESCE(retained, false) = false"),
+                org.mockito.ArgumentMatchers.<Object[]>any());
         verify(userRepository).delete(target);
         verify(userRepository).flush();
         verify(userProfileService).deleteStoredAvatar(target);
+    }
+
+    @Test
+    void retainedLogsBlockAccountDeletionBeforeAnyOwnedDataIsRemoved() {
+        var users = mock(UserRepository.class);
+        var logs = mock(OperationLogService.class);
+        var jdbc = mock(JdbcTemplate.class);
+        var admin = User.builder().id(1L).role(User.Role.ADMIN).build();
+        var owner = User.builder().id(2L).role(User.Role.USER).build();
+        when(users.findById(2L)).thenReturn(Optional.of(owner));
+        when(logs.hasRetainedLogs(owner)).thenReturn(true);
+        var service = new AdminUserService(users, mock(PasswordEncoder.class), logs,
+                jdbc, mock(UserProfileService.class));
+        assertThatThrownBy(() -> service.deleteUser(2L, admin))
+                .hasMessageContaining("永久保留");
+        org.mockito.Mockito.verifyNoInteractions(jdbc);
+        verify(users, never()).delete(owner);
+        verify(logs, never()).record(any(), any(), any(), anyString(), any());
     }
 
     private AdminUserService service(UserRepository userRepository) {

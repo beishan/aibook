@@ -14,4 +14,5 @@ public class OperationLogDTO {
     private String description;
     private String details;
     private LocalDateTime createdAt;
+    private boolean retained;
 }

@@ -58,6 +58,10 @@ public class OperationLog {
     @Column(columnDefinition = "TEXT")
     private String details;
 
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean retained = false;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

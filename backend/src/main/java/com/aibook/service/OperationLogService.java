@@ -6,6 +6,9 @@ import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.User;
 import com.aibook.repository.OperationLogRepository;
 import lombok.RequiredArgsConstructor;
+import java.util.Locale;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -56,6 +59,44 @@ public class OperationLogService {
         return operationLogRepository.findByUser(user, pageable).map(this::toDTO);
     }
 
+    @Transactional(readOnly = true)
+    public Page<OperationLogDTO> getLogs(User user, Pageable pageable, String action, String keyword) {
+        OperationLog.Action type = null;
+        if (action != null && !action.isBlank()) {
+            try {
+                type = OperationLog.Action.valueOf(action.trim());
+            } catch (IllegalArgumentException exception) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无效的日志类型");
+            }
+        }
+        String text = keyword == null ? "" : keyword.trim();
+        if (text.length() > 200) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "搜索内容最多 200 字符");
+        }
+        String pattern = text.isEmpty() ? "" : "%" + text.toLowerCase(Locale.ROOT)
+                .replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+        return operationLogRepository.search(user, type, pattern, pageable).map(this::toDTO);
+    }
+
+    @Transactional
+    public void retain(User user, Long id) {
+        if (operationLogRepository.retain(user, id) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "日志不存在");
+        }
+    }
+
+    @Transactional
+    public void delete(User user, Long id) {
+        if (operationLogRepository.deleteOwned(user, id) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "日志不存在");
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasRetainedLogs(User user) {
+        return operationLogRepository.existsByUserAndRetainedTrue(user);
+    }
+
     private OperationLogDTO toDTO(OperationLog log) {
         return OperationLogDTO.builder()
                 .id(log.getId())
@@ -65,6 +106,7 @@ public class OperationLogService {
                 .description(log.getDescription())
                 .details(log.getDetails())
                 .createdAt(log.getCreatedAt())
+                .retained(log.isRetained())
                 .build();
     }
 }

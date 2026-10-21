@@ -120,6 +120,10 @@ public class AdminUserService {
             throw new IllegalArgumentException("不能删除当前登录账号");
         }
         ensureAdminRemains(target, null, false);
+        if (operationLogService.hasRetainedLogs(target)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "该用户存在永久保留的操作日志，请先由该用户手动删除这些日志后再删除账号");
+        }
         String targetUsername = target.getUsername();
 
         operationLogService.record(
@@ -222,7 +226,8 @@ public class AdminUserService {
         update("UPDATE categories SET parent_id = NULL WHERE user_id = ?", userId);
         update("DELETE FROM categories WHERE user_id = ?", userId);
         update("DELETE FROM tags WHERE user_id = ?", userId);
-        update("DELETE FROM operation_logs WHERE user_id = ?", userId);
+        update("DELETE FROM operation_log_retention_policies WHERE user_id = ?", userId);
+        update("DELETE FROM operation_logs WHERE user_id = ? AND COALESCE(retained, false) = false", userId);
     }
 
     private void update(String sql, Object... arguments) {
