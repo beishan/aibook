@@ -146,6 +146,15 @@ public class CrawlerController {
         return managementService.books(user(auth), page, size, keyword, siteId,
                 crawlStatus, importStatus, favoriteOnly, sort, tag, chapterCountGreaterThan);
     }
+    @GetMapping("/books/blacklist")
+    public Page<BookView> blacklistBooks(Authentication auth,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long siteId) {
+        return managementService.blacklistBooks(user(auth), page, size, keyword, siteId);
+    }
+
     @GetMapping("/books/tags")
     public List<String> managedBookTags(Authentication auth,
             @RequestParam(required = false) Long siteId) {

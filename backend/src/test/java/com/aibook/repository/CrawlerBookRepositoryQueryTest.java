@@ -16,6 +16,18 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 class CrawlerBookRepositoryQueryTest {
+    @Test
+    void blacklistQueryIncludesOwnerAndStatusWithoutExcludingUncrawledBooks() throws Exception {
+        Method method = CrawlerBookRepository.class.getMethod("searchBlacklistBooks",
+                User.class, CrawlerBook.DiscoveryStatus.class, String.class, Long.class, Pageable.class);
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query.value()).contains("b.site.user = :user", "b.discoveryStatus = :status",
+                ":siteId is null", "b.bookName", "b.author", "b.site.siteName")
+                .doesNotContain("crawlStatus");
+        assertThat(namedParameters(query.value())).containsExactlyInAnyOrder(
+                "user", "status", "keyword", "siteId");
+    }
+
 
     private Query managedBookQuery() throws NoSuchMethodException {
         Method method = CrawlerBookRepository.class.getMethod("searchManagedBooks",
@@ -107,6 +119,13 @@ class CrawlerBookRepositoryQueryTest {
                         .extracting(jakarta.persistence.Parameter::getName)
                         .containsExactlyInAnyOrder("user", "discoveryStatus", "crawlStatus", "keyword",
                                 "siteId", "excludedIds");
+                Method blacklist = CrawlerBookRepository.class.getMethod("searchBlacklistBooks",
+                        User.class, CrawlerBook.DiscoveryStatus.class, String.class, Long.class,
+                        Pageable.class);
+                assertThat(session.createQuery(blacklist.getAnnotation(Query.class).value(),
+                        CrawlerBook.class).getParameters())
+                        .extracting(jakarta.persistence.Parameter::getName)
+                        .containsExactlyInAnyOrder("user", "status", "keyword", "siteId");
                 Query managed = managedBookQuery();
                 assertThat(session.createQuery(managed.value(), CrawlerBook.class).getParameters())
                         .extracting(jakarta.persistence.Parameter::getName).contains("tag");

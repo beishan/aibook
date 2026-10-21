@@ -420,6 +420,8 @@ export const crawlerApi = {
   setRuleStatus: (siteId:number, ruleId:number, enabled:boolean) => api.put<CrawlerRuleVersion>(`/api/crawler/sites/${siteId}/rules/${ruleId}/status`,{enabled}).then(r => r.data),
   exportRule: (siteId:number, ruleId:number) => api.get<CrawlerRuleExport>(`/api/crawler/sites/${siteId}/rules/${ruleId}/export`).then(r => r.data),
   importRule: (siteId:number, data:CrawlerRuleExport & {enabled:boolean}) => api.post<CrawlerRuleVersion>(`/api/crawler/sites/${siteId}/rules/import`,data).then(r => r.data),
+  blacklistBooks: (params: {page: number; size: number; keyword?: string; siteId?: number}) =>
+    api.get<PageResult<CrawlerBook>>('/api/crawler/books/blacklist', {params}).then(r => r.data),
   books: (params:CrawlerBookQuery) => api.get<PageResult<CrawlerBook>>('/api/crawler/books', { params }).then(r => r.data),
   previewCategoryCleanup: (data:{siteId?:number;categoryNames:string[];syncLibrary:boolean}) =>
     api.post<{matchedBooks:number;matchingLibraryBooks:number;samples:{id:number;bookName:string;category:string;siteName:string;matchingLibraryCategory:boolean}[]}>(

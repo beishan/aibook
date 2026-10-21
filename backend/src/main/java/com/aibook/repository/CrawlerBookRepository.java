@@ -11,6 +11,23 @@ import java.util.*;
 
 public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> {
     @Query("""
+            select b from CrawlerBook b
+            where b.site.user = :user
+              and b.discoveryStatus = :status
+              and (:siteId is null or b.site.id = :siteId)
+              and (:keyword = ''
+                   or lower(b.bookName) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(b.author, '')) like lower(concat('%', :keyword, '%'))
+                   or lower(b.site.siteName) like lower(concat('%', :keyword, '%')))
+            """)
+    Page<CrawlerBook> searchBlacklistBooks(
+            @Param("user") User user,
+            @Param("status") CrawlerBook.DiscoveryStatus status,
+            @Param("keyword") String keyword,
+            @Param("siteId") Long siteId,
+            Pageable pageable);
+
+    @Query("""
             select b.id as id, b.bookName as bookName, b.author as author, b.category as category,
                    b.site.siteName as siteName, library.id as libraryBookId,
                    category.id as libraryCategoryId, category.name as libraryCategoryName

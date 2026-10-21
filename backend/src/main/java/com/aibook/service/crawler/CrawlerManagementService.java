@@ -299,6 +299,14 @@ public class CrawlerManagementService {
     }
 
     @Transactional(readOnly = true)
+    public Page<BookView> blacklistBooks(User user, int page, int size, String keyword, Long siteId) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+                Sort.by(Sort.Order.desc("id")));
+        return bookRepository.searchBlacklistBooks(user, CrawlerBook.DiscoveryStatus.BLACKLISTED,
+                blank(keyword) ? "" : keyword.trim(), siteId, pageable).map(this::bookView);
+    }
+
+    @Transactional(readOnly = true)
     public List<String> managedBookTags(User user, Long siteId) {
         Set<String> tags = new TreeSet<>();
         for (String metadata : bookRepository.managedTagMetadata(user,

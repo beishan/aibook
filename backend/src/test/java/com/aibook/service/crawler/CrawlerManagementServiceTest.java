@@ -42,6 +42,44 @@ import static org.mockito.Mockito.*;
 
 class CrawlerManagementServiceTest {
     @Test
+    void blacklistBooksUsesOwnerStatusFiltersAndDatabasePagination() {
+        User owner = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(owner).siteName("来源站").build();
+        CrawlerBook book = CrawlerBook.builder().id(15L).site(site).bookName("黑名单书籍")
+                .discoveryStatus(CrawlerBook.DiscoveryStatus.BLACKLISTED).build();
+        when(books.searchBlacklistBooks(eq(owner), eq(CrawlerBook.DiscoveryStatus.BLACKLISTED),
+                eq("示例"), eq(7L), any(Pageable.class)))
+                .thenAnswer(call -> new PageImpl<>(List.of(book), call.getArgument(4), 45));
+
+        var result = service.blacklistBooks(owner, 1, 20, " 示例 ", 7L);
+
+        assertThat(result.getTotalElements()).isEqualTo(45);
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).bookName()).isEqualTo("黑名单书籍");
+        assertThat(result.getContent().get(0).discoveryStatus()).isEqualTo("BLACKLISTED");
+        ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
+        verify(books).searchBlacklistBooks(eq(owner), eq(CrawlerBook.DiscoveryStatus.BLACKLISTED),
+                eq("示例"), eq(7L), page.capture());
+        assertThat(page.getValue().getPageNumber()).isEqualTo(1);
+        assertThat(page.getValue().getPageSize()).isEqualTo(20);
+        assertThat(page.getValue().getSort().getOrderFor("id").isDescending()).isTrue();
+    }
+
+    @Test
+    void blacklistBooksNormalizesBlankSearchAndBoundsPageSize() {
+        User owner = user();
+        when(books.searchBlacklistBooks(eq(owner), eq(CrawlerBook.DiscoveryStatus.BLACKLISTED),
+                eq(""), isNull(), any(Pageable.class))).thenReturn(Page.empty());
+
+        assertThat(service.blacklistBooks(owner, -1, 1000, "  ", null).isEmpty()).isTrue();
+        ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
+        verify(books).searchBlacklistBooks(eq(owner), eq(CrawlerBook.DiscoveryStatus.BLACKLISTED),
+                eq(""), isNull(), page.capture());
+        assertThat(page.getValue().getPageNumber()).isZero();
+        assertThat(page.getValue().getPageSize()).isEqualTo(100);
+    }
+
+    @Test
     void persistsSiteAutoImportRulesIndependentlyAndScopesThemToTheOwner() {
         User user = user();
         CrawlerSite site = CrawlerSite.builder().id(7L).user(user).build();

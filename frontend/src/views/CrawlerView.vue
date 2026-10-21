@@ -6,6 +6,7 @@
         <p class="crawler-page-subtitle">共 {{ dashboard?.bookCount || 0 }} 本采集书籍</p>
       </div>
       <div class="crawler-header-actions">
+        <el-button @click="openBlacklist">黑名单书籍</el-button>
         <el-switch
           :model-value="preferencesStore.crawlerHideBookNames"
           active-text="隐藏书名"
@@ -1436,6 +1437,61 @@
           {{ importResumeJobId?'继续查询入库结果':importFailures.length?'重试未成功书籍':importTargets.length>1?'确认批量入库':importTarget?.importStatus==='IMPORTED'?'同步所选格式':'确认入库' }}
         </el-button>
       </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="blacklistDialog"
+      title="黑名单书籍"
+      width="min(960px, 96vw)"
+      append-to-body
+    >
+      <p>已加入黑名单的书籍，后续扫描不会重新收录。</p>
+      <div class="blacklist-filters">
+        <el-input
+          v-model="blacklistKeyword"
+          clearable
+          placeholder="搜索书名、作者或网站"
+          aria-label="搜索黑名单书籍"
+          @keyup.enter="applyBlacklistFilters"
+          @clear="applyBlacklistFilters"
+        />
+        <el-select
+          v-model="blacklistSiteId"
+          clearable
+          placeholder="全部采集网站"
+          aria-label="黑名单来源网站"
+          @change="applyBlacklistFilters"
+        >
+          <el-option v-for="site in sites" :key="site.id" :label="site.siteName" :value="site.id" />
+        </el-select>
+        <el-button :loading="blacklistLoading" @click="applyBlacklistFilters">查询</el-button>
+      </div>
+      <el-alert v-if="blacklistError" :title="blacklistError" type="error" :closable="false" />
+      <el-table v-loading="blacklistLoading" :data="blacklistBooks" row-key="id" max-height="52vh">
+        <el-table-column label="书名" min-width="200">
+          <template #default="{ row }"><CrawlerBookTitle :title="row.bookName" /></template>
+        </el-table-column>
+        <el-table-column prop="author" label="作者" min-width="140" show-overflow-tooltip />
+        <el-table-column label="来源网站" min-width="140">
+          <template #default="{ row }">
+            <SiteSourceTag :name="row.siteName" :color="row.siteThemeColor" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="bookUrl" label="来源地址" min-width="230" show-overflow-tooltip />
+        <template #empty>{{ blacklistError ? '加载失败，请重试' : '暂无符合条件的黑名单书籍' }}</template>
+      </el-table>
+      <div class="blacklist-pagination">
+        <el-pagination
+          v-model:current-page="blacklistPage"
+          v-model:page-size="blacklistPageSize"
+          :page-sizes="[20, 50, 100]"
+          :total="blacklistTotal"
+          layout="total, sizes, prev, pager, next, jumper"
+          background
+          @current-change="loadBlacklistBooks"
+          @size-change="applyBlacklistFilters"
+        />
+      </div>
     </el-dialog>
 
     <el-dialog v-model="bookListDialog" :title="`预选书单 · ${bookListTarget?.bookName || ''}`" width="min(560px, 94vw)" append-to-body>
@@ -4342,6 +4398,51 @@ function handleScanResultFilterKey(event: KeyboardEvent) {
 async function handleScanResultSizeChange(){scanResultsPage.value=1;await loadScanResults()}
 async function loadFailedTasks(options:LoadOptions={}){if(!options.silent){failedTaskLoading.value=true;selectedFailedTasks.value=[]}try{const result=await crawlerApi.tasks({page:failedTaskPage.value-1,size:failedTaskPageSize.value,failedOnly:true});const lastPage=Math.max(1,Math.ceil(result.totalElements/failedTaskPageSize.value));if(failedTaskPage.value>lastPage){failedTaskPage.value=lastPage;return await loadFailedTasks(options)}failedTasks.value=result.content;failedTaskTotal.value=result.totalElements}finally{if(!options.silent)failedTaskLoading.value=false}}
 async function handleFailedTaskSizeChange(){failedTaskPage.value=1;await loadFailedTasks()}
+const blacklistDialog = ref(false)
+const blacklistLoading = ref(false)
+const blacklistError = ref('')
+const blacklistBooks = ref<CrawlerBook[]>([])
+const blacklistKeyword = ref('')
+const blacklistSiteId = ref<number>()
+const blacklistPage = ref(1)
+const blacklistPageSize = ref(20)
+const blacklistTotal = ref(0)
+let blacklistRequest = 0
+
+async function openBlacklist() {
+  blacklistDialog.value = true
+  await applyBlacklistFilters()
+}
+
+async function applyBlacklistFilters() {
+  blacklistPage.value = 1
+  await loadBlacklistBooks()
+}
+
+async function loadBlacklistBooks() {
+  const request = ++blacklistRequest
+  blacklistLoading.value = true
+  blacklistError.value = ''
+  blacklistBooks.value = []
+  try {
+    const result = await crawlerApi.blacklistBooks({
+      page: blacklistPage.value - 1,
+      size: blacklistPageSize.value,
+      keyword: blacklistKeyword.value.trim() || undefined,
+      siteId: blacklistSiteId.value,
+    })
+    if (request !== blacklistRequest) return
+    blacklistBooks.value = result.content
+    blacklistTotal.value = result.totalElements
+  } catch (error: any) {
+    if (request !== blacklistRequest) return
+    blacklistTotal.value = 0
+    blacklistError.value = error.response?.data?.message || '黑名单加载失败，请重试'
+  } finally {
+    if (request === blacklistRequest) blacklistLoading.value = false
+  }
+}
+
 async function loadDiscoveredBooks(options:LoadOptions={}) {
   const request = ++discoveryBooksRequest
   if (!options.silent) discoveryLoading.value = true
@@ -5471,6 +5572,23 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 @media(max-width:640px){:global(.site-editor-dialog){width:calc(100vw - 20px)!important;max-height:calc(100dvh - 20px);margin-top:10px!important;margin-bottom:10px}:global(.site-editor-dialog .el-dialog__body){padding-right:14px;padding-left:14px}.site-editor-form{padding-right:0}}
 @media(prefers-reduced-motion:reduce){.site-editor-tab-indicator{transition:none}}
 .chapter-heading-tools{display:flex;align-items:center;gap:10px}.chapter-follow{box-sizing:border-box;display:flex;min-width:132px;height:38px;align-items:center;justify-content:space-between;gap:10px;padding:2px 10px;border:1px solid var(--border-color);border-radius:12px;background:var(--bg-page);cursor:pointer;transition:border-color .2s ease,background .2s ease}.chapter-follow strong{color:var(--text-secondary);font-size:11px}.chapter-follow.active{border-color:color-mix(in srgb,var(--primary) 38%,var(--border-color));background:var(--primary-alpha-10)}.chapter-follow.active strong{color:var(--primary)}.chapter-sort.disabled{opacity:.5}.chapter-sort button:disabled{cursor:not-allowed}.chapter-name-cell{display:flex;min-width:0;align-items:center;gap:8px}.chapter-name-cell>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chapter-name-cell em{display:inline-flex;flex:0 0 auto;align-items:center;gap:5px;padding:3px 7px;border-radius:99px;background:var(--primary-alpha-10);color:var(--primary);font-size:9px;font-style:normal;font-weight:800}.chapter-name-cell em i{width:6px;height:6px;border-radius:50%;background:var(--primary);box-shadow:0 0 0 4px var(--primary-alpha-10);animation:chapter-follow-pulse 1.5s ease-out infinite}.chapters-table :deep(.current-crawling-row>td.el-table__cell){background:color-mix(in srgb,var(--primary) 11%,var(--surface-elevated))!important}.chapters-table :deep(.current-crawling-row:hover>td.el-table__cell){background:color-mix(in srgb,var(--primary) 15%,var(--surface-elevated))!important}@keyframes chapter-follow-pulse{70%,100%{box-shadow:0 0 0 8px transparent}}@media(max-width:720px){.chapter-heading-tools{align-items:stretch;flex-direction:column}.chapter-follow{width:100%}}@media(prefers-reduced-motion:reduce){.chapter-follow{transition:none}.chapter-name-cell em i{animation:none}}
+.blacklist-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+.blacklist-filters > .el-input {
+  flex: 1 1 220px;
+}
+.blacklist-filters > .el-select {
+  flex: 1 1 180px;
+}
+.blacklist-pagination {
+  overflow-x: auto;
+  padding-top: 16px;
+}
+
 .crawler-header-actions{display:flex;align-items:center;gap:10px}.polling-setting{display:flex;align-items:center;gap:10px;padding:7px 9px 7px 12px;border:1px solid var(--border-color);border-radius:13px;background:color-mix(in srgb,var(--surface-elevated) 88%,transparent);box-shadow:var(--shadow-sm);backdrop-filter:blur(14px)}.polling-setting>span{display:flex;align-items:center;gap:7px;color:var(--text-secondary);font-size:11px;font-weight:700;white-space:nowrap}.polling-setting>span i{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 0 4px var(--success-alpha-15);animation:live-pulse 1.8s ease-out infinite}.polling-setting :deep(.el-select){width:84px}.polling-setting :deep(.el-select__wrapper){border-radius:9px;background:var(--surface-card);box-shadow:none}@media(max-width:640px){.crawler-header{gap:var(--spacing-md);flex-direction:column}.crawler-header-actions{width:100%;flex-wrap:wrap}.polling-setting{justify-content:space-between}.crawler-header-actions>.el-button{margin-left:0}}@media(prefers-reduced-motion:reduce){.polling-setting>span i{animation:none}}
 .import-book-dialog{display:grid;gap:20px}.format-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.format-options :deep(.el-checkbox-button){width:100%}.format-options :deep(.el-checkbox-button__inner){display:grid;width:100%;gap:4px;padding:16px;border:1px solid var(--border-color)!important;border-radius:13px!important;background:var(--surface-elevated);box-shadow:none!important;text-align:left}.format-options :deep(.el-checkbox-button__inner strong){font-size:15px}.format-options :deep(.el-checkbox-button__inner small){color:var(--text-tertiary);font-size:11px;font-weight:400}.format-options :deep(.el-checkbox-button.is-checked .el-checkbox-button__inner){border-color:var(--primary)!important;background:var(--primary-alpha-10);color:var(--primary)}.format-options :deep(.el-checkbox-button.is-focus .el-checkbox-button__inner){outline:2px solid var(--primary);outline-offset:2px}@media(max-width:480px){.format-options{grid-template-columns:minmax(0,1fr)}}
 .discovery-manager-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;margin-bottom:14px;border-radius:14px;background:var(--primary-alpha-10)}.discovery-manager-toolbar>div{display:grid;gap:3px}.discovery-manager-toolbar p{color:var(--text-secondary);font-size:12px}.discovery-pages{display:grid;gap:8px}.discovery-pages-dialog-list{max-height:58vh;overflow-y:auto;padding-right:4px}.discovery-page-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center;padding:12px 14px;border:1px solid var(--border-color-light);border-radius:12px;background:var(--surface-card)}.discovery-page-row>div:first-child{display:grid;min-width:0;gap:3px}.discovery-page-row a{overflow:hidden;color:var(--text-secondary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.discovery-page-row small{color:var(--text-tertiary);font-size:10px}.discovery-page-actions {
