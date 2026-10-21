@@ -4,7 +4,7 @@
       <button class="icon-action back-action" type="button" aria-label="返回采集书籍" @click="goBack">‹</button>
       <div class="book-identity">
         <div class="title-line">
-          <strong :title="book?.bookName">{{ book?.bookName || '临时试读' }}</strong>
+          <strong :title="book?.bookName"><CrawlerBookTitle :title="book?.bookName || '临时试读'" /></strong>
           <span class="trial-badge">临时试读</span>
         </div>
         <p>{{ activeChapter?.chapterName || '正在准备章节' }}<span v-if="readableChapters.length"> · {{ activeIndex + 1 }} / {{ readableChapters.length }}</span></p>
@@ -70,6 +70,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { crawlerApi, type CrawlerBook, type CrawlerChapter } from '@/utils/crawler'
 import SiteSourceTag from '@/components/SiteSourceTag.vue'
+import CrawlerBookTitle from '@/components/CrawlerBookTitle.vue'
+import { usePreferencesStore } from '@/stores/preferences'
 
 type ReaderTheme='paper'|'light'|'night'
 const route=useRoute(),router=useRouter()
@@ -93,6 +95,7 @@ async function loadChapters(bookId:number){
   readableChapters.value=[...first.content,...remaining.flatMap(page=>page.content)].filter(chapter=>chapter.crawlStatus==='COMPLETED')
 }
 async function initialize(){
+  await usePreferencesStore().hydrate()
   const bookId=Number(route.params.id)
   if(!Number.isFinite(bookId)){loadError.value='无效的采集书籍编号';loading.value=false;return}
   loading.value=true;loadError.value=''

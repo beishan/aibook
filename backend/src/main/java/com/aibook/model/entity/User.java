@@ -259,6 +259,14 @@ public class User implements UserDetails {
         preference().setCrawlerDiscoveryViewMode(value);
     }
 
+    public Boolean getCrawlerHideBookNames() {
+        return preference().getCrawlerHideBookNames();
+    }
+
+    public void setCrawlerHideBookNames(Boolean value) {
+        preference().setCrawlerHideBookNames(value);
+    }
+
     public String getCrawlerBookViewMode() {
         return preference().getCrawlerBookViewMode();
     }

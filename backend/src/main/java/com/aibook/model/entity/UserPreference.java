@@ -77,6 +77,8 @@ public class UserPreference {
     private String crawlerDiscoveryViewMode;
     @Column(name = "crawler_book_view_mode")
     private String crawlerBookViewMode;
+    @Column(name = "crawler_hide_book_names")
+    private Boolean crawlerHideBookNames;
 
     @Column(name = "scraper_trial_view_mode")
     private String scraperTrialViewMode;

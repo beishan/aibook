@@ -412,6 +412,7 @@ class UserServiceTest {
                         .crawlerChapterPageSize(50)
                         .crawlerDiscoveryViewMode("card")
                         .crawlerBookViewMode("card")
+                        .crawlerHideBookNames(true)
                         .build());
 
         assertEquals(10, user.getCrawlerPollingIntervalSeconds());
@@ -424,6 +425,16 @@ class UserServiceTest {
         assertEquals(50, result.getCrawlerChapterPageSize());
         assertEquals("card", result.getCrawlerDiscoveryViewMode());
         assertEquals("card", result.getCrawlerBookViewMode());
+        assertEquals(true, user.getCrawlerHideBookNames());
+        assertEquals(true, result.getCrawlerHideBookNames());
+        assertEquals(true, service.getPreferences("reader").getCrawlerHideBookNames());
+
+        service.updatePreferences("reader", UserPreferencesDTO.builder().crawlerFollowCurrentChapter(false).build());
+        assertEquals(true, user.getCrawlerHideBookNames());
+        UserPreferencesDTO visible = service.updatePreferences(
+                "reader", UserPreferencesDTO.builder().crawlerHideBookNames(false).build());
+        assertEquals(false, user.getCrawlerHideBookNames());
+        assertEquals(false, visible.getCrawlerHideBookNames());
     }
 
     @Test

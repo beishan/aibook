@@ -214,6 +214,9 @@ public class UserService implements UserDetailsService {
                     CRAWLER_DISCOVERY_VIEW_MODES);
             user.setCrawlerDiscoveryViewMode(request.getCrawlerDiscoveryViewMode());
         }
+        if (request.getCrawlerHideBookNames() != null) {
+            user.setCrawlerHideBookNames(request.getCrawlerHideBookNames());
+        }
         if (request.getCrawlerBookViewMode() != null) {
             requireAllowed("采集书籍显示方式", request.getCrawlerBookViewMode(),
                     CRAWLER_BOOK_VIEW_MODES);
@@ -323,6 +326,7 @@ public class UserService implements UserDetailsService {
                 .crawlerChapterPageSize(user.getCrawlerChapterPageSize())
                 .crawlerDiscoveryViewMode(user.getCrawlerDiscoveryViewMode())
                 .crawlerBookViewMode(user.getCrawlerBookViewMode())
+                .crawlerHideBookNames(user.getCrawlerHideBookNames())
                 .scraperTrialViewMode(user.getScraperTrialViewMode())
                 .dockSize(defaultIfNull(user.getDockSize(), DEFAULT_DOCK_SIZE))
                 .dockOpacity(defaultIfNull(user.getDockOpacity(), DEFAULT_DOCK_OPACITY))

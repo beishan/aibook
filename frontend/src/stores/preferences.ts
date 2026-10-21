@@ -102,6 +102,7 @@ interface UserPreferences {
   crawlerFollowCurrentChapter: boolean | null
   crawlerChapterPageSize: number | null
   crawlerDiscoveryViewMode: CrawlerDiscoveryViewMode | null
+  crawlerHideBookNames: boolean | null
   crawlerBookViewMode: CrawlerBookViewMode | null
   scraperTrialViewMode: ScraperTrialViewMode | null
   modernThemeColor: string | null
@@ -355,6 +356,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const authorPageSize = ref<AuthorPageSize>(
     isAuthorPageSize(storedAuthorPageSize) ? storedAuthorPageSize : DEFAULT_AUTHOR_PAGE_SIZE
   )
+  const crawlerHideBookNames = ref(false)
   const crawlerStatisticsWindow = ref('day:30')
   const scanThreadCount = ref(DEFAULT_SCAN_THREAD_COUNT)
   const storedCrawlerPollingIntervalSeconds = Number(
@@ -490,6 +492,11 @@ export const usePreferencesStore = defineStore('preferences', () => {
     crawlerDiscoveryViewMode.value = value
     localStorage.setItem(CRAWLER_DISCOVERY_VIEW_MODE_KEY, value)
     if (syncRemote) persistRemote({ crawlerDiscoveryViewMode: value })
+  }
+
+  const setCrawlerHideBookNames = (value: boolean, syncRemote = true) => {
+    crawlerHideBookNames.value = value
+    if (syncRemote) persistRemote({ crawlerHideBookNames: value })
   }
 
   const setCrawlerBookViewMode = (
@@ -823,6 +830,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.crawlerDiscoveryViewMode = crawlerDiscoveryViewMode.value
       }
 
+      setCrawlerHideBookNames(data.crawlerHideBookNames === true, false)
       if (isCrawlerBookViewMode(data.crawlerBookViewMode)) {
         setCrawlerBookViewMode(data.crawlerBookViewMode, false)
       } else {
@@ -909,6 +917,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   }
 
   const resetHydration = () => {
+    crawlerHideBookNames.value = false
     categoryPageSize.value = 20
     crawlerStatisticsWindow.value = 'day:30'
     hydrated.value = false
@@ -944,6 +953,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     crawlerChapterPageSize,
     crawlerDiscoveryViewMode,
     crawlerBookViewMode,
+    crawlerHideBookNames,
+    setCrawlerHideBookNames,
     scraperTrialViewMode,
     dockSize,
     dockOpacity,
