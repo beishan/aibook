@@ -1,6 +1,7 @@
 package com.aibook.dto.backup;
 
 import com.aibook.model.entity.BackupExecution;
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 public record BackupExecutionView(
@@ -21,7 +22,8 @@ public record BackupExecutionView(
         LocalDateTime finishedAt,
         String executionStatus,
         LocalDateTime deletedAt,
-        String deletionReason) {
+        String deletionReason,
+        Long durationMillis) {
 
     public static BackupExecutionView from(BackupExecution execution) {
         return new BackupExecutionView(
@@ -33,6 +35,16 @@ public record BackupExecutionView(
                 execution.getOutputPath(), execution.getErrorMessage(),
                 execution.getFileSizeBytes(), execution.getFileCount(),
                 execution.getStartedAt(), execution.getFinishedAt(),
-                execution.getStatus().name(), execution.getDeletedAt(), execution.getDeletionReason());
+                execution.getStatus().name(), execution.getDeletedAt(), execution.getDeletionReason(),
+                durationMillis(execution));
+    }
+
+    private static Long durationMillis(BackupExecution execution) {
+        LocalDateTime started = execution.getStartedAt();
+        LocalDateTime finished = execution.getFinishedAt();
+        if (started == null || finished == null || finished.isBefore(started)) {
+            return null;
+        }
+        return Duration.between(started, finished).toMillis();
     }
 }

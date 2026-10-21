@@ -206,6 +206,7 @@
                 <th scope="col">任务</th>
                 <th scope="col">备份内容 / 结果</th>
                 <th scope="col">状态</th>
+                <th scope="col">耗时</th>
                 <th scope="col">文件数</th>
                 <th scope="col">大小</th>
                 <th scope="col">备份目录</th>
@@ -255,6 +256,9 @@
                   <small v-if="execution.deletionReason" class="execution-deletion-reason">
                     删除原因：{{ execution.deletionReason }}
                   </small>
+                </td>
+                <td class="execution-duration-cell" data-label="耗时">
+                  {{ formatBackupDuration(execution) }}
                 </td>
                 <td data-label="文件数">{{ execution.fileCount ?? '—' }}</td>
                 <td data-label="大小">{{ formatBytes(execution.fileSizeBytes) }}</td>
@@ -359,6 +363,10 @@
             <dd>{{ formatTime(selectedExecution.finishedAt) }}</dd>
           </div>
           <div>
+            <dt>执行耗时</dt>
+            <dd>{{ formatBackupDuration(selectedExecution) }}</dd>
+          </div>
+          <div>
             <dt>文件数 / 数据大小</dt>
             <dd>{{ selectedExecution.fileCount ?? '—' }} / {{ formatBytes(selectedExecution.fileSizeBytes) }}</dd>
           </div>
@@ -438,6 +446,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'v
 import { message } from '@/utils/message'
 import {
   backupApi,
+  formatBackupDuration,
   type BackupExecution,
   type BackupPath,
   type BackupRetentionSettings,
@@ -1014,7 +1023,7 @@ onBeforeUnmount(() => {
 }
 
 .backup-execution-table {
-  min-width: 1020px;
+  min-width: 1140px;
 }
 
 .backup-data-table th,
@@ -1664,5 +1673,11 @@ onBeforeUnmount(() => {
   .status-running span {
     animation: none;
   }
+}
+
+.execution-duration-cell {
+  min-width: 110px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 </style>

@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import ts from 'typescript'
+
+const source = fs.readFileSync(new URL('../src/utils/backups.ts', import.meta.url), 'utf8')
+const code = ts.transpile(source.slice(source.indexOf('export function formatBackupDuration'))
+  .replace('export function', 'function'), { target: ts.ScriptTarget.ES2020 })
+const format = new Function(`${code}; return formatBackupDuration`)()
+const result = durationMillis => format({ executionStatus: 'SUCCESS', durationMillis })
+assert.equal(result(0), '0 毫秒')
+assert.equal(result(999), '999 毫秒')
+assert.equal(result(1000), '1 秒')
+assert.equal(result(59999), '59 秒')
+assert.equal(result(60000), '1 分 0 秒')
+assert.equal(result(3662250), '1 小时 1 分 2 秒')
+assert.equal(result(90061000), '25 小时 1 分 1 秒')
+for (const invalid of [null, undefined, -1, NaN, Infinity]) assert.equal(result(invalid), '—')
+assert.equal(format({ executionStatus: 'QUEUED' }), '待执行')
+assert.equal(format({ executionStatus: 'RUNNING' }), '执行中')
+assert.equal(format({ executionStatus: 'FAILED', durationMillis: 2000 }), '2 秒')
+assert.equal(format({ status: 'DELETED', executionStatus: 'SUCCESS', durationMillis: 2000 }), '2 秒')
+const panel = fs.readFileSync(new URL('../src/components/BackupSettingsPanel.vue', import.meta.url), 'utf8')
+assert(panel.includes('formatBackupDuration(execution)'))
+assert(panel.includes('formatBackupDuration(selectedExecution)'))
+console.log('Backup duration: time units, boundaries, incomplete records, failure and deleted history passed.')

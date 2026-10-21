@@ -36,6 +36,7 @@ export interface BackupExecution {
   fileCount: number | null
   startedAt: string | null
   finishedAt: string | null
+  durationMillis?: number | null
 }
 
 export interface BackupExecutionPage {
@@ -88,4 +89,19 @@ export const backupApi = {
   runImmediately: (input: BackupTaskInput) => api
     .post<BackupExecution>('/api/system/backups/run', input)
     .then(({ data }) => data),
+}
+
+export function formatBackupDuration(execution: BackupExecution): string {
+  const status = execution.executionStatus || execution.status
+  if (status === 'QUEUED') return '待执行'
+  if (status === 'RUNNING') return '执行中'
+  const duration = execution.durationMillis
+  if (duration == null || !Number.isFinite(duration) || duration < 0) return '—'
+  if (duration < 1000) return `${Math.floor(duration)} 毫秒`
+  const seconds = Math.floor(duration / 1000)
+  if (seconds < 60) return `${seconds} 秒`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} 分 ${seconds % 60} 秒`
+  const hours = Math.floor(minutes / 60)
+  return `${hours} 小时 ${minutes % 60} 分 ${seconds % 60} 秒`
 }
