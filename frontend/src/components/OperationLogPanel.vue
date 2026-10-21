@@ -125,11 +125,66 @@
       aria-labelledby="operation-log-tab-retention"
     >
       <p class="retention-description">
-        规则按当前账户保存。系统每小时自动检查一次；也可一键清理全部符合已保存规则的日志，不受列表筛选影响。
+        规则及自动清理计划按当前账户保存。可按计划自动清理，也可一键清理全部符合已保存规则的日志，不受列表筛选影响。
         未配置、永久留存和单条已保留的日志不清理。期限按日志创建时间计算，“最近两天”表示保留最近 48 小时。
       </p>
       <p class="retention-description">单条日志点击保留后无法取消保留，任何批量或自动流程均跳过；如需移除，请在日志列表手动删除。已删除账户的归档日志不参与规则清理，仅管理员可手动管理。</p>
       <el-alert v-if="policyError" :title="policyError" type="error" :closable="false" />
+      <section v-if="!policyLoading && !policyError" class="cleanup-schedule" aria-labelledby="cleanup-schedule-title">
+        <div class="schedule-heading">
+          <h3 id="cleanup-schedule-title">自动清理计划</h3>
+          <el-switch
+            v-model="draftSchedule.enabled"
+            active-text="启用自动清理"
+            aria-label="启用日志自动清理"
+            :disabled="saving || cleaning"
+          />
+        </div>
+        <p class="header-hint">按北京时间（Asia/Shanghai）执行。关闭自动清理不影响手动一键清理；修改后点击下方“保存策略”生效。</p>
+        <div class="schedule-fields">
+          <label>
+            <span>执行频率</span>
+            <el-select v-model="draftSchedule.frequency" aria-label="自动清理执行频率" :disabled="!draftSchedule.enabled || saving || cleaning">
+              <el-option label="每小时" value="HOURLY" />
+              <el-option label="每天" value="DAILY" />
+              <el-option label="每周" value="WEEKLY" />
+            </el-select>
+          </label>
+          <label v-if="draftSchedule.frequency === 'WEEKLY'">
+            <span>执行星期</span>
+            <el-select v-model="draftSchedule.dayOfWeek" aria-label="自动清理执行星期" :disabled="!draftSchedule.enabled || saving || cleaning">
+              <el-option v-for="(day, index) in weekDays" :key="day" :label="day" :value="index + 1" />
+            </el-select>
+          </label>
+          <label v-if="draftSchedule.frequency === 'HOURLY'">
+            <span>每小时第几分钟执行（0–59）</span>
+            <el-input-number
+              v-model="draftSchedule.minute"
+              :min="0"
+              :max="59"
+              :precision="0"
+              controls-position="right"
+              aria-label="自动清理执行分钟"
+              :disabled="!draftSchedule.enabled || saving || cleaning"
+            />
+          </label>
+          <label v-else>
+            <span>执行时间</span>
+            <el-time-picker
+              v-model="scheduleTime"
+              format="HH:mm"
+              value-format="HH:mm"
+              :clearable="false"
+              aria-label="自动清理执行时间"
+              :disabled="!draftSchedule.enabled || saving || cleaning"
+            />
+          </label>
+        </div>
+        <p class="schedule-status">
+          已保存计划的下一次执行：{{ !savedSchedule.enabled ? '自动清理已关闭' : !hasExpiringRules ? '无有限期限规则，不执行' : savedSchedule.nextRunAt ? formatChinaDateTime(savedSchedule.nextRunAt) : '等待计划初始化' }}
+        </p>
+        <p v-if="savedSchedule.lastRunAt" class="header-hint">上次自动检查完成：{{ formatChinaDateTime(savedSchedule.lastRunAt) }}</p>
+      </section>
       <div v-if="policyLoading" class="log-state" role="status">加载保留策略…</div>
       <div v-else-if="draftRules.length" class="retention-grid">
         <label v-for="rule in draftRules" :key="rule.action" class="retention-rule">
@@ -182,6 +237,9 @@ import { confirm, message } from '@/utils/message'
 import {
   operationLogsApi,
   retentionKey,
+  cleanupScheduleKey,
+  defaultLogCleanupSchedule,
+  type LogCleanupSchedule,
   retentionOptions,
   type LogRetentionRule,
   type OperationLog,
@@ -203,12 +261,25 @@ const keyword = ref('')
 const busyIds = ref(new Set<number>())
 const savedRules = ref<LogRetentionRule[]>([])
 const draftRules = ref<LogRetentionRule[]>([])
+const savedSchedule = ref<LogCleanupSchedule>(defaultLogCleanupSchedule())
+const draftSchedule = ref<LogCleanupSchedule>(defaultLogCleanupSchedule())
+const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const scheduleTime = computed({
+  get: () => `${String(draftSchedule.value.hour).padStart(2, '0')}:${String(draftSchedule.value.minute).padStart(2, '0')}`,
+  set: (value: string) => {
+    if (!value) return
+    const [hour, minute] = value.split(':').map(Number)
+    draftSchedule.value.hour = hour
+    draftSchedule.value.minute = minute
+  },
+})
 const policyLoading = ref(false)
 const policyError = ref('')
 const saving = ref(false)
 const cleaning = ref(false)
 let listRequest = 0
-const dirty = computed(() => retentionKey(savedRules.value) !== retentionKey(draftRules.value))
+const dirty = computed(() => retentionKey(savedRules.value) !== retentionKey(draftRules.value)
+  || cleanupScheduleKey(savedSchedule.value) !== cleanupScheduleKey(draftSchedule.value))
 const hasExpiringRules = computed(() => savedRules.value.some(rule => (rule.retentionDays ?? 0) > 0))
 const actionLabel = (action: string) => savedRules.value.find(rule => rule.action === action)?.label || action
 const isCustomDays = (days: number | null) => days !== null && !retentionOptions.some(option => option.value === days)
@@ -265,6 +336,8 @@ async function loadPolicies() {
     const data = await operationLogsApi.settings()
     savedRules.value = data.rules.map(rule => ({ ...rule }))
     draftRules.value = data.rules.map(rule => ({ ...rule }))
+    savedSchedule.value = { ...defaultLogCleanupSchedule(), ...data.schedule }
+    draftSchedule.value = { ...savedSchedule.value }
   } catch (error: any) {
     policyError.value = error.response?.data?.message || '保留策略加载失败，请重新加载'
   } finally {
@@ -281,10 +354,12 @@ async function savePolicies() {
   if (saving.value || cleaning.value) return
   saving.value = true
   try {
-    const data = await operationLogsApi.saveSettings({ rules: draftRules.value })
+    const data = await operationLogsApi.saveSettings({ rules: draftRules.value, schedule: draftSchedule.value })
     savedRules.value = data.rules.map(rule => ({ ...rule }))
     draftRules.value = data.rules.map(rule => ({ ...rule }))
-    message.success('日志保留策略已保存，将用于自动清理和一键清理')
+    savedSchedule.value = { ...defaultLogCleanupSchedule(), ...data.schedule }
+    draftSchedule.value = { ...savedSchedule.value }
+    message.success('日志保留策略及自动清理计划已保存')
   } catch (error: any) {
     message.error(error.response?.data?.message || '保留策略保存失败')
   } finally {
@@ -500,6 +575,46 @@ onMounted(() => {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.9;
+}
+.cleanup-schedule {
+  margin: 20px 0;
+  padding: 20px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 12px;
+}
+.schedule-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.schedule-heading h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+.schedule-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.schedule-fields label {
+  display: grid;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.schedule-fields :deep(.el-input-number),
+.schedule-fields :deep(.el-date-editor) {
+  width: 100%;
+}
+.schedule-status {
+  margin: 16px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.8;
 }
 .retention-grid {
   display: grid;

@@ -19,8 +19,33 @@ export interface LogRetentionRule {
   retentionDays: number | null
 }
 
+export interface LogCleanupSchedule {
+  enabled: boolean
+  frequency: 'HOURLY' | 'DAILY' | 'WEEKLY'
+  hour: number
+  minute: number
+  dayOfWeek: number
+  nextRunAt?: string | null
+  lastRunAt?: string | null
+}
+
+export const defaultLogCleanupSchedule = (): LogCleanupSchedule => ({
+  enabled: true,
+  frequency: 'HOURLY',
+  hour: 3,
+  minute: 35,
+  dayOfWeek: 1,
+  nextRunAt: null,
+  lastRunAt: null,
+})
+
+export const cleanupScheduleKey = (schedule: LogCleanupSchedule) => JSON.stringify([
+  schedule.enabled, schedule.frequency, schedule.hour, schedule.minute, schedule.dayOfWeek,
+])
+
 export interface LogRetentionSettings {
   rules: LogRetentionRule[]
+  schedule?: LogCleanupSchedule
 }
 
 export const retentionOptions = [

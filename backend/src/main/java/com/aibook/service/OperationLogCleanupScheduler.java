@@ -15,12 +15,12 @@ public class OperationLogCleanupScheduler {
     private final UserRepository users;
     private final OperationLogRetentionService retention;
 
-    @Scheduled(cron = "${operation-logs.cleanup-cron:0 35 * * * ?}")
+    @Scheduled(cron = "${operation-logs.cleanup-poll-cron:0 * * * * ?}", zone = "Asia/Shanghai")
     public void cleanup() {
         for (Long userId : policies.findExpiringPolicyUserIds()) {
             try {
                 users.findById(userId).ifPresent(user -> {
-                    int deleted = retention.cleanup(user);
+                    int deleted = retention.runScheduledCleanup(user);
                     if (deleted > 0) {
                         log.info("操作日志自动清理完成: userId={}, deleted={}", userId, deleted);
                     }

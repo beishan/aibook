@@ -2,6 +2,11 @@ package com.aibook.service;
 
 import com.aibook.dto.OperationLogRetentionDTO;
 import com.aibook.dto.OperationLogRetentionDTO.Rule;
+import com.aibook.dto.OperationLogRetentionDTO.Schedule;
+import com.aibook.model.entity.OperationLogCleanupSchedule;
+import com.aibook.repository.OperationLogCleanupScheduleRepository;
+import java.time.ZoneId;
+import java.util.List;
 import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.OperationLogRetentionPolicy;
 import com.aibook.model.entity.User;
@@ -24,14 +29,25 @@ public class OperationLogRetentionService {
     private final OperationLogRetentionPolicyRepository policies;
     private final OperationLogRepository logs;
     private final UserRepository users;
+    private final OperationLogCleanupScheduleRepository schedules;
+    static final ZoneId SCHEDULE_ZONE = ZoneId.of("Asia/Shanghai");
 
     @Transactional(readOnly = true)
     public OperationLogRetentionDTO getSettings(User user) {
         Map<OperationLog.Action, Integer> configured = new EnumMap<>(OperationLog.Action.class);
         policies.findByUser(user).forEach(policy ->
                 configured.put(policy.getAction(), policy.getRetentionDays()));
+        OperationLogCleanupSchedule schedule = scheduleFor(user);
+        boolean expiring = configured.values().stream().anyMatch(days -> days != null && days > 0);
+        LocalDateTime next = null;
+        if (schedule.isEnabled() && expiring) {
+            next = schedule.getNextRunAt() == null
+                    ? schedule.nextAfter(now()) : schedule.getNextRunAt();
+        }
         return new OperationLogRetentionDTO(Arrays.stream(OperationLog.Action.values())
-                .map(action -> new Rule(action.name(), label(action), configured.get(action))).toList());
+                .map(action -> new Rule(action.name(), label(action), configured.get(action))).toList(),
+                new Schedule(schedule.isEnabled(), schedule.getFrequency().name(), schedule.getHour(),
+                        schedule.getMinute(), schedule.getDayOfWeek(), next, schedule.getLastRunAt()));
     }
 
     @Transactional
@@ -60,6 +76,7 @@ public class OperationLogRetentionService {
             }
             desired.put(action, days);
         }
+        validateSchedule(request.schedule());
         lockUser(user);
         Map<OperationLog.Action, OperationLogRetentionPolicy> existing =
                 new EnumMap<>(OperationLog.Action.class);
@@ -80,24 +97,109 @@ public class OperationLogRetentionService {
             }
         }
         policies.flush();
+        saveSchedule(user, request.schedule(), desired.values().stream()
+                .anyMatch(days -> days != null && days > 0));
         return getSettings(user);
     }
 
     @Transactional
     public int cleanup(User user) {
-        return cleanupAt(user, LocalDateTime.now());
+        return cleanupAt(user, now());
     }
 
     int cleanupAt(User user, LocalDateTime now) {
         lockUser(user);
+        return purgeAt(user, now, policies.findByUser(user));
+    }
+
+    @Transactional
+    public int runScheduledCleanup(User user) {
+        return runScheduledCleanupAt(user, now());
+    }
+
+    int runScheduledCleanupAt(User user, LocalDateTime now) {
+        lockUser(user);
+        List<OperationLogRetentionPolicy> configured = policies.findByUser(user);
+        if (configured.stream().noneMatch(policy -> policy.getRetentionDays() != null
+                && policy.getRetentionDays() > 0 && policy.getRetentionDays() <= 3650)) {
+            return 0;
+        }
+        OperationLogCleanupSchedule schedule = scheduleFor(user);
+        if (!schedule.isEnabled()) {
+            return 0;
+        }
+        if (schedule.getNextRunAt() == null) {
+            schedule.setNextRunAt(schedule.nextAfter(now));
+            schedules.save(schedule);
+            return 0;
+        }
+        if (now.isBefore(schedule.getNextRunAt())) {
+            return 0;
+        }
+        int deleted = purgeAt(user, now, configured);
+        schedule.setLastRunAt(now);
+        schedule.setNextRunAt(schedule.nextAfter(now));
+        schedules.save(schedule);
+        return deleted;
+    }
+
+    private int purgeAt(User user, LocalDateTime now, List<OperationLogRetentionPolicy> configured) {
         int deleted = 0;
-        for (OperationLogRetentionPolicy policy : policies.findByUser(user)) {
+        for (OperationLogRetentionPolicy policy : configured) {
             Integer days = policy.getRetentionDays();
             if (days != null && days > 0 && days <= 3650) {
                 deleted += logs.deleteExpired(user, policy.getAction(), now.minusDays(days));
             }
         }
         return deleted;
+    }
+
+    private LocalDateTime now() {
+        return LocalDateTime.now(SCHEDULE_ZONE);
+    }
+
+    private OperationLogCleanupSchedule scheduleFor(User user) {
+        return schedules.findById(user.getId()).orElseGet(() ->
+                OperationLogCleanupSchedule.builder().userId(user.getId()).user(user).build());
+    }
+
+    private void validateSchedule(Schedule value) {
+        if (value == null) {
+            return;
+        }
+        if (value.enabled() == null || value.frequency() == null || value.hour() == null
+                || value.minute() == null || value.dayOfWeek() == null
+                || value.hour() < 0 || value.hour() > 23 || value.minute() < 0 || value.minute() > 59
+                || value.dayOfWeek() < 1 || value.dayOfWeek() > 7) {
+            throw badRequest("自动清理计划须填写开关、频率、有效时间和星期");
+        }
+        try {
+            OperationLogCleanupSchedule.Frequency.valueOf(value.frequency());
+        } catch (IllegalArgumentException exception) {
+            throw badRequest("自动清理频率仅支持每小时、每天或每周");
+        }
+    }
+
+    private void saveSchedule(User user, Schedule value, boolean expiring) {
+        OperationLogCleanupSchedule schedule = scheduleFor(user);
+        boolean changed = false;
+        if (value != null) {
+            changed = schedule.isEnabled() != value.enabled()
+                    || !schedule.getFrequency().name().equals(value.frequency())
+                    || schedule.getHour() != value.hour() || schedule.getMinute() != value.minute()
+                    || schedule.getDayOfWeek() != value.dayOfWeek();
+            schedule.setEnabled(value.enabled());
+            schedule.setFrequency(OperationLogCleanupSchedule.Frequency.valueOf(value.frequency()));
+            schedule.setHour(value.hour());
+            schedule.setMinute(value.minute());
+            schedule.setDayOfWeek(value.dayOfWeek());
+        }
+        if (!schedule.isEnabled() || !expiring) {
+            schedule.setNextRunAt(null);
+        } else if (changed || schedule.getNextRunAt() == null) {
+            schedule.setNextRunAt(schedule.nextAfter(now()));
+        }
+        schedules.save(schedule);
     }
 
     private void lockUser(User user) {

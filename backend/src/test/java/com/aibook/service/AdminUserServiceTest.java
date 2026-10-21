@@ -151,6 +151,9 @@ class AdminUserServiceTest {
         assertThat(statements.getAllValues()).noneMatch(sql -> sql.startsWith("DELETE FROM operation_logs"));
         assertThat(statements.getAllValues()).anyMatch(sql -> sql.startsWith("UPDATE operation_logs")
                 && sql.contains("user_id = NULL") && sql.contains("owner_username"));
+        verify(jdbcTemplate).update(
+                org.mockito.ArgumentMatchers.eq("DELETE FROM operation_log_cleanup_schedules WHERE user_id = ?"),
+                org.mockito.ArgumentMatchers.<Object[]>any());
         verify(userRepository).delete(target);
         verify(userRepository).flush();
         verify(userProfileService).deleteStoredAvatar(target);

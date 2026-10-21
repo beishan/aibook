@@ -226,6 +226,7 @@ public class AdminUserService {
         update("DELETE FROM categories WHERE user_id = ?", userId);
         update("DELETE FROM tags WHERE user_id = ?", userId);
         update("DELETE FROM operation_log_retention_policies WHERE user_id = ?", userId);
+        update("DELETE FROM operation_log_cleanup_schedules WHERE user_id = ?", userId);
     }
 
     private void update(String sql, Object... arguments) {

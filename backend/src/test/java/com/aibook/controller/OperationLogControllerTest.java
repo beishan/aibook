@@ -24,6 +24,21 @@ import org.springframework.security.core.Authentication;
 class OperationLogControllerTest {
 
     @Test
+    void scheduleJsonSupportsNewConfigurationAndLegacyRulesOnlyRequests() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+                .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+        var request = mapper.readValue("""
+                {"rules":[],"schedule":{"enabled":false,"frequency":"WEEKLY",
+                "hour":4,"minute":15,"dayOfWeek":7}}
+                """, com.aibook.dto.OperationLogRetentionDTO.class);
+        assertThat(request.schedule().enabled()).isFalse();
+        assertThat(request.schedule().frequency()).isEqualTo("WEEKLY");
+        assertThat(request.schedule().dayOfWeek()).isEqualTo(7);
+        assertThat(mapper.readValue("{\"rules\":[]}", com.aibook.dto.OperationLogRetentionDTO.class)
+                .schedule()).isNull();
+    }
+
+    @Test
     void mutationAndPolicyEndpointsAlwaysUseAuthenticatedAccount() {
         var service = mock(OperationLogService.class);
         var users = mock(UserService.class);

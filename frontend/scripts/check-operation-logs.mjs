@@ -22,6 +22,8 @@ let rules = [
   { action: 'OPEN_BOOK', label: '打开书籍', retentionDays: null },
   { action: 'CRAWLER_TASK', label: '爬虫任务', retentionDays: 0 },
 ]
+let schedule = { enabled: true, frequency: 'HOURLY', hour: 3, minute: 35, dayOfWeek: 1,
+  nextRunAt: '2026-10-22T03:35:00', lastRunAt: null }
 let rows = [
   { id: 1, action: 'OPEN_BOOK', description: '打开数学', details: '详情', createdAt: '2026-10-21T12:00:00', retained: false },
   { id: 2, action: 'CRAWLER_TASK', description: '采集完成', createdAt: '2026-10-01T12:00:00', retained: true },
@@ -32,7 +34,7 @@ const fakeApi = {
     requests.push({ method: 'GET', url, params: options?.params })
     if (url.endsWith('/retention')) {
       if (rejectPolicyLoad) throw new Error('load failure')
-      return { data: { rules: clone(rules) } }
+      return { data: { rules: clone(rules), schedule: clone(schedule) } }
     }
     const params = options.params
     const filtered = rows.filter(row => (!params.action || row.action === params.action)
@@ -43,7 +45,8 @@ const fakeApi = {
   async put(url, data) {
     requests.push({ method: 'PUT', url, data: clone(data) })
     rules = clone(data.rules)
-    return { data: { rules: clone(rules) } }
+    schedule = clone(data.schedule)
+    return { data: { rules: clone(rules), schedule: clone(schedule) } }
   },
   async post(url) {
     requests.push({ method: 'POST', url })
@@ -126,6 +129,33 @@ assert.ok(state.policyError.includes('加载失败'))
 rejectPolicyLoad = false
 await state.loadPolicies()
 assert.equal(state.policyError, '')
+
+// Automatic cleanup controls persist independently of manual cleanup eligibility.
+state.draftSchedule.enabled = false
+assert.equal(state.dirty, true)
+await state.savePolicies()
+assert.equal(schedule.enabled, false)
+assert.equal(state.savedSchedule.enabled, false)
+const manualBefore = requests.filter(item => item.url.endsWith('/cleanup')).length
+await state.cleanupLogs()
+assert.equal(requests.filter(item => item.url.endsWith('/cleanup')).length, manualBefore + 1)
+state.draftSchedule.enabled = true
+state.draftSchedule.frequency = 'WEEKLY'
+state.draftSchedule.dayOfWeek = 7
+state.scheduleTime = '04:15'
+assert.equal(state.draftSchedule.hour, 4)
+assert.equal(state.draftSchedule.minute, 15)
+assert.equal(state.dirty, true)
+await state.savePolicies()
+assert.equal(schedule.frequency, 'WEEKLY')
+assert.equal(schedule.dayOfWeek, 7)
+assert.equal(state.savedSchedule.hour, 4)
+await state.loadPolicies()
+assert.equal(state.draftSchedule.frequency, 'WEEKLY')
+assert.equal(state.scheduleTime, '04:15')
+assert.equal(state.dirty, false)
+state.savedSchedule.nextRunAt = '2026-10-23T04:15:00'
+assert.equal(state.dirty, false, 'Execution metadata must not make configuration dirty')
 
 // Older network responses must never overwrite the latest filter result.
 let resolveOld, resolveNew

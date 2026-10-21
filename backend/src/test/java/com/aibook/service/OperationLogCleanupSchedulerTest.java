@@ -20,11 +20,11 @@ class OperationLogCleanupSchedulerTest {
         when(users.findById(1L)).thenReturn(Optional.of(first));
         when(users.findById(2L)).thenReturn(Optional.of(second));
         when(users.findById(3L)).thenReturn(Optional.empty());
-        when(retention.cleanup(first)).thenThrow(new IllegalStateException("isolated failure"));
-        when(retention.cleanup(second)).thenReturn(4);
+        when(retention.runScheduledCleanup(first)).thenThrow(new IllegalStateException("isolated failure"));
+        when(retention.runScheduledCleanup(second)).thenReturn(4);
         new OperationLogCleanupScheduler(policies, users, retention).cleanup();
-        verify(retention).cleanup(first);
-        verify(retention).cleanup(second);
+        verify(retention).runScheduledCleanup(first);
+        verify(retention).runScheduledCleanup(second);
         verifyNoMoreInteractions(retention);
     }
 }
