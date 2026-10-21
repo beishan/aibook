@@ -6,13 +6,12 @@
         <p class="crawler-page-subtitle">共 {{ dashboard?.bookCount || 0 }} 本采集书籍</p>
       </div>
       <div class="crawler-header-actions">
-        <el-button
-          :type="preferencesStore.crawlerHideBookNames ? 'primary' : 'default'"
-          :aria-pressed="preferencesStore.crawlerHideBookNames"
-          @click="preferencesStore.setCrawlerHideBookNames(!preferencesStore.crawlerHideBookNames)"
-        >
-          {{ preferencesStore.crawlerHideBookNames ? '显示书名' : '隐藏书名' }}
-        </el-button>
+        <el-switch
+          :model-value="preferencesStore.crawlerHideBookNames"
+          active-text="隐藏书名"
+          aria-label="隐藏书名"
+          @change="preferencesStore.setCrawlerHideBookNames(Boolean($event))"
+        />
         <label class="polling-setting">
           <span><i />自动刷新</span>
           <el-select
