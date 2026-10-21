@@ -160,7 +160,7 @@ public class OperationLogRetentionService {
 
     private OperationLogCleanupSchedule scheduleFor(User user) {
         return schedules.findById(user.getId()).orElseGet(() ->
-                OperationLogCleanupSchedule.builder().userId(user.getId()).user(user).build());
+                OperationLogCleanupSchedule.builder().userId(user.getId()).build());
     }
 
     private void validateSchedule(Schedule value) {
