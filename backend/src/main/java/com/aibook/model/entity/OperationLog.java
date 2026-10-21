@@ -40,8 +40,13 @@ public class OperationLog {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id")
     private User user;
+
+    private Long ownerUserId;
+
+    @Column(length = 255)
+    private String ownerUsername;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)

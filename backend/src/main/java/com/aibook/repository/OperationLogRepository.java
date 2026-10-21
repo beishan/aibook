@@ -25,6 +25,27 @@ public interface OperationLogRepository extends JpaRepository<OperationLog, Long
             @Param("action") OperationLog.Action action, @Param("pattern") String pattern,
             Pageable pageable);
 
+    /** Called only for administrators; current users' logs remain account-scoped. */
+    @Query("""
+            select l from OperationLog l where (l.user = :user or l.user is null)
+              and (:action is null or l.action = :action)
+              and (:pattern = '' or lower(l.description) like :pattern escape '!'
+                   or lower(coalesce(l.details, '')) like :pattern escape '!'
+                   or lower(coalesce(l.bookTitle, '')) like :pattern escape '!'
+                   or lower(coalesce(l.ownerUsername, '')) like :pattern escape '!')
+            """)
+    Page<OperationLog> searchWithArchived(@Param("user") User user,
+            @Param("action") OperationLog.Action action, @Param("pattern") String pattern,
+            Pageable pageable);
+
+    @Modifying
+    @Query("update OperationLog l set l.retained = true where l.id = :id and l.user is null")
+    int retainArchived(@Param("id") Long id);
+
+    @Modifying
+    @Query("delete from OperationLog l where l.id = :id and l.user is null")
+    int deleteArchived(@Param("id") Long id);
+
     @Modifying
     @Query("update OperationLog l set l.retained = true where l.id = :id and l.user = :user")
     int retain(@Param("user") User user, @Param("id") Long id);

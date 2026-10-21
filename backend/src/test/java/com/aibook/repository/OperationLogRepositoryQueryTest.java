@@ -18,6 +18,8 @@ class OperationLogRepositoryQueryTest {
         var relation = OperationLog.class.getDeclaredField("user")
                 .getAnnotation(jakarta.persistence.ManyToOne.class);
         assertThat(relation.cascade()).isEmpty();
+        assertThat(OperationLog.class.getDeclaredField("user")
+                .getAnnotation(jakarta.persistence.JoinColumn.class).nullable()).isTrue();
         assertThat(OperationLog.builder().build().isRetained()).isFalse();
     }
 
@@ -28,6 +30,14 @@ class OperationLogRepositoryQueryTest {
         assertThat(expired).contains("l.user = :user", "l.action = :action",
                 "coalesce(l.retained, false) = false", "l.createdAt < :cutoff")
                 .doesNotContain("<=");
+        String archivedSearch = OperationLogRepository.class.getMethod("searchWithArchived",
+                User.class, OperationLog.Action.class, String.class, Pageable.class)
+                .getAnnotation(Query.class).value();
+        assertThat(archivedSearch).contains("l.user = :user or l.user is null", "l.ownerUsername");
+        for (String name : new String[] {"deleteArchived", "retainArchived"}) {
+            assertThat(OperationLogRepository.class.getMethod(name, Long.class)
+                    .getAnnotation(Query.class).value()).contains("l.id = :id", "l.user is null");
+        }
         String manual = OperationLogRepository.class.getMethod("deleteOwned", User.class, Long.class)
                 .getAnnotation(Query.class).value();
         assertThat(manual).contains("l.id = :id", "l.user = :user").doesNotContain("retained");
@@ -60,8 +70,12 @@ class OperationLogRepositoryQueryTest {
                         .containsExactlyInAnyOrder("user", "action", "pattern");
                 for (var method : OperationLogRepository.class.getMethods()) {
                     Query annotation = method.getAnnotation(Query.class);
-                    if (annotation != null && !method.getName().equals("search")) {
-                        session.createMutationQuery(annotation.value());
+                    if (annotation != null) {
+                        if (method.getName().startsWith("search")) {
+                            session.createQuery(annotation.value(), OperationLog.class);
+                        } else {
+                            session.createMutationQuery(annotation.value());
+                        }
                     }
                 }
                 String expiring = OperationLogRetentionPolicyRepository.class.getMethod("findExpiringPolicyUserIds")

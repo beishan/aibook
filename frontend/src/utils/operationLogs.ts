@@ -8,6 +8,9 @@ export interface OperationLog {
   bookTitle?: string
   createdAt: string
   retained: boolean
+  archived?: boolean
+  ownerUserId?: number
+  ownerUsername?: string
 }
 
 export interface LogRetentionRule {

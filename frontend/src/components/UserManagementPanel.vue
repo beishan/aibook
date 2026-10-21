@@ -377,7 +377,7 @@ const resetPassword = async () => {
 
 const handleDelete = async (user: ManagedUser) => {
   const accepted = await confirm(
-    `确定删除用户“${user.username}”吗？该用户的书库、书单、阅读记录等数据库数据将被清理，原始书籍文件会保留。`
+    `确定删除用户“${user.username}”吗？该用户的书库、书单、阅读记录等业务数据将被清理；操作日志将归档保留，原始书籍文件也会保留。`
   )
   if (!accepted) return
   try {

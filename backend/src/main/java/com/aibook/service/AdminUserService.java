@@ -111,7 +111,7 @@ public class AdminUserService {
     }
 
     /**
-     * 删除用户及其数据库业务数据。书籍原文件始终保留。
+     * 删除用户及其业务数据；操作日志归档，书籍原文件始终保留。
      */
     @Transactional
     public void deleteUser(Long id, User administrator) {
@@ -120,10 +120,6 @@ public class AdminUserService {
             throw new IllegalArgumentException("不能删除当前登录账号");
         }
         ensureAdminRemains(target, null, false);
-        if (operationLogService.hasRetainedLogs(target)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "该用户存在永久保留的操作日志，请先由该用户手动删除这些日志后再删除账号");
-        }
         String targetUsername = target.getUsername();
 
         operationLogService.record(
@@ -131,7 +127,10 @@ public class AdminUserService {
                 OperationLog.Action.DELETE_USER,
                 null,
                 "删除用户“" + targetUsername + "”",
-                "用户数据库数据已清理，书籍原文件保留");
+                "用户业务数据已清理，操作日志与书籍原文件保留");
+        update("UPDATE operation_logs SET owner_user_id = COALESCE(owner_user_id, user_id), "
+                + "owner_username = COALESCE(owner_username, ?), user_id = NULL WHERE user_id = ?",
+                targetUsername, id);
         deleteOwnedData(id);
         userRepository.delete(target);
         userRepository.flush();
@@ -227,7 +226,6 @@ public class AdminUserService {
         update("DELETE FROM categories WHERE user_id = ?", userId);
         update("DELETE FROM tags WHERE user_id = ?", userId);
         update("DELETE FROM operation_log_retention_policies WHERE user_id = ?", userId);
-        update("DELETE FROM operation_logs WHERE user_id = ? AND COALESCE(retained, false) = false", userId);
     }
 
     private void update(String sql, Object... arguments) {

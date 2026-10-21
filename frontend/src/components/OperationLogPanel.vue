@@ -3,7 +3,7 @@
     <header class="log-header">
       <div>
         <h2 class="panel-title">操作日志</h2>
-        <p class="header-hint">查看关键操作，为每种日志配置保留时间；已保留日志仅可手动删除。</p>
+        <p class="header-hint">查看关键操作，为每种日志配置保留时间；已保留日志仅可手动删除；已删除账户的归档日志仅管理员可见。</p>
       </div>
     </header>
 
@@ -69,9 +69,14 @@
             <tr v-for="log in logs" :key="log.id">
               <td class="time-cell">{{ formatChinaDateTime(log.createdAt) }}</td>
               <td><span class="tag tag-primary">{{ actionLabel(log.action) }}</span></td>
-              <td class="description-cell">{{ log.description }}</td>
+              <td class="description-cell">
+                <span>{{ log.description }}</span>
+                <small v-if="log.archived" class="archived-owner">
+                  已删除账户：{{ log.ownerUsername || '未知用户' }}（#{{ log.ownerUserId ?? '未知' }}）
+                </small>
+              </td>
               <td class="details-cell">{{ log.details || '—' }}</td>
-              <td><span :class="{ 'retained-label': log.retained }">{{ log.retained ? '永久保留' : '按类型策略' }}</span></td>
+              <td><span :class="{ 'retained-label': log.retained }">{{ log.retained ? '永久保留' : log.archived ? '归档保留' : '按类型策略' }}</span></td>
               <td>
                 <div class="log-row-actions">
                   <el-button
@@ -123,7 +128,7 @@
         规则按当前账户保存。系统每小时自动检查一次；也可一键清理全部符合已保存规则的日志，不受列表筛选影响。
         未配置、永久留存和单条已保留的日志不清理。期限按日志创建时间计算，“最近两天”表示保留最近 48 小时。
       </p>
-      <p class="retention-description">单条日志点击保留后无法取消保留，任何批量或自动流程均跳过；如需移除，请在日志列表手动删除。</p>
+      <p class="retention-description">单条日志点击保留后无法取消保留，任何批量或自动流程均跳过；如需移除，请在日志列表手动删除。已删除账户的归档日志不参与规则清理，仅管理员可手动管理。</p>
       <el-alert v-if="policyError" :title="policyError" type="error" :closable="false" />
       <div v-if="policyLoading" class="log-state" role="status">加载保留策略…</div>
       <div v-else-if="draftRules.length" class="retention-grid">
@@ -452,6 +457,12 @@ onMounted(() => {
   max-width: 400px;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+.archived-owner {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-weight: 400;
 }
 .details-cell {
   color: var(--text-secondary);

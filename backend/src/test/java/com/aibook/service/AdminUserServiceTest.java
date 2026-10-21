@@ -17,6 +17,7 @@ import com.aibook.model.entity.User;
 import com.aibook.repository.UserRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -145,30 +146,35 @@ class AdminUserServiceTest {
         service.deleteUser(2L, administrator);
 
         verify(jdbcTemplate, atLeastOnce()).update(anyString(), any(Object[].class));
-        verify(jdbcTemplate).update(
-                org.mockito.ArgumentMatchers.eq("DELETE FROM operation_logs WHERE user_id = ? AND COALESCE(retained, false) = false"),
-                org.mockito.ArgumentMatchers.<Object[]>any());
+        var statements = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate, atLeastOnce()).update(statements.capture(), any(Object[].class));
+        assertThat(statements.getAllValues()).noneMatch(sql -> sql.startsWith("DELETE FROM operation_logs"));
+        assertThat(statements.getAllValues()).anyMatch(sql -> sql.startsWith("UPDATE operation_logs")
+                && sql.contains("user_id = NULL") && sql.contains("owner_username"));
         verify(userRepository).delete(target);
         verify(userRepository).flush();
         verify(userProfileService).deleteStoredAvatar(target);
     }
 
     @Test
-    void retainedLogsBlockAccountDeletionBeforeAnyOwnedDataIsRemoved() {
+    void preservedLogsDoNotBlockAccountDeletionOrLoseRetentionState() {
         var users = mock(UserRepository.class);
         var logs = mock(OperationLogService.class);
         var jdbc = mock(JdbcTemplate.class);
         var admin = User.builder().id(1L).role(User.Role.ADMIN).build();
-        var owner = User.builder().id(2L).role(User.Role.USER).build();
+        var owner = User.builder().id(2L).username("reader").role(User.Role.USER).build();
         when(users.findById(2L)).thenReturn(Optional.of(owner));
-        when(logs.hasRetainedLogs(owner)).thenReturn(true);
         var service = new AdminUserService(users, mock(PasswordEncoder.class), logs,
                 jdbc, mock(UserProfileService.class));
-        assertThatThrownBy(() -> service.deleteUser(2L, admin))
-                .hasMessageContaining("永久保留");
-        org.mockito.Mockito.verifyNoInteractions(jdbc);
-        verify(users, never()).delete(owner);
-        verify(logs, never()).record(any(), any(), any(), anyString(), any());
+        service.deleteUser(2L, admin);
+        verify(users).delete(owner);
+        var sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbc, atLeastOnce()).update(sql.capture(), any(Object[].class));
+        assertThat(sql.getAllValues()).noneMatch(value -> value.startsWith("DELETE FROM operation_logs"));
+        assertThat(sql.getAllValues()).filteredOn(value -> value.startsWith("UPDATE operation_logs"))
+                .allSatisfy(value -> assertThat(value).contains("COALESCE(owner_user_id, user_id)",
+                        "COALESCE(owner_username, ?)", "user_id = NULL").doesNotContain("retained"));
+        verify(logs, never()).hasRetainedLogs(owner);
     }
 
     private AdminUserService service(UserRepository userRepository) {

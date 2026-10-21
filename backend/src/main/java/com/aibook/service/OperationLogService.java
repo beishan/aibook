@@ -46,6 +46,8 @@ public class OperationLogService {
             String details) {
         operationLogRepository.save(OperationLog.builder()
                 .user(user)
+                .ownerUserId(user.getId())
+                .ownerUsername(user.getUsername())
                 .action(action)
                 .bookId(bookId)
                 .bookTitle(bookTitle)
@@ -56,7 +58,7 @@ public class OperationLogService {
 
     @Transactional(readOnly = true)
     public Page<OperationLogDTO> getLogs(User user, Pageable pageable) {
-        return operationLogRepository.findByUser(user, pageable).map(this::toDTO);
+        return getLogs(user, pageable, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -75,19 +77,30 @@ public class OperationLogService {
         }
         String pattern = text.isEmpty() ? "" : "%" + text.toLowerCase(Locale.ROOT)
                 .replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
-        return operationLogRepository.search(user, type, pattern, pageable).map(this::toDTO);
+        Page<OperationLog> result = user.getRole() == User.Role.ADMIN
+                ? operationLogRepository.searchWithArchived(user, type, pattern, pageable)
+                : operationLogRepository.search(user, type, pattern, pageable);
+        return result.map(this::toDTO);
     }
 
     @Transactional
     public void retain(User user, Long id) {
-        if (operationLogRepository.retain(user, id) == 0) {
+        int changed = operationLogRepository.retain(user, id);
+        if (changed == 0 && user.getRole() == User.Role.ADMIN) {
+            changed = operationLogRepository.retainArchived(id);
+        }
+        if (changed == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "日志不存在");
         }
     }
 
     @Transactional
     public void delete(User user, Long id) {
-        if (operationLogRepository.deleteOwned(user, id) == 0) {
+        int deleted = operationLogRepository.deleteOwned(user, id);
+        if (deleted == 0 && user.getRole() == User.Role.ADMIN) {
+            deleted = operationLogRepository.deleteArchived(id);
+        }
+        if (deleted == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "日志不存在");
         }
     }
@@ -107,6 +120,9 @@ public class OperationLogService {
                 .details(log.getDetails())
                 .createdAt(log.getCreatedAt())
                 .retained(log.isRetained())
+                .archived(log.getUser() == null)
+                .ownerUserId(log.getOwnerUserId())
+                .ownerUsername(log.getOwnerUsername())
                 .build();
     }
 }

@@ -15,4 +15,7 @@ public class OperationLogDTO {
     private String details;
     private LocalDateTime createdAt;
     private boolean retained;
+    private boolean archived;
+    private Long ownerUserId;
+    private String ownerUsername;
 }
