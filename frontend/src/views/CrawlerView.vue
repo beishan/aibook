@@ -29,6 +29,9 @@
             />
           </el-select>
         </label>
+        <el-button :icon="Refresh" :loading="manualRefreshing" @click="manualRefresh">
+          手动刷新
+        </el-button>
         <el-button type="primary" :icon="Link" @click="crawlDialog = true">
           URL 手动采集
         </el-button>
@@ -3083,6 +3086,20 @@ async function loadPollingIntervalOptions() {
   }
 }
 function setPollingInterval(value:number){if(!pollingIntervalOptions.value.includes(value))return;preferencesStore.setCrawlerPollingIntervalSeconds(value);restartPolling();void pollCrawlerProgress()}
+const manualRefreshing = ref(false)
+
+async function manualRefresh() {
+  if (manualRefreshing.value) return
+  manualRefreshing.value = true
+  try {
+    await refreshOverview()
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '刷新失败，请重试')
+  } finally {
+    manualRefreshing.value = false
+  }
+}
+
 async function refreshOverview(){await Promise.all([refresh(),loadCrawlerStatistics()])}
 function restoreStatisticsWindow() {
   const saved = parseStatisticsWindow(preferencesStore.crawlerStatisticsWindow)
