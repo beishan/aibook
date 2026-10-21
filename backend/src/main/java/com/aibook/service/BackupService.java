@@ -131,6 +131,67 @@ public class BackupService {
                         BackupExecution.Status.QUEUED, BackupExecution.Status.RUNNING)));
     }
 
+    public synchronized void deleteExecution(long id) {
+        BackupExecution execution = executionRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "备份记录不存在"));
+        if (execution.getStatus() == BackupExecution.Status.QUEUED
+                || execution.getStatus() == BackupExecution.Status.RUNNING) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                    "排队中或执行中的备份不能删除，请等待执行结束");
+        }
+        if (execution.getOutputPath() != null && !execution.getOutputPath().isBlank()) {
+            try {
+                Path root = Path.of(backupPath).toAbsolutePath().normalize();
+                Path fileName = Path.of(execution.getOutputPath()).getFileName();
+                if (fileName == null) {
+                    throw new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                            "备份路径不匹配，已阻止删除，请检查备份目录配置");
+                }
+                Path directory = root.resolve(fileName).normalize();
+                var parsed = parseBackupDirectory(directory);
+                if (!root.equals(directory.getParent()) || parsed.isEmpty()
+                        || parsed.get().executionId() != id
+                        || !isRecordedBackupPath(directory, execution)
+                        || Files.isSymbolicLink(directory)) {
+                    throw new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                            "备份路径不匹配，已阻止删除，请检查备份目录配置");
+                }
+                if (!Files.isDirectory(root) || !Files.isReadable(root)) {
+                    throw new IOException("备份根目录不可用");
+                }
+                if (!Files.notExists(directory, LinkOption.NOFOLLOW_LINKS)) {
+                    deleteDirectory(directory);
+                }
+            } catch (IOException | java.nio.file.InvalidPathException exception) {
+                log.warn("删除备份文件失败 executionId={}", id, exception);
+                throw new ResponseStatusException(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR,
+                        "删除备份文件失败，记录已保留，请检查目录和权限后重试", exception);
+            }
+        }
+        executionRepository.delete(execution);
+    }
+
+    private void deleteDirectory(Path path) throws IOException {
+        // Do not follow symlinks: a link inside a backup must never delete its target.
+        Files.walkFileTree(path, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes)
+                    throws IOException {
+                Files.delete(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path directory, IOException exception)
+                    throws IOException {
+                if (exception != null) throw exception;
+                Files.delete(directory);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
     private void reconcileDeletedBackup(BackupExecution execution) {
         if (execution.getDeletionReason() != null
                 || execution.getStatus() == BackupExecution.Status.QUEUED
@@ -198,7 +259,7 @@ public class BackupService {
     }
 
     @Scheduled(cron = "${backup.retention-cron:0 15 4 * * *}")
-    public void cleanExpiredBackups() {
+    public synchronized void cleanExpiredBackups() {
         BackupRetentionSettings settings = retentionSettings();
         if (!settings.enabled()) return;
 
@@ -338,22 +399,7 @@ public class BackupService {
 
     private void deleteBackupFolder(BackupFolder folder, String reason) {
         try {
-            Files.walkFileTree(folder.path(), new SimpleFileVisitor<>() {
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attributes)
-                        throws IOException {
-                    Files.delete(file);
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult postVisitDirectory(Path directory, IOException exception)
-                        throws IOException {
-                    if (exception != null) throw exception;
-                    Files.delete(directory);
-                    return FileVisitResult.CONTINUE;
-                }
-            });
+            deleteDirectory(folder.path());
             if (folder.execution() != null) {
                 BackupExecution execution = folder.execution();
                 execution.setDeletedAt(LocalDateTime.now());

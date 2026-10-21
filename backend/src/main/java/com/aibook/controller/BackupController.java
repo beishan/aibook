@@ -78,6 +78,12 @@ public class BackupController {
         return ResponseEntity.accepted().body(backupService.runImmediately(request));
     }
 
+    @DeleteMapping("/executions/{id}")
+    public ResponseEntity<Void> deleteExecution(@PathVariable long id) {
+        backupService.deleteExecution(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/executions/page")
     public ResponseEntity<BackupService.ExecutionPage> executionPage(
             @RequestParam(defaultValue = "0") int page,

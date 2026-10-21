@@ -73,6 +73,7 @@ export const backupApi = {
   executions: () => api
     .get<BackupExecution[]>('/api/system/backups/executions')
     .then(({ data }) => data),
+  deleteExecution: (id: number) => api.delete(`/api/system/backups/executions/${id}`),
   executionPage: (page: number, size = 20) => api
     .get<BackupExecutionPage>('/api/system/backups/executions/page', { params: { page, size } })
     .then(({ data }) => data),

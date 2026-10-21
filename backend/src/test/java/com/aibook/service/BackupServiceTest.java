@@ -1,6 +1,7 @@
 package com.aibook.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -166,4 +167,102 @@ class BackupServiceTest {
         assertThat(service.executions().getFirst().status()).isEqualTo("SUCCESS");
         verify(repository, never()).save(any());
     }
+    private BackupExecution deletableExecution() {
+        BackupExecution row = execution(LocalDateTime.of(2026, 10, 21, 12, 0));
+        when(repository.findById(1L)).thenReturn(java.util.Optional.of(row));
+        return row;
+    }
+
+    @Test
+    void manualDeleteRemovesNestedFilesAndRecordButDoesNotFollowLinks() throws Exception {
+        BackupExecution row = deletableExecution();
+        Path directory = Files.createDirectory(Path.of(row.getOutputPath()));
+        Path nested = Files.createDirectory(directory.resolve("nested"));
+        Files.writeString(nested.resolve("database.dump"), "backup");
+        Path outside = Files.createTempDirectory(root.getParent(), "backup-outside-");
+        try {
+            Path protectedFile = Files.writeString(outside.resolve("original.txt"), "original");
+            Files.createSymbolicLink(directory.resolve("link"), outside);
+            service.deleteExecution(1L);
+            assertThat(directory).doesNotExist();
+            assertThat(protectedFile).hasContent("original");
+            verify(repository).delete(row);
+        } finally {
+            Files.deleteIfExists(outside.resolve("original.txt"));
+            Files.deleteIfExists(outside);
+        }
+    }
+
+    @Test
+    void manualDeleteRejectsActiveBackupsBeforeTouchingFiles() throws Exception {
+        BackupExecution row = deletableExecution();
+        Path directory = Files.createDirectory(Path.of(row.getOutputPath()));
+        for (var status : List.of(BackupExecution.Status.QUEUED, BackupExecution.Status.RUNNING)) {
+            row.setStatus(status);
+            assertThatThrownBy(() -> service.deleteExecution(1L))
+                    .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                    .hasMessageContaining("409");
+        }
+        assertThat(directory).isDirectory();
+        verify(repository, never()).delete(any(BackupExecution.class));
+    }
+
+    @Test
+    void manualDeleteValidatesPathAndExecutionIdAndRejectsDirectorySymlink() throws Exception {
+        BackupExecution row = deletableExecution();
+        String validPath = row.getOutputPath();
+        for (String invalidPath : List.of("/", root.toString(), root.resolve("other").toString(),
+                root.resolve("aibook-20261021-120000-2").toString(),
+                root.getParent().resolve("aibook-20261021-120000-1").toString())) {
+            row.setOutputPath(invalidPath);
+            assertThatThrownBy(() -> service.deleteExecution(1L))
+                    .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                    .hasMessageContaining("409");
+        }
+        row.setOutputPath(validPath);
+        Path target = Files.createDirectory(root.resolve("originals"));
+        Files.createSymbolicLink(Path.of(validPath), target);
+        assertThatThrownBy(() -> service.deleteExecution(1L))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("409");
+        assertThat(target).isDirectory();
+        verify(repository, never()).delete(any(BackupExecution.class));
+    }
+
+    @Test
+    void manualDeleteSupportsMissingFilesOrNoOutputAndRejectsUnavailableRoot() {
+        BackupExecution row = deletableExecution();
+        ReflectionTestUtils.setField(service, "backupPath", root.resolve("unmounted").toString());
+        assertThatThrownBy(() -> service.deleteExecution(1L))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("500");
+        verify(repository, never()).delete(any(BackupExecution.class));
+        ReflectionTestUtils.setField(service, "backupPath", root.toString());
+        service.deleteExecution(1L);
+        verify(repository).delete(row);
+        row.setOutputPath(null);
+        service.deleteExecution(1L);
+        verify(repository, org.mockito.Mockito.times(2)).delete(row);
+    }
+
+    @Test
+    void manualDeleteMapsHostPathToMountedBackupDirectory() throws Exception {
+        BackupExecution row = deletableExecution();
+        Path directory = Files.createDirectory(Path.of(row.getOutputPath()));
+        Files.writeString(directory.resolve("data"), "backup");
+        ReflectionTestUtils.setField(service, "backupHostPath", "/NAS/backups");
+        row.setOutputPath("/NAS/backups/" + directory.getFileName());
+        service.deleteExecution(1L);
+        assertThat(directory).doesNotExist();
+        verify(repository).delete(row);
+    }
+
+    @Test
+    void manualDeleteMissingRecordReturnsNotFound() {
+        assertThatThrownBy(() -> service.deleteExecution(404L))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("404");
+        verify(repository, never()).delete(any(BackupExecution.class));
+    }
+
 }

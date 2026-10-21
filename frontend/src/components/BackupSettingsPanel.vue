@@ -210,6 +210,7 @@
                 <th scope="col">文件数</th>
                 <th scope="col">大小</th>
                 <th scope="col">备份目录</th>
+                <th scope="col">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -265,6 +266,17 @@
                 <td class="execution-path-cell" data-label="备份目录">
                   <code v-if="execution.outputPath">{{ execution.outputPath }}</code>
                   <span v-else>—</span>
+                </td>
+                <td data-label="操作">
+                  <button
+                    type="button"
+                    class="btn btn-danger"
+                    :disabled="deletingExecutionId !== null || isExecutionActive(execution)"
+                    :title="isExecutionActive(execution) ? '请等待备份执行结束后删除' : '删除记录及备份文件'"
+                    @click="removeExecution(execution)"
+                  >
+                    {{ deletingExecutionId === execution.id ? '删除中…' : '删除' }}
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -443,7 +455,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { message } from '@/utils/message'
+import { confirm, message } from '@/utils/message'
 import {
   backupApi,
   formatBackupDuration,
@@ -467,6 +479,7 @@ const contentOptions: { key: ContentKey; label: string; description: string }[] 
 
 const tasks = ref<BackupTask[]>([])
 const executions = ref<BackupExecution[]>([])
+const deletingExecutionId = ref<number | null>(null)
 const executionPage = ref(1)
 const executionTotal = ref(0)
 const executionPages = ref(0)
@@ -727,6 +740,37 @@ const removeTask = async (task: BackupTask) => {
     await refreshAll(true)
   } catch (error: any) {
     message.error(error.response?.data?.message || '删除备份任务失败')
+  }
+}
+
+const isExecutionActive = (execution: BackupExecution) =>
+  ['QUEUED', 'RUNNING'].includes(execution.executionStatus || execution.status)
+
+const removeExecution = async (execution: BackupExecution) => {
+  if (deletingExecutionId.value !== null || isExecutionActive(execution)) return
+  deletingExecutionId.value = execution.id
+  try {
+    const accepted = await confirm(
+      `确定删除「${execution.taskName}」的备份记录（#${execution.id}）？\n`
+      + `执行时间：${formatTime(execution.startedAt)}\n`
+      + `备份目录：${execution.outputPath || '无'}\n\n`
+      + '此操作会永久删除该执行记录及对应目录内的全部备份文件，无法恢复。',
+      '删除备份记录及文件',
+    )
+    if (!accepted) return
+    await backupApi.deleteExecution(execution.id)
+    if (selectedExecutionId.value === execution.id) executionDetailsVisible.value = false
+    message.success('备份记录及对应文件已删除')
+    try {
+      await loadExecutionPage()
+    } catch {
+      message.error('删除已完成，但列表刷新失败，请点击刷新重新加载')
+    }
+    syncExecutionPolling()
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '删除备份失败，请稍后重试')
+  } finally {
+    deletingExecutionId.value = null
   }
 }
 
@@ -1023,7 +1067,7 @@ onBeforeUnmount(() => {
 }
 
 .backup-execution-table {
-  min-width: 1140px;
+  min-width: 1240px;
 }
 
 .backup-data-table th,
