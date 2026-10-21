@@ -553,6 +553,10 @@
       <BackupSettingsPanel />
     </div>
 
+    <div v-if="activeTab === 'guide'" class="tab-content">
+      <UserGuidePanel />
+    </div>
+
     <!-- 系统信息 -->
     <div v-show="activeTab === 'info'" class="tab-content">
       <div class="card glass">
@@ -768,6 +772,7 @@ const preferencesStore = usePreferencesStore()
 const categoryStore = useCategoryStore()
 const userStore = useUserStore()
 const themes = THEMES
+const UserGuidePanel = defineAsyncComponent(() => import('@/components/UserGuidePanel.vue'))
 const systemVersion = packageMetadata.version
 
 interface SystemRuntime {
@@ -981,6 +986,7 @@ const tabGroups = computed(() => [
         { key: 'backups', label: '数据备份', icon: '💾' },
       ] : []),
       { key: 'logs', label: '操作日志', icon: '📋' },
+      { key: 'guide', label: '使用说明', icon: '📖' },
       { key: 'info', label: '系统信息', icon: 'ℹ️' },
     ],
   },
