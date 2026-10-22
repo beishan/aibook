@@ -64,7 +64,7 @@ public class UserService implements UserDetailsService {
     private static final Set<String> DOCK_ICON_STYLES =
             Set.of("minimal", "skeuomorphic", "macos26", "custom");
     private static final Set<String> DOCK_NAV_KEYS = Set.of("home", "library", "rewrite",
-            "shelf", "repair", "conversion", "crawler", "statistics", "settings");
+            "shelf", "repair", "conversion", "crawler", "statistics", "settings", "recommendations");
     private static final Set<String> DOCK_NAV_ICONS = Set.of("home", "library", "rewrite",
             "shelf", "repair", "conversion", "crawler", "statistics", "settings",
             "trashEmpty", "trashFull");
@@ -393,6 +393,12 @@ public class UserService implements UserDetailsService {
 
     private List<DockNavigationItemDTO> normalizeDockNavigationItems(
             List<DockNavigationItemDTO> items) {
+        // Upgrade the previous complete navigation without discarding custom titles/order.
+        if (items != null && items.size() == DOCK_NAV_KEYS.size() - 1
+                && items.stream().noneMatch(item -> item != null && "recommendations".equals(item.getKey()))) {
+            items = new ArrayList<>(items);
+            items.add(new DockNavigationItemDTO("recommendations", "推荐阅读", "shelf", true, items.size()));
+        }
         if (items == null || items.size() != DOCK_NAV_KEYS.size()) {
             throw new IllegalArgumentException("Dock 导航必须包含全部内置项目");
         }
@@ -455,7 +461,8 @@ public class UserService implements UserDetailsService {
                 new DockNavigationItemDTO("conversion", "格式转换", "conversion", true, 5),
                 new DockNavigationItemDTO("crawler", "书籍爬虫", "crawler", true, 6),
                 new DockNavigationItemDTO("statistics", "阅读统计", "statistics", true, 7),
-                new DockNavigationItemDTO("settings", "设置", "settings", true, 8));
+                new DockNavigationItemDTO("settings", "设置", "settings", true, 8),
+                new DockNavigationItemDTO("recommendations", "推荐阅读", "shelf", true, 9));
     }
 
     private int normalizeLibraryPageSize(Integer value, int fallback) {

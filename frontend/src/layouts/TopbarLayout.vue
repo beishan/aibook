@@ -102,6 +102,7 @@ const menuItems = [
   { path: '/books', icon: '📚', title: '书库' },
   { path: '/rewrite', icon: '✎', title: '重写' },
   { path: '/shelf', icon: '📖', title: '书架' },
+  { path: '/recommendations', icon: '📚', title: '推荐阅读' },
   { path: '/text-repair', icon: '🔧', title: '内容修复' },
   { path: '/format-conversion', icon: '🔄', title: '格式转换' },
   { path: '/crawler', icon: '🕸️', title: '书籍爬虫' },
@@ -164,8 +165,9 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   display: flex;
   align-items: center;
   justify-content: space-between;
-  max-width: 1200px;
+  max-width: 1600px;
   margin: 0 auto;
+  gap: var(--spacing-md);
   padding: 0 var(--spacing-lg);
   height: 64px;
 }
@@ -195,12 +197,17 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 
 /* 水平导航 */
 .header-nav {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
 }
 
 .nav-item {
+  flex-shrink: 0;
+  white-space: nowrap;
   display: flex;
   align-items: center;
   gap: 6px;

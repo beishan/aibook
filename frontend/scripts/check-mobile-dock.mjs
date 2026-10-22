@@ -15,6 +15,7 @@ const navigation = [
   { key: 'crawler', title: '采集', icon: 'crawler', enabled: true, order: 6 },
   { key: 'statistics', title: '统计', icon: 'statistics', enabled: true, order: 7 },
   { key: 'settings', title: '设置', icon: 'settings', enabled: true, order: 8 },
+  { key: 'recommendations', title: '推荐阅读', icon: 'shelf', enabled: false, order: 9 },
 ]
 const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64')
 const browser = await chromium.launch({

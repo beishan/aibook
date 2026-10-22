@@ -178,7 +178,7 @@ try {
       }
       await page.getByRole('button', { name: '更多功能', exact: true }).click()
       await page.getByRole('dialog').waitFor()
-      assert.equal(await page.locator('.phone-navigation-grid a').count(), 9)
+      assert.equal(await page.locator('.phone-navigation-grid a').count(), 10)
       await page.locator('.phone-navigation-grid a[href="/crawler"]').click()
       await page.waitForURL('**/crawler')
       await page.getByRole('dialog').waitFor({ state: 'hidden' })

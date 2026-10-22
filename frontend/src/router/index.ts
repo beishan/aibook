@@ -89,6 +89,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/ShelfView.vue'),
       },
       {
+        path: 'recommendations',
+        name: 'Recommendations',
+        component: () => import('@/views/RecommendationsView.vue'),
+      },
+      {
         path: 'statistics',
         name: 'Statistics',
         component: () => import('@/views/ReadingStatisticsView.vue'),

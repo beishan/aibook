@@ -622,4 +622,26 @@ class UserServiceTest {
                         "reader",
                         UserPreferencesDTO.builder().uiFontId(99L).build()));
     }
+    @Test
+    void upgradesLegacyNavigationWithoutLosingCustomizations() throws Exception {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder().username("reader").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        when(repository.save(user)).thenReturn(user);
+        var service = new UserService(repository);
+        var legacy = new java.util.ArrayList<>(service.getPreferences("reader").getDockNavigationItems());
+        legacy.removeIf(item -> "recommendations".equals(item.getKey()));
+        legacy.get(0).setTitle("我的定制首页");
+        legacy.get(0).setEnabled(false);
+        user.setDockNavigationSettings(new ObjectMapper().writeValueAsString(legacy));
+        var restored = service.getPreferences("reader").getDockNavigationItems();
+        assertEquals(10, restored.size());
+        assertEquals("我的定制首页", restored.get(0).getTitle());
+        assertEquals(false, restored.get(0).getEnabled());
+        assertEquals("recommendations", restored.get(9).getKey());
+        var saved = service.updatePreferences("reader",
+                UserPreferencesDTO.builder().dockNavigationItems(legacy).build());
+        assertEquals(10, saved.getDockNavigationItems().size());
+    }
+
 }

@@ -100,6 +100,7 @@ const menuRoutes: Record<string, string> = {
   conversion: '/format-conversion',
   crawler: '/crawler',
   statistics: '/statistics',
+  recommendations: '/recommendations',
   settings: '/settings',
 }
 const allItems = computed(() => [...preferencesStore.dockNavigationItems]
