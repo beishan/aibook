@@ -929,6 +929,7 @@ private fun ReaderTextContent(
                 Text(
                     text = paragraphs[index],
                     modifier = Modifier
+                        .fillMaxWidth()
                         .background(highlight?.let { Color(it.color) } ?: Color.Transparent)
                         .pointerInput(chapter.index, index, paragraphs[index]) {
                             detectTapGestures(
@@ -940,10 +941,8 @@ private fun ReaderTextContent(
                     fontSize = (19 * settings.fontScale).sp,
                     lineHeight = (35 * settings.fontScale * settings.lineHeight).sp,
                     fontFamily = fontFamily,
-                    letterSpacing = 0.sp
-                    , style = if (state.book?.format == BookFormat.TXT && settings.indentTxtParagraphs && paragraphs[index].isNotBlank()) {
-                        MaterialTheme.typography.bodyLarge.copy(textIndent = TextIndent(firstLine = 2.em))
-                    } else MaterialTheme.typography.bodyLarge
+                    letterSpacing = 0.sp,
+                    style = readerBodyStyle(settings, state.book?.format == BookFormat.TXT)
                 )
             }
         }
@@ -1155,11 +1154,13 @@ private fun ReaderPagedContent(
             page.paragraphs.forEach { paragraph ->
                 Text(
                     text = paragraph,
+                    modifier = Modifier.fillMaxWidth(),
                     color = foreground,
                     fontSize = (19 * settings.fontScale).sp,
                     lineHeight = (35 * settings.fontScale * settings.lineHeight).sp,
                     fontFamily = fontFamily,
-                    letterSpacing = 0.sp
+                    letterSpacing = 0.sp,
+                    style = readerBodyStyle(settings, state.book?.format == BookFormat.TXT)
                 )
             }
         }
@@ -2065,6 +2066,9 @@ private fun ReadingSettingsPage(
             selected = section.ordinal,
             onSelect = { section = ReadingSettingsSection.entries[it] }
         )
+        if (section == ReadingSettingsSection.TYPOGRAPHY) {
+            ReaderTypographyPreview(state, isLandscape)
+        }
         LazyVerticalGrid(
             columns = GridCells.Fixed(if (isLandscape) 2 else 1),
             modifier = Modifier.weight(1f),
@@ -2169,6 +2173,63 @@ private fun ReadingSettingsPage(
             onImport = { fontImportLauncher.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/x-font-otf", "application/octet-stream")) },
             onDismiss = { showFontDialog = false }
         )
+    }
+}
+
+@Composable
+private fun readerBodyStyle(settings: ReaderSettings, isTxt: Boolean) =
+    MaterialTheme.typography.bodyLarge.copy(
+        textAlign = when (settings.textAlignment) {
+            TextAlignment.LEFT -> TextAlign.Left
+            TextAlignment.CENTER -> TextAlign.Center
+            TextAlignment.RIGHT -> TextAlign.Right
+            TextAlignment.JUSTIFY -> TextAlign.Justify
+        },
+        textIndent = TextIndent(firstLine = if (isTxt && settings.indentTxtParagraphs) 2.em else 0.em)
+    )
+
+@Composable
+private fun ReaderTypographyPreview(state: ReaderUiState, isLandscape: Boolean) {
+    val settings = state.settings
+    val palette = readerColors(settings.theme)
+    val fontFamily = rememberReaderFontFamily(settings)
+    val isTxt = state.book?.format == BookFormat.TXT
+    val sample = remember(state.loadedChapters, state.currentChapterIndex) {
+        state.loadedChapters.firstOrNull { it.index == state.currentChapterIndex }
+            ?.content?.take(1200)?.takeIf { it.isNotBlank() }
+            ?: "午后的阳光落在书页上，窗外的树影轻轻摇动。翻开一本书，让阅读回到舒适的节奏。\n\n每一段文字都有自己的呼吸。调整字号、行距和段距，找到适合自己的排版。"
+    }
+    val paragraphs = remember(sample, isTxt, settings.compressTxtBlankLines, settings.mergeTxtShortLines) {
+        TxtParagraphNormalizer.normalize(sample, isTxt && settings.compressTxtBlankLines).let {
+            if (isTxt && settings.mergeTxtShortLines) TxtParagraphNormalizer.mergeHardWrappedLines(it) else it
+        }
+    }
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp)) {
+        Text("实时排版预览 · 可上下滚动", color = DesignTokens.SoftText)
+        Column(
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .fillMaxWidth()
+                .height(if (isLandscape) 120.dp else 200.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(palette.background)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(paragraphGap(settings.paragraphSpacing))
+        ) {
+            paragraphs.forEach { paragraph ->
+                Text(
+                    text = paragraph,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = palette.foreground,
+                    fontFamily = fontFamily,
+                    fontSize = (19 * settings.fontScale).sp,
+                    lineHeight = (35 * settings.fontScale * settings.lineHeight).sp,
+                    letterSpacing = 0.sp,
+                    style = readerBodyStyle(settings, isTxt)
+                )
+            }
+        }
     }
 }
 
