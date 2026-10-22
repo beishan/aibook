@@ -12,6 +12,16 @@ class ReaderPositionHistoryTest {
     )
 
     @Test
+    fun staleReturnDoesNotConsumeNewerHistory() {
+        val first = position(1)
+        val second = position(2)
+        val history = listOf(first, second)
+        assertSame(history, ReaderPositionHistory.consume(history, first))
+        assertEquals(listOf(first), ReaderPositionHistory.consume(history, second))
+        assertEquals(emptyList(), ReaderPositionHistory.consume(emptyList(), first))
+    }
+
+    @Test
     fun retainsNewestTenPositionsInReturnOrder() {
         val history = (0..12).fold(emptyList<ReaderBookmark>()) { result, line ->
             ReaderPositionHistory.push(result, position(line))
@@ -21,7 +31,7 @@ class ReaderPositionHistoryTest {
         assertEquals(17, history.last().scrollOffset)
     }
 
-    @Test
+@Test
     fun ignoresConsecutiveDuplicateButRetainsRevisitedPositions() {
         val history = listOf(position(1))
         assertSame(history, ReaderPositionHistory.push(history, position(1)))

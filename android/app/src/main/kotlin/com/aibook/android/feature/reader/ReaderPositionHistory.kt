@@ -3,6 +3,9 @@ package com.aibook.android.feature.reader
 import com.aibook.android.core.reader.ReaderBookmark
 
 object ReaderPositionHistory {
+    fun consume(history: List<ReaderBookmark>, expected: ReaderBookmark): List<ReaderBookmark> =
+        if (history.lastOrNull()?.id == expected.id) history.dropLast(1) else history
+
     fun push(history: List<ReaderBookmark>, position: ReaderBookmark): List<ReaderBookmark> {
         val previous = history.lastOrNull()
         if (previous != null && previous.chapterIndex == position.chapterIndex &&

@@ -468,12 +468,13 @@ class ReaderViewModel(
     }
 
     fun openBookmark(bookmark: ReaderBookmark, rememberOrigin: Boolean = true) {
-        if (rememberOrigin) rememberReadingPosition()
         val targetIndex = bookmark.chapterIndex
             ?: _state.value.chapters.indexOfFirst { it.href == bookmark.chapterHref }.takeIf { it >= 0 }
             ?: return
         val chapter = _state.value.chapters.getOrNull(targetIndex) ?: return
         val book = _state.value.book
+        if (rememberOrigin) rememberReadingPosition()
+        val selectionRequestId = ++chapterSelectionRequestId
 
         viewModelScope.launch {
             val loaded = if (
@@ -481,7 +482,9 @@ class ReaderViewModel(
                 chapter.content.isBlank() && chapter.imageUri.isNullOrBlank()
             ) {
                 loadStructuredChapter(targetIndex) ?: run {
-                    _state.update { it.copy(errorMessage = "书签所在章节加载失败，请检查网络后重试") }
+                    if (selectionRequestId == chapterSelectionRequestId) {
+                        _state.update { it.copy(errorMessage = "目标章节加载失败，请检查网络后重试") }
+                    }
                     return@launch
                 }
             } else if (
@@ -489,12 +492,18 @@ class ReaderViewModel(
                 chapter.content.isBlank() && chapter.imageUri.isNullOrBlank()
             ) {
                 runCatching { ReadiumEpubReader(appContext).parseChapter(File(book.uri), targetIndex) }.getOrNull()
-                    ?: chapter
+                    ?: run {
+                        if (selectionRequestId == chapterSelectionRequestId) {
+                            _state.update { it.copy(errorMessage = "目标章节加载失败，请重试") }
+                        }
+                        return@launch
+                    }
             } else chapter
+            if (selectionRequestId != chapterSelectionRequestId) return@launch
             val updatedChapters = _state.value.chapters.map { if (it.index == targetIndex) loaded else it }
             _state.update {
                 it.copy(
-                    returnPositions = if (rememberOrigin) it.returnPositions else it.returnPositions.dropLast(1),
+                    returnPositions = if (rememberOrigin) it.returnPositions else ReaderPositionHistory.consume(it.returnPositions, bookmark),
                     chapters = updatedChapters,
                     loadedChapters = listOf(loaded),
                     currentChapterIndex = targetIndex,
@@ -517,12 +526,14 @@ class ReaderViewModel(
     }
 
     fun openSearchMatch(match: ReaderSearchMatch) {
-        rememberReadingPosition()
         val state = _state.value
         val chapter = state.chapters.getOrNull(match.chapterIndex) ?: return
+        rememberReadingPosition()
+        val selectionRequestId = ++chapterSelectionRequestId
         val book = state.book
 
         fun publish(loaded: ReaderChapter) {
+            if (selectionRequestId != chapterSelectionRequestId) return
             _state.update { current ->
                 current.copy(
                     chapters = current.chapters.map { if (it.index == match.chapterIndex) loaded else it },
