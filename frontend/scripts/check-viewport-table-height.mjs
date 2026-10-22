@@ -100,6 +100,36 @@ assert.equal(listeners.size, 0)
 assert.equal(viewportListeners.size, 0)
 assert.equal(pendingFrame, undefined)
 
+// Exercise the log panel's native table and pagination selectors with the same sizing lifecycle.
+const logView = await readFile(new URL('../src/components/OperationLogPanel.vue', import.meta.url), 'utf8')
+const selectors = []
+panel.querySelector = selector => {
+  selectors.push(selector)
+  return selector.includes('.log-table-wrap') ? table : pagination
+}
+top = 250
+windowMock.scrollY = 0
+ancestor.scrollTop = 0
+viewport.height = 900
+paginationHeight = 72
+vm.runInContext(`var logResult = useViewportTableHeight({
+  tableSelector: ':scope > .log-table-wrap',
+  paginationSelector: ':scope > .log-pagination'
+})`, context)
+context.logResult.tablePanelRef.value = panel
+hooks.mount()
+flush()
+assert.equal(context.logResult.tableMaxHeight.value, 464, 'log table reserves its pagination')
+viewport.height = 700
+viewportListeners.get('resize')()
+flush()
+assert.equal(context.logResult.tableMaxHeight.value, 264, 'log table shrinks with the browser')
+assert(selectors.includes(':scope > .log-table-wrap'))
+assert(selectors.includes(':scope > .log-pagination'))
+assert(logView.includes('ref="tablePanelRef"'))
+assert(logView.includes('maxHeight: `${tableMaxHeight}px`'))
+hooks.unmount()
+
 for (const tab of ['discovered', 'books']) {
   const section = view.split(`activeTab === '${tab}'" ref="tablePanelRef"`)[1]?.split('</section>')[0]
   assert.ok(section?.includes(':max-height="tableMaxHeight"'), `${tab} table uses the viewport limit`)

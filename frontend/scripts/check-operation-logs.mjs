@@ -69,6 +69,12 @@ const { descriptor } = parse(fs.readFileSync(new URL('../src/components/Operatio
 const compiled = compileScript(descriptor, { id: 'operation-log-check' })
 const panel = evaluate(compiled.content, {
   '@/utils/operationLogs': utility,
+  '@/utils/useViewportTableHeight': {
+    useViewportTableHeight: () => ({
+      tablePanelRef: require('vue').ref(),
+      tableMaxHeight: require('vue').ref(400),
+    }),
+  },
   '@/utils/dateTime': { formatChinaDateTime: value => value },
   '@/utils/message': { confirm: async () => accepted, message: {
     error: value => notices.push(value), success: value => notices.push(value),

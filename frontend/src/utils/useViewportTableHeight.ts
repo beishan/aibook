@@ -1,7 +1,10 @@
 import { onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 
 /** Keep a table's header and pagination within the viewport as surrounding controls resize. */
-export function useViewportTableHeight() {
+export function useViewportTableHeight({
+  tableSelector = ':scope > .data-table',
+  paginationSelector = ':scope > .discovery-pagination, :scope > .list-pagination',
+} = {}) {
   const tablePanelRef = ref<HTMLElement>()
   const tableMaxHeight = ref<number>(Math.max(1, window.innerHeight))
   let observer: ResizeObserver | undefined
@@ -10,7 +13,7 @@ export function useViewportTableHeight() {
   function updateHeight() {
     frame = 0
     const panel = tablePanelRef.value
-    const table = panel?.querySelector<HTMLElement>(':scope > .data-table')
+    const table = panel?.querySelector<HTMLElement>(tableSelector)
     if (!panel || !table) return
 
     const viewport = window.visualViewport
@@ -25,7 +28,7 @@ export function useViewportTableHeight() {
       bottomSpacing = Math.max(bottomSpacing, parseFloat(getComputedStyle(parent).paddingBottom) || 0)
     }
 
-    const pagination = panel.querySelector<HTMLElement>(':scope > .discovery-pagination, :scope > .list-pagination')
+    const pagination = panel.querySelector<HTMLElement>(paginationSelector)
     const panelStyle = getComputedStyle(panel)
     const reservedHeight = (pagination?.getBoundingClientRect().height ?? 0)
       + (parseFloat(panelStyle.paddingBottom) || 0) + bottomSpacing
@@ -47,7 +50,7 @@ export function useViewportTableHeight() {
     if (panel && observer) {
       observer.observe(panel)
       for (const child of panel.children) {
-        if (!child.classList.contains('data-table')) observer.observe(child)
+        if (child !== panel.querySelector(tableSelector)) observer.observe(child)
       }
     }
     scheduleUpdate()

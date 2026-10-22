@@ -31,6 +31,7 @@
     <section
       v-show="activeTab === 'list'"
       id="operation-log-panel-list"
+      ref="tablePanelRef"
       role="tabpanel"
       aria-labelledby="operation-log-tab-list"
     >
@@ -53,7 +54,14 @@
       </div>
       <div v-if="loading && !logs.length" class="log-state" role="status">加载中…</div>
       <div v-else-if="!logs.length" class="log-state">暂无符合条件的操作日志</div>
-      <div v-else class="log-table-wrap">
+      <div
+        v-else
+        class="log-table-wrap"
+        :style="{ maxHeight: `${tableMaxHeight}px` }"
+        tabindex="0"
+        role="region"
+        aria-label="操作日志列表，可滚动查看"
+      >
         <table class="log-table">
           <thead>
             <tr>
@@ -232,6 +240,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
+import { useViewportTableHeight } from '@/utils/useViewportTableHeight'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import { confirm, message } from '@/utils/message'
 import {
@@ -244,6 +253,11 @@ import {
   type LogRetentionRule,
   type OperationLog,
 } from '@/utils/operationLogs'
+
+const { tablePanelRef, tableMaxHeight } = useViewportTableHeight({
+  tableSelector: ':scope > .log-table-wrap',
+  paginationSelector: ':scope > .log-pagination',
+})
 
 type LogTab = 'list' | 'retention'
 const tabs: { key: LogTab; label: string }[] = [
@@ -502,7 +516,11 @@ onMounted(() => {
   color: var(--text-secondary);
 }
 .log-table-wrap {
-  overflow-x: auto;
+  overflow: auto;
+}
+.log-table-wrap:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 .log-table {
   width: 100%;
@@ -519,6 +537,9 @@ onMounted(() => {
   vertical-align: middle;
 }
 .log-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background: var(--surface-muted, var(--primary-alpha-10));
   color: var(--text-secondary);
   white-space: nowrap;
