@@ -79,6 +79,11 @@ visibilityContext.exports.captureBookCoverVisibility({ content: [
 assert.equal(privacy.shouldLoadBookCover(10), false, 'DTO state also works if account preference hydration is unavailable')
 privacy.allBookCoversHidden.value = true
 assert.equal(privacy.shouldLoadBookCover(11), true)
+visibilityContext.exports.captureBookCoverVisibility({ groups: [{ books: [
+  { id: 12, title: '推荐隐藏封面', coverHidden: true },
+] }] })
+assert.equal(visibilityContext.exports.explicitBookCoverOverrides.value['12'], true,
+  'grouped home recommendations must capture book privacy before rendering')
 visibilityContext.exports.captureBookCoverVisibility({ book: { id: 10, title: '恢复默认', coverHidden: null } })
 privacy.allBookCoversHidden.value = false
 assert.equal(privacy.shouldLoadBookCover(10), true)

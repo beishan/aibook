@@ -60,7 +60,7 @@
     </header>
 
     <!-- 内容区 -->
-    <main class="layout-main" :class="{ 'library-layout-main': route.path === '/books' }">
+    <main class="layout-main" :class="{ 'library-layout-main': route.path === '/books', 'home-layout-main': route.path === '/' }">
       <router-view v-slot="{ Component }">
         <Transition name="fade" mode="out-in">
           <component :is="Component" />
@@ -359,7 +359,8 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   width: 100%;
 }
 
-.layout-main.library-layout-main {
+.layout-main.library-layout-main,
+.layout-main.home-layout-main {
   max-width: none;
 }
 

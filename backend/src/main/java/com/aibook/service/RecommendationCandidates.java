@@ -88,7 +88,7 @@ public class RecommendationCandidates {
     public List<Map<String, Object>> books(User user, List<Long> ids) {
         if (ids.isEmpty()) return List.of();
         return jdbc.queryForList("SELECT b.id, b.title, b.author, b.cover_url AS \"coverUrl\", "
-                + "b.reading_status AS \"readingStatus\", b.format FROM books b WHERE "
+                + "b.cover_hidden AS \"coverHidden\", b.reading_status AS \"readingStatus\", b.format FROM books b WHERE "
                 + VISIBLE + " AND b.id IN (:ids)",
                 new MapSqlParameterSource("user", user.getId()).addValue("ids", ids));
     }

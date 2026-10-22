@@ -18,7 +18,7 @@ export function captureBookCoverVisibility(payload: unknown) {
         && (item.coverHidden === null || typeof item.coverHidden === 'boolean')) {
       changes[String(item.id)] = item.coverHidden as boolean | null
     }
-    for (const key of ['content', 'books', 'book', 'results', 'items']) {
+    for (const key of ['content', 'books', 'book', 'results', 'items', 'groups']) {
       if (item[key] != null) visit(item[key])
     }
   }

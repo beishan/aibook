@@ -33,6 +33,7 @@ export interface RecommendedBook {
   title: string
   author: string
   coverUrl: string | null
+  coverHidden?: boolean | null
   readingStatus: string
   format: string
 }

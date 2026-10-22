@@ -153,7 +153,7 @@
           <el-option label="添加时间" value="createdAt" />
           <el-option label="书名" value="title" />
           <el-option label="作者" value="author" />
-          <el-option label="最近阅读" value="updatedAt" />
+          <el-option label="最近更新" value="updatedAt" />
         </el-select>
         <div class="filter-actions">
           <button class="btn" @click="handleSearch">搜索</button>
@@ -737,6 +737,7 @@ async function loadSourceSites(visible:boolean) {
 const filterFormat = ref('')
 const filterStatus = ref('')
 const filterCategoryId = ref('')
+const filterIncludeChildren = ref(true)
 const filterTagId = ref('')
 const sortBy = ref('createdAt')
 const currentPage = ref(1)
@@ -945,7 +946,7 @@ const loadBooks = async () => {
       format: filterFormat.value || undefined,
       status: filterStatus.value || undefined,
       categoryId: filterCategoryId.value ? Number(filterCategoryId.value) : undefined,
-      includeChildren: Boolean(filterCategoryId.value),
+      includeChildren: Boolean(filterCategoryId.value) && filterIncludeChildren.value,
       tagId: filterTagId.value ? Number(filterTagId.value) : undefined,
       sourceType: siteSource ? 'CRAWLER' : (filterSource.value || undefined) as Book['sourceType'],
       sourceSiteName: siteSource ? filterSource.value.slice(5) : undefined,
@@ -963,6 +964,7 @@ const handleSearch = () => {
 }
 
 const handleFilterChange = (_type: 'format' | 'status' | 'category' | 'tag' | 'source') => {
+  if (_type === 'category') filterIncludeChildren.value = true
   currentPage.value = 1
   loadBooks()
 }
@@ -1346,26 +1348,31 @@ const handleViewModeKey = (event: KeyboardEvent) => {
   ;(event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
 }
 
-watch(
-  () => route.query.search,
-  (newSearch) => {
-    if (newSearch) {
-      searchKeyword.value = newSearch as string
-      handleSearch()
-    }
+function applyHomeRouteFilters() {
+  searchKeyword.value = typeof route.query.search === 'string' ? route.query.search : ''
+  const category = Number(route.query.categoryId)
+  filterCategoryId.value = Number.isSafeInteger(category) && category > 0 ? String(category) : ''
+  filterIncludeChildren.value = route.query.includeChildren !== 'false'
+  if (typeof route.query.sortBy === 'string'
+      && ['createdAt', 'updatedAt', 'title', 'author'].includes(route.query.sortBy)) {
+    sortBy.value = route.query.sortBy
   }
+}
+
+watch(
+  () => [route.query.search, route.query.categoryId, route.query.includeChildren, route.query.sortBy],
+  () => {
+    applyHomeRouteFilters()
+    handleSearch()
+  },
 )
 
 onMounted(async () => {
   await preferencesStore.hydrate()
   categoryStore.refresh()
   tagStore.fetchTags()
-  if (route.query.search) {
-    searchKeyword.value = route.query.search as string
-    handleSearch()
-  } else {
-    loadBooks()
-  }
+  applyHomeRouteFilters()
+  loadBooks()
 })
 
 </script>

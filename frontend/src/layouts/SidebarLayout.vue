@@ -85,7 +85,7 @@
       </el-header>
 
       <el-main class="modern-main">
-        <div class="content-shell" :class="{ 'library-content-shell': route.path === '/books' }">
+        <div class="content-shell" :class="{ 'library-content-shell': route.path === '/books', 'home-content-shell': route.path === '/' }">
           <router-view v-slot="{ Component }">
             <Transition name="fade" mode="out-in">
               <component :is="Component" />
@@ -403,7 +403,8 @@ const handleLogout = async () => {
   margin: 0 auto;
 }
 
-.content-shell.library-content-shell {
+.content-shell.library-content-shell,
+.content-shell.home-content-shell {
   max-width: none;
 }
 
