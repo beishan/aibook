@@ -26,6 +26,11 @@ accept = true
 await handler({ ...row, executionStatus: 'RUNNING' })
 await handler({ ...row, executionStatus: 'QUEUED' })
 assert.equal(calls, 0, 'Active backups cannot be deleted')
+await handler({ ...row, status: 'DELETED', executionStatus: 'SUCCESS' })
+await handler({ ...row, status: 'SUCCESS', deletedAt: '2026-10-22' })
+assert.equal(calls, 0, 'Deleted backups cannot trigger another delete request')
+assert.match(source, /v-if="!isExecutionDeleted\(execution\)"/,
+  'Deleted rows must hide their delete button')
 let resolveConfirm
 pendingConfirm = new Promise(resolve => { resolveConfirm = resolve })
 const first = handler(row)

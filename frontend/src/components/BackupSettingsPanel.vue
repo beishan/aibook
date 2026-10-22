@@ -269,6 +269,7 @@
                 </td>
                 <td data-label="操作">
                   <button
+                    v-if="!isExecutionDeleted(execution)"
                     type="button"
                     class="btn btn-danger"
                     :disabled="deletingExecutionId !== null || isExecutionActive(execution)"
@@ -746,8 +747,13 @@ const removeTask = async (task: BackupTask) => {
 const isExecutionActive = (execution: BackupExecution) =>
   ['QUEUED', 'RUNNING'].includes(execution.executionStatus || execution.status)
 
+const isExecutionDeleted = (execution: BackupExecution) =>
+  execution.status === 'DELETED' || execution.deletedAt != null
+
 const removeExecution = async (execution: BackupExecution) => {
-  if (deletingExecutionId.value !== null || isExecutionActive(execution)) return
+  if (deletingExecutionId.value !== null
+    || isExecutionActive(execution)
+    || isExecutionDeleted(execution)) return
   deletingExecutionId.value = execution.id
   try {
     const accepted = await confirm(
