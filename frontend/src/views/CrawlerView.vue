@@ -3050,20 +3050,34 @@ const statisticsTaskTotals=computed(()=>statistics.value?.daily.reduce((totals,i
 const statisticsSuccessRate=computed(()=>statisticsTaskTotals.value.finished?Math.round(statisticsTaskTotals.value.successful/statisticsTaskTotals.value.finished*100):0)
 let timer:number|undefined
 let progressPolling=false
+let pollingReady = false
+let crawlerPageMounted = false
 let statisticsRequestSequence=0
 let chapterRequestSequence=0
 let chapterReaderRequestSequence=0
 let statisticsCharts:import('echarts').ECharts[]=[]
 onMounted(async () => {
+  crawlerPageMounted = true
+  document.addEventListener('visibilitychange', handlePollingVisibilityChange)
   document.addEventListener('keydown', handleChapterReaderKeydown)
   window.addEventListener('resize', resizeStatisticsCharts)
   await preferencesStore.hydrate()
   restoreStatisticsWindow()
   await loadPollingIntervalOptions()
   await Promise.all([refresh(), loadCrawlerStatistics()])
+  if (!crawlerPageMounted) return
+  pollingReady = true
   restartPolling()
 })
-onUnmounted(()=>{if(timer)window.clearInterval(timer);document.removeEventListener('keydown',handleChapterReaderKeydown);window.removeEventListener('resize',resizeStatisticsCharts);disposeStatisticsCharts()})
+onUnmounted(() => {
+  crawlerPageMounted = false
+  pollingReady = false
+  stopPolling()
+  document.removeEventListener('visibilitychange', handlePollingVisibilityChange)
+  document.removeEventListener('keydown', handleChapterReaderKeydown)
+  window.removeEventListener('resize', resizeStatisticsCharts)
+  disposeStatisticsCharts()
+})
 watch(activeTab, value => {
   if (value === 'statistics') void loadCrawlerStatistics()
   if (value === 'discovered') void loadDiscoveryFilterOptions(true)
@@ -3071,7 +3085,25 @@ watch(activeTab, value => {
 watch(discoverySiteId, () => {
   void loadDiscoveryFilterOptions(true)
 })
-function restartPolling(){if(timer)window.clearInterval(timer);timer=window.setInterval(()=>{void pollCrawlerProgress()},pollingIntervalSeconds.value*1000)}
+function canPollCrawlerProgress() {
+  return crawlerPageMounted && pollingReady && document.visibilityState === 'visible'
+}
+
+function stopPolling() {
+  if (timer !== undefined) window.clearInterval(timer)
+  timer = undefined
+}
+
+function restartPolling() {
+  stopPolling()
+  if (!canPollCrawlerProgress()) return
+  timer = window.setInterval(() => { void pollCrawlerProgress() }, pollingIntervalSeconds.value * 1000)
+}
+
+function handlePollingVisibilityChange() {
+  restartPolling()
+  if (canPollCrawlerProgress()) void pollCrawlerProgress()
+}
 async function loadPollingIntervalOptions() {
   try {
     const configuredOptions = await crawlerApi.crawlerPollingIntervalOptions()
@@ -3793,7 +3825,7 @@ async function refresh(){const [dashboardData,siteData]=await Promise.all([crawl
 async function loadCurrentCrawlerTasks(){currentCrawlerTasks.value=await crawlerApi.currentTasks()}
 async function loadDiscoveryPages(){const pages=await crawlerApi.discoveryPages();discoveryPagesBySite.value=pages.reduce<Record<number,CrawlerDiscoveryPage[]>>((groups,page)=>{(groups[page.siteId]??=[]).push(page);return groups},{})}
 async function pollCrawlerProgress(){
-  if(progressPolling)return
+  if(!canPollCrawlerProgress() || progressPolling)return
   const hasActiveTask=currentCrawlerTasks.value.some(task=>['RUNNING','WAITING'].includes(task.status))||[...tasks.value,...(dashboard.value?.recentTasks||[])].some(task=>['RUNNING','WAITING'].includes(task.status))
   if(!hasActiveTask&&!bookDrawer.value&&!taskDrawer.value)return
   progressPolling=true
