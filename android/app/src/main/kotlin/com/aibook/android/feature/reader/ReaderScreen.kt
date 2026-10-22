@@ -872,9 +872,9 @@ private fun ReaderTextContent(
 
     val configuration = LocalConfiguration.current
     val horizontalPadding = if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-        (((configuration.screenWidthDp - 760) / 2).coerceAtLeast(24) + 24).dp
+        ((configuration.screenWidthDp - 760) / 2).coerceAtLeast(16).dp
     } else {
-        38.dp
+        16.dp
     }
     val verticalPadding = if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 24.dp else 48.dp
 
@@ -1069,8 +1069,8 @@ private fun ReaderPagedContent(
         val transform = PageTurnVisuals.transform(settings.pageTurnMode, pageOffset)
         val configuration = LocalConfiguration.current
         val horizontalPadding = if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            (((configuration.screenWidthDp - 760) / 2).coerceAtLeast(24) + 24).dp
-        } else 38.dp
+            ((configuration.screenWidthDp - 760) / 2).coerceAtLeast(16).dp
+        } else 16.dp
         val verticalPadding = if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 24.dp else 48.dp
         Column(
             modifier = Modifier
@@ -2070,7 +2070,15 @@ private fun ReadingSettingsPage(
                 }
                 item { SettingLineCard("字体", "${ReaderFontCatalog.selectedLabel(settings)} 〉") { showFontDialog = true } }
                 item {
-                    SliderCard("字号", "A-", "A+", (18f * settings.fontScale).toInt().toString(), settings.fontScale.coerceIn(14f / 18f, 30f / 18f), 14f / 18f..30f / 18f, viewModel::setFontScale)
+                    SliderCard(
+                        "字号",
+                        "A-",
+                        "A+",
+                        (18f * settings.fontScale).toInt().toString(),
+                        settings.fontScale.coerceIn(10f / 18f, 30f / 18f),
+                        10f / 18f..30f / 18f,
+                        viewModel::setFontScale
+                    )
                 }
                 item { SegmentedSetting("行距", listOf("紧凑", "适中", "宽松"), lineHeightToIndex(settings.lineHeight)) { viewModel.setLineHeight(indexToLineHeight(it)) } }
                 item { SegmentedSetting("段距", listOf("无", "小", "大"), settings.paragraphSpacing.ordinal) { viewModel.setParagraphSpacing(ParagraphSpacing.entries[it]) } }
