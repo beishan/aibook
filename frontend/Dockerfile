@@ -25,6 +25,10 @@ RUN apk add --no-cache tzdata \
 # 复制构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html
 
+# 构建环境的 umask 不应影响 Nginx 读取公开静态资源
+RUN find /usr/share/nginx/html -type d -exec chmod 755 {} + \
+    && find /usr/share/nginx/html -type f -exec chmod 644 {} +
+
 # 复制 Nginx 配置
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 

@@ -1,6 +1,6 @@
 # 主页阅读横幅素材
 
-- 项目文件：`frontend/public/images/home-reading-landscape.webp`
+- 项目文件：`frontend/src/assets/home-reading-landscape.webp`
 - 用途：新版网页主页的装饰性横幅背景，文字、按钮与当前账户书封由页面独立渲染。
 - 生成方式：内置 imagegen 工具，原创生成，未编辑或复制参考截图中的书封及背景。
 - 原始尺寸：2172 × 724；以 WebP 质量 88、method 6 转码，约 336 KB。运行时只读取本地静态资源。

@@ -892,7 +892,7 @@ onUnmounted(() => {
   overflow: hidden;
   border: 1px solid rgb(255 255 255 / 20%);
   border-radius: 7px;
-  background: #343c37 url('/images/home-reading-landscape.webp') center 55% / cover;
+  background: #343c37 url('../assets/home-reading-landscape.webp') center 55% / cover;
   color: #fff8ef;
   isolation: isolate;
 }
