@@ -2080,7 +2080,15 @@ private fun ReadingSettingsPage(
                         viewModel::setFontScale
                     )
                 }
-                item { SegmentedSetting("行距", listOf("紧凑", "适中", "宽松"), lineHeightToIndex(settings.lineHeight)) { viewModel.setLineHeight(indexToLineHeight(it)) } }
+                item {
+                    SegmentedSetting(
+                        "行距",
+                        listOf("极紧", "紧凑", "适中", "宽松"),
+                        lineHeightToIndex(settings.lineHeight)
+                    ) { index ->
+                        viewModel.setLineHeight(indexToLineHeight(index))
+                    }
+                }
                 item { SegmentedSetting("段距", listOf("无", "小", "大"), settings.paragraphSpacing.ordinal) { viewModel.setParagraphSpacing(ParagraphSpacing.entries[it]) } }
                 item { IconSegmentedSetting(settings.textAlignment, viewModel::setTextAlignment) }
                 item { SegmentedSetting("翻页方式", listOf("仿真", "滑动", "覆盖", "平移", "上下"), settings.pageTurnMode.ordinal) { viewModel.setPageTurnMode(PageTurnMode.entries[it]) } }
@@ -2934,15 +2942,17 @@ private fun readingDurationLabel(seconds: Long): String {
 }
 
 private fun lineHeightToIndex(lineHeight: Float): Int = when {
-    lineHeight < 1.3f -> 0
-    lineHeight > 1.6f -> 2
-    else -> 1
+    lineHeight < 1.1f -> 0
+    lineHeight < 1.3f -> 1
+    lineHeight > 1.6f -> 3
+    else -> 2
 }
 
 private fun indexToLineHeight(index: Int): Float = when (index) {
-    0 -> 1.2f
-    1 -> 1.45f
-    2 -> 1.8f
+    0 -> 1.0f
+    1 -> 1.2f
+    2 -> 1.45f
+    3 -> 1.8f
     else -> 1.45f
 }
 
