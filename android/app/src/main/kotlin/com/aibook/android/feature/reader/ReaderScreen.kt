@@ -236,80 +236,90 @@ fun ReaderScreen(
         }
     }
 
-    when (panel) {
-        ReaderPanel.Contents -> ReaderContentsPage(
-            state = state,
-            onBack = { panel = ReaderPanel.None },
-            onOpenBookmarks = { panel = ReaderPanel.Bookmarks },
-            onChapterClick = {
-                viewModel.selectChapter(it)
-                panel = ReaderPanel.None
+    Box(Modifier.fillMaxSize()) {
+        when (panel) {
+            ReaderPanel.Contents -> ReaderContentsPage(
+                state = state,
+                onBack = { panel = ReaderPanel.None },
+                onOpenBookmarks = { panel = ReaderPanel.Bookmarks },
+                onChapterClick = {
+                    viewModel.selectChapter(it)
+                    panel = ReaderPanel.None
+                }
+            )
+            ReaderPanel.Bookmarks -> ReaderBookmarksPage(
+                bookmarks = state.bookmarks,
+                onBack = { panel = ReaderPanel.Contents },
+                onBookmarkClick = {
+                    viewModel.openBookmark(it)
+                    panel = ReaderPanel.None
+                },
+                onDelete = viewModel::removeBookmark
+            )
+            ReaderPanel.Highlights -> ReaderHighlightsPage(
+                highlights = state.highlights,
+                onBack = { panel = ReaderPanel.None },
+                onDelete = viewModel::removeHighlight
+            )
+            ReaderPanel.Settings -> ReadingSettingsPage(
+                state = state,
+                viewModel = viewModel,
+                autoPlaying = autoPlaying,
+                onStartAutoPlay = {
+                    viewModel.confirmSettings()
+                    autoPlaying = true
+                    panel = ReaderPanel.None
+                },
+                onLockTouch = {
+                    viewModel.confirmSettings()
+                    touchLocked = true
+                    panel = ReaderPanel.None
+                },
+                onBack = {
+                    viewModel.confirmSettings()
+                    panel = ReaderPanel.None
+                }
+            )
+            ReaderPanel.Theme -> ReaderThemePage(
+                settings = settings,
+                onBack = { panel = ReaderPanel.None },
+                onThemeChange = viewModel::setTheme
+            )
+            ReaderPanel.None -> ReaderMainPage(
+                state = state,
+                settings = settings,
+                scrollState = scrollState,
+                onBack = { viewModel.saveProgressThen(onBack) },
+                onOpenContents = { panel = ReaderPanel.Contents },
+                onOpenSettings = { panel = ReaderPanel.Settings },
+                onOpenTheme = { panel = ReaderPanel.Theme },
+                onProgressChange = viewModel::updateScrollProgress,
+                onLoadNextChapter = viewModel::appendNextChapter,
+                onLoadPreviousChapter = viewModel::prependPreviousChapter,
+                onToggleFavorite = viewModel::toggleFavorite,
+                onToggleBookmark = viewModel::toggleBookmark,
+                onAddHighlight = viewModel::addHighlight,
+                onOpenHighlights = { panel = ReaderPanel.Highlights },
+                onOpenSearchMatch = viewModel::openSearchMatch,
+                onToggleQuickTheme = {
+                    viewModel.setTheme(if (settings.theme == ReaderTheme.DARK) ReaderTheme.LIGHT else ReaderTheme.DARK)
+                },
+                onSelectChapter = viewModel::selectChapter,
+                onReadingPositionChanged = viewModel::updateReadingPosition,
+                touchLocked = touchLocked,
+                autoPlaying = autoPlaying,
+                onUnlockTouch = { touchLocked = false },
+                onAutoPlayingChange = { autoPlaying = it }
+            )
+        }
+        if (panel == ReaderPanel.None && state.returnPositions.isNotEmpty() && !touchLocked) {
+            TextButton(
+                onClick = viewModel::returnToReadingPosition,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 96.dp)
+            ) {
+                Text("返回阅读位置（${state.returnPositions.size}）")
             }
-        )
-        ReaderPanel.Bookmarks -> ReaderBookmarksPage(
-            bookmarks = state.bookmarks,
-            onBack = { panel = ReaderPanel.Contents },
-            onBookmarkClick = {
-                viewModel.openBookmark(it)
-                panel = ReaderPanel.None
-            },
-            onDelete = viewModel::removeBookmark
-        )
-        ReaderPanel.Highlights -> ReaderHighlightsPage(
-            highlights = state.highlights,
-            onBack = { panel = ReaderPanel.None },
-            onDelete = viewModel::removeHighlight
-        )
-        ReaderPanel.Settings -> ReadingSettingsPage(
-            state = state,
-            viewModel = viewModel,
-            autoPlaying = autoPlaying,
-            onStartAutoPlay = {
-                viewModel.confirmSettings()
-                autoPlaying = true
-                panel = ReaderPanel.None
-            },
-            onLockTouch = {
-                viewModel.confirmSettings()
-                touchLocked = true
-                panel = ReaderPanel.None
-            },
-            onBack = {
-                viewModel.confirmSettings()
-                panel = ReaderPanel.None
-            }
-        )
-        ReaderPanel.Theme -> ReaderThemePage(
-            settings = settings,
-            onBack = { panel = ReaderPanel.None },
-            onThemeChange = viewModel::setTheme
-        )
-        ReaderPanel.None -> ReaderMainPage(
-            state = state,
-            settings = settings,
-            scrollState = scrollState,
-            onBack = { viewModel.saveProgressThen(onBack) },
-            onOpenContents = { panel = ReaderPanel.Contents },
-            onOpenSettings = { panel = ReaderPanel.Settings },
-            onOpenTheme = { panel = ReaderPanel.Theme },
-            onProgressChange = viewModel::updateScrollProgress,
-            onLoadNextChapter = viewModel::appendNextChapter,
-            onLoadPreviousChapter = viewModel::prependPreviousChapter,
-            onToggleFavorite = viewModel::toggleFavorite,
-            onToggleBookmark = viewModel::toggleBookmark,
-            onAddHighlight = viewModel::addHighlight,
-            onOpenHighlights = { panel = ReaderPanel.Highlights },
-            onOpenSearchMatch = viewModel::openSearchMatch,
-            onToggleQuickTheme = {
-                viewModel.setTheme(if (settings.theme == ReaderTheme.DARK) ReaderTheme.LIGHT else ReaderTheme.DARK)
-            },
-            onSelectChapter = viewModel::selectChapter,
-            onReadingPositionChanged = viewModel::updateReadingPosition,
-            touchLocked = touchLocked,
-            autoPlaying = autoPlaying,
-            onUnlockTouch = { touchLocked = false },
-            onAutoPlayingChange = { autoPlaying = it }
-        )
+        }
     }
 }
 
@@ -965,7 +975,8 @@ private fun ReaderPagedContent(
     }
     val fontFamily = rememberReaderFontFamily(settings)
     val pagerState = rememberPagerState(pageCount = { pages.size.coerceAtLeast(1) })
-    var restoredInitialPage by remember(state.book?.id, state.remoteBookId, settings.pageTurnMode) {
+    val layoutKey = listOf(settings.fontScale, settings.lineHeight, settings.paragraphSpacing, settings.fontType, settings.customFontPath, settings.textAlignment, LocalConfiguration.current.screenWidthDp, LocalConfiguration.current.screenHeightDp)
+    var restoredInitialPage by remember(state.book?.id, state.remoteBookId, settings.pageTurnMode, layoutKey) {
         mutableStateOf(false)
     }
     var appliedNavigationId by remember(state.book?.id, state.remoteBookId, settings.pageTurnMode) {
@@ -973,7 +984,7 @@ private fun ReaderPagedContent(
     }
 
     // 窗口预加载改变页数时保留位置，仅初次打开或明确导航请求才主动定位。
-    LaunchedEffect(pages, state.chapterWindowNavigation?.requestId, settings.pageTurnMode) {
+    LaunchedEffect(pages, state.chapterWindowNavigation?.requestId, settings.pageTurnMode, layoutKey) {
         if (pages.isEmpty()) return@LaunchedEffect
         val requestId = state.chapterWindowNavigation?.requestId
         val navigation = state.chapterWindowNavigation?.takeIf { it.requestId != appliedNavigationId }
@@ -1291,6 +1302,11 @@ private fun ReaderBottomBar(
             Slider(
                 value = progress.coerceIn(0f, 1f),
                 onValueChange = onProgressChange,
+                onValueChangeFinished = {
+                    if (totalChapters > 0) {
+                        onSelectChapter((progress * (totalChapters - 1)).toInt())
+                    }
+                },
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 18.dp),

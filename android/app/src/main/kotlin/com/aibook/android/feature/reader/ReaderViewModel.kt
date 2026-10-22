@@ -76,6 +76,7 @@ data class ReaderUiState(
     val hasSettingsDraft: Boolean = false,
     val bookmarks: List<ReaderBookmark> = emptyList(),
     val highlights: List<ReaderHighlight> = emptyList(),
+    val returnPositions: List<ReaderBookmark> = emptyList(),
     val bookmarkNavigation: BookmarkNavigation? = null,
     val chapterWindowNavigation: ChapterWindowNavigation? = null
 ) {
@@ -466,7 +467,8 @@ class ReaderViewModel(
         }
     }
 
-    fun openBookmark(bookmark: ReaderBookmark) {
+    fun openBookmark(bookmark: ReaderBookmark, rememberOrigin: Boolean = true) {
+        if (rememberOrigin) rememberReadingPosition()
         val targetIndex = bookmark.chapterIndex
             ?: _state.value.chapters.indexOfFirst { it.href == bookmark.chapterHref }.takeIf { it >= 0 }
             ?: return
@@ -492,12 +494,14 @@ class ReaderViewModel(
             val updatedChapters = _state.value.chapters.map { if (it.index == targetIndex) loaded else it }
             _state.update {
                 it.copy(
+                    returnPositions = if (rememberOrigin) it.returnPositions else it.returnPositions.dropLast(1),
                     chapters = updatedChapters,
                     loadedChapters = listOf(loaded),
                     currentChapterIndex = targetIndex,
                     currentLineIndex = bookmark.lineIndex,
                     currentScrollOffset = bookmark.scrollOffset,
                     scrollProgress = bookmark.progress,
+                    chapterWindowNavigation = ChapterWindowNavigation(System.nanoTime(), targetIndex, bookmark.lineIndex),
                     bookmarkNavigation = BookmarkNavigation(
                         requestId = System.nanoTime(),
                         chapterIndex = targetIndex,
@@ -513,6 +517,7 @@ class ReaderViewModel(
     }
 
     fun openSearchMatch(match: ReaderSearchMatch) {
+        rememberReadingPosition()
         val state = _state.value
         val chapter = state.chapters.getOrNull(match.chapterIndex) ?: return
         val book = state.book
@@ -590,7 +595,32 @@ class ReaderViewModel(
             it.chapterIndex == state.currentChapterIndex && it.lineIndex == state.currentLineIndex
         }
 
+    private fun rememberReadingPosition() {
+        val current = _state.value
+        val chapter = current.chapters.getOrNull(current.currentChapterIndex) ?: return
+        val position = ReaderBookmark(
+            bookId = current.book?.id ?: "server:${current.remoteBookId}",
+            chapterHref = chapter.href,
+            chapterTitle = chapter.title,
+            progress = current.scrollProgress,
+            chapterIndex = current.currentChapterIndex,
+            lineIndex = current.currentLineIndex,
+            scrollOffset = current.currentScrollOffset
+        )
+        _state.update {
+            it.copy(returnPositions = ReaderPositionHistory.push(it.returnPositions, position))
+        }
+    }
+
+    fun returnToReadingPosition() {
+        val position = _state.value.returnPositions.lastOrNull() ?: return
+
+        openBookmark(position, rememberOrigin = false)
+    }
+
     fun selectChapter(index: Int) {
+        if (_state.value.chapters.getOrNull(index) == null) return
+        rememberReadingPosition()
         val chapters = _state.value.chapters
         val chapter = chapters.getOrNull(index) ?: return
         val book = _state.value.book
