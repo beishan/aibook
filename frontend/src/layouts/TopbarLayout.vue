@@ -143,6 +143,8 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 
 <style scoped>
 .layout-container {
+  --topbar-content-width: 1600px;
+
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -165,7 +167,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   display: flex;
   align-items: center;
   justify-content: space-between;
-  max-width: 1600px;
+  max-width: var(--topbar-content-width);
   margin: 0 auto;
   gap: var(--spacing-md);
   padding: 0 var(--spacing-lg);
@@ -283,7 +285,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: 6px 12px 6px 6px;
+  padding: 6px 0 6px 6px;
   border-radius: var(--radius-xl);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -294,6 +296,8 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 }
 
 .user-avatar {
+  order: 1;
+  flex-shrink: 0;
   width: 36px;
   height: 36px;
   border-radius: var(--radius-full);
@@ -354,7 +358,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 .layout-main {
   flex: 1;
   padding: var(--spacing-lg);
-  max-width: 1200px;
+  max-width: var(--topbar-content-width);
   margin: 0 auto;
   width: 100%;
 }
@@ -362,6 +366,16 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 .layout-main.library-layout-main,
 .layout-main.home-layout-main {
   max-width: none;
+}
+
+/* 常规页面与导航共用宽度，移除页面根容器的二次限宽与横向留白。 */
+.layout-container:not(.app-layout--immersive)
+  .layout-main:not(.library-layout-main):not(.home-layout-main) > :deep(*) {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin-inline: 0;
+  padding-inline: 0;
 }
 
 .mobile-nav {
