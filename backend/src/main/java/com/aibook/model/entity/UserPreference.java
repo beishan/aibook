@@ -63,6 +63,8 @@ public class UserPreference {
     private Integer authorPageSize;
     @Column(name = "category_page_size")
     private Integer categoryPageSize;
+    @Column(name = "shelf_page_size")
+    private Integer shelfPageSize;
     @Column(name = "scan_thread_count")
     private Integer scanThreadCount;
     @Column(name = "crawler_statistics_window", length = 20)

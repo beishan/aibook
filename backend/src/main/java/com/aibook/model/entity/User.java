@@ -387,6 +387,14 @@ public class User implements UserDetails {
         preference().setReaderSettings(value);
     }
 
+    public Integer getShelfPageSize() {
+        return preference().getShelfPageSize();
+    }
+
+    public void setShelfPageSize(Integer value) {
+        preference().setShelfPageSize(value);
+    }
+
     public Integer getCategoryPageSize() {
         return preference().getCategoryPageSize();
     }

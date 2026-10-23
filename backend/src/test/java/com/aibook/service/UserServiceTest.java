@@ -21,6 +21,34 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void shelfPageSizeDefaultsPersistsAndKeepsAccountsSeparate() {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+        assertEquals(24, service.getPreferences("reader").getShelfPageSize());
+        for (int size : new int[] {12, 24, 48, 96}) {
+            assertEquals(size, service.updatePreferences("reader",
+                    UserPreferencesDTO.builder().shelfPageSize(size).build()).getShelfPageSize());
+            assertEquals(size, reader.getPreferences().getShelfPageSize());
+        }
+        service.updatePreferences("reader", UserPreferencesDTO.builder().libraryViewMode("list").build());
+        assertEquals(96, service.getPreferences("reader").getShelfPageSize());
+        assertEquals(24, service.getPreferences("other").getShelfPageSize());
+        for (int invalid : new int[] {-1, 0, 25, 100, 1000}) {
+            assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                    UserPreferencesDTO.builder().shelfPageSize(invalid).build()));
+        }
+        assertEquals(96, reader.getShelfPageSize());
+        reader.setShelfPageSize(25);
+        assertEquals(24, service.getPreferences("reader").getShelfPageSize());
+    }
+
+
+    @Test
     void persistsTrialViewModeAndPreservesItOnUnrelatedPartialUpdate() {
         UserRepository repository = mock(UserRepository.class);
         User user = User.builder().username("reader").build();

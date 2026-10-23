@@ -172,6 +172,10 @@ public class UserService implements UserDetailsService {
                     LIBRARY_PAGE_SIZES);
             user.setLibraryListPageSize(request.getLibraryListPageSize());
         }
+        if (request.getShelfPageSize() != null) {
+            requireAllowed("书架分页大小", request.getShelfPageSize(), Set.of(12, 24, 48, 96));
+            user.setShelfPageSize(request.getShelfPageSize());
+        }
         if (request.getAuthorPageSize() != null) {
             requireAllowed("作者列表分页大小", request.getAuthorPageSize(), AUTHOR_PAGE_SIZES);
             user.setAuthorPageSize(request.getAuthorPageSize());
@@ -316,6 +320,9 @@ public class UserService implements UserDetailsService {
                 .libraryCardPageSize(cardPageSize)
                 .libraryListPageSize(listPageSize)
                 .authorPageSize(normalizeAuthorPageSize(user.getAuthorPageSize()))
+                .shelfPageSize(user.getShelfPageSize() != null
+                        && Set.of(12, 24, 48, 96).contains(user.getShelfPageSize())
+                        ? user.getShelfPageSize() : 24)
                 .categoryPageSize(user.getCategoryPageSize() != null
                         && CATEGORY_PAGE_SIZES.contains(user.getCategoryPageSize()) ? user.getCategoryPageSize() : 20)
                 .scanThreadCount(

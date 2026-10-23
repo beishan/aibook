@@ -24,6 +24,7 @@ public class UserPreferencesDTO {
     private Integer libraryListPageSize;
     private Integer authorPageSize;
     private Integer categoryPageSize;
+    private Integer shelfPageSize;
     private Integer scanThreadCount;
     private String crawlerStatisticsWindow;
     private Integer crawlerPollingIntervalSeconds;
@@ -301,6 +302,14 @@ public class UserPreferencesDTO {
         this.readerSettings = readerSettings;
     }
 
+    public Integer getShelfPageSize() {
+        return shelfPageSize;
+    }
+
+    public void setShelfPageSize(Integer shelfPageSize) {
+        this.shelfPageSize = shelfPageSize;
+    }
+
     public Integer getCategoryPageSize() {
         return categoryPageSize;
     }
@@ -478,6 +487,11 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder readerSettings(ReaderSettingsDTO readerSettings) {
             value.setReaderSettings(readerSettings);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder shelfPageSize(Integer shelfPageSize) {
+            value.setShelfPageSize(shelfPageSize);
             return this;
         }
 

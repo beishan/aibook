@@ -649,13 +649,14 @@
     </div>
 
     <nav v-if="activeTotal > 0 && !activeLoading" class="shelf-pagination" aria-label="书架分页">
-      <span class="shelf-pagination-summary">共 {{ activeTotal }} 项，每页 {{ SHELF_PAGE_SIZE }} 项</span>
+      <span class="shelf-pagination-summary">共 {{ activeTotal }} 项，每页 {{ shelfPageSize }} 项</span>
       <el-pagination
         v-model:current-page="activePage"
-        :page-size="SHELF_PAGE_SIZE"
+        v-model:page-size="shelfPageSize"
+        :page-sizes="[...SHELF_PAGE_SIZE_OPTIONS]"
         :total="activeTotal"
         :pager-count="5"
-        layout="prev, pager, next"
+        layout="sizes, prev, pager, next"
         background
       />
     </nav>
@@ -740,6 +741,7 @@ import { useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useBookStore } from '@/stores/book'
 import api from '@/utils/api'
+import { SHELF_PAGE_SIZE_OPTIONS, usePreferencesStore } from '@/stores/preferences'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import ShelfBookActions from '@/components/ShelfBookActions.vue'
@@ -753,6 +755,7 @@ import { downloadBookToLocal } from '@/utils/bookDownload'
 
 const router = useRouter()
 const bookStore = useBookStore()
+const preferencesStore = usePreferencesStore()
 const pendingBookActions = ref(new Set<number>())
 const quickReader = ref<InstanceType<typeof BookQuickReader> | null>(null)
 const editingBook = ref<Book | null>(null)
@@ -948,8 +951,11 @@ const displayedShelfBooks = computed(() => {
   return [...shelfOverview.value.ungroupedBooks, ...shelfOverview.value.groups.flatMap(group => group.books)]
     .sort((left, right) => new Date(right.shelfAddedAt || 0).getTime() - new Date(left.shelfAddedAt || 0).getTime())
 })
-// 页码是本次浏览状态；固定每页数量不新增账户偏好。
-const SHELF_PAGE_SIZE = 24
+// 页码保留在当前浏览会话，页大小由账户偏好统一保存。
+const shelfPageSize = computed({
+  get: () => preferencesStore.shelfPageSize,
+  set: (value: number) => preferencesStore.setShelfPageSize(value),
+})
 const tabPages = ref<Record<string, number>>({})
 const activePage = computed({
   get: () => tabPages.value[activeTab.value] || 1,
@@ -972,10 +978,10 @@ const activeLoading = computed(() => ({
   wanted: wantedLoading.value,
 } as Record<string, boolean>)[activeTab.value] || false)
 const pageBooks = <T,>(items: T[], tab: string): T[] => {
-  const offset = ((tabPages.value[tab] || 1) - 1) * SHELF_PAGE_SIZE
-  return items.slice(offset, offset + SHELF_PAGE_SIZE)
+  const offset = ((tabPages.value[tab] || 1) - 1) * shelfPageSize.value
+  return items.slice(offset, offset + shelfPageSize.value)
 }
-const shelfPageOffset = computed(() => ((tabPages.value.shelf || 1) - 1) * SHELF_PAGE_SIZE)
+const shelfPageOffset = computed(() => ((tabPages.value.shelf || 1) - 1) * shelfPageSize.value)
 const pagedShelfBooks = computed(() => pageBooks(displayedShelfBooks.value, 'shelf'))
 const pagedFavoriteBooks = computed(() => pageBooks(favoriteBooks.value, 'favorite'))
 const pagedReadingBooks = computed(() => pageBooks(readingBooks.value, 'reading'))
@@ -983,10 +989,11 @@ const pagedFinishedBooks = computed(() => pageBooks(finishedBooks.value, 'finish
 const pagedWantedBooks = computed(() => pageBooks(wantedBooks.value, 'wanted'))
 const pagedBookLists = computed(() => pageBooks(bookLists.value, 'lists'))
 
+watch(shelfPageSize, () => { tabPages.value = {} }, { flush: 'sync' })
 watch(selectedShelfGroup, () => { tabPages.value.shelf = 1 }, { flush: 'sync' })
 watch(collectionTotals, totals => {
   for (const [tab, count] of Object.entries(totals)) {
-    const lastPage = Math.max(1, Math.ceil(count / SHELF_PAGE_SIZE))
+    const lastPage = Math.max(1, Math.ceil(count / shelfPageSize.value))
     tabPages.value[tab] = Math.min(tabPages.value[tab] || 1, lastPage)
   }
 }, { flush: 'sync' })
@@ -1408,6 +1415,18 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: var(--spacing-md);
   margin-top: var(--spacing-xl);
+}
+
+.shelf-pagination :deep(.el-pagination) {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--spacing-sm);
+}
+
+/* 书架在手机端也提供页大小选择，覆盖全局的小屏隐藏规则。 */
+.shelf-pagination :deep(.el-pagination__sizes) {
+  display: inline-flex !important;
+  margin-left: 0;
 }
 
 .shelf-pagination-summary {

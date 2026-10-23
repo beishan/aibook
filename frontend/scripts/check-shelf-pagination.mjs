@@ -4,9 +4,16 @@ import ts from 'typescript'
 import { ref, computed, watch } from 'vue'
 
 const source = await readFile(new URL('../src/views/ShelfView.vue', import.meta.url), 'utf8')
-const paging = source.slice(source.indexOf('const SHELF_PAGE_SIZE ='), source.indexOf('const selectedShelfTitle ='))
+const paging = source.slice(source.indexOf('const shelfPageSize ='), source.indexOf('const selectedShelfTitle ='))
+const savedSize = ref(24)
+const writes = []
+const preferencesStore = {
+  get shelfPageSize() { return savedSize.value },
+  setShelfPageSize(value) { savedSize.value = value; writes.push(value) },
+}
 const names = ['shelf', 'favorite', 'reading', 'finished', 'wanted', 'lists']
 const state = {
+  preferencesStore,
   activeTab: ref('shelf'),
   selectedShelfGroup: ref('ungrouped'),
   displayedShelfBooks: ref(Array.from({ length: 49 }, (_, id) => ({ id }))),
@@ -21,7 +28,7 @@ const state = {
   finishedLoading: ref(false),
   wantedLoading: ref(false),
 }
-const compiled = ts.transpile(paging + '\nreturn {activePage, tabPages, pagedShelfBooks, pagedFinishedBooks, shelfPageOffset, activeTotal, activeLoading};', { target: ts.ScriptTarget.ES2022 })
+const compiled = ts.transpile(paging + '\nreturn {shelfPageSize, activePage, tabPages, pagedShelfBooks, pagedFavoriteBooks, pagedFinishedBooks, shelfPageOffset, activeTotal, activeLoading};', { target: ts.ScriptTarget.ES2022 })
 const result = new Function('ref', 'computed', 'watch', ...Object.keys(state), compiled)(ref, computed, watch, ...Object.values(state))
 assert.equal(result.pagedShelfBooks.value.length, 24)
 result.activePage.value = 2
@@ -46,6 +53,62 @@ state.finishedLoading.value = true
 assert.equal(result.activeLoading.value, true)
 state.finishedBooks.value = []
 assert.equal(result.activePage.value, 1, 'empty collections keep a valid page')
+
+// Size changes reset every tab and update both slicing and ordering offsets.
+state.activeTab.value = 'shelf'
+result.activePage.value = 2
+result.shelfPageSize.value = 12
+assert.equal(result.activePage.value, 1)
+assert.equal(result.pagedShelfBooks.value.length, 12)
+result.activePage.value = 3
+assert.equal(result.shelfPageOffset.value, 24)
+assert.equal(result.pagedShelfBooks.value[0].id, 24)
+state.activeTab.value = 'favorite'
+assert.equal(result.pagedFavoriteBooks.value.length, 12)
+result.activePage.value = 2
+result.shelfPageSize.value = 48
+assert.equal(result.activePage.value, 1)
+assert.equal(result.pagedFavoriteBooks.value.length, 30)
+state.activeTab.value = 'shelf'
+assert.equal(result.activePage.value, 1, 'size changes reset inactive tabs too')
+assert.equal(result.pagedShelfBooks.value.length, 48)
+// Account hydration also resets pages and applies the remotely restored size.
+result.activePage.value = 2
+savedSize.value = 96
+assert.equal(result.activePage.value, 1)
+assert.deepEqual(writes, [12, 48])
+result.shelfPageSize.value = 24
+assert.match(source, /v-model:page-size="shelfPageSize"/)
+assert.match(source, /layout="sizes, prev, pager, next"/)
+
+// Execute the actual preference setter and hydration path, including validation.
+const preferenceSource = await readFile(new URL('../src/stores/preferences.ts', import.meta.url), 'utf8')
+const accountSize = ref(24)
+const remoteWrites = []
+const options = [12, 24, 48, 96]
+const setterSource = preferenceSource.slice(preferenceSource.indexOf('  const setShelfPageSize ='),
+  preferenceSource.indexOf('  const setCategoryPageSize ='))
+const setSize = new Function('shelfPageSize', 'SHELF_PAGE_SIZE_OPTIONS', 'persistRemote',
+  ts.transpile(setterSource + '\nreturn setShelfPageSize;', { target: ts.ScriptTarget.ES2022 }))(
+  accountSize, options, patch => remoteWrites.push(patch),
+)
+setSize(48)
+assert.equal(accountSize.value, 48)
+assert.deepEqual(remoteWrites, [{ shelfPageSize: 48 }])
+for (const invalid of [0, -1, 25, 100]) setSize(invalid)
+assert.equal(accountSize.value, 48)
+assert.equal(remoteWrites.length, 1)
+const hydrationSource = preferenceSource.slice(preferenceSource.indexOf('      setShelfPageSize('),
+  preferenceSource.indexOf('      setCategoryPageSize('))
+const hydrateSize = new Function('data', 'SHELF_PAGE_SIZE_OPTIONS', 'setShelfPageSize', ts.transpile(hydrationSource))
+hydrateSize({ shelfPageSize: 96 }, options, setSize)
+assert.equal(accountSize.value, 96)
+hydrateSize({ shelfPageSize: 1000 }, options, setSize)
+assert.equal(accountSize.value, 24)
+hydrateSize({}, options, setSize)
+assert.equal(accountSize.value, 24)
+assert.equal(remoteWrites.length, 1, 'hydration must not write preferences back')
+assert.match(preferenceSource, /const resetHydration = \(\) => \{[\s\S]*?shelfPageSize.value = 24/)
 
 // Execute the actual ordering handler with a page-two boundary index.
 state.selectedShelfGroup.value = 'ungrouped'
@@ -100,4 +163,4 @@ assert.match(source, /moveShelfBookOrder\(shelfPageOffset \+ bookIndex, -1\)/)
 assert.match(source, /moveShelfBookOrder\(shelfPageOffset \+ bookIndex, 1\)/)
 assert.match(source, /status: 'FINISHED'/)
 assert.match(source, /while \(page < totalPages\)/)
-console.log('Shelf pagination: page boundaries, independent tabs, folder reset, shrinking collections, finished totals and cross-page ordering passed')
+console.log('Shelf pagination: sizes, account persistence/hydration, page reset, boundaries, independent tabs, shrinking collections and cross-page ordering passed')

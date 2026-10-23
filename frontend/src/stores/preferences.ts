@@ -44,6 +44,7 @@ export const DEFAULT_DOCK_NAVIGATION_ITEMS: DockNavigationItem[] = [
 ]
 export const LIBRARY_PAGE_SIZE_OPTIONS = [10, 30, 50, 100, 200] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
+export const SHELF_PAGE_SIZE_OPTIONS = [12, 24, 48, 96] as const
 export const AUTHOR_PAGE_SIZE_OPTIONS = [10, 20, 50] as const
 export type AuthorPageSize = (typeof AUTHOR_PAGE_SIZE_OPTIONS)[number]
 export type ReaderAppearance = 'classic' | 'readingRoom' | 'trialReader'
@@ -96,6 +97,7 @@ interface UserPreferences {
   libraryCardPageSize: number | null
   libraryListPageSize: number | null
   authorPageSize: number | null
+  shelfPageSize: number | null
   categoryPageSize: number | null
   scanThreadCount: number | null
   crawlerStatisticsWindow: string | null
@@ -344,6 +346,7 @@ const readLocalReaderSettings = (): ReaderSettings => {
 }
 
 export const usePreferencesStore = defineStore('preferences', () => {
+  const shelfPageSize = ref(24)
   const categoryPageSize = ref(20)
   const themeStore = useThemeStore()
   const libraryViewMode = ref<LibraryViewMode>(readLocalLibraryViewMode())
@@ -670,6 +673,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
     else persist()
   }
 
+  const setShelfPageSize = (value: number, syncRemote = true) => {
+    if (!(SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(value)) return
+    shelfPageSize.value = value
+    if (syncRemote) persistRemote({ shelfPageSize: value })
+  }
+
   const setCategoryPageSize = (value:number, syncRemote = true) => {
     if (![10, 20, 50, 100].includes(value)) return
     categoryPageSize.value = value
@@ -896,6 +905,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
           quickReaderWindow.value = null
         }
       }
+      setShelfPageSize((SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(data.shelfPageSize ?? 0)
+        ? data.shelfPageSize! : 24, false)
       setCategoryPageSize([10, 20, 50, 100].includes(data.categoryPageSize ?? 0)
         ? data.categoryPageSize! : 20, false)
 
@@ -919,6 +930,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   const resetHydration = () => {
     crawlerHideBookNames.value = false
+    shelfPageSize.value = 24
     categoryPageSize.value = 20
     crawlerStatisticsWindow.value = 'day:30'
     hydrated.value = false
@@ -945,6 +957,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     libraryCardPageSize,
     libraryListPageSize,
     authorPageSize,
+    shelfPageSize,
     categoryPageSize,
     scanThreadCount,
     crawlerStatisticsWindow,
@@ -973,6 +986,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setLibraryCardPageSize,
     setLibraryListPageSize,
     setAuthorPageSize,
+    setShelfPageSize,
     setCategoryPageSize,
     setScanThreadCount,
     setCrawlerPollingIntervalSeconds,
