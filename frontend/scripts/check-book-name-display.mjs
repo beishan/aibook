@@ -11,7 +11,7 @@ const source = fs.readFileSync(new URL('../src/utils/bookName.ts', import.meta.u
 const javascript = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText
-const { maskBookName, normalizeBookNamePrefixLength } = await import(`data:text/javascript;base64,${Buffer.from(javascript).toString('base64')}`)
+const { maskBookName, normalizeBookNamePrefixLength, isBookNameMaskCharacter, normalizeBookNameMaskCharacter } = await import(`data:text/javascript;base64,${Buffer.from(javascript).toString('base64')}`)
 for (const [title, hidden, mode, length, expected] of [
   ['三国演义', false, 'HEAD_TAIL', 2, '三国演义'],
   ['三国演义', true, 'HEAD_TAIL', 2, '三**义'],
@@ -34,11 +34,12 @@ assert.equal(normalizeBookNamePrefixLength(100), 100)
 
 const preferences = fs.readFileSync(new URL('../src/stores/preferences.ts', import.meta.url), 'utf8')
 const hideBookNames = ref(false), bookNameMaskMode = ref('HEAD_TAIL'), bookNamePrefixLength = ref(2)
+const bookNameMaskCharacter = ref('*')
 const writes = []
 const setterSource = preferences.slice(preferences.indexOf('  const setHideBookNames ='), preferences.indexOf('  const setShelfPageSize ='))
-const setters = new Function('hideBookNames', 'bookNameMaskMode', 'bookNamePrefixLength', 'normalizeBookNamePrefixLength', 'persistRemote',
-  ts.transpile(setterSource + '\nreturn { setHideBookNames, setBookNameMaskMode, setBookNamePrefixLength };'))(
-  hideBookNames, bookNameMaskMode, bookNamePrefixLength, normalizeBookNamePrefixLength, value => writes.push(value),
+const setters = new Function('hideBookNames', 'bookNameMaskMode', 'bookNamePrefixLength', 'normalizeBookNamePrefixLength', 'bookNameMaskCharacter', 'isBookNameMaskCharacter', 'persistRemote',
+  ts.transpile(setterSource + '\nreturn { setHideBookNames, setBookNameMaskMode, setBookNamePrefixLength, setBookNameMaskCharacter };'))(
+  hideBookNames, bookNameMaskMode, bookNamePrefixLength, normalizeBookNamePrefixLength, bookNameMaskCharacter, isBookNameMaskCharacter, value => writes.push(value),
 )
 setters.setHideBookNames(true)
 setters.setBookNameMaskMode('PREFIX')
@@ -49,16 +50,16 @@ setters.setBookNameMaskMode('INVALID')
 assert.equal(writes.length, 3)
 
 const hydration = preferences.slice(preferences.indexOf('      setHideBookNames('), preferences.indexOf('      setShelfPageSize('))
-const restore = new Function('data', 'setHideBookNames', 'setBookNameMaskMode', 'setBookNamePrefixLength', 'normalizeBookNamePrefixLength', ts.transpile(hydration))
-restore({ hideBookNames: true, bookNameMaskMode: 'PREFIX', bookNamePrefixLength: 5 }, ...Object.values(setters), normalizeBookNamePrefixLength)
+const restore = new Function('data', 'setHideBookNames', 'setBookNameMaskMode', 'setBookNamePrefixLength', 'setBookNameMaskCharacter', 'normalizeBookNamePrefixLength', 'normalizeBookNameMaskCharacter', ts.transpile(hydration))
+restore({ hideBookNames: true, bookNameMaskMode: 'PREFIX', bookNamePrefixLength: 5 }, ...Object.values(setters), normalizeBookNamePrefixLength, normalizeBookNameMaskCharacter)
 assert.equal(bookNamePrefixLength.value, 5)
-restore({}, ...Object.values(setters), normalizeBookNamePrefixLength)
+restore({}, ...Object.values(setters), normalizeBookNamePrefixLength, normalizeBookNameMaskCharacter)
 assert.equal(hideBookNames.value, false)
 assert.equal(bookNameMaskMode.value, 'HEAD_TAIL')
 assert.equal(bookNamePrefixLength.value, 2)
 assert.equal(writes.length, 3, 'restoring settings must not save them again')
 
-const state = { hydrated: false, hideBookNames: false, bookNameMaskMode: 'HEAD_TAIL', bookNamePrefixLength: 2 }
+const state = { hydrated: false, hideBookNames: false, bookNameMaskMode: 'HEAD_TAIL', bookNamePrefixLength: 2, bookNameMaskCharacter: '*' }
 const composable = fs.readFileSync(new URL('../src/composables/useBookNameDisplay.ts', import.meta.url), 'utf8')
 const context = vm.createContext({
   exports: {}, localStorage: { getItem: () => 'account-token' },
@@ -75,12 +76,39 @@ assert.equal(displayBookName('三国演义'), '三**义')
 state.bookNameMaskMode = 'PREFIX'
 assert.equal(displayBookName('三国演义'), '三国**')
 const resetSource = preferences.slice(preferences.indexOf('  const resetHydration ='), preferences.indexOf('    crawlerHideBookNames.value = false', preferences.indexOf('  const resetHydration =')))
-new Function('hideBookNames', 'bookNameMaskMode', 'bookNamePrefixLength', 'let hydrationSequence = 0;\n' + resetSource + '}\nresetHydration();')(
-  hideBookNames, bookNameMaskMode, bookNamePrefixLength,
+new Function('hideBookNames', 'bookNameMaskMode', 'bookNamePrefixLength', 'bookNameMaskCharacter', 'let hydrationSequence = 0;\n' + resetSource + '}\nresetHydration();')(
+  hideBookNames, bookNameMaskMode, bookNamePrefixLength, bookNameMaskCharacter,
 )
 assert.equal(hideBookNames.value, false)
 assert.equal(bookNameMaskMode.value, 'HEAD_TAIL')
 assert.equal(bookNamePrefixLength.value, 2)
+// A replacement is one visible grapheme, including multi-code-point emoji.
+for (const character of ['*', '#', '●', '隐', '🙂', '👨‍👩‍👧', '🇨🇳', 'e\u0301', '<']) {
+  assert.equal(isBookNameMaskCharacter(character), true, character)
+  assert.equal(maskBookName('三国演义', true, 'HEAD_TAIL', 2, character), `三${character.repeat(2)}义`)
+  assert.equal(maskBookName('三国演义', true, 'PREFIX', 2, character), `三国${character.repeat(2)}`)
+}
+for (const invalid of ['', ' ', '\n', '\t', '\u0000', '\u200b', '\u0301', '\ud800', '**', 'abc', '🙂🙂', '*'.repeat(65)]) {
+  assert.equal(isBookNameMaskCharacter(invalid), false, JSON.stringify(invalid))
+  assert.equal(normalizeBookNameMaskCharacter(invalid), '*')
+}
+setters.setBookNameMaskCharacter('●')
+assert.equal(bookNameMaskCharacter.value, '●')
+assert.deepEqual(writes.at(-1), { bookNameMaskCharacter: '●' })
+setters.setBookNameMaskCharacter('invalid')
+assert.equal(bookNameMaskCharacter.value, '●')
+restore({ bookNameMaskCharacter: '👨‍👩‍👧' }, ...Object.values(setters), normalizeBookNamePrefixLength, normalizeBookNameMaskCharacter)
+assert.equal(bookNameMaskCharacter.value, '👨‍👩‍👧')
+restore({}, ...Object.values(setters), normalizeBookNamePrefixLength, normalizeBookNameMaskCharacter)
+assert.equal(bookNameMaskCharacter.value, '*')
+state.bookNameMaskCharacter = '●'
+assert.equal(displayBookName('三国演义'), '三国●●')
+for (const view of ['CrawlerView', 'CrawlerTrialReaderView']) {
+  const template = fs.readFileSync(new URL(`../src/views/${view}.vue`, import.meta.url), 'utf8')
+  assert.doesNotMatch(template, /<CrawlerBookTitle[^>]*:title="displayBookName\(/,
+    'crawler title components must receive original text to avoid masking multi-code-point replacements twice')
+}
+state.bookNameMaskCharacter = '*'
 // Execute the account/sequence guard from hydrate with deliberately late responses.
 const hydrationStart = preferences.indexOf('  const hydrate = async')
 const guardSource = preferences.slice(hydrationStart, preferences.indexOf('      const missingPreferences', hydrationStart))
@@ -128,4 +156,11 @@ for (const [globalHidden, crawlerHidden, expectedText, expectedHint] of [
   assert(html.includes(`title="${expectedHint}"`))
   assert(html.includes(`>${expectedText}</span>`))
 }
+state.hideBookNames = true
+state.bookNameMaskMode = 'HEAD_TAIL'
+state.bookNameMaskCharacter = '👨‍👩‍👧'
+const emojiHtml = await renderToString(vue.createSSRApp({
+  render: () => vue.h(crawlerContext.exports.default, { title: '三国演义' }),
+}))
+assert(emojiHtml.includes('>三👨‍👩‍👧👨‍👩‍👧义</span>'))
 console.log('Book name display: both modes, Unicode, bounds, save/restore, account reset, stale responses, pre-hydration masking and crawler compatibility passed')

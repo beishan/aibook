@@ -1,4 +1,4 @@
-import { normalizeBookNamePrefixLength, type BookNameMaskMode } from '@/utils/bookName'
+import { isBookNameMaskCharacter, normalizeBookNameMaskCharacter, normalizeBookNamePrefixLength, type BookNameMaskMode } from '@/utils/bookName'
 import { parseStatisticsWindow } from '../utils/crawlerStatistics'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
@@ -101,6 +101,7 @@ interface UserPreferences {
   hideBookNames: boolean | null
   bookNameMaskMode: BookNameMaskMode | null
   bookNamePrefixLength: number | null
+  bookNameMaskCharacter: string | null
   shelfPageSize: number | null
   categoryPageSize: number | null
   scanThreadCount: number | null
@@ -353,6 +354,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const hideBookNames = ref(false)
   const bookNameMaskMode = ref<BookNameMaskMode>('HEAD_TAIL')
   const bookNamePrefixLength = ref(2)
+  const bookNameMaskCharacter = ref('*')
   const shelfPageSize = ref(24)
   const categoryPageSize = ref(20)
   const themeStore = useThemeStore()
@@ -698,6 +700,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (syncRemote) persistRemote({ bookNamePrefixLength: value })
   }
 
+  const setBookNameMaskCharacter = (value: string, syncRemote = true) => {
+    if (!isBookNameMaskCharacter(value)) return
+    bookNameMaskCharacter.value = value
+    if (syncRemote) persistRemote({ bookNameMaskCharacter: value })
+  }
+
   const setShelfPageSize = (value: number, syncRemote = true) => {
     if (!(SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(value)) return
     shelfPageSize.value = value
@@ -936,6 +944,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
       setHideBookNames(data.hideBookNames === true, false)
       setBookNameMaskMode(data.bookNameMaskMode === 'PREFIX' ? 'PREFIX' : 'HEAD_TAIL', false)
       setBookNamePrefixLength(normalizeBookNamePrefixLength(data.bookNamePrefixLength), false)
+      setBookNameMaskCharacter(normalizeBookNameMaskCharacter(data.bookNameMaskCharacter), false)
       setShelfPageSize((SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(data.shelfPageSize ?? 0)
         ? data.shelfPageSize! : 24, false)
       setCategoryPageSize([10, 20, 50, 100].includes(data.categoryPageSize ?? 0)
@@ -964,6 +973,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     hideBookNames.value = false
     bookNameMaskMode.value = 'HEAD_TAIL'
     bookNamePrefixLength.value = 2
+    bookNameMaskCharacter.value = '*'
     crawlerHideBookNames.value = false
     shelfPageSize.value = 24
     categoryPageSize.value = 20
@@ -991,9 +1001,11 @@ export const usePreferencesStore = defineStore('preferences', () => {
     hideBookNames,
     bookNameMaskMode,
     bookNamePrefixLength,
+    bookNameMaskCharacter,
     setHideBookNames,
     setBookNameMaskMode,
     setBookNamePrefixLength,
+    setBookNameMaskCharacter,
     libraryViewMode,
     libraryCardPageSize,
     libraryListPageSize,

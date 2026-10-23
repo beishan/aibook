@@ -13,6 +13,7 @@ export function useBookNameDisplay() {
       preferences.hideBookNames,
       preferences.bookNameMaskMode,
       preferences.bookNamePrefixLength,
+      preferences.bookNameMaskCharacter,
     )
   }
   return { displayBookName }

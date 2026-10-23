@@ -46,7 +46,7 @@
           {{ option.label }}
         </button>
       </div>
-      <p>首尾显示保留第一个和最后一个文字；首 N 字显示保留指定数量，其余用 * 代替。</p>
+      <p>首尾显示保留第一个和最后一个文字；首 N 字显示保留指定数量，其余用下方指定的替换字符代替。</p>
     </div>
 
     <div v-if="preferences.bookNameMaskMode === 'PREFIX'" class="prefix-field">
@@ -64,6 +64,26 @@
       <small>可选 1–100，默认 2；书名不足 N 个文字时完整显示。</small>
     </div>
 
+    <div class="setting-field">
+      <label for="book-name-mask-character">替换字符</label>
+      <div class="mask-character-controls">
+        <el-input
+          id="book-name-mask-character"
+          v-model="maskCharacterDraft"
+          :maxlength="64"
+          placeholder="例如 *、#、●"
+          aria-label="书名替换字符"
+          :aria-invalid="Boolean(maskCharacterError)"
+          :aria-describedby="maskCharacterError ? 'mask-character-error' : undefined"
+          @input="maskCharacterError = ''"
+          @change="saveMaskCharacter"
+        />
+        <button class="btn" type="button" @click="resetMaskCharacter">恢复默认字符</button>
+      </div>
+      <small>输入一个可见字符，支持中文、符号和表情；离开输入框后自动保存，默认 *。</small>
+      <p v-if="maskCharacterError" id="mask-character-error" class="field-error" role="alert">{{ maskCharacterError }}</p>
+    </div>
+
     <div class="name-preview" aria-live="polite">
       <span>效果预览</span>
       <strong>{{ preview }}</strong>
@@ -73,11 +93,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { usePreferencesStore } from '@/stores/preferences'
-import { maskBookName, type BookNameMaskMode } from '@/utils/bookName'
+import { isBookNameMaskCharacter, maskBookName, type BookNameMaskMode } from '@/utils/bookName'
 
 const preferences = usePreferencesStore()
+const maskCharacterDraft = ref(preferences.bookNameMaskCharacter)
+const maskCharacterError = ref('')
+watch(() => preferences.bookNameMaskCharacter, value => {
+  maskCharacterDraft.value = value
+  maskCharacterError.value = ''
+})
 const visibilityOptions = [{ label: '显示', hidden: false }, { label: '隐藏', hidden: true }]
 const modeOptions: Array<{ label: string; value: BookNameMaskMode }> = [
   { label: '首尾显示', value: 'HEAD_TAIL' },
@@ -86,7 +112,23 @@ const modeOptions: Array<{ label: string; value: BookNameMaskMode }> = [
 const preview = computed(() => maskBookName(
   '春日书房里的阅读时光', preferences.hideBookNames,
   preferences.bookNameMaskMode, preferences.bookNamePrefixLength,
+  isBookNameMaskCharacter(maskCharacterDraft.value) ? maskCharacterDraft.value : preferences.bookNameMaskCharacter,
 ))
+
+function saveMaskCharacter(value: string) {
+  if (!isBookNameMaskCharacter(value)) {
+    maskCharacterError.value = '请输入一个可见字符，不能使用空白或控制字符'
+    return
+  }
+  preferences.setBookNameMaskCharacter(value)
+  maskCharacterError.value = ''
+}
+
+function resetMaskCharacter() {
+  maskCharacterDraft.value = '*'
+  maskCharacterError.value = ''
+  preferences.setBookNameMaskCharacter('*')
+}
 
 function updatePrefixLength(value: number | undefined) {
   if (value !== undefined) preferences.setBookNamePrefixLength(value)
@@ -185,6 +227,26 @@ function handleModeKey(event: KeyboardEvent) {
 .name-segmented button:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: -2px;
+}
+
+.mask-character-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.mask-character-controls .el-input {
+  width: 180px;
+  max-width: 100%;
+}
+
+.mask-character-controls .btn {
+  white-space: nowrap;
+}
+
+.book-name-settings .field-error {
+  color: var(--danger, #dc2626);
 }
 
 .name-preview {

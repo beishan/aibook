@@ -403,6 +403,14 @@ public class User implements UserDetails {
         preference().setBookNameMaskMode(value);
     }
 
+    public String getBookNameMaskCharacter() {
+        return preference().getBookNameMaskCharacter();
+    }
+
+    public void setBookNameMaskCharacter(String value) {
+        preference().setBookNameMaskCharacter(value);
+    }
+
     public Integer getBookNamePrefixLength() {
         return preference().getBookNamePrefixLength();
     }

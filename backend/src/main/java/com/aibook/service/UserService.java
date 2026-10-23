@@ -179,6 +179,12 @@ public class UserService implements UserDetailsService {
             requireAllowed("书名隐藏模式", request.getBookNameMaskMode(), Set.of("HEAD_TAIL", "PREFIX"));
             user.setBookNameMaskMode(request.getBookNameMaskMode());
         }
+        if (request.getBookNameMaskCharacter() != null) {
+            if (!isBookNameMaskCharacter(request.getBookNameMaskCharacter())) {
+                throw new IllegalArgumentException("书名替换字符必须为单个可见字符，不能使用空白或控制字符");
+            }
+            user.setBookNameMaskCharacter(request.getBookNameMaskCharacter());
+        }
         if (request.getBookNamePrefixLength() != null) {
             requireRange("书名前缀文字数", request.getBookNamePrefixLength(), 1, 100);
             user.setBookNamePrefixLength(request.getBookNamePrefixLength());
@@ -333,6 +339,8 @@ public class UserService implements UserDetailsService {
                 .authorPageSize(normalizeAuthorPageSize(user.getAuthorPageSize()))
                 .hideBookNames(Boolean.TRUE.equals(user.getHideBookNames()))
                 .bookNameMaskMode("PREFIX".equals(user.getBookNameMaskMode()) ? "PREFIX" : "HEAD_TAIL")
+                .bookNameMaskCharacter(isBookNameMaskCharacter(user.getBookNameMaskCharacter())
+                        ? user.getBookNameMaskCharacter() : "*")
                 .bookNamePrefixLength(user.getBookNamePrefixLength() != null
                         && user.getBookNamePrefixLength() >= 1 && user.getBookNamePrefixLength() <= 100
                         ? user.getBookNamePrefixLength() : 2)
@@ -695,6 +703,18 @@ public class UserService implements UserDetailsService {
         } catch (JsonProcessingException | IllegalArgumentException exception) {
             return null;
         }
+    }
+
+    private boolean isBookNameMaskCharacter(String value) {
+        return value != null && !value.isEmpty() && value.length() <= 64
+                && value.matches("\\X")
+                && value.codePoints().noneMatch(cp -> Character.isWhitespace(cp)
+                        || Character.isSpaceChar(cp) || Character.isISOControl(cp)
+                        || Character.getType(cp) == Character.SURROGATE)
+                && value.codePoints().anyMatch(cp -> Character.getType(cp) != Character.FORMAT
+                        && Character.getType(cp) != Character.NON_SPACING_MARK
+                        && Character.getType(cp) != Character.COMBINING_SPACING_MARK
+                        && Character.getType(cp) != Character.ENCLOSING_MARK);
     }
 
     private <T> T requireValue(String label, T value) {

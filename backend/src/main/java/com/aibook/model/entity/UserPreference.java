@@ -71,6 +71,8 @@ public class UserPreference {
     private String bookNameMaskMode;
     @Column(name = "book_name_prefix_length")
     private Integer bookNamePrefixLength;
+    @Column(name = "book_name_mask_character", length = 64)
+    private String bookNameMaskCharacter;
     @Column(name = "scan_thread_count")
     private Integer scanThreadCount;
     @Column(name = "crawler_statistics_window", length = 20)

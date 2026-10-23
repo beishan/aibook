@@ -28,6 +28,7 @@ public class UserPreferencesDTO {
     private Boolean hideBookNames;
     private String bookNameMaskMode;
     private Integer bookNamePrefixLength;
+    private String bookNameMaskCharacter;
 
     private Integer scanThreadCount;
     private String crawlerStatisticsWindow;
@@ -322,6 +323,14 @@ public class UserPreferencesDTO {
         this.bookNameMaskMode = value;
     }
 
+    public String getBookNameMaskCharacter() {
+        return bookNameMaskCharacter;
+    }
+
+    public void setBookNameMaskCharacter(String value) {
+        this.bookNameMaskCharacter = value;
+    }
+
     public Integer getBookNamePrefixLength() {
         return bookNamePrefixLength;
     }
@@ -525,6 +534,11 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder bookNameMaskMode(String value) {
             this.value.setBookNameMaskMode(value);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder bookNameMaskCharacter(String value) {
+            this.value.setBookNameMaskCharacter(value);
             return this;
         }
 

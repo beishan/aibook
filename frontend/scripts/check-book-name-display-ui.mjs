@@ -19,7 +19,7 @@ const browser = await chromium.launch({ headless: true, channel: process.env.MOB
 try {
   for (const [theme, width] of [['warm', 1564], ['modern', 390], ['macos26', 1280]]) {
     const context = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: 'reduce' })
-    let preferences = { hideBookNames: false, bookNameMaskMode: 'HEAD_TAIL', bookNamePrefixLength: 2 }
+    let preferences = { hideBookNames: false, bookNameMaskMode: 'HEAD_TAIL', bookNamePrefixLength: 2, bookNameMaskCharacter: '*' }
     const changes = [], errors = []
     await context.addInitScript(theme => {
       localStorage.setItem('token', 'book-name-display-test')
@@ -90,6 +90,15 @@ try {
       assert.deepEqual(leakedHints, [], `raw hint leaked in ${path}`)
     }
     await page.goto(baseUrl + '/settings?tab=cover-display')
+    const characterInput = page.locator('#book-name-mask-character')
+    await saveThrough(async () => {
+      await characterInput.fill('#')
+      assert((await panel.locator('.name-preview strong').textContent()).includes('#'))
+      await characterInput.blur()
+    }, 'bookNameMaskCharacter', '#')
+    await page.goto(baseUrl + '/books')
+    await page.locator('.book-title').filter({ hasText: headTail.replace(/\*/g, '#') }).first().waitFor()
+    await page.goto(baseUrl + '/settings?tab=cover-display')
     await panel.getByRole('radio', { name: '首尾显示', exact: true }).focus()
     await saveThrough(() => page.keyboard.press('End'), 'bookNameMaskMode', 'PREFIX')
     const input = page.locator('#book-name-prefix-length')
@@ -102,10 +111,25 @@ try {
     assert.equal(preferences.bookNamePrefixLength, 3)
     for (const [path, selector] of routes.slice(0, 4)) {
       await page.goto(baseUrl + path)
-      await page.locator(selector).filter({ hasText: prefix }).first().waitFor()
+      await page.locator(selector).filter({ hasText: prefix.replace(/\*/g, '#') }).first().waitFor()
       assert(!(await page.locator('body').innerText()).includes(name))
     }
     await page.goto(baseUrl + '/settings?tab=cover-display')
+    await characterInput.fill('**')
+    await characterInput.blur()
+    await panel.getByRole('alert').waitFor()
+    assert.equal(preferences.bookNameMaskCharacter, '#')
+    await saveThrough(() => panel.getByRole('button', { name: '恢复默认字符', exact: true }).click(), 'bookNameMaskCharacter', '*')
+    assert.equal(await panel.getByRole('alert').count(), 0)
+    await saveThrough(async () => {
+      await characterInput.fill('👨‍👩‍👧')
+      await characterInput.blur()
+    }, 'bookNameMaskCharacter', '👨‍👩‍👧')
+    await page.goto(baseUrl + '/books')
+    await page.locator('.book-title').filter({ hasText: prefix.replace(/\*/g, '👨‍👩‍👧') }).first().waitFor()
+    await page.goto(baseUrl + '/settings?tab=cover-display')
+    assert.equal(await characterInput.inputValue(), '👨‍👩‍👧')
+    await saveThrough(() => panel.getByRole('button', { name: '恢复默认字符', exact: true }).click(), 'bookNameMaskCharacter', '*')
     const bounds = await panel.boundingBox()
     assert(bounds.x >= 0 && bounds.x + bounds.width <= width + 1)
     if (process.env.BOOK_NAME_SETTINGS_SCREENSHOT && theme === 'warm') {
@@ -120,7 +144,7 @@ try {
     assert(changes.some(patch => patch.bookNamePrefixLength === 3))
     assert.equal(preferences.hideBookNames, false)
     assert.deepEqual(errors, [])
-    console.log(`Book name UI: settings, keyboard, persistence, both modes, six pages, hints and restore passed: ${theme}/${width}px`)
+    console.log(`Book name UI: settings, keyboard, persistence, both modes, custom characters/emoji, validation, six pages, hints and restore passed: ${theme}/${width}px`)
     await context.close()
   }
 } finally {

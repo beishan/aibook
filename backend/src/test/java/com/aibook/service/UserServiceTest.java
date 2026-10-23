@@ -21,6 +21,36 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void bookNameReplacementCharacterPersistsValidUnicodeAndRejectsInvisibleOrMultipleCharacters() {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+        assertEquals("*", service.getPreferences("reader").getBookNameMaskCharacter());
+        for (String character : new String[] {"#", "●", "隐", "🙂", "👨‍👩‍👧", "🇨🇳", "e\u0301", "<"}) {
+            var result = service.updatePreferences("reader", UserPreferencesDTO.builder()
+                    .bookNameMaskCharacter(character).build());
+            assertEquals(character, result.getBookNameMaskCharacter());
+            assertEquals(character, reader.getPreferences().getBookNameMaskCharacter());
+        }
+        service.updatePreferences("reader", UserPreferencesDTO.builder().hideBookNames(true).build());
+        assertEquals("<", service.getPreferences("reader").getBookNameMaskCharacter());
+        assertEquals("*", service.getPreferences("other").getBookNameMaskCharacter());
+        for (String invalid : new String[] {"", " ", "\n", "\t", "\u200b", "\u0301", "**", "🙂🙂", "*".repeat(65)}) {
+            assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                    UserPreferencesDTO.builder().bookNameMaskCharacter(invalid).build()));
+        }
+        reader.setBookNameMaskCharacter("invalid");
+        assertEquals("*", service.getPreferences("reader").getBookNameMaskCharacter());
+        assertEquals("*", service.updatePreferences("reader", UserPreferencesDTO.builder()
+                .bookNameMaskCharacter("*").build()).getBookNameMaskCharacter());
+    }
+
+
+    @Test
     void bookNameDisplayDefaultsPersistAndDoNotCrossAccounts() {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();
