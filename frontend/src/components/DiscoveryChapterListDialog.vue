@@ -24,8 +24,8 @@
         <div v-loading="loading" class="picker-list">
           <el-alert v-if="loadFailed" title="加载失败，请重新搜索" type="error" :closable="false" />
           <article v-for="book in available" :key="book.id">
-            <div><strong>{{ displayBookName(book.bookName) }}</strong><small>{{ book.author || '未知作者' }} · {{ book.siteName }}</small></div>
-            <el-button :disabled="loading || submitting || isActive(book)" :aria-label="`添加${displayBookName(book.bookName)}`" @click="add(book)">
+            <div><strong>{{ displayCrawlerBookName(book.bookName) }}</strong><small>{{ book.author || '未知作者' }} · {{ book.siteName }}</small></div>
+            <el-button :disabled="loading || submitting || isActive(book)" :aria-label="`添加${displayCrawlerBookName(book.bookName)}`" @click="add(book)">
               {{ isActive(book) ? '已有任务' : '添加 →' }}
             </el-button>
           </article>
@@ -37,8 +37,8 @@
         <header><strong>已选书籍 · {{ selected.length }} 本</strong><el-button :disabled="submitting || !selected.length" @click="clearSelection">清空</el-button></header>
         <div class="picker-list selected-list">
           <article v-for="book in selected" :key="book.id">
-            <div><strong>{{ displayBookName(book.bookName) }}</strong><small>{{ book.author || '未知作者' }} · {{ book.siteName }}</small></div>
-            <el-button :disabled="submitting" :aria-label="`移除${displayBookName(book.bookName)}`" @click="remove(book.id)">← 移除</el-button>
+            <div><strong>{{ displayCrawlerBookName(book.bookName) }}</strong><small>{{ book.author || '未知作者' }} · {{ book.siteName }}</small></div>
+            <el-button :disabled="submitting" :aria-label="`移除${displayCrawlerBookName(book.bookName)}`" @click="remove(book.id)">← 移除</el-button>
           </article>
           <el-empty v-if="!selected.length" :image-size="50" description="从左侧添加需要采集章节信息的书籍" />
         </div>
@@ -52,12 +52,12 @@
 </template>
 
 <script setup lang="ts">
-import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
+import { useCrawlerBookNameDisplay } from '@/composables/useCrawlerBookNameDisplay'
 import { computed, ref, watch } from 'vue'
 import { crawlerApi, type CrawlerBook, type CrawlerSite, type CrawlerTask } from '@/utils/crawler'
 import { message } from '@/utils/message'
 
-const { displayBookName } = useBookNameDisplay()
+const { displayCrawlerBookName } = useCrawlerBookNameDisplay()
 
 const props = defineProps<{
   modelValue: boolean

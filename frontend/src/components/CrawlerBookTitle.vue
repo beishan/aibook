@@ -1,19 +1,10 @@
 <template>
-  <span :title="preferences.hydrated && !preferences.hideBookNames ? title : displayedTitle" tabindex="0">{{ displayedTitle }}</span>
+  <span :title="title" tabindex="0">{{ displayCrawlerBookName(title) }}</span>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { usePreferencesStore } from '@/stores/preferences'
-import { maskCrawlerBookTitle } from '@/utils/crawlerBookTitle'
-import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
+import { useCrawlerBookNameDisplay } from '@/composables/useCrawlerBookNameDisplay'
 
-const props = defineProps<{ title: string }>()
-const preferences = usePreferencesStore()
-
-const { displayBookName } = useBookNameDisplay()
-
-const displayedTitle = computed(() => preferences.hideBookNames
-  ? displayBookName(props.title)
-  : displayBookName(maskCrawlerBookTitle(props.title, preferences.crawlerHideBookNames)))
+defineProps<{ title: string }>()
+const { displayCrawlerBookName } = useCrawlerBookNameDisplay()
 </script>

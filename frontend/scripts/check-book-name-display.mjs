@@ -133,34 +133,45 @@ pending[0]({ data: {} })
 await olderRequest
 assert.equal(guardContext.applied, 1)
 
-// Render the real crawler title component: global privacy wins, while the old
-// crawler-only tooltip behavior remains available when global privacy is off.
+// Crawler titles ignore all global name display settings, in every switch combination.
+const crawlerDisplaySource = fs.readFileSync(new URL('../src/composables/useCrawlerBookNameDisplay.ts', import.meta.url), 'utf8')
+const crawlerDisplayContext = vm.createContext({ exports: {}, require: name => {
+  if (name === '@/stores/preferences') return { usePreferencesStore: () => state }
+  return { maskCrawlerBookTitle: (title, hidden) => maskBookName(title, hidden) }
+} })
+vm.runInContext(ts.transpileModule(crawlerDisplaySource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, crawlerDisplayContext)
+const { useCrawlerBookNameDisplay } = crawlerDisplayContext.exports
+const { displayCrawlerBookName } = useCrawlerBookNameDisplay()
 const crawlerSource = fs.readFileSync(new URL('../src/components/CrawlerBookTitle.vue', import.meta.url), 'utf8')
 const crawlerScript = compileScript(parse(crawlerSource).descriptor, { id: 'name-display-test', inlineTemplate: true })
 const crawlerContext = vm.createContext({ exports: {}, require: name => {
   if (name === 'vue') return vue
-  if (name === '@/stores/preferences') return { usePreferencesStore: () => state }
-  if (name === '@/composables/useBookNameDisplay') return { useBookNameDisplay: () => ({ displayBookName }) }
-  return { maskCrawlerBookTitle: (title, hidden) => maskBookName(title, hidden) }
+  if (name === '@/composables/useCrawlerBookNameDisplay') return { useCrawlerBookNameDisplay }
+  throw new Error(`Unexpected crawler display dependency: ${name}`)
 } })
 vm.runInContext(ts.transpileModule(crawlerScript.content, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, crawlerContext)
-for (const [globalHidden, crawlerHidden, expectedText, expectedHint] of [
-  [true, true, '三国**', '三国**'],
-  [false, true, '三**义', '三国演义'],
-  [false, false, '三国演义', '三国演义'],
-]) {
-  state.hydrated = true
-  state.hideBookNames = globalHidden
-  state.crawlerHideBookNames = crawlerHidden
-  const html = await renderToString(vue.createSSRApp({ render: () => vue.h(crawlerContext.exports.default, { title: '三国演义' }) }))
-  assert(html.includes(`title="${expectedHint}"`))
-  assert(html.includes(`>${expectedText}</span>`))
+for (const globalHidden of [false, true]) {
+  for (const crawlerHidden of [false, true]) {
+    state.hydrated = true
+    state.hideBookNames = globalHidden
+    state.crawlerHideBookNames = crawlerHidden
+    state.bookNameMaskMode = 'PREFIX'
+    state.bookNamePrefixLength = 1
+    state.bookNameMaskCharacter = '👨‍👩‍👧'
+    const expectedText = crawlerHidden ? '三**义' : '三国演义'
+    assert.equal(displayCrawlerBookName('三国演义'), expectedText)
+    const html = await renderToString(vue.createSSRApp({ render: () => vue.h(crawlerContext.exports.default, { title: '三国演义' }) }))
+    assert(html.includes('title="三国演义"'))
+    assert(html.includes(`>${expectedText}</span>`))
+    // The reverse dependency must also be absent: crawler changes do not affect library names.
+    assert.equal(displayBookName('三国演义'), globalHidden ? '三👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧' : '三国演义')
+  }
 }
-state.hideBookNames = true
-state.bookNameMaskMode = 'HEAD_TAIL'
-state.bookNameMaskCharacter = '👨‍👩‍👧'
-const emojiHtml = await renderToString(vue.createSSRApp({
-  render: () => vue.h(crawlerContext.exports.default, { title: '三国演义' }),
-}))
-assert(emojiHtml.includes('>三👨‍👩‍👧👨‍👩‍👧义</span>'))
-console.log('Book name display: both modes, Unicode, bounds, save/restore, account reset, stale responses, pre-hydration masking and crawler compatibility passed')
+for (const name of ['views/CrawlerView.vue', 'views/CrawlerTrialReaderView.vue',
+  'components/CrawlerBookTitle.vue', 'components/DiscoveryChapterListDialog.vue',
+  'components/CrawlerExecutorsSettingsPanel.vue']) {
+  const content = fs.readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8')
+  assert.doesNotMatch(content, /useBookNameDisplay|displayBookName|preferences\.hideBookNames/,
+    `${name} must exclusively use the crawler setting`)
+}
+console.log('Book name display: modes, Unicode, persistence, account isolation and all independent crawler/global switch combinations passed')
