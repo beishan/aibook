@@ -396,6 +396,8 @@
             >
               <el-dropdown
                 trigger="click"
+                :persistent="false"
+                popper-class="library-book-menu"
                 :disabled="processingBookId === book.id"
                 @click.stop
                 @command="command => handleMoreCommand(command, book)"
@@ -536,6 +538,8 @@
           </button>
           <el-dropdown
             trigger="click"
+            :persistent="false"
+            popper-class="library-book-menu"
             :disabled="processingBookId === row.id"
             @click.stop
             @command="command => handleMoreCommand(command, row)"
