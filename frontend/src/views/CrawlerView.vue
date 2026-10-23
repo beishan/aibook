@@ -1448,7 +1448,7 @@
       width="min(960px, 96vw)"
       append-to-body
     >
-      <p>已加入黑名单的书籍，后续扫描不会重新收录。</p>
+      <p>已加入黑名单的书籍，后续扫描不会重新收录；移出后恢复正常发现状态，不会自动启动采集。</p>
       <div class="blacklist-filters">
         <el-input
           v-model="blacklistKeyword"
@@ -1481,6 +1481,19 @@
           </template>
         </el-table-column>
         <el-table-column prop="bookUrl" label="来源地址" min-width="230" show-overflow-tooltip />
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              type="primary"
+              link
+              :loading="blacklistRemovingId === row.id"
+              :disabled="blacklistRemovingId !== null || blacklistLoading"
+              @click="removeFromBlacklist(row)"
+            >
+              移出黑名单
+            </el-button>
+          </template>
+        </el-table-column>
         <template #empty>{{ blacklistError ? '加载失败，请重试' : '暂无符合条件的黑名单书籍' }}</template>
       </el-table>
       <div class="blacklist-pagination">
@@ -4450,6 +4463,7 @@ async function handleFailedTaskSizeChange(){failedTaskPage.value=1;await loadFai
 const blacklistDialog = ref(false)
 const blacklistLoading = ref(false)
 const blacklistError = ref('')
+const blacklistRemovingId = ref<number | null>(null)
 const blacklistBooks = ref<CrawlerBook[]>([])
 const blacklistKeyword = ref('')
 const blacklistSiteId = ref<number>()
@@ -4481,6 +4495,12 @@ async function loadBlacklistBooks() {
       siteId: blacklistSiteId.value,
     })
     if (request !== blacklistRequest) return
+    const lastPage = Math.max(1, Math.ceil(result.totalElements / blacklistPageSize.value))
+    if (blacklistPage.value > lastPage) {
+      blacklistPage.value = lastPage
+      await loadBlacklistBooks()
+      return
+    }
     blacklistBooks.value = result.content
     blacklistTotal.value = result.totalElements
   } catch (error: any) {
@@ -4489,6 +4509,26 @@ async function loadBlacklistBooks() {
     blacklistError.value = error.response?.data?.message || '黑名单加载失败，请重试'
   } finally {
     if (request === blacklistRequest) blacklistLoading.value = false
+  }
+}
+
+async function removeFromBlacklist(book: CrawlerBook) {
+  if (blacklistRemovingId.value !== null || blacklistLoading.value) return
+  blacklistRemovingId.value = book.id
+  try {
+    await crawlerApi.setDiscoveryStatus([book.id], 'ACTIVE')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '移出黑名单失败，请重试')
+    blacklistRemovingId.value = null
+    return
+  }
+  message.success('已移出黑名单，恢复正常发现状态')
+  try {
+    await Promise.all([loadBlacklistBooks(), refresh()])
+  } catch {
+    message.warning('已移出黑名单，部分页面数据刷新失败，请手动刷新')
+  } finally {
+    blacklistRemovingId.value = null
   }
 }
 
