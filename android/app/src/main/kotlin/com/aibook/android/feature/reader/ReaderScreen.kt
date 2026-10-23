@@ -192,7 +192,10 @@ fun ReaderScreen(
     bookId: String,
     isRemote: Boolean,
     onBack: () -> Unit,
-    viewModel: ReaderViewModel = viewModel(factory = ReaderViewModel.Factory)
+    viewModel: ReaderViewModel = viewModel(factory = ReaderViewModel.Factory),
+    requestedVersionId: Long? = null,
+    versionLabel: String? = null,
+    onChooseVersion: (() -> Unit)? = null
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val settings = state.settings
@@ -217,9 +220,15 @@ fun ReaderScreen(
         if (panel != ReaderPanel.None) autoPlaying = false
     }
 
-    LaunchedEffect(bookId, isRemote) {
+    LaunchedEffect(bookId, isRemote, requestedVersionId) {
         if (isRemote) {
-            viewModel.loadRemoteBook(bookId.toLongOrNull() ?: 0L)
+            val remoteId = bookId.toLongOrNull() ?: 0L
+            val current = viewModel.uiState.value
+            if (requestedVersionId == null || current.remoteBookId != remoteId ||
+                current.remoteVersionId != requestedVersionId || !current.hasReadableContent
+            ) {
+                viewModel.loadRemoteBook(remoteId, requestedVersionId)
+            }
         } else {
             viewModel.loadLocalBook(bookId)
         }
@@ -290,6 +299,13 @@ fun ReaderScreen(
                 settings = settings,
                 scrollState = scrollState,
                 onBack = { viewModel.saveProgressThen(onBack) },
+                versionLabel = versionLabel,
+                onChooseVersion = onChooseVersion?.let { choose ->
+                    {
+                        autoPlaying = false
+                        viewModel.saveProgressThen(choose)
+                    }
+                },
                 onOpenContents = { panel = ReaderPanel.Contents },
                 onOpenSettings = { panel = ReaderPanel.Settings },
                 onOpenTheme = { panel = ReaderPanel.Theme },
@@ -347,6 +363,8 @@ private fun ReaderMainPage(
     settings: ReaderSettings,
     scrollState: androidx.compose.foundation.lazy.LazyListState,
     onBack: () -> Unit,
+    versionLabel: String?,
+    onChooseVersion: (() -> Unit)?,
     onOpenContents: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenTheme: () -> Unit,
@@ -515,6 +533,8 @@ private fun ReaderMainPage(
             ) {
                 ReaderTopBar(
                     title = state.book?.title ?: "在线书籍",
+                    versionLabel = versionLabel,
+                    onChooseVersion = if (state.isLoading) null else onChooseVersion,
                     chapterTitle = state.currentChapterTitle,
                     colors = colors,
                     isBookmarked = state.isCurrentPositionBookmarked,
@@ -676,6 +696,8 @@ private fun ReaderTouchLockOverlay(
 @Composable
 private fun ReaderTopBar(
     title: String,
+    versionLabel: String?,
+    onChooseVersion: (() -> Unit)?,
     chapterTitle: String,
     colors: ReaderPalette,
     isBookmarked: Boolean,
@@ -698,12 +720,18 @@ private fun ReaderTopBar(
         Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
             Text(title, color = colors.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                chapterTitle.ifBlank { "正在阅读" },
+                listOfNotNull(versionLabel, chapterTitle.takeIf { it.isNotBlank() })
+                    .joinToString(" · ").ifBlank { "正在阅读" },
                 color = colors.muted,
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+        if (onChooseVersion != null) {
+            TextButton(onClick = onChooseVersion) {
+                Text("版本", color = colors.foreground)
+            }
         }
         IconButton(onClick = onOpenSearch) {
             Icon(Icons.Default.Search, contentDescription = "搜索书内内容", tint = colors.foreground)

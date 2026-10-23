@@ -262,7 +262,7 @@ class ReaderViewModel(
         }
     }
 
-    fun loadRemoteBook(bookId: Long) {
+    fun loadRemoteBook(bookId: Long, requestedVersionId: Long? = null) {
         viewModelScope.launch {
             structuredCacheNamespace = serverRepository.structuredCacheNamespace()
             readingStartedAtMillis = System.currentTimeMillis()
@@ -282,16 +282,13 @@ class ReaderViewModel(
             )
             try {
                 val versions = serverRepository.getBookVersions(bookId).getOrThrow()
-                val version = versions.firstOrNull { it.selected }
-                    ?: versions.firstOrNull { it.primaryVersion }
-                    ?: versions.firstOrNull()
-                    ?: error("书籍没有可阅读版本")
+                val version = resolveReaderVersion(versions, requestedVersionId)
                 _state.update { it.copy(remoteVersionId = version.id) }
                 serverRepository.getReadingProgress(bookId, version.id).getOrThrow().let { saved ->
                     val locator = saved.locator?.let(::decodeRemoteLocator)
                     _state.update {
                         it.copy(
-                            remoteVersionId = saved.versionId,
+                            remoteVersionId = version.id,
                             remoteProgress = ReadingProgress(
                                 chapterHref = saved.currentChapter,
                                 chapterTitle = saved.currentChapterTitle,
