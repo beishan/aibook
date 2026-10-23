@@ -31,7 +31,7 @@
     <div v-if="book" class="trial-target-banner">
       <div class="trial-target-copy">
         <span class="trial-result-eyebrow">当前书籍</span>
-        <strong>{{ book.title }}</strong>
+        <strong>{{ displayBookName(book.title) }}</strong>
         <span>{{ book.author || '未知作者' }}</span>
       </div>
       <el-button type="primary" :disabled="running || confirming" :loading="running" @click="start">
@@ -141,12 +141,14 @@
                 type="radio"
                 :checked="selected?.id === row.id"
                 :disabled="running || confirming"
-                :aria-label="`选择${row.title}`"
+                :aria-label="`选择${displayBookName(row.title)}`"
                 @change="selectBook(row)"
               />
             </template>
           </el-table-column>
-          <el-table-column prop="title" label="书名" min-width="180" />
+          <el-table-column label="书名" min-width="180">
+            <template #default="{ row }">{{ displayBookName(row.title) }}</template>
+          </el-table-column>
           <el-table-column prop="author" label="作者" min-width="100" />
           <el-table-column prop="format" label="类型" width="80" />
           <el-table-column prop="categoryName" label="分类" min-width="100" />
@@ -162,7 +164,7 @@
               class="trial-book-card"
               :class="{ 'is-selected': selected?.id === book.id }"
               :aria-pressed="selected?.id === book.id"
-              :aria-label="`选择《${book.title}》${book.author ? `，${book.author}` : ''}`"
+              :aria-label="`选择《${displayBookName(book.title)}》${book.author ? `，${book.author}` : ''}`"
               :disabled="running || loading"
               @click="selectBook(book)"
             >
@@ -174,10 +176,10 @@
                   loading="lazy"
                   @error="failedCovers.add(book.id)"
                 />
-                <span v-else class="trial-cover-placeholder">{{ book.title }}</span>
+                <span v-else class="trial-cover-placeholder">{{ displayBookName(book.title) }}</span>
                 <span v-if="selected?.id === book.id" class="trial-card-check" aria-hidden="true">✓</span>
               </span>
-              <span class="trial-card-title" :title="book.title">{{ book.title }}</span>
+              <span class="trial-card-title" :title="displayBookName(book.title)">{{ displayBookName(book.title) }}</span>
               <span class="trial-card-author">{{ book.author || '未知作者' }}</span>
               <span class="trial-card-meta">{{ book.format?.toUpperCase() || '未知类型' }} · {{ book.categoryName || '未分类' }}</span>
             </button>
@@ -206,7 +208,7 @@
               <span class="trial-status-dot" :class="{ 'is-running': running }" aria-hidden="true"></span>
               {{ statusLabel }}
             </h3>
-            <p>{{ selected?.title || '试刮削任务' }} · 已用 {{ elapsed }} 秒</p>
+            <p>{{ displayBookName(selected?.title) || '试刮削任务' }} · 已用 {{ elapsed }} 秒</p>
           </div>
           <el-button v-if="pollError && taskId" @click="resumePolling">重新连接进度</el-button>
           <el-button v-if="snapshot?.metadata" @click="activeTab = 'result'">查看刮削结果</el-button>
@@ -241,7 +243,7 @@
               >
                 <span class="trial-candidate-index" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
                 <div class="trial-candidate-copy">
-                  <strong>{{ candidate.title }}</strong>
+                  <strong>{{ displayBookName(candidate.title) }}</strong>
                   <div class="trial-candidate-meta">
                     <span>{{ candidate.author || '作者待加载详情' }} · {{ candidate.publishDate || '出版年份待核对' }}</span>
                     <a :href="candidate.sourceUrl" target="_blank" rel="noopener noreferrer">查看豆瓣原书页</a>
@@ -287,7 +289,7 @@
         <div class="trial-result-heading">
           <div>
             <span class="trial-result-eyebrow">{{ source?.name }} · 元信息预览</span>
-            <h3>{{ formatValue(snapshot.metadata.title) }}</h3>
+            <h3>{{ displayBookName(formatValue(snapshot.metadata.title)) }}</h3>
             <p>{{ snapshot.applied ? '已保存到这本书的公共元信息' : '仅预览，尚未写入书籍' }}</p>
           </div>
           <el-tag :type="snapshot.applied ? 'success' : 'info'">{{ statusLabel }}</el-tag>
@@ -312,11 +314,11 @@
               <img
                 v-if="resultCover && resultCoverVisible && !resultCoverFailed"
                 :src="getCoverThumbnailUrl(resultCover)"
-                :alt="`${formatValue(snapshot.metadata.title)}的封面`"
+                :alt="`${displayBookName(formatValue(snapshot.metadata.title))}的封面`"
                 @error="resultCoverFailed = true"
               />
               <div v-else class="trial-cover-placeholder">
-                <strong>{{ formatValue(snapshot.metadata.title) }}</strong>
+                <strong>{{ displayBookName(formatValue(snapshot.metadata.title)) }}</strong>
                 <p>{{ resultCoverMessage }}</p>
                 <el-button v-if="resultCoverFailed && resultCoverVisible" size="small" @click="resultCoverFailed = false">重试加载</el-button>
               </div>
@@ -463,7 +465,7 @@
     </section>
     <template #footer>
       <div class="trial-workbench-footer">
-        <span v-if="!book && activeTab === 'books'">{{ selected ? `已选择：${selected.title}` : '请选择一本书籍开始查询' }}</span>
+        <span v-if="!book && activeTab === 'books'">{{ selected ? `已选择：${displayBookName(selected.title)}` : '请选择一本书籍开始查询' }}</span>
         <span v-else>{{ running ? '关闭后服务器仍会完成查询，重新打开可查看' : snapshot?.applied ? '已保存到本书公共元信息' : '仅在确认保存后补全书籍' }}</span>
         <div class="trial-footer-actions">
           <el-button @click="emit('update:modelValue', false)">{{ manual ? '返回模式选择' : '关闭工作台' }}</el-button>
@@ -481,12 +483,15 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import api from '@/utils/api'
 import type { ScraperStatus } from '@/utils/config'
 import { usePreferencesStore, type ScraperTrialViewMode } from '@/stores/preferences'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
+
+const { displayBookName } = useBookNameDisplay()
 
 const props = defineProps<{ modelValue: boolean; source: ScraperStatus | null; book?: BookChoice | null; manual?: boolean }>()
 const emit = defineEmits<{

@@ -387,6 +387,30 @@ public class User implements UserDetails {
         preference().setReaderSettings(value);
     }
 
+    public Boolean getHideBookNames() {
+        return preference().getHideBookNames();
+    }
+
+    public void setHideBookNames(Boolean value) {
+        preference().setHideBookNames(value);
+    }
+
+    public String getBookNameMaskMode() {
+        return preference().getBookNameMaskMode();
+    }
+
+    public void setBookNameMaskMode(String value) {
+        preference().setBookNameMaskMode(value);
+    }
+
+    public Integer getBookNamePrefixLength() {
+        return preference().getBookNamePrefixLength();
+    }
+
+    public void setBookNamePrefixLength(Integer value) {
+        preference().setBookNamePrefixLength(value);
+    }
+
     public Integer getShelfPageSize() {
         return preference().getShelfPageSize();
     }

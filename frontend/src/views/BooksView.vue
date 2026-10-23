@@ -327,7 +327,7 @@
           <input
             type="checkbox"
             :checked="selectedBooks.has(book.id)"
-            :aria-label="`选择书籍：${book.title}`"
+            :aria-label="`选择书籍：${displayBookName(book.title)}`"
             @change="toggleBookSelection(book.id)"
           />
         </div>
@@ -342,7 +342,7 @@
             decoding="async"
           />
           <div v-else class="no-cover">
-            <span>{{ book.title.charAt(0) }}</span>
+            <span>{{ displayBookName(book.title).charAt(0) }}</span>
           </div>
           <BookCoverPrivacyButton
             v-if="book.coverUrl && !selectionMode"
@@ -424,7 +424,7 @@
         </div>
 
         <div class="book-info">
-          <div class="book-title" :title="book.title">{{ book.title }}</div>
+          <div class="book-title" :title="displayBookName(book.title)">{{ displayBookName(book.title) }}</div>
           <div v-if="book.tags?.length" class="book-tag-list">
             <span
               v-for="tag in book.tags.slice(0, 3)"
@@ -456,7 +456,7 @@
           <input
             type="checkbox"
             :checked="selectedBooks.has(row.id)"
-            :aria-label="`选择书籍：${row.title}`"
+            :aria-label="`选择书籍：${displayBookName(row.title)}`"
             @change="toggleBookSelection(row.id)"
           />
         </div>
@@ -469,7 +469,7 @@
             :loading="index < PRIORITY_COVER_COUNT ? 'eager' : 'lazy'"
             decoding="async"
           />
-          <div v-else class="no-cover-small">{{ row.title.charAt(0) }}</div>
+          <div v-else class="no-cover-small">{{ displayBookName(row.title).charAt(0) }}</div>
           <BookCoverPrivacyButton
             v-if="row.coverUrl && !selectionMode"
             :book-id="row.id"
@@ -478,7 +478,7 @@
           />
         </div>
         <div class="book-list-info">
-          <div class="book-list-title">{{ row.title }}</div>
+          <div class="book-list-title">{{ displayBookName(row.title) }}</div>
           <div class="book-list-author">{{ row.author || '未知作者' }}</div>
         </div>
         <div class="book-list-meta">
@@ -679,6 +679,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
@@ -711,6 +712,8 @@ import {
   toggleAllBookCovers,
 } from '@/utils/imagePrivacy'
 import { downloadBookToLocal } from '@/utils/bookDownload'
+
+const { displayBookName } = useBookNameDisplay()
 
 const route = useRoute()
 const router = useRouter()

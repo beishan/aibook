@@ -172,6 +172,17 @@ public class UserService implements UserDetailsService {
                     LIBRARY_PAGE_SIZES);
             user.setLibraryListPageSize(request.getLibraryListPageSize());
         }
+        if (request.getHideBookNames() != null) {
+            user.setHideBookNames(request.getHideBookNames());
+        }
+        if (request.getBookNameMaskMode() != null) {
+            requireAllowed("书名隐藏模式", request.getBookNameMaskMode(), Set.of("HEAD_TAIL", "PREFIX"));
+            user.setBookNameMaskMode(request.getBookNameMaskMode());
+        }
+        if (request.getBookNamePrefixLength() != null) {
+            requireRange("书名前缀文字数", request.getBookNamePrefixLength(), 1, 100);
+            user.setBookNamePrefixLength(request.getBookNamePrefixLength());
+        }
         if (request.getShelfPageSize() != null) {
             requireAllowed("书架分页大小", request.getShelfPageSize(), Set.of(12, 24, 48, 96));
             user.setShelfPageSize(request.getShelfPageSize());
@@ -320,6 +331,11 @@ public class UserService implements UserDetailsService {
                 .libraryCardPageSize(cardPageSize)
                 .libraryListPageSize(listPageSize)
                 .authorPageSize(normalizeAuthorPageSize(user.getAuthorPageSize()))
+                .hideBookNames(Boolean.TRUE.equals(user.getHideBookNames()))
+                .bookNameMaskMode("PREFIX".equals(user.getBookNameMaskMode()) ? "PREFIX" : "HEAD_TAIL")
+                .bookNamePrefixLength(user.getBookNamePrefixLength() != null
+                        && user.getBookNamePrefixLength() >= 1 && user.getBookNamePrefixLength() <= 100
+                        ? user.getBookNamePrefixLength() : 2)
                 .shelfPageSize(user.getShelfPageSize() != null
                         && Set.of(12, 24, 48, 96).contains(user.getShelfPageSize())
                         ? user.getShelfPageSize() : 24)

@@ -147,8 +147,9 @@
       <FontManagementPanel />
     </div>
 
-    <!-- 书籍封面显示 -->
+    <!-- 书籍显示 -->
     <div v-show="activeTab === 'cover-display'" class="tab-content">
+      <BookNameDisplaySettingsPanel />
       <BookCoverDisplaySettingsPanel />
     </div>
 
@@ -741,6 +742,7 @@ import BackupSettingsPanel from '@/components/BackupSettingsPanel.vue'
 import DockSettingsPanel from '@/components/DockSettingsPanel.vue'
 import ThemeColorSettingsPanel from '@/components/ThemeColorSettingsPanel.vue'
 import ThemeBackgroundSettingsPanel from '@/components/ThemeBackgroundSettingsPanel.vue'
+import BookNameDisplaySettingsPanel from '@/components/BookNameDisplaySettingsPanel.vue'
 import BookCoverDisplaySettingsPanel from '@/components/BookCoverDisplaySettingsPanel.vue'
 import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
 import RandomCoverLibraryPanel from '@/components/RandomCoverLibraryPanel.vue'
@@ -943,7 +945,7 @@ const tabGroups = computed(() => [
     items: [
       { key: 'profile', label: '个人设置', icon: '👤' },
       { key: 'theme', label: '主题与界面', icon: '🎨' },
-      { key: 'cover-display', label: '封面显示', icon: '🖼️' },
+      { key: 'cover-display', label: '书籍显示', icon: '🖼️' },
     ],
   },
   {

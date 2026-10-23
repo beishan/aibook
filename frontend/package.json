@@ -1,9 +1,11 @@
 {
   "name": "aibook-frontend",
-  "version": "1.47.67",
+  "version": "1.47.68",
   "description": "汗牛充栋 - 阅读书籍管理系统前端",
   "type": "module",
   "scripts": {
+    "test:book-name-display": "node scripts/check-book-name-display.mjs",
+    "test:book-name-display-ui": "node scripts/check-book-name-display-ui.mjs",
     "test:library-selection-ui": "node scripts/check-library-selection-ui.mjs",
     "test:crawler-blacklist-removal": "node scripts/check-crawler-blacklist-removal.mjs",
     "test:crawler-site-auto-import": "node scripts/check-crawler-site-auto-import.mjs",

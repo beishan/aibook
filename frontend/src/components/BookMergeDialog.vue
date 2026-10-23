@@ -39,9 +39,9 @@
             :class="{ selected: targetBookId === book.id }"
             @click="targetBookId = book.id"
           >
-            <span class="merge-book-mark">{{ book.title.slice(0, 1) }}</span>
+            <span class="merge-book-mark">{{ displayBookName(book.title).slice(0, 1) }}</span>
             <span class="merge-book-copy">
-              <strong>{{ book.title }}</strong>
+              <strong>{{ displayBookName(book.title) }}</strong>
               <small>{{ book.author || '未知作者' }} · {{ versionsFor(book.id).length }} 个版本</small>
             </span>
             <span class="merge-radio" aria-hidden="true"></span>
@@ -57,7 +57,7 @@
         <div class="merge-source-list">
           <article v-for="book in sourceBooks" :key="book.id" class="merge-source-book">
             <header>
-              <div><strong>{{ book.title }}</strong><small>{{ book.author || '未知作者' }}</small></div>
+              <div><strong>{{ displayBookName(book.title) }}</strong><small>{{ book.author || '未知作者' }}</small></div>
               <el-tag size="small" effect="plain">全部迁入</el-tag>
             </header>
             <div class="merge-version-list">
@@ -92,10 +92,13 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, ref } from 'vue'
 import type { Book } from '@/stores/book'
 import api from '@/utils/api'
 import { confirm, message } from '@/utils/message'
+
+const { displayBookName } = useBookNameDisplay()
 
 interface BookVersion {
   id: number
@@ -160,7 +163,7 @@ const submitMerge = async () => {
   const target = props.books.find(book => book.id === targetBookId.value)
   if (!target || !canMerge.value) return
   const approved = await confirm(
-    `确定将 ${sourceBooks.value.length} 本书完整合并到《${target.title}》吗？\n\n合并后其他书籍会从书库中消失，全部版本及关联阅读数据会迁移到目标书籍。`,
+    `确定将 ${sourceBooks.value.length} 本书完整合并到《${displayBookName(target.title)}》吗？\n\n合并后其他书籍会从书库中消失，全部版本及关联阅读数据会迁移到目标书籍。`,
     '确认合并书籍',
   )
   if (!approved) return

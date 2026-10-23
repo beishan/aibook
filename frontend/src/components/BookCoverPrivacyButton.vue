@@ -3,7 +3,7 @@
     class="book-cover-privacy-button"
     :class="{ 'is-hidden': hidden, compact, inline }"
     type="button"
-    :aria-label="hidden ? `显示《${bookTitle}》封面` : `隐藏《${bookTitle}》封面`"
+    :aria-label="hidden ? `显示《${displayBookName(bookTitle)}》封面` : `隐藏《${displayBookName(bookTitle)}》封面`"
     :title="hidden ? '显示此书封面，保存到本书并优先于全局设置' : '隐藏此书封面，保存到本书并优先于全局设置'"
     :disabled="saving"
     :aria-busy="saving"
@@ -15,10 +15,13 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, ref } from 'vue'
 import { Hide, View } from '@element-plus/icons-vue'
 import { isBookCoverHidden, toggleBookCover } from '@/utils/imagePrivacy'
 import { message } from '@/utils/message'
+
+const { displayBookName } = useBookNameDisplay()
 
 const props = withDefaults(defineProps<{
   bookId: number

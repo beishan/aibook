@@ -57,6 +57,7 @@ const source = fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.
 const { descriptor } = parse(source)
 const compiled = compileScript(descriptor, { id: 'home-check' })
 const panel = evaluate(compiled.content, {
+  '@/composables/useBookNameDisplay': { useBookNameDisplay: () => ({ displayBookName: title => title || '' }) },
   '@/components/HomeBookCover.vue': { default: {} },
   '@/utils/home': { ...utility, homeApi: { async dashboard() {
     homeLoads++
@@ -118,6 +119,7 @@ assert.equal(listeners.size, 0)
 const coverSource = fs.readFileSync(new URL('../src/components/HomeBookCover.vue', import.meta.url), 'utf8')
 const coverDescriptor = parse(coverSource).descriptor
 const cover = evaluate(compileScript(coverDescriptor, { id: 'cover-check', inlineTemplate: true }).content, {
+  '@/composables/useBookNameDisplay': { useBookNameDisplay: () => ({ displayBookName: title => title || '' }) },
   '@/utils/imagePrivacy': { shouldLoadBookCover: () => false },
   '@/utils/cover': { getCoverThumbnailUrl: value => value },
 }).default

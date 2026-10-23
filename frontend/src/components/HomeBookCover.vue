@@ -3,21 +3,24 @@
     <img
       v-if="book.coverUrl && displayCover"
       :src="getCoverThumbnailUrl(book.coverUrl, compact ? 'list' : 'card')"
-      :alt="`${book.title}封面`"
+      :alt="`${displayBookName(book.title)}封面`"
       :loading="eager ? 'eager' : 'lazy'"
     />
     <span v-else class="cover-letter" aria-hidden="true">
-      <span>{{ book.title.slice(0, 2) }}</span>
+      <span>{{ displayBookName(book.title).slice(0, 2) }}</span>
       <small>{{ book.format?.toUpperCase() }}</small>
     </span>
   </span>
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed } from 'vue'
 import type { HomeBook } from '@/utils/home'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { getCoverThumbnailUrl } from '@/utils/cover'
+
+const { displayBookName } = useBookNameDisplay()
 
 const props = defineProps<{ book: HomeBook; compact?: boolean; eager?: boolean }>()
 const displayCover = computed(() => props.book.coverHidden == null

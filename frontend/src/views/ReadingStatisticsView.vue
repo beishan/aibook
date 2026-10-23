@@ -166,10 +166,10 @@
                 :src="getCoverThumbnailUrl(book.coverUrl, 'list')"
                 alt=""
               />
-              <span v-else>{{ book.title.charAt(0) }}</span>
+              <span v-else>{{ displayBookName(book.title).charAt(0) }}</span>
             </div>
             <div class="top-book-meta">
-              <div class="top-book-title">{{ book.title }}</div>
+              <div class="top-book-title">{{ displayBookName(book.title) }}</div>
               <div class="top-book-author">{{ book.author || '未知作者' }}</div>
             </div>
             <div class="top-book-time">{{ formatHours(book.readingTimeSeconds) }}</div>
@@ -181,11 +181,14 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import api from '@/utils/api'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
+
+const { displayBookName } = useBookNameDisplay()
 
 interface Overview {
   totalBooks: number

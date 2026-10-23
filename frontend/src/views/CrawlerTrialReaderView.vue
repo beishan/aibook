@@ -4,7 +4,7 @@
       <button class="icon-action back-action" type="button" aria-label="返回采集书籍" @click="goBack">‹</button>
       <div class="book-identity">
         <div class="title-line">
-          <strong :title="book?.bookName"><CrawlerBookTitle :title="book?.bookName || '临时试读'" /></strong>
+          <strong :title="displayBookName(book?.bookName)"><CrawlerBookTitle :title="displayBookName(book?.bookName) || '临时试读'" /></strong>
           <span class="trial-badge">临时试读</span>
         </div>
         <p>{{ activeChapter?.chapterName || '正在准备章节' }}<span v-if="readableChapters.length"> · {{ activeIndex + 1 }} / {{ readableChapters.length }}</span></p>
@@ -66,12 +66,15 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { crawlerApi, type CrawlerBook, type CrawlerChapter } from '@/utils/crawler'
 import SiteSourceTag from '@/components/SiteSourceTag.vue'
 import CrawlerBookTitle from '@/components/CrawlerBookTitle.vue'
 import { usePreferencesStore } from '@/stores/preferences'
+
+const { displayBookName } = useBookNameDisplay()
 
 type ReaderTheme='paper'|'light'|'night'
 const route=useRoute(),router=useRouter()

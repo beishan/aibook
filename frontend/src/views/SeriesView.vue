@@ -40,12 +40,12 @@
           <ol v-if="books.length" class="volume-list">
             <li v-for="book in books" :key="book.id" class="volume-row">
               <span class="volume-number">{{ book.seriesIndex ?? '—' }}</span>
-              <router-link :to="`/books/${book.id}`" class="cover" :aria-label="`查看${book.title}`">
+              <router-link :to="`/books/${book.id}`" class="cover" :aria-label="`查看${displayBookName(book.title)}`">
                 <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 'list')" alt="" loading="lazy" decoding="async" />
-                <span v-else aria-hidden="true">{{ book.title.charAt(0) }}</span>
+                <span v-else aria-hidden="true">{{ displayBookName(book.title).charAt(0) }}</span>
               </router-link>
               <div class="volume-info"><span class="volume-label">{{ volumeLabel(book.seriesIndex) }}</span>
-                <router-link :to="`/books/${book.id}`" class="volume-title">{{ book.title }}</router-link>
+                <router-link :to="`/books/${book.id}`" class="volume-title">{{ displayBookName(book.title) }}</router-link>
                 <small>{{ book.author || '未知作者' }} · {{ book.format.toUpperCase() }}</small>
               </div>
               <span class="reading-state" :class="{ finished: book.readingStatus === 'FINISHED' }">{{ statusLabel(book.readingStatus) }}</span>
@@ -62,6 +62,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/utils/api'
@@ -71,6 +72,9 @@ import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { missingVolumeRanges, volumeLabel, type SeriesBook, type SeriesSummary } from '@/utils/series'
 import { useBookStore, type Book } from '@/stores/book'
 import BookEditDialog from '@/components/BookEditDialog.vue'
+
+const { displayBookName } = useBookNameDisplay()
+
 const route = useRoute()
 const router = useRouter()
 const bookStore = useBookStore()

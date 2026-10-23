@@ -224,7 +224,7 @@
             <el-table-column label="书籍 / 章节" min-width="210" show-overflow-tooltip>
               <template #default="{ row }">
                 <div class="attempt-chapter-cell">
-                  <strong><CrawlerBookTitle :title="row.bookName" /></strong>
+                  <strong><CrawlerBookTitle :title="displayBookName(row.bookName)" /></strong>
                   <span>{{ row.chapterIndex ? `第 ${row.chapterIndex} 章 · ` : '' }}{{ row.chapterName }}</span>
                 </div>
               </template>
@@ -493,10 +493,10 @@
         <el-table-column label="书籍" min-width="260">
           <template #default="{row}">
             <div class="book-cell">
-              <div class="mini-cover">{{ row.bookName.slice(0,1) }}</div>
+              <div class="mini-cover">{{ displayBookName(row.bookName).slice(0,1) }}</div>
               <div>
                 <div class="discovery-book-title">
-                  <strong><CrawlerBookTitle :title="row.bookName" /></strong>
+                  <strong><CrawlerBookTitle :title="displayBookName(row.bookName)" /></strong>
                   <el-tag v-if="row.suspectedDuplicate" size="small" type="warning">疑似重复</el-tag>
                 </div>
                 <p class="book-source-line">
@@ -558,7 +558,7 @@
         <div v-if="discoveredBooks.length" class="discovery-card-selection"><el-checkbox class="crawler-multiselect" :model-value="allDiscoveredSelected" :indeterminate="someDiscoveredSelected&&!allDiscoveredSelected" @change="toggleCurrentDiscoveryPage(Boolean($event))">选择当前页</el-checkbox><span>已选择 {{ selectedDiscoveries.length }} 本</span></div>
         <div class="discovery-card-grid">
           <article v-for="book in discoveredBooks" :key="book.id" class="discovery-card" :class="{selected:isDiscoverySelected(book)}">
-            <div class="discovery-card-action-overlay" role="group" :aria-label="`${book.bookName}快捷操作`" @click.stop>
+            <div class="discovery-card-action-overlay" role="group" :aria-label="`${displayBookName(book.bookName)}快捷操作`" @click.stop>
               <el-button size="small" circle :icon="book.favorite?StarFilled:Star" class="favorite-action" :class="{'is-favorite':book.favorite}" :aria-label="book.favorite?'取消收藏':'加入收藏'" :title="book.favorite?'取消收藏':'加入收藏'" @click="toggleFavorite(book)"/>
               <el-button size="small" type="primary" :loading="submittingBookTaskIds.has(book.id)" :disabled="isBookTaskActive(book)" @click="crawlDiscovered(book)">采集</el-button>
               <el-button size="small" @click="batchDiscovery('IGNORED',[book.id])">忽略</el-button>
@@ -568,11 +568,11 @@
               </el-dropdown>
             </div>
             <div class="discovery-card-cover">
-              <span>{{ book.bookName.slice(0,1) }}</span>
+              <span>{{ displayBookName(book.bookName).slice(0,1) }}</span>
               <img
                 v-if="book.coverUrl && shouldLoadBookCover()"
                 v-queued-cover="getCoverThumbnailUrl(book.coverUrl, 'card')"
-                :alt="`${book.bookName}封面`"
+                :alt="`${displayBookName(book.bookName)}封面`"
                 decoding="async"
                 @error="hideBrokenCover"
               />
@@ -582,7 +582,7 @@
                 :name="book.siteName"
                 :color="book.siteThemeColor"
               />
-              <el-checkbox class="crawler-multiselect discovery-card-check" :model-value="isDiscoverySelected(book)" :aria-label="`选择${book.bookName}`" @click.stop @change="toggleDiscoverySelection(book,Boolean($event))"/>
+              <el-checkbox class="crawler-multiselect discovery-card-check" :model-value="isDiscoverySelected(book)" :aria-label="`选择${displayBookName(book.bookName)}`" @click.stop @change="toggleDiscoverySelection(book,Boolean($event))"/>
             </div>
             <div v-if="book.category||book.tags?.length" class="discovery-card-body discovery-card-category crawler-book-tag-list"><el-tag v-if="book.category" size="small" type="info" effect="plain">{{ book.category }}</el-tag><el-tag v-for="tag in book.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></div>
           </article>
@@ -682,9 +682,9 @@
         <el-table-column label="书籍" min-width="280">
           <template #default="{ row }">
             <div class="book-cell">
-              <div class="mini-cover">{{ row.bookName.slice(0, 1) }}</div>
+              <div class="mini-cover">{{ displayBookName(row.bookName).slice(0, 1) }}</div>
               <div>
-                <strong><CrawlerBookTitle :title="row.bookName" /></strong>
+                <strong><CrawlerBookTitle :title="displayBookName(row.bookName)" /></strong>
                 <p class="book-source-line">
                   <span>{{ row.author || '未知作者' }}</span>
                   <SiteSourceTag :name="row.siteName" :color="row.siteThemeColor" />
@@ -726,7 +726,7 @@
         <div v-if="books.length" class="discovery-card-selection"><el-checkbox class="crawler-multiselect" :model-value="allBooksSelected" :indeterminate="someBooksSelected&&!allBooksSelected" @change="toggleCurrentBookPage(Boolean($event))">选择当前页</el-checkbox><span>已选择 {{ selectedBooks.length }} 本</span></div>
         <div class="discovery-card-grid">
           <article v-for="book in books" :key="book.id" class="discovery-card crawler-book-card" :class="{selected:isBookSelected(book)}" @click="openBook(book)">
-            <div class="discovery-card-action-overlay crawler-book-action-overlay" role="group" :aria-label="`${book.bookName}快捷操作`" @click.stop>
+            <div class="discovery-card-action-overlay crawler-book-action-overlay" role="group" :aria-label="`${displayBookName(book.bookName)}快捷操作`" @click.stop>
               <el-button size="small" type="primary" :disabled="isBookTaskActive(book)" @click="continueCrawl(book)">{{ isBookTaskActive(book)?'任务中':'继续' }}</el-button>
               <el-button size="small" circle :icon="book.favorite?StarFilled:Star" class="favorite-action" :class="{'is-favorite':book.favorite}" :aria-label="book.favorite?'取消收藏':'加入收藏'" :title="book.favorite?'取消收藏':'加入收藏'" @click="toggleFavorite(book)"/>
               <el-button size="small" :disabled="!book.crawledChapterCount" @click="startTrial(book)">试读</el-button>
@@ -736,11 +736,11 @@
               </el-dropdown>
             </div>
             <div class="discovery-card-cover">
-              <span>{{ book.bookName.slice(0,1) }}</span>
+              <span>{{ displayBookName(book.bookName).slice(0,1) }}</span>
               <img
                 v-if="book.coverUrl && shouldLoadBookCover()"
                 v-queued-cover="getCoverThumbnailUrl(book.coverUrl, 'card')"
-                :alt="`${book.bookName}封面`"
+                :alt="`${displayBookName(book.bookName)}封面`"
                 decoding="async"
                 @error="hideBrokenCover"
               />
@@ -755,7 +755,7 @@
               <el-checkbox
                 class="crawler-multiselect discovery-card-check crawler-book-card-check"
                 :model-value="isBookSelected(book)"
-                :aria-label="`选择${book.bookName}`"
+                :aria-label="`选择${displayBookName(book.bookName)}`"
                 @click.stop
                 @change="toggleBookSelection(book, Boolean($event))"
               />
@@ -766,10 +766,10 @@
                   <button
                     type="button"
                     class="crawler-book-title-button"
-                    :title="book.bookName"
+                    :title="displayBookName(book.bookName)"
                     @click.stop="openBook(book)"
                   >
-                    <CrawlerBookTitle :title="book.bookName" />
+                    <CrawlerBookTitle :title="displayBookName(book.bookName)" />
                   </button>
                   <p :title="book.author || '未知作者'">{{ book.author || '未知作者' }}</p>
                 </div>
@@ -789,7 +789,7 @@
                 :percentage="progress(book)"
                 :show-text="false"
                 :stroke-width="3"
-                :aria-label="`${book.bookName}采集进度`"
+                :aria-label="`${displayBookName(book.bookName)}采集进度`"
               />
             </div>
           </article>
@@ -1383,7 +1383,7 @@
           <p v-if="categoryCleanupPreview.matchedBooks>100">下方展示前 100 本样例，确认后会清理该范围内全部匹配记录。</p>
           <el-table :data="categoryCleanupPreview.samples" max-height="300" row-key="id">
             <el-table-column prop="bookName" label="书名" min-width="180">
-              <template #default="{ row }"><CrawlerBookTitle :title="row.bookName" /></template>
+              <template #default="{ row }"><CrawlerBookTitle :title="displayBookName(row.bookName)" /></template>
             </el-table-column>
             <el-table-column prop="category" label="错误分类" min-width="160" />
             <el-table-column prop="siteName" label="来源" min-width="100" />
@@ -1407,7 +1407,7 @@
       append-to-body
     >
       <div v-if="importTargets.length" class="import-book-dialog">
-        <div v-if="importTarget" class="status-book"><span class="mini-cover">{{ importTarget.bookName.slice(0,1) }}</span><div><strong><CrawlerBookTitle :title="importTarget.bookName" /></strong><p>{{ importTarget.author || '未知作者' }} · 已有正文 {{ importTarget.crawledChapterCount }} / {{ importTarget.chapterCount }} 章</p></div></div>
+        <div v-if="importTarget" class="status-book"><span class="mini-cover">{{ displayBookName(importTarget.bookName).slice(0,1) }}</span><div><strong><CrawlerBookTitle :title="displayBookName(importTarget.bookName)" /></strong><p>{{ importTarget.author || '未知作者' }} · 已有正文 {{ importTarget.crawledChapterCount }} / {{ importTarget.chapterCount }} 章</p></div></div>
         <div v-else class="status-book"><span class="mini-cover">批</span><div><strong>批量处理 {{ importTargets.length }} 本书</strong><p>其中 {{ importTargets.filter(book=>book.importStatus==='IMPORTED').length }} 本已入库，将同步为新版本</p></div></div>
         <div><p class="field-label">选择入库方式与附加导出</p><el-checkbox-group v-model="importFormats" :disabled="importing||Boolean(importResumeJobId)" class="crawler-multiselect-group format-options"><el-checkbox-button class="crawler-multiselect" v-for="option in importFormatOptions" :key="option.value" :value="option.value"><strong>{{ option.label }}</strong><small>{{ option.description }}</small></el-checkbox-button></el-checkbox-group></div>
         <el-alert v-if="importTargets.some(book=>book.crawlStatus!=='COMPLETED')" type="warning" :closable="false" :title="importTargets.length>1?'未完整采集的书籍只会加入已有正文；没有可用正文的书籍会显示失败原因。':'当前书籍尚未完整采集，所选格式只会包含已有正文。'" />
@@ -1420,12 +1420,12 @@
           <el-alert
             v-for="failure in importFailures"
             :key="failure.book.id"
-            :title="failure.book.bookName"
+            :title="displayBookName(failure.book.bookName)"
             :description="failure.reason"
             type="error"
             :closable="false"
           >
-            <template #title><CrawlerBookTitle :title="failure.book.bookName" /></template>
+            <template #title><CrawlerBookTitle :title="displayBookName(failure.book.bookName)" /></template>
           </el-alert>
         </div>
       </div>
@@ -1472,7 +1472,7 @@
       <el-alert v-if="blacklistError" :title="blacklistError" type="error" :closable="false" />
       <el-table v-loading="blacklistLoading" :data="blacklistBooks" row-key="id" max-height="52vh">
         <el-table-column label="书名" min-width="200">
-          <template #default="{ row }"><CrawlerBookTitle :title="row.bookName" /></template>
+          <template #default="{ row }"><CrawlerBookTitle :title="displayBookName(row.bookName)" /></template>
         </el-table-column>
         <el-table-column prop="author" label="作者" min-width="140" show-overflow-tooltip />
         <el-table-column label="来源网站" min-width="140">
@@ -1515,8 +1515,8 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="bookListDialog" :title="`预选书单 · ${bookListTarget?.bookName || ''}`" width="min(560px, 94vw)" append-to-body>
-      <template #header>预选书单 · <CrawlerBookTitle :title="bookListTarget?.bookName || ''" /></template>
+    <el-dialog v-model="bookListDialog" :title="`预选书单 · ${displayBookName(bookListTarget?.bookName) || ''}`" width="min(560px, 94vw)" append-to-body>
+      <template #header>预选书单 · <CrawlerBookTitle :title="displayBookName(bookListTarget?.bookName) || ''" /></template>
       <div v-loading="bookListLoading" class="crawler-book-list-dialog">
         <el-alert type="info" :closable="false" title="现在选择书单；书籍入库时会自动加入。已入库书籍会立即同步书单。" />
         <el-empty v-if="!bookListLoading&&!availableBookLists.length" description="暂无书单，请先在书库中创建书单" />
@@ -1531,7 +1531,7 @@
 
     <el-dialog v-model="statusDialog" title="人工修改采集状态" width="min(520px, 94vw)" append-to-body>
       <div v-if="statusBook" class="status-dialog-content">
-        <div class="status-book"><span class="mini-cover">{{ statusBook.bookName.slice(0,1) }}</span><div><strong><CrawlerBookTitle :title="statusBook.bookName" /></strong><p>当前状态：{{ statusLabel(statusBook.crawlStatus) }} · 已有正文 {{ statusBook.crawledChapterCount }} / {{ statusBook.chapterCount }} 章</p></div></div>
+        <div class="status-book"><span class="mini-cover">{{ displayBookName(statusBook.bookName).slice(0,1) }}</span><div><strong><CrawlerBookTitle :title="displayBookName(statusBook.bookName)" /></strong><p>当前状态：{{ statusLabel(statusBook.crawlStatus) }} · 已有正文 {{ statusBook.crawledChapterCount }} / {{ statusBook.chapterCount }} 章</p></div></div>
         <el-form label-position="top"><el-form-item label="修改为"><el-select v-model="manualStatus"><el-option v-for="item in manualStatusOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-form>
         <el-alert type="warning" :closable="false" title="只调整整本书状态，不会补齐缺失章节或改变章节统计；后续任务仍需人工触发。" />
       </div>
@@ -1848,9 +1848,9 @@
     <el-dialog v-model="queuedTasksDialog" :title="`${activeQueue ? queueDisplayName(activeQueue) : '任务'} · 队列任务 · ${queuedTasks.length}`" width="min(1040px, calc(100vw - 32px))" class="queued-tasks-dialog" append-to-body>
       <div v-if="queuedTasks.some(task=>task.status==='WAITING')" class="queued-order-note"><span class="queue-drag-mark">⠿</span><div><strong>运行中任务固定在最前，等待任务可调整顺序</strong><small>拖动等待任务或聚焦排序按钮后使用上下方向键；需要置顶时可点击“优先”。</small></div></div>
       <el-table v-loading="queuedTasksLoading||queuedTasksReordering||!!queuedTaskPrioritizingId" :data="pagedQueuedTasks" row-key="id" max-height="56vh" class="queued-task-table" :row-class-name="queuedTaskRowClassName">
-        <el-table-column label="排序" width="62" align="center"><template #default="{row}"><button type="button" class="queue-drag-handle" :class="{dragging:queuedTaskDraggingId===row.id,disabled:row.status!=='WAITING'}" :disabled="row.status!=='WAITING'||queuedTasksReordering||Boolean(queuedTaskPrioritizingId)||Boolean(queuedTaskCommandId)" :draggable="row.status==='WAITING'&&!queuedTasksReordering&&!queuedTaskPrioritizingId&&!queuedTaskCommandId" :aria-label="row.status==='WAITING'?`拖动排序：${row.bookName||row.discoveryPageName||taskTypeLabel(row.type)}`:'当前状态不可排序'" :title="row.status==='WAITING'?'拖动调整顺序；也可使用上下方向键':'只有等待中的任务可以排序'" @dragstart="startQueuedTaskDrag(row,$event)" @dragenter.prevent="moveDraggedQueuedTask(row)" @dragover.prevent @dragend="finishQueuedTaskDrag" @keydown.up.prevent="moveQueuedTaskByKeyboard(row,-1)" @keydown.down.prevent="moveQueuedTaskByKeyboard(row,1)">⠿</button></template></el-table-column>
+        <el-table-column label="排序" width="62" align="center"><template #default="{row}"><button type="button" class="queue-drag-handle" :class="{dragging:queuedTaskDraggingId===row.id,disabled:row.status!=='WAITING'}" :disabled="row.status!=='WAITING'||queuedTasksReordering||Boolean(queuedTaskPrioritizingId)||Boolean(queuedTaskCommandId)" :draggable="row.status==='WAITING'&&!queuedTasksReordering&&!queuedTaskPrioritizingId&&!queuedTaskCommandId" :aria-label="row.status==='WAITING'?`拖动排序：${displayBookName(row.bookName)||row.discoveryPageName||taskTypeLabel(row.type)}`:'当前状态不可排序'" :title="row.status==='WAITING'?'拖动调整顺序；也可使用上下方向键':'只有等待中的任务可以排序'" @dragstart="startQueuedTaskDrag(row,$event)" @dragenter.prevent="moveDraggedQueuedTask(row)" @dragover.prevent @dragend="finishQueuedTaskDrag" @keydown.up.prevent="moveQueuedTaskByKeyboard(row,-1)" @keydown.down.prevent="moveQueuedTaskByKeyboard(row,1)">⠿</button></template></el-table-column>
         <el-table-column type="index" label="#" width="54" :index="index=>index+(queuedTaskPage-1)*queuedTaskPageSize+1" />
-        <el-table-column label="任务" min-width="280"><template #default="{row}"><button type="button" class="queue-task-link" @dragenter.prevent="moveDraggedQueuedTask(row)" @click="openQueuedTask(row)"><SiteSourceTag :name="row.siteName" :color="row.siteThemeColor" /><strong><CrawlerBookTitle v-if="row.bookName" :title="row.bookName" /><template v-else>{{ row.discoveryPageName || taskTypeLabel(row.type) }}</template></strong></button></template></el-table-column>
+        <el-table-column label="任务" min-width="280"><template #default="{row}"><button type="button" class="queue-task-link" @dragenter.prevent="moveDraggedQueuedTask(row)" @click="openQueuedTask(row)"><SiteSourceTag :name="row.siteName" :color="row.siteThemeColor" /><strong><CrawlerBookTitle v-if="row.bookName" :title="displayBookName(row.bookName)" /><template v-else>{{ row.discoveryPageName || taskTypeLabel(row.type) }}</template></strong></button></template></el-table-column>
         <el-table-column label="任务类型" width="120"><template #default="{row}">{{ taskTypeLabel(row.type) }}</template></el-table-column>
         <el-table-column label="状态" width="90"><template #default="{row}"><el-tag :type="statusType(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
         <el-table-column label="优先级" width="90"><template #default="{row}"><el-tag :type="priorityType(row.priority)" effect="plain">{{ priorityLabel(row.priority) }}</el-tag></template></el-table-column>
@@ -1890,7 +1890,7 @@
       </div>
       <el-table v-loading="scanResultsLoading" :data="scanResults" max-height="52vh" class="scan-results-table">
         <el-table-column prop="bookName" label="书籍" min-width="220">
-          <template #default="{ row }"><CrawlerBookTitle :title="row.bookName" /></template>
+          <template #default="{ row }"><CrawlerBookTitle :title="displayBookName(row.bookName)" /></template>
         </el-table-column>
         <el-table-column label="结果" width="100"><template #default="{row}"><el-tag :type="scanResultType(row.resultStatus)" effect="light">{{ scanResultLabel(row.resultStatus) }}</el-tag></template></el-table-column>
         <el-table-column label="地址" min-width="280" show-overflow-tooltip><template #default="{row}"><a :href="row.bookUrl" target="_blank">{{ row.bookUrl }}</a></template></el-table-column>
@@ -1998,10 +1998,10 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="bookDrawer" size="min(1240px, 98vw)" :title="selectedBook?.bookName || '采集书籍详情'" class="book-detail-drawer">
-      <template #header><CrawlerBookTitle :title="selectedBook?.bookName || '采集书籍详情'" /></template>
+    <el-drawer v-model="bookDrawer" size="min(1240px, 98vw)" :title="displayBookName(selectedBook?.bookName) || '采集书籍详情'" class="book-detail-drawer">
+      <template #header><CrawlerBookTitle :title="displayBookName(selectedBook?.bookName) || '采集书籍详情'" /></template>
       <div v-if="selectedBook" class="book-drawer-content">
-        <div class="book-summary"><div class="large-cover">{{ selectedBook.bookName.slice(0,1) }}</div><div><h2><CrawlerBookTitle :title="selectedBook.bookName" /></h2><p class="book-source-line"><span>{{ selectedBook.author || '未知作者' }}</span><SiteSourceTag :name="selectedBook.siteName" :color="selectedBook.siteThemeColor" /></p><div v-if="isBookCompleted(selectedBook)" class="book-crawl-result drawer-result"><div><span>采集结果详情</span><strong>采集完成</strong></div><small>正文 {{ selectedBook.crawledChapterCount }} 章 · 待开放 {{ selectedBook.pendingReleaseChapterCount }} 章 · 失败 {{ selectedBook.failedChapterCount }} 章</small></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(selectedBook)}" :percentage="progress(selectedBook)"/><small>正文 {{ selectedBook.crawledChapterCount }} / {{ selectedBook.chapterCount }} 章，待开放 {{ selectedBook.pendingReleaseChapterCount }}，失败 {{ selectedBook.failedChapterCount }}</small></template></div></div>
+        <div class="book-summary"><div class="large-cover">{{ displayBookName(selectedBook.bookName).slice(0,1) }}</div><div><h2><CrawlerBookTitle :title="displayBookName(selectedBook.bookName)" /></h2><p class="book-source-line"><span>{{ selectedBook.author || '未知作者' }}</span><SiteSourceTag :name="selectedBook.siteName" :color="selectedBook.siteThemeColor" /></p><div v-if="isBookCompleted(selectedBook)" class="book-crawl-result drawer-result"><div><span>采集结果详情</span><strong>采集完成</strong></div><small>正文 {{ selectedBook.crawledChapterCount }} 章 · 待开放 {{ selectedBook.pendingReleaseChapterCount }} 章 · 失败 {{ selectedBook.failedChapterCount }} 章</small></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(selectedBook)}" :percentage="progress(selectedBook)"/><small>正文 {{ selectedBook.crawledChapterCount }} / {{ selectedBook.chapterCount }} 章，待开放 {{ selectedBook.pendingReleaseChapterCount }}，失败 {{ selectedBook.failedChapterCount }}</small></template></div></div>
         <div class="crawler-book-metadata"><span><small>来源状态</small><strong>{{ selectedBook.bookStatus || '未识别' }}</strong></span><span><small>分类</small><strong>{{ selectedBook.category || '未分类' }}</strong></span><span class="metadata-tag-row"><small>标签</small><span v-if="selectedBook.tags?.length" class="metadata-tags"><el-tag v-for="tag in selectedBook.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></span><strong v-else>无</strong></span></div>
         <div v-if="selectedBook.libraryBookId" class="library-sync-control"><div><strong>自动同步到书库</strong><p>检查更新或续采成功后，自动发布为同一本书的新版本。</p></div><el-switch :model-value="selectedBook.autoSyncLibrary" @change="toggleLibrarySync(selectedBook,Boolean($event))" /></div>
         <div class="drawer-actions">
@@ -2260,7 +2260,7 @@
         <header class="chapter-reader-toolbar">
           <div class="chapter-reader-heading">
             <strong>{{ chapterDetail?.title || chapterReaderActive?.chapterName || '章节正文' }}</strong>
-            <p><span>临时阅读</span> · <CrawlerBookTitle :title="selectedBook?.bookName || '采集书籍'" /><template v-if="chapterReaderPosition"> · {{ chapterReaderPosition }} / {{ chapterReaderChapters.length }}</template></p>
+            <p><span>临时阅读</span> · <CrawlerBookTitle :title="displayBookName(selectedBook?.bookName) || '采集书籍'" /><template v-if="chapterReaderPosition"> · {{ chapterReaderPosition }} / {{ chapterReaderChapters.length }}</template></p>
           </div>
           <div class="chapter-reader-actions">
             <a v-if="chapterDetail?.url" :href="chapterDetail.url" target="_blank" rel="noopener noreferrer">原始网页 ↗</a>
@@ -2333,6 +2333,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import CrawlerBookTitle from '@/components/CrawlerBookTitle.vue'
 import {
   parseStatisticsWindow,
@@ -2394,6 +2395,8 @@ import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { useViewportTableHeight } from '@/utils/useViewportTableHeight'
 import { confirm, message } from '@/utils/message'
 import api from '@/utils/api'
+
+const { displayBookName } = useBookNameDisplay()
 
 const { tablePanelRef, tableMaxHeight } = useViewportTableHeight()
 
@@ -2465,7 +2468,7 @@ const TaskTable = defineComponent({
         size: 'small',
         type: row.autoImportEnabled ? 'primary' : 'default',
         plain: true,
-        'aria-label': `${row.bookName || '本书'}：配置自动入库${row.autoImportEnabled ? '（已开启）' : '（未开启）'}`,
+        'aria-label': `${displayBookName(row.bookName) || '本书'}：配置自动入库${row.autoImportEnabled ? '（已开启）' : '（未开启）'}`,
         title: '配置采集完成后的自动入库与入库格式',
         onClick: (event: MouseEvent) => {
           event.stopPropagation()
@@ -4088,7 +4091,7 @@ async function loadQueueTabTasks(){
 async function applyQueueTaskFilters(){queueTabTaskPage.value=1;await loadQueueTabTasks()}
 async function resetQueueTaskFilters(){queueTaskSiteId.value=undefined;queueTaskStatus.value='';queueTaskType.value='';queueTaskPriority.value='';queueTaskCreatedRange.value=undefined;await applyQueueTaskFilters()}
 async function handleQueueTabTaskSizeChange(){queueTabTaskPage.value=1;await loadQueueTabTasks()}
-async function prioritizeQueueTabTask(task:CrawlerTask){if(task.status!=='WAITING'||queueTaskPrioritizingId.value)return;queueTaskPrioritizingId.value=task.id;try{await crawlerApi.prioritizeQueuedTask(task.id);message.success(`“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”已移到等待队列首位`);await Promise.all([loadQueueTabTasks(),loadTasks({silent:true}),loadTaskQueues()])}catch(error:any){message.error(error.response?.data?.message||'任务优先调整失败');await loadQueueTabTasks()}finally{queueTaskPrioritizingId.value=undefined}}
+async function prioritizeQueueTabTask(task:CrawlerTask){if(task.status!=='WAITING'||queueTaskPrioritizingId.value)return;queueTaskPrioritizingId.value=task.id;try{await crawlerApi.prioritizeQueuedTask(task.id);message.success(`“${displayBookName(task.bookName)||task.discoveryPageName||taskTypeLabel(task.type)}”已移到等待队列首位`);await Promise.all([loadQueueTabTasks(),loadTasks({silent:true}),loadTaskQueues()])}catch(error:any){message.error(error.response?.data?.message||'任务优先调整失败');await loadQueueTabTasks()}finally{queueTaskPrioritizingId.value=undefined}}
 async function runQueueTabTaskCommand(task:CrawlerTask,command:'pause'|'resume'|'cancel'){await runTaskCommand(task,command)}
 async function removeQueueTabTask(task:CrawlerTask){await removeTask(task);await loadQueueTabTasks()}
 async function toggleQueueTabTaskFavorite(task:CrawlerTask){await toggleTaskFavorite(task);await loadQueueTabTasks()}
@@ -4141,8 +4144,8 @@ function clampQueuedTaskPage(){queuedTaskPage.value=Math.min(queuedTaskPage.valu
 function handleQueuedTaskSizeChange(){queuedTaskPage.value=1;clampQueuedTaskPage()}
 async function loadQueuedTasks(options:LoadOptions={}){if(options.silent&&(queuedTaskDraggingId.value||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value))return;if(!options.silent)queuedTasksLoading.value=true;try{queuedTasks.value=orderCurrentTasks(await crawlerApi.currentTasks(activeQueue.value?.id));clampQueuedTaskPage()}finally{if(!options.silent)queuedTasksLoading.value=false}}
 async function openQueuedTask(task:CrawlerTask){queuedTasksDialog.value=false;await openTask(task)}
-async function prioritizeQueuedTask(task:CrawlerTask){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value||batchTaskManaging.value)return;queuedTaskPrioritizingId.value=task.id;try{await crawlerApi.prioritizeQueuedTask(task.id);message.success(`“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”已移到等待队列首位`);await Promise.all([loadQueuedTasks(),loadTasks({silent:true}),loadTaskQueues()])}catch(error:any){message.error(error.response?.data?.message||'任务优先调整失败');await loadQueuedTasks()}finally{queuedTaskPrioritizingId.value=undefined}}
-async function commandCurrentTask(task:CrawlerTask,command:'pause'|'resume'|'cancel'){if(queuedTaskCommandId.value||queuedTasksReordering.value||queuedTaskPrioritizingId.value)return;queuedTaskCommandId.value=task.id;queuedTaskCommand.value=command;const actionLabel={pause:'暂停',resume:'继续',cancel:'取消'}[command];try{await crawlerApi.taskCommand(task.id,command);message.success(`“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”已${actionLabel}`);const [dashboardData]=await Promise.all([crawlerApi.dashboard(),loadQueuedTasks(),loadTasks({silent:true}),loadFailedTasks({silent:true}),loadTaskQueues()]);dashboard.value=dashboardData}catch(error:any){message.error(error.response?.data?.message||`任务${actionLabel}失败，请稍后重试`);await loadQueuedTasks()}finally{queuedTaskCommandId.value=undefined;queuedTaskCommand.value=undefined}}
+async function prioritizeQueuedTask(task:CrawlerTask){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskPrioritizingId.value||queuedTaskCommandId.value||batchTaskManaging.value)return;queuedTaskPrioritizingId.value=task.id;try{await crawlerApi.prioritizeQueuedTask(task.id);message.success(`“${displayBookName(task.bookName)||task.discoveryPageName||taskTypeLabel(task.type)}”已移到等待队列首位`);await Promise.all([loadQueuedTasks(),loadTasks({silent:true}),loadTaskQueues()])}catch(error:any){message.error(error.response?.data?.message||'任务优先调整失败');await loadQueuedTasks()}finally{queuedTaskPrioritizingId.value=undefined}}
+async function commandCurrentTask(task:CrawlerTask,command:'pause'|'resume'|'cancel'){if(queuedTaskCommandId.value||queuedTasksReordering.value||queuedTaskPrioritizingId.value)return;queuedTaskCommandId.value=task.id;queuedTaskCommand.value=command;const actionLabel={pause:'暂停',resume:'继续',cancel:'取消'}[command];try{await crawlerApi.taskCommand(task.id,command);message.success(`“${displayBookName(task.bookName)||task.discoveryPageName||taskTypeLabel(task.type)}”已${actionLabel}`);const [dashboardData]=await Promise.all([crawlerApi.dashboard(),loadQueuedTasks(),loadTasks({silent:true}),loadFailedTasks({silent:true}),loadTaskQueues()]);dashboard.value=dashboardData}catch(error:any){message.error(error.response?.data?.message||`任务${actionLabel}失败，请稍后重试`);await loadQueuedTasks()}finally{queuedTaskCommandId.value=undefined;queuedTaskCommand.value=undefined}}
 function startQueuedTaskDrag(task:CrawlerTask,event:DragEvent){if(task.status!=='WAITING'||queuedTasksReordering.value||queuedTaskCommandId.value){event.preventDefault();return}queuedTaskDraggingId.value=task.id;queuedTaskDragStartOrder.value=queuedTasks.value.filter(item=>item.status==='WAITING').map(item=>item.id);if(event.dataTransfer){event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',task.id)}}
 function moveDraggedQueuedTask(target:CrawlerTask){const sourceIndex=queuedTasks.value.findIndex(item=>item.id===queuedTaskDraggingId.value),targetIndex=queuedTasks.value.findIndex(item=>item.id===target.id);if(sourceIndex<0||targetIndex<0||sourceIndex===targetIndex||target.status!=='WAITING'||queuedTasks.value[sourceIndex].status!=='WAITING'||queuedTasks.value[sourceIndex].priority!==target.priority)return;const next=[...queuedTasks.value],[source]=next.splice(sourceIndex,1);next.splice(targetIndex,0,source);queuedTasks.value=next}
 async function persistQueuedTaskOrder(){queuedTasksReordering.value=true;try{await crawlerApi.reorderQueuedTasks(queuedTasks.value.filter(task=>task.status==='WAITING').map(task=>task.id),activeQueue.value?.id);message.success('等待队列顺序已更新');await loadQueuedTasks()}catch(error:any){message.error(error.response?.data?.message||'队列排序保存失败');await loadQueuedTasks()}finally{queuedTasksReordering.value=false}}
@@ -5091,7 +5094,7 @@ async function batchRefreshBookMetadata(){
   finally{eligible.forEach(book=>setBookTaskSubmitting(book.id,false));batchBookAction.value=undefined}
 }
 async function toggleLibrarySync(book:CrawlerBook,enabled:boolean){const updated=await crawlerApi.setLibrarySync(book.id,enabled);books.value=books.value.map(item=>item.id===updated.id?updated:item);if(selectedBook.value?.id===updated.id)selectedBook.value=updated;message.success(enabled?'已开启追更后自动同步书库':'已关闭自动同步，更新只保留在采集中心')}
-async function generate(book:CrawlerBook){if(book.crawlStatus!=='COMPLETED'&&!await confirm(`“${book.bookName}”当前为${statusLabel(book.crawlStatus)}，生成文件将只包含已有正文，是否继续？`))return;await crawlerApi.generate(book.id,['TXT','EPUB']);message.success('已有正文已生成 TXT 与 EPUB，并保留在采集中心')}
+async function generate(book:CrawlerBook){if(book.crawlStatus!=='COMPLETED'&&!await confirm(`“${displayBookName(book.bookName)}”当前为${statusLabel(book.crawlStatus)}，生成文件将只包含已有正文，是否继续？`))return;await crawlerApi.generate(book.id,['TXT','EPUB']);message.success('已有正文已生成 TXT 与 EPUB，并保留在采集中心')}
 function openCategoryCleanup(){
   categoryCleanupSiteId.value=bookSiteId.value
   categoryCleanupNames.value=''
@@ -5186,7 +5189,7 @@ async function openTaskBook(task:CrawlerTask){if(!task.bookId)return;const book=
 async function runTaskCommand(task:CrawlerTask,command:'pause'|'resume'|'cancel'){const updated=await crawlerApi.taskCommand(task.id,command);if(selectedTask.value?.id===updated.id)selectedTask.value=updated;await refresh();if(queueOverviewDialog.value&&queuePopupTab.value==='tasks')await loadQueueTabTasks();if(taskDrawer.value&&selectedTask.value?.id===updated.id)await syncOpenTask({silent:true})}
 function openTaskEditor(task:CrawlerTask){editingTask.value=task;taskPriority.value=(task.priority as 'LOW'|'NORMAL'|'HIGH'|'EXTREME')||'NORMAL';taskEditDialog.value=true}
 async function saveTask(){if(!editingTask.value)return;savingTask.value=true;try{const updated=await crawlerApi.updateTask(editingTask.value.id,taskPriority.value);if(selectedTask.value?.id===updated.id)selectedTask.value=updated;taskEditDialog.value=false;message.success('任务优先级已更新');await refresh();if(queueOverviewDialog.value&&queuePopupTab.value==='tasks')await loadQueueTabTasks()}finally{savingTask.value=false}}
-async function removeTask(task:CrawlerTask){if(!await confirm(`确定删除“${task.bookName||task.discoveryPageName||taskTypeLabel(task.type)}”的任务记录吗？关联书籍和章节不会被删除。`))return;await crawlerApi.deleteTask(task.id);if(selectedTask.value?.id===task.id){taskDrawer.value=false;selectedTask.value=undefined}message.success('任务记录已删除');await refresh()}
+async function removeTask(task:CrawlerTask){if(!await confirm(`确定删除“${displayBookName(task.bookName)||task.discoveryPageName||taskTypeLabel(task.type)}”的任务记录吗？关联书籍和章节不会被删除。`))return;await crawlerApi.deleteTask(task.id);if(selectedTask.value?.id===task.id){taskDrawer.value=false;selectedTask.value=undefined}message.success('任务记录已删除');await refresh()}
 async function loadChapterReaderIndex(bookId:number){
   if(chapterReaderBookId.value===bookId&&chapterReaderChapters.value.length===chapterTotal.value)return
   const first=await crawlerApi.chapters(bookId,{page:0,size:100,sort:'INDEX_ASC'})

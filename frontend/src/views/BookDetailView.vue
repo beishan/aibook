@@ -89,7 +89,7 @@
               class="cover-image"
             />
             <div v-else class="no-cover">
-              <span>{{ book.title.charAt(0) }}</span>
+              <span>{{ displayBookName(book.title).charAt(0) }}</span>
             </div>
           </div>
           <div class="cover-action-row">
@@ -136,7 +136,7 @@
             <span>{{ selectedVersionFormat === 'structured' ? '在线章节' : selectedVersionFormat.toUpperCase() }}</span>
           </div>
           <div class="book-title-wrapper">
-            <h1 v-if="!editingTitle" class="book-title">{{ book.title }}</h1>
+            <h1 v-if="!editingTitle" class="book-title">{{ displayBookName(book.title) }}</h1>
             <div v-else class="title-edit-group">
               <input
                 ref="titleInput"
@@ -725,7 +725,7 @@
                 show-word-limit
                 :disabled="savingInfo"
               />
-              <span v-else class="info-value">{{ book.title }}</span>
+              <span v-else class="info-value">{{ displayBookName(book.title) }}</span>
             </div>
             <div class="info-item list-item">
               <span class="info-label">作者</span>
@@ -919,8 +919,8 @@
         <div v-loading="candidateLoading" class="version-candidate-list">
           <button v-for="candidate in versionCandidates" :key="candidate.id" type="button" class="version-candidate" :class="{ selected: isVersionCandidateSelected(candidate.id) }" @click="toggleVersionCandidate(candidate)">
             <el-checkbox :model-value="isVersionCandidateSelected(candidate.id)" tabindex="-1" @click.stop @change="toggleVersionCandidate(candidate)" />
-            <span class="version-candidate-cover">{{ candidate.title.slice(0, 1) }}</span>
-            <span class="version-candidate-info"><strong>{{ candidate.title }}</strong><small>{{ candidate.author || '未知作者' }} · {{ candidate.format.toUpperCase() }} · {{ candidate.versionCount }} 个版本</small></span>
+            <span class="version-candidate-cover">{{ displayBookName(candidate.title).slice(0, 1) }}</span>
+            <span class="version-candidate-info"><strong>{{ displayBookName(candidate.title) }}</strong><small>{{ candidate.author || '未知作者' }} · {{ candidate.format.toUpperCase() }} · {{ candidate.versionCount }} 个版本</small></span>
             <el-tag v-if="candidate.sameTitle" size="small" type="success" effect="plain">同名推荐</el-tag>
           </button>
           <el-empty v-if="!candidateLoading && !versionCandidates.length" :image-size="54" description="没有找到可选书籍" />
@@ -933,7 +933,7 @@
         <div class="version-selection-summary"><div><strong>选择要导入的版本</strong><p>已选 {{ selectedImportVersionCount }} 个版本，来自 {{ importSources.length }} 本书。</p></div></div>
         <div class="version-source-list">
           <section v-for="source in importSources" :key="source.book.id" class="version-source-group">
-            <header><div><strong>{{ source.book.title }}</strong><small>{{ source.book.author || '未知作者' }}</small></div><el-checkbox :model-value="source.selectedVersionIds.length === source.versions.length" :indeterminate="source.selectedVersionIds.length > 0 && source.selectedVersionIds.length < source.versions.length" :disabled="sourceHandling === 'MERGE'" @change="toggleAllSourceVersions(source, Boolean($event))">全选</el-checkbox></header>
+            <header><div><strong>{{ displayBookName(source.book.title) }}</strong><small>{{ source.book.author || '未知作者' }}</small></div><el-checkbox :model-value="source.selectedVersionIds.length === source.versions.length" :indeterminate="source.selectedVersionIds.length > 0 && source.selectedVersionIds.length < source.versions.length" :disabled="sourceHandling === 'MERGE'" @change="toggleAllSourceVersions(source, Boolean($event))">全选</el-checkbox></header>
             <div v-for="version in source.versions" :key="version.id" class="import-version-row" @click="toggleImportVersion(source, version.id, !source.selectedVersionIds.includes(version.id))">
               <el-checkbox :model-value="source.selectedVersionIds.includes(version.id)" :disabled="sourceHandling === 'MERGE'" @click.stop @change="toggleImportVersion(source, version.id, Boolean($event))" />
               <span class="import-version-format">{{ version.format === 'structured' ? '在线' : version.format.toUpperCase() }}</span>
@@ -1048,6 +1048,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, reactive, ref, onMounted, nextTick, watch } from 'vue'
 import BookSeriesPanel from '@/components/BookSeriesPanel.vue'
 import MetadataSearch from '@/components/MetadataSearch.vue'
@@ -1066,6 +1067,8 @@ import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { downloadBookToLocal } from '@/utils/bookDownload'
+
+const { displayBookName } = useBookNameDisplay()
 
 const route = useRoute()
 const router = useRouter()
@@ -1684,7 +1687,7 @@ const submitVersionImport = async () => {
   if (!book.value || !selectedImportVersionCount.value) return
   if (sourceHandling.value === 'MERGE') {
     const approved = await confirm(
-      `确定将 ${importSources.value.length} 本书完整合并到《${book.value.title}》吗？\n\n合并后原书籍会从书库中消失，版本、阅读进度、书签、批注和书单关联会迁移到当前书籍。`,
+      `确定将 ${importSources.value.length} 本书完整合并到《${displayBookName(book.value.title)}》吗？\n\n合并后原书籍会从书库中消失，版本、阅读进度、书签、批注和书单关联会迁移到当前书籍。`,
     )
     if (!approved) return
   }

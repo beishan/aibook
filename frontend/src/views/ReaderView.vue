@@ -38,11 +38,11 @@
               :src="getCoverThumbnailUrl(book.coverUrl, 'detail')"
               alt=""
             />
-            <span v-else>{{ book.title?.slice(0, 1) || '书' }}</span>
+            <span v-else>{{ displayBookName(book.title)?.slice(0, 1) || '书' }}</span>
           </div>
           <div class="reader-book-identity">
             <div class="reader-book-line">
-              <span class="reader-book-name" :title="book.title">{{ book.title }}</span>
+              <span class="reader-book-name" :title="displayBookName(book.title)">{{ displayBookName(book.title) }}</span>
               <span v-if="selectedVersion" class="reader-version-badge" :title="selectedVersion.displayName">
                 {{ formatLabel(selectedVersion.format) }}
               </span>
@@ -414,7 +414,7 @@
               <span>⚙️</span>
             </button>
             <div class="floating-reading-info">
-              <span class="floating-book-title">{{ book.title }}</span>
+              <span class="floating-book-title">{{ displayBookName(book.title) }}</span>
               <span class="floating-progress">{{ headerChapterName }} · {{ headerProgress }}%</span>
             </div>
             <button class="btn btn-icon" @click="toggleFullscreen" title="退出全屏">
@@ -710,6 +710,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { useBookStore } from '@/stores/book'
@@ -741,6 +742,8 @@ import {
   type ReaderBackgroundDto,
   type ReaderBackgroundOption,
 } from '@/utils/readerBackground'
+
+const { displayBookName } = useBookNameDisplay()
 
 const route = useRoute()
 const router = useRouter()

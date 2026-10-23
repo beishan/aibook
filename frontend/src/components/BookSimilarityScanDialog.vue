@@ -59,9 +59,9 @@
             <el-checkbox
               :model-value="batchPlans.has(group.id)"
               :disabled="busy || selectingAll || (selections[group.id]?.length || 0) < 2"
-              :aria-label="`批量选择分组 ${group.books[0]?.title}`"
+              :aria-label="`批量选择分组 ${displayBookName(group.books[0]?.title)}`"
               @change="value => toggleBatchGroup(group, Boolean(value))"
-            >{{ group.books[0]?.title }}</el-checkbox>
+            >{{ displayBookName(group.books[0]?.title) }}</el-checkbox>
             <p>{{ group.books.length }} 本 · {{ group.similarity === 100 ? '规范化后同名' : `匹配相似度 ${group.similarity}% 起` }}</p>
           </div>
           <div class="group-actions">
@@ -81,7 +81,7 @@
           <div v-for="book in group.books" :key="book.id" class="candidate-row">
             <el-checkbox :value="book.id" class="candidate-selection">
               <span class="candidate-copy">
-                <strong>{{ book.title }}</strong>
+                <strong>{{ displayBookName(book.title) }}</strong>
                 <small>{{ book.author || '未知作者' }} · {{ formatLabel(book.format) }} · #{{ book.id }}</small>
                 <small :title="book.sourceType === 'DIRECTORY_SCAN' ? book.sourcePath : undefined">
                   {{ sourceLabel(book) }} · {{ chapterCountLabel(book.chapterCount) }} · {{ sizeLabel(book.fileSize) }}
@@ -126,6 +126,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import type { Book } from '@/stores/book'
 import api from '@/utils/api'
@@ -137,6 +138,8 @@ import {
   chapterCountLabel, sizeLabel, sourceLabel, suggestedTarget, validateBatchPlans,
   type BatchMergePlan, type BatchMergeResult, type ComparisonCandidate,
 } from '@/utils/bookComparison'
+
+const { displayBookName } = useBookNameDisplay()
 
 interface SimilarityGroup {
   id: string

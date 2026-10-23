@@ -4,7 +4,7 @@
       <div>
         <router-link to="/rewrite" class="back-link">← 重写项目</router-link>
         <h1>{{ project.name }}</h1>
-        <p>《{{ project.bookTitle }}》 · {{ project.versionName }} · {{ statusLabel(project.status) }} · 全书 {{ project.totalWordCount }} 字</p>
+        <p>《{{ displayBookName(project.bookTitle) }}》 · {{ project.versionName }} · {{ statusLabel(project.status) }} · 全书 {{ project.totalWordCount }} 字</p>
       </div>
       <div class="header-actions">
         <span class="save-indicator" :class="saveState">{{ saveLabel }}</span>
@@ -569,6 +569,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { Editor, EditorContent } from '@tiptap/vue-3'
@@ -578,6 +579,8 @@ import 'diff2html/bundles/css/diff2html.min.css'
 import api from '@/utils/api'
 import { confirm, message } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
+
+const { displayBookName } = useBookNameDisplay()
 
 interface RewriteProject {
   id: number

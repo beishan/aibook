@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="visible"
-    :title="book ? `加入书单 · ${book.title}` : '加入书单'"
+    :title="book ? `加入书单 · ${displayBookName(book.title)}` : '加入书单'"
     width="min(560px, 92vw)"
     append-to-body
     destroy-on-close
@@ -49,11 +49,14 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/utils/api'
 import { message } from '@/utils/message'
 import type { Book } from '@/stores/book'
+
+const { displayBookName } = useBookNameDisplay()
 
 interface BookListItem {
   id: number

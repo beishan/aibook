@@ -56,6 +56,7 @@ const source = fs.readFileSync(new URL('../src/views/RecommendationsView.vue', i
 const { descriptor } = parse(source)
 const compiled = compileScript(descriptor, { id: 'recommendations-check' })
 const panel = evaluate(compiled.content, {
+  '@/composables/useBookNameDisplay': { useBookNameDisplay: () => ({ displayBookName: title => title || '' }) },
   '@/utils/recommendations': { ...utility, recommendationApi: fakeApi },
   '@/utils/message': { confirm: async () => accepted, message: {
     error: value => notices.push(value), success: value => notices.push(value),

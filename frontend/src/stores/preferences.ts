@@ -1,3 +1,4 @@
+import { normalizeBookNamePrefixLength, type BookNameMaskMode } from '@/utils/bookName'
 import { parseStatisticsWindow } from '../utils/crawlerStatistics'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
@@ -97,6 +98,9 @@ interface UserPreferences {
   libraryCardPageSize: number | null
   libraryListPageSize: number | null
   authorPageSize: number | null
+  hideBookNames: boolean | null
+  bookNameMaskMode: BookNameMaskMode | null
+  bookNamePrefixLength: number | null
   shelfPageSize: number | null
   categoryPageSize: number | null
   scanThreadCount: number | null
@@ -346,6 +350,9 @@ const readLocalReaderSettings = (): ReaderSettings => {
 }
 
 export const usePreferencesStore = defineStore('preferences', () => {
+  const hideBookNames = ref(false)
+  const bookNameMaskMode = ref<BookNameMaskMode>('HEAD_TAIL')
+  const bookNamePrefixLength = ref(2)
   const shelfPageSize = ref(24)
   const categoryPageSize = ref(20)
   const themeStore = useThemeStore()
@@ -402,6 +409,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     localStorage.getItem('token') ? null : readLocalQuickReaderWindow(),
   )
   const hydrated = ref(false)
+  let hydrationSequence = 0
   let saveQueue: Promise<unknown> = Promise.resolve()
   let readerSettingsSaveTimer: ReturnType<typeof setTimeout> | null = null
   let quickReaderWindowSaveTimer: ReturnType<typeof setTimeout> | null = null
@@ -673,6 +681,23 @@ export const usePreferencesStore = defineStore('preferences', () => {
     else persist()
   }
 
+  const setHideBookNames = (value: boolean, syncRemote = true) => {
+    hideBookNames.value = value
+    if (syncRemote) persistRemote({ hideBookNames: value })
+  }
+
+  const setBookNameMaskMode = (value: BookNameMaskMode, syncRemote = true) => {
+    if (value !== 'HEAD_TAIL' && value !== 'PREFIX') return
+    bookNameMaskMode.value = value
+    if (syncRemote) persistRemote({ bookNameMaskMode: value })
+  }
+
+  const setBookNamePrefixLength = (value: number, syncRemote = true) => {
+    if (normalizeBookNamePrefixLength(value) !== value) return
+    bookNamePrefixLength.value = value
+    if (syncRemote) persistRemote({ bookNamePrefixLength: value })
+  }
+
   const setShelfPageSize = (value: number, syncRemote = true) => {
     if (!(SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(value)) return
     shelfPageSize.value = value
@@ -757,10 +782,13 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   const hydrate = async (force = false) => {
     if (hydrated.value && !force) return
-    if (!localStorage.getItem('token')) return
+    const accountToken = localStorage.getItem('token')
+    if (!accountToken) return
+    const sequence = ++hydrationSequence
 
     try {
       const { data } = await api.get<UserPreferences>('/api/user/preferences')
+      if (sequence !== hydrationSequence || localStorage.getItem('token') !== accountToken) return
       const missingPreferences: Partial<UserPreferences> = {}
 
       if (isTheme(data.theme)) {
@@ -905,6 +933,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
           quickReaderWindow.value = null
         }
       }
+      setHideBookNames(data.hideBookNames === true, false)
+      setBookNameMaskMode(data.bookNameMaskMode === 'PREFIX' ? 'PREFIX' : 'HEAD_TAIL', false)
+      setBookNamePrefixLength(normalizeBookNamePrefixLength(data.bookNamePrefixLength), false)
       setShelfPageSize((SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(data.shelfPageSize ?? 0)
         ? data.shelfPageSize! : 24, false)
       setCategoryPageSize([10, 20, 50, 100].includes(data.categoryPageSize ?? 0)
@@ -929,6 +960,10 @@ export const usePreferencesStore = defineStore('preferences', () => {
   }
 
   const resetHydration = () => {
+    hydrationSequence++
+    hideBookNames.value = false
+    bookNameMaskMode.value = 'HEAD_TAIL'
+    bookNamePrefixLength.value = 2
     crawlerHideBookNames.value = false
     shelfPageSize.value = 24
     categoryPageSize.value = 20
@@ -953,6 +988,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
   }
 
   return {
+    hideBookNames,
+    bookNameMaskMode,
+    bookNamePrefixLength,
+    setHideBookNames,
+    setBookNameMaskMode,
+    setBookNamePrefixLength,
     libraryViewMode,
     libraryCardPageSize,
     libraryListPageSize,

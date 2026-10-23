@@ -7,7 +7,7 @@
         <span>返回</span>
       </button>
       <div v-if="bookInfo">
-        <h1 class="page-title">内容修复 - {{ bookInfo.title }}</h1>
+        <h1 class="page-title">内容修复 - {{ displayBookName(bookInfo.title) }}</h1>
         <p class="page-subtitle">
           {{ bookInfo.author || '未知作者' }} · {{ bookInfo.format?.toUpperCase() }}
         </p>
@@ -433,12 +433,15 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useRepairStore } from '@/stores/repair'
 import { useBookStore } from '@/stores/book'
 import type { RepairIssue, RepairReport } from '@/utils/repair'
+
+const { displayBookName } = useBookNameDisplay()
 
 const route = useRoute()
 const repairStore = useRepairStore()

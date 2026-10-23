@@ -27,7 +27,7 @@
       <div class="batch-plans">
         <section v-for="plan in visiblePlans" :key="plan.groupId" class="batch-plan">
           <header>
-            <strong>{{ plan.title }}</strong>
+            <strong>{{ displayBookName(plan.title) }}</strong>
             <el-tag v-if="results[plan.groupId]" :type="results[plan.groupId].status === 'completed' ? 'success' : 'danger'">
               {{ results[plan.groupId].status === 'completed' ? '已合并' : '失败' }}
             </el-tag>
@@ -35,12 +35,12 @@
           <label>
             保留书籍
             <el-select v-model="plan.targetBookId" :disabled="merging || finished" aria-label="选择本组保留的书籍">
-              <el-option v-for="book in plan.books" :key="book.id" :value="book.id" :label="`${book.title} · ${chapterCountLabel(book.chapterCount)} · #${book.id}`" />
+              <el-option v-for="book in plan.books" :key="book.id" :value="book.id" :label="`${displayBookName(book.title)} · ${chapterCountLabel(book.chapterCount)} · #${book.id}`" />
             </el-select>
           </label>
           <div class="batch-source-list">
             <p v-for="book in plan.books" :key="book.id">
-              <strong>{{ book.id === plan.targetBookId ? '保留' : '迁入' }} · {{ book.title }}</strong>
+              <strong>{{ book.id === plan.targetBookId ? '保留' : '迁入' }} · {{ displayBookName(book.title) }}</strong>
               <span>{{ sourceLabel(book) }} · {{ chapterCountLabel(book.chapterCount) }} · {{ sizeLabel(book.fileSize) }}</span>
             </p>
           </div>
@@ -65,6 +65,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, onUnmounted, ref } from 'vue'
 import api from '@/utils/api'
 import { confirm } from '@/utils/message'
@@ -72,6 +73,8 @@ import {
   chapterCountLabel, executeBatchMerge, sizeLabel, sourceLabel, validateBatchPlans,
   type BatchMergePlan, type BatchMergeResult,
 } from '@/utils/bookComparison'
+
+const { displayBookName } = useBookNameDisplay()
 
 const props = defineProps<{ visible: boolean; groups: BatchMergePlan[] }>()
 const emit = defineEmits<{ close: []; complete: [results: BatchMergeResult[]] }>()

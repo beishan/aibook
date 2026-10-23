@@ -81,7 +81,7 @@
             <el-table-column label="书籍 / 章节" min-width="190">
               <template #default="{ row }">
                 <div class="execution-cell">
-                  <strong>{{ row.bookName || '网站扫描' }}</strong>
+                  <strong>{{ displayBookName(row.bookName) || '网站扫描' }}</strong>
                   <small>{{ row.chapterName || '—' }}</small>
                 </div>
               </template>
@@ -322,11 +322,14 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { crawlerApi, type CrawlerExecutorLog, type CrawlerTaskQueue, type CrawlerQueueExecutor, type CrawlerQueueExecutorPayload, type CrawlerQueueProxyOption, type MihomoPolicyView, type MihomoReferencePayload } from '@/utils/crawler'
 import { proxySettingsApi, type SystemProxyConfig, type MihomoNodeGroup } from '@/utils/proxySettings'
 import { confirm, message } from '@/utils/message'
+
+const { displayBookName } = useBookNameDisplay()
 
 const route = useRoute()
 const queues = ref<CrawlerTaskQueue[]>([])

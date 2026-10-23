@@ -202,7 +202,7 @@
                 :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
                 alt="封面"
               />
-              <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+              <div v-else class="no-cover">{{ displayBookName(book.title).charAt(0) }}</div>
               <BookCoverPrivacyButton
                 v-if="book.coverUrl"
                 :book-id="book.id"
@@ -259,7 +259,7 @@
               </div>
             </div>
             <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
-              <div class="book-title">{{ book.title }}</div>
+              <div class="book-title">{{ displayBookName(book.title) }}</div>
               <div class="book-author">{{ book.author || '未知作者' }}</div>
               <div v-if="viewMode === 'list'" class="book-meta">
                 <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
@@ -331,7 +331,7 @@
               :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
               alt="封面"
             />
-            <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+            <div v-else class="no-cover">{{ displayBookName(book.title).charAt(0) }}</div>
             <BookCoverPrivacyButton
               v-if="book.coverUrl"
               :book-id="book.id"
@@ -352,7 +352,7 @@
             </div>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
-            <div class="book-title">{{ book.title }}</div>
+            <div class="book-title">{{ displayBookName(book.title) }}</div>
             <div class="book-author">{{ book.author || '未知作者' }}</div>
             <div v-if="viewMode === 'list'" class="book-meta">
               <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
@@ -401,7 +401,7 @@
               :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
               alt="封面"
             />
-            <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+            <div v-else class="no-cover">{{ displayBookName(book.title).charAt(0) }}</div>
             <BookCoverPrivacyButton
               v-if="book.coverUrl"
               :book-id="book.id"
@@ -433,7 +433,7 @@
             </div>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
-            <div class="book-title">{{ book.title }}</div>
+            <div class="book-title">{{ displayBookName(book.title) }}</div>
             <div class="book-author">{{ book.author || '未知作者' }}</div>
             <div v-if="viewMode === 'list'" class="book-meta">
               <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
@@ -489,7 +489,7 @@
               :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
               alt="封面"
             />
-            <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+            <div v-else class="no-cover">{{ displayBookName(book.title).charAt(0) }}</div>
             <BookCoverPrivacyButton
               v-if="book.coverUrl"
               :book-id="book.id"
@@ -510,7 +510,7 @@
             </div>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
-            <div class="book-title">{{ book.title }}</div>
+            <div class="book-title">{{ displayBookName(book.title) }}</div>
             <div class="book-author">{{ book.author || '未知作者' }}</div>
             <div v-if="viewMode === 'list'" class="book-meta">
               <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
@@ -559,7 +559,7 @@
               :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
               alt="封面"
             />
-            <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+            <div v-else class="no-cover">{{ displayBookName(book.title).charAt(0) }}</div>
             <BookCoverPrivacyButton
               v-if="book.coverUrl"
               :book-id="book.id"
@@ -580,7 +580,7 @@
             </div>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
-            <div class="book-title">{{ book.title }}</div>
+            <div class="book-title">{{ displayBookName(book.title) }}</div>
             <div class="book-author">{{ book.author || '未知作者' }}</div>
             <div v-if="viewMode === 'list'" class="book-meta">
               <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
@@ -635,7 +635,7 @@
                 :src="getCoverThumbnailUrl(book.coverUrl, 'list')"
                 alt="封面"
               />
-              <div v-else class="no-cover-small">{{ book.title.charAt(0) }}</div>
+              <div v-else class="no-cover-small">{{ displayBookName(book.title).charAt(0) }}</div>
               <BookCoverPrivacyButton
                 v-if="book.coverUrl"
                 :book-id="book.id"
@@ -736,6 +736,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
@@ -752,6 +753,8 @@ import ScraperDialog from '@/components/ScraperDialog.vue'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import type { Book } from '@/stores/book'
 import { downloadBookToLocal } from '@/utils/bookDownload'
+
+const { displayBookName } = useBookNameDisplay()
 
 const router = useRouter()
 const bookStore = useBookStore()
@@ -863,7 +866,7 @@ async function handleBookAction(command:string, book:Book) {
         scrapingBook.value = book
         break
       case 'delete':
-        if (!await confirm(`确定将《${book.title}》移入回收站吗？原始文件会保留，可从回收站恢复。`, '移入回收站')) return
+        if (!await confirm(`确定将《${displayBookName(book.title)}》移入回收站吗？原始文件会保留，可从回收站恢复。`, '移入回收站')) return
         await bookStore.deleteBook(book.id)
         removeBookFromCollections(book.id)
         message.success('已移入回收站')
@@ -1250,7 +1253,7 @@ const removeShelfBook = async (book: Book) => {
   try {
     applyBookUpdate(await bookStore.removeFromShelf(book.id))
     await loadShelf()
-    message.success(`已将《${book.title}》移出书架`)
+    message.success(`已将《${displayBookName(book.title)}》移出书架`)
   } catch (error) {
     message.error('移出书架失败')
   } finally {
@@ -1288,7 +1291,7 @@ const removeFromReading = async (book: Book) => {
   try {
     applyBookUpdate(await bookStore.updateReadingStatus(book.id, 'UNREADING'))
     readingBooks.value = readingBooks.value.filter(item => item.id !== book.id)
-    message.success(`已将《${book.title}》移出正在阅读`)
+    message.success(`已将《${displayBookName(book.title)}》移出正在阅读`)
   } catch (error) {
     console.error('Failed to remove reading book:', error)
     message.error('移除正在阅读失败')

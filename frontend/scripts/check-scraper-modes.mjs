@@ -19,6 +19,7 @@ const context = {
   exports: {},
   require(name) {
     if (name === 'vue') return vue
+    if (name === '@/composables/useBookNameDisplay') return { useBookNameDisplay: () => ({ displayBookName: title => title || '' }) }
     if (name === '@element-plus/icons-vue') return { Loading: {} }
     if (name === '@/components/ScraperTrialDialog.vue') return { default: {} }
     if (name === '@/utils/scraper') return {

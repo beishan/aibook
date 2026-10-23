@@ -87,10 +87,10 @@
                 :src="getCoverThumbnailUrl(row.coverUrl, 'list')"
                 alt=""
               />
-              <span v-else>{{ row.title?.charAt(0) || '书' }}</span>
+              <span v-else>{{ displayBookName(row.title)?.charAt(0) || '书' }}</span>
             </div>
             <div class="book-summary">
-              <strong :title="row.title">{{ row.title }}</strong>
+              <strong :title="displayBookName(row.title)">{{ displayBookName(row.title) }}</strong>
               <span>{{ row.author || '未知作者' }}</span>
             </div>
           </div>
@@ -127,6 +127,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { onMounted, ref } from 'vue'
 import { Delete, DeleteFilled, RefreshRight, Search } from '@element-plus/icons-vue'
 import { useBookStore, type Book } from '@/stores/book'
@@ -135,6 +136,8 @@ import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { confirm, message } from '@/utils/message'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import api from '@/utils/api'
+
+const { displayBookName } = useBookNameDisplay()
 
 const props = withDefaults(defineProps<{
   compact?: boolean

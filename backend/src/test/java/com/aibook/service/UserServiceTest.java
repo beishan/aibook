@@ -21,6 +21,49 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void bookNameDisplayDefaultsPersistAndDoNotCrossAccounts() {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+        var defaults = service.getPreferences("reader");
+        assertEquals(false, defaults.getHideBookNames());
+        assertEquals("HEAD_TAIL", defaults.getBookNameMaskMode());
+        assertEquals(2, defaults.getBookNamePrefixLength());
+        var saved = service.updatePreferences("reader", UserPreferencesDTO.builder()
+                .hideBookNames(true).bookNameMaskMode("PREFIX").bookNamePrefixLength(3).build());
+        assertEquals(true, saved.getHideBookNames());
+        assertEquals("PREFIX", saved.getBookNameMaskMode());
+        assertEquals(3, saved.getBookNamePrefixLength());
+        assertEquals(3, reader.getPreferences().getBookNamePrefixLength());
+        service.updatePreferences("reader", UserPreferencesDTO.builder().shelfPageSize(48).build());
+        assertEquals(true, service.getPreferences("reader").getHideBookNames());
+        assertEquals(false, service.getPreferences("other").getHideBookNames());
+        for (int invalid : new int[] {-1, 0, 101}) {
+            assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                    UserPreferencesDTO.builder().bookNamePrefixLength(invalid).build()));
+        }
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                UserPreferencesDTO.builder().bookNameMaskMode("UNKNOWN").build()));
+        for (int length : new int[] {1, 100}) {
+            assertEquals(length, service.updatePreferences("reader",
+                    UserPreferencesDTO.builder().bookNamePrefixLength(length).build()).getBookNamePrefixLength());
+        }
+        service.updatePreferences("reader", UserPreferencesDTO.builder()
+                .hideBookNames(false).bookNameMaskMode("HEAD_TAIL").build());
+        assertEquals(false, service.getPreferences("reader").getHideBookNames());
+        assertEquals("HEAD_TAIL", service.getPreferences("reader").getBookNameMaskMode());
+        reader.setBookNamePrefixLength(101);
+        reader.setBookNameMaskMode("INVALID");
+        assertEquals(2, service.getPreferences("reader").getBookNamePrefixLength());
+        assertEquals("HEAD_TAIL", service.getPreferences("reader").getBookNameMaskMode());
+    }
+
+
+    @Test
     void shelfPageSizeDefaultsPersistsAndKeepsAccountsSeparate() {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();

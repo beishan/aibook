@@ -37,7 +37,7 @@
           <span>{{ project.completedCount }}/{{ project.chapterCount }} 章</span>
         </div>
         <h2>{{ project.name }}</h2>
-        <p class="project-book">《{{ project.bookTitle }}》 · {{ project.versionName }}</p>
+        <p class="project-book">《{{ displayBookName(project.bookTitle) }}》 · {{ project.versionName }}</p>
         <p class="project-description">{{ project.description || '继续编辑并对照原文' }}</p>
         <div class="project-progress" role="progressbar" :aria-valuenow="project.progress" aria-valuemin="0" aria-valuemax="100">
           <span :style="{ width: `${project.progress}%` }" />
@@ -87,7 +87,7 @@
           <el-option
             v-for="book in bookOptions"
             :key="book.id"
-            :label="`${book.title} · ${book.author || '未知作者'}`"
+            :label="`${displayBookName(book.title)} · ${book.author || '未知作者'}`"
             :value="book.id"
           />
         </el-select>
@@ -152,10 +152,13 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/utils/api'
 import { message } from '@/utils/message'
+
+const { displayBookName } = useBookNameDisplay()
 
 interface RewriteProject {
   id: number

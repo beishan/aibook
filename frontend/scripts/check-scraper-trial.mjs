@@ -51,6 +51,7 @@ const privacyAllowsCover = vue.ref(true)
 const context = {
   exports: {},
   require(name) {
+    if (name === '@/composables/useBookNameDisplay') return { useBookNameDisplay: () => ({ displayBookName: title => title || '' }) }
     if (name === 'vue') return { ...vue, onBeforeUnmount: () => {} }
     if (name === '@/utils/api') return { default: api }
     if (name === '@/stores/preferences') return { usePreferencesStore: () => preferenceState }

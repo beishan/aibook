@@ -25,6 +25,10 @@ public class UserPreferencesDTO {
     private Integer authorPageSize;
     private Integer categoryPageSize;
     private Integer shelfPageSize;
+    private Boolean hideBookNames;
+    private String bookNameMaskMode;
+    private Integer bookNamePrefixLength;
+
     private Integer scanThreadCount;
     private String crawlerStatisticsWindow;
     private Integer crawlerPollingIntervalSeconds;
@@ -302,6 +306,30 @@ public class UserPreferencesDTO {
         this.readerSettings = readerSettings;
     }
 
+    public Boolean getHideBookNames() {
+        return hideBookNames;
+    }
+
+    public void setHideBookNames(Boolean value) {
+        this.hideBookNames = value;
+    }
+
+    public String getBookNameMaskMode() {
+        return bookNameMaskMode;
+    }
+
+    public void setBookNameMaskMode(String value) {
+        this.bookNameMaskMode = value;
+    }
+
+    public Integer getBookNamePrefixLength() {
+        return bookNamePrefixLength;
+    }
+
+    public void setBookNamePrefixLength(Integer value) {
+        this.bookNamePrefixLength = value;
+    }
+
     public Integer getShelfPageSize() {
         return shelfPageSize;
     }
@@ -487,6 +515,21 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder readerSettings(ReaderSettingsDTO readerSettings) {
             value.setReaderSettings(readerSettings);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder hideBookNames(Boolean value) {
+            this.value.setHideBookNames(value);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder bookNameMaskMode(String value) {
+            this.value.setBookNameMaskMode(value);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder bookNamePrefixLength(Integer value) {
+            this.value.setBookNamePrefixLength(value);
             return this;
         }
 

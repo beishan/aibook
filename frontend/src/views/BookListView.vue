@@ -32,7 +32,7 @@
             :src="getCoverThumbnailUrl(book.coverUrl, 'card')"
             alt="封面"
           />
-          <div v-else class="no-cover">{{ book.title.charAt(0) }}</div>
+          <div v-else class="no-cover">{{ displayBookName(book.title).charAt(0) }}</div>
           <BookCoverPrivacyButton
             v-if="book.coverUrl"
             :book-id="book.id"
@@ -40,7 +40,7 @@
           />
         </div>
         <div class="book-info">
-          <div class="book-title">{{ book.title }}</div>
+          <div class="book-title">{{ displayBookName(book.title) }}</div>
           <div class="book-author">{{ book.author || '未知作者' }}</div>
         </div>
       </div>
@@ -56,12 +56,15 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/utils/api'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
+
+const { displayBookName } = useBookNameDisplay()
 
 const route = useRoute()
 const router = useRouter()

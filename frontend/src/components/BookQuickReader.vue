@@ -15,7 +15,7 @@
         ref="quickReaderFrame"
         class="book-quick-reader-frame"
         :src="quickReaderSrc"
-        :title="`小窗阅读：${quickReaderBook?.title || ''}`"
+        :title="`小窗阅读：${displayBookName(quickReaderBook?.title) || ''}`"
         allow="fullscreen"
       />
       <button
@@ -46,11 +46,14 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { usePreferencesStore } from '@/stores/preferences'
 import type { Book } from '@/stores/book'
+
+const { displayBookName } = useBookNameDisplay()
 
 const emit = defineEmits<{ (event:'closed', bookId:number):void }>()
 const router = useRouter()

@@ -65,6 +65,12 @@ public class UserPreference {
     private Integer categoryPageSize;
     @Column(name = "shelf_page_size")
     private Integer shelfPageSize;
+    @Column(name = "hide_book_names")
+    private Boolean hideBookNames;
+    @Column(name = "book_name_mask_mode", length = 20)
+    private String bookNameMaskMode;
+    @Column(name = "book_name_prefix_length")
+    private Integer bookNamePrefixLength;
     @Column(name = "scan_thread_count")
     private Integer scanThreadCount;
     @Column(name = "crawler_statistics_window", length = 20)

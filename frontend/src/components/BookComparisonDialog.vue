@@ -18,7 +18,7 @@
           <header>
             <strong>{{ sideIndex === 0 ? '左侧书籍' : '右侧书籍' }}</strong>
             <el-select v-model="side.bookId" :aria-label="`${sideIndex === 0 ? '左侧' : '右侧'}书籍`" @change="loadSide(sideIndex, true)">
-              <el-option v-for="book in books" :key="book.id" :value="book.id" :label="`${book.title} · #${book.id}`" :disabled="book.id === sides[1 - sideIndex].bookId" />
+              <el-option v-for="book in books" :key="book.id" :value="book.id" :label="`${displayBookName(book.title)} · #${book.id}`" :disabled="book.id === sides[1 - sideIndex].bookId" />
             </el-select>
             <el-select
               v-if="side.versions.length"
@@ -36,7 +36,7 @@
 
           <template v-if="side.data">
             <dl class="comparison-details">
-              <div><dt>书名</dt><dd>{{ side.data.book.title }}</dd></div>
+              <div><dt>书名</dt><dd>{{ displayBookName(side.data.book.title) }}</dd></div>
               <div><dt>作者</dt><dd>{{ side.data.book.author || '未知作者' }}</dd></div>
               <div><dt>来源</dt><dd>{{ sourceLabel(side.data.book) }}</dd></div>
               <div><dt>大小</dt><dd>{{ side.data.format === 'structured' ? '在线章节（无本地文件）' : sizeLabel(side.data.fileSize) }}</dd></div>
@@ -87,10 +87,13 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, onUnmounted, reactive, watch } from 'vue'
 import type { Book } from '@/stores/book'
 import api from '@/utils/api'
 import { chapterCountLabel, sizeLabel, sourceLabel, type ComparisonCandidate } from '@/utils/bookComparison'
+
+const { displayBookName } = useBookNameDisplay()
 
 interface ChapterEntry { index: number; title: string }
 interface ComparisonData {

@@ -173,7 +173,7 @@
         <article v-for="record in repairStore.records" :key="record.id" class="record-card glass">
           <div class="record-main">
             <div class="record-title-row">
-              <h4>{{ record.bookTitle }}</h4>
+              <h4>{{ displayBookName(record.bookTitle) }}</h4>
               <span class="record-status" :class="record.status.toLowerCase()">{{ getTaskStatusText(record.status) }}</span>
               <span class="record-mode">{{ getModeText(record.repairMode) }}</span>
             </div>
@@ -202,7 +202,7 @@
             <button
               class="btn btn-danger record-delete"
               :disabled="deletingId === record.id || rescanningId === record.id"
-              :aria-label="`删除《${record.bookTitle}》的检测记录`"
+              :aria-label="`删除《${displayBookName(record.bookTitle)}》的检测记录`"
               @click="deleteRecord(record)"
             >
               {{ deletingId === record.id ? '删除中...' : '删除' }}
@@ -534,11 +534,14 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, confirm } from '@/utils/message'
 import { useRepairStore } from '@/stores/repair'
 import type { RepairRule, RepairTask, RepairTemplate } from '@/utils/repair'
+
+const { displayBookName } = useBookNameDisplay()
 
 const repairStore = useRepairStore()
 const router = useRouter()
@@ -739,7 +742,7 @@ async function rescanRecord(record: RepairTask) {
 
 async function deleteRecord(record: RepairTask) {
   const confirmed = await confirm(
-    `确认删除《${record.bookTitle}》在 ${formatDate(record.createdAt)} 生成的检测记录？\n\n该记录的检测问题和处理状态将一并删除，书籍文件不会受到影响。`,
+    `确认删除《${displayBookName(record.bookTitle)}》在 ${formatDate(record.createdAt)} 生成的检测记录？\n\n该记录的检测问题和处理状态将一并删除，书籍文件不会受到影响。`,
     '删除检测记录',
   )
   if (!confirmed) return

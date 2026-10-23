@@ -24,7 +24,7 @@ assert.match(
 )
 assert.match(
   readerCover,
-  /<span v-else>{{ book\.title\?\.slice\(0, 1\) \|\| '书' }}<\/span>/,
+  /<span v-else>{{ displayBookName\(book\.title\)\?\.slice\(0, 1\) \|\| '书' }}<\/span>/,
   'the no-cover placeholder must remain visible when the cover is hidden',
 )
 

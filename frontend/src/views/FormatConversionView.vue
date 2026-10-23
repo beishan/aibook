@@ -10,7 +10,7 @@
         <template #label><span class="conversion-tab-label"><el-icon><UploadFilled /></el-icon><span>选择/上传书籍</span><small>TXT 或 EPUB</small></span></template>
         <div class="tab-content-shell">
           <section v-if="task" class="current-task-banner">
-            <div><span class="task-state-dot"></span><strong>当前任务：{{ task.title }}</strong><small>{{ task.sourceFilename }} · {{ statusText(task.status) }}</small></div>
+            <div><span class="task-state-dot"></span><strong>当前任务：{{ displayBookName(task.title) }}</strong><small>{{ task.sourceFilename }} · {{ statusText(task.status) }}</small></div>
             <el-button type="primary" plain @click="activeTab = 'source'">继续编辑源信息</el-button>
           </section>
           <section class="panel source-picker">
@@ -49,12 +49,12 @@
                   <div v-if="libraryBooks.length && libraryViewMode !== 'list'" class="library-book-grid" :class="{ 'is-compact': libraryViewMode === 'compact' }">
                     <article v-for="book in libraryBooks" :key="book.id" class="library-book-card" :class="{ selected: selectedBookId === book.id }">
                       <div class="library-book-cover">
-                        <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
-                        <span v-else>{{ book.title?.charAt(0) || '书' }}</span>
+                        <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" :alt="`${displayBookName(book.title)}封面`" loading="lazy" decoding="async" />
+                        <span v-else>{{ displayBookName(book.title)?.charAt(0) || '书' }}</span>
                         <em>{{ (book.format || '未知').toUpperCase() }}</em>
                       </div>
                       <div class="library-book-info">
-                        <h3 :title="book.title">{{ book.title }}</h3>
+                        <h3 :title="displayBookName(book.title)">{{ displayBookName(book.title) }}</h3>
                         <p :title="book.author || '未知作者'">{{ book.author || '未知作者' }}</p>
                         <small>{{ book.categoryName || '未分类' }}<template v-if="book.fileSize"> · {{ formatSize(book.fileSize) }}</template></small>
                       </div>
@@ -64,11 +64,11 @@
                   <div v-else-if="libraryBooks.length" class="library-book-list">
                     <article v-for="book in libraryBooks" :key="book.id" class="library-book-list-row" :class="{ selected: selectedBookId === book.id }">
                       <div class="library-list-cover">
-                        <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" :alt="`${book.title}封面`" loading="lazy" decoding="async" />
-                        <span v-else>{{ book.title?.charAt(0) || '书' }}</span>
+                        <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" :alt="`${displayBookName(book.title)}封面`" loading="lazy" decoding="async" />
+                        <span v-else>{{ displayBookName(book.title)?.charAt(0) || '书' }}</span>
                       </div>
                       <div class="library-list-primary">
-                        <h3 :title="book.title">{{ book.title }}</h3>
+                        <h3 :title="displayBookName(book.title)">{{ displayBookName(book.title) }}</h3>
                         <p :title="book.author || '未知作者'">{{ book.author || '未知作者' }}</p>
                       </div>
                       <div class="library-list-meta"><span>{{ (book.format || '未知').toUpperCase() }}</span><span>{{ book.categoryName || '未分类' }}</span><span>{{ formatSize(book.fileSize) }}</span></div>
@@ -92,9 +92,9 @@
           <section class="panel source-card">
             <div class="section-title"><div><span class="step">02</span><h2>源书籍信息</h2></div><el-button link @click="activeTab = 'select'">更换源文件</el-button></div>
             <div class="source-grid">
-              <div class="cover-box" @click="coverInput?.click()"><img v-if="coverObjectUrl && shouldLoadBookCover()" :src="coverObjectUrl" alt="书籍封面" /><span v-else>{{ task.title?.charAt(0) || '书' }}</span><em>点击上传封面</em></div>
+              <div class="cover-box" @click="coverInput?.click()"><img v-if="coverObjectUrl && shouldLoadBookCover()" :src="coverObjectUrl" alt="书籍封面" /><span v-else>{{ displayBookName(task.title)?.charAt(0) || '书' }}</span><em>点击上传封面</em></div>
               <input ref="coverInput" hidden type="file" accept="image/jpeg,image/png,image/webp" @change="uploadCover" />
-              <div class="source-main"><h3>{{ task.title }}</h3><p>{{ task.author || '未知作者' }}</p><div class="facts"><span><b>转换</b> {{ conversionDirection }}</span><span><b>大小</b> {{ formatSize(task.sourceSize) }}</span><span><b>输出编码</b> {{ task.targetFormat === 'txt' ? 'UTF-8' : task.encoding }}</span><span><b>字符</b> {{ formatNumber(task.characterCount) }}</span><span><b>章节</b> {{ task.chapters?.length || 0 }}</span><span><b>换行</b> {{ task.newlineFormat }}</span></div><div class="cover-actions"><el-button @click="coverInput?.click()">上传封面</el-button><el-button @click="openCoverLibrary">封面库</el-button><el-button :loading="randomizing" @click="randomCover">随机一个</el-button></div></div>
+              <div class="source-main"><h3>{{ displayBookName(task.title) }}</h3><p>{{ task.author || '未知作者' }}</p><div class="facts"><span><b>转换</b> {{ conversionDirection }}</span><span><b>大小</b> {{ formatSize(task.sourceSize) }}</span><span><b>输出编码</b> {{ task.targetFormat === 'txt' ? 'UTF-8' : task.encoding }}</span><span><b>字符</b> {{ formatNumber(task.characterCount) }}</span><span><b>章节</b> {{ task.chapters?.length || 0 }}</span><span><b>换行</b> {{ task.newlineFormat }}</span></div><div class="cover-actions"><el-button @click="coverInput?.click()">上传封面</el-button><el-button @click="openCoverLibrary">封面库</el-button><el-button :loading="randomizing" @click="randomCover">随机一个</el-button></div></div>
             </div>
           </section>
 
@@ -135,18 +135,21 @@
           <section v-if="!['CONVERTING','SUCCESS','FAILED'].includes(task.status)" class="panel result-empty"><span class="result-empty-icon">⇄</span><h2>尚未开始转换</h2><p>源书籍已经分析完成，请检查信息与 {{ targetFormatLabel }} 参数后开始转换。</p><el-button type="primary" @click="activeTab = 'source'">前往书籍源信息</el-button></section>
           <section v-else class="panel progress-panel"><div class="section-title"><div><span class="step">06</span><h2>转换进度</h2></div><strong>{{ task.progress }}%</strong></div><el-progress :percentage="task.progress" :status="task.status === 'FAILED' ? 'exception' : task.status === 'SUCCESS' ? 'success' : undefined" /><p>{{ task.stage }}</p><el-alert v-if="task.status === 'FAILED'" :title="task.errorMessage || '转换失败，请保留配置后重试'" type="error" :closable="false" show-icon /><div v-if="task.status === 'FAILED'" class="retry-action"><el-button type="primary" @click="activeTab = 'source'">检查配置并重新转换</el-button></div></section>
           <section v-if="task.status === 'SUCCESS'" class="panel result-panel"><div class="result-summary"><span class="success-mark">✓</span><div><h2>转换成功</h2><p>{{ task.outputFilename }} · {{ formatSize(task.outputSize) }} · {{ activeChapters.length }} 章 · {{ formatElapsed(task.elapsedMillis) }}</p></div></div><div class="result-actions"><el-button type="primary" @click="download(task)">下载 {{ targetFormatLabel }}</el-button><el-button @click="activeTab = 'source'">修改并重新转换</el-button><el-button type="danger" plain @click="removeTask(task.id)">删除转换结果</el-button></div><div class="library-actions"><el-button v-if="task.sourceBookId" type="success" size="large" @click="attachToBook(task.sourceBookId)">加入到当前书籍的新版本</el-button><template v-else><el-button type="success" size="large" @click="createBook">创建新书籍</el-button><el-button size="large" @click="openAttachBookDialog">关联已有书籍</el-button></template></div></section>
-          <section v-if="task.status === 'SUCCESS'" class="panel preview-panel"><div class="section-title"><div><span class="step">07</span><h2>{{ targetFormatLabel }} 预览</h2></div><div><el-button :disabled="preview.chapterIndex <= 0" @click="loadPreview(preview.chapterIndex - 1)">上一章</el-button><el-button :disabled="preview.chapterIndex >= preview.chapterCount - 1" @click="loadPreview(preview.chapterIndex + 1)">下一章</el-button></div></div><div class="reader-preview" :class="{ night: previewNight }"><div class="preview-tools"><el-select :model-value="preview.chapterIndex" @change="loadPreview"><el-option v-for="(chapter, index) in activeChapters" :key="chapter.index" :label="chapter.title" :value="index" /></el-select><el-button @click="previewNight = !previewNight">{{ previewNight ? '日间' : '夜间' }}</el-button></div><div class="preview-book"><img v-if="coverObjectUrl && shouldLoadBookCover()" :src="coverObjectUrl" alt="封面" /><div><h1>{{ task.title }}</h1><p>{{ task.author || '未知作者' }}</p></div></div><article><h2>{{ preview.chapterTitle }}</h2><p v-for="(paragraph, index) in previewParagraphs" :key="index">{{ paragraph }}</p></article></div></section>
+          <section v-if="task.status === 'SUCCESS'" class="panel preview-panel"><div class="section-title"><div><span class="step">07</span><h2>{{ targetFormatLabel }} 预览</h2></div><div><el-button :disabled="preview.chapterIndex <= 0" @click="loadPreview(preview.chapterIndex - 1)">上一章</el-button><el-button :disabled="preview.chapterIndex >= preview.chapterCount - 1" @click="loadPreview(preview.chapterIndex + 1)">下一章</el-button></div></div><div class="reader-preview" :class="{ night: previewNight }"><div class="preview-tools"><el-select :model-value="preview.chapterIndex" @change="loadPreview"><el-option v-for="(chapter, index) in activeChapters" :key="chapter.index" :label="chapter.title" :value="index" /></el-select><el-button @click="previewNight = !previewNight">{{ previewNight ? '日间' : '夜间' }}</el-button></div><div class="preview-book"><img v-if="coverObjectUrl && shouldLoadBookCover()" :src="coverObjectUrl" alt="封面" /><div><h1>{{ displayBookName(task.title) }}</h1><p>{{ task.author || '未知作者' }}</p></div></div><article><h2>{{ preview.chapterTitle }}</h2><p v-for="(paragraph, index) in previewParagraphs" :key="index">{{ paragraph }}</p></article></div></section>
         </div>
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog v-model="showHistory" title="转换历史" width="min(960px, 94vw)" class="conversion-history-dialog" append-to-body><div class="history-actions"><span>关闭页面后也可以继续查看任务</span><el-button @click="loadHistory">刷新</el-button></div><el-table :data="history" empty-text="暂无转换任务"><el-table-column prop="title" label="书籍" min-width="180" /><el-table-column label="格式" width="120"><template #default="{ row }">{{ row.sourceFormat.toUpperCase() }} → {{ row.targetFormat.toUpperCase() }}</template></el-table-column><el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag></template></el-table-column><el-table-column prop="createdAt" label="创建时间" min-width="170" /><el-table-column label="操作" width="210"><template #default="{ row }"><el-button link type="primary" @click="openTask(row.id)">查看/继续</el-button><el-button v-if="row.status === 'SUCCESS'" link @click="download(row)">下载</el-button><el-button link type="danger" @click="removeTask(row.id)">删除</el-button></template></el-table-column></el-table></el-dialog>
+    <el-dialog v-model="showHistory" title="转换历史" width="min(960px, 94vw)" class="conversion-history-dialog" append-to-body><div class="history-actions"><span>关闭页面后也可以继续查看任务</span><el-button @click="loadHistory">刷新</el-button></div><el-table :data="history" empty-text="暂无转换任务"><el-table-column label="书籍" min-width="180">
+      <template #default="{ row }">{{ displayBookName(row.title) }}</template>
+    </el-table-column><el-table-column label="格式" width="120"><template #default="{ row }">{{ row.sourceFormat.toUpperCase() }} → {{ row.targetFormat.toUpperCase() }}</template></el-table-column><el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag></template></el-table-column><el-table-column prop="createdAt" label="创建时间" min-width="170" /><el-table-column label="操作" width="210"><template #default="{ row }"><el-button link type="primary" @click="openTask(row.id)">查看/继续</el-button><el-button v-if="row.status === 'SUCCESS'" link @click="download(row)">下载</el-button><el-button link type="danger" @click="removeTask(row.id)">删除</el-button></template></el-table-column></el-table></el-dialog>
     <el-dialog v-model="showCoverDialog" title="从封面库选择" width="min(760px, 92vw)" append-to-body><el-input v-model="coverSearch" clearable placeholder="搜索封面文件名" /><div class="cover-library"><button v-for="cover in filteredCovers" :key="cover.id" @click="chooseCover(cover.id)"><img v-if="shouldLoadBookCover()" :src="getCoverThumbnailUrl(cover.url, 'card')" :alt="cover.originalFilename" /><span>{{ cover.originalFilename }}</span></button></div><el-empty v-if="!filteredCovers.length" description="封面库为空" /></el-dialog>
-    <el-dialog v-model="showBookDialog" title="关联已有书籍" width="min(560px, 92vw)" append-to-body><el-select v-model="attachBookId" filterable class="wide" placeholder="选择书籍"><el-option v-for="book in books" :key="book.id" :label="`${book.title} · ${book.author || '未知作者'}`" :value="book.id" /></el-select><template #footer><el-button @click="showBookDialog = false">取消</el-button><el-button type="primary" :disabled="!attachBookId" @click="attachToBook(attachBookId)">确认关联</el-button></template></el-dialog>
+    <el-dialog v-model="showBookDialog" title="关联已有书籍" width="min(560px, 92vw)" append-to-body><el-select v-model="attachBookId" filterable class="wide" placeholder="选择书籍"><el-option v-for="book in books" :key="book.id" :label="`${displayBookName(book.title)} · ${book.author || '未知作者'}`" :value="book.id" /></el-select><template #footer><el-button @click="showBookDialog = false">取消</el-button><el-button type="primary" :disabled="!attachBookId" @click="attachToBook(attachBookId)">确认关联</el-button></template></el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CircleCheckFilled, Document, Grid, List, Search, Tickets, UploadFilled } from '@element-plus/icons-vue'
@@ -154,6 +157,8 @@ import api from '@/utils/api'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { message, confirm } from '@/utils/message'
+
+const { displayBookName } = useBookNameDisplay()
 
 const route = useRoute(); const router = useRouter()
 const task = ref<any>(null); const history = ref<any[]>([]); const books = ref<any[]>([]); const bookVersions = ref<any[]>([])
@@ -191,7 +196,7 @@ const handleLibraryPageSizeChange = (size: number) => { if (!libraryPageSizes.in
 const handleSourceModeChange = (mode: string | number | boolean | undefined) => { if (mode === 'library' && !libraryLoaded.value && !libraryLoading.value) void loadLibraryBooks(1) }
 const loadHistory = async () => { history.value = (await api.get('/api/conversions')).data || [] }
 const loadBookVersions = async (bookId = selectedBookId.value, preferredFormat = '') => { selectedVersionId.value = null; if (!bookId) return null; const versions = (await api.get(`/api/books/${bookId}/versions`)).data || []; if (selectedBookId.value !== bookId) return null; bookVersions.value = versions; const supported = versions.filter((v: any) => ['txt', 'epub'].includes(String(v.format).toLowerCase())); const preferred = String(preferredFormat).toLowerCase(); selectedVersionId.value = supported.find((v: any) => String(v.format).toLowerCase() === preferred)?.id || supported.find((v: any) => v.primaryVersion)?.id || supported[0]?.id || null; return selectedVersionId.value }
-const selectLibraryBook = async (book: any) => { const currentBookId = book.id; selectingBookId.value = currentBookId; selectedBookId.value = currentBookId; try { const versionId = await loadBookVersions(currentBookId, book.format); if (selectedBookId.value !== currentBookId) return; if (!versionId) { selectedBookId.value = null; selectedVersionId.value = null; message.warning(`《${book.title}》没有可用于转换的 TXT 或 EPUB 文件版本`); return } await createFromBook() } catch (e: any) { if (selectedBookId.value === currentBookId) { selectedBookId.value = null; selectedVersionId.value = null; message.error(e.response?.data?.message || '读取书籍文件版本失败') } } finally { if (selectingBookId.value === currentBookId) selectingBookId.value = null } }
+const selectLibraryBook = async (book: any) => { const currentBookId = book.id; selectingBookId.value = currentBookId; selectedBookId.value = currentBookId; try { const versionId = await loadBookVersions(currentBookId, book.format); if (selectedBookId.value !== currentBookId) return; if (!versionId) { selectedBookId.value = null; selectedVersionId.value = null; message.warning(`《${displayBookName(book.title)}》没有可用于转换的 TXT 或 EPUB 文件版本`); return } await createFromBook() } catch (e: any) { if (selectedBookId.value === currentBookId) { selectedBookId.value = null; selectedVersionId.value = null; message.error(e.response?.data?.message || '读取书籍文件版本失败') } } finally { if (selectingBookId.value === currentBookId) selectingBookId.value = null } }
 const onSourceSelected = (upload: any) => { selectedFile.value = upload.raw }
 const createFromUpload = async () => { if (!selectedFile.value) return; creating.value = true; try { const data = new FormData(); data.append('file', selectedFile.value); const response = await api.post('/api/conversions/upload', data); syncTask(response.data); activeTab.value = 'source'; await router.replace({ path: '/format-conversion', query: { taskId: response.data.id } }); await loadHistory() } catch (e: any) { message.error(e.response?.data?.message || '书籍分析失败') } finally { creating.value = false } }
 const createFromBook = async (loadHistoryAfter = true) => { if (!selectedBookId.value || !selectedVersionId.value) return; creating.value = true; try { const { data } = await api.post('/api/conversions/from-book', { bookId: selectedBookId.value, versionId: selectedVersionId.value }); syncTask(data); activeTab.value = 'source'; await router.replace({ path: '/format-conversion', query: { taskId: data.id } }); if (loadHistoryAfter) await loadHistory() } catch (e: any) { message.error(e.response?.data?.message || '书籍分析失败') } finally { creating.value = false } }

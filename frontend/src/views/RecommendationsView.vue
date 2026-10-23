@@ -40,11 +40,11 @@
       </p>
       <div class="book-grid">
         <article v-for="book in group.books" :key="book.id" class="recommended-book">
-          <router-link :to="`/books/${book.id}`" class="cover" :aria-label="`查看《${book.title}》详情`">
+          <router-link :to="`/books/${book.id}`" class="cover" :aria-label="`查看《${displayBookName(book.title)}》详情`">
             <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" alt="" loading="lazy" />
-            <span v-else class="cover-placeholder">{{ book.title.slice(0, 2) }}</span>
+            <span v-else class="cover-placeholder">{{ displayBookName(book.title).slice(0, 2) }}</span>
           </router-link>
-          <router-link :to="`/books/${book.id}`" class="book-title">{{ book.title }}</router-link>
+          <router-link :to="`/books/${book.id}`" class="book-title">{{ displayBookName(book.title) }}</router-link>
           <p class="muted author">{{ book.author || '未知作者' }}</p>
           <small class="muted">{{ statusLabels[book.readingStatus] || book.readingStatus }} · {{ book.format.toUpperCase() }}</small>
           <router-link :to="`/reader/${book.id}`" class="read-link">{{ book.readingStatus === 'READING' ? '继续阅读' : '开始阅读' }} →</router-link>
@@ -136,6 +136,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { confirm, message } from '@/utils/message'
 import { getCoverThumbnailUrl } from '@/utils/cover'
@@ -144,6 +145,8 @@ import {
   emptyRecommendationRule, recommendationApi, recommendationDate,
   type RecommendationRule, type RecommendationGroup, type RecommendationOptions, type TodayRecommendations,
 } from '@/utils/recommendations'
+
+const { displayBookName } = useBookNameDisplay()
 
 const result = ref<TodayRecommendations | null>(null)
 const rules = ref<RecommendationRule[]>([])

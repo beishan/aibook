@@ -130,7 +130,7 @@
       <div class="home-main">
         <section class="reading-hero" aria-label="阅读精选">
           <div class="hero-shade" />
-          <router-link v-if="heroBook" :to="`/books/${heroBook.id}`" class="hero-cover" :aria-label="`查看《${heroBook.title}》详情`">
+          <router-link v-if="heroBook" :to="`/books/${heroBook.id}`" class="hero-cover" :aria-label="`查看《${displayBookName(heroBook.title)}》详情`">
             <HomeBookCover :book="heroBook" eager />
           </router-link>
           <div class="hero-copy" :class="{ 'without-cover': !heroBook }">
@@ -144,7 +144,7 @@
               让每一本珍藏，都有自己的位置
             </p>
             <p v-if="heroBook" class="hero-book-name">
-              {{ heroBook.title }}
+              {{ displayBookName(heroBook.title) }}
               <span>
                 ／ {{ heroBook.author || '佚名' }}
               </span>
@@ -207,8 +207,8 @@
               <HomeBookCover :book="book" compact />
               <div class="continue-info">
                 <div class="continue-title">
-                  <h3 :title="book.title">
-                    {{ book.title }}
+                  <h3 :title="displayBookName(book.title)">
+                    {{ displayBookName(book.title) }}
                   </h3>
                   <span>
                     继续阅读
@@ -221,7 +221,7 @@
                   {{ book.currentChapterTitle || '从上次的位置继续' }}
                 </p>
                 <div class="continue-progress">
-                  <div class="progress-track" role="progressbar" :aria-label="`${book.title}阅读进度`" :aria-valuenow="readingPercent(book.totalProgress)" aria-valuemin="0" aria-valuemax="100">
+                  <div class="progress-track" role="progressbar" :aria-label="`${displayBookName(book.title)}阅读进度`" :aria-valuenow="readingPercent(book.totalProgress)" aria-valuemin="0" aria-valuemax="100">
                     <span :style="{ width: `${readingPercent(book.totalProgress)}%` }" />
                   </div>
                   <small>
@@ -259,8 +259,8 @@
           <div v-else-if="dashboard?.recentlyAdded.length" class="home-book-grid">
             <router-link v-for="book in dashboard.recentlyAdded" :key="book.id" :to="`/books/${book.id}`" class="shelf-book">
               <HomeBookCover :book="book" />
-              <h3 :title="book.title">
-                {{ book.title }}
+              <h3 :title="displayBookName(book.title)">
+                {{ displayBookName(book.title) }}
               </h3>
               <p class="book-author" :title="book.author">
                 {{ book.author || '未知作者' }}
@@ -332,8 +332,8 @@
             <div v-if="recommendationGroup.books.length" class="home-book-grid">
               <router-link v-for="book in recommendationGroup.books.slice(0, 6)" :key="book.id" :to="`/books/${book.id}`" class="shelf-book">
                 <HomeBookCover :book="book" />
-                <h3 :title="book.title">
-                  {{ book.title }}
+                <h3 :title="displayBookName(book.title)">
+                  {{ displayBookName(book.title) }}
                 </h3>
                 <p class="book-author">
                   {{ book.author || '未知作者' }}
@@ -428,7 +428,7 @@
             <HomeBookCover :book="book" compact />
             <div>
               <p class="activity-title">
-                {{ book.title }}
+                {{ displayBookName(book.title) }}
               </p>
               <p class="activity-detail">
                 {{ book.readingStatus === 'FINISHED' ? '已读完' : book.currentChapterTitle || '继续上次阅读' }}
@@ -461,7 +461,7 @@
             <HomeBookCover :book="book" compact />
             <div>
               <p class="activity-title">
-                {{ book.title }}
+                {{ displayBookName(book.title) }}
               </p>
               <p class="activity-detail">
                 {{ book.author || '未知作者' }}
@@ -489,7 +489,7 @@
           </div>
           <router-link v-for="book in dashboard?.wanted || []" :key="book.id" :to="`/books/${book.id}`" class="wanted-row">
             <span>
-              {{ book.title }}
+              {{ displayBookName(book.title) }}
             </span>
             <small>
               {{ book.author || '未知作者' }}
@@ -511,6 +511,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   ArrowLeft, ArrowRight, Clock, Collection, DataAnalysis, Files, Folder, House,
@@ -521,6 +522,8 @@ import { homeApi, homeFileSize, readingPercent, type HomeDashboard } from '@/uti
 import { recommendationApi, recommendationDate, type TodayRecommendations } from '@/utils/recommendations'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import { useUserStore } from '@/stores/user'
+
+const { displayBookName } = useBookNameDisplay()
 
 const userStore = useUserStore()
 const dashboard = ref<HomeDashboard | null>(null)

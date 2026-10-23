@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="dialogVisible"
-    :title="`刮削书籍 · ${book?.title || ''}`"
+    :title="`刮削书籍 · ${displayBookName(book?.title)}`"
     class="scrape-mode-dialog"
     width="700px"
     top="5vh"
@@ -146,11 +146,14 @@
 </template>
 
 <script setup lang="ts">
+import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, nextTick, ref, watch } from 'vue'
 import { Loading } from '@element-plus/icons-vue'
 import ScraperTrialDialog from '@/components/ScraperTrialDialog.vue'
 import { scrapeBook, type ScrapeResponse } from '@/utils/scraper'
 import { getScraperStatus, type ScraperStatus } from '@/utils/config'
+
+const { displayBookName } = useBookNameDisplay()
 
 const props = defineProps<{
   visible: boolean
