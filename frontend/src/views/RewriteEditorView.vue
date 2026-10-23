@@ -17,7 +17,10 @@
         <el-button :disabled="!chapter" @click="toggleSource">{{ showSource ? '收起原文' : '原文对照' }}</el-button>
         <el-button :disabled="!chapter" @click="openHistory">历史记录</el-button>
         <el-button :disabled="!project" @click="openReader">阅读预览</el-button>
-        <el-dropdown @command="handleProjectAction">
+        <el-dropdown
+          :persistent="false"
+          @command="handleProjectAction"
+        >
           <el-button>项目操作 ⌄</el-button>
           <template #dropdown>
             <el-dropdown-menu>

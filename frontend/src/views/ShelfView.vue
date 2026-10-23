@@ -101,10 +101,11 @@
       </div>
     </div>
 
+    <!-- 栏目状态保留在父组件，仅挂载当前栏目，避免隐藏卡片同时渲染。 -->
     <!-- 书架 -->
     <div
       id="shelf-panel-shelf"
-      v-show="activeTab === 'shelf'"
+      v-if="activeTab === 'shelf'"
       class="tab-content shelf-tab-content"
       role="tabpanel"
       aria-labelledby="shelf-tab-shelf"
@@ -227,7 +228,11 @@
                   title="向后移动"
                   @click="moveShelfBookOrder(shelfPageOffset + bookIndex, 1)"
                 ><span class="action-icon">↓</span></button>
-                <el-dropdown trigger="click" @command="command => moveBookToShelfGroup(book, command)">
+                <el-dropdown
+                  :persistent="false"
+                  trigger="click"
+                  @command="command => moveBookToShelfGroup(book, command)"
+                >
                   <button class="action-btn" title="移动到分组" @click.stop>
                     <span class="action-icon">📁</span>
                   </button>
@@ -280,7 +285,11 @@
                 :disabled="shelfPageOffset + bookIndex === displayedShelfBooks.length - 1 || shelfActionBookId === book.id"
                 @click="moveShelfBookOrder(shelfPageOffset + bookIndex, 1)"
               >下移</button>
-              <el-dropdown trigger="click" @command="command => moveBookToShelfGroup(book, command)">
+              <el-dropdown
+                :persistent="false"
+                trigger="click"
+                @command="command => moveBookToShelfGroup(book, command)"
+              >
                 <button class="btn btn-text" @click.stop>移动分组</button>
                 <template #dropdown>
                   <el-dropdown-menu>
@@ -304,7 +313,7 @@
     <!-- 收藏 -->
     <div
       id="shelf-panel-favorite"
-      v-show="activeTab === 'favorite'"
+      v-if="activeTab === 'favorite'"
       class="tab-content"
       role="tabpanel"
       aria-labelledby="shelf-tab-favorite"
@@ -374,7 +383,7 @@
     <!-- 正在阅读 -->
     <div
       id="shelf-panel-reading"
-      v-show="activeTab === 'reading'"
+      v-if="activeTab === 'reading'"
       class="tab-content"
       role="tabpanel"
       aria-labelledby="shelf-tab-reading"
@@ -463,7 +472,7 @@
     <!-- 已读完 -->
     <div
       id="shelf-panel-finished"
-      v-show="activeTab === 'finished'"
+      v-if="activeTab === 'finished'"
       class="tab-content"
       role="tabpanel"
       aria-labelledby="shelf-tab-finished"
@@ -532,7 +541,7 @@
     <!-- 想读 -->
     <div
       id="shelf-panel-wanted"
-      v-show="activeTab === 'wanted'"
+      v-if="activeTab === 'wanted'"
       class="tab-content"
       role="tabpanel"
       aria-labelledby="shelf-tab-wanted"
@@ -602,7 +611,7 @@
     <!-- 我的书单 -->
     <div
       id="shelf-panel-lists"
-      v-show="activeTab === 'lists'"
+      v-if="activeTab === 'lists'"
       class="tab-content"
       role="tabpanel"
       aria-labelledby="shelf-tab-lists"

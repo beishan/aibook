@@ -20,7 +20,12 @@
     </button>
     <button v-if="list" type="button" class="common-action" :disabled="disabled"
       @click="emit('action', 'quick-read', book)">小窗阅读</button>
-    <el-dropdown trigger="click" :disabled="disabled" @command="command => emit('action', String(command), book)">
+    <el-dropdown
+      :persistent="false"
+      trigger="click"
+      :disabled="disabled"
+      @command="command => emit('action', String(command), book)"
+    >
       <button type="button" class="common-action" :disabled="disabled" title="更多操作" aria-label="更多操作">
         <span>{{ list ? '更多' : '⋯' }}</span>
       </button>

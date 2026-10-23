@@ -33,6 +33,7 @@
             <span>{{ downloadingBook ? '下载中...' : '下载到本地' }}</span>
           </button>
           <el-dropdown
+            :persistent="false"
             trigger="click"
             @command="handleBookActionCommand"
             @visible-change="moreActionsOpen = $event"

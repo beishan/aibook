@@ -527,6 +527,7 @@
                 @click="crawlDiscovered(row)"
               >采集</el-button>
               <el-dropdown
+                :persistent="false"
                 trigger="click"
                 placement="bottom-end"
                 popper-class="discovery-more-popper"
@@ -562,7 +563,13 @@
               <el-button size="small" circle :icon="book.favorite?StarFilled:Star" class="favorite-action" :class="{'is-favorite':book.favorite}" :aria-label="book.favorite?'取消收藏':'加入收藏'" :title="book.favorite?'取消收藏':'加入收藏'" @click="toggleFavorite(book)"/>
               <el-button size="small" type="primary" :loading="submittingBookTaskIds.has(book.id)" :disabled="isBookTaskActive(book)" @click="crawlDiscovered(book)">采集</el-button>
               <el-button size="small" @click="batchDiscovery('IGNORED',[book.id])">忽略</el-button>
-              <el-dropdown trigger="click" placement="bottom-end" popper-class="discovery-more-popper" @command="handleDiscoveryCardMore($event,book)">
+              <el-dropdown
+                :persistent="false"
+                trigger="click"
+                placement="bottom-end"
+                popper-class="discovery-more-popper"
+                @command="handleDiscoveryCardMore($event,book)"
+              >
                 <el-button size="small" aria-label="更多操作">更多</el-button>
                 <template #dropdown><el-dropdown-menu><el-dropdown-item command="details">详细信息</el-dropdown-item><el-dropdown-item command="book-lists">加入书单</el-dropdown-item><el-dropdown-item command="website">查看网站</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(book)">刷新分类标签</el-dropdown-item><el-dropdown-item command="blacklist" divided class="danger-dropdown-item">加入黑名单</el-dropdown-item></el-dropdown-menu></template>
               </el-dropdown>
@@ -706,7 +713,13 @@
               <el-button size="small" round class="crawler-book-action-button crawler-book-action-details" @click="openBook(row)">详情</el-button>
               <el-button size="small" round class="crawler-book-action-button crawler-book-action-continue" :disabled="isBookTaskActive(row)" @click="continueCrawl(row)">{{ isBookTaskActive(row)?'任务中':'继续' }}</el-button>
               <el-button size="small" round class="crawler-book-action-button crawler-book-action-import" @click="importBook(row)">{{ row.importStatus==='IMPORTED'?'同步入库':'入库' }}</el-button>
-              <el-dropdown trigger="click" placement="bottom-end" popper-class="discovery-more-popper" @command="handleCrawlerBookTableMore($event,row)">
+              <el-dropdown
+                :persistent="false"
+                trigger="click"
+                placement="bottom-end"
+                popper-class="discovery-more-popper"
+                @command="handleCrawlerBookTableMore($event,row)"
+              >
                 <el-button size="small" circle :icon="MoreFilled" class="crawler-book-action-more" aria-label="更多操作" title="更多操作" />
                 <template #dropdown>
                   <el-dropdown-menu>
@@ -730,7 +743,13 @@
               <el-button size="small" type="primary" :disabled="isBookTaskActive(book)" @click="continueCrawl(book)">{{ isBookTaskActive(book)?'任务中':'继续' }}</el-button>
               <el-button size="small" circle :icon="book.favorite?StarFilled:Star" class="favorite-action" :class="{'is-favorite':book.favorite}" :aria-label="book.favorite?'取消收藏':'加入收藏'" :title="book.favorite?'取消收藏':'加入收藏'" @click="toggleFavorite(book)"/>
               <el-button size="small" :disabled="!book.crawledChapterCount" @click="startTrial(book)">试读</el-button>
-              <el-dropdown trigger="click" placement="bottom-end" popper-class="discovery-more-popper" @command="handleCrawlerBookCardMore($event,book)">
+              <el-dropdown
+                :persistent="false"
+                trigger="click"
+                placement="bottom-end"
+                popper-class="discovery-more-popper"
+                @command="handleCrawlerBookCardMore($event,book)"
+              >
                 <el-button size="small" aria-label="更多操作">更多</el-button>
                 <template #dropdown><el-dropdown-menu><el-dropdown-item command="details">详细信息</el-dropdown-item><el-dropdown-item command="book-lists">加入书单</el-dropdown-item><el-dropdown-item command="website">查看网站</el-dropdown-item><el-dropdown-item command="updates" divided>检查更新</el-dropdown-item><el-dropdown-item command="metadata" :disabled="isBookTaskActive(book)">刷新分类标签</el-dropdown-item><el-dropdown-item command="generate">生成文件</el-dropdown-item><el-dropdown-item command="import">{{ book.importStatus==='IMPORTED'?'同步入库':'加入书库' }}</el-dropdown-item><el-dropdown-item command="status">修改状态</el-dropdown-item></el-dropdown-menu></template>
               </el-dropdown>
@@ -833,7 +852,12 @@
         <div v-if="selectedTaskRows.length" class="task-batch-bar" role="toolbar" aria-label="采集任务批量管理">
           <div class="task-batch-summary"><span>{{ selectedTaskRows.length }}</span><div><strong>已选择任务</strong><small>批量操作仅在所选任务状态兼容时可用</small></div></div>
           <div class="task-batch-actions">
-            <el-dropdown trigger="click" :disabled="batchTaskManaging || !canBatchSetPriority" @command="handleBatchTaskPriority">
+            <el-dropdown
+              :persistent="false"
+              trigger="click"
+              :disabled="batchTaskManaging || !canBatchSetPriority"
+              @command="handleBatchTaskPriority"
+            >
               <el-button :loading="batchTaskManaging && batchTaskAction==='priority'">设置优先级</el-button>
               <template #dropdown><el-dropdown-menu><el-dropdown-item v-for="item in taskPriorityOptions" :key="item.value" :command="item.value">{{ item.label }}优先级</el-dropdown-item></el-dropdown-menu></template>
             </el-dropdown>
@@ -2513,7 +2537,13 @@ const TaskTable = defineComponent({
       row.status==='WAITING'?h(ElButton,{size:'small',round:true,class:'task-action-button task-action-prioritize',loading:props.prioritizingTaskId===row.id,disabled:props.batchManaging||Boolean(props.prioritizingTaskId&&props.prioritizingTaskId!==row.id),onClick:()=>emit('prioritize',row)},()=> '优先'):null,
       row.status==='PAUSED'?h(ElButton,{size:'small',circle:true,icon:VideoPlay,class:'task-action-button task-action-resume','aria-label':'继续任务',title:'继续任务',onClick:()=>emit('command',row,'resume')}):null,
       ['RUNNING','WAITING','PAUSED'].includes(row.status)?h(ElButton,{size:'small',round:true,class:'task-action-button task-action-cancel',onClick:()=>emit('command',row,'cancel')},()=> '取消'):null,
-      actions.length?h(ElDropdown,{trigger:'click',placement:'bottom-end',onCommand:(command:TaskMoreCommand)=>handleMoreCommand(row,command)},{
+      actions.length?h(ElDropdown, {
+        trigger: 'click',
+        persistent: false,
+        placement: 'bottom-end',
+        popperClass: 'crawler-task-more-popper',
+        onCommand: (command: TaskMoreCommand) => handleMoreCommand(row, command),
+      }, {
         default:()=>h(ElButton,{size:'small',circle:true,icon:MoreFilled,class:'task-action-more','aria-label':'更多操作',title:'更多操作'}),
         dropdown:()=>h(ElDropdownMenu,{},()=>actions.map(action=>h(ElDropdownItem,{command:action.command,divided:action.divided,class:action.danger?'danger-dropdown-item':undefined},()=>action.label))),
       }):null,

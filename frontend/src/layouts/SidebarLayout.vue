@@ -63,7 +63,11 @@
             </template>
           </el-input>
 
-          <el-dropdown trigger="click" @command="handleUserCommand">
+          <el-dropdown
+            :persistent="false"
+            trigger="click"
+            @command="handleUserCommand"
+          >
             <el-button text circle class="user-button" aria-label="用户菜单">
               <el-avatar
                 :size="34"
