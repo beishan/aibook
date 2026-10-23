@@ -227,57 +227,72 @@
     <div v-if="selectionMode && selectedBooks.size > 0" class="batch-toolbar glass">
       <span class="selection-count">已选择 {{ selectedBooks.size }} 本</span>
       <div class="batch-actions">
-        <button class="btn btn-text" @click="selectAllCurrentPage">全选当前页</button>
-        <button class="btn btn-text" @click="clearSelection">取消全选</button>
-        <el-select v-model="batchCategoryId" class="select-input batch-category-select" filterable>
-          <el-option label="设为未分类" value="" />
-          <el-option
-            v-for="category in categoryStore.flatTree"
-            :key="category.id"
-            :value="String(category.id)"
-            :label="category.path"
-          />
-        </el-select>
-        <button class="btn" @click="applyBatchCategory">
-          <span>🗂️</span>
-          <span>设置分类</span>
-        </button>
-        <el-select
-          v-model="batchTagIds"
-          multiple
-          collapse-tags
-          collapse-tags-tooltip
-          placeholder="选择标签"
-          class="batch-tag-select"
-        >
-          <el-option
-            v-for="tag in tagStore.tags"
-            :key="tag.id"
-            :label="tag.name"
-            :value="tag.id"
-          />
-        </el-select>
-        <el-select v-model="batchTagMode" class="select-input batch-tag-mode">
-          <el-option label="添加标签" value="ADD" />
-          <el-option label="移除标签" value="REMOVE" />
-          <el-option label="替换标签" value="REPLACE" />
-        </el-select>
-        <button class="btn" :disabled="batchTagIds.length === 0" @click="applyBatchTags">
-          <span>🏷️</span>
-          <span>应用标签</span>
-        </button>
-        <button class="btn btn-primary" @click="openBatchScraper('selected')">
-          <span>✨</span>
-          <span>批量刮削</span>
-        </button>
-        <button class="btn" :disabled="selectedBooks.size < 2" @click="openSelectedBookMerge">
-          <span>⇄</span>
-          <span>合并书籍</span>
-        </button>
-        <button class="btn batch-trash-button" @click="moveSelectedToTrash">
-          <span>🗑️</span>
-          <span>移入回收站</span>
-        </button>
+        <div class="batch-action-group" role="group" aria-label="批量选择">
+          <button class="btn btn-text" @click="selectAllCurrentPage">全选当前页</button>
+          <button class="btn btn-text" @click="clearSelection">取消全选</button>
+        </div>
+        <div class="batch-action-group" role="group" aria-label="批量分类">
+          <el-select
+            v-model="batchCategoryId"
+            class="batch-category-select"
+            aria-label="批量设置的分类"
+            placeholder="选择分类"
+            filterable
+          >
+            <el-option label="设为未分类" value="" />
+            <el-option
+              v-for="category in categoryStore.flatTree"
+              :key="category.id"
+              :value="String(category.id)"
+              :label="category.path"
+            />
+          </el-select>
+          <button class="btn" @click="applyBatchCategory">
+            <span aria-hidden="true">🗂️</span>
+            <span>设置分类</span>
+          </button>
+        </div>
+        <div class="batch-action-group batch-tag-group" role="group" aria-label="批量标签">
+          <el-select
+            v-model="batchTagIds"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="选择标签"
+            aria-label="批量设置的标签"
+            class="batch-tag-select"
+          >
+            <el-option
+              v-for="tag in tagStore.tags"
+              :key="tag.id"
+              :label="tag.name"
+              :value="tag.id"
+            />
+          </el-select>
+          <el-select v-model="batchTagMode" class="batch-tag-mode" aria-label="标签处理方式">
+            <el-option label="添加标签" value="ADD" />
+            <el-option label="移除标签" value="REMOVE" />
+            <el-option label="替换标签" value="REPLACE" />
+          </el-select>
+          <button class="btn" :disabled="batchTagIds.length === 0" @click="applyBatchTags">
+            <span aria-hidden="true">🏷️</span>
+            <span>应用标签</span>
+          </button>
+        </div>
+        <div class="batch-action-group" role="group" aria-label="批量书籍操作">
+          <button class="btn btn-primary" @click="openBatchScraper('selected')">
+            <span aria-hidden="true">✨</span>
+            <span>批量刮削</span>
+          </button>
+          <button class="btn" :disabled="selectedBooks.size < 2" @click="openSelectedBookMerge">
+            <span aria-hidden="true">⇄</span>
+            <span>合并书籍</span>
+          </button>
+          <button class="btn batch-trash-button" @click="moveSelectedToTrash">
+            <span aria-hidden="true">🗑️</span>
+            <span>移入回收站</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -312,6 +327,7 @@
           <input
             type="checkbox"
             :checked="selectedBooks.has(book.id)"
+            :aria-label="`选择书籍：${book.title}`"
             @change="toggleBookSelection(book.id)"
           />
         </div>
@@ -329,11 +345,11 @@
             <span>{{ book.title.charAt(0) }}</span>
           </div>
           <BookCoverPrivacyButton
-            v-if="book.coverUrl"
+            v-if="book.coverUrl && !selectionMode"
             :book-id="book.id"
             :book-title="book.title"
           />
-          <div class="book-cover-actions" @click.stop>
+          <div v-if="!selectionMode" class="book-cover-actions" @click.stop>
             <button
               class="action-btn"
               :class="{ 'active-favorite': book.isFavorite }"
@@ -440,6 +456,7 @@
           <input
             type="checkbox"
             :checked="selectedBooks.has(row.id)"
+            :aria-label="`选择书籍：${row.title}`"
             @change="toggleBookSelection(row.id)"
           />
         </div>
@@ -454,7 +471,7 @@
           />
           <div v-else class="no-cover-small">{{ row.title.charAt(0) }}</div>
           <BookCoverPrivacyButton
-            v-if="row.coverUrl"
+            v-if="row.coverUrl && !selectionMode"
             :book-id="row.id"
             :book-title="row.title"
             compact
@@ -480,7 +497,7 @@
           </span>
           <span class="book-date">{{ formatDate(row.createdAt) }}</span>
         </div>
-        <div class="book-list-actions">
+        <div v-if="!selectionMode" class="book-list-actions">
           <button
             class="btn btn-text list-state-button"
             :class="{ 'is-favorite': row.isFavorite }"
@@ -1602,8 +1619,9 @@ onMounted(async () => {
 /* 批量操作工具栏 */
 .batch-toolbar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  align-items: flex-start;
   padding: var(--spacing-md) var(--spacing-lg);
   margin-bottom: var(--spacing-lg);
   background: var(--surface-card);
@@ -1626,17 +1644,36 @@ onMounted(async () => {
 }
 
 .selection-count {
+  flex: 0 0 auto;
+  padding-block: 8px;
+  white-space: nowrap;
   font-weight: 500;
   color: var(--text-primary);
 }
 
 .batch-actions {
   display: flex;
-  gap: var(--spacing-sm);
+  flex: 1 1 640px;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: var(--spacing-md);
   align-items: center;
 }
 
+.batch-action-group {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  max-width: 100%;
+}
+
 .batch-actions .btn {
+  flex: 0 0 auto;
+  min-height: 36px;
+  white-space: nowrap;
   padding: 8px 16px;
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
@@ -1654,7 +1691,7 @@ onMounted(async () => {
 }
 
 .batch-category-select {
-  min-width: 180px;
+  width: 200px;
 }
 
 .batch-tag-select {
@@ -1662,11 +1699,16 @@ onMounted(async () => {
 }
 
 .batch-tag-mode {
-  min-width: 112px;
+  width: 130px;
 }
 
-.batch-category-select :deep(.el-select__wrapper),
-.batch-tag-mode :deep(.el-select__wrapper) {
+.batch-actions .el-select {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.batch-actions :deep(.el-select__wrapper) {
   min-height: 36px;
 }
 
@@ -2270,9 +2312,14 @@ onMounted(async () => {
   }
 
   .batch-actions {
+    flex: 0 1 auto;
     flex-wrap: wrap;
     gap: 8px;
     min-width: 0;
+  }
+
+  .batch-action-group {
+    width: 100%;
   }
 
   .batch-actions .el-select {
