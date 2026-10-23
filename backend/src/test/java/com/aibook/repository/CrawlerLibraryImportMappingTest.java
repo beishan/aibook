@@ -40,6 +40,18 @@ class CrawlerLibraryImportMappingTest {
                 assertThat(propertyNames).contains("libraryBook", "importStatus");
                 assertThat(persister.getPropertyUpdateability()[propertyNames.indexOf("libraryBook")]).isFalse();
                 assertThat(persister.getPropertyUpdateability()[propertyNames.indexOf("importStatus")]).isFalse();
+                for (String property : java.util.List.of("discoveryStatus", "blacklistedAt")) {
+                    assertThat(persister.getPropertyUpdateability()[propertyNames.indexOf(property)]).isFalse();
+                }
+                String discoveryQuery = CrawlerBookRepository.class.getMethod("updateDiscoveryStatus",
+                        java.util.Collection.class, User.class, CrawlerBook.DiscoveryStatus.class,
+                        boolean.class, java.time.LocalDateTime.class).getAnnotation(Query.class).value();
+                session.createMutationQuery(discoveryQuery)
+                        .setParameter("ids", java.util.List.of(1L))
+                        .setParameter("user", User.builder().id(1L).build())
+                        .setParameter("status", CrawlerBook.DiscoveryStatus.BLACKLISTED)
+                        .setParameter("blacklisted", true)
+                        .setParameter("changedAt", java.time.LocalDateTime.now());
                 var sitePersister = factory.getRuntimeMetamodels().getMappingMetamodel()
                         .getEntityDescriptor(com.aibook.model.entity.CrawlerSite.class);
                 int rulesIndex = Arrays.asList(sitePersister.getPropertyNames()).indexOf("autoImportRulesJson");

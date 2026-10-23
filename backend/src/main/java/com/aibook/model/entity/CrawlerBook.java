@@ -64,7 +64,12 @@ public class CrawlerBook {
             inverseJoinColumns = @JoinColumn(name = "book_list_id"))
     @Builder.Default private List<BookList> bookLists = new ArrayList<>();
     @Enumerated(EnumType.STRING) @Builder.Default private CrawlStatus crawlStatus = CrawlStatus.DISCOVERED;
-    @Enumerated(EnumType.STRING) @Builder.Default private DiscoveryStatus discoveryStatus = DiscoveryStatus.ACTIVE;
+    // 状态及拉黑时间通过独立更新维护，避免采集线程的旧实体快照覆盖用户操作。
+    @Enumerated(EnumType.STRING)
+    @Column(updatable = false)
+    @Builder.Default private DiscoveryStatus discoveryStatus = DiscoveryStatus.ACTIVE;
+    @Column(updatable = false)
+    private LocalDateTime blacklistedAt;
     // 入库状态和关联通过独立更新语句维护，防止采集工作线程用旧快照覆盖入库结果。
     @Enumerated(EnumType.STRING)
     @Column(updatable = false)

@@ -756,12 +756,13 @@ public class CrawlerTaskService {
                 .toList();
     }
 
+    @Transactional
     public List<com.aibook.dto.crawler.CrawlerDtos.BookView> setDiscoveryStatus(
             User user, List<Long> bookIds, CrawlerBook.DiscoveryStatus status) {
-        return ownedBooks(user, bookIds).stream().map(book -> {
-            book.setDiscoveryStatus(status);
-            return managementService.bookView(bookRepository.save(book));
-        }).toList();
+        List<Long> ids = ownedBooks(user, bookIds).stream().map(CrawlerBook::getId).toList();
+        bookRepository.updateDiscoveryStatus(ids, user, status,
+                status == CrawlerBook.DiscoveryStatus.BLACKLISTED, LocalDateTime.now());
+        return ownedBooks(user, ids).stream().map(managementService::bookView).toList();
     }
 
     public com.aibook.dto.crawler.CrawlerDtos.BookView setBookStatus(

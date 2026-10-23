@@ -39,6 +39,53 @@ import static org.mockito.Mockito.*;
 class CrawlerTaskManagementTest {
 
     @Test
+    void discoveryStatusUsesDedicatedAccountScopedMutationAndReloadsPersistedTime() {
+        User owner = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(owner).build();
+        CrawlerBook old = CrawlerBook.builder().id(8L).site(site).build();
+        LocalDateTime joined = LocalDateTime.of(2026, 10, 23, 10, 30);
+        CrawlerBook saved = CrawlerBook.builder().id(8L).site(site)
+                .discoveryStatus(CrawlerBook.DiscoveryStatus.BLACKLISTED).blacklistedAt(joined).build();
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        CrawlerManagementService management = mock(CrawlerManagementService.class);
+        when(books.findByIdInAndSiteUser(anyCollection(), eq(owner)))
+                .thenReturn(List.of(old), List.of(saved));
+        when(management.bookView(any(CrawlerBook.class))).thenCallRealMethod();
+        CrawlerTaskService service = service(mock(CrawlerTaskRepository.class), books, management);
+        try {
+            var result = service.setDiscoveryStatus(owner, List.of(8L, 8L),
+                    CrawlerBook.DiscoveryStatus.BLACKLISTED);
+            assertThat(result).hasSize(1);
+            assertThat(result.getFirst().blacklistedAt()).isEqualTo(joined);
+            verify(books).updateDiscoveryStatus(eq(List.of(8L)), eq(owner),
+                    eq(CrawlerBook.DiscoveryStatus.BLACKLISTED), eq(true), any(LocalDateTime.class));
+            verify(books, never()).save(any(CrawlerBook.class));
+            service.setDiscoveryStatus(owner, List.of(8L), CrawlerBook.DiscoveryStatus.ACTIVE);
+            verify(books).updateDiscoveryStatus(eq(List.of(8L)), eq(owner),
+                    eq(CrawlerBook.DiscoveryStatus.ACTIVE), eq(false), any(LocalDateTime.class));
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void discoveryStatusRejectsOtherAccountsBooksBeforeAnyMutation() {
+        User owner = user();
+        CrawlerBookRepository books = mock(CrawlerBookRepository.class);
+        when(books.findByIdInAndSiteUser(anyCollection(), eq(owner))).thenReturn(List.of());
+        CrawlerTaskService service = service(mock(CrawlerTaskRepository.class), books,
+                mock(CrawlerManagementService.class));
+        try {
+            assertThatThrownBy(() -> service.setDiscoveryStatus(owner, List.of(8L),
+                    CrawlerBook.DiscoveryStatus.BLACKLISTED)).isInstanceOf(ResponseStatusException.class);
+            verify(books, never()).updateDiscoveryStatus(anyCollection(), any(), any(), anyBoolean(), any());
+        } finally {
+            service.shutdown();
+        }
+    }
+
+
+    @Test
     void autoCrawlScanBooksOnlyPassesActiveDiscoveredBooksToExistingBatchQueue() {
         User user = user();
         CrawlerBook ready = CrawlerBook.builder().id(1L).build();

@@ -1152,7 +1152,7 @@ public class CrawlerManagementService {
                 b.getLibraryBook() != null
                         && "structured".equalsIgnoreCase(b.getLibraryBook().getFormat()),
                 Boolean.TRUE.equals(b.getAutoImportEnabled()),
-                com.aibook.util.CrawlerImportFormats.decode(b.getAutoImportFormats()));
+                com.aibook.util.CrawlerImportFormats.decode(b.getAutoImportFormats()), b.getBlacklistedAt());
     }
 
     private List<String> splitTags(String value) {

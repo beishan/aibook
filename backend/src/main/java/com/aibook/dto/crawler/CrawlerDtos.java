@@ -330,7 +330,7 @@ public final class CrawlerDtos {
             LocalDateTime lastCrawlStartedAt, LocalDateTime lastCrawlTime,
             LocalDateTime createdAt, boolean suspectedDuplicate, String siteThemeColor,
             boolean libraryHasStructuredChapters, boolean autoImportEnabled,
-            List<String> autoImportFormats) { }
+            List<String> autoImportFormats, LocalDateTime blacklistedAt) { }
 
     public record ChapterContentSaveRequest(@NotNull @Size(max = 2_000_000) String content,
             Boolean syncLibrary) { }

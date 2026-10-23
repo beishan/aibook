@@ -105,6 +105,21 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
     @Query("update CrawlerBook b set b.favorite = :favorite where b.id = :id and b.site.user = :user")
     int updateFavorite(@Param("id") Long id, @Param("user") User user,
             @Param("favorite") boolean favorite);
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update CrawlerBook b set
+                b.blacklistedAt = case when :blacklisted = true then
+                    case when b.discoveryStatus = :status then b.blacklistedAt else :changedAt end
+                    else null end,
+                b.discoveryStatus = :status,
+                b.updatedAt = :changedAt
+            where b.id in :ids and b.site.user = :user
+            """)
+    int updateDiscoveryStatus(@Param("ids") Collection<Long> ids, @Param("user") User user,
+            @Param("status") CrawlerBook.DiscoveryStatus status,
+            @Param("blacklisted") boolean blacklisted,
+            @Param("changedAt") java.time.LocalDateTime changedAt);
+
     Optional<CrawlerBook> findBySiteAndExternalBookId(CrawlerSite site, String externalBookId);
     Optional<CrawlerBook> findFirstBySiteOrderByLastCrawlTimeDesc(CrawlerSite site);
     Page<CrawlerBook> findBySiteUser(User user, Pageable pageable);

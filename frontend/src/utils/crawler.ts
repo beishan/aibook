@@ -89,6 +89,7 @@ export interface CrawlerBook {
   pendingReleaseChapterCount:number
   failedChapterCount:number
   crawlStatus:string
+  blacklistedAt?:string | null
   discoveryStatus:string
   importStatus:string
   autoUpdateEnabled:boolean

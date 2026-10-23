@@ -1481,6 +1481,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="bookUrl" label="来源地址" min-width="230" show-overflow-tooltip />
+        <el-table-column label="加入时间" width="170">
+          <template #default="{ row }">
+            {{ row.blacklistedAt ? formatTime(row.blacklistedAt) : '暂无记录' }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button
