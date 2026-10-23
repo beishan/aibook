@@ -1445,7 +1445,7 @@ onMounted(async () => {
   -webkit-backdrop-filter: var(--glass-blur);
   border: var(--glass-border);
   border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
+  padding: 12px var(--spacing-lg);
   margin-bottom: var(--spacing-lg);
 }
 
@@ -2344,7 +2344,7 @@ onMounted(async () => {
   }
 
   .filter-card {
-    padding: 14px;
+    padding: 10px 14px;
     border-radius: 18px;
   }
 

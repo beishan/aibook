@@ -545,6 +545,10 @@
     padding: var(--mobile-card-padding);
   }
 
+  .app-layout :is(.layout-main, .modern-main) .books-view .filter-card {
+    padding-block: 10px;
+  }
+
   .app-layout .settings-view .card:has(
     > .card-header, > .profile-header, > .library-header, > .proxy-hero, > .el-tabs
   ) {
