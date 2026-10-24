@@ -204,7 +204,23 @@
                 :book-title="book.title"
                 :compact="viewMode === 'list'"
               />
-              <div v-if="viewMode === 'grid'" class="book-cover-actions shelf-book-actions" @click.stop>
+              <el-popover
+              v-if="viewMode === 'grid'"
+              trigger="click"
+              placement="bottom-end"
+              :width="240"
+              :persistent="false"
+            >
+              <template #reference>
+                <button
+                  type="button"
+                  class="book-menu-trigger"
+                  :aria-label="displayBookName(book.title) + '的操作菜单'"
+                  title="书籍操作"
+                  @click.stop
+                >⋯</button>
+              </template>
+              <div class="book-cover-actions shelf-book-actions" @click.stop>
                 <ShelfBookActions :book="book" :small="cardSize === 'small'"
                   :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
                   @action="handleBookAction" />
@@ -256,6 +272,7 @@
                   @click="removeShelfBook(book)"
                 ><span class="action-icon">✕</span></button>
               </div>
+            </el-popover>
             </div>
             <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
               <div class="book-title">{{ displayBookName(book.title) }}</div>
@@ -348,7 +365,23 @@
               :book-title="book.title"
               :compact="viewMode === 'list'"
             />
-            <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
+            <el-popover
+              v-if="viewMode === 'grid'"
+              trigger="click"
+              placement="bottom-end"
+              :width="240"
+              :persistent="false"
+            >
+              <template #reference>
+                <button
+                  type="button"
+                  class="book-menu-trigger"
+                  :aria-label="displayBookName(book.title) + '的操作菜单'"
+                  title="书籍操作"
+                  @click.stop
+                >⋯</button>
+              </template>
+              <div class="book-cover-actions shelf-book-actions" @click.stop>
                 <ShelfBookActions :book="book" :small="cardSize === 'small'"
                   :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
                   @action="handleBookAction" />
@@ -360,6 +393,7 @@
                 @click.stop="handleDownloadBook(book)"
               ><span class="action-icon">{{ downloadingBookId === book.id ? '…' : '⇩' }}</span></button>
             </div>
+            </el-popover>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
@@ -418,7 +452,23 @@
               :book-title="book.title"
               :compact="viewMode === 'list'"
             />
-            <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
+            <el-popover
+              v-if="viewMode === 'grid'"
+              trigger="click"
+              placement="bottom-end"
+              :width="240"
+              :persistent="false"
+            >
+              <template #reference>
+                <button
+                  type="button"
+                  class="book-menu-trigger"
+                  :aria-label="displayBookName(book.title) + '的操作菜单'"
+                  title="书籍操作"
+                  @click.stop
+                >⋯</button>
+              </template>
+              <div class="book-cover-actions shelf-book-actions" @click.stop>
                 <ShelfBookActions :book="book" :small="cardSize === 'small'"
                   :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
                   @action="handleBookAction" />
@@ -441,6 +491,7 @@
                 <span class="action-icon">{{ removingReadingIds.has(book.id) ? '…' : '✕' }}</span>
               </button>
             </div>
+            </el-popover>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
@@ -506,7 +557,23 @@
               :book-title="book.title"
               :compact="viewMode === 'list'"
             />
-            <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
+            <el-popover
+              v-if="viewMode === 'grid'"
+              trigger="click"
+              placement="bottom-end"
+              :width="240"
+              :persistent="false"
+            >
+              <template #reference>
+                <button
+                  type="button"
+                  class="book-menu-trigger"
+                  :aria-label="displayBookName(book.title) + '的操作菜单'"
+                  title="书籍操作"
+                  @click.stop
+                >⋯</button>
+              </template>
+              <div class="book-cover-actions shelf-book-actions" @click.stop>
                 <ShelfBookActions :book="book" :small="cardSize === 'small'"
                   :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
                   @action="handleBookAction" />
@@ -518,6 +585,7 @@
                 @click.stop="handleDownloadBook(book)"
               ><span class="action-icon">{{ downloadingBookId === book.id ? '…' : '⇩' }}</span></button>
             </div>
+            </el-popover>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
@@ -576,7 +644,23 @@
               :book-title="book.title"
               :compact="viewMode === 'list'"
             />
-            <div v-if="viewMode === 'grid'" class="book-cover-actions" @click.stop>
+            <el-popover
+              v-if="viewMode === 'grid'"
+              trigger="click"
+              placement="bottom-end"
+              :width="240"
+              :persistent="false"
+            >
+              <template #reference>
+                <button
+                  type="button"
+                  class="book-menu-trigger"
+                  :aria-label="displayBookName(book.title) + '的操作菜单'"
+                  title="书籍操作"
+                  @click.stop
+                >⋯</button>
+              </template>
+              <div class="book-cover-actions shelf-book-actions" @click.stop>
                 <ShelfBookActions :book="book" :small="cardSize === 'small'"
                   :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
                   @action="handleBookAction" />
@@ -588,6 +672,7 @@
                 @click.stop="handleDownloadBook(book)"
               ><span class="action-icon">{{ downloadingBookId === book.id ? '…' : '⇩' }}</span></button>
             </div>
+            </el-popover>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
@@ -2746,7 +2831,7 @@ button.shelf-folder-card .shelf-folder-icon {
   height: 190px;
 }
 .books-grid .book-cover {
-  margin-right: 26px;
+  margin-right: 0;
   border-radius: 5px 5px 0 0;
 }
 .books-grid .book-info {
@@ -2816,5 +2901,43 @@ button.shelf-folder-card .shelf-folder-icon {
   .book-card {
     transition: none;
   }
+}
+
+/* 操作面板按需弹出，不再在窄封面上换行堆叠。 */
+.book-menu-trigger {
+  position: absolute;
+  z-index: 4;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.book-menu-trigger:hover {
+  background: var(--surface-hover);
+}
+.book-menu-trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.book-cover-actions {
+  position: static;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 0;
+  opacity: 1;
+  transform: none;
+  transition: none;
 }
 </style>
