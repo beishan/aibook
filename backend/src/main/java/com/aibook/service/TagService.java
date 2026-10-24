@@ -15,6 +15,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.Set;
 import java.util.TreeSet;
 import org.springframework.data.domain.Page;
@@ -35,9 +37,14 @@ public class TagService {
      */
     @Transactional(readOnly = true)
     public List<TagDTO> getTags(User user) {
-        return tagRepository.findByUserOrderByNameAsc(user).stream()
+        List<Tag> tags = tagRepository.findByUserOrderByNameAsc(user).stream()
                 .filter(tag -> !tag.isPending())
-                .map(tag -> convertToDTO(tag, user))
+                .toList();
+        if (tags.isEmpty()) return List.of();
+        Map<Long, Long> counts = bookRepository.countBooksByTag(user).stream()
+                .collect(Collectors.toMap(row -> row.getTagId(), row -> row.getCnt()));
+        return tags.stream()
+                .map(tag -> convertToDTO(tag, counts.getOrDefault(tag.getId(), 0L)))
                 .toList();
     }
 
@@ -218,6 +225,11 @@ public class TagService {
     }
 
     public TagDTO convertToDTO(Tag tag, User user) {
+        return convertToDTO(tag, bookRepository.countByUserAndTagsContainingAndDeletedAtIsNull(
+                user, tag));
+    }
+
+    private TagDTO convertToDTO(Tag tag, long bookCount) {
         return TagDTO.builder()
                 .id(tag.getId())
                 .name(tag.getName())
@@ -225,8 +237,7 @@ public class TagService {
                 .sourceType(tag.getSourceType() == null
                         ? Tag.SourceType.MANUAL.name() : tag.getSourceType().name())
                 .sourceDetail(tag.getSourceDetail())
-                .bookCount(bookRepository.countByUserAndTagsContainingAndDeletedAtIsNull(
-                        user, tag))
+                .bookCount(bookCount)
                 .createdAt(tag.getCreatedAt())
                 .build();
     }
@@ -235,7 +246,7 @@ public class TagService {
     public List<TagDTO> getPendingTags(User user) {
         return tagRepository.findByUserOrderByNameAsc(user).stream()
                 .filter(Tag::isPending)
-                .map(tag -> convertToDTO(tag, user))
+                .map(tag -> convertToDTO(tag, 0L))
                 .toList();
     }
 

@@ -55,9 +55,6 @@ class CategoryServiceTest {
                             .filter(category -> category.getParent() == parent)
                             .toList());
                 });
-        when(bookRepository.countByUserAndCategoryAndDeletedAtIsNull(
-                any(User.class), any(Category.class)))
-                .thenReturn(0L);
 
         CategoryService service = new CategoryService(
                 categoryRepository, bookRepository, mock(ScanDirectoryRepository.class));

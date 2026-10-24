@@ -96,7 +96,7 @@ public class CategoryService {
     public List<CategoryDTO> getCategories(User user) {
         initializeIfEmpty(user);
         return categoryRepository.findByUserOrderBySortOrderAscNameAsc(user).stream()
-                .map(category -> toDTO(category, false))
+                .map(category -> toDTO(category))
                 .toList();
     }
 
@@ -107,11 +107,20 @@ public class CategoryService {
     public List<CategoryDTO> getCategoryTree(User user) {
         initializeIfEmpty(user);
         List<Category> categories = categoryRepository.findByUserOrderBySortOrderAscNameAsc(user);
+        Map<Long, Long> counts = new LinkedHashMap<>();
+        if (!categories.isEmpty()) {
+            bookRepository.countByCategory(user).forEach(row ->
+                    counts.put(row.getCategoryId(), row.getCnt()));
+        }
         Map<Long, CategoryDTO> dtoById = new LinkedHashMap<>();
         List<CategoryDTO> roots = new ArrayList<>();
 
         for (Category category : categories) {
-            dtoById.put(category.getId(), toDTO(category, true));
+            CategoryDTO dto = toDTO(category);
+            long directCount = counts.getOrDefault(category.getId(), 0L);
+            dto.setDirectBookCount(directCount);
+            dto.setBookCount(directCount);
+            dtoById.put(category.getId(), dto);
         }
 
         for (Category category : categories) {
@@ -133,7 +142,7 @@ public class CategoryService {
     public List<CategoryDTO> getSubCategories(User user, Long parentId) {
         Category parent = getOwnedCategory(parentId, user);
         return categoryRepository.findByUserAndParentOrderBySortOrderAscNameAsc(user, parent).stream()
-                .map(category -> toDTO(category, false))
+                .map(category -> toDTO(category))
                 .toList();
     }
 
@@ -157,7 +166,7 @@ public class CategoryService {
                 .user(user)
                 .build();
 
-        return toDTO(categoryRepository.save(category), false);
+        return toDTO(categoryRepository.save(category));
     }
 
     /**
@@ -181,7 +190,7 @@ public class CategoryService {
             category.setEnabled(request.getEnabled());
         }
 
-        return toDTO(categoryRepository.save(category), false);
+        return toDTO(categoryRepository.save(category));
     }
 
     /**
@@ -198,7 +207,7 @@ public class CategoryService {
         if (request.getSortOrder() != null) {
             category.setSortOrder(request.getSortOrder());
         }
-        return toDTO(categoryRepository.save(category), false);
+        return toDTO(categoryRepository.save(category));
     }
 
     /**
@@ -261,7 +270,7 @@ public class CategoryService {
         transferBooks(source, target, user);
         transferScanDirectoryDefaults(source, target, user);
         categoryRepository.delete(source);
-        return toDTO(target, false);
+        return toDTO(target);
     }
 
     /**
@@ -425,11 +434,7 @@ public class CategoryService {
                 .orElse(-1) + 1;
     }
 
-    private CategoryDTO toDTO(Category category, boolean includeCounts) {
-        long directBookCount = includeCounts
-                ? bookRepository.countByUserAndCategoryAndDeletedAtIsNull(
-                        category.getUser(), category)
-                : 0;
+    private CategoryDTO toDTO(Category category) {
         return CategoryDTO.builder()
                 .id(category.getId())
                 .name(category.getName())
@@ -438,8 +443,8 @@ public class CategoryService {
                 .sortOrder(category.getSortOrder())
                 .builtIn(Boolean.TRUE.equals(category.getBuiltIn()))
                 .enabled(!Boolean.FALSE.equals(category.getEnabled()))
-                .directBookCount(directBookCount)
-                .bookCount(directBookCount)
+                .directBookCount(0L)
+                .bookCount(0L)
                 .children(new ArrayList<>())
                 .createdAt(category.getCreatedAt())
                 .updatedAt(category.getUpdatedAt())

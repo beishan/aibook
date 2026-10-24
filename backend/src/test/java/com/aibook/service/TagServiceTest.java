@@ -15,8 +15,29 @@ import org.springframework.web.server.ResponseStatusException;
 
 class TagServiceTest {
     private final TagRepository repository = mock(TagRepository.class);
-    private final TagService service = new TagService(repository, mock(BookRepository.class));
+    private final BookRepository books = mock(BookRepository.class);
+    private final TagService service = new TagService(repository, books);
     private final User user = User.builder().id(1L).build();
+
+    @Test
+    void largeListUsesOneGroupedCountAndKeepsUnusedAndPendingTagsCorrect() {
+        List<Tag> tags = java.util.stream.LongStream.rangeClosed(1, 500)
+                .mapToObj(id -> Tag.builder().id(id).name("标签" + id).user(user)
+                        .pending(id == 500).build()).toList();
+        when(repository.findByUserOrderByNameAsc(user)).thenReturn(tags);
+        BookRepository.TagBookCount count = mock(BookRepository.TagBookCount.class);
+        when(count.getTagId()).thenReturn(1L);
+        when(count.getCnt()).thenReturn(12L);
+        when(books.countBooksByTag(user)).thenReturn(List.of(count));
+        var result = service.getTags(user);
+        assertThat(result).hasSize(499);
+        assertThat(result.getFirst().getBookCount()).isEqualTo(12L);
+        assertThat(result.get(1).getBookCount()).isZero();
+        verify(books).countBooksByTag(user);
+        verify(books, never()).countByUserAndTagsContainingAndDeletedAtIsNull(any(), any());
+        assertThat(service.getPendingTags(user)).hasSize(1);
+        verifyNoMoreInteractions(books);
+    }
 
     @Test
     void externalTagsWaitForApprovalAndExistingTagsRemainUsable() {

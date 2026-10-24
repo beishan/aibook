@@ -232,6 +232,17 @@ public interface BookRepository
     long countByUserAndCategoryAndDeletedAtIsNull(
             @Param("user") User user, @Param("category") Category category);
 
+    interface TagBookCount {
+        Long getTagId();
+        Long getCnt();
+    }
+
+    /** 一次统计当前账户所有标签，沿用单标签统计的可见书籍口径。 */
+    @Query("SELECT t.id AS tagId, COUNT(DISTINCT b.id) AS cnt FROM Book b JOIN b.tags t "
+            + "WHERE b.user = :user AND t.user = :user AND b.deletedAt IS NULL AND" + LIBRARY_VISIBLE
+            + " GROUP BY t.id")
+    List<TagBookCount> countBooksByTag(@Param("user") User user);
+
     /**
      * 统计使用指定标签的书籍。
      */
