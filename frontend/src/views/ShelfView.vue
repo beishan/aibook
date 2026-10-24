@@ -110,17 +110,6 @@
       role="tabpanel"
       aria-labelledby="shelf-tab-shelf"
     >
-      <div class="shelf-tab-toolbar">
-        <div>
-          <h2>我的书架</h2>
-          <p>共 {{ shelfOverview.totalBooks }} 本书，可按文件夹整理和手动排序</p>
-        </div>
-        <button class="btn btn-primary" @click="openCreateShelfGroup">
-          <span>📁</span>
-          <span>新建分组</span>
-        </button>
-      </div>
-
       <div v-if="shelfLoading" class="loading glass">
         <div class="loading-spinner"></div>
         <p>正在加载书架...</p>
@@ -129,6 +118,7 @@
         <div class="empty-icon">📚</div>
         <p>书架还是空的，可在书库或书籍详情页点击“加入书架”</p>
         <button class="btn btn-primary" @click="$router.push('/books')">去书库添加</button>
+        <button class="btn btn-text" @click="openCreateShelfGroup">新建分组</button>
       </div>
       <template v-else>
         <div class="shelf-folder-grid">
@@ -146,7 +136,7 @@
             :class="{ active: selectedShelfGroup === 'ungrouped' }"
             @click="selectedShelfGroup = 'ungrouped'"
           >
-            <span class="shelf-folder-icon">📖</span>
+            <span class="shelf-folder-icon">📁</span>
             <strong>未分组</strong>
             <small>{{ shelfOverview.ungroupedBooks.length }} 本</small>
           </button>
@@ -160,6 +150,7 @@
             tabindex="0"
             @click="selectedShelfGroup = group.id"
             @keyup.enter="selectedShelfGroup = group.id"
+            @keydown.space.prevent="selectedShelfGroup = group.id"
           >
             <div class="folder-card-main">
               <span class="shelf-folder-icon">{{ group.icon }}</span>
@@ -180,15 +171,18 @@
 
         <div class="shelf-section-heading">
           <div>
-            <h3>{{ selectedShelfTitle }}</h3>
+            <h3>{{ selectedShelfTitle }} <small>· {{ displayedShelfBooks.length }} 本</small></h3>
             <p>{{ selectedShelfDescription }}</p>
           </div>
-          <span>{{ displayedShelfBooks.length }} 本</span>
+          <div class="shelf-search">
+            <span aria-hidden="true">⌕</span>
+            <input v-model="shelfKeyword" type="search" aria-label="搜索当前书架分组" placeholder="搜索书名、作者或关键词…" />
+          </div>
         </div>
 
         <div v-if="displayedShelfBooks.length === 0" class="empty glass compact-empty">
           <div class="empty-icon">📂</div>
-          <p>这个分组中还没有书籍</p>
+          <p>{{ shelfKeyword.trim() ? '没有找到匹配的书籍，请尝试其他关键词' : '这个分组中还没有书籍' }}</p>
         </div>
         <div v-else :class="[viewMode === 'grid' ? 'books-grid' : 'books-list', `card-${cardSize}`]">
           <div
@@ -215,14 +209,14 @@
                   :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
                   @action="handleBookAction" />
                 <button
-                  v-if="selectedShelfGroup !== 'all'"
+                  v-if="selectedShelfGroup !== 'all' && !shelfKeyword.trim()"
                   class="action-btn"
                   :disabled="shelfPageOffset + bookIndex === 0 || shelfActionBookId === book.id"
                   title="向前移动"
                   @click="moveShelfBookOrder(shelfPageOffset + bookIndex, -1)"
                 ><span class="action-icon">↑</span></button>
                 <button
-                  v-if="selectedShelfGroup !== 'all'"
+                  v-if="selectedShelfGroup !== 'all' && !shelfKeyword.trim()"
                   class="action-btn"
                   :disabled="shelfPageOffset + bookIndex === displayedShelfBooks.length - 1 || shelfActionBookId === book.id"
                   title="向后移动"
@@ -266,6 +260,13 @@
             <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
               <div class="book-title">{{ displayBookName(book.title) }}</div>
               <div class="book-author">{{ book.author || '未知作者' }}</div>
+              <div v-if="viewMode === 'grid'" class="shelf-card-meta">
+                {{ book.format === 'structured' ? '在线章节' : '电子书 · ' + (book.format?.toUpperCase() || '未知格式') }}
+              </div>
+              <div v-if="viewMode === 'grid'" class="shelf-card-status" :class="{ finished: book.readingStatus === 'FINISHED' }">
+                <span aria-hidden="true"></span>
+                {{ book.readingStatus === 'FINISHED' ? '已读完 ✓' : book.readingStatus === 'READING' ? '正在阅读' : '未读' }}
+              </div>
               <div v-if="viewMode === 'list'" class="book-meta">
                 <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
                 <span>加入于 {{ formatShelfDate(book.shelfAddedAt) }}</span>
@@ -274,13 +275,13 @@
             <div v-if="viewMode === 'list'" class="shelf-list-actions" @click.stop>
               <ShelfBookActions :book="book" list hide-shelf :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id" @action="handleBookAction" />
               <button
-                v-if="selectedShelfGroup !== 'all'"
+                v-if="selectedShelfGroup !== 'all' && !shelfKeyword.trim()"
                 class="btn btn-text"
                 :disabled="shelfPageOffset + bookIndex === 0 || shelfActionBookId === book.id"
                 @click="moveShelfBookOrder(shelfPageOffset + bookIndex, -1)"
               >上移</button>
               <button
-                v-if="selectedShelfGroup !== 'all'"
+                v-if="selectedShelfGroup !== 'all' && !shelfKeyword.trim()"
                 class="btn btn-text"
                 :disabled="shelfPageOffset + bookIndex === displayedShelfBooks.length - 1 || shelfActionBookId === book.id"
                 @click="moveShelfBookOrder(shelfPageOffset + bookIndex, 1)"
@@ -955,7 +956,8 @@ const newListForm = ref({
 
 const finishedBooks = ref<Book[]>([])
 const finishedLoading = ref(false)
-const displayedShelfBooks = computed(() => {
+const shelfKeyword = ref('')
+const groupedShelfBooks = computed(() => {
   if (selectedShelfGroup.value === 'ungrouped') return shelfOverview.value.ungroupedBooks
   if (typeof selectedShelfGroup.value === 'number') {
     return shelfOverview.value.groups.find(group => group.id === selectedShelfGroup.value)?.books || []
@@ -963,6 +965,14 @@ const displayedShelfBooks = computed(() => {
   return [...shelfOverview.value.ungroupedBooks, ...shelfOverview.value.groups.flatMap(group => group.books)]
     .sort((left, right) => new Date(right.shelfAddedAt || 0).getTime() - new Date(left.shelfAddedAt || 0).getTime())
 })
+const displayedShelfBooks = computed(() => {
+  const keyword = shelfKeyword.value.trim().toLocaleLowerCase()
+  if (!keyword) return groupedShelfBooks.value
+  return groupedShelfBooks.value.filter(book =>
+    [book.title, book.author, book.description].some(value => value?.toLocaleLowerCase().includes(keyword)),
+  )
+})
+watch(shelfKeyword, () => { tabPages.value.shelf = 1 })
 // 页码保留在当前浏览会话，页大小由账户偏好统一保存。
 const shelfPageSize = computed({
   get: () => preferencesStore.shelfPageSize,
@@ -2568,6 +2578,242 @@ button.shelf-folder-card {
   .shelf-tab-slider,
   .view-toggle-slider,
   .card-size-slider {
+    transition: none;
+  }
+}
+
+/* 参考书架设计：纸张暖色、紧凑分组和封面陈列。 */
+.shelf-view {
+  max-width: 1680px;
+  --shelf-accent: #bc6842;
+}
+.shelf-view .btn-primary {
+  background: linear-gradient(115deg, #a9532e, #d98c66);
+  border-color: transparent;
+  color: #fff;
+}
+.shelf-folder-grid {
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 16px;
+}
+.shelf-folder-card {
+  min-height: 86px;
+  padding: 18px;
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  border-radius: 13px;
+}
+button.shelf-folder-card {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  column-gap: 12px;
+  align-content: center;
+}
+button.shelf-folder-card .shelf-folder-icon {
+  grid-row: span 2;
+  align-self: center;
+}
+.shelf-folder-card strong {
+  margin-top: 0;
+}
+.shelf-folder-card.active {
+  border-color: var(--shelf-accent);
+  box-shadow: 0 0 0 2px #bc68421a;
+}
+.custom-folder-card > p {
+  display: none;
+}
+.custom-folder-card {
+  display: flex;
+  align-items: center;
+}
+.shelf-create-group {
+  align-self: center;
+  min-height: 56px;
+  gap: 12px;
+}
+.continue-reading {
+  display: grid;
+  grid-template-columns: 170px repeat(3, minmax(0, 1fr));
+  align-items: center;
+  margin-top: 16px;
+  padding: 12px 18px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-card) 85%, transparent);
+}
+.continue-heading h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+.continue-heading p,
+.continue-copy > span {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.continue-book {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  padding: 0 22px;
+  border-left: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.continue-book img,
+.continue-placeholder {
+  width: 56px;
+  height: 78px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 5px;
+}
+.continue-placeholder {
+  display: grid;
+  place-items: center;
+  background: var(--surface-card);
+  font-size: 28px;
+}
+.continue-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.continue-copy strong,
+.continue-copy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.continue-copy small {
+  color: var(--shelf-accent);
+  font-size: 11px;
+}
+.continue-arrow {
+  font-size: 24px;
+  color: var(--text-secondary);
+}
+.shelf-section-heading h3 small {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 400;
+}
+.shelf-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(350px, 100%);
+  padding: 10px 14px;
+  background: var(--surface-card);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border-radius: 12px;
+}
+.shelf-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+.shelf-search:focus-within,
+.continue-book:focus-visible {
+  outline: 2px solid var(--shelf-accent);
+  outline-offset: 3px;
+}
+.books-grid {
+  gap: 14px;
+}
+.books-grid.card-medium {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+.books-grid .book-card {
+  padding: 0 6px;
+  border-radius: 12px;
+  box-shadow: 0 3px 12px #54351e08;
+}
+.books-grid .book-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px #54351e15;
+}
+.books-grid.card-medium .book-cover {
+  height: 190px;
+}
+.books-grid .book-cover {
+  margin-right: 26px;
+  border-radius: 5px 5px 0 0;
+}
+.books-grid .book-info {
+  padding: 9px 6px;
+}
+.book-author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shelf-card-meta {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.shelf-card-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.shelf-card-status > span {
+  width: 22px;
+  height: 5px;
+  border-radius: 5px;
+  background: #e58b61;
+}
+.shelf-card-status.finished > span {
+  background: #6baf96;
+}
+@media (max-width: 1000px) {
+  .continue-reading {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .continue-book {
+    border-left: 0;
+    padding: 0;
+  }
+}
+@media (max-width: 768px) {
+  .shelf-folder-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .shelf-folder-card {
+    padding: 12px;
+  }
+  button.shelf-folder-card {
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 6px;
+  }
+  .shelf-section-heading {
+    align-items: stretch;
+  }
+  .shelf-search {
+    box-sizing: border-box;
+  }
+  .books-grid.card-medium {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shelf-folder-card,
+  .book-card {
     transition: none;
   }
 }

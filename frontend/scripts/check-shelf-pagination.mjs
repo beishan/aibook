@@ -164,3 +164,21 @@ assert.match(source, /moveShelfBookOrder\(shelfPageOffset \+ bookIndex, 1\)/)
 assert.match(source, /status: 'FINISHED'/)
 assert.match(source, /while \(page < totalPages\)/)
 console.log('Shelf pagination: sizes, account persistence/hydration, page reset, boundaries, independent tabs, shrinking collections and cross-page ordering passed')
+
+// Group search operates before pagination and does not mutate manual ordering.
+const searchSource = source.slice(source.indexOf('const displayedShelfBooks ='), source.indexOf('watch(shelfKeyword,'))
+const groupedShelfBooks = ref([
+  { id: 1, title: '三体', author: '刘慈欣', description: '科幻' },
+  { id: 2, title: 'DUNE', author: 'Frank Herbert' },
+  { id: 3, title: '活着', author: '余华' },
+])
+const shelfKeyword = ref('')
+const searched = new Function('computed', 'groupedShelfBooks', 'shelfKeyword',
+  ts.transpile(searchSource + '\nreturn displayedShelfBooks;', { target: ts.ScriptTarget.ES2022 }),
+)(computed, groupedShelfBooks, shelfKeyword)
+for (const [keyword, expected] of [[' 刘慈欣 ', [1]], ['dune', [2]], ['科幻', [1]], ['不存在', []], ['', [1, 2, 3]]]) {
+  shelfKeyword.value = keyword
+  assert.deepEqual(searched.value.map(book => book.id), expected)
+}
+assert.deepEqual(groupedShelfBooks.value.map(book => book.id), [1, 2, 3])
+console.log('Shelf search: title, author, description, case normalization, empty results and stable source ordering passed')
