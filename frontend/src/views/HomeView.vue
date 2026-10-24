@@ -150,8 +150,8 @@
               </span>
             </p>
             <div class="hero-actions">
-              <router-link :to="heroBook ? `/reader/${heroBook.id}` : '/books'" class="hero-primary">
-                {{ heroBook ? heroBook.lastReadAt ? '继续阅读' : '开始阅读' : '开启阅读' }}
+              <router-link :to="heroBook ? `/books/${heroBook.id}` : '/books'" class="hero-primary">
+                {{ heroBook ? '查看详情' : '开启阅读' }}
                 <el-icon>
                   <ArrowRight />
                 </el-icon>
@@ -203,7 +203,7 @@
             <div v-for="index in 3" :key="index" class="continue-card skeleton" />
           </div>
           <div v-else-if="dashboard?.continuing.length" class="continue-grid">
-            <router-link v-for="book in dashboard.continuing" :key="book.id" :to="`/reader/${book.id}`" class="continue-card surface">
+            <router-link v-for="book in dashboard.continuing" :key="book.id" :to="`/books/${book.id}`" class="continue-card surface">
               <HomeBookCover :book="book" compact />
               <div class="continue-info">
                 <div class="continue-title">
@@ -211,7 +211,7 @@
                     {{ displayBookName(book.title) }}
                   </h3>
                   <span>
-                    继续阅读
+                    查看详情
                   </span>
                 </div>
                 <p class="book-author">
@@ -424,7 +424,7 @@
           <div v-if="!dashboard?.recentlyRead.length" class="aside-empty">
             {{ loading ? '正在加载…' : homeError ? '阅读记录暂未加载' : '还没有阅读记录' }}
           </div>
-          <router-link v-for="book in dashboard?.recentlyRead || []" :key="book.id" :to="`/reader/${book.id}`" class="activity-item">
+          <router-link v-for="book in dashboard?.recentlyRead || []" :key="book.id" :to="`/books/${book.id}`" class="activity-item">
             <HomeBookCover :book="book" compact />
             <div>
               <p class="activity-title">

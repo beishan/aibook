@@ -402,7 +402,7 @@
           v-for="book in pagedReadingBooks"
           :key="book.id"
           :class="viewMode === 'grid' ? 'book-card glass' : 'book-list-item glass'"
-          @click="$router.push(`/reader/${book.id}`)"
+          @click="$router.push(`/books/${book.id}`)"
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
             <img
