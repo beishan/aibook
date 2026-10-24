@@ -36,6 +36,7 @@ public class TagService {
     @Transactional(readOnly = true)
     public List<TagDTO> getTags(User user) {
         return tagRepository.findByUserOrderByNameAsc(user).stream()
+                .filter(tag -> !tag.isPending())
                 .map(tag -> convertToDTO(tag, user))
                 .toList();
     }
@@ -47,6 +48,11 @@ public class TagService {
     public TagDTO createTag(User user, String name, String color) {
         String normalizedName = normalizeName(name);
         Tag existing = tagRepository.findByNameIgnoreCaseAndUser(normalizedName, user);
+        if (existing != null && existing.isPending()) {
+            existing.setPending(false);
+            existing.setColor(normalizeColor(color));
+            return convertToDTO(tagRepository.save(existing), user);
+        }
         if (existing != null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "标签已存在");
         }
@@ -105,7 +111,7 @@ public class TagService {
         }
         List<Long> distinctIds = tagIds.stream().distinct().toList();
         List<Tag> tags = tagRepository.findAllById(distinctIds).stream()
-                .filter(tag -> tag.getUser().getId().equals(user.getId()))
+                .filter(tag -> tag.getUser().getId().equals(user.getId()) && !tag.isPending())
                 .toList();
         if (tags.size() != distinctIds.size()) {
             throw new ResponseStatusException(
@@ -135,6 +141,7 @@ public class TagService {
             if (tag == null) {
                 tag = tagRepository.save(Tag.builder()
                         .name(name)
+                        .pending(true)
                         .color("#64748B")
                         .sourceType(scraperName == null || scraperName.isBlank()
                                 ? Tag.SourceType.MANUAL : Tag.SourceType.SCRAPER)
@@ -143,7 +150,7 @@ public class TagService {
                         .user(user)
                         .build());
             }
-            result.add(tag);
+            if (!tag.isPending()) result.add(tag);
         }
         return result;
     }
@@ -176,10 +183,15 @@ public class TagService {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         for (String name : normalizedNames) {
             Tag existing = tagRepository.findByNameIgnoreCaseAndUser(name, user);
+            if (existing != null && existing.isPending()) {
+                existing.setPending(false);
+                tagRepository.save(existing);
+            }
             if (existing == null) {
                 tagRepository.save(Tag.builder()
                         .name(name)
                         .color("#64748B")
+                        .pending(false)
                         .sourceType(Tag.SourceType.LIBRARY_SCAN)
                         .user(user)
                         .build());
@@ -217,6 +229,29 @@ public class TagService {
                         user, tag))
                 .createdAt(tag.getCreatedAt())
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public List<TagDTO> getPendingTags(User user) {
+        return tagRepository.findByUserOrderByNameAsc(user).stream()
+                .filter(Tag::isPending)
+                .map(tag -> convertToDTO(tag, user))
+                .toList();
+    }
+
+    @Transactional
+    public void managePendingTags(List<Long> ids, User user, boolean approve) {
+        if (ids == null || ids.isEmpty()) return;
+        List<Tag> tags = ids.stream().distinct().map(id -> getOwnedTag(id, user)).toList();
+        if (tags.stream().anyMatch(tag -> !tag.isPending())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "部分标签已处理，请刷新重试");
+        }
+        if (approve) {
+            tags.forEach(tag -> tag.setPending(false));
+            tagRepository.saveAll(tags);
+        } else {
+            tagRepository.deleteAll(tags);
+        }
     }
 
     private String normalizeName(String name) {

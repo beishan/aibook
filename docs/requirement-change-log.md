@@ -2,6 +2,18 @@
 
 本文件用于持续记录项目开发需求及完成情况，最新记录置于最上方。
 
+### REQ-20261024-001 · 爬取新标签默认待加入
+
+- 需求时间：2026-10-24
+- 完成时间：2026-10-24
+- 状态：已完成（构建及后端针对性测试；未进行 NAS 实库和浏览器交互验证）
+- 应用版本：`1.47.75`
+- 需求内容：后续爬取到的新书籍标签默认不加入标签，在标签管理增加“待加入标签”按钮和管理弹窗。
+- 完成情况：爬虫入库、元数据刮削生成的新标签按账户在服务端暂存，不出现在正式标签列表、不关联书籍；已有标签继续应用，历史标签保持原状。弹窗支持搜索、勾选、批量加入及确认删除，展示来源。加入后可手动标记或重新刮削/入库应用，不追溯补标；删除后再次爬取可能重新出现。
+- 主要改动：标签增加可空 pending 字段（Hibernate schema update 为旧数据默认 false，兼容 null）；增加账户隔离的查询及批量处理接口；复用现有 Vue、Element Plus、Spring Data JPA，无新增依赖、外部代码或架构变更；同步调整爬虫入库测试期望并新增待加入生命周期和越权测试。
+- 使用说明：已更新实际使用说明“标签”章节，说明入口、默认行为、账户持久化、加入后应用方式及删除限制。
+- 验证结果：前端生产构建、test:user-guide（32 章）、git diff --check 通过；TagServiceTest、CrawlerExportServiceTest、SelectedMetadataOverwriteTest、ScrapingModesApplicationTest、ConfirmedMetadataApplicationTest 共 33 项测试通过。Windows 沙箱默认临时目录文件移动受限，改用 backend/target 内临时目录，并显式装载现有 Mockito Byte Buddy agent 后重跑通过。未进行浏览器交互与 NAS 数据库升级实测。
+
 ### REQ-20261023-013 · 扩展其他页面的按需渲染优化
 
 - 需求时间：2026-10-23

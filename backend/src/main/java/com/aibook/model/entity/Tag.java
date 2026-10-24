@@ -35,6 +35,13 @@ public class Tag {
      */
     private String color;
 
+    @Column(name = "pending", columnDefinition = "boolean default false")
+    private Boolean pending;
+
+    public boolean isPending() {
+        return Boolean.TRUE.equals(pending);
+    }
+
     /** 标签首次进入标签库的来源。 */
     @Enumerated(EnumType.STRING)
     @Column(name = "source_type", length = 30)

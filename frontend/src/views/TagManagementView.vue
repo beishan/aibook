@@ -6,6 +6,7 @@
         <p class="page-subtitle">使用标签灵活标记题材、来源、用途或阅读偏好</p>
       </div>
       <div class="header-actions">
+        <button class="btn" @click="openPending">待加入标签</button>
         <button class="btn" @click="startLibraryScan">书库扫描新增</button>
         <button class="btn" @click="openManage">一键整理</button>
         <button class="btn btn-primary" @click="openCreate">新增标签</button>
@@ -103,6 +104,36 @@
         </div>
       </template>
     </div>
+
+    <el-dialog
+      v-model="pendingVisible"
+      title="待加入标签"
+      width="min(760px, 94vw)"
+      :close-on-click-modal="!pendingBusy"
+      :close-on-press-escape="!pendingBusy"
+      :show-close="!pendingBusy"
+      destroy-on-close
+    >
+      <p>爬虫和刮削发现的新标签先在此保留，加入后可用于书籍标记。不会自动补加到历史书籍；删除后再次爬取仍可能重新出现。</p>
+      <el-input v-model="pendingKeyword" placeholder="搜索待加入标签" clearable aria-label="搜索待加入标签" />
+      <el-table v-loading="pendingBusy" :data="filteredPendingTags" height="360" row-key="id">
+        <el-table-column label="选择" width="70">
+          <template #default="{ row }">
+            <el-checkbox v-model="pendingIds" :value="row.id" :label="row.id" :disabled="pendingBusy" :aria-label="'选择标签 ' + row.name">
+              <span></span>
+            </el-checkbox>
+          </template>
+        </el-table-column>
+        <el-table-column prop="name" label="标签" min-width="150" />
+        <el-table-column prop="sourceDetail" label="来源" min-width="150" />
+        <template #empty>暂无待加入标签</template>
+      </el-table>
+      <template #footer>
+        <el-button :disabled="pendingBusy" @click="pendingVisible = false">关闭</el-button>
+        <el-button :disabled="pendingBusy || !pendingIds.length" type="danger" @click="processPending('delete')">删除所选</el-button>
+        <el-button :disabled="pendingBusy || !pendingIds.length" type="primary" @click="processPending('approve')">加入所选（{{ pendingIds.length }}）</el-button>
+      </template>
+    </el-dialog>
 
     <Teleport to="body">
       <Transition name="fade">
@@ -290,6 +321,46 @@ import { useTagStore, type Tag } from '@/stores/tag'
 
 const tagStore = useTagStore()
 const dialogVisible = ref(false)
+const pendingVisible = ref(false)
+const pendingBusy = ref(false)
+const pendingTags = ref<Tag[]>([])
+const pendingIds = ref<number[]>([])
+const pendingKeyword = ref('')
+const filteredPendingTags = computed(() => pendingTags.value.filter(tag =>
+  tag.name.toLocaleLowerCase().includes(pendingKeyword.value.trim().toLocaleLowerCase())
+))
+
+const openPending = async () => {
+  pendingVisible.value = true
+  pendingBusy.value = true
+  pendingIds.value = []
+  pendingTags.value = []
+  pendingKeyword.value = ''
+  try {
+    pendingTags.value = await tagStore.fetchPendingTags()
+  } catch {
+    message.error('待加入标签加载失败，请关闭后重试')
+  } finally {
+    pendingBusy.value = false
+  }
+}
+
+const processPending = async (action: 'approve' | 'delete') => {
+  if (!pendingIds.value.length || pendingBusy.value) return
+  if (action === 'delete' && !await confirm('确定删除所选待加入标签吗？再次爬取可能重新出现。')) return
+  pendingBusy.value = true
+  try {
+    await tagStore.managePendingTags([...pendingIds.value], action)
+    pendingIds.value = []
+    pendingTags.value = await tagStore.fetchPendingTags()
+    message.success(action === 'approve' ? '所选标签已加入标签库' : '所选待加入标签已删除')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '处理失败，请关闭后重试')
+  } finally {
+    pendingBusy.value = false
+  }
+}
+
 const editingId = ref<number>()
 const saving = ref(false)
 const searchKeyword = ref('')

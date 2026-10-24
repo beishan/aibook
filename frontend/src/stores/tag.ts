@@ -76,7 +76,19 @@ export const useTagStore = defineStore('tag', () => {
     return response.data as { deletedCount: number }
   }
 
+  async function fetchPendingTags() {
+    const response = await api.get('/api/tags/pending')
+    return response.data as Tag[]
+  }
+
+  async function managePendingTags(ids: number[], action: 'approve' | 'delete') {
+    await api.post('/api/tags/pending/' + action, { ids })
+    await fetchTags()
+  }
+
   return {
+    fetchPendingTags,
+    managePendingTags,
     tags,
     loading,
     fetchTags,

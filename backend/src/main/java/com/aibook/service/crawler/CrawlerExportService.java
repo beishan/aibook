@@ -515,8 +515,13 @@ public class CrawlerExportService {
                 ? Set.of() : libraryBook.getTags());
         for (String name : metadataTags(crawlerBook.getTags())) {
             Tag tag = tagRepository.findByNameIgnoreCaseAndUser(name, user);
-            if (tag == null) tag = tagRepository.save(Tag.builder().name(name).color("#64748B").user(user).build());
-            tags.add(tag);
+            if (tag == null) {
+                tag = tagRepository.save(Tag.builder()
+                        .name(name).color("#64748B").pending(true)
+                        .sourceType(Tag.SourceType.SCRAPER).sourceDetail("网站爬虫")
+                        .user(user).build());
+            }
+            if (!tag.isPending()) tags.add(tag);
         }
         libraryBook.setTags(tags);
     }

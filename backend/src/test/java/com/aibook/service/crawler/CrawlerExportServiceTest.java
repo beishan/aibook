@@ -322,8 +322,7 @@ class CrawlerExportServiceTest {
                 .extracting(BookVersion::getFormat).isEqualTo("epub");
         assertThat(crawlerBook.getLibraryBook()).isNotNull();
         assertThat(crawlerBook.getLibraryBook().getCategory().getName()).isEqualTo("都市");
-        assertThat(crawlerBook.getLibraryBook().getTags()).extracting(Tag::getName)
-                .containsExactlyInAnyOrder("后宫", "NTR");
+        assertThat(crawlerBook.getLibraryBook().getTags()).isEmpty();
         assertThat(crawlerBook.getLibraryBook().getSourceBookStatus()).isEqualTo("连载中");
         verify(crawlerBooks).save(crawlerBook);
     }

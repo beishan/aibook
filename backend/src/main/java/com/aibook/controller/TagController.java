@@ -36,6 +36,24 @@ public class TagController {
         return ResponseEntity.ok(tags);
     }
 
+    @GetMapping("/pending")
+    public ResponseEntity<List<TagDTO>> getPendingTags(Authentication authentication) {
+        return ResponseEntity.ok(tagService.getPendingTags(
+                userService.findByUsername(authentication.getName())));
+    }
+
+    @PostMapping("/pending/{action}")
+    public ResponseEntity<Void> managePendingTags(
+            Authentication authentication, @PathVariable String action,
+            @RequestBody TagIdsRequest request) {
+        if (!List.of("approve", "delete").contains(action)) {
+            return ResponseEntity.badRequest().build();
+        }
+        tagService.managePendingTags(request.ids(),
+                userService.findByUsername(authentication.getName()), action.equals("approve"));
+        return ResponseEntity.noContent().build();
+    }
+
     /** 按页扫描当前账户书库内的标签，前端可据此展示实际扫描进度。 */
     @GetMapping("/library-scan")
     public ResponseEntity<TagLibraryScanPageDTO> scanLibraryTags(
