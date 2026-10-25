@@ -529,7 +529,13 @@
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column prop="latestChapter" label="最新章节" min-width="180" />
+        <el-table-column prop="latestChapter" label="最新章节" min-width="180">
+          <template #default="{ row }">
+            <span class="discovery-latest-chapter" :title="row.latestChapter" tabindex="0">
+              {{ row.latestChapter }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column label="发现时间" width="170"><template #default="{row}">{{ formatTime(row.discoverTime) }}</template></el-table-column>
         <el-table-column label="操作" width="180" :fixed="isMobileCrawlerLayout ? false : 'right'" align="right">
           <template #default="{ row }">
@@ -5630,6 +5636,17 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   .crawler-book-card > .discovery-card-cover {
     height: 128px;
   }
+}
+.discovery-latest-chapter {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.discovery-latest-chapter:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 .crawler-book-tag-list {
   display: flex;
