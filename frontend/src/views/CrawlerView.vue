@@ -462,6 +462,7 @@
       </div>
       <el-table
         v-if="discoveryViewMode==='table'"
+        ref="discoveryTableRef"
         v-loading="discoveryLoading"
         :data="discoveredBooks"
         :max-height="tableMaxHeight"
@@ -536,9 +537,9 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="发现时间" width="170"><template #default="{row}">{{ formatTime(row.discoverTime) }}</template></el-table-column>
-        <el-table-column label="操作" width="180" :fixed="isMobileCrawlerLayout ? false : 'right'" align="right">
+        <el-table-column label="发现时间" width="170" class-name="task-ending-cell">
           <template #default="{ row }">
+            <span>{{ formatTime(row.discoverTime) }}</span>
             <div class="crawler-book-action-cluster discovery-book-action-cluster row-hover-action" @click.stop>
               <el-button
                 size="small"
@@ -2756,6 +2757,8 @@ watch(chapterTableRef, table => {
   stopChapterProgressViewport = table ? observeChapterProgressViewport(table.$el) : () => {}
 }, { flush: 'post' })
 onUnmounted(() => stopChapterProgressViewport())
+const discoveryTableRef = ref<InstanceType<typeof ElTable>>()
+useTableViewportActions(discoveryTableRef)
 const bookTableRef=ref<InstanceType<typeof ElTable>>()
 useTableViewportActions(bookTableRef)
 const bookTag = ref('')

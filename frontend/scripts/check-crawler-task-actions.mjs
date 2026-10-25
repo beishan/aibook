@@ -76,7 +76,9 @@ assert.match(source, /function handleCrawlerBookTableMore\([\s\S]*?command==='tr
 
 const discoveryBookTable = source.match(/<el-table\s+v-if="discoveryViewMode==='table'"([\s\S]*?)<\/el-table>/)?.[1]
 assert.ok(discoveryBookTable, 'CrawlerView must define the discovery-book table')
-assert.match(discoveryBookTable, /label="操作"\s+width="180"\s+:fixed="isMobileCrawlerLayout \? false : 'right'"\s+align="right"/, 'discovery-book actions must match the crawler-book fixed column alignment')
+assert.doesNotMatch(discoveryBookTable, /label="操作"/, 'discovery-book actions must not occupy a dedicated column')
+assert.match(discoveryBookTable, /label="发现时间"[\s\S]*?class-name="task-ending-cell"[\s\S]*?discovery-book-action-cluster/, 'discovery actions must share the final data cell')
+assert.match(source, /useTableViewportActions\(discoveryTableRef\)/, 'discovery actions must retain the visible right edge positioning')
 assert.match(discoveryBookTable, /class="crawler-book-action-cluster discovery-book-action-cluster row-hover-action"/, 'discovery-book actions must reuse the hover-revealed unified rounded cluster')
 assert.match(discoveryBookTable, /crawler-book-action-details[\s\S]*?crawler-book-action-import/, 'discovery-book details and crawl must remain primary actions')
 assert.match(discoveryBookTable, /circle\s+:icon="MoreFilled"\s+class="crawler-book-action-more"/, 'discovery-book secondary actions must use a compact overflow button')
