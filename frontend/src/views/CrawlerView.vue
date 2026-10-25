@@ -746,9 +746,9 @@
         <el-table-column label="入库状态" width="110"><template #default="{row}"><el-tag :type="importStatusType(row.importStatus)" effect="light">{{ importStatusLabel(row.importStatus) }}</el-tag></template></el-table-column>
         <el-table-column label="创建时间" width="154"><template #default="{row}">{{ formatTime(row.createdAt) }}</template></el-table-column>
         <el-table-column label="开始爬取" width="154"><template #default="{row}">{{ row.lastCrawlStartedAt ? formatTime(row.lastCrawlStartedAt) : '暂无记录' }}</template></el-table-column>
-        <el-table-column label="失败" width="80" prop="failedChapterCount" />
-        <el-table-column label="操作" width="260" :fixed="isMobileCrawlerLayout ? false : 'right'" align="right">
+        <el-table-column label="失败" width="80" class-name="task-ending-cell">
           <template #default="{ row }">
+            <span>{{ row.failedChapterCount }}</span>
             <div class="crawler-book-action-cluster row-hover-action" @click.stop>
               <el-button size="small" round class="crawler-book-action-button crawler-book-action-details" @click="openBook(row)">详情</el-button>
               <el-button size="small" round class="crawler-book-action-button crawler-book-action-continue" :disabled="isBookTaskActive(row)" @click="continueCrawl(row)">{{ isBookTaskActive(row)?'任务中':'继续' }}</el-button>
@@ -2469,6 +2469,31 @@ interface BookListOption { id:number; name:string; description?:string }
 type TaskMoreCommand='scan-results'|'book-lists'|'edit'|'resume'|'delete'|'queue'
 type TaskMoreAction={command:TaskMoreCommand;label:string;danger?:boolean;divided?:boolean}
 
+function useTableViewportActions(tableRef: { value: InstanceType<typeof ElTable> | undefined }) {
+  watch(() => tableRef.value, (table, _previous, onCleanup) => {
+    const scrollWrapper = table?.$el.querySelector('.el-scrollbar__wrap') as HTMLElement | null
+    if (!scrollWrapper) return
+    const updateActionPosition = () => {
+      const hiddenRight = Math.max(
+        0,
+        scrollWrapper.scrollWidth - scrollWrapper.clientWidth - scrollWrapper.scrollLeft,
+      )
+      table.$el.style.setProperty('--task-actions-hidden-right', hiddenRight + 'px')
+      table.$el.style.setProperty('--task-actions-viewport-width', scrollWrapper.clientWidth + 'px')
+    }
+    scrollWrapper.addEventListener('scroll', updateActionPosition, { passive: true })
+    const resizeObserver = new ResizeObserver(updateActionPosition)
+    resizeObserver.observe(scrollWrapper)
+    const bodyTable = scrollWrapper.querySelector('.el-table__body')
+    if (bodyTable) resizeObserver.observe(bodyTable)
+    updateActionPosition()
+    onCleanup(() => {
+      scrollWrapper.removeEventListener('scroll', updateActionPosition)
+      resizeObserver.disconnect()
+    })
+  }, { flush: 'post', immediate: true })
+}
+
 const TaskTable = defineComponent({
   props: {
     tasks: { type: Array as () => CrawlerTask[], required: true },
@@ -2485,31 +2510,7 @@ const TaskTable = defineComponent({
   ],
   setup(props, { emit, expose }) {
   const tableRef = ref<InstanceType<typeof ElTable>>()
-  let scrollWrapper: HTMLElement | null = null
-  let actionResizeObserver: ResizeObserver | undefined
-  const updateActionPosition = () => {
-    if (!scrollWrapper) return
-    const hiddenRight = Math.max(
-      0,
-      scrollWrapper.scrollWidth - scrollWrapper.clientWidth - scrollWrapper.scrollLeft,
-    )
-    tableRef.value?.$el.style.setProperty('--task-actions-hidden-right', hiddenRight + 'px')
-    tableRef.value?.$el.style.setProperty('--task-actions-viewport-width', scrollWrapper.clientWidth + 'px')
-  }
-  onMounted(() => {
-    scrollWrapper = tableRef.value?.$el.querySelector('.el-scrollbar__wrap') ?? null
-    if (!scrollWrapper) return
-    scrollWrapper.addEventListener('scroll', updateActionPosition, { passive: true })
-    actionResizeObserver = new ResizeObserver(updateActionPosition)
-    actionResizeObserver.observe(scrollWrapper)
-    const bodyTable = scrollWrapper.querySelector('.el-table__body')
-    if (bodyTable) actionResizeObserver.observe(bodyTable)
-    updateActionPosition()
-  })
-  onUnmounted(() => {
-    scrollWrapper?.removeEventListener('scroll', updateActionPosition)
-    actionResizeObserver?.disconnect()
-  })
+  useTableViewportActions(tableRef)
   expose({ refreshLayout: () => tableRef.value?.doLayout() })
   const moreActions=(row:CrawlerTask):TaskMoreAction[]=>[
     row.type==='SITE_SCAN'?{command:'scan-results',label:'扫描结果'}:null,
@@ -2750,6 +2751,7 @@ watch(chapterTableRef, table => {
 }, { flush: 'post' })
 onUnmounted(() => stopChapterProgressViewport())
 const bookTableRef=ref<InstanceType<typeof ElTable>>()
+useTableViewportActions(bookTableRef)
 const bookTag = ref('')
 const bookChapterCountGreaterThan = ref<number | undefined>(undefined)
 const bookTagOptions = ref<string[]>([])
@@ -6191,11 +6193,12 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   overflow: visible;
 }
 
-:deep(.el-table__row .task-ending-cell .task-action-cluster) {
+:deep(.el-table__row .task-ending-cell :is(.task-action-cluster, .crawler-book-action-cluster)) {
   position: absolute;
   z-index: 5;
   top: 50%;
   right: calc(12px + var(--task-actions-hidden-right, 0px));
+  width: max-content;
   max-width: calc(var(--task-actions-viewport-width, 100vw) - 24px);
   box-sizing: border-box;
   flex-wrap: wrap;
@@ -6203,7 +6206,7 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 }
 
 @media (hover: none) {
-  :deep(.el-table__row .task-ending-cell .task-action-cluster) {
+  :deep(.el-table__row .task-ending-cell :is(.task-action-cluster, .crawler-book-action-cluster)) {
     position: static;
     display: flex;
     flex-wrap: wrap;

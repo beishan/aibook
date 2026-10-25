@@ -64,7 +64,8 @@ assert.match(source, /pagedQueuedTasks=computed\(\(\)=>queuedTasks\.value\.slice
 
 const crawlerBookTable = source.match(/<el-table\s+v-if="bookViewMode==='table'"([\s\S]*?)<\/el-table>/)?.[1]
 assert.ok(crawlerBookTable, 'CrawlerView must define the crawler-book table')
-assert.match(crawlerBookTable, /label="操作"\s+width="260"\s+:fixed="isMobileCrawlerLayout \? false : 'right'"\s+align="right"/, 'crawler-book actions must use the task-list column alignment')
+assert.doesNotMatch(crawlerBookTable, /label="操作"/, 'crawler-book actions must not occupy a dedicated column')
+assert.match(crawlerBookTable, /label="失败"[\s\S]*?class-name="task-ending-cell"[\s\S]*?crawler-book-action-cluster/, 'crawler-book actions must share the final cell')
 assert.match(crawlerBookTable, /class="crawler-book-action-cluster row-hover-action"/, 'crawler-book actions must use a hover-revealed unified rounded cluster')
 assert.match(crawlerBookTable, /crawler-book-action-details/, 'crawler-book details must remain a primary action')
 assert.match(crawlerBookTable, /crawler-book-action-continue/, 'crawler-book continue must remain a primary action')
@@ -86,7 +87,7 @@ assert.match(source, /Star, StarFilled[\s\S]*?VideoPause, VideoPlay/, 'crawler c
 console.log('Crawler task, discovery-book, and crawler-book actions use polished action clusters with compact overflow menus')
 
 // Exercise the production geometry with a table wider than its visible viewport.
-const positioningBody = taskTable.match(/const updateActionPosition = \(\) => \{([\s\S]*?)\n  \}/)?.[1]
+const positioningBody = source.match(/const updateActionPosition = \(\) => \{([\s\S]*?)\n    \}/)?.[1]
 assert.ok(positioningBody, 'task actions must track the visible table edge')
 for (const [scrollWidth, clientWidth, scrollLeft] of [
   [1800, 900, 0],
@@ -98,7 +99,7 @@ for (const [scrollWidth, clientWidth, scrollLeft] of [
   const styles = new Map()
   runInNewContext('(() => {' + positioningBody + '})()', {
     scrollWrapper: { scrollWidth, clientWidth, scrollLeft },
-    tableRef: { value: { $el: { style: { setProperty: (key, value) => styles.set(key, value) } } } },
+    table: { $el: { style: { setProperty: (key, value) => styles.set(key, value) } } },
   })
   const offset = Number.parseFloat(styles.get('--task-actions-hidden-right'))
   assert.equal(scrollWidth - scrollLeft - offset, clientWidth, 'action right edge must follow the visible viewport throughout scrolling and resizing')
