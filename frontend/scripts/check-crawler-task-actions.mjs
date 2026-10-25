@@ -107,3 +107,11 @@ for (const [scrollWidth, clientWidth, scrollLeft] of [
 }
 assert.match(source, /right: calc\(12px \+ var\(--task-actions-hidden-right, 0px\)\)/)
 console.log('Task action positioning follows the visible right edge at scroll endpoints, midway, and after resize')
+
+const overlayRule = source.match(/:deep\(\.el-table__row \.task-ending-cell :is\(\.task-action-cluster, \.crawler-book-action-cluster\)\) \{([\s\S]*?)\}/)?.[1]
+assert.ok(overlayRule, 'both list action groups must share their positioning rule')
+assert.match(overlayRule, /top: 50%;/)
+assert.match(overlayRule, /translate: 0 -50%;/, 'vertical centering must use independent translate so hover transforms cannot override it')
+assert.doesNotMatch(overlayRule, /transform:/, 'centering must not compete with the common hover transform')
+assert.match(source, /@media \(hover: none\) \{[\s\S]*?task-ending-cell[\s\S]*?position: static;[\s\S]*?translate: none;/, 'touch inline actions must reset centering')
+console.log('Task and crawler-book overlays center independently of hover and focus transforms')

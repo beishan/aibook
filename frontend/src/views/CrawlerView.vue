@@ -6202,7 +6202,7 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
   max-width: calc(var(--task-actions-viewport-width, 100vw) - 24px);
   box-sizing: border-box;
   flex-wrap: wrap;
-  transform: translateY(-50%);
+  translate: 0 -50%;
 }
 
 @media (hover: none) {
@@ -6212,6 +6212,7 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
     flex-wrap: wrap;
     width: fit-content;
     margin-top: 6px;
+    translate: none;
     transform: none;
     white-space: normal;
   }
