@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { runInNewContext } from 'node:vm'
 import { readFile } from 'node:fs/promises'
 
 const source = await readFile(new URL('../src/views/CrawlerView.vue', import.meta.url), 'utf8')
@@ -83,3 +84,25 @@ assert.match(source, /function handleDiscoveryCardMore\([\s\S]*?command==='ignor
 assert.match(source, /Star, StarFilled[\s\S]*?VideoPause, VideoPlay/, 'crawler controls must reuse the Element Plus star, pause, and play icons')
 
 console.log('Crawler task, discovery-book, and crawler-book actions use polished action clusters with compact overflow menus')
+
+// Exercise the production geometry with a table wider than its visible viewport.
+const positioningBody = taskTable.match(/const updateActionPosition = \(\) => \{([\s\S]*?)\n  \}/)?.[1]
+assert.ok(positioningBody, 'task actions must track the visible table edge')
+for (const [scrollWidth, clientWidth, scrollLeft] of [
+  [1800, 900, 0],
+  [1800, 900, 450],
+  [1800, 900, 900],
+  [1800, 600, 300],
+  [900, 900, 0],
+]) {
+  const styles = new Map()
+  runInNewContext('(() => {' + positioningBody + '})()', {
+    scrollWrapper: { scrollWidth, clientWidth, scrollLeft },
+    tableRef: { value: { $el: { style: { setProperty: (key, value) => styles.set(key, value) } } } },
+  })
+  const offset = Number.parseFloat(styles.get('--task-actions-hidden-right'))
+  assert.equal(scrollWidth - scrollLeft - offset, clientWidth, 'action right edge must follow the visible viewport throughout scrolling and resizing')
+  assert.equal(styles.get('--task-actions-viewport-width'), clientWidth + 'px')
+}
+assert.match(source, /right: calc\(12px \+ var\(--task-actions-hidden-right, 0px\)\)/)
+console.log('Task action positioning follows the visible right edge at scroll endpoints, midway, and after resize')

@@ -2485,6 +2485,31 @@ const TaskTable = defineComponent({
   ],
   setup(props, { emit, expose }) {
   const tableRef = ref<InstanceType<typeof ElTable>>()
+  let scrollWrapper: HTMLElement | null = null
+  let actionResizeObserver: ResizeObserver | undefined
+  const updateActionPosition = () => {
+    if (!scrollWrapper) return
+    const hiddenRight = Math.max(
+      0,
+      scrollWrapper.scrollWidth - scrollWrapper.clientWidth - scrollWrapper.scrollLeft,
+    )
+    tableRef.value?.$el.style.setProperty('--task-actions-hidden-right', hiddenRight + 'px')
+    tableRef.value?.$el.style.setProperty('--task-actions-viewport-width', scrollWrapper.clientWidth + 'px')
+  }
+  onMounted(() => {
+    scrollWrapper = tableRef.value?.$el.querySelector('.el-scrollbar__wrap') ?? null
+    if (!scrollWrapper) return
+    scrollWrapper.addEventListener('scroll', updateActionPosition, { passive: true })
+    actionResizeObserver = new ResizeObserver(updateActionPosition)
+    actionResizeObserver.observe(scrollWrapper)
+    const bodyTable = scrollWrapper.querySelector('.el-table__body')
+    if (bodyTable) actionResizeObserver.observe(bodyTable)
+    updateActionPosition()
+  })
+  onUnmounted(() => {
+    scrollWrapper?.removeEventListener('scroll', updateActionPosition)
+    actionResizeObserver?.disconnect()
+  })
   expose({ refreshLayout: () => tableRef.value?.doLayout() })
   const moreActions=(row:CrawlerTask):TaskMoreAction[]=>[
     row.type==='SITE_SCAN'?{command:'scan-results',label:'扫描结果'}:null,
@@ -2525,7 +2550,7 @@ const TaskTable = defineComponent({
       data: props.tasks,
       loading: props.loading,
       rowKey: 'id',
-      class: 'data-table',
+      class: 'data-table task-actions-viewport',
       onSelectionChange: (rows: CrawlerTask[]) => emit('selection-change', rows),
     },
     () => [
@@ -6168,9 +6193,12 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 
 :deep(.el-table__row .task-ending-cell .task-action-cluster) {
   position: absolute;
-  z-index: 2;
+  z-index: 5;
   top: 50%;
-  right: 12px;
+  right: calc(12px + var(--task-actions-hidden-right, 0px));
+  max-width: calc(var(--task-actions-viewport-width, 100vw) - 24px);
+  box-sizing: border-box;
+  flex-wrap: wrap;
   transform: translateY(-50%);
 }
 
