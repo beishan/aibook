@@ -2458,6 +2458,26 @@ const TaskTable = defineComponent({
     if(command==='resume')emit('command',row,'resume')
     else emit(command,row)
   }
+  const renderTaskActions = (row: CrawlerTask) => {
+    const actions=moreActions(row)
+    return h('div',{class:'task-action-cluster row-hover-action'},[
+      h(ElButton,{size:'small',round:true,class:'task-action-button task-action-details',onClick:()=>emit('open',row)},()=> '详情'),
+      ['RUNNING','WAITING'].includes(row.status)?h(ElButton,{size:'small',circle:true,icon:VideoPause,class:'task-action-button task-action-pause','aria-label':'暂停任务',title:'暂停任务',onClick:()=>emit('command',row,'pause')}):null,
+      row.status==='WAITING'?h(ElButton,{size:'small',round:true,class:'task-action-button task-action-prioritize',loading:props.prioritizingTaskId===row.id,disabled:props.batchManaging||Boolean(props.prioritizingTaskId&&props.prioritizingTaskId!==row.id),onClick:()=>emit('prioritize',row)},()=> '优先'):null,
+      row.status==='PAUSED'?h(ElButton,{size:'small',circle:true,icon:VideoPlay,class:'task-action-button task-action-resume','aria-label':'继续任务',title:'继续任务',onClick:()=>emit('command',row,'resume')}):null,
+      ['RUNNING','WAITING','PAUSED'].includes(row.status)?h(ElButton,{size:'small',round:true,class:'task-action-button task-action-cancel',onClick:()=>emit('command',row,'cancel')},()=> '取消'):null,
+      actions.length?h(ElDropdown, {
+        trigger: 'click',
+        persistent: false,
+        placement: 'bottom-end',
+        popperClass: 'crawler-task-more-popper',
+        onCommand: (command: TaskMoreCommand) => handleMoreCommand(row, command),
+      }, {
+        default:()=>h(ElButton,{size:'small',circle:true,icon:MoreFilled,class:'task-action-more','aria-label':'更多操作',title:'更多操作'}),
+        dropdown:()=>h(ElDropdownMenu,{},()=>actions.map(action=>h(ElDropdownItem,{command:action.command,divided:action.divided,class:action.danger?'danger-dropdown-item':undefined},()=>action.label))),
+      }):null,
+    ])
+  }
   return () => h(
     ElTable,
     {
@@ -2523,32 +2543,17 @@ const TaskTable = defineComponent({
     row.status==='RUNNING'&&row.currentSubStep?h('small',{class:'task-sub-step'},row.currentSubStep):null,
   ])}),
   h(ElTableColumn,{label:'创建时间',width:170},{default:({row}:{row:CrawlerTask})=>formatTime(row.createdAt)}),
-  h(ElTableColumn,{label:'完成时间',width:170},{default:({row}:{row:CrawlerTask})=>formatTime(row.finishedAt)}),
   h(ElTableColumn, {
-    label: '操作',
-    width: 260,
-    fixed: isMobileCrawlerLayout.value ? false : 'right',
-    align: 'right',
-  }, {default:({row}:{row:CrawlerTask})=>{
-    const actions=moreActions(row)
-    return h('div',{class:'task-action-cluster row-hover-action'},[
-      h(ElButton,{size:'small',round:true,class:'task-action-button task-action-details',onClick:()=>emit('open',row)},()=> '详情'),
-      ['RUNNING','WAITING'].includes(row.status)?h(ElButton,{size:'small',circle:true,icon:VideoPause,class:'task-action-button task-action-pause','aria-label':'暂停任务',title:'暂停任务',onClick:()=>emit('command',row,'pause')}):null,
-      row.status==='WAITING'?h(ElButton,{size:'small',round:true,class:'task-action-button task-action-prioritize',loading:props.prioritizingTaskId===row.id,disabled:props.batchManaging||Boolean(props.prioritizingTaskId&&props.prioritizingTaskId!==row.id),onClick:()=>emit('prioritize',row)},()=> '优先'):null,
-      row.status==='PAUSED'?h(ElButton,{size:'small',circle:true,icon:VideoPlay,class:'task-action-button task-action-resume','aria-label':'继续任务',title:'继续任务',onClick:()=>emit('command',row,'resume')}):null,
-      ['RUNNING','WAITING','PAUSED'].includes(row.status)?h(ElButton,{size:'small',round:true,class:'task-action-button task-action-cancel',onClick:()=>emit('command',row,'cancel')},()=> '取消'):null,
-      actions.length?h(ElDropdown, {
-        trigger: 'click',
-        persistent: false,
-        placement: 'bottom-end',
-        popperClass: 'crawler-task-more-popper',
-        onCommand: (command: TaskMoreCommand) => handleMoreCommand(row, command),
-      }, {
-        default:()=>h(ElButton,{size:'small',circle:true,icon:MoreFilled,class:'task-action-more','aria-label':'更多操作',title:'更多操作'}),
-        dropdown:()=>h(ElDropdownMenu,{},()=>actions.map(action=>h(ElDropdownItem,{command:action.command,divided:action.divided,class:action.danger?'danger-dropdown-item':undefined},()=>action.label))),
-      }):null,
-    ])
-  }})
+    label: '完成时间',
+    width: 170,
+    className: 'task-ending-cell',
+  }, {
+    default: ({ row }: { row: CrawlerTask }) => [
+      h('span', {}, formatTime(row.finishedAt)),
+      renderTaskActions(row),
+    ],
+  }),
+
     ],
   )
   },
@@ -6097,6 +6102,34 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 :deep(.task-action-cluster){display:inline-flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--border-color-light);border-radius:13px;background:color-mix(in srgb,var(--surface-elevated) 88%,transparent);box-shadow:0 3px 10px color-mix(in srgb,var(--text-primary) 5%,transparent);white-space:nowrap}:deep(.task-action-cluster .el-button){height:28px;margin-left:0;padding:5px 11px;border-color:transparent;background:transparent;font-size:11px;font-weight:700;transition:background .18s ease,color .18s ease,box-shadow .18s ease}:deep(.task-action-cluster .task-action-details),:deep(.task-action-cluster .task-action-resume){background:var(--primary-alpha-10);color:var(--primary)}:deep(.task-action-cluster .task-action-details:hover),:deep(.task-action-cluster .task-action-details:focus-visible),:deep(.task-action-cluster .task-action-resume:hover),:deep(.task-action-cluster .task-action-resume:focus-visible){background:var(--primary);color:#fff;box-shadow:0 4px 10px color-mix(in srgb,var(--primary) 22%,transparent)}:deep(.task-action-cluster .task-action-pause){color:var(--text-secondary)}:deep(.task-action-cluster .task-action-pause:hover),:deep(.task-action-cluster .task-action-pause:focus-visible){background:var(--surface-card);color:var(--text-primary)}:deep(.task-action-cluster .task-action-cancel){color:var(--danger)}:deep(.task-action-cluster .task-action-cancel:hover),:deep(.task-action-cluster .task-action-cancel:focus-visible){background:color-mix(in srgb,var(--danger) 10%,transparent);color:var(--danger)}:deep(.task-action-cluster .el-dropdown){display:inline-flex}:deep(.task-action-cluster .task-action-more){width:28px;padding:0;color:var(--text-tertiary)}:deep(.task-action-cluster .task-action-more:hover),:deep(.task-action-cluster .task-action-more:focus-visible){background:var(--surface-card);color:var(--text-primary)}
 :deep(.crawler-book-action-cluster){display:inline-flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--border-color-light);border-radius:13px;background:color-mix(in srgb,var(--surface-elevated) 88%,transparent);box-shadow:0 3px 10px color-mix(in srgb,var(--text-primary) 5%,transparent);white-space:nowrap}:deep(.crawler-book-action-cluster .el-button){height:28px;margin-left:0;padding:5px 10px;border-color:transparent;background:transparent;font-size:11px;font-weight:700;transition:background .18s ease,color .18s ease,box-shadow .18s ease}:deep(.crawler-book-action-cluster .crawler-book-action-details),:deep(.crawler-book-action-cluster .crawler-book-action-import){background:var(--primary-alpha-10);color:var(--primary)}:deep(.crawler-book-action-cluster .crawler-book-action-details:hover),:deep(.crawler-book-action-cluster .crawler-book-action-details:focus-visible),:deep(.crawler-book-action-cluster .crawler-book-action-import:hover),:deep(.crawler-book-action-cluster .crawler-book-action-import:focus-visible){background:var(--primary);color:#fff;box-shadow:0 4px 10px color-mix(in srgb,var(--primary) 22%,transparent)}:deep(.crawler-book-action-cluster .crawler-book-action-continue){color:var(--text-secondary)}:deep(.crawler-book-action-cluster .crawler-book-action-continue:hover),:deep(.crawler-book-action-cluster .crawler-book-action-continue:focus-visible){background:var(--surface-card);color:var(--text-primary)}:deep(.crawler-book-action-cluster .el-dropdown){display:inline-flex}:deep(.crawler-book-action-cluster .crawler-book-action-more){width:28px;padding:0;color:var(--text-tertiary)}:deep(.crawler-book-action-cluster .crawler-book-action-more:hover),:deep(.crawler-book-action-cluster .crawler-book-action-more:focus-visible){background:var(--surface-card);color:var(--text-primary)}
 :deep(.favorite-action){width:28px!important;height:28px!important;padding:0!important;color:var(--text-tertiary)}:deep(.favorite-action:hover),:deep(.favorite-action:focus-visible){background:color-mix(in srgb,#f6c85f 16%,transparent)!important;color:#a66a00!important}:deep(.favorite-action.is-favorite){border-color:#d59b26!important;background:#f6c85f!important;color:#3b2500!important;font-weight:800}:deep(.favorite-action.is-favorite:hover),:deep(.favorite-action.is-favorite:focus-visible){border-color:#c88b12!important;background:#ffd978!important;color:#2d1b00!important}
+:deep(.task-ending-cell) {
+  position: relative;
+}
+
+:deep(.task-ending-cell .cell) {
+  overflow: visible;
+}
+
+:deep(.el-table__row .task-ending-cell .task-action-cluster) {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+}
+
+@media (hover: none) {
+  :deep(.el-table__row .task-ending-cell .task-action-cluster) {
+    position: static;
+    display: flex;
+    flex-wrap: wrap;
+    width: fit-content;
+    margin-top: 6px;
+    transform: none;
+    white-space: normal;
+  }
+}
+
 :deep(.el-table__row .row-hover-action) {
   opacity: 0;
   pointer-events: none;
