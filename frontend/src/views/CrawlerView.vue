@@ -508,7 +508,27 @@
           </template>
         </el-table-column>
         <el-table-column label="发现页" width="160"><template #default="{row}"><el-tag v-if="row.discoveryPageName" size="small" effect="plain">{{ row.discoveryPageName }}</el-tag><span v-else class="muted-text">站点首页 / 未记录</span></template></el-table-column>
-        <el-table-column label="分类 / 标签" min-width="190"><template #default="{row}"><div class="crawler-book-tag-list table-tags"><el-tag v-if="row.category" size="small" type="info" effect="plain">{{ row.category }}</el-tag><el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag><span v-if="!row.category&&!row.tags?.length">暂无</span></div></template></el-table-column>
+        <el-table-column label="分类 / 标签" min-width="190">
+          <template #default="{ row }">
+            <el-tooltip
+              :content="[row.category, ...(row.tags || [])].filter(Boolean).join(' / ')"
+              :disabled="!row.category && !row.tags?.length"
+              :show-after="250"
+              :popper-style="{ maxWidth: 'min(360px, 90vw)', overflowWrap: 'anywhere' }"
+              placement="top"
+            >
+              <div class="crawler-book-tag-list table-tags" tabindex="0">
+                <el-tag v-if="row.category" size="small" type="info" effect="plain">
+                  {{ row.category }}
+                </el-tag>
+                <el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">
+                  {{ tag }}
+                </el-tag>
+                <span v-if="!row.category && !row.tags?.length">暂无</span>
+              </div>
+            </el-tooltip>
+          </template>
+        </el-table-column>
         <el-table-column prop="latestChapter" label="最新章节" min-width="180" />
         <el-table-column label="发现时间" width="170"><template #default="{row}">{{ formatTime(row.discoverTime) }}</template></el-table-column>
         <el-table-column label="操作" width="180" :fixed="isMobileCrawlerLayout ? false : 'right'" align="right">
@@ -700,7 +720,27 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="分类 / 标签" min-width="210"><template #default="{row}"><div class="crawler-book-tag-list table-tags"><el-tag v-if="row.category" size="small" type="info" effect="plain">{{ row.category }}</el-tag><el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag><span v-if="!row.category&&!row.tags?.length">暂无</span></div></template></el-table-column>
+        <el-table-column label="分类 / 标签" min-width="210">
+          <template #default="{ row }">
+            <el-tooltip
+              :content="[row.category, ...(row.tags || [])].filter(Boolean).join(' / ')"
+              :disabled="!row.category && !row.tags?.length"
+              :show-after="250"
+              :popper-style="{ maxWidth: 'min(360px, 90vw)', overflowWrap: 'anywhere' }"
+              placement="top"
+            >
+              <div class="crawler-book-tag-list table-tags" tabindex="0">
+                <el-tag v-if="row.category" size="small" type="info" effect="plain">
+                  {{ row.category }}
+                </el-tag>
+                <el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">
+                  {{ tag }}
+                </el-tag>
+                <span v-if="!row.category && !row.tags?.length">暂无</span>
+              </div>
+            </el-tooltip>
+          </template>
+        </el-table-column>
         <el-table-column label="进度 / 采集结果" min-width="250"><template #default="{row}"><div v-if="isBookCompleted(row)" class="book-crawl-result table-result"><div><span>采集结果</span><strong>采集完成</strong></div><small>正文 {{ row.crawledChapterCount }} · 待开放 {{ row.pendingReleaseChapterCount }} · 失败 {{ row.failedChapterCount }}</small><el-button text type="primary" size="small" @click.stop="openBook(row)">采集结果详情</el-button></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(row)}" :percentage="progress(row)" :stroke-width="7" /><small>正文 {{ row.crawledChapterCount }}，待开放 {{ row.pendingReleaseChapterCount }} / 共 {{ row.chapterCount }} 章</small></template></template></el-table-column>
         <el-table-column label="状态" width="140"><template #default="{row}"><button class="status-editor" type="button" title="人工修改采集状态" @click.stop="openStatusEditor(row)"><el-tag :type="statusType(row.crawlStatus)">{{ statusLabel(row.crawlStatus) }}</el-tag><small>修改</small></button></template></el-table-column>
         <el-table-column label="入库状态" width="110"><template #default="{row}"><el-tag :type="importStatusType(row.importStatus)" effect="light">{{ importStatusLabel(row.importStatus) }}</el-tag></template></el-table-column>
@@ -5572,6 +5612,22 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 }
 .crawler-book-tag-list.table-tags {
   align-items: center;
+  max-height: 45px;
+  overflow: hidden;
+}
+.crawler-book-tag-list.table-tags .el-tag {
+  flex: 0 0 auto;
+  max-width: 100%;
+  height: 20px;
+}
+.crawler-book-tag-list.table-tags :deep(.el-tag__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crawler-book-tag-list.table-tags:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 .crawler-book-tag-list.table-tags > span:not(.el-tag) {
   color: var(--text-tertiary);
