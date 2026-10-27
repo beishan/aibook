@@ -1,0 +1,1074 @@
+/* All rules are rooted in the opt-in appearance class. Existing reader skins stay isolated. */
+.reader-view.blue-gray-mode {
+  --blue-accent: #1264cf;
+  --blue-selection: #e1effe;
+  --blue-sidebar-width: clamp(290px, 24.75vw, 380px);
+  --blue-visible-sidebar: 0px;
+  --blue-footer-height: 86px;
+  --reader-header-height: 62px;
+  height: 100dvh;
+  color: var(--blue-ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+.blue-gray-mode.blue-sidebar-open {
+  --blue-visible-sidebar: var(--blue-sidebar-width);
+}
+
+.blue-gray-mode .reader-content {
+  overflow: hidden;
+  background: transparent;
+}
+
+.blue-gray-mode .reader-body-wrapper {
+  display: grid;
+  grid-template-columns: var(--blue-visible-sidebar) minmax(0, 1fr);
+  grid-template-rows: 92px minmax(0, 1fr);
+  background: transparent;
+}
+
+.blue-gray-mode .side-panel {
+  position: relative;
+  inset: auto;
+  grid-column: 1;
+  grid-row: 1 / 3;
+  width: var(--blue-sidebar-width);
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  border: 0;
+  border-right: 1px solid var(--blue-line);
+  background: linear-gradient(125deg, var(--blue-soft), var(--blue-surface));
+  backdrop-filter: none;
+  box-shadow: none;
+  color: var(--blue-ink);
+  z-index: 10;
+}
+
+.blue-gray-mode .blue-book-identity {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 21px;
+  padding: 22px 24px 24px;
+}
+
+.blue-gray-mode .blue-book-cover {
+  display: grid;
+  width: 82px;
+  height: 118px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 5px;
+  background: #dfe7ee;
+  color: #6b7d94;
+  font: 32px 'Songti SC', 'STSong', serif;
+}
+
+.blue-gray-mode .blue-book-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.blue-gray-mode .blue-book-details {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-top: 3px;
+  gap: 10px;
+}
+
+.blue-gray-mode .blue-book-details > strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--blue-ink);
+  font-size: 20px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.blue-gray-mode .blue-book-details > span {
+  color: var(--blue-muted);
+  font-size: 14px;
+}
+
+.blue-gray-mode .blue-shelf-action {
+  display: inline-flex;
+  min-height: 35px;
+  align-items: center;
+  gap: 7px;
+  margin-top: auto;
+  padding: 6px 11px;
+  border: 1px solid var(--blue-line);
+  border-radius: 7px;
+  background: var(--blue-surface);
+  color: var(--blue-ink);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.blue-gray-mode .blue-shelf-action svg {
+  width: 15px;
+  height: 15px;
+}
+
+.blue-gray-mode .blue-book-more {
+  position: absolute;
+  right: 19px;
+  bottom: 24px;
+}
+
+.blue-gray-mode .blue-panel-navigation {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 0 20px 13px;
+  border-bottom: 1px solid var(--blue-line);
+}
+
+.blue-gray-mode .blue-panel-navigation > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.blue-gray-mode .blue-icon-button.blue-close-sidebar {
+  display: none;
+}
+
+.blue-gray-mode .panel-content {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 14px 24px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd6e4 transparent;
+}
+
+.blue-gray-mode .toc-search {
+  margin: 0 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--blue-line);
+  border-radius: 8px;
+  background: var(--blue-surface);
+  color: var(--blue-muted);
+}
+
+.blue-gray-mode .toc-search input {
+  color: var(--blue-ink);
+  font-size: 12px;
+}
+
+.blue-gray-mode .toc-list {
+  gap: 3px;
+}
+
+.blue-gray-mode .toc-item {
+  position: relative;
+  min-height: 46px;
+  gap: 12px;
+  padding: 10px 20px;
+  border-radius: 7px;
+  color: var(--blue-ink);
+  font-size: 15px;
+}
+
+.blue-gray-mode .toc-index {
+  display: none;
+}
+
+.blue-gray-mode .toc-item.active, .blue-gray-mode .bookmark-item:hover, .blue-gray-mode .search-result-item.active, .blue-gray-mode .blue-highlight-active {
+  background: var(--blue-selection);
+  color: #075dc6;
+}
+
+.blue-gray-mode .toc-item.active::before, .blue-gray-mode .search-result-item.active::before, .blue-gray-mode .blue-highlight-active::before {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: #1264cf;
+  content: '';
+}
+
+.blue-gray-mode .toc-item:hover {
+  background: color-mix(in srgb, var(--blue-accent) 7%, transparent);
+}
+
+.blue-gray-mode .blue-reading-toolbar {
+  position: relative;
+  display: flex;
+  grid-column: 2;
+  grid-row: 1;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 30px;
+  gap: 12px;
+}
+
+.blue-gray-mode .blue-reading-book-title {
+  display: block;
+  overflow: hidden;
+  max-width: calc(100% - 370px);
+  margin: 0 auto;
+  color: var(--blue-ink);
+  font: 600 28px/1.4 'Songti SC', 'STSong', 'SimSun', serif;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blue-gray-mode .blue-reading-actions {
+  position: absolute;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.blue-gray-mode .blue-icon-button {
+  display: inline-flex;
+  min-width: 34px;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: 7px;
+  padding: 7px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--blue-control);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.blue-gray-mode .blue-icon-button:hover, .blue-gray-mode .blue-icon-button.active {
+  background: #e1effe;
+  color: #1264cf;
+}
+
+.blue-gray-mode .blue-typography-action {
+  font: 22px/1 Georgia, serif;
+}
+
+.blue-gray-mode .blue-sidebar-toggle {
+  position: absolute;
+  left: 18px;
+}
+
+.reader-view.blue-gray-mode .reader-body {
+  grid-column: 2;
+  grid-row: 2;
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  min-width: 0;
+  margin: 0;
+  padding: 16px clamp(32px, 8vw, 124px) 40px;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: var(--blue-ink);
+  background: transparent;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd6e4 transparent;
+}
+
+.blue-gray-mode .reader-text, .blue-gray-mode .reader-html {
+  width: 100%;
+  max-width: var(--blue-content-width);
+  margin: 0 auto;
+}
+
+.blue-gray-mode .reader-text p, .blue-gray-mode .reader-rich-block {
+  font-size: 1em;
+  line-height: inherit;
+  letter-spacing: .035em;
+  text-align: justify;
+}
+
+.blue-gray-mode .chapter-title {
+  margin: 0 0 40px;
+  padding: 0;
+  color: inherit;
+  font-size: 1.6em;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: left;
+  letter-spacing: .04em;
+}
+
+.blue-gray-mode .chapter-title::after {
+  display: none;
+}
+
+.blue-gray-mode .reader-text ::selection, .blue-gray-mode .reader-html ::selection {
+  background: #d8eaff;
+  color: #172235;
+}
+
+.reader-view.blue-gray-mode .reader-body--epub {
+  padding: 10px clamp(32px, 8vw, 124px) 24px;
+}
+
+.reader-view.blue-gray-mode .reader-body--pdf {
+  padding: 8px 24px 20px;
+}
+
+.blue-gray-mode .reader-pdf {
+  height: 100%;
+}
+
+.blue-gray-mode .reader-tool-rail, .blue-gray-mode .reader-progress-dock {
+  display: none !important;
+}
+
+.blue-gray-mode .blue-reader-footer {
+  position: relative;
+  display: flex;
+  flex: 0 0 var(--blue-footer-height);
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  min-width: 0;
+  margin-left: var(--blue-visible-sidebar);
+  padding: 12px 28px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--blue-line);
+  box-sizing: border-box;
+  background: linear-gradient(180deg, var(--blue-surface), var(--blue-soft));
+  color: var(--blue-ink);
+}
+
+.blue-gray-mode .blue-chapter-button {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 12px;
+  padding: 10px 16px;
+  border: 1px solid var(--blue-line);
+  border-radius: 8px;
+  background: var(--blue-surface);
+  color: var(--blue-ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.blue-gray-mode .blue-chapter-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.blue-gray-mode .blue-footer-progress {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 12px;
+  color: var(--blue-muted);
+  text-align: center;
+}
+
+.blue-gray-mode .blue-footer-progress > span {
+  display: block;
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blue-gray-mode .blue-footer-progress input {
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  margin: 7px 0 0;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(to right, #1264cf var(--blue-progress), #dce5ef var(--blue-progress));
+  cursor: pointer;
+}
+
+.blue-gray-mode .blue-footer-progress input::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #0754b4;
+  border-radius: 50%;
+  background: #1264cf;
+}
+
+.blue-gray-mode .blue-footer-progress input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 1px solid #0754b4;
+  border-radius: 50%;
+  background: #1264cf;
+}
+
+.blue-gray-mode .blue-footer-chapter {
+  overflow: hidden;
+  color: var(--blue-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blue-gray-mode .reader-search-form {
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.blue-gray-mode .reader-search-form input {
+  min-width: 0;
+  border: 1px solid var(--blue-line);
+  border-radius: 9px;
+  background: var(--blue-surface);
+  color: var(--blue-ink);
+}
+
+.blue-gray-mode .reader-search-form button {
+  border: 1px solid var(--blue-line);
+  border-radius: 8px;
+  background: var(--blue-surface);
+  color: #1264cf;
+}
+
+.blue-gray-mode .search-summary {
+  padding: 12px 8px;
+  color: var(--blue-muted);
+  font-size: 12px;
+}
+
+.blue-gray-mode .search-results {
+  gap: 3px;
+}
+
+.blue-gray-mode .search-result-item {
+  position: relative;
+  padding: 14px 20px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--blue-ink);
+  text-align: left;
+}
+
+.blue-gray-mode .search-result-location {
+  color: inherit;
+  font-size: 14px;
+}
+
+.blue-gray-mode .search-result-excerpt {
+  margin-top: 7px;
+  color: inherit;
+  font: 14px/1.8 'Songti SC', 'STSong', serif;
+}
+
+.blue-gray-mode .search-result-excerpt mark {
+  background: #cbe3ff;
+  color: #075dc6;
+}
+
+.blue-gray-mode .bookmarks-header {
+  padding: 0 8px 14px;
+}
+
+.blue-gray-mode .bookmark-add-btn {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--blue-line);
+  border-radius: 8px;
+  background: var(--blue-surface);
+  color: #1264cf;
+  font-weight: 400;
+}
+
+.blue-gray-mode .bookmark-item {
+  padding: 15px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--blue-line);
+  border-radius: 6px;
+  background: transparent;
+}
+
+.blue-gray-mode .blue-bookmark-icon {
+  width: 16px;
+  height: 18px;
+  color: #1264cf;
+}
+
+.blue-gray-mode .bookmark-title {
+  color: var(--blue-ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.blue-gray-mode .blue-bookmark-excerpt {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 8px 0;
+  color: var(--blue-muted);
+  font: 13px/1.7 'Songti SC', 'STSong', serif;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.blue-gray-mode .bookmark-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: var(--blue-muted);
+  font-size: 11px;
+}
+
+.blue-gray-mode .blue-annotation-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 14px;
+  color: var(--blue-muted);
+  font-size: 12px;
+}
+
+.blue-gray-mode .blue-highlight-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.blue-gray-mode .blue-highlight-filter button {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--swatch-color);
+  cursor: pointer;
+}
+
+.blue-gray-mode .blue-highlight-filter button:first-child {
+  width: auto;
+  height: auto;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--blue-muted);
+  font: inherit;
+}
+
+.blue-gray-mode .blue-highlight-filter button.active {
+  outline: 2px solid #1264cf;
+  outline-offset: 3px;
+}
+
+.blue-gray-mode .highlight-item {
+  position: relative;
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--blue-line);
+  border-left: 3px solid;
+  border-radius: 7px;
+  background: transparent;
+}
+
+.blue-gray-mode .blue-highlight-quote {
+  display: -webkit-box;
+  width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--blue-ink);
+  font: 15px/1.8 'Songti SC', 'STSong', serif;
+  text-align: left;
+  cursor: pointer;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.blue-gray-mode .highlight-note {
+  color: var(--blue-muted);
+  font-size: 13px;
+}
+
+.blue-gray-mode .highlight-note .note-icon {
+  display: none;
+}
+
+.blue-gray-mode .highlight-meta {
+  color: var(--blue-muted);
+  font-size: 11px;
+}
+
+.blue-gray-mode .highlight-actions {
+  margin-top: 8px;
+}
+
+.blue-gray-mode .highlight-actions button {
+  color: #1264cf;
+  font-size: 12px;
+}
+
+.blue-gray-mode .settings-overlay {
+  position: absolute;
+  inset: 62px 0 var(--blue-footer-height) auto;
+  z-index: 200;
+  width: min(410px, 100%);
+  background: transparent;
+  pointer-events: none;
+}
+
+.blue-gray-mode .settings-panel {
+  width: 100%;
+  max-height: 100%;
+  border: 1px solid var(--blue-line);
+  border-radius: 16px 0 0 16px;
+  background: var(--blue-surface);
+  color: var(--blue-ink);
+  box-shadow: -8px 8px 30px #243e5810;
+  backdrop-filter: none;
+  pointer-events: auto;
+}
+
+.blue-gray-mode .settings-header {
+  min-height: 76px;
+  padding: 22px 28px;
+  border-bottom: 1px solid var(--blue-line);
+  color: var(--blue-ink);
+  font-size: 21px;
+  font-weight: 600;
+}
+
+.blue-gray-mode .settings-body {
+  padding: 20px 28px 28px;
+}
+
+.blue-gray-mode .dialog-close {
+  color: var(--blue-ink);
+}
+
+.blue-gray-mode.blue-note-open .reader-body-wrapper {
+  padding-right: 360px;
+}
+
+.blue-gray-mode.blue-note-open .reader-body {
+  padding-right: 38px;
+  padding-left: 38px;
+}
+
+.blue-gray-mode.blue-note-open .blue-reading-book-title {
+  max-width: calc(100% - 300px);
+  font-size: 24px;
+}
+
+.blue-gray-mode.blue-note-open .blue-search-label {
+  display: none;
+}
+
+.blue-gray-mode.blue-note-open .blue-reading-actions {
+  gap: 3px;
+  right: 12px;
+}
+
+.blue-gray-mode .highlight-editor-backdrop {
+  position: absolute;
+  inset: 62px 0 var(--blue-footer-height) auto;
+  z-index: 180;
+  display: block;
+  width: 360px;
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.blue-gray-mode .highlight-editor {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  gap: 20px;
+  padding: 28px 24px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  border: 0;
+  border-left: 1px solid var(--blue-line);
+  border-radius: 0;
+  background: var(--blue-surface);
+  box-shadow: none;
+  color: var(--blue-ink);
+}
+
+.blue-gray-mode .highlight-editor header > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.blue-gray-mode .highlight-editor header strong {
+  font-size: 21px;
+  font-weight: 600;
+}
+
+.blue-gray-mode .highlight-editor header p {
+  display: block;
+  max-height: 200px;
+  margin: 24px 0 0;
+  padding: 14px;
+  overflow-y: auto;
+  border-radius: 8px;
+  background: var(--blue-soft);
+  color: var(--blue-ink);
+  font: 15px/1.9 'Songti SC', 'STSong', serif;
+}
+
+.blue-gray-mode .highlight-color-options {
+  margin: 0;
+}
+
+.blue-gray-mode .highlight-color-options button {
+  width: 24px;
+  height: 24px;
+  border: 2px solid transparent;
+}
+
+.blue-gray-mode .highlight-color-options button.active {
+  border-color: #1264cf;
+  box-shadow: none;
+  outline-offset: 1px;
+}
+
+.blue-gray-mode .blue-note-label {
+  color: var(--blue-muted);
+  font-size: 14px;
+}
+
+.blue-gray-mode .highlight-editor textarea {
+  flex: 1;
+  min-height: 180px;
+  margin: 0;
+  padding: 14px;
+  box-sizing: border-box;
+  border: 1px solid #8fb9ee;
+  border-radius: 8px;
+  background: var(--blue-surface);
+  color: var(--blue-ink);
+  font-size: 15px;
+  line-height: 1.9;
+}
+
+.blue-gray-mode .highlight-editor footer {
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.blue-gray-mode .highlight-editor footer button {
+  padding: 10px 20px;
+  border: 1px solid var(--blue-line);
+  border-radius: 7px;
+  background: var(--blue-surface);
+  color: var(--blue-ink);
+}
+
+.blue-gray-mode .highlight-editor footer .btn-primary {
+  border-color: #1264cf;
+  background: #1264cf;
+  color: #fff;
+}
+
+.blue-gray-mode .blue-selection-toolbar {
+  position: fixed;
+  z-index: 190;
+  display: flex;
+  width: min(460px, calc(100vw - 24px));
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--blue-line);
+  border-radius: 10px;
+  background: var(--blue-surface);
+  color: var(--blue-ink);
+  box-shadow: 0 4px 16px #203a6018;
+}
+
+.blue-gray-mode .blue-selection-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.blue-gray-mode .blue-selection-toolbar svg {
+  width: 17px;
+  height: 17px;
+}
+
+.blue-gray-mode .blue-selection-toolbar .blue-selection-color {
+  width: 18px;
+  height: 18px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+}
+
+.blue-gray-mode .blue-selection-toolbar .blue-selection-color:hover {
+  outline: 2px solid #1264cf;
+  outline-offset: 2px;
+}
+
+.blue-gray-mode .blue-selection-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--blue-line);
+}
+
+.blue-gray-mode button:focus-visible, .blue-gray-mode input:focus-visible, .blue-gray-mode textarea:focus-visible, .blue-gray-mode [role='button']:focus-visible {
+  outline: 2px solid #1264cf;
+  outline-offset: 2px;
+}
+
+.blue-gray-mode button:disabled {
+  opacity: .4;
+  cursor: default;
+}
+
+.blue-gray-mode.fullscreen-mode .blue-reading-toolbar {
+  min-height: 64px;
+}
+
+.blue-gray-mode.fullscreen-mode .reader-body-wrapper {
+  grid-template-rows: 64px minmax(0, 1fr);
+}
+
+.blue-gray-mode.fullscreen-mode .blue-reading-book-title {
+  font-size: 22px;
+}
+
+.blue-gray-mode.fullscreen-mode .blue-reading-actions > :not(:last-child) {
+  display: none;
+}
+
+.blue-gray-mode.fullscreen-mode .reader-body {
+  padding-top: 44px;
+}
+
+.blue-gray-mode.fullscreen-mode .blue-reader-footer {
+  flex-basis: 125px;
+  padding-top: 66px;
+}
+
+.blue-gray-mode.fullscreen-mode .settings-overlay, .blue-gray-mode.fullscreen-mode .highlight-editor-backdrop {
+  top: 64px;
+  bottom: 125px;
+}
+
+.blue-gray-mode .blue-fullscreen-tools {
+  position: absolute;
+  right: 12px;
+  bottom: 76px;
+  left: 12px;
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  margin: 0 auto;
+  padding: 12px 20px;
+  overflow-x: auto;
+  border: 1px solid var(--blue-line);
+  border-radius: 10px;
+  background: var(--blue-surface);
+}
+
+.blue-gray-mode .blue-fullscreen-tools button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--blue-ink);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+@media (max-width: 1200px) {
+  .blue-gray-mode .blue-reading-actions {
+    gap: 2px;
+    right: 14px;
+  }
+  .blue-gray-mode .blue-search-label {
+    display: none;
+  }
+  .blue-gray-mode .blue-reading-book-title {
+    max-width: calc(100% - 270px);
+    font-size: 24px;
+  }
+  .reader-view.blue-gray-mode .reader-body {
+    padding-right: 40px;
+    padding-left: 40px;
+  }
+  .blue-gray-mode.blue-note-open .reader-body-wrapper {
+    padding-right: 330px;
+  }
+  .blue-gray-mode .highlight-editor-backdrop {
+    width: 330px;
+  }
+  .blue-gray-mode.blue-note-open .blue-reading-book-title {
+    max-width: calc(100% - 220px);
+    font-size: 20px;
+  }
+  .blue-gray-mode.blue-note-open .blue-reading-actions {
+    gap: 0;
+    right: 2px;
+  }
+  .blue-gray-mode.blue-note-open .blue-reading-actions > :nth-child(5) {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .reader-view.blue-gray-mode {
+    --blue-sidebar-width: min(340px, 86vw);
+    --blue-visible-sidebar: 0px;
+    --blue-footer-height: 76px;
+  }
+  .blue-gray-mode .reader-body-wrapper {
+    grid-template-rows: 72px minmax(0, 1fr);
+  }
+  .blue-gray-mode .side-panel {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--blue-sidebar-width);
+    box-shadow: 12px 0 35px #203a601c;
+  }
+  .blue-gray-mode .blue-icon-button.blue-close-sidebar {
+    display: inline-flex;
+  }
+  .blue-gray-mode .blue-panel-navigation {
+    padding-left: 12px;
+    padding-right: 8px;
+  }
+  .blue-gray-mode .blue-reader-footer {
+    gap: 14px;
+    padding: 10px 16px;
+  }
+  .blue-gray-mode .blue-chapter-button {
+    gap: 4px;
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .blue-gray-mode.blue-note-open .reader-body-wrapper {
+    padding-right: 0;
+  }
+  .blue-gray-mode .highlight-editor-backdrop {
+    width: min(380px, 94vw);
+    box-shadow: -12px 0 35px #203a601c;
+  }
+  .blue-gray-mode .blue-book-more {
+    right: 14px;
+  }
+}
+
+@media (max-width: 700px) {
+  .reader-view.blue-gray-mode {
+    --reader-header-height: 54px;
+  }
+  .blue-gray-mode .blue-reading-toolbar {
+    padding: 0 10px;
+  }
+  .blue-gray-mode .blue-reading-book-title {
+    max-width: calc(100% - 215px);
+    margin-left: 42px;
+    font-size: 20px;
+    text-align: left;
+  }
+  .blue-gray-mode .blue-reading-actions {
+    gap: 0;
+    right: 8px;
+  }
+  .blue-gray-mode .blue-reading-actions > :nth-child(3),   .blue-gray-mode .blue-reading-actions > :nth-child(5) {
+    display: none;
+  }
+  .blue-gray-mode .blue-sidebar-toggle {
+    left: 7px;
+  }
+  .reader-view.blue-gray-mode .reader-body {
+    padding: 14px 22px 30px;
+  }
+  .reader-view.blue-gray-mode .reader-body--epub {
+    padding: 4px 10px 16px;
+  }
+  .reader-view.blue-gray-mode .reader-body--pdf {
+    padding: 4px 6px 16px;
+  }
+  .blue-gray-mode .chapter-title {
+    margin-bottom: 28px;
+    font-size: 1.3em;
+  }
+  .blue-gray-mode .blue-reader-footer {
+    gap: 10px;
+    padding-right: 10px;
+    padding-left: 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .blue-gray-mode .blue-footer-progress > span {
+    font-size: 10px;
+  }
+  .blue-gray-mode .blue-footer-progress > span > span[title] {
+    display: none;
+  }
+  .blue-gray-mode .settings-overlay, .blue-gray-mode .highlight-editor-backdrop {
+    top: 54px;
+  }
+  .blue-gray-mode .settings-header {
+    padding: 20px;
+  }
+  .blue-gray-mode .settings-body {
+    padding: 16px 20px 24px;
+  }
+  .blue-gray-mode .blue-selection-toolbar {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .blue-gray-mode .blue-fullscreen-tools {
+    gap: 10px;
+    padding: 10px;
+  }
+  .blue-gray-mode.fullscreen-mode .blue-reading-book-title {
+    margin: 0 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reader-view.blue-gray-mode .reader-body {
+    scroll-behavior: auto;
+  }
+  .blue-gray-mode .slide-left-enter-active,   .blue-gray-mode .slide-left-leave-active,   .blue-gray-mode .slide-right-enter-active,   .blue-gray-mode .slide-right-leave-active {
+    transition: none;
+  }
+}

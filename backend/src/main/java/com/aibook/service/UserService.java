@@ -48,7 +48,7 @@ public class UserService implements UserDetailsService {
     private static final Set<String> CRAWLER_DISCOVERY_VIEW_MODES = Set.of("table", "card");
     private static final Set<String> CRAWLER_BOOK_VIEW_MODES = Set.of("table", "card");
     private static final Set<String> READER_APPEARANCES =
-            Set.of("classic", "readingRoom", "trialReader");
+            Set.of("classic", "readingRoom", "trialReader", "blueGray");
     private static final Set<String> READER_EPUB_ENGINES = Set.of("epubjs", "readium");
     private static final Set<String> READER_CONTENT_WIDTHS =
             Set.of("narrow", "medium", "wide", "wider", "full");
@@ -649,6 +649,16 @@ public class UserService implements UserDetailsService {
         requireValue("翻页模式", settings.getPaginationMode());
         requireValue("首行缩进", settings.getTextIndent());
         requireValue("阅读进度显示", settings.getShowProgress());
+        if (settings.getBlueGray() != null) {
+            UserPreferencesDTO.ReaderTypographyDTO typography = settings.getBlueGray();
+            // Reuse the existing allowlists and bounds without accepting recursive settings.
+            normalizeReaderSettings(new UserPreferencesDTO.ReaderSettingsDTO(
+                    "blueGray", settings.getEpubEngine(), typography.fontFamily(),
+                    typography.fontSize(), typography.lineHeight(), typography.paragraphSpacing(),
+                    typography.contentWidth(), typography.backgroundColor(), typography.backgroundImageId(),
+                    settings.getPaginationMode(), settings.getScreenMode(),
+                    settings.getTextIndent(), settings.getShowProgress()));
+        }
         return settings;
     }
 

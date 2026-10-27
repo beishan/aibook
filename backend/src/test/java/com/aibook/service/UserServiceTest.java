@@ -655,6 +655,54 @@ class UserServiceTest {
                 "reader", UserPreferencesDTO.builder().readerSettings(invalidBackground).build()));
     }
 
+    @Test
+    void blueGrayAppearancePersistsItsTypographyWithoutChangingLegacyValues() throws Exception {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder().username("reader").preferences(UserPreference.builder().build()).build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        when(repository.save(user)).thenReturn(user);
+        UserService service = new UserService(repository);
+        UserPreferencesDTO.ReaderSettingsDTO settings = validReaderSettings();
+        settings.setAppearance("blueGray");
+        settings.setBlueGray(new UserPreferencesDTO.ReaderTypographyDTO(
+                "default", 24, 1.9, 32, "wide", "auto", "none"));
+
+        service.updatePreferences("reader", UserPreferencesDTO.builder().readerSettings(settings).build());
+        UserPreferencesDTO.ReaderSettingsDTO restored = service.getPreferences("reader").getReaderSettings();
+        assertEquals("blueGray", restored.getAppearance());
+        assertEquals(24, restored.getBlueGray().fontSize());
+        assertEquals("default", restored.getBlueGray().fontFamily());
+        assertEquals(22, restored.getFontSize());
+        assertEquals("managed:12", restored.getFontFamily());
+        assertEquals("#f5f5dc", restored.getBackgroundColor());
+
+        restored.setAppearance("classic");
+        service.updatePreferences("reader", UserPreferencesDTO.builder().readerSettings(restored).build());
+        assertEquals(24, service.getPreferences("reader").getReaderSettings().getBlueGray().fontSize());
+        UserPreferencesDTO.ReaderSettingsDTO serialized = new ObjectMapper().readValue(
+                user.getReaderSettings(), UserPreferencesDTO.ReaderSettingsDTO.class);
+        assertEquals("classic", serialized.getAppearance());
+        assertEquals(22, serialized.getFontSize());
+    }
+
+    @Test
+    void rejectsInvalidBlueGrayTypographyWithoutSavingIt() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder().username("reader").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        UserService service = new UserService(repository);
+        UserPreferencesDTO.ReaderSettingsDTO settings = validReaderSettings();
+        settings.setBlueGray(new UserPreferencesDTO.ReaderTypographyDTO(
+                "default", 48, 1.9, 32, "wide", "auto", "none"));
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences(
+                "reader", UserPreferencesDTO.builder().readerSettings(settings).build()));
+        settings.setBlueGray(new UserPreferencesDTO.ReaderTypographyDTO(
+                "default", 22, 1.9, 32, "wide", "auto", "javascript:alert(1)"));
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences(
+                "reader", UserPreferencesDTO.builder().readerSettings(settings).build()));
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).save(user);
+    }
+
     private UserPreferencesDTO.ReaderSettingsDTO validReaderSettings() {
         return new UserPreferencesDTO.ReaderSettingsDTO(
                 "readingRoom",

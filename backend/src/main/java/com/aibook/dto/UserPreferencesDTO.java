@@ -618,6 +618,7 @@ public class UserPreferencesDTO {
     }
 
     public static class ReaderSettingsDTO {
+        private ReaderTypographyDTO blueGray;
         private String appearance;
         private String epubEngine;
         private String fontFamily;
@@ -665,6 +666,8 @@ public class UserPreferencesDTO {
         }
 
         public String getAppearance() { return appearance; }
+        public ReaderTypographyDTO getBlueGray() { return blueGray; }
+        public void setBlueGray(ReaderTypographyDTO value) { blueGray = value; }
         public void setAppearance(String value) { appearance = value; }
         public String getEpubEngine() { return epubEngine; }
         public void setEpubEngine(String value) { epubEngine = value; }
@@ -690,6 +693,16 @@ public class UserPreferencesDTO {
         public void setTextIndent(Boolean value) { textIndent = value; }
         public Boolean getShowProgress() { return showProgress; }
         public void setShowProgress(Boolean value) { showProgress = value; }
+    }
+
+    public record ReaderTypographyDTO(
+            String fontFamily,
+            Integer fontSize,
+            Double lineHeight,
+            Integer paragraphSpacing,
+            String contentWidth,
+            String backgroundColor,
+            String backgroundImageId) {
     }
 
     public static class ThemeBackgroundDTO {

@@ -120,6 +120,20 @@ export class ReadiumReaderEngine implements ReaderEngine {
     const { Locator } = await import('@readium/shared')
     let target: Locator | undefined
     if (locator.raw) target = Locator.deserialize(locator.raw)
+    if (!target && locator.totalProgression != null) {
+      const progression = Math.min(1, Math.max(0, locator.totalProgression))
+      const positions: Locator[] = await this.publication.positionsFromManifest().catch(() => [])
+      target = [...positions].reverse().find(position =>
+        (position.locations.totalProgression ?? 0) <= progression) || positions[0]
+      if (!target) {
+        const links = this.publication.readingOrder?.items || []
+        const index = Math.min(links.length - 1, Math.floor(progression * links.length))
+        target = links[index]?.locator
+        if (target) {
+          target = target.copyWithLocations({ progression: progression === 1 ? 1 : 0 })
+        }
+      }
+    }
     if (!target && locator.href) {
       const link = this.publication.linkWithHref(locator.href)
         || this.publication.readingOrder?.items?.find((item: any) =>
