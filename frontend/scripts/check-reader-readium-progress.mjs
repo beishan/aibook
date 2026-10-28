@@ -36,4 +36,6 @@ engine.publication.readingOrder.items = []
 const previousCalls = calls.length
 assert.equal(await engine.goTo({ totalProgression: 0.5 }), false)
 assert.equal(calls.length, previousCalls)
+assert.equal(engine.toPreferences({ textAlign: 'center' }).textAlign, 'left')
+assert.equal(engine.toPreferences({ textAlign: 'justify' }).textAlign, 'justify')
 console.log('Readium progress navigation: position list, chapter fallback, bounds and legacy href navigation passed')

@@ -1,14 +1,19 @@
 <template>
   <div
     class="reader-view"
+    :data-reader-appearance="settings.appearance"
     :class="{
       'fullscreen-mode': isFullscreen,
       'quick-window-mode': isQuickWindow,
       'reading-room-mode': settings.appearance === 'readingRoom',
       'trial-reader-mode': settings.appearance === 'trialReader',
-      'blue-gray-mode': isBlueGray,
-      'blue-sidebar-open': isBlueGray && blueSidebarVisible,
-      'blue-note-open': isBlueGray && !!highlightEditor && !blueQuickHighlightSave,
+      'blue-gray-mode': settings.appearance === 'blueGray',
+      'warm-paper-mode': isWarmPaper,
+      'warm-settings-open': isWarmPaper && showSettings,
+      'warm-left-open': isWarmPaper && blueSidebarVisible && !warmRightPanel,
+      'warm-right-open': isWarmPaper && blueSidebarVisible && warmRightPanel,
+      'blue-sidebar-open': usesWorkspaceChrome && blueSidebarVisible,
+      'blue-note-open': usesWorkspaceChrome && !!highlightEditor && !blueQuickHighlightSave,
     }"
     :style="readerShellStyle"
     @pointerdown="handleBluePointerDown"
@@ -26,7 +31,7 @@
     <!-- 阅读器内容 -->
     <div v-if="book" class="reader-content">
       <ReaderBlueGrayTopbar
-        v-if="isBlueGray && !isFullscreen"
+        v-if="usesWorkspaceChrome && !isWarmPaper && !isFullscreen"
         :active-tab="activeTab"
         :quick-window="isQuickWindow"
         @read="focusBlueReading"
@@ -35,7 +40,7 @@
       />
       <!-- 阅读器头部 -->
       <header
-        v-show="!isFullscreen && !isBlueGray"
+        v-show="!isFullscreen && !usesWorkspaceChrome"
         class="reader-header"
         :style="readerHeaderStyle"
       >
@@ -94,15 +99,23 @@
         </div>
       </header>
 
+      <ReaderWarmPaperRail
+        v-if="isWarmPaper && !isFullscreen"
+        :active-panel="blueSidebarVisible ? activeTab : ''"
+        :settings-open="showSettings"
+        @panel="toggleWarmPanel"
+        @settings="toggleWarmSettings"
+        @fullscreen="toggleFullscreen"
+      />
       <div class="reader-body-wrapper">
         <!-- 目录/搜索从左侧展开，书签/划线从右侧展开 -->
         <Transition name="slide-left">
           <aside
-            v-if="isBlueGray ? blueSidebarVisible : showSidePanel"
+            v-if="usesWorkspaceChrome ? blueSidebarVisible : showSidePanel"
             class="side-panel"
-            :class="{ 'side-panel--right': !isBlueGray && rightPanelOpen }"
+            :class="{ 'side-panel--right': !usesWorkspaceChrome && rightPanelOpen, 'warm-panel--right': isWarmPaper && warmRightPanel }"
           >
-            <div v-if="isBlueGray" class="blue-book-identity">
+            <div v-if="usesWorkspaceChrome && !isWarmPaper" class="blue-book-identity">
               <div class="blue-book-cover" aria-hidden="true">
                 <img
                   v-if="book.coverUrl && shouldLoadBookCover(book.id)"
@@ -135,10 +148,16 @@
               </button>
             </div>
             <!-- 面板标签页 -->
-            <div v-if="isBlueGray" class="blue-panel-navigation">
+            <div v-if="isWarmPaper && !warmRightPanel" class="warm-panel-heading">
+              <strong>{{ activeTab === 'search' ? '书内搜索' : '目录' }}</strong>
+              <button class="blue-icon-button" type="button" aria-label="关闭侧栏" @click="blueSidebarOpen = false">
+                <ReaderBlueGrayIcon name="close" />
+              </button>
+            </div>
+            <div v-else-if="usesWorkspaceChrome" class="blue-panel-navigation">
               <ReaderBlueGraySegmented
                 :model-value="activeTab === 'search' ? blueLastTab : activeTab"
-                :options="bluePanelTabs"
+                :options="isWarmPaper ? warmAnnotationTabs : bluePanelTabs"
                 label="阅读侧栏"
                 @update:model-value="activatePanelTab($event as PanelTab)"
               />
@@ -228,7 +247,7 @@
                 >
                   <span class="search-result-location">{{ result.locationLabel }}</span>
                   <span class="search-result-excerpt">
-                    <template v-if="isBlueGray">
+                    <template v-if="usesWorkspaceChrome">
                       <template v-for="(part, index) in blueSearchExcerpt(result.excerpt)" :key="index">
                         <mark v-if="part.match">{{ part.text }}</mark>
                         <template v-else>{{ part.text }}</template>
@@ -255,10 +274,10 @@
                   v-for="(item, index) in filteredTocItems"
                   :key="`${item.href || item.index}-${index}`"
                   class="toc-item"
-                  :role="isBlueGray ? 'button' : undefined"
-                  :tabindex="isBlueGray ? 0 : undefined"
-                  @keydown.enter="isBlueGray && goToTocItem(item)"
-                  @keydown.space.prevent="isBlueGray && goToTocItem(item)"
+                  :role="usesWorkspaceChrome ? 'button' : undefined"
+                  :tabindex="usesWorkspaceChrome ? 0 : undefined"
+                  @keydown.enter="usesWorkspaceChrome && goToTocItem(item)"
+                  @keydown.space.prevent="usesWorkspaceChrome && goToTocItem(item)"
                   :class="{ active: isCurrentTocItem(item) }"
                   :aria-current="isCurrentTocItem(item) ? 'location' : undefined"
                   :style="item.level ? { paddingLeft: `${14 + item.level * 16}px` } : undefined"
@@ -292,17 +311,17 @@
                   v-for="bookmark in bookmarks"
                   :key="bookmark.id"
                   class="bookmark-item"
-                  :role="isBlueGray ? 'button' : undefined"
-                  :tabindex="isBlueGray ? 0 : undefined"
-                  @keydown.enter.self="isBlueGray && handleGotoBookmark(bookmark)"
-                  @keydown.space.self.prevent="isBlueGray && handleGotoBookmark(bookmark)"
+                  :role="usesWorkspaceChrome ? 'button' : undefined"
+                  :tabindex="usesWorkspaceChrome ? 0 : undefined"
+                  @keydown.enter.self="usesWorkspaceChrome && handleGotoBookmark(bookmark)"
+                  @keydown.space.self.prevent="usesWorkspaceChrome && handleGotoBookmark(bookmark)"
                   @click="handleGotoBookmark(bookmark)"
                 >
-                  <ReaderBlueGrayIcon v-if="isBlueGray" name="bookmark" class="blue-bookmark-icon" />
+                  <ReaderBlueGrayIcon v-if="usesWorkspaceChrome" name="bookmark" class="blue-bookmark-icon" />
                   <div v-else class="bookmark-icon">🔖</div>
                   <div class="bookmark-info">
                     <div class="bookmark-title">{{ bookmark.title || '书签' }}</div>
-                    <p v-if="isBlueGray && bookmark.excerpt" class="blue-bookmark-excerpt">{{ bookmark.excerpt }}</p>
+                    <p v-if="usesWorkspaceChrome && bookmark.excerpt" class="blue-bookmark-excerpt">{{ bookmark.excerpt }}</p>
                     <div class="bookmark-meta">
                       <span>{{ bookmark.chapter || '未知章节' }}</span>
                       <span>·</span>
@@ -310,7 +329,7 @@
                     </div>
                   </div>
                   <button class="btn btn-icon btn-small" type="button" aria-label="删除书签" @click.stop="handleDeleteBookmark(bookmark)">
-                    <ReaderBlueGrayIcon v-if="isBlueGray" name="trash" />
+                    <ReaderBlueGrayIcon v-if="usesWorkspaceChrome" name="trash" />
                     <span v-else>🗑️</span>
                   </button>
                 </div>
@@ -318,8 +337,8 @@
             </div>
 
             <!-- 高亮内容 -->
-            <div v-if="activeTab === 'highlights' || (isBlueGray && activeTab === 'notes')" class="panel-content">
-              <div v-if="isBlueGray" class="blue-annotation-summary">
+            <div v-if="activeTab === 'highlights' || (usesWorkspaceChrome && activeTab === 'notes')" class="panel-content">
+              <div v-if="usesWorkspaceChrome" class="blue-annotation-summary">
                 <template v-if="activeTab === 'notes'">共 {{ blueVisibleHighlights.length }} 条笔记</template>
                 <template v-else>
                   <div class="blue-highlight-filter" aria-label="按划线颜色筛选">
@@ -346,25 +365,25 @@
                   <span>{{ blueVisibleHighlights.length }} 条划线</span>
                 </template>
               </div>
-              <div v-if="!isBlueGray" class="highlights-header">
+              <div v-if="!usesWorkspaceChrome" class="highlights-header">
                 <span class="tag">{{ highlights.length }} 条</span>
               </div>
-              <div v-if="(isBlueGray ? blueVisibleHighlights : highlights).length === 0" class="empty-panel">
+              <div v-if="(usesWorkspaceChrome ? blueVisibleHighlights : highlights).length === 0" class="empty-panel">
                 <div class="empty-icon">🖍️</div>
                 <p>{{ activeTab === 'notes' ? '暂无笔记' : '暂无高亮内容' }}</p>
                 <p class="empty-hint">选中文本后可添加高亮或笔记</p>
               </div>
               <div v-else class="highlights-list">
                 <div
-                  v-for="highlight in (isBlueGray ? blueVisibleHighlights : highlights)"
+                  v-for="highlight in (usesWorkspaceChrome ? blueVisibleHighlights : highlights)"
                   :key="highlight.id"
                   class="highlight-item"
-                  :class="{ 'blue-highlight-active': isBlueGray && blueActiveHighlightId === highlight.id }"
+                  :class="{ 'blue-highlight-active': usesWorkspaceChrome && blueActiveHighlightId === highlight.id }"
                   :style="{ borderLeftColor: highlight.color }"
                 >
                   <div class="highlight-content">
                     <button
-                      v-if="isBlueGray"
+                      v-if="usesWorkspaceChrome"
                       class="blue-highlight-quote"
                       type="button"
                       @click="activateBlueHighlight(highlight)"
@@ -393,7 +412,21 @@
           </aside>
         </Transition>
 
-        <div v-if="isBlueGray" class="blue-reading-toolbar">
+        <ReaderWarmPaperHeader
+          v-if="isWarmPaper"
+          :title="displayBookName(book.title)"
+          :chapter="headerChapterName"
+          :quick-window="isQuickWindow"
+          :fullscreen="isFullscreen"
+          :night="readingTypography.backgroundColor === '#2d2d2d'"
+          @back="goBack"
+          @settings="toggleWarmSettings"
+          @night="toggleWarmNight"
+          @notes="activatePanelTab('notes')"
+          @download="handleDownload"
+          @fullscreen="toggleFullscreen"
+        />
+        <div v-if="usesWorkspaceChrome && !isWarmPaper" class="blue-reading-toolbar">
           <button
             class="blue-icon-button blue-sidebar-toggle"
             type="button"
@@ -470,7 +503,7 @@
         <!-- 阅读器内容 -->
         <div
           class="reader-body"
-          :tabindex="isBlueGray ? -1 : undefined"
+          :tabindex="usesWorkspaceChrome ? -1 : undefined"
           :class="[
             { 'pagination-mode': isPaginationMode },
             `reader-body--${book.format}`,
@@ -528,7 +561,7 @@
       </div>
 
       <nav
-        v-show="!isFullscreen && !isBlueGray"
+        v-show="!isFullscreen && !usesWorkspaceChrome"
         class="reader-tool-rail"
         :class="{ 'reader-tool-rail--shifted': rightPanelOpen }"
         aria-label="阅读工具"
@@ -559,7 +592,7 @@
 
       <!-- 正文两侧空白区域翻页 -->
       <button
-        v-if="showPageNavigation && !isBlueGray"
+        v-if="showPageNavigation && !usesWorkspaceChrome"
         type="button"
         class="page-turn-zone page-turn-zone--previous"
         :style="pageTurnZoneStyle"
@@ -571,7 +604,7 @@
         <span class="page-turn-button" aria-hidden="true">‹</span>
       </button>
       <button
-        v-if="showPageNavigation && !isBlueGray"
+        v-if="showPageNavigation && !usesWorkspaceChrome"
         type="button"
         class="page-turn-zone page-turn-zone--next"
         :style="pageTurnZoneStyle"
@@ -583,7 +616,7 @@
         <span class="page-turn-button" aria-hidden="true">›</span>
       </button>
 
-      <div v-if="settings.showProgress && !isBlueGray" class="reader-progress-dock" role="status" aria-label="阅读进度">
+      <div v-if="settings.showProgress && !usesWorkspaceChrome" class="reader-progress-dock" role="status" aria-label="阅读进度">
         <div class="reader-progress-primary">
           <span>全书进度 {{ headerProgress }}%</span>
           <span class="reader-progress-track" aria-hidden="true">
@@ -594,7 +627,7 @@
       </div>
 
       <div
-        v-if="isBlueGray && pendingBlueSelection && (!highlightEditor || blueQuickHighlightSave)"
+        v-if="usesWorkspaceChrome && pendingBlueSelection && (!highlightEditor || blueQuickHighlightSave)"
         class="blue-selection-toolbar"
         :style="blueSelectionStyle"
         role="toolbar"
@@ -624,7 +657,11 @@
           <ReaderBlueGrayIcon name="close" />
         </button>
       </div>
-      <footer v-if="isBlueGray && supportsPageTurning" class="blue-reader-footer">
+      <footer v-if="usesWorkspaceChrome && supportsPageTurning" class="blue-reader-footer">
+        <button v-if="isWarmPaper" class="warm-footer-location" type="button" title="目录" @click="toggleWarmPanel('toc')">
+          <ReaderBlueGrayIcon name="menu" />
+          <span>{{ headerChapterName }}</span>
+        </button>
         <div v-if="isFullscreen" class="blue-fullscreen-tools" aria-label="全屏阅读工具">
           <button type="button" @click="activatePanelTab('toc')">
             <ReaderBlueGrayIcon name="menu" />
@@ -685,7 +722,7 @@
         </button>
       </footer>
       <!-- 全屏模式下的浮动控制条 -->
-      <div v-if="isFullscreen && !isBlueGray" class="fullscreen-controls" @mouseenter="showFullscreenControls = true" @mouseleave="showFullscreenControls = false">
+      <div v-if="isFullscreen && !usesWorkspaceChrome" class="fullscreen-controls" @mouseenter="showFullscreenControls = true" @mouseleave="showFullscreenControls = false">
         <Transition name="fade">
           <div v-if="showFullscreenControls" class="floating-bar glass">
             <button class="btn btn-icon" @click="togglePanel('toc')" title="目录">
@@ -714,9 +751,11 @@
               <button class="dialog-close" @click="showSettings = false">✕</button>
             </div>
             <ReaderBlueGraySettings
-              v-if="isBlueGray"
+              v-if="usesWorkspaceChrome"
               class="settings-body"
               :settings="settings"
+              :paper="isWarmPaper"
+              :fixed-layout="book.format === 'pdf'"
               :typography="readingTypography"
               :appearances="appearanceOptions"
               :fonts="fontOptions"
@@ -965,12 +1004,12 @@
         </div>
       </Transition>
 
-      <div v-if="highlightEditor && !(isBlueGray && blueQuickHighlightSave)" class="highlight-editor-backdrop" @click.self="closeHighlightEditor">
-        <section class="highlight-editor glass" role="dialog" :aria-modal="!isBlueGray" aria-labelledby="highlight-editor-title">
+      <div v-if="highlightEditor && !(usesWorkspaceChrome && blueQuickHighlightSave)" class="highlight-editor-backdrop" @click.self="closeHighlightEditor">
+        <section class="highlight-editor glass" role="dialog" :aria-modal="!usesWorkspaceChrome" aria-labelledby="highlight-editor-title">
           <header>
             <div>
               <strong id="highlight-editor-title">
-                {{ isBlueGray ? (highlightEditor.id ? '编辑笔记' : '添加笔记') : (highlightEditor.id ? '编辑高亮与批注' : '添加高亮与批注') }}
+                {{ usesWorkspaceChrome ? (highlightEditor.id ? '编辑笔记' : '添加笔记') : (highlightEditor.id ? '编辑高亮与批注' : '添加高亮与批注') }}
               </strong>
               <p>“{{ highlightEditor.text }}”</p>
             </div>
@@ -987,7 +1026,7 @@
               @click="highlightEditor.color = color"
             />
           </div>
-          <label v-if="isBlueGray" class="blue-note-label" for="reader-highlight-note">我的笔记</label>
+          <label v-if="usesWorkspaceChrome" class="blue-note-label" for="reader-highlight-note">我的笔记</label>
           <textarea
             id="reader-highlight-note"
             aria-label="笔记内容"
@@ -999,7 +1038,7 @@
           <footer>
             <button class="btn btn-text" type="button" @click="closeHighlightEditor">取消</button>
             <button class="btn btn-primary" type="button" :disabled="savingHighlight" @click="saveHighlight">
-              {{ savingHighlight ? '保存中…' : (isBlueGray ? '保存笔记' : '保存') }}
+              {{ savingHighlight ? '保存中…' : (usesWorkspaceChrome ? '保存笔记' : '保存') }}
             </button>
           </footer>
         </section>
@@ -1026,6 +1065,7 @@ import { useThemeStore } from '@/stores/theme'
 import {
   DEFAULT_READER_SETTINGS,
   DEFAULT_BLUE_GRAY_TYPOGRAPHY,
+  DEFAULT_WARM_PAPER_TYPOGRAPHY,
   usePreferencesStore,
   type ReaderAppearance,
   type ReaderSettings,
@@ -1037,6 +1077,8 @@ import ReaderBlueGrayIcon from '@/components/reader/ReaderBlueGrayIcon.vue'
 import ReaderBlueGrayTopbar from '@/components/reader/ReaderBlueGrayTopbar.vue'
 import ReaderBlueGraySegmented from '@/components/reader/ReaderBlueGraySegmented.vue'
 import ReaderBlueGraySettings from '@/components/reader/ReaderBlueGraySettings.vue'
+import ReaderWarmPaperRail from '@/components/reader/ReaderWarmPaperRail.vue'
+import ReaderWarmPaperHeader from '@/components/reader/ReaderWarmPaperHeader.vue'
 import { EpubJsReaderEngine } from '@/reader/EpubJsReaderEngine'
 import { ReadiumReaderEngine } from '@/reader/ReadiumReaderEngine'
 import type {
@@ -1288,7 +1330,7 @@ const resolveReaderFontFamily = (value: string) => {
   const id = managedFontId(value)
   if (id != null) return `${fontStore.cssFamily(id)}, serif`
   return value === 'default'
-    ? (isBlueGray.value ? '"Songti SC", "STSong", "SimSun", serif' : 'inherit')
+    ? (usesWorkspaceChrome.value ? '"Songti SC", "STSong", "SimSun", serif' : 'inherit')
     : value
 }
 
@@ -1355,18 +1397,51 @@ const appearanceOptions: Array<{
   { value: 'readingRoom', label: '书房', description: '沉浸纸书风格' },
   { value: 'trialReader', label: '临时阅读', description: '轻量试读布局' },
   { value: 'blueGray', label: '浅蓝灰', description: '阅读工作台' },
+  { value: 'warmPaper', label: '温暖纸感', description: '草木与书香' },
 ]
 
 const settings = ref<ReaderSettings>({ ...DEFAULT_READER_SETTINGS })
-const isBlueGray = computed(() => settings.value.appearance === 'blueGray')
-const readingTypography = computed<ReaderTypography>(() => isBlueGray.value
-  ? { ...DEFAULT_BLUE_GRAY_TYPOGRAPHY, ...settings.value.blueGray }
-  : settings.value)
+const isWarmPaper = computed(() => settings.value.appearance === 'warmPaper')
+const usesWorkspaceChrome = computed(() => settings.value.appearance === 'blueGray' || isWarmPaper.value)
+const readingTypography = computed<ReaderTypography>(() => isWarmPaper.value
+  ? { ...DEFAULT_WARM_PAPER_TYPOGRAPHY, ...settings.value.warmPaper }
+  : usesWorkspaceChrome.value
+    ? { ...DEFAULT_BLUE_GRAY_TYPOGRAPHY, ...settings.value.blueGray }
+    : settings.value)
 const updateBlueTypography = (patch: Partial<ReaderTypography>) => {
-  settings.value.blueGray = { ...DEFAULT_BLUE_GRAY_TYPOGRAPHY, ...settings.value.blueGray, ...patch }
+  if (isWarmPaper.value) {
+    settings.value.warmPaper = { ...DEFAULT_WARM_PAPER_TYPOGRAPHY, ...settings.value.warmPaper, ...patch }
+  } else {
+    settings.value.blueGray = { ...DEFAULT_BLUE_GRAY_TYPOGRAPHY, ...settings.value.blueGray, ...patch }
+  }
 }
 const blueSidebarOpen = ref(false)
 const blueSidebarVisible = computed(() => blueSidebarOpen.value)
+const warmAnnotationTabs = [
+  { value: 'bookmarks', label: '书签' },
+  { value: 'notes', label: '笔记' },
+  { value: 'highlights', label: '划线' },
+]
+const warmRightPanel = computed(() => ['bookmarks', 'notes', 'highlights'].includes(activeTab.value))
+const toggleWarmPanel = (panel: string) => {
+  if (blueSidebarOpen.value && activeTab.value === panel) {
+    blueSidebarOpen.value = false
+  } else {
+    showSettings.value = false
+    closeHighlightEditor()
+    activatePanelTab(panel as PanelTab)
+  }
+}
+const toggleWarmSettings = () => {
+  if (!showSettings.value) {
+    blueSidebarOpen.value = false
+    closeHighlightEditor()
+  }
+  showSettings.value = !showSettings.value
+}
+const toggleWarmNight = () => updateBlueTypography({
+  backgroundColor: readingTypography.value.backgroundColor === '#2d2d2d' ? 'auto' : '#2d2d2d',
+})
 const blueLastTab = ref('toc')
 const blueActiveHighlightId = ref<number | null>(null)
 const blueQuickHighlightSave = ref(false)
@@ -1445,8 +1520,8 @@ const widthOptions = [
 // 获取实际背景色和文字色（处理 'auto' 跟随主题）
 const getResolvedColors = (bg: string) => {
   if (bg === 'auto') {
-    return isBlueGray.value
-      ? { bg: '#fcfdff', text: '#172235' }
+    return usesWorkspaceChrome.value
+      ? (isWarmPaper.value ? { bg: '#faf8f2', text: '#242821' } : { bg: '#fcfdff', text: '#172235' })
       : { bg: autoThemeColors.value.bg, text: autoThemeColors.value.text }
   }
   return { bg, text: ['#2d2d2d', '#1a1a2e'].includes(bg) ? '#eee' : '#333' }
@@ -1462,7 +1537,7 @@ const loadReaderBackgrounds = async () => {
     const { data } = await api.get<ReaderBackgroundDto[]>('/api/reader-backgrounds')
     customReaderBackgrounds.value = data.map(toReaderBackgroundOption)
     if (readingTypography.value.backgroundImageId !== 'none' && !selectedReaderBackground.value) {
-      if (isBlueGray.value) updateBlueTypography({ backgroundImageId: 'none' })
+      if (usesWorkspaceChrome.value) updateBlueTypography({ backgroundImageId: 'none' })
       else settings.value.backgroundImageId = 'none'
     }
   } catch (error) {
@@ -1482,7 +1557,7 @@ const readerStyle = computed(() => {
     lineHeight: readingTypography.value.lineHeight,
     color: colors.text,
     // 两屏模式下不限制宽度，让两栏均匀分布
-    maxWidth: isBlueGray.value ? 'none' : isDoubleScreen ? '100%' : widthOption.maxWidth,
+    maxWidth: usesWorkspaceChrome.value ? 'none' : isDoubleScreen ? '100%' : widthOption.maxWidth,
   }
 })
 
@@ -1491,6 +1566,9 @@ const readerShellStyle = computed(() => {
   return {
     '--reader-room-background': colors.bg,
     '--reader-room-text': colors.text,
+    '--paper-content-width': readingTypography.value.contentWidth === 'wide'
+      ? '960px' : (widthOptions.find(width => width.value === readingTypography.value.contentWidth) || widthOptions[2]).maxWidth,
+    '--paper-text-align': readingTypography.value.textAlign || 'justify',
     '--blue-content-width': (widthOptions.find(width => width.value === readingTypography.value.contentWidth) || widthOptions[2]).maxWidth,
     '--blue-ink': colors.text,
     '--blue-muted': ['#2d2d2d', '#1a1a2e'].includes(colors.bg) ? '#abbad0' : '#7183a0',
@@ -1722,7 +1800,7 @@ const handleKeydown = (e: KeyboardEvent) => {
       showSettings.value = false
       return
     }
-    if (isBlueGray.value && blueSidebarVisible.value) {
+    if (usesWorkspaceChrome.value && blueSidebarVisible.value) {
       blueSidebarOpen.value = false
       return
     }
@@ -1842,9 +1920,9 @@ const clearEpubKeyboardBindings = () => {
 
 // 面板显示状态
 const showSidePanel = computed(() =>
-  (isBlueGray.value && blueSidebarVisible.value) || showSearch.value || showToc.value || showBookmarks.value || showHighlights.value,
+  (usesWorkspaceChrome.value && blueSidebarVisible.value) || showSearch.value || showToc.value || showBookmarks.value || showHighlights.value,
 )
-const rightPanelOpen = computed(() => !isBlueGray.value && (showBookmarks.value || showHighlights.value))
+const rightPanelOpen = computed(() => !usesWorkspaceChrome.value && (showBookmarks.value || showHighlights.value))
 const annotationPanelStyle = computed(() => ({
   '--panel-tab-index': String(activeTab.value === 'highlights' ? 1 : 0),
   '--panel-tab-count': String(annotationPanelTabs.length),
@@ -2067,11 +2145,11 @@ const closeHighlightEditor = () => {
 
 const openHighlightEditor = (value: Omit<HighlightEditorState, 'note' | 'color'>) => {
   if (!value.text.trim()) return
-  highlightEditor.value = { ...value, color: isBlueGray.value ? '#9ed0ff' : '#ffe066', note: '' }
+  highlightEditor.value = { ...value, color: usesWorkspaceChrome.value ? '#9ed0ff' : '#ffe066', note: '' }
 }
 
 const editHighlight = (highlight: Highlight) => {
-  if (isBlueGray.value) {
+  if (usesWorkspaceChrome.value) {
     blueActiveHighlightId.value = highlight.id
     showSettings.value = false
     pendingBlueSelection.value = null
@@ -2263,7 +2341,7 @@ const captureDocumentSelection = () => {
 
   const nextHighlight = capturedHighlight
   if (nextHighlight) {
-    if (isBlueGray.value) {
+    if (usesWorkspaceChrome.value) {
       presentBlueSelection(nextHighlight, range.getBoundingClientRect())
     } else {
       window.setTimeout(() => openHighlightEditor(nextHighlight), 0)
@@ -2340,7 +2418,7 @@ const renderDocumentHighlights = () => {
     const name = `reader-highlight-${highlight.id}`
     registry.set(name, new HighlightConstructor(range))
     textHighlightNames.add(name)
-    rules.push(`::highlight(${name}){background-color:${highlight.color || '#ffe066'};color:inherit}`)
+    rules.push(`::highlight(${name}){background-color:${highlight.color || '#ffe066'};color:${isWarmPaper.value ? '#242821' : 'inherit'}}`)
   })
   if (rules.length) {
     const style = document.createElement('style')
@@ -2830,7 +2908,7 @@ const isCurrentTocItem = (item: Chapter): boolean => {
   }
   if (isTextFormat(book.value?.format)) {
     const currentTextItem = chapterAtTextIndex(
-      isBlueGray.value ? blueVisibleTextIndex.value : visibleTextIndex(),
+      usesWorkspaceChrome.value ? blueVisibleTextIndex.value : visibleTextIndex(),
     ).chapter
       || tocItems.value[0]
     if (currentTextItem) return item.index === currentTextItem.index
@@ -3052,7 +3130,7 @@ const handleScroll = () => {
   const readerBody = document.querySelector<HTMLElement>('.reader-body')
   if (!readerBody) return
 
-  if (isBlueGray.value && isTextFormat(book.value?.format)) {
+  if (usesWorkspaceChrome.value && isTextFormat(book.value?.format)) {
     blueVisibleTextIndex.value = visibleTextIndex()
   }
 
@@ -3190,6 +3268,7 @@ const handlePdfError = (error: string) => {
 const toEngineSettings = (): ReaderEngineSettings => {
   const colors = getResolvedColors(readingTypography.value.backgroundColor)
   return {
+    ...(isWarmPaper.value ? { textAlign: readingTypography.value.textAlign || 'justify' as const } : {}),
     fontFamily: resolveReaderFontFamily(readingTypography.value.fontFamily),
     fontSize: Number(readingTypography.value.fontSize),
     lineHeight: Number(readingTypography.value.lineHeight),
@@ -3360,7 +3439,7 @@ const initEpubJs = async (progressReady: Promise<void> = Promise.resolve()) => {
         ?.replace(/\s+/g, ' ').trim().slice(0, 4000) || ''
       if (!text) return
       const selection = { cfiRange, text, chapter: currentChapterName.value }
-      if (isBlueGray.value) {
+      if (usesWorkspaceChrome.value) {
         const range = contents?.window?.getSelection?.()?.getRangeAt?.(0)
         const rect = range?.getBoundingClientRect?.()
         const frame = Array.from(epubContainer.value?.querySelectorAll('iframe') || [])
@@ -3688,7 +3767,7 @@ const revealDocumentSearchRange = (range: Range | null) => {
   registry.set(searchHighlightName, new HighlightConstructor(range))
   const style = document.createElement('style')
   style.id = searchHighlightStyleId
-  style.textContent = `::highlight(${searchHighlightName}){background:${isBlueGray.value ? '#a8d2ff' : '#ff9f43'};color:inherit}`
+  style.textContent = `::highlight(${searchHighlightName}){background:${usesWorkspaceChrome.value ? '#a8d2ff' : '#ff9f43'};color:inherit}`
   document.head.appendChild(style)
 }
 
@@ -3726,7 +3805,7 @@ const goToSearchResult = async (result: ReaderSearchResult) => {
 }
 
 const activatePanelTab = (panel: PanelTab) => {
-  if (isBlueGray.value) {
+  if (usesWorkspaceChrome.value) {
     dismissBlueSelection()
     if (panel !== 'search') clearCurrentSearchHighlight()
     blueSidebarOpen.value = true
@@ -3771,8 +3850,8 @@ const togglePanel = (panel: PanelTab) => {
 }
 
 const closeAllPanels = () => {
-  if (isBlueGray.value && window.innerWidth > 900 && !isFullscreen.value) return
-  if (isBlueGray.value) blueSidebarOpen.value = false
+  if (usesWorkspaceChrome.value && window.innerWidth > 900 && !isFullscreen.value) return
+  if (usesWorkspaceChrome.value) blueSidebarOpen.value = false
   showSearch.value = false
   showToc.value = false
   showBookmarks.value = false
@@ -3995,14 +4074,14 @@ const applyThemeToContent = (contents: any) => {
           margin-bottom: ${readingTypography.value.paragraphSpacing}px !important;
           ${settings.value.textIndent ? 'text-indent: 2em !important;' : ''}
         }
-        ${isBlueGray.value ? `
+        ${usesWorkspaceChrome.value ? `
         h1, h2 {
           font-size: 1.6em !important;
           font-weight: 600 !important;
           text-align: left !important;
           margin: 0 0 1.15em !important;
         }
-        p { letter-spacing: .035em !important; text-align: justify !important; }
+        p { letter-spacing: .035em !important; text-align: ${isWarmPaper.value ? readingTypography.value.textAlign || 'justify' : 'justify'} !important; }
         ::selection { background: #d8eaff; }
         ` : ''}
       `
@@ -4067,7 +4146,7 @@ watch(content, () => {
 watch(currentPageContent, () => {
   if (isPaginationMode.value) {
     nextTick(renderDocumentHighlights)
-    if (isBlueGray.value) nextTick(handleScroll)
+    if (usesWorkspaceChrome.value) nextTick(handleScroll)
   }
 })
 
@@ -4163,7 +4242,7 @@ const dismissBlueSelection = () => {
 }
 
 const handleBluePointerDown = (event: PointerEvent) => {
-  if (!isBlueGray.value || !pendingBlueSelection.value) return
+  if (!usesWorkspaceChrome.value || !pendingBlueSelection.value) return
   if (!(event.target as Element | null)?.closest('.blue-selection-toolbar')) {
     dismissBlueSelection()
   }
@@ -4216,7 +4295,7 @@ const copyBlueSelection = async () => {
 }
 
 const handleReaderBodyScroll = () => {
-  if (isBlueGray.value) dismissBlueSelection()
+  if (usesWorkspaceChrome.value) dismissBlueSelection()
   handleScroll()
 }
 
@@ -4282,14 +4361,14 @@ const seekBlueProgress = async (percentage: number) => {
   }
 }
 
-watch(isBlueGray, async (active) => {
+watch([usesWorkspaceChrome, isWarmPaper], async ([active]) => {
   const textIndex = book.value && isTextFormat(book.value.format) ? visibleTextIndex() : undefined
   dismissBlueSelection()
   closeHighlightEditor()
   if (active) {
-    blueSidebarOpen.value = window.innerWidth > 900
+    blueSidebarOpen.value = !isWarmPaper.value && window.innerWidth > 900
     activatePanelTab('toc')
-    blueSidebarOpen.value = window.innerWidth > 900
+    blueSidebarOpen.value = !isWarmPaper.value && window.innerWidth > 900
     const id = managedFontId(readingTypography.value.fontFamily)
     if (id != null) await selectBlueFont(readingTypography.value.fontFamily)
   } else if (activeTab.value === 'notes') {
@@ -4309,11 +4388,11 @@ watch(isBlueGray, async (active) => {
 })
 
 watch(isFullscreen, () => {
-  if (isBlueGray.value) blueSidebarOpen.value = !isFullscreen.value && window.innerWidth > 900
+  if (usesWorkspaceChrome.value) blueSidebarOpen.value = !isWarmPaper.value && !isFullscreen.value && window.innerWidth > 900
   dismissBlueSelection()
 })
 watch([blueSidebarVisible, showSettings, highlightEditor], () => {
-  if (!isBlueGray.value || blueQuickHighlightSave.value) return
+  if (!usesWorkspaceChrome.value || blueQuickHighlightSave.value) return
   dismissBlueSelection()
   if (showSettings.value && highlightEditor.value) closeHighlightEditor()
   void nextTick(() => {
@@ -4348,8 +4427,8 @@ const initializeReader = async () => {
       settings.value.fontFamily = 'default'
     }
   }
-  if (isBlueGray.value) {
-    blueSidebarOpen.value = window.innerWidth > 900
+  if (usesWorkspaceChrome.value) {
+    blueSidebarOpen.value = !isWarmPaper.value && window.innerWidth > 900
     const id = managedFontId(readingTypography.value.fontFamily)
     if (id != null) await selectBlueFont(readingTypography.value.fontFamily)
   }
@@ -5982,7 +6061,7 @@ onBeforeUnmount(() => {
   --appearance-index: 0;
   position: relative;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   padding: 4px;
   overflow-x: auto;
   border: 1px solid var(--border-color-light);
@@ -6002,12 +6081,16 @@ onBeforeUnmount(() => {
   --appearance-index: 3;
 }
 
+.appearance-segmented--warmPaper {
+  --appearance-index: 4;
+}
+
 .appearance-segmented-indicator {
   position: absolute;
   top: 4px;
   bottom: 4px;
   left: 4px;
-  width: calc((100% - 8px) / 4);
+  width: calc((100% - 8px) / 5);
   border: 1px solid var(--border-color-light);
   border-radius: 12px;
   background: var(--surface-elevated);
@@ -7523,3 +7606,5 @@ onBeforeUnmount(() => {
 </style>
 
 <style scoped src="../assets/reader-blue-gray.css"></style>
+
+<style src="../assets/reader-warm-paper.css"></style>

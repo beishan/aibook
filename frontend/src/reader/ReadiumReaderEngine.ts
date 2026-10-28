@@ -1,4 +1,5 @@
 import type { Locator } from '@readium/shared'
+import type { TextAlignment } from '@readium/navigator'
 import type {
   ReaderEngine,
   ReaderEngineEvents,
@@ -173,6 +174,9 @@ export class ReadiumReaderEngine implements ReaderEngine {
       paragraphIndent: settings.paragraphIndent ? 2 : 0,
       columnCount: settings.columnCount,
       scroll: false,
+      ...(settings.textAlign ? {
+        textAlign: (settings.textAlign === 'center' ? 'left' : settings.textAlign) as TextAlignment,
+      } : {}),
     }
   }
 

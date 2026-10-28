@@ -703,6 +703,51 @@ class UserServiceTest {
         org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).save(user);
     }
 
+    @Test
+    void warmPaperTypographyRemainsIndependentOfBlueGrayAndLegacyTypography() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder().username("reader").preferences(UserPreference.builder().build()).build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        when(repository.save(user)).thenReturn(user);
+        UserService service = new UserService(repository);
+        UserPreferencesDTO.ReaderSettingsDTO settings = validReaderSettings();
+        settings.setAppearance("warmPaper");
+        settings.setBlueGray(new UserPreferencesDTO.ReaderTypographyDTO(
+                "default", 23, 1.8, 20, "wide", "auto", "none"));
+        settings.setWarmPaper(new UserPreferencesDTO.ReaderTypographyDTO(
+                "default", 25, 1.9, 30, "wide", "auto", "none", "center"));
+
+        service.updatePreferences("reader", UserPreferencesDTO.builder().readerSettings(settings).build());
+        UserPreferencesDTO.ReaderSettingsDTO restored = service.getPreferences("reader").getReaderSettings();
+        assertEquals("warmPaper", restored.getAppearance());
+        assertEquals(25, restored.getWarmPaper().fontSize());
+        assertEquals("center", restored.getWarmPaper().textAlign());
+        assertEquals(23, restored.getBlueGray().fontSize());
+        assertEquals(22, restored.getFontSize());
+        restored.setAppearance("blueGray");
+        service.updatePreferences("reader", UserPreferencesDTO.builder().readerSettings(restored).build());
+        assertEquals(25, service.getPreferences("reader").getReaderSettings().getWarmPaper().fontSize());
+    }
+
+    @Test
+    void rejectsInvalidWarmPaperAlignmentAndBackground() {
+        UserRepository repository = mock(UserRepository.class);
+        User user = User.builder().username("reader").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(user));
+        UserService service = new UserService(repository);
+        UserPreferencesDTO.ReaderSettingsDTO settings = validReaderSettings();
+        settings.setAppearance("warmPaper");
+        settings.setWarmPaper(new UserPreferencesDTO.ReaderTypographyDTO(
+                "default", 24, 1.9, 30, "wide", "auto", "none", "invalid"));
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences(
+                "reader", UserPreferencesDTO.builder().readerSettings(settings).build()));
+        settings.setWarmPaper(new UserPreferencesDTO.ReaderTypographyDTO(
+                "default", 24, 1.9, 30, "wide", "auto", "javascript:alert(1)", "justify"));
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences(
+                "reader", UserPreferencesDTO.builder().readerSettings(settings).build()));
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).save(user);
+    }
+
     private UserPreferencesDTO.ReaderSettingsDTO validReaderSettings() {
         return new UserPreferencesDTO.ReaderSettingsDTO(
                 "readingRoom",

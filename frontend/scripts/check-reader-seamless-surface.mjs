@@ -10,7 +10,7 @@ const finalReadingRoomBodyBlock = source.match(/\.reader-view\.reading-room-mode
 const epubThemeBlock = source.match(/const applyThemeToContent = \(contents: any\) => \{([\s\S]*?)\n\}/)?.[1] ?? ''
 const epubContainerBlock = source.match(/\.epub-container \{([\s\S]*?)\n\}/)?.[1] ?? ''
 
-assert.match(readerStyleBlock, /maxWidth: isBlueGray\.value \? 'none' : isDoubleScreen \? '100%' : widthOption\.maxWidth/,
+assert.match(readerStyleBlock, /maxWidth: usesWorkspaceChrome\.value \? 'none' : isDoubleScreen \? '100%' : widthOption\.maxWidth/,
   '浅蓝灰由版心内层控制宽度；原样式仍应保留单双栏宽度逻辑')
 assert.doesNotMatch(readerStyleBlock, /background(?:Color|Image|Position|Repeat|Size):/,
   '正文容器不应单独绘制阅读主题背景')

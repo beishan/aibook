@@ -48,7 +48,7 @@ export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
 export const SHELF_PAGE_SIZE_OPTIONS = [12, 24, 48, 96] as const
 export const AUTHOR_PAGE_SIZE_OPTIONS = [10, 20, 50] as const
 export type AuthorPageSize = (typeof AUTHOR_PAGE_SIZE_OPTIONS)[number]
-export type ReaderAppearance = 'classic' | 'readingRoom' | 'trialReader' | 'blueGray'
+export type ReaderAppearance = 'classic' | 'readingRoom' | 'trialReader' | 'blueGray' | 'warmPaper'
 export type ReaderEpubEngine = 'epubjs' | 'readium'
 export type ReaderContentWidth = 'narrow' | 'medium' | 'wide' | 'wider' | 'full'
 export type ReaderScreenMode = 'single' | 'double'
@@ -74,9 +74,11 @@ export interface ReaderSettings {
   contentWidth: ReaderContentWidth
   screenMode: ReaderScreenMode
   blueGray?: ReaderTypography
+  warmPaper?: ReaderTypography
 }
 
 export interface ReaderTypography {
+  textAlign?: 'left' | 'center' | 'justify'
   fontFamily: string
   fontSize: number
   lineHeight: number
@@ -94,6 +96,17 @@ export const DEFAULT_BLUE_GRAY_TYPOGRAPHY: ReaderTypography = {
   contentWidth: 'wide',
   backgroundColor: 'auto',
   backgroundImageId: 'none',
+}
+
+export const DEFAULT_WARM_PAPER_TYPOGRAPHY: ReaderTypography = {
+  fontFamily: 'default',
+  fontSize: 24,
+  lineHeight: 1.9,
+  paragraphSpacing: 30,
+  contentWidth: 'wide',
+  backgroundColor: 'auto',
+  backgroundImageId: 'none',
+  textAlign: 'justify',
 }
 
 export const DEFAULT_READER_SETTINGS: ReaderSettings = {
@@ -286,7 +299,7 @@ const isBackgroundSettings = (value: unknown): value is ThemeBackgroundSettings 
     && isBackgroundConfig(settings.macos26)
 }
 
-const READER_APPEARANCES: ReaderAppearance[] = ['classic', 'readingRoom', 'trialReader', 'blueGray']
+const READER_APPEARANCES: ReaderAppearance[] = ['classic', 'readingRoom', 'trialReader', 'blueGray', 'warmPaper']
 const READER_EPUB_ENGINES: ReaderEpubEngine[] = ['epubjs', 'readium']
 const READER_CONTENT_WIDTHS: ReaderContentWidth[] = ['narrow', 'medium', 'wide', 'wider', 'full']
 const READER_SCREEN_MODES: ReaderScreenMode[] = ['single', 'double']
@@ -338,6 +351,9 @@ export const normalizeReaderSettings = (value: unknown): ReaderSettings => {
   const blueGray = source.blueGray && typeof source.blueGray === 'object'
     ? source.blueGray : DEFAULT_BLUE_GRAY_TYPOGRAPHY
   const blueGrayDefaults = DEFAULT_BLUE_GRAY_TYPOGRAPHY
+  const warmPaper = source.warmPaper && typeof source.warmPaper === 'object'
+    ? source.warmPaper : DEFAULT_WARM_PAPER_TYPOGRAPHY
+  const paperDefaults = DEFAULT_WARM_PAPER_TYPOGRAPHY
 
   return {
     appearance: isOneOf(source.appearance, READER_APPEARANCES)
@@ -380,6 +396,26 @@ export const normalizeReaderSettings = (value: unknown): ReaderSettings => {
       backgroundImageId: typeof blueGray.backgroundImageId === 'string'
         && /^(none|warm-paper|rice-paper|sage-linen|mist-blue|custom-[1-9]\d*)$/.test(blueGray.backgroundImageId)
         ? blueGray.backgroundImageId : blueGrayDefaults.backgroundImageId,
+    },
+    warmPaper: {
+      textAlign: isOneOf(warmPaper.textAlign, ['left', 'center', 'justify'] as const)
+        ? warmPaper.textAlign : paperDefaults.textAlign,
+      fontFamily: typeof warmPaper.fontFamily === 'string'
+        && (READER_BUILT_IN_FONTS.includes(warmPaper.fontFamily)
+          || /^managed:[1-9]\d*$/.test(warmPaper.fontFamily))
+        ? warmPaper.fontFamily : paperDefaults.fontFamily,
+      fontSize: normalizedNumber(warmPaper.fontSize, paperDefaults.fontSize, 12, 28),
+      lineHeight: normalizedNumber(warmPaper.lineHeight, paperDefaults.lineHeight, 1.2, 2.5),
+      paragraphSpacing: normalizedNumber(
+        warmPaper.paragraphSpacing, paperDefaults.paragraphSpacing, 0, 40,
+      ),
+      contentWidth: isOneOf(warmPaper.contentWidth, READER_CONTENT_WIDTHS)
+        ? warmPaper.contentWidth : paperDefaults.contentWidth,
+      backgroundColor: isOneOf(warmPaper.backgroundColor, READER_BACKGROUND_COLORS)
+        ? warmPaper.backgroundColor : paperDefaults.backgroundColor,
+      backgroundImageId: typeof warmPaper.backgroundImageId === 'string'
+        && /^(none|warm-paper|rice-paper|sage-linen|mist-blue|custom-[1-9]\d*)$/.test(warmPaper.backgroundImageId)
+        ? warmPaper.backgroundImageId : paperDefaults.backgroundImageId,
     },
   }
 }

@@ -1,5 +1,5 @@
 <template>
-  <div class="blue-settings-content">
+  <div class="blue-settings-content" :class="{ 'paper-settings-content': paper }">
     <section class="blue-type-settings">
       <label class="blue-setting-row">
         <span>字体</span>
@@ -50,7 +50,17 @@
         <output>{{ typography.lineHeight }}</output>
       </label>
     </section>
-    <section>
+    <section v-if="paper && !fixedLayout" class="paper-alignment-settings">
+      <h3>对齐方式</h3>
+      <ReaderBlueGraySegmented
+        :model-value="limitedAlignment && typography.textAlign === 'center' ? 'left' : typography.textAlign || 'justify'"
+        :options="limitedAlignment ? alignments.filter(option => option.value !== 'center') : alignments"
+        label="对齐方式"
+        @update:model-value="$emit('typography', { textAlign: $event as 'left' | 'center' | 'justify' })"
+      />
+      <p v-if="limitedAlignment">Readium 支持左对齐和两端对齐；居中对齐请切换稳定引擎。</p>
+    </section>
+    <section class="blue-mode-settings">
       <div class="blue-setting-stack">
         <span>页面宽度</span>
         <ReaderBlueGraySegmented
@@ -70,7 +80,7 @@
         />
       </div>
     </section>
-    <section>
+    <section class="blue-color-settings">
       <h3>主题色</h3>
       <div class="blue-theme-swatches">
         <button
@@ -86,7 +96,7 @@
         </button>
       </div>
     </section>
-    <section>
+    <section class="blue-display-settings">
       <label class="blue-switch-row">
         <span>显示阅读进度</span>
         <input
@@ -152,7 +162,7 @@
       />
       <p>Readium 实验引擎暂不支持书内搜索和高亮，可切回稳定引擎。</p>
     </section>
-    <section>
+    <section class="blue-appearance-settings">
       <h3>界面样式</h3>
       <ReaderBlueGraySegmented
         :model-value="settings.appearance"
@@ -169,11 +179,14 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { ReaderContentWidth, ReaderSettings, ReaderTypography } from '@/stores/preferences'
 import ReaderBlueGraySegmented from './ReaderBlueGraySegmented.vue'
 import ReaderBlueGrayIcon from './ReaderBlueGrayIcon.vue'
 
-defineProps<{
+const props = defineProps<{
+  paper?: boolean
+  fixedLayout?: boolean
   settings: ReaderSettings
   typography: ReaderTypography
   appearances: Array<{ value: string; label: string }>
@@ -198,11 +211,22 @@ const widths = [
 const modes = [{ value: 'pagination', label: '翻页' }, { value: 'scroll', label: '滚动' }]
 const screens = [{ value: 'single', label: '单栏' }, { value: 'double', label: '双栏' }]
 const engines = [{ value: 'epubjs', label: 'epub.js（稳定）' }, { value: 'readium', label: 'Readium（实验）' }]
-const themes = [
+const dayThemes = [
   { value: 'auto', label: '日间', color: '#fcfdff' },
   { value: '#f5f5dc', label: '纸张', color: '#f5f5dc' },
   { value: '#2d2d2d', label: '夜间', color: '#2d2d2d' },
 ]
+const alignments = [
+  { value: 'left', label: '左对齐' },
+  { value: 'center', label: '居中对齐' },
+  { value: 'justify', label: '两端对齐' },
+]
+const limitedAlignment = computed(() => props.epub && props.settings.epubEngine === 'readium')
+const themes = computed(() => props.paper ? [
+  { value: 'auto', label: '宣纸白', color: '#faf8f2' },
+  { value: '#e8f5e9', label: '青草绿', color: '#dfe7d6' },
+  { value: '#2d2d2d', label: '墨夜黑', color: '#2d2d2d' },
+] : dayThemes)
 </script>
 
 <style scoped>
@@ -290,7 +314,7 @@ input[type='range'] {
   flex: 1;
   width: 100%;
   min-width: 0;
-  accent-color: #1264cf;
+  accent-color: var(--reader-control-accent, #1264cf);
 }
 
 .blue-setting-stack {
@@ -327,11 +351,11 @@ input[type='range'] {
 }
 
 .blue-theme-swatches .active {
-  color: #1264cf;
+  color: var(--reader-control-accent, #1264cf);
 }
 
 .blue-theme-swatches .active > span {
-  outline: 2px solid #1264cf;
+  outline: 2px solid var(--reader-control-accent, #1264cf);
   outline-offset: 2px;
 }
 
@@ -365,7 +389,7 @@ input[role='switch']::before {
 }
 
 input[role='switch']:checked {
-  background: #1264cf;
+  background: var(--reader-control-accent, #1264cf);
 }
 
 input[role='switch']:checked::before {
@@ -392,7 +416,7 @@ button:disabled {
 }
 
 button:focus-visible, select:focus-visible, input:focus-visible {
-  outline: 2px solid #1264cf;
+  outline: 2px solid var(--reader-control-accent, #1264cf);
   outline-offset: 3px;
 }
 

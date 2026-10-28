@@ -74,7 +74,7 @@ const handleKeydown = async (event: KeyboardEvent) => {
   left: 3px;
   width: calc((100% - 6px) / var(--segment-count));
   border-radius: 8px;
-  background: #1264cf;
+  background: var(--reader-control-accent, #1264cf);
   transform: translateX(calc(var(--segment-index) * 100%));
   transition: transform 220ms cubic-bezier(.2, .8, .2, 1);
   pointer-events: none;
@@ -99,7 +99,7 @@ button[aria-checked='true'] {
 }
 
 button:focus-visible {
-  outline: 2px solid #1264cf;
+  outline: 2px solid var(--reader-control-accent, #1264cf);
   outline-offset: -2px;
 }
 

@@ -11,6 +11,7 @@ export interface ReaderEngineLocator {
 }
 
 export interface ReaderEngineSettings {
+  textAlign?: 'left' | 'center' | 'justify'
   fontFamily: string
   fontSize: number
   lineHeight: number

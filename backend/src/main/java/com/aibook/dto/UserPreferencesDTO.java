@@ -619,6 +619,7 @@ public class UserPreferencesDTO {
 
     public static class ReaderSettingsDTO {
         private ReaderTypographyDTO blueGray;
+        private ReaderTypographyDTO warmPaper;
         private String appearance;
         private String epubEngine;
         private String fontFamily;
@@ -666,6 +667,8 @@ public class UserPreferencesDTO {
         }
 
         public String getAppearance() { return appearance; }
+        public ReaderTypographyDTO getWarmPaper() { return warmPaper; }
+        public void setWarmPaper(ReaderTypographyDTO value) { warmPaper = value; }
         public ReaderTypographyDTO getBlueGray() { return blueGray; }
         public void setBlueGray(ReaderTypographyDTO value) { blueGray = value; }
         public void setAppearance(String value) { appearance = value; }
@@ -702,7 +705,15 @@ public class UserPreferencesDTO {
             Integer paragraphSpacing,
             String contentWidth,
             String backgroundColor,
-            String backgroundImageId) {
+            String backgroundImageId,
+            String textAlign) {
+        public ReaderTypographyDTO(
+                String fontFamily, Integer fontSize, Double lineHeight,
+                Integer paragraphSpacing, String contentWidth, String backgroundColor,
+                String backgroundImageId) {
+            this(fontFamily, fontSize, lineHeight, paragraphSpacing, contentWidth,
+                    backgroundColor, backgroundImageId, null);
+        }
     }
 
     public static class ThemeBackgroundDTO {

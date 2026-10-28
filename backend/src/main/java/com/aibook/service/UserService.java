@@ -48,7 +48,7 @@ public class UserService implements UserDetailsService {
     private static final Set<String> CRAWLER_DISCOVERY_VIEW_MODES = Set.of("table", "card");
     private static final Set<String> CRAWLER_BOOK_VIEW_MODES = Set.of("table", "card");
     private static final Set<String> READER_APPEARANCES =
-            Set.of("classic", "readingRoom", "trialReader", "blueGray");
+            Set.of("classic", "readingRoom", "trialReader", "blueGray", "warmPaper");
     private static final Set<String> READER_EPUB_ENGINES = Set.of("epubjs", "readium");
     private static final Set<String> READER_CONTENT_WIDTHS =
             Set.of("narrow", "medium", "wide", "wider", "full");
@@ -654,6 +654,18 @@ public class UserService implements UserDetailsService {
             // Reuse the existing allowlists and bounds without accepting recursive settings.
             normalizeReaderSettings(new UserPreferencesDTO.ReaderSettingsDTO(
                     "blueGray", settings.getEpubEngine(), typography.fontFamily(),
+                    typography.fontSize(), typography.lineHeight(), typography.paragraphSpacing(),
+                    typography.contentWidth(), typography.backgroundColor(), typography.backgroundImageId(),
+                    settings.getPaginationMode(), settings.getScreenMode(),
+                    settings.getTextIndent(), settings.getShowProgress()));
+        }
+        if (settings.getWarmPaper() != null) {
+            UserPreferencesDTO.ReaderTypographyDTO typography = settings.getWarmPaper();
+            if (typography.textAlign() != null) {
+                requireAllowed("纸感阅读对齐", typography.textAlign(), Set.of("left", "center", "justify"));
+            }
+            normalizeReaderSettings(new UserPreferencesDTO.ReaderSettingsDTO(
+                    "warmPaper", settings.getEpubEngine(), typography.fontFamily(),
                     typography.fontSize(), typography.lineHeight(), typography.paragraphSpacing(),
                     typography.contentWidth(), typography.backgroundColor(), typography.backgroundImageId(),
                     settings.getPaginationMode(), settings.getScreenMode(),
