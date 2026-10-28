@@ -361,6 +361,7 @@
         </div>
         <div class="discovery-heading-actions">
           <el-button @click="chapterListPickerOpen = true">采集章节信息</el-button>
+          <el-button :disabled="batchDiscoveryCrawling" @click="advancedCrawlOpen = true">高级批量采集</el-button>
           <div
             class="discovery-view-switch"
             role="tablist"
@@ -941,6 +942,28 @@
       <div v-if="activeTab === 'tasks'&&taskTotal" class="list-pagination"><span>当前显示 {{ tasks.length }} 项</span><el-pagination v-model:current-page="taskPage" v-model:page-size="taskPageSize" :page-sizes="[20,50,100]" :total="taskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadTasks()" @size-change="handleTaskSizeChange" /></div>
       <div v-if="activeTab === 'failed'&&failedTaskTotal" class="list-pagination"><span>当前显示 {{ failedTasks.length }} 项</span><el-pagination v-model:current-page="failedTaskPage" v-model:page-size="failedTaskPageSize" :page-sizes="[20,50,100]" :total="failedTaskTotal" layout="total, sizes, prev, pager, next, jumper" background @current-change="loadFailedTasks()" @size-change="handleFailedTaskSizeChange" /></div>
     </section>
+
+    <el-dialog v-model="advancedCrawlOpen" title="高级批量采集" width="min(540px, 94vw)" :close-on-click-modal="!advancedCrawlLoading" :show-close="!advancedCrawlLoading">
+      <p>使用发现书籍页面当前的搜索、来源、分类、标签、收藏和排序条件，跨所有页面选择。</p>
+      <el-form label-position="top" style="margin-top: 20px">
+        <el-form-item label="选择方式">
+          <el-select v-model="advancedCrawlMode" :disabled="advancedCrawlLoading">
+            <el-option label="按筛选排序" value="ordered" />
+            <el-option label="随机选择" value="random" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="采集数量">
+          <el-select v-model="advancedCrawlCount" filterable allow-create default-first-option :disabled="advancedCrawlLoading" placeholder="选择或输入数量">
+            <el-option v-for="count in [100, 200, 1000]" :key="count" :label="String(count)" :value="count" />
+          </el-select>
+          <small class="field-hint">输入正整数，最多 10000 本；符合条件的书籍不足时采集实际数量。已有活动任务的书籍会跳过。</small>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="advancedCrawlLoading" @click="advancedCrawlOpen = false">取消</el-button>
+        <el-button type="primary" :loading="advancedCrawlLoading" @click="submitAdvancedCrawl">创建采集任务</el-button>
+      </template>
+    </el-dialog>
 
     <DiscoveryChapterListDialog
       v-model="chapterListPickerOpen"
@@ -2749,6 +2772,10 @@ function openSiteAutoImport(site: CrawlerSite) {
 const discoveryPagesBySite=ref<Record<number,CrawlerDiscoveryPage[]>>({})
 const discoveryMetadataRefreshing=ref(false)
 const batchDiscoveryCrawling = ref(false)
+const advancedCrawlOpen = ref(false)
+const advancedCrawlLoading = ref(false)
+const advancedCrawlMode = ref<'ordered' | 'random'>('ordered')
+const advancedCrawlCount = ref<number | string>(100)
 const bookLoading=ref(false), bookPage=ref(1), bookPageSize=ref(20), bookTotal=ref(0)
 const chapterTableRef = ref<InstanceType<typeof ElTable>>()
 let stopChapterProgressViewport = () => {}
@@ -4985,6 +5012,60 @@ function refreshAfterCrawlSubmission(){
     loadCurrentCrawlerTasks(),
     loadDiscoveredBooks({silent:true,preserveSelection:true}),
   ]).catch(()=>undefined)
+}
+async function submitAdvancedCrawl() {
+  const count = Number(advancedCrawlCount.value)
+  if (!Number.isInteger(count) || count < 1 || count > 10000) {
+    message.warning('请输入 1 到 10000 之间的整数')
+    return
+  }
+  if (advancedCrawlLoading.value || batchDiscoveryCrawling.value) return
+  advancedCrawlLoading.value = true
+  batchDiscoveryCrawling.value = true
+  const query = {
+    size: 100,
+    keyword: discoveryKeyword.value.trim() || undefined,
+    siteId: discoverySiteId.value,
+    category: discoveryCategory.value || undefined,
+    tag: discoveryTag.value || undefined,
+    favoriteOnly: discoveryFavoriteOnly.value || undefined,
+    sort: discoverySort.value,
+  }
+  const selected: number[] = []
+  const seen = new Set<number>()
+  let encountered = 0
+  try {
+    for (let page = 0; ; page++) {
+      const result = await crawlerApi.discoveredBooks({ ...query, page })
+      for (const book of result.content) {
+        if (seen.has(book.id)) continue
+        seen.add(book.id)
+        encountered++
+        if (selected.length < count) selected.push(book.id)
+        else if (advancedCrawlMode.value === 'random') {
+          const index = Math.floor(Math.random() * encountered)
+          if (index < count) selected[index] = book.id
+        }
+      }
+      if (!result.content.length || (page + 1) * query.size >= result.totalElements ||
+          (advancedCrawlMode.value === 'ordered' && selected.length >= count)) break
+    }
+    if (!selected.length) {
+      message.warning('当前筛选条件下没有发现书籍')
+      return
+    }
+    const tasks = await crawlerApi.batchCrawl(selected)
+    const skipped = selected.length - tasks.length
+    message.success(`已创建 ${tasks.length} 个采集任务${skipped ? `，跳过 ${skipped} 本已有活动任务的书籍` : ''}`)
+    advancedCrawlOpen.value = false
+    selectedDiscoveries.value = []
+    refreshAfterCrawlSubmission()
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '高级批量采集失败，请重试')
+  } finally {
+    advancedCrawlLoading.value = false
+    batchDiscoveryCrawling.value = false
+  }
 }
 async function batchCrawl() {
   if (batchDiscoveryCrawling.value || !selectedDiscoveries.value.length) return
