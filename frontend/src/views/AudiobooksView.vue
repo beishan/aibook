@@ -1,22 +1,24 @@
 <template>
   <div class="audio-library">
     <header class="audio-library-header">
-      <div>
-        <h1>书库 · 有声书</h1>
+      <div class="library-heading">
+        <div class="library-title-row">
+          <h1>书库</h1>
+          <AudioSegmented
+            model-value="audio"
+            label="书库内容"
+            :options="[
+              { value: 'ebook', label: '电子书' },
+              { value: 'audio', label: '有声书' },
+            ]"
+            @update:model-value="(value) => value === 'ebook' && router.push('/books')"
+          />
+        </div>
         <p>{{ total }} 个演播版本，阅读与收听分别记录进度</p>
       </div>
       <button class="btn btn-primary" @click="showImport = true">＋ 导入有声书</button>
     </header>
     <section class="audio-filter glass">
-      <AudioSegmented
-        model-value="audio"
-        label="书库内容"
-        :options="[
-          { value: 'ebook', label: '电子书' },
-          { value: 'audio', label: '有声书' },
-        ]"
-        @update:model-value="(value) => value === 'ebook' && router.push('/books')"
-      />
       <form
         @submit.prevent="resetAndLoad"
       >
@@ -191,6 +193,22 @@ onMounted(load)
   align-items: center;
   gap: 20px;
   flex-wrap: wrap;
+}
+.library-heading {
+  min-width: 0;
+}
+.library-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  margin-bottom: 10px;
+}
+.library-title-row h1 {
+  margin-bottom: 0;
+}
+.library-title-row .audio-segmented {
+  max-width: 100%;
 }
 h1 {
   font-size: 30px;

@@ -2,8 +2,16 @@
   <div class="books-view">
     <!-- 页面头部 -->
     <div class="page-header">
-      <div>
-        <h1 class="page-title">书库</h1>
+      <div class="library-heading">
+        <div class="library-title-row">
+          <h1 class="page-title">书库</h1>
+          <AudioSegmented
+            model-value="ebook"
+            label="书库内容"
+            :options="[{ value: 'ebook', label: '电子书' }, { value: 'audio', label: '有声书' }]"
+            @update:model-value="value => value === 'audio' && $router.push('/audiobooks')"
+          />
+        </div>
         <p class="page-subtitle">共 {{ bookStore.totalElements }} 本书</p>
       </div>
       <div class="page-header-actions">
@@ -53,12 +61,6 @@
       </div>
     </div>
 
-    <AudioSegmented
-      model-value="ebook"
-      label="书库内容"
-      :options="[{ value: 'ebook', label: '电子书' }, { value: 'audio', label: '有声书' }]"
-      @update:model-value="value => value === 'audio' && $router.push('/audiobooks')"
-    />
     <!-- 筛选区 -->
     <div class="filter-card glass">
       <div class="filter-row">
@@ -1430,6 +1432,26 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: var(--spacing-xl);
+}
+
+.library-heading {
+  min-width: 0;
+}
+
+.library-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm) var(--spacing-lg);
+  margin-bottom: var(--spacing-sm);
+}
+
+.library-title-row .page-title {
+  margin-bottom: 0;
+}
+
+.library-title-row .audio-segmented {
+  max-width: 100%;
 }
 
 .page-header-actions {
