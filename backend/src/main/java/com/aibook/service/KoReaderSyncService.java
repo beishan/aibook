@@ -181,6 +181,7 @@ public class KoReaderSyncService {
         // 最后回退：遍历所有书籍
         var books = bookRepository.findByUserAndDeletedAtIsNull(user);
         for (Book book : books) {
+            if (book.getFormat() == null || book.getFilePath() == null) continue;
             String filename = book.getTitle() + "." + book.getFormat();
             if (filename.equals(documentId) || book.getFilePath().endsWith(documentId)) {
                 return book;

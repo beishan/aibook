@@ -148,6 +148,12 @@ public class ScanDirectoryController {
                 id, categoryId, getUserFromAuth(authentication)));
     }
 
+    @PutMapping("/{id}/content-type")
+    public ResponseEntity<ScanDirectory> updateContentType(Authentication authentication,
+            @PathVariable Long id, @RequestBody Map<String,String> body) {
+        return ResponseEntity.ok(scanDirectoryService.updateContentType(id, body.getOrDefault("contentType","EBOOK"), getUserFromAuth(authentication)));
+    }
+
     private User getUserFromAuth(Authentication authentication) {
         if (authentication == null) {
             throw new RuntimeException("未认证");

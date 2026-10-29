@@ -90,6 +90,7 @@ public class BookService {
             var predicates = new ArrayList<Predicate>();
             predicates.add(cb.equal(root.get("user"), user));
             predicates.add(cb.isNull(root.get("deletedAt")));
+            predicates.add(cb.isNotNull(root.get("format")));
             var scanSources = query.subquery(Long.class);
             var scanSource = scanSources.from(BookScanSource.class);
             scanSources.select(cb.literal(1L)).where(cb.equal(scanSource.get("book"), root));

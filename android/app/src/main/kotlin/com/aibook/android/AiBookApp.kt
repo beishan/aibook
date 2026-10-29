@@ -409,9 +409,15 @@ fun AiBookApp(initialDebugRoute: String? = null) {
                     )
                 }
             }
+            composable("audiobooks") {
+                PaddedScreen(paddingValues) {
+                    com.aibook.android.feature.audio.AudiobooksScreen(onBack = { navController.popBackStack() })
+                }
+            }
             composable(Screen.ServerLibrary.route) {
                 PaddedScreen(paddingValues) {
                     ServerLibraryScreen(
+                        onAudiobooksClick = { navController.navigate("audiobooks") },
                         onLocalLibraryClick = { navigateDiscoverySource(Screen.Store.route) },
                         onOpdsClick = { navigateDiscoverySource(Screen.StoreOpds.route) },
                         onReadBook = { bookId -> navController.navigate(Screen.RemoteReader.createRoute(bookId)) },

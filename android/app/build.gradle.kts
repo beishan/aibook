@@ -57,6 +57,8 @@ android {
 }
 
 dependencies {
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-session:1.11.1")
     implementation(project(":core:model"))
     implementation(project(":core:network"))
     implementation(project(":core:data"))

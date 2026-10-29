@@ -20,6 +20,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 /** 与账号基本资料分离存储的用户偏好配置。 */
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Table(name = "user_preferences")
 @Getter
 @Setter
@@ -140,6 +141,9 @@ public class UserPreference {
 
     @Column(name = "random_cover_visibility_overrides", columnDefinition = "TEXT")
     private String randomCoverVisibilityOverrides;
+
+    @Column(name = "audio_settings", columnDefinition = "TEXT")
+    private String audioSettings;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

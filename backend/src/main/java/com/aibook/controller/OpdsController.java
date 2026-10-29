@@ -167,7 +167,7 @@ public class OpdsController {
         Book book = bookRepository.findByIdAndUserAndDeletedAtIsNull(id, user)
                 .orElse(null);
 
-        if (book == null) {
+        if (book == null || book.getFormat() == null || book.getFilePath() == null) {
             return ResponseEntity.notFound().build();
         }
 

@@ -57,6 +57,7 @@ public class BookVersionService {
 
     @Transactional
     public List<com.aibook.dto.BookVersionDTO> getVersions(Book book) {
+        if (book.getFormat() == null) return List.of();
         ensurePrimaryVersion(book);
         return bookVersionRepository
                 .findByBookOrderByPrimaryVersionDescCreatedAtAsc(book)
@@ -93,6 +94,9 @@ public class BookVersionService {
 
     @Transactional
     public BookVersion ensurePrimaryVersion(Book book, String uploadedFilename) {
+        if (book.getFormat() == null || book.getFilePath() == null) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "本作品只有有声版本，请使用收听入口");
+        }
         BookVersion version = bookVersionRepository.findByBookAndPrimaryVersionTrue(book)
                 .map(existing -> {
                     if (isGeneratedStorageFilename(existing.getDisplayName())

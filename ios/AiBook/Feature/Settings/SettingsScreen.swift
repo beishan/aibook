@@ -68,6 +68,7 @@ struct SettingsScreen: View {
 
             // 书库与扫描
             Section("书库与扫描") {
+                NavigationLink { AudiobooksScreen() } label: { Label("有声书", systemImage: "headphones") }
                 NavigationLink(value: Screen.scanDirectories) {
                     Label("扫描目录", systemImage: "folder")
                 }

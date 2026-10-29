@@ -326,6 +326,7 @@
         </aside>
       </section>
 
+      <BookAudiobookPanel :book-id="book.id" />
       <section class="version-panel">
         <div class="version-panel-header">
           <div>
@@ -1049,6 +1050,7 @@
 </template>
 
 <script setup lang="ts">
+import BookAudiobookPanel from '@/components/audio/BookAudiobookPanel.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, reactive, ref, onMounted, nextTick, watch } from 'vue'
 import BookSeriesPanel from '@/components/BookSeriesPanel.vue'
@@ -1327,6 +1329,11 @@ const loadBook = async () => {
 
   try {
     book.value = await bookStore.fetchBookById(id)
+    if (!book.value.format) {
+      const { data } = await api.get(`/api/audiobooks/by-book/${id}`)
+      if (data.length) await router.replace(`/audiobooks/${data[0].id}`)
+      return
+    }
     notes.value = book.value.notes || ''
     selectedTagIds.value = (book.value.tags || []).map((tag: any) => tag.id)
     await loadVersions()

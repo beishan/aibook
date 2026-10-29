@@ -150,6 +150,7 @@ public class Opds2Service {
 
         List<Map<String, Object>> publications = new ArrayList<>();
         for (Book book : books) {
+            if (book.getFormat() == null) continue;
             publications.add(convertBookToPublication(book));
         }
         feed.put("publications", publications);

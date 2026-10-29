@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        A10000000000000000000121 /* AudioOfflineCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000122 /* AudioOfflineCache.swift */; };
+        A10000000000000000000111 /* AudiobooksScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000112 /* AudiobooksScreen.swift */; };
 		7185753D2FFF81BB0099570A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7185753C2FFF81BB0099570A /* Assets.xcassets */; };
 		718575402FFF81BB0099570A /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7185753F2FFF81BB0099570A /* Preview Assets.xcassets */; };
 		B10000000000000000000001 /* BookFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* BookFormatTests.swift */; };
@@ -96,6 +98,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+        A10000000000000000000122 /* AudioOfflineCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioOfflineCache.swift; sourceTree = "<group>"; };
+        A10000000000000000000112 /* AudiobooksScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudiobooksScreen.swift; sourceTree = "<group>"; };
 		718575332FFF81B90099570A /* AiBook.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AiBook.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7185753C2FFF81BB0099570A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
 		7185753F2FFF81BB0099570A /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
@@ -329,6 +333,8 @@
 		718575822FFF8F7B0099570A /* Feature */ = {
 			isa = PBXGroup;
 			children = (
+                A10000000000000000000112 /* AudiobooksScreen.swift */,
+                A10000000000000000000122 /* AudioOfflineCache.swift */,
 				718575632FFF8F7B0099570A /* Importer */,
 				718575672FFF8F7B0099570A /* Opds */,
 				7185756F2FFF8F7B0099570A /* Reader */,
@@ -654,6 +660,8 @@
 				718575D02FFF8F7C0099570A /* BookCoverView.swift in Sources */,
 				718575EE2FFF8F7C0099570A /* AiBookApp.swift in Sources */,
 				718575E82FFF8F7C0099570A /* OpdsSyncCollector.swift in Sources */,
+                A10000000000000000000111 /* AudiobooksScreen.swift in Sources */,
+                A10000000000000000000121 /* AudioOfflineCache.swift in Sources */,
 				718575BD2FFF8F7C0099570A /* ReaderScreen.swift in Sources */,
 				718575E72FFF8F7C0099570A /* OpdsFeedParser.swift in Sources */,
 				718575CA2FFF8F7C0099570A /* ShelfViewModel.swift in Sources */,
@@ -878,6 +886,7 @@
 				DEVELOPMENT_ASSET_PATHS = "\"AiBook/Resources/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_FILE = AiBook/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -907,6 +916,7 @@
 				DEVELOPMENT_ASSET_PATHS = "\"AiBook/Resources/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_FILE = AiBook/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

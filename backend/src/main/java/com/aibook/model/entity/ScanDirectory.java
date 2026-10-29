@@ -48,6 +48,10 @@ public class ScanDirectory {
     @Column(name = "library_visible", nullable = false, columnDefinition = "boolean default true")
     private Boolean libraryVisible = true;
 
+    @Builder.Default
+    @Column(name = "content_type", nullable = false, columnDefinition = "varchar(20) default 'EBOOK'")
+    private String contentType = "EBOOK";
+
     /**
      * 上次扫描时间
      */

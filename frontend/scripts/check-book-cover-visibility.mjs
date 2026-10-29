@@ -126,3 +126,10 @@ onResponse({ data: { id: 21, title: '旧账户响应', coverHidden: false }, con
 } })
 assert.equal(privacy.shouldLoadBookCover(21), false)
 console.log('Book DTO privacy synchronization accepts current account responses and ignores stale accounts')
+
+visibilityContext.exports.captureBookCoverVisibility({
+  id: 901, bookId: 902, title: '有声版本', narrator: '演播者', coverHidden: true,
+})
+assert.equal(visibilityContext.exports.explicitBookCoverOverrides.value['902'], true)
+assert.equal(visibilityContext.exports.explicitBookCoverOverrides.value['901'], undefined)
+console.log('Audiobook cover visibility is keyed by work ID, not edition ID')

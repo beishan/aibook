@@ -58,6 +58,8 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/readium-resources/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/audio-media/**").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/audio-media/**").permitAll()
                 .requestMatchers(
                     HttpMethod.GET,
                     "/api/site/favicon",

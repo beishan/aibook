@@ -52,7 +52,7 @@ public interface BookRepository
     int clearCrawlerCategoryIfUnchanged(@Param("bookId") Long bookId, @Param("user") User user,
             @Param("categoryId") Long categoryId);
 
-    String LIBRARY_VISIBLE = " (NOT EXISTS (SELECT source FROM BookScanSource source "
+    String LIBRARY_VISIBLE = " b.format IS NOT NULL AND (NOT EXISTS (SELECT source FROM BookScanSource source "
             + "WHERE source.book = b) OR EXISTS (SELECT source FROM BookScanSource source "
             + "WHERE source.book = b AND (source.scanDirectory.libraryVisible = true "
             + "OR source.scanDirectory.libraryVisible IS NULL))) ";
@@ -286,7 +286,7 @@ public interface BookRepository
                    b.isbn AS isbn,
                    b.filePath AS filePath
             FROM Book b
-            WHERE b.user.id = :userId AND b.deletedAt IS NULL
+            WHERE b.user.id = :userId AND b.deletedAt IS NULL AND b.format IS NOT NULL
             ORDER BY b.id
             """)
     List<BookVersionIdentityProjection> findVersionIdentitiesByUserId(

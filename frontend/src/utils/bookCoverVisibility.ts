@@ -16,7 +16,9 @@ export function captureBookCoverVisibility(payload: unknown) {
     if (typeof item.id === 'number' && Number.isSafeInteger(item.id) && item.id > 0
         && typeof item.title === 'string' && Object.prototype.hasOwnProperty.call(item, 'coverHidden')
         && (item.coverHidden === null || typeof item.coverHidden === 'boolean')) {
-      changes[String(item.id)] = item.coverHidden as boolean | null
+      const bookId = typeof item.bookId === 'number' && typeof item.narrator === 'string'
+        ? item.bookId : item.id
+      changes[String(bookId)] = item.coverHidden as boolean | null
     }
     for (const key of ['content', 'books', 'book', 'results', 'items', 'groups']) {
       if (item[key] != null) visit(item[key])

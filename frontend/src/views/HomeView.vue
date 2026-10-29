@@ -1,5 +1,6 @@
 <template>
   <div class="home-view">
+    <ContinueListening />
     <header class="home-welcome">
       <div class="welcome-copy">
         <el-icon>
@@ -511,6 +512,7 @@
 </template>
 
 <script setup lang="ts">
+import ContinueListening from '@/components/audio/ContinueListening.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {

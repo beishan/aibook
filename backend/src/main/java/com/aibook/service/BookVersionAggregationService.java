@@ -54,6 +54,9 @@ public class BookVersionAggregationService {
     private final BookScanSourceRepository bookScanSourceRepository;
 
     @Autowired(required = false)
+    private com.aibook.audiobook.AudioStore audioStore;
+
+    @Autowired(required = false)
     private RewriteProjectRepository rewriteProjectRepository;
 
     public RebuildPlan buildPlan(Long userId) {
@@ -112,8 +115,15 @@ public class BookVersionAggregationService {
                     "源书籍存在重写项目，暂不能合并到其他书籍");
         }
 
+        if (primary.getFormat() == null || duplicate.getFormat() == null) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "纯有声作品请在有声版本资料中关联作品，不能作为电子书文件合并");
+        }
         bookVersionService.ensurePrimaryVersion(primary);
         bookVersionService.ensurePrimaryVersion(duplicate);
+        if (audioStore != null) {
+            audioStore.update("UPDATE audiobook_editions SET book_id=? WHERE book_id=?", primaryId, duplicateId);
+        }
         List<BookVersion> duplicateVersions =
                 bookVersionRepository
                         .findByBookOrderByPrimaryVersionDescCreatedAtAsc(duplicate);

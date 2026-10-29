@@ -49,6 +49,12 @@
       </div>
     </div>
 
+    <AudioSegmented
+      model-value="ebook"
+      label="书库内容"
+      :options="[{ value: 'ebook', label: '电子书' }, { value: 'audio', label: '有声书' }]"
+      @update:model-value="value => value === 'audio' && $router.push('/audiobooks')"
+    />
     <!-- 筛选区 -->
     <div class="filter-card glass">
       <div class="filter-row">
@@ -683,6 +689,7 @@
 </template>
 
 <script setup lang="ts">
+import AudioSegmented from '@/components/audio/AudioSegmented.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'

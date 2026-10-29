@@ -24,6 +24,21 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
     children: [
       {
+        path: 'audiobooks',
+        name: 'Audiobooks',
+        component: () => import('@/views/AudiobooksView.vue'),
+      },
+      {
+        path: 'audiobooks/:id',
+        name: 'AudiobookDetail',
+        component: () => import('@/views/AudiobookDetailView.vue'),
+      },
+      {
+        path: 'audiobooks/:id/listen',
+        name: 'AudiobookPlayer',
+        component: () => import('@/views/AudiobookPlayerView.vue'),
+      },
+      {
         path: '',
         name: 'Home',
         component: () => import('@/views/HomeView.vue'),

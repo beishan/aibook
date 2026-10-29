@@ -188,6 +188,7 @@ export const useUserStore = defineStore('user', () => {
 
   // 登出
   function logout() {
+    window.dispatchEvent(new Event('aibook:audio-stop'))
     token.value = ''
     userInfo.value = null
     replaceAvatarObjectUrl()

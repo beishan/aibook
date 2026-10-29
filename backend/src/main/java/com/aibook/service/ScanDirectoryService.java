@@ -27,6 +27,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class ScanDirectoryService {
 
+    @Transactional
+    public ScanDirectory updateContentType(Long id, String type, User user) {
+        if (type == null || !List.of("EBOOK", "AUDIO", "MIXED").contains(type)) throw new IllegalArgumentException("扫描内容类型无效");
+        ScanDirectory directory = scanDirectoryRepository.findByIdAndUser(id, user)
+                .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
+        directory.setContentType(type);
+        return scanDirectoryRepository.save(directory);
+    }
+
     private final ScanDirectoryRepository scanDirectoryRepository;
     private final FileScannerService fileScannerService;
     private final CategoryService categoryService;

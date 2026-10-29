@@ -31,6 +31,9 @@ public class ScheduledScanService {
     private static final DateTimeFormatter TIME_FORMATTER =
             DateTimeFormatter.ofPattern("HH:mm");
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.aibook.audiobook.AudioImportService audioImports;
+
     private final UserRepository userRepository;
     private final ScanDirectoryRepository scanDirectoryRepository;
     private final ScanDirectoryTaskService scanDirectoryTaskService;
@@ -82,8 +85,15 @@ public class ScheduledScanService {
 
             lastTriggeredMinutes.put(user.getId(), currentMinute);
             int started = 0;
-            for (ScanDirectory directory : scanDirectoryRepository.findByUser(user)) {
-                if (!Boolean.TRUE.equals(directory.getEnabled())) {
+            var directories = scanDirectoryRepository.findByUser(user);
+            if (audioImports != null) {
+                var audioRoots = directories.stream().filter(d -> Boolean.TRUE.equals(d.getEnabled()))
+                        .filter(d -> "AUDIO".equals(d.getContentType()) || "MIXED".equals(d.getContentType())).toList();
+                try { audioImports.scheduled(user,audioRoots); }
+                catch (RuntimeException exception) { log.warn("有声书定时探测未启动，账户可能已有活动任务: userId={}",user.getId()); }
+            }
+            for (ScanDirectory directory : directories) {
+                if (!Boolean.TRUE.equals(directory.getEnabled()) || "AUDIO".equals(directory.getContentType())) {
                     continue;
                 }
                 try {

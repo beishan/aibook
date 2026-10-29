@@ -215,6 +215,7 @@ public class OpdsService {
         }
 
         for (Book book : books) {
+            if (book.getFormat() == null) continue;
             xml.append("  <entry>\n");
             xml.append("    <title>").append(escapeXml(book.getTitle())).append("</title>\n");
             xml.append("    <id>urn:aibook:book:").append(book.getId()).append("</id>\n");

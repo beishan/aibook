@@ -72,7 +72,7 @@ scanning:
 logging:
   level:
     com.aibook: DEBUG
-    org.springframework.security: DEBUG
+    org.springframework.security: INFO
 
 management:
   endpoints:
@@ -82,3 +82,7 @@ management:
   endpoint:
     health:
       show-details: never
+
+# Audiobooks run inside this backend. No separate media service is required.
+audio:
+  ffprobe: ${AUDIO_FFPROBE:ffprobe}

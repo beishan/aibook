@@ -594,6 +594,11 @@ class ServerRepository(
         }
     }
 
+    suspend fun audioApi(): com.aibook.android.core.network.api.AudioApi =
+        ensureRetrofit().create(com.aibook.android.core.network.api.AudioApi::class.java)
+
+    suspend fun audioBaseUrl(): String = cachedServerUrl.ifBlank { serverConfigStore.serverUrl.first() }.trimEnd('/')
+
     private suspend fun getAuthApi(): AuthApi {
         return ApiServiceFactory.createAuthApi(ensureRetrofit())
     }

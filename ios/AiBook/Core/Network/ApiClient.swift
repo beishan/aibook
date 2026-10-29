@@ -88,7 +88,7 @@ final class ApiClient {
         case 200...299:
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(T.self, from: data)
+            return try decoder.decode(T.self, from: data.isEmpty ? Data("{}".utf8) : data)
         case 401:
             throw ApiError.unauthorized
         case 404:

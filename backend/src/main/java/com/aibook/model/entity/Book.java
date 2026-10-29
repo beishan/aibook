@@ -92,13 +92,13 @@ public class Book {
     /**
      * 文件格式 (epub, txt, pdf, mobi, azw3, docx, html, md)
      */
-    @Column(nullable = false)
+    @Column
     private String format;
 
     /**
      * 文件路径
      */
-    @Column(nullable = false)
+    @Column
     private String filePath;
 
     /** 当前账户在该书上最后选择的版本；失效时由客户端回退到主版本。 */

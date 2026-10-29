@@ -50,6 +50,7 @@ import com.aibook.android.ui.design.SoftCard
 @Composable
 fun ServerLibraryScreen(
     onLocalLibraryClick: () -> Unit,
+    onAudiobooksClick: () -> Unit = {},
     onOpdsClick: () -> Unit = {},
     onReadBook: (Long) -> Unit,
     onBookClick: (Long) -> Unit = onReadBook,
@@ -82,6 +83,7 @@ fun ServerLibraryScreen(
         },
         actions = {
             if (overviewMode) {
+                androidx.compose.material3.TextButton(onClick = onAudiobooksClick) { Text("听书") }
                 Icon(Icons.Default.Search, contentDescription = "搜索", modifier = Modifier.noRippleClick(onSearchClick))
                 Icon(Icons.Default.MoreVert, contentDescription = "更多", modifier = Modifier.noRippleClick(viewModel::loadOverview))
             } else {
