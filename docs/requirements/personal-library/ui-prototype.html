@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>汗牛充栋 · 个人图书馆 UI 设计稿</title>
+<style>
+:root { --paper:#f6f4ed; --card:#fffef9; --ink:#253b33; --muted:#73786e; --line:#e0e3d8; --accent:#325e49; --soft:#e7ecdf; --gold:#a06a3e; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft Yahei",sans-serif; font-size:14px; line-height:1.6; }
+button,input,select,textarea { font:inherit; }
+button,a,input,select,textarea { -webkit-tap-highlight-color:transparent; }
+button { cursor:pointer; border:1px solid var(--line); background:var(--card); color:var(--ink); padding:10px 17px; border-radius:10px; }
+button:hover { background:var(--soft); }
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible { outline:3px solid #a06a3e; outline-offset:3px; }
+button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+button.ghost { border-color:transparent; background:transparent; }
+button.danger { color:#a14436; }
+button:disabled { opacity:.5; cursor:default; }
+small,.muted { color:var(--muted); }
+h1,h2,h3,p { margin:0; }
+h1,h2,.serif { font-family:"Songti SC","STSong",Georgia,serif; }
+h1 { font-size:38px; font-weight:500; letter-spacing:2px; }
+h2 { font-size:25px; font-weight:500; }
+h3 { font-size:16px; }
+.sidebar { position:fixed; inset:0 auto 0 0; width:208px; background:#edf0e6; border-right:1px solid var(--line); padding:30px 20px; display:flex; flex-direction:column; z-index:5; }
+.brand { font-size:23px; letter-spacing:4px; font-family:"Songti SC",serif; font-weight:700; }
+.brand small { display:block; font:10px sans-serif; letter-spacing:3px; margin-top:5px; }
+.side-label { color:var(--muted); font-size:11px; letter-spacing:2px; margin:44px 12px 12px; }
+.side-link { width:100%; text-align:left; border:0; background:transparent; margin:4px 0; padding:12px; }
+.side-link.active { background:#dce5d6; font-weight:600; }
+.side-bottom { margin-top:auto; border-top:1px solid var(--line); padding-top:20px; }
+.avatar { width:30px; height:30px; border-radius:50%; background:var(--accent); color:white; display:inline-grid; place-items:center; margin-right:9px; }
+main { margin-left:208px; }
+.topbar { display:flex; justify-content:space-between; align-items:center; padding:16px 42px; border-bottom:1px solid var(--line); min-height:74px; gap:12px; }
+.topbar small { letter-spacing:1px; }
+.prototype { font-size:11px; color:var(--gold); background:#f0e9da; padding:4px 9px; border-radius:5px; }
+.content { max-width:1330px; margin:auto; padding:36px 44px 65px; }
+.row { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.eyebrow { letter-spacing:3px; color:var(--gold); font-size:11px; margin-bottom:8px; }
+.intro { margin:10px 0 28px; color:var(--muted); }
+.grid { display:grid; gap:24px; }
+.libraries { grid-template-columns:repeat(3,minmax(0,1fr)); margin-top:24px; }
+.library { display:flex; flex-direction:column; text-align:left; padding:0; overflow:hidden; background:var(--card); border-radius:15px; }
+.library:hover { transform:translateY(-3px); background:var(--card); }
+.landscape { width:100%; flex-shrink:0; height:180px; overflow:hidden; position:relative; background:#dce2d1; }
+.landscape::before,.landscape::after { content:""; position:absolute; width:110%; height:160px; border-radius:50%; transform:rotate(-15deg); background:#9dac8e; left:-20%; top:90px; }
+.landscape::after { background:#627c63; left:25%; top:110px; }
+.landscape .sun { position:absolute; width:45px; height:45px; background:#f5eedb; border-radius:50%; right:35px; top:30px; }
+.landscape.tech { background:#d7dfe3; }
+.landscape.tech::before { background:#a3b5bd; }
+.landscape.tech::after { background:#56727e; }
+.landscape.history { background:#e8d8c2; }
+.landscape.history::before { background:#c4a681; }
+.landscape.history::after { background:#92785c; }
+.library-info { padding:23px; }
+.library-info h2 { margin-bottom:8px; }
+.library-info footer { margin-top:25px; display:flex; justify-content:space-between; color:var(--muted); font-size:12px; }
+.new-library { min-height:342px; border:1px dashed #b9c5b1; background:transparent; display:grid; place-content:center; text-align:center; gap:12px; }
+.new-library span { font-size:32px; font-weight:200; }
+.hero { min-height:240px; padding:33px 38px; border-radius:16px; background:#e5eadc; position:relative; overflow:hidden; display:flex; justify-content:space-between; align-items:center; gap:20px; }
+.hero-copy { max-width:530px; z-index:1; }
+.hero p { margin:13px 0 21px; color:#58694f; }
+.hero-art { font:90px "Songti SC",serif; letter-spacing:12px; color:#839277; writing-mode:vertical-rl; line-height:1.1; transform:rotate(-10deg); opacity:.5; padding:0 25px; }
+.pill { border:1px solid #b8c5ad; border-radius:30px; padding:5px 12px; font-size:12px; display:inline-block; }
+.tabs { display:flex; position:relative; padding:4px; gap:0; background:#e9ece3; border-radius:13px; width:fit-content; max-width:100%; overflow:auto; margin:27px 0 32px; }
+.tabs button { position:relative; background:transparent; border:0; min-width:88px; white-space:nowrap; z-index:1; }
+.tab-indicator { position:absolute; top:4px; bottom:4px; left:4px; background:var(--card); border:1px solid var(--line); border-radius:10px; transition:transform .25s ease,width .25s ease; }
+.section { margin:32px 0; }
+.section-heading { margin-bottom:19px; }
+.section-heading small { display:block; margin-top:4px; }
+.books { grid-template-columns:repeat(4,minmax(0,1fr)); gap:24px; }
+.book { min-width:0; }
+.book-open { width:100%; padding:0; border:0; background:transparent; text-align:left; }
+.book-open:hover { background:transparent; }
+.cover { height:228px; padding:23px 22px; position:relative; border-radius:3px 9px 9px 3px; border-left:7px solid #0002; background:var(--book); color:var(--text,#f9f5e8); display:flex; flex-direction:column; justify-content:space-between; overflow:hidden; }
+.cover::after { content:""; position:absolute; width:150px; height:150px; border:1px solid currentColor; border-radius:50%; bottom:-75px; right:-25px; opacity:.35; }
+.cover .book-title { font:27px/1.5 "Songti SC",serif; letter-spacing:3px; }
+.cover .en { font:9px/1.7 Georgia,serif; letter-spacing:2px; opacity:.7; }
+.cover small { color:inherit; opacity:.8; }
+.book-meta { padding-top:13px; }
+.book-meta h3 { font-size:14px; font-weight:500; }
+.progress { height:3px; background:#e1e5d9; margin:12px 0 6px; border-radius:5px; }
+.progress span { height:100%; display:block; background:var(--accent); }
+.book-footer { display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--muted); }
+.heart { padding:2px 8px; border:0; background:transparent; font-size:19px; }
+.booklists { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.list-card { border:1px solid var(--line); background:var(--card); border-radius:13px; padding:23px; text-align:left; display:flex; align-items:center; gap:22px; }
+.mini-covers { display:flex; min-width:96px; }
+.mini-covers span { width:39px; height:65px; background:#687d65; margin-right:-12px; border:2px solid var(--card); transform:rotate(-7deg); }
+.mini-covers span:nth-child(2) { background:#b6a17c; transform:rotate(0); }
+.mini-covers span:nth-child(3) { background:#727f90; transform:rotate(7deg); }
+.toolbar { display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; margin:18px 0 25px; }
+input,select,textarea { background:var(--card); border:1px solid var(--line); border-radius:9px; padding:10px 12px; color:var(--ink); min-width:0; }
+.search { width:260px; max-width:100%; }
+.chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; }
+.chips button[aria-pressed="true"] { background:var(--soft); border-color:#9dae94; }
+.settings { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:32px; }
+.panel { border:1px solid var(--line); background:var(--card); border-radius:14px; padding:25px; }
+.field { display:flex; flex-direction:column; gap:8px; margin:18px 0; }
+.templates { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
+.templates button[aria-pressed="true"] { background:var(--soft); border-color:var(--accent); }
+.swatch { width:32px; height:32px; padding:0; border-radius:50%; border:3px solid var(--card); outline:1px solid var(--line); }
+.swatch[aria-pressed="true"] { outline:2px solid var(--ink); }
+.module { display:flex; gap:10px; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--line); }
+.module label { flex:1; }
+.module button { padding:3px 9px; }
+.preview { position:sticky; top:20px; height:fit-content; }
+.preview-head { padding:26px; border-radius:9px; background:var(--soft); margin:20px 0; }
+.preview-books { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+.preview-books span { height:105px; background:#8c9b7e; border-radius:3px; }
+.notice { border-left:3px solid #9cae8e; padding:9px 14px; background:#eaf0e3; color:#58694f; font-size:12px; margin:20px 0; }
+.empty { padding:65px 20px; text-align:center; border:1px dashed var(--line); border-radius:12px; }
+.pagination { display:flex; gap:8px; justify-content:center; align-items:center; margin-top:35px; }
+dialog { width:min(570px,calc(100% - 30px)); max-height:85vh; border:1px solid var(--line); border-radius:18px; background:var(--paper); color:var(--ink); padding:28px; }
+dialog::backdrop { background:#1b2c2766; backdrop-filter:blur(4px); }
+dialog h2 { margin-bottom:8px; }
+.dialog-row { padding:13px 0; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; }
+.dialog-row label { flex:1; }
+.toast { position:fixed; bottom:26px; left:50%; transform:translateX(-50%); background:var(--ink); color:white; padding:12px 24px; border-radius:10px; z-index:20; max-width:90%; }
+.demo-footer { margin-top:48px; padding-top:20px; border-top:1px solid var(--line); font-size:11px; color:var(--muted); }
+body[data-layout="list"] .books { grid-template-columns:repeat(2,minmax(0,1fr)); }
+body[data-layout="list"] .book { display:flex; gap:16px; }
+body[data-layout="list"] .book-open { width:85px; flex-shrink:0; }
+body[data-layout="list"] .cover { height:120px; padding:8px; border-left-width:3px; }
+body[data-layout="list"] .cover .book-title { font-size:15px; }
+body[data-layout="list"] .cover .en { display:none; }
+body[data-layout="list"] .book-meta { flex:1; }
+@media(min-width:1400px) { .books { grid-template-columns:repeat(4,minmax(0,1fr)); } .cover { height:270px; } }
+@media(max-width:1050px) { .sidebar { width:165px; padding:25px 15px; } main { margin-left:165px; } .content { padding:28px; } .libraries { grid-template-columns:repeat(2,minmax(0,1fr)); } .books { gap:17px; } .cover { height:195px; padding:16px; } .cover .book-title { font-size:22px; } .settings { grid-template-columns:1fr; } .preview { position:static; } }
+@media(max-width:700px) { .sidebar { position:static; width:100%; padding:14px 18px; flex-direction:row; align-items:center; gap:8px; border-right:0; border-bottom:1px solid var(--line); } .brand { font-size:18px; white-space:nowrap; } .brand small,.side-label,.side-bottom,.sidebar .external { display:none; } .side-link { width:auto; padding:8px 10px; margin:0 0 0 auto; } main { margin-left:0; } .topbar { padding:12px 18px; min-height:58px; } .topbar small { display:none; } .topbar select { max-width:150px; } .content { padding:26px 18px 40px; } h1 { font-size:29px; } h2 { font-size:23px; } .row { flex-wrap:wrap; } .libraries { grid-template-columns:1fr; } .landscape { height:155px; } .new-library { min-height:140px; } .hero { padding:27px 24px; min-height:230px; } .hero-art { display:none; } .hero p { max-width:270px; } .books { grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 18px; } .cover { height:220px; } .booklists { grid-template-columns:1fr; } .tabs { width:100%; } .tabs button { flex:1; min-width:68px; padding:10px 12px; } .search { width:100%; } .toolbar > input { flex:1; } .settings { gap:20px; } .panel { padding:20px; } body[data-layout="list"] .books { grid-template-columns:1fr; } .prototype { font-size:10px; } }
+@media(prefers-reduced-motion:reduce) { *,*::before,*::after { transition:none!important; animation:none!important; } }
+</style>
+</head>
+<body>
+<aside class="sidebar">
+<div class="brand">汗牛充栋<small>A ROOM OF ONE’S OWN</small></div>
+<div class="side-label">我的阅读空间</div>
+<button class="side-link external" data-action="global">⌂　首页</button>
+<button class="side-link external" data-action="global">▤　总书库</button>
+<button class="side-link external" data-action="global">▥　我的书架</button>
+<button class="side-link active" id="nav-libraries">▦　图书馆</button>
+<div class="side-bottom"><span class="avatar">北</span>我的私人藏书室<small style="display:block;margin-top:12px">整理书，也整理自己的世界。</small></div>
+</aside>
+<main>
+<header class="topbar"><div><span id="breadcrumb">阅读空间 / 图书馆</span> <small>　PRIVATE COLLECTIONS</small></div><div class="actions"><span class="prototype">UI 设计稿 · 示例数据</span><select id="library-switch" aria-label="切换图书馆"><option value="">所有图书馆</option value="0">文学与远方</option><option value="1">技术与思考</option><option value="2">历史的回声</option></select></div></header>
+<div id="app" class="content"></div>
+</main>
+<dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+<script>
+const app = document.getElementById('app');
+const modal = document.getElementById('dialog');
+const libraries = [
+  { name:'文学与远方', description:'在文字里漫游，在故事里与世界重逢。', count:128, style:'', label:'LITERATURE & LIFE' },
+  { name:'技术与思考', description:'保持好奇，理解工具，也理解它们背后的思想。', count:64, style:'tech', label:'TECHNOLOGY & IDEAS' },
+  { name:'历史的回声', description:'循着时间的纹理，重新看见来时的路。', count:92, style:'history', label:'HISTORY & MEMORY' }
+];
+const baseBooks = [
+  { title:'山茶文具店', author:'小川糸', en:'THE TSUBAKI STATIONERY SHOP', color:'#71816c', progress:42, favorite:true, group:'日本文学' },
+  { title:'一个人的朝圣', author:'蕾秋·乔伊斯', en:'THE UNLIKELY PILGRIMAGE', color:'#a98c67', progress:26, favorite:false, group:'旅途与生活' },
+  { title:'瓦尔登湖', author:'亨利·戴维·梭罗', en:'WALDEN · LIFE IN THE WOODS', color:'#47645a', progress:68, favorite:true, group:'旅途与生活' },
+  { title:'长日将尽', author:'石黑一雄', en:'THE REMAINS OF THE DAY', color:'#77818d', progress:13, favorite:false, group:'日本文学' },
+  { title:'悉达多', author:'赫尔曼·黑塞', en:'SIDDHARTHA', color:'#b1986e', progress:0, favorite:true, group:'未分组' },
+  { title:'我与地坛', author:'史铁生', en:'REFLECTIONS IN THE PARK', color:'#8b7968', progress:100, favorite:false, group:'中国文学' },
+  { title:'人间草木', author:'汪曾祺', en:'THE WORLD OF PLANTS', color:'#8b997b', progress:0, favorite:false, group:'中国文学' },
+  { title:'月亮与六便士', author:'毛姆', en:'THE MOON AND SIXPENCE', color:'#646f87', progress:0, favorite:true, group:'未分组' }
+];
+let books = structuredClone(baseBooks);
+const libraryStates = new Map();
+let current = null, tab = 'home', query = '', group = '全部书籍', currentList = '', empty = false;
+let theme = '#325e49', layout = 'grid', template = '简洁', draftName = '文学与远方';
+let modules = [{name:'继续阅读',on:true},{name:'精选书籍',on:true},{name:'推荐书单',on:true},{name:'最近加入',on:true}];
+let timer;
+let indicatorOffset = 0, indicatorWidth = 88;
+const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(message) {
+  const el = document.getElementById('toast');
+  el.textContent = message; el.hidden = false;
+  clearTimeout(timer); timer = setTimeout(() => el.hidden = true, 3500);
+}
+function footer() { return '<footer class="demo-footer">设计基线 v1.0 · 个人主题图书馆　/　所有书籍、数量与进度均为演示数据；刷新后还原。</footer>'; }
+function keepState() {
+  if(current !== null) libraryStates.set(current, { books:structuredClone(books), theme, layout, template, modules:structuredClone(modules) });
+}
+function openLibrary(index) {
+  keepState();
+  current = Number(index);
+  const state = libraryStates.get(current);
+  books = structuredClone(state?.books || baseBooks);
+  theme = state?.theme || '#325e49';
+  layout = state?.layout || 'grid';
+  template = state?.template || '简洁';
+  modules = structuredClone(state?.modules || [{name:'继续阅读',on:true},{name:'精选书籍',on:true},{name:'推荐书单',on:true},{name:'最近加入',on:true}]);
+  document.documentElement.style.setProperty('--accent',theme); tab = 'home'; query=''; currentList=''; group='全部书籍'; empty=false; render(); }
+function render() {
+  document.getElementById('library-switch').innerHTML = '<option value="">所有图书馆</option>' + libraries.map((lib,i)=>`<option value="${i}">${escapeHtml(lib.name)}</option>`).join('');
+  document.getElementById('library-switch').value = current === null ? '' : current;
+  document.getElementById('breadcrumb').textContent = current === null ? '阅读空间 / 图书馆' : '图书馆 / '+libraries[current].name;
+  document.body.dataset.layout = tab === 'shelf' || tab === 'favorites' ? layout : 'grid';
+  if (current === null) { renderLibraries(); return; }
+  const lib = libraries[current];
+  const labels = [['home','首页'],['shelf','书架'],['lists','书单'],['favorites','收藏']];
+  app.innerHTML = `<div class="row"><div><div class="eyebrow">YOUR PERSONAL LIBRARY</div><h2>${escapeHtml(lib.name)}</h2></div><div class="actions"><button data-action="all" class="ghost">← 所有图书馆</button><button data-action="settings">图书馆设置</button><button class="primary" data-action="add">＋ 添加书籍</button></div></div><nav class="tabs" role="tablist" aria-label="图书馆栏目"><span class="tab-indicator" aria-hidden="true"></span>${labels.map(([key,label])=>`<button role="tab" id="tab-${key}" aria-controls="page-panel" aria-selected="${tab===key}" tabindex="${tab===key?0:-1}" data-tab="${key}">${label}</button>`).join('')}</nav><section id="page-panel" role="tabpanel" aria-label="${tab==='settings'?'图书馆设置':labels.find(x=>x[0]===tab)?.[1]}" ${tab!=='settings'?`aria-labelledby="tab-${tab}"`:''}></section>${footer()}`;
+  const panel = document.getElementById('page-panel');
+  if(tab==='settings') renderSettings(panel);
+  else if(empty) panel.innerHTML='<div class="empty"><div class="eyebrow">A NEW CHAPTER</div><h2>让第一本书，走进这座馆</h2><p class="intro">从已有书库挑选，慢慢组成你自己的阅读世界。</p><button class="primary" data-action="add">从书库添加书籍</button></div>';
+  else if(tab==='home') renderHome(panel);
+  else if(tab==='shelf'||tab==='favorites') renderShelf(panel);
+  else renderLists(panel);
+  moveIndicator();
+}
+function moveIndicator() {
+  const target = app.querySelector('[role="tab"][aria-selected="true"]');
+  const indicator = app.querySelector('.tab-indicator');
+  if(!indicator) return;
+  if(target) {
+    indicator.hidden = false;
+    indicator.style.width = indicatorWidth + 'px';
+    indicator.style.transform = `translateX(${indicatorOffset}px)`;
+    const nextWidth = target.offsetWidth;
+    const nextOffset = target.offsetLeft - 4;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if(!indicator.isConnected) return;
+      indicator.style.width = nextWidth + 'px';
+      indicator.style.transform = `translateX(${nextOffset}px)`;
+    }));
+    indicatorOffset = nextOffset;
+    indicatorWidth = nextWidth;
+  }
+  else indicator.hidden=true;
+}
+function renderLibraries() {
+  const filtered=libraries.map((l,i)=>({l,i})).filter(({l})=>l.name.includes(query));
+  app.innerHTML=`<div class="row"><div><div class="eyebrow">CURATED BY YOU</div><h1>我的图书馆</h1></div><button class="primary" data-action="create">＋ 创建图书馆</button></div><p class="intro">为每一种热爱，留一间书房。</p><div class="toolbar"><input id="search" class="search" aria-label="搜索图书馆" placeholder="搜索图书馆名称" value="${escapeHtml(query)}"><span class="muted">${libraries.length} 座图书馆 · 仅自己可见</span></div><div class="grid libraries">${filtered.map(({l,i})=>`<button class="library" data-library="${i}"><div class="landscape ${l.style}"><span class="sun"></span></div><div class="library-info"><div class="eyebrow">${l.label}</div><h2>${escapeHtml(l.name)}</h2><p class="muted">${escapeHtml(l.description)}</p><footer><span>${l.count} 本藏书</span><span>进入图书馆 ↗</span></footer></div></button>`).join('')}<button class="new-library" data-action="create"><span>＋</span><h3>下一间书房，留给新的热爱</h3><small>创建一个属于自己的主题图书馆</small></button></div>${footer()}`;
+}
+function bookCard(book) {
+  const index=books.indexOf(book);
+  return `<article class="book"><button class="book-open" data-book="${index}" aria-label="查看${escapeHtml(book.title)}详情"><div class="cover" style="--book:${book.color}"><div><div class="en">${book.en}</div><div class="book-title">${book.title}</div></div><small>${book.author} 著</small></div></button><div class="book-meta"><h3>${book.title}</h3><small>${book.author}</small><div class="progress"><span style="width:${book.progress}%"></span></div><div class="book-footer"><span>${book.progress===100?'已读完':book.progress>0?'已读 '+book.progress+'%':'尚未开始'}</span><button class="heart" data-favorite="${index}" aria-label="${book.favorite?'取消':'添加'}本馆收藏" aria-pressed="${book.favorite}">${book.favorite?'♥':'♡'}</button></div></div></article>`;
+}
+function sectionHeading(name,sub,action='shelf') { return `<div class="row section-heading"><div><h2>${name}</h2>${sub?`<small>${sub}</small>`:''}</div><button class="ghost" data-tab="${action}">查看全部 →</button></div>`; }
+function listCards() { return `<div class="grid booklists">${['在日常里，发现诗意','一个人的远行'].map((name,i)=>`<button class="list-card" data-list="${name}"><div class="mini-covers" aria-hidden="true"><span></span><span></span><span></span></div><div><div class="eyebrow">READING COLLECTION ${i+1}</div><h3>${name}</h3><small>${i===0?'8 本书 · 慢下来，读一点生活':'6 本书 · 去看看，更大的世界'}</small></div></button>`).join('')}</div>`; }
+function renderHome(panel) {
+  const lib=libraries[current];
+  panel.innerHTML=`<div class="hero"><div class="hero-copy"><div class="eyebrow">${lib.label}</div><h1>${escapeHtml(lib.name)}</h1><p>${escapeHtml(lib.description)}</p><span class="pill">${lib.count} 本藏书</span> <span class="pill">私人图书馆</span></div><div class="hero-art" aria-hidden="true">读书<br>见远方</div></div>${modules.filter(m=>m.on).map(m=>m.name==='推荐书单'?`<section class="section">${sectionHeading(m.name,'给阅读，一条慢慢展开的路径。','lists')}${listCards()}</section>`:`<section class="section">${sectionHeading(m.name,m.name==='继续阅读'?'让上一次的故事，接着发生。':'从馆藏中，挑选值得停留的文字。')}<div class="grid books">${(m.name==='继续阅读'?books.filter(b=>b.progress>0&&b.progress<100):m.name==='最近加入'?[...books].reverse():books.slice(4)).slice(0,4).map(bookCard).join('')}</div></section>`).join('')}`;
+}
+function renderShelf(panel) {
+  const favorite=tab==='favorites';
+  const subset=books.filter(b=>(!favorite||b.favorite)&&(group==='全部书籍'||b.group===group)&&(!currentList||books.indexOf(b)<4));
+  panel.innerHTML=`<div class="row"><div><h2>${currentList|| (favorite?'本馆收藏':'馆内书架')}</h2><small>${favorite?'只收起这间书房里，格外喜欢的书。':'所有书籍来自总书库，阅读进度跨馆共享。'}</small></div><div class="actions">${currentList?'<button data-action="back-lists">← 返回书单</button>':''}<button data-action="empty">预览空状态</button></div></div><div class="toolbar"><input id="search" class="search" aria-label="搜索书名或作者" placeholder="搜索本馆书名、作者" value="${escapeHtml(query)}"><div class="actions"><label class="muted">排序 <select id="sort"><option value="added">最近加入</option><option value="title">书名</option><option value="recent">最近阅读</option></select></label><label class="muted">布局 <select id="layout"><option value="grid" ${layout==='grid'?'selected':''}>封面网格</option><option value="list" ${layout==='list'?'selected':''}>简洁列表</option></select></label></div></div>${!favorite&&!currentList?`<div class="chips">${['全部书籍','未分组','中国文学','日本文学','旅途与生活'].map(g=>`<button data-group="${g}" aria-pressed="${group===g}">${g}</button>`).join('')}<button data-action="group">＋ 新建分组</button></div>`:''}<div class="grid books" id="book-results">${subset.map(bookCard).join('')}</div><div class="pagination"><button disabled aria-label="上一页">←</button><span>第 1 页</span><button disabled aria-label="下一页">→</button><span class="muted">共 ${subset.length} 本演示藏书</span></div>`;
+  filterBooks();
+}
+function filterBooks() {
+  if(current===null) return;
+  const target=document.getElementById('book-results');
+  if(!target) return;
+  let filtered=books.filter(b=>(tab!=='favorites'||b.favorite)&&(group==='全部书籍'||b.group===group)&&(!currentList||books.indexOf(b)<4)&&(b.title.includes(query)||b.author.includes(query)));
+  const sort=document.getElementById('sort')?.value;
+  if(sort==='title') filtered.sort((a,b)=>a.title.localeCompare(b.title,'zh'));
+  if(sort==='recent') filtered.sort((a,b)=>baseBooks.findIndex(x=>x.title===a.title)-baseBooks.findIndex(x=>x.title===b.title));
+  target.innerHTML=filtered.length?filtered.map(bookCard).join(''):'<p class="muted">没有匹配的书籍，请调整关键词。</p>';
+}
+function renderLists(panel) {
+  panel.innerHTML=`<div class="row section-heading"><div><h2>馆内书单</h2><small>把散落的书，串成自己的阅读路线。</small></div><button data-action="new-list">＋ 新建书单</button></div>${listCards()}<div class="notice">书单属于当前图书馆。删除书单不会移出馆藏或删除书籍。</div>`;
+}
+function renderSettings(panel) {
+  draftName=libraries[current].name;
+  panel.innerHTML=`<div class="row section-heading"><div><h2>布置这间书房</h2><small>设置只作用于当前图书馆。</small></div><button class="primary" data-action="save">保存设置</button></div><div class="settings"><div><section class="panel"><h3>基本资料与外观</h3><label class="field">图书馆名称<input id="name-input" value="${escapeHtml(draftName)}" maxlength="50"></label><label class="field">简介<textarea id="description-input" maxlength="500" rows="2">${escapeHtml(libraries[current].description)}</textarea></label><div class="field"><span>首页模板</span><div class="templates">${['简洁','书架','专题'].map(t=>`<button data-template="${t}" aria-pressed="${template===t}">${t}</button>`).join('')}</div></div><div class="field"><span>主题色</span><div class="actions">${[['#325e49','苔绿'],['#5c718a','雾蓝'],['#89664c','暖棕']].map(([c,n])=>`<button class="swatch" style="background:${c}" data-theme="${c}" aria-label="${n}" aria-pressed="${theme===c}"></button>`).join('')}</div></div></section><section class="panel" style="margin-top:20px"><h3>首页模块</h3><p class="muted">开关控制展示，上下调整顺序。</p><div id="modules"></div></section><div class="row" style="margin-top:20px"><button data-action="reset">恢复默认外观</button><button class="danger" data-action="delete">删除图书馆</button></div></div><aside class="panel preview"><div class="row"><h3>首页预览</h3><small>尚未保存</small></div><div class="preview-head"><div class="eyebrow" id="preview-template">${template}模板</div><h2 id="preview-name">${escapeHtml(draftName)}</h2><p class="muted" id="preview-description">${escapeHtml(libraries[current].description)}</p></div><div id="preview-modules"></div><div class="notice">正式功能保存后将绑定当前账户，跨设备恢复。此设计稿仅模拟当前页面状态。</div></aside></div>`;
+  renderModules();
+}
+function renderModules() {
+  document.getElementById('modules').innerHTML=modules.map((m,i)=>`<div class="module"><label><input type="checkbox" data-module="${i}" ${m.on?'checked':''}> ${m.name}</label><button data-up="${i}" ${i===0?'disabled':''} aria-label="上移${m.name}">↑</button><button data-down="${i}" ${i===modules.length-1?'disabled':''} aria-label="下移${m.name}">↓</button></div>`).join('');
+  document.getElementById('preview-modules').innerHTML=modules.filter(m=>m.on).map(m=>`<h3 style="margin:18px 0 10px">${m.name}</h3><div class="preview-books"><span></span><span style="background:#aa9473"></span><span style="background:#697d87"></span></div>`).join('')||'<p>馆头与进入书架按钮保留。</p>';
+}
+function showDialog(title,body) {
+  modal.innerHTML=`<div class="row"><h2 id="dialog-title">${title}</h2><button class="ghost" data-close aria-label="关闭对话框">✕</button></div>${body}`;
+  modal.showModal();
+}
+function addDialog() {
+  showDialog('从书库添加书籍',`<p class="muted">添加到「${escapeHtml(libraries[current].name)}」· 不复制原文件</p><div class="notice">以下为交互示例。前两本已经入馆，第三本模拟可添加书籍。</div>${['山茶文具店','瓦尔登湖','飞鸟集'].map((title,i)=>`<div class="dialog-row"><input id="pick-${i}" type="checkbox" ${i<2?'disabled checked':''}><label for="pick-${i}">${title}</label><small>${i<2?'已添加':'来自总书库'}</small></div>`).join('')}<div class="actions" style="justify-content:flex-end;margin-top:24px"><button data-close>取消</button><button class="primary" data-action="confirm-add">添加到本馆</button></div>`);
+}
+document.addEventListener('click',event=>{
+  const el=event.target.closest('button'); if(!el) return;
+  if(el.hasAttribute('data-close')) { modal.close(); return; }
+  if(el.dataset.library!==undefined) { openLibrary(el.dataset.library); return; }
+  if(el.dataset.tab) { tab=el.dataset.tab; query=''; group='全部书籍'; currentList=''; empty=false; render(); return; }
+  if(el.dataset.favorite!==undefined) { const b=books[Number(el.dataset.favorite)]; b.favorite=!b.favorite; render(); toast(b.favorite?'已加入本馆收藏':'已取消本馆收藏'); return; }
+  if(el.dataset.book!==undefined) { const b=books[Number(el.dataset.book)]; showDialog('书籍详情 · 入口示意',`<h2 style="margin-top:20px">${b.title}</h2><p class="muted">${b.author}</p><div class="notice">此处将复用现有书籍详情与阅读器。进度按账户和文件版本保存，跨图书馆共享。</div><p>当前进度：${b.progress}%</p><div class="actions" style="margin-top:22px"><button class="primary" data-action="read">${b.progress>0?'继续阅读':'开始阅读'}</button><button data-action="remove">移出本馆</button></div>`); return; }
+  if(el.dataset.group) { group=el.dataset.group; render(); return; }
+  if(el.dataset.list) { currentList=el.dataset.list; tab='shelf'; group='全部书籍'; query=''; render(); return; }
+  if(el.dataset.template) { template=el.dataset.template; document.querySelectorAll('[data-template]').forEach(b=>b.setAttribute('aria-pressed',b===el)); document.getElementById('preview-template').textContent=template+'模板'; toast('已预览'+template+'模板，保存后生效'); return; }
+  if(el.dataset.theme) { theme=el.dataset.theme; document.querySelectorAll('[data-theme]').forEach(b=>b.setAttribute('aria-pressed',b===el)); document.querySelector('.preview').style.setProperty('--accent',theme); document.querySelector('.preview-head').style.borderTop='4px solid '+theme; return; }
+  if(el.dataset.up!==undefined||el.dataset.down!==undefined) { const i=Number(el.dataset.up??el.dataset.down); const j=i+(el.dataset.up!==undefined?-1:1); [modules[i],modules[j]]=[modules[j],modules[i]]; renderModules(); return; }
+  const action=el.dataset.action;
+  if(el.id==='nav-libraries'||action==='all') { keepState(); current=null; query=''; render(); }
+  else if(action==='settings') { tab='settings'; render(); }
+  else if(action==='add') addDialog();
+  else if(action==='confirm-add') { if(!document.getElementById('pick-2').checked) { toast('请先选择待添加的书籍'); return; } modal.close(); empty=false; toast('演示：新增 1 本，已存在 2 本；未写入真实书库'); render(); }
+  else if(action==='create') showDialog('创建图书馆','<p class="muted">为一种热爱，留一间书房。</p><label class="field">图书馆名称<input id="new-name" maxlength="50" placeholder="例如：诗歌的小宇宙"></label><label class="field">简介<textarea id="new-description" rows="2" maxlength="500" placeholder="写下这座馆的主题"></textarea></label><div class="notice">默认使用简洁模板和内置山景封面，可在设置中调整。</div><button class="primary" data-action="confirm-create">创建图书馆</button>');
+  else if(action==='confirm-create') { const name=document.getElementById('new-name').value.trim(); if(!name||libraries.some(l=>l.name===name)) { toast('请填写不重复的图书馆名称'); return; } libraries.push({name,description:document.getElementById('new-description').value,count:0,style:'',label:'A NEW READING ROOM'}); modal.close(); openLibrary(libraries.length-1); empty=true; render(); }
+  else if(action==='empty') { empty=true; render(); }
+  else if(action==='back-lists') { currentList=''; tab='lists'; render(); }
+  else if(action==='save') { const name=document.getElementById('name-input').value.trim(); if(!name||libraries.some((l,i)=>i!==current&&l.name===name)) { toast('馆名不能为空或与其他馆重复'); return; } libraries[current].name=name; libraries[current].description=document.getElementById('description-input').value; document.documentElement.style.setProperty('--accent',theme); toast('演示设置已保存，刷新后还原'); render(); }
+  else if(action==='reset') showDialog('恢复默认外观','<p class="intro">将还原当前馆的主题与首页模块，保留全部馆藏和书单。</p><button data-close>取消</button> <button class="primary" data-action="confirm-reset">确认恢复</button>');
+  else if(action==='confirm-reset') { theme='#325e49'; template='简洁'; modules.forEach(m=>m.on=true); document.documentElement.style.setProperty('--accent',theme); modal.close(); render(); toast('默认外观已恢复（演示）'); }
+  else if(action==='delete'||action==='remove') showDialog(action==='delete'?'删除图书馆？':'移出本馆？',`<p class="intro">${action==='delete'?'将删除本馆组织数据，且无法恢复。':'将移除这本书在本馆的分组、书单、收藏与精选关联。'}原书、文件及阅读记录均保留。</p><div class="actions"><button data-close>取消</button><button class="danger" data-action="demo-delete">确认${action==='delete'?'删除':'移出'}</button></div>`);
+  else if(action==='demo-delete') { modal.close(); toast('已演示确认流程，示例数据未删除'); }
+  else if(action==='read') { modal.close(); toast('正式实现将打开现有阅读器并恢复共享进度'); }
+  else if(action==='global') toast('系统原有入口示意，本设计稿聚焦图书馆');
+  else if(action==='new-list'||action==='group') toast('管理入口示意；名称、归属与删除规则见需求文档');
+});
+document.addEventListener('input',event=>{
+  if(event.target.id==='search') { query=event.target.value; if(current===null) { const pos=event.target.selectionStart; renderLibraries(); const input=document.getElementById('search'); input.focus(); input.setSelectionRange(pos,pos); } else filterBooks(); }
+  if(event.target.id==='name-input') document.getElementById('preview-name').textContent=event.target.value;
+  if(event.target.id==='description-input') document.getElementById('preview-description').textContent=event.target.value;
+});
+document.addEventListener('change',event=>{
+  if(event.target.id==='library-switch') { if(event.target.value==='') { keepState(); current=null; query=''; render(); } else openLibrary(event.target.value); }
+  if(event.target.id==='layout') { layout=event.target.value; document.body.dataset.layout=layout; }
+  if(event.target.id==='sort') filterBooks();
+  if(event.target.dataset.module!==undefined) { modules[Number(event.target.dataset.module)].on=event.target.checked; renderModules(); }
+});
+document.addEventListener('keydown',event=>{
+  if(event.target.getAttribute('role')!=='tab') return;
+  const tabs=[...document.querySelectorAll('[role="tab"]')];
+  let i=tabs.indexOf(event.target);
+  if(event.key==='ArrowRight') i=(i+1)%tabs.length;
+  else if(event.key==='ArrowLeft') i=(i-1+tabs.length)%tabs.length;
+  else if(event.key==='Home') i=0;
+  else if(event.key==='End') i=tabs.length-1;
+  else return;
+  event.preventDefault(); tab=tabs[i].dataset.tab; query=''; group='全部书籍'; currentList=''; empty=false; render(); document.getElementById('tab-'+tab).focus();
+});
+window.addEventListener('resize',moveIndicator);
+render();
+</script>
+</body>
+</html>
