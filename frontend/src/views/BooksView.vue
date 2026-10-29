@@ -7,45 +7,49 @@
         <p class="page-subtitle">共 {{ bookStore.totalElements }} 本书</p>
       </div>
       <div class="page-header-actions">
-        <button
-          class="btn image-privacy-button"
-          :class="{ active: allBookCoversHidden }"
-          :aria-pressed="allBookCoversHidden"
-          :title="allBookCoversHidden ? '默认显示书籍封面，单书设置优先' : '默认隐藏书籍封面，单书设置优先'"
-          @click="toggleAllBookCovers"
-        >
-          <el-icon aria-hidden="true"><View v-if="allBookCoversHidden" /><Hide v-else /></el-icon>
-          <span>{{ allBookCoversHidden ? '默认显示封面' : '默认隐藏封面' }}</span>
-        </button>
-        <button
-          class="btn"
-          title="选择多本书籍并合并到其中一本"
-          @click="openBookMergeEntry"
-        >
-          <span>⇄</span>
-          <span>合并书籍</span>
-        </button>
-        <button
-          class="btn"
-          title="遍历书库并自动聚合同一本书的不同文件版本"
-          @click="showVersionRebuildDialog = true"
-        >
-          <span>🧩</span>
-          <span>重建多版本</span>
-        </button>
-        <button
-          class="btn"
-          title="扫描整个书库的相似书名，核对后选择合并"
-          @click="showSimilarityScanDialog = true"
-        >
-          <span aria-hidden="true">🔎</span>
-          <span>扫描相似书名</span>
-        </button>
         <button class="btn btn-primary" @click="showUploadDialog = true">
           <span>📤</span>
           <span>上传书籍</span>
         </button>
-        <router-link class="btn" to="/series">系列与阅读顺序</router-link>
+        <el-dropdown trigger="click">
+          <button class="btn" aria-label="书库更多操作">
+            <el-icon aria-hidden="true"><MoreFilled /></el-icon>
+            <span>更多</span>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item
+                :title="allBookCoversHidden ? '默认显示书籍封面，单书设置优先' : '默认隐藏书籍封面，单书设置优先'"
+                @click="toggleAllBookCovers"
+              >
+                <el-icon aria-hidden="true"><View v-if="allBookCoversHidden" /><Hide v-else /></el-icon>
+                <span>{{ allBookCoversHidden ? '默认显示封面' : '默认隐藏封面' }}</span>
+              </el-dropdown-item>
+              <el-dropdown-item
+                divided
+                title="选择多本书籍并合并到其中一本"
+                @click="openBookMergeEntry"
+              >
+                合并书籍
+              </el-dropdown-item>
+              <el-dropdown-item
+                title="遍历书库并自动聚合同一本书的不同文件版本"
+                @click="showVersionRebuildDialog = true"
+              >
+                重建多版本
+              </el-dropdown-item>
+              <el-dropdown-item
+                title="扫描整个书库的相似书名，核对后选择合并"
+                @click="showSimilarityScanDialog = true"
+              >
+                扫描相似书名
+              </el-dropdown-item>
+              <el-dropdown-item divided @click="$router.push('/series')">
+                系列与阅读顺序
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
 
@@ -1430,12 +1434,6 @@ onMounted(async () => {
   gap: var(--spacing-sm);
 }
 
-.image-privacy-button.active {
-  border-color: var(--primary);
-  background: var(--primary-alpha-10);
-  color: var(--primary);
-}
-
 .page-title {
   font-size: var(--font-size-4xl);
   font-weight: 700;
@@ -1742,8 +1740,13 @@ onMounted(async () => {
     flex-wrap: wrap;
   }
 
-  .page-header-actions .btn {
+  .page-header-actions > .btn,
+  .page-header-actions > .el-dropdown {
     flex: 1 1 calc(50% - var(--spacing-sm));
+  }
+
+  .page-header-actions > .el-dropdown > .btn {
+    width: 100%;
   }
 }
 
