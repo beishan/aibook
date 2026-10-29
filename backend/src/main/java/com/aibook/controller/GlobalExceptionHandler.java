@@ -1,6 +1,14 @@
 package com.aibook.controller;
 
 import com.aibook.exception.ResourceNotFoundException;
+import com.aibook.service.SystemErrorLogService;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.servlet.HandlerMapping;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -22,7 +30,10 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @RestControllerAdvice
 @Slf4j
+@RequiredArgsConstructor
 public class GlobalExceptionHandler {
+
+    private final SystemErrorLogService systemErrorLogs;
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ResponseEntity<Map<String, Object>> handleOptimisticConflict(
@@ -95,20 +106,50 @@ public class GlobalExceptionHandler {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("error", ex.getStatusCode().toString());
         body.put("message", ex.getReason() == null ? "请求处理失败" : ex.getReason());
+        if (ex.getStatusCode().is5xxServerError()) {
+            body.put("errorId", recordSystemError(ex));
+        }
         return ResponseEntity.status(ex.getStatusCode()).body(body);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneral(
             Exception ex, HttpServletResponse response) {
-        log.error("Unexpected error", ex);
+        String errorId = recordSystemError(ex);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of(
                     "error", "Internal server error",
-                    "message", "An unexpected error occurred"
+                    "message", "系统异常，请在操作日志中按错误编号查看：" + errorId,
+                    "errorId", errorId
                 ));
+    }
+
+    private String recordSystemError(Exception error) {
+        String errorId = UUID.randomUUID().toString();
+        log.error("System error [{}]", errorId, error);
+        try {
+            var authentication = SecurityContextHolder.getContext().getAuthentication();
+            String username = authentication != null && authentication.isAuthenticated()
+                    && !(authentication instanceof AnonymousAuthenticationToken)
+                    ? authentication.getName() : null;
+            String method = "UNKNOWN";
+            String route = "未匹配路由";
+            if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
+                var request = attributes.getRequest();
+                method = request.getMethod();
+                Object pattern = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+                if (pattern != null) {
+                    route = pattern.toString();
+                }
+            }
+            systemErrorLogs.record(errorId, username, method, route, error);
+        } catch (Exception loggingError) {
+            // A database outage must not replace the original failure or recursively log itself.
+            log.error("Unable to persist system error [{}]", errorId, loggingError);
+        }
+        return errorId;
     }
 
     @ExceptionHandler(ClientAbortException.class)

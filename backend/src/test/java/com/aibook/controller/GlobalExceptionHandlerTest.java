@@ -10,7 +10,8 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void badCredentialsReturnsUnauthorizedInsteadOfInternalServerError() {
-        var response = new GlobalExceptionHandler().handleAuthentication(
+        var response = new GlobalExceptionHandler(org.mockito.Mockito.mock(
+                com.aibook.service.SystemErrorLogService.class)).handleAuthentication(
                 new BadCredentialsException("Bad credentials"));
 
         assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());

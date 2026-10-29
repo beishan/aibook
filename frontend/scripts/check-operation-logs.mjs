@@ -64,11 +64,17 @@ const utility = evaluate(fs.readFileSync(new URL('../src/utils/operationLogs.ts'
   '@/utils/api': { default: fakeApi },
 })
 const notices = []
+const copiedDiagnostics = []
+let rejectCopy = false
 let accepted = true
 const { descriptor } = parse(fs.readFileSync(new URL('../src/components/OperationLogPanel.vue', import.meta.url), 'utf8'))
 const compiled = compileScript(descriptor, { id: 'operation-log-check' })
 const panel = evaluate(compiled.content, {
   '@/utils/operationLogs': utility,
+  '@/utils/clipboard': { copyText: async text => {
+    if (rejectCopy) throw new Error('clipboard unavailable')
+    copiedDiagnostics.push(text)
+  } },
   '@/utils/useViewportTableHeight': {
     useViewportTableHeight: () => ({
       tablePanelRef: require('vue').ref(),
@@ -91,6 +97,15 @@ const state = app._instance.setupState
 async function flush() { for (let i = 0; i < 8; i++) { await Promise.resolve(); await nextTick() } }
 await flush()
 assert.equal(state.logs.length, 2)
+const incident = { action: 'SYSTEM_ERROR', description: '系统异常 · incident-1',
+  details: 'SQLState: 23514', createdAt: '2026-10-29T21:00:00' }
+await state.copyDiagnostics(incident)
+assert.ok(copiedDiagnostics[0].includes('incident-1'))
+assert.ok(copiedDiagnostics[0].includes('23514'))
+rejectCopy = true
+await state.copyDiagnostics(incident)
+assert.ok(notices.at(-1).includes('手动复制'))
+rejectCopy = false
 assert.equal(state.dirty, false)
 assert.equal(state.hasExpiringRules, false)
 

@@ -228,6 +228,7 @@ public class OperationLogRetentionService {
             case UPDATE_SITE_SETTINGS -> "网站设置";
             case UPDATE_SCAN_DIRECTORY_VISIBILITY -> "书库显示设置";
             case CRAWLER_TASK -> "爬虫任务";
+            case SYSTEM_ERROR -> "系统异常";
             case ADD_TO_SHELF -> "加入书架";
             case REMOVE_FROM_SHELF -> "移出书架";
         };

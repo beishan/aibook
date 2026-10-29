@@ -29,7 +29,10 @@ class AudioMediaControllerTest {
         when(playback.media("session",7L,"scoped-key")).thenReturn(track);
         when(audio.checkedPath(track)).thenReturn(file);
         var controller = new AudioController(mock(UserService.class), audio, mock(AudioImportService.class), playback, mock(AudioOfflineService.class));
-        mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler()).build();
+        mvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler(
+                        mock(com.aibook.service.SystemErrorLogService.class)))
+                .build();
     }
 
     @Test

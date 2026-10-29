@@ -79,11 +79,20 @@
               <td><span class="tag tag-primary">{{ actionLabel(log.action) }}</span></td>
               <td class="description-cell">
                 <span>{{ log.description }}</span>
-                <small v-if="log.archived" class="archived-owner">
+                <small v-if="log.archived && log.ownerUserId != null" class="archived-owner">
                   已删除账户：{{ log.ownerUsername || '未知用户' }}（#{{ log.ownerUserId ?? '未知' }}）
                 </small>
               </td>
-              <td class="details-cell">{{ log.details || '—' }}</td>
+              <td class="details-cell">
+                <template v-if="log.action === 'SYSTEM_ERROR'">
+                  <details>
+                    <summary>查看异常诊断</summary>
+                    <pre class="error-diagnostics">{{ log.details || '—' }}</pre>
+                  </details>
+                  <el-button size="small" @click="copyDiagnostics(log)">复制诊断信息</el-button>
+                </template>
+                <template v-else>{{ log.details || '—' }}</template>
+              </td>
               <td><span :class="{ 'retained-label': log.retained }">{{ log.retained ? '永久保留' : log.archived ? '归档保留' : '按类型策略' }}</span></td>
               <td>
                 <div class="log-row-actions">
@@ -243,6 +252,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { useViewportTableHeight } from '@/utils/useViewportTableHeight'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import { confirm, message } from '@/utils/message'
+import { copyText } from '@/utils/clipboard'
 import {
   operationLogsApi,
   retentionKey,
@@ -295,6 +305,15 @@ let listRequest = 0
 const dirty = computed(() => retentionKey(savedRules.value) !== retentionKey(draftRules.value)
   || cleanupScheduleKey(savedSchedule.value) !== cleanupScheduleKey(draftSchedule.value))
 const hasExpiringRules = computed(() => savedRules.value.some(rule => (rule.retentionDays ?? 0) > 0))
+async function copyDiagnostics(log: OperationLog) {
+  try {
+    await copyText(`${formatChinaDateTime(log.createdAt)}\n${log.description}\n${log.details || ''}`)
+    message.success('诊断信息已复制，可提供给维护者排查')
+  } catch {
+    message.error('复制失败，请展开诊断信息后手动复制')
+  }
+}
+
 const actionLabel = (action: string) => savedRules.value.find(rule => rule.action === action)?.label || action
 const isCustomDays = (days: number | null) => days !== null && !retentionOptions.some(option => option.value === days)
 
@@ -560,6 +579,14 @@ onMounted(() => {
   color: var(--text-secondary);
   font-weight: 400;
 }
+.error-diagnostics {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+
 .details-cell {
   color: var(--text-secondary);
 }
