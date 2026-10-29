@@ -10,7 +10,7 @@
     <div v-else-if="book" class="book-content glass">
       <div class="detail-toolbar">
         <div class="detail-breadcrumb">
-          <button class="back-btn" @click="$router.back()">
+          <button class="back-btn" @click="handleDetailBack">
             <span aria-hidden="true">←</span>
             <span>返回书库</span>
           </button>
@@ -18,6 +18,7 @@
           <span class="breadcrumb-current">图书详情</span>
         </div>
         <div class="detail-toolbar-actions">
+          <button class="btn" @click="showLibraryDialog = true">添加到图书馆</button>
           <button class="btn" @click="showAddToListDialog = true">
             <span>📚</span>
             <span>加入书单</span>
@@ -870,7 +871,7 @@
     <div v-else class="empty glass">
       <div class="empty-icon">📚</div>
       <p>书籍不存在</p>
-      <button class="btn btn-primary" @click="$router.back()">返回书库</button>
+      <button class="btn btn-primary" @click="handleDetailBack">返回书库</button>
     </div>
 
     <!-- 刮削对话框 -->
@@ -882,6 +883,7 @@
       @refresh="loadBook"
     />
 
+    <AddToLibraryDialog v-if="book" v-model="showLibraryDialog" :book-ids="[book.id]" />
     <AddToBookListDialog
       :visible="showAddToListDialog"
       :book="book"
@@ -1066,6 +1068,7 @@ import { downloadCover } from '@/utils/scraper'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import { formatChinaDateTime } from '@/utils/dateTime'
 import ScraperDialog from '@/components/ScraperDialog.vue'
+import AddToLibraryDialog from '@/components/library/AddToLibraryDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
@@ -1278,6 +1281,7 @@ const hasReadingProgress = computed(() => Boolean(
   || (readingProgress.value?.totalProgress || 0) > 0,
 ))
 // 书单相关
+const showLibraryDialog = ref(false)
 const showAddToListDialog = ref(false)
 
 // 编辑书名相关
@@ -1442,6 +1446,22 @@ const syncTocPageToCurrentChapter = () => {
   if (currentIndex >= 0) {
     tocCurrentPage.value = Math.floor(currentIndex / tocPageSize.value) + 1
   }
+}
+
+const libraryReturnPath = () => {
+  const value = typeof route.query.libraryReturn === 'string' ? route.query.libraryReturn : ''
+  const libraryId = Number(route.query.libraryId)
+  if (!Number.isSafeInteger(libraryId) || libraryId <= 0) return ''
+  const path = value.split('?')[0]
+  return path === `/libraries/${libraryId}`
+    || [`/libraries/${libraryId}/shelf`, `/libraries/${libraryId}/favorites`, `/libraries/${libraryId}/booklists`].includes(path)
+    || new RegExp(`^/libraries/${libraryId}/booklists/[1-9][0-9]*$`).test(path)
+    ? value : ''
+}
+const handleDetailBack = () => {
+  const target = libraryReturnPath()
+  if (target) void router.push(target)
+  else router.back()
 }
 
 const handleRead = () => {

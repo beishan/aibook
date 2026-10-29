@@ -237,6 +237,7 @@
     <div v-if="selectionMode && selectedBooks.size > 0" class="batch-toolbar glass">
       <span class="selection-count">已选择 {{ selectedBooks.size }} 本</span>
       <div class="batch-actions">
+        <button class="btn" @click="showLibraryDialog = true">添加到图书馆</button>
         <div class="batch-action-group" role="group" aria-label="批量选择">
           <button class="btn btn-text" @click="selectAllCurrentPage">全选当前页</button>
           <button class="btn btn-text" @click="clearSelection">取消全选</button>
@@ -663,6 +664,7 @@
       @saved="handleBookSaved"
     />
 
+    <AddToLibraryDialog v-model="showLibraryDialog" :book-ids="Array.from(selectedBooks)" />
     <AddToBookListDialog
       :visible="showAddToListDialog"
       :book="bookToAddToList"
@@ -715,6 +717,7 @@ import FileUpload from '@/components/FileUpload.vue'
 import BatchScraperDialog from '@/components/BatchScraperDialog.vue'
 import BookEditDialog from '@/components/BookEditDialog.vue'
 import ScraperDialog from '@/components/ScraperDialog.vue'
+import AddToLibraryDialog from '@/components/library/AddToLibraryDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
 import BookVersionRebuildDialog from '@/components/BookVersionRebuildDialog.vue'
 import BookMergeDialog from '@/components/BookMergeDialog.vue'
@@ -781,6 +784,7 @@ const showUploadDialog = ref(false)
 const showScraperDialog = ref(false)
 const showEditDialog = ref(false)
 const editingBook = ref<Book | null>(null)
+const showLibraryDialog = ref(false)
 const showAddToListDialog = ref(false)
 const bookToAddToList = ref<Book | null>(null)
 const processingBookId = ref<number | null>(null)

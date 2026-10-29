@@ -182,6 +182,7 @@ const dockScales = ref<number[]>([])
 const menuRoutes: Record<string, string> = {
   home: '/',
   library: '/books',
+  libraries: '/libraries',
   rewrite: '/rewrite',
   shelf: '/shelf',
   repair: '/text-repair',

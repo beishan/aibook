@@ -94,6 +94,7 @@ const immersive = computed(() => ['Reader', 'CrawlerTrialReader', 'RewriteEditor
 const menuRoutes: Record<string, string> = {
   home: '/',
   library: '/books',
+  libraries: '/libraries',
   rewrite: '/rewrite',
   shelf: '/shelf',
   repair: '/text-repair',

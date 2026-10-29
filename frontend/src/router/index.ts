@@ -24,6 +24,47 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
     children: [
       {
+        path: 'libraries',
+        name: 'Libraries',
+        component: () => import('@/views/LibrariesView.vue'),
+      },
+      {
+        path: 'libraries/:libraryId',
+        name: 'PersonalLibrary',
+        component: () => import('@/views/PersonalLibraryView.vue'),
+        meta: { libraryTab: 'home' },
+      },
+      {
+        path: 'libraries/:libraryId/shelf',
+        name: 'LibraryShelf',
+        component: () => import('@/views/PersonalLibraryView.vue'),
+        meta: { libraryTab: 'shelf' },
+      },
+      {
+        path: 'libraries/:libraryId/booklists',
+        name: 'LibraryLists',
+        component: () => import('@/views/PersonalLibraryView.vue'),
+        meta: { libraryTab: 'lists' },
+      },
+      {
+        path: 'libraries/:libraryId/booklists/:listId',
+        name: 'LibraryList',
+        component: () => import('@/views/PersonalLibraryView.vue'),
+        meta: { libraryTab: 'shelf' },
+      },
+      {
+        path: 'libraries/:libraryId/favorites',
+        name: 'LibraryFavorites',
+        component: () => import('@/views/PersonalLibraryView.vue'),
+        meta: { libraryTab: 'favorites' },
+      },
+      {
+        path: 'libraries/:libraryId/settings',
+        name: 'LibrarySettings',
+        component: () => import('@/views/PersonalLibraryView.vue'),
+        meta: { libraryTab: 'settings' },
+      },
+      {
         path: 'audiobooks',
         name: 'Audiobooks',
         component: () => import('@/views/AudiobooksView.vue'),

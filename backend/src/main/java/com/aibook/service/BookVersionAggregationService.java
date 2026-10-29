@@ -43,6 +43,9 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class BookVersionAggregationService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.aibook.library.LibraryLifecycle libraryLifecycle;
+
 
     private final BookRepository bookRepository;
     private final BookVersionRepository bookVersionRepository;
@@ -133,6 +136,7 @@ public class BookVersionAggregationService {
         }
         bookVersionRepository.saveAll(duplicateVersions);
 
+        if (libraryLifecycle != null) libraryLifecycle.merge(primaryId, duplicateId);
         mergeMetadata(primary, duplicate);
         mergeReadingProgress(primary, duplicate, user);
         moveBookmarks(primary, duplicate);

@@ -3,12 +3,12 @@
     <div class="audio-segmented-track" :style="{ '--count': options.length, '--index': index }">
       <span class="audio-segmented-thumb" aria-hidden="true" />
       <button
-        v-for="option in options"
+        v-for="(option, optionIndex) in options"
         :key="option.value"
         type="button"
         role="radio"
         :aria-checked="modelValue === option.value"
-        :tabindex="modelValue === option.value ? 0 : -1"
+        :tabindex="index === optionIndex ? 0 : -1"
         @click="emit('update:modelValue', option.value)"
       >
         {{ option.label }}

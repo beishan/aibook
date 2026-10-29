@@ -21,7 +21,7 @@ export type ScraperTrialViewMode = 'table' | 'card'
 export const CRAWLER_POLLING_INTERVAL_OPTIONS = [1, 3, 5, 10, 30] as const
 export type CrawlerPollingIntervalSeconds = number
 export type DockIconStyle = 'minimal' | 'skeuomorphic' | 'macos26' | 'custom'
-export type DockNavigationKey = 'recommendations' | 'home' | 'library' | 'rewrite' | 'shelf' | 'repair' | 'conversion' | 'crawler' | 'statistics' | 'settings'
+export type DockNavigationKey = 'libraries' | 'recommendations' | 'home' | 'library' | 'rewrite' | 'shelf' | 'repair' | 'conversion' | 'crawler' | 'statistics' | 'settings'
 export type DockNavigationIcon = 'home' | 'library' | 'rewrite' | 'shelf' | 'repair' | 'conversion' | 'crawler' | 'statistics' | 'settings' | 'trashEmpty' | 'trashFull'
 export interface DockNavigationItem {
   key: DockNavigationKey
@@ -42,6 +42,7 @@ export const DEFAULT_DOCK_NAVIGATION_ITEMS: DockNavigationItem[] = [
   { key: 'statistics', title: '阅读统计', icon: 'statistics', enabled: true, order: 7 },
   { key: 'settings', title: '设置', icon: 'settings', enabled: true, order: 8 },
   { key: 'recommendations', title: '推荐阅读', icon: 'shelf', enabled: true, order: 9 },
+  { key: 'libraries', title: '图书馆', icon: 'library', enabled: true, order: 10 },
 ]
 export const LIBRARY_PAGE_SIZE_OPTIONS = [10, 30, 50, 100, 200] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]

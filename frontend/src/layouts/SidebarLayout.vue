@@ -182,6 +182,7 @@ const menuItems = [
   { path: '/books', icon: Collection, title: '书库' },
   { path: '/rewrite', icon: EditPen, title: '书籍重写' },
   { path: '/shelf', icon: Reading, title: '书架' },
+  { path: '/libraries', icon: Collection, title: '图书馆' },
   { path: '/recommendations', icon: Reading, title: '推荐阅读' },
   { path: '/text-repair', icon: Tools, title: '内容修复' },
   { path: '/format-conversion', icon: Switch, title: '格式转换' },

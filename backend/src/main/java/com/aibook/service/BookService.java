@@ -39,6 +39,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class BookService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.aibook.library.LibraryLifecycle libraryLifecycle;
+
 
     private final BookRepository bookRepository;
     private final ReadingProgressRepository readingProgressRepository;
@@ -393,6 +396,7 @@ public class BookService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "书籍关联重写项目，请先恢复书籍并删除相关重写项目");
         }
+        if (libraryLifecycle != null) libraryLifecycle.purge(book.getId());
         readingProgressRepository.deleteByBook(book);
         bookmarkRepository.deleteByBook(book);
         bookHighlightRepository.deleteByBook(book);
