@@ -136,6 +136,9 @@ public class UserPreference {
     @Column(name = "book_cover_image_sizes", columnDefinition = "TEXT")
     private String bookCoverImageSizes;
 
+    @Column(name = "book_card_badge_settings", columnDefinition = "TEXT")
+    private String bookCardBadgeSettings;
+
     @Column(name = "all_random_covers_hidden")
     private Boolean allRandomCoversHidden;
 

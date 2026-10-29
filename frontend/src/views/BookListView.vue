@@ -27,6 +27,7 @@
         @click="$router.push(`/books/${book.id}`)"
       >
         <div class="book-cover">
+          <BookCardBadges :format="book.format" :author="book.author" />
           <img
             v-if="book.coverUrl && shouldLoadBookCover(book.id)"
             :src="getCoverThumbnailUrl(book.coverUrl, 'card')"
@@ -41,7 +42,6 @@
         </div>
         <div class="book-info">
           <div class="book-title">{{ displayBookName(book.title) }}</div>
-          <div class="book-author">{{ book.author || '未知作者' }}</div>
         </div>
       </div>
     </div>
@@ -56,6 +56,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCardBadges from '@/components/BookCardBadges.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'

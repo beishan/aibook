@@ -1,3 +1,4 @@
+import { hydrateBookCardBadges, resetBookCardBadges } from '@/utils/bookCardBadges'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/utils/api'
@@ -150,6 +151,7 @@ export const useUserStore = defineStore('user', () => {
         hydrateBookCoverPrivacy(profile.id),
         hydrateRandomCoverPrivacy(profile.id),
         hydrateBookCoverImageSizes(),
+        hydrateBookCardBadges(),
       ])
     }
     return data
@@ -181,6 +183,7 @@ export const useUserStore = defineStore('user', () => {
         hydrateBookCoverPrivacy(profile.id),
         hydrateRandomCoverPrivacy(profile.id),
         hydrateBookCoverImageSizes(),
+        hydrateBookCardBadges(),
       ])
     }
     return data
@@ -201,6 +204,7 @@ export const useUserStore = defineStore('user', () => {
     resetBookCoverPrivacy()
     resetRandomCoverPrivacy()
     resetBookCoverImageSizes()
+    resetBookCardBadges()
   }
 
   window.addEventListener(AUTH_EXPIRED_EVENT, logout)

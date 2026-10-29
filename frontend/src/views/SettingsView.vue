@@ -151,6 +151,7 @@
     <div v-show="activeTab === 'cover-display'" class="tab-content">
       <BookNameDisplaySettingsPanel />
       <BookCoverDisplaySettingsPanel />
+      <BookCardBadgeSettingsPanel />
     </div>
 
     <!-- 扫描目录 -->
@@ -722,6 +723,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCardBadgeSettingsPanel from '@/components/BookCardBadgeSettingsPanel.vue'
 import { ref, reactive, onMounted, onUnmounted, computed, watch, defineAsyncComponent, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Brush, Monitor, Operation, Picture } from '@element-plus/icons-vue'

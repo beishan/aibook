@@ -192,6 +192,7 @@
             @click="$router.push(`/books/${book.id}`)"
           >
             <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
+              <BookCardBadges v-if="viewMode === 'grid'" :format="book.format" :author="book.author" />
               <img
                 v-if="book.coverUrl && shouldLoadBookCover(book.id)"
                 :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
@@ -276,10 +277,7 @@
             </div>
             <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
               <div class="book-title">{{ displayBookName(book.title) }}</div>
-              <div class="book-author">{{ book.author || '未知作者' }}</div>
-              <div v-if="viewMode === 'grid'" class="shelf-card-meta">
-                {{ book.format === 'structured' ? '在线章节' : '电子书 · ' + (book.format?.toUpperCase() || '未知格式') }}
-              </div>
+              <div v-if="viewMode === 'list'" class="book-author">{{ book.author || '未知作者' }}</div>
               <div v-if="viewMode === 'grid'" class="shelf-card-status" :class="{ finished: book.readingStatus === 'FINISHED' }">
                 <span aria-hidden="true"></span>
                 {{ book.readingStatus === 'FINISHED' ? '已读完 ✓' : book.readingStatus === 'READING' ? '正在阅读' : '未读' }}
@@ -353,6 +351,7 @@
           @click="$router.push(`/books/${book.id}`)"
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
+            <BookCardBadges v-if="viewMode === 'grid'" :format="book.format" :author="book.author" />
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
               :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
@@ -397,7 +396,7 @@
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
-            <div class="book-author">{{ book.author || '未知作者' }}</div>
+            <div v-if="viewMode === 'list'" class="book-author">{{ book.author || '未知作者' }}</div>
             <div v-if="viewMode === 'list'" class="book-meta">
               <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
               <span v-if="book.publisher">{{ book.publisher }}</span>
@@ -440,6 +439,7 @@
           @click="$router.push(`/books/${book.id}`)"
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
+            <BookCardBadges v-if="viewMode === 'grid'" :format="book.format" :author="book.author" />
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
               :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
@@ -495,7 +495,7 @@
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
-            <div class="book-author">{{ book.author || '未知作者' }}</div>
+            <div v-if="viewMode === 'list'" class="book-author">{{ book.author || '未知作者' }}</div>
             <div v-if="viewMode === 'list'" class="book-meta">
               <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
               <span v-if="book.publisher">{{ book.publisher }}</span>
@@ -545,6 +545,7 @@
           @click="$router.push(`/books/${book.id}`)"
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
+            <BookCardBadges v-if="viewMode === 'grid'" :format="book.format" :author="book.author" />
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
               :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
@@ -589,7 +590,7 @@
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
-            <div class="book-author">{{ book.author || '未知作者' }}</div>
+            <div v-if="viewMode === 'list'" class="book-author">{{ book.author || '未知作者' }}</div>
             <div v-if="viewMode === 'list'" class="book-meta">
               <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
               <span v-if="book.publisher">{{ book.publisher }}</span>
@@ -632,6 +633,7 @@
           @click="$router.push(`/books/${book.id}`)"
         >
           <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
+            <BookCardBadges v-if="viewMode === 'grid'" :format="book.format" :author="book.author" />
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
               :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
@@ -676,7 +678,7 @@
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
-            <div class="book-author">{{ book.author || '未知作者' }}</div>
+            <div v-if="viewMode === 'list'" class="book-author">{{ book.author || '未知作者' }}</div>
             <div v-if="viewMode === 'list'" class="book-meta">
               <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
               <span v-if="book.publisher">{{ book.publisher }}</span>
@@ -831,6 +833,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCardBadges from '@/components/BookCardBadges.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'

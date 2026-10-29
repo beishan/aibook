@@ -14,12 +14,13 @@
         @click="$emit('open', book)"
       >
         <HomeBookCover :book="book" />
+        <BookCardBadges v-if="layout !== 'list'" :format="book.format" :author="book.author" />
       </button>
       <div class="book-info">
         <button class="book-title" type="button" @click="$emit('open', book)">
           {{ displayBookName(book.title) }}
         </button>
-        <p>
+        <p v-if="layout === 'list'">
           {{ book.author || '佚名' }}
         </p>
         <div
@@ -44,6 +45,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import BookCardBadges from '@/components/BookCardBadges.vue';
 import HomeBookCover from '@/components/HomeBookCover.vue';
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay';
 import type { LibraryBook } from '@/utils/personalLibraries';
@@ -91,6 +93,7 @@ const { displayBookName } = useBookNameDisplay();
   font: inherit;
 }
 .book-open {
+  position: relative;
   width: 100%;
 }
 .book-title {
@@ -130,8 +133,8 @@ const { displayBookName } = useBookNameDisplay();
 .select-book {
   position: absolute;
   top: 5px;
-  left: 5px;
-  z-index: 1;
+  right: 5px;
+  z-index: 3;
   padding: 4px;
   background: var(--surface-elevated);
   border-radius: 5px;
@@ -152,6 +155,7 @@ const { displayBookName } = useBookNameDisplay();
   align-items: center;
 }
 .as-list .book-open {
+  position: relative;
   width: 75px;
   flex-shrink: 0;
 }
