@@ -1,0 +1,26 @@
+[
+  {
+    "file": "01-library.png",
+    "width": 1536,
+    "height": 1024,
+    "sha256": "34c8dc7f0aee38cad4b80cff6397dfca65c46192ab002bbef481493d75b93b51"
+  },
+  {
+    "file": "02-detail.png",
+    "width": 1536,
+    "height": 1024,
+    "sha256": "147b50e5ae0261ee36f0b4a0272f23cf0e1bbe830f51c53aa4faeab177f62d9a"
+  },
+  {
+    "file": "03-player.png",
+    "width": 1536,
+    "height": 1024,
+    "sha256": "b96e61e68592dd48e4608fb71e354263849b804d0d1229ae9f6cfa27f1c0cf36"
+  },
+  {
+    "file": "04-import-mobile.png",
+    "width": 1536,
+    "height": 1024,
+    "sha256": "5f313da29b292cff59218ff1d8b51f62ca890f4041d4d42fb3339dcf7fd05c29"
+  }
+]
