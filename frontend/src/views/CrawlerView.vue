@@ -1890,12 +1890,41 @@
       width="min(700px, 96vw)"
       append-to-body
     >
-      <p class="field-hint">新增执行器需手动添加到此队列，已添加且启用的执行器各占一个并发槽位。删除后停止接收新任务，当前任务完成后清理。</p>
+      <p class="field-hint">新建执行器需手动加入队列。也可选择当前账户其他网站的执行器共享使用；配置修改同步生效，同一执行器同时只运行一个任务。共享执行器移出当前队列不会删除其他队列的配置，忙碌时须等待当前任务结束。</p>
+      <div class="queue-executor-share">
+        <el-select
+          v-model="selectedSharedExecutorId"
+          filterable
+          clearable
+          placeholder="选择其他网站 / 队列的执行器"
+          aria-label="选择已有执行器共享使用"
+          :disabled="queueExecutorsLoading || sharingExecutor"
+        >
+          <el-option
+            v-for="option in sharedExecutorOptions"
+            :key="option.id"
+            :value="option.id"
+            :label="`${option.sourceName} · ${option.name}${option.busy ? '（忙碌）' : option.enabled ? '' : '（已禁用）'}`"
+            :disabled="option.busy"
+          />
+        </el-select>
+        <el-button
+          type="primary"
+          :loading="sharingExecutor"
+          :disabled="!selectedSharedExecutorId || queueExecutorsLoading || queueExecutors.length >= 16 || sharedExecutorOptions.some(option => option.id === selectedSharedExecutorId && option.busy)"
+          @click="shareExistingExecutor"
+        >添加共享执行器</el-button>
+      </div>
       <div v-loading="queueExecutorsLoading" class="queue-executor-list">
         <article v-for="item in queueExecutors" :key="item.id" class="queue-executor-card">
           <div>
             <strong>{{ item.name }}</strong>
             <el-tag v-if="item.defaultExecutor" size="small" effect="plain">默认</el-tag>
+            <el-tag v-if="item.shared" size="small" effect="plain">共享 · {{ item.sourceQueueName }}</el-tag>
+            <el-tag v-if="item.busy" type="warning" size="small">
+              忙碌 · {{ item.busyQueueId === item.queueId ? '当前队列运行' : '其他队列运行' }}
+            </el-tag>
+            <el-tag v-else-if="item.assigned && item.enabled" type="success" size="small">空闲</el-tag>
             <el-tag v-if="item.deletionPending" type="warning" size="small">待删除 · 当前任务完成后清理</el-tag>
             <el-tag v-else-if="!item.assigned" type="info" size="small">待添加到队列</el-tag>
             <el-tag v-if="item.enabled === false" type="info" size="small">已禁用</el-tag>
@@ -1913,14 +1942,14 @@
           </div>
           <div class="queue-executor-actions">
             <el-button v-if="!item.assigned && !item.deletionPending" size="small" type="primary" @click="assignQueueExecutor(item)">添加到队列</el-button>
-            <el-button size="small" :disabled="item.deletionPending" @click="openExecutorSettings(item)">配置执行器</el-button>
+            <el-button size="small" :disabled="item.deletionPending || (item.shared && item.busy)" @click="openExecutorSettings(item)">配置执行器</el-button>
             <el-button
               v-if="!item.deletionPending"
               size="small"
               type="danger"
               plain
               @click="removeQueueExecutor(item)"
-            >删除</el-button>
+            >{{ item.shared ? '移出当前队列' : '删除' }}</el-button>
           </div>
         </article>
       </div>
@@ -2898,6 +2927,12 @@ const creatingExecutor = ref(false)
 const newExecutorName = ref('')
 const newExecutorDescription = ref('')
 const newExecutorQueueId = ref<number>()
+const sharedExecutorOptions = ref<Array<{
+  id:number; sourceQueueId:number; sourceName:string; name:string; proxyMode:string; enabled:boolean; busy:boolean
+}>>([])
+const selectedSharedExecutorId = ref<number>()
+const sharingExecutor = ref(false)
+let queueExecutorRequest = 0
 const queueExecutorsDialog = ref(false)
 const queueExecutorsLoading = ref(false)
 const queueExecutors = ref<CrawlerQueueExecutor[]>([])
@@ -2945,7 +2980,12 @@ const queuedTasks = ref<CrawlerTask[]>([])
 const queuedTaskPage = ref(1)
 const queuedTaskPageSize = ref(10)
 const totalQueueRunning=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.runningCount,0))
-const totalQueueConcurrency=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.maxConcurrentTasks,0))
+const totalQueueConcurrency = computed(() => {
+  if (taskQueues.value.every(queue => Array.isArray(queue.enabledExecutorIds))) {
+    return new Set(taskQueues.value.flatMap(queue => queue.enabledExecutorIds || [])).size
+  }
+  return taskQueues.value.reduce((total, queue) => total + queue.maxConcurrentTasks, 0)
+})
 const totalQueueWaiting=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.waitingCount,0))
 const totalQueuePaused=computed(()=>taskQueues.value.reduce((total,queue)=>total+queue.pausedCount,0))
 const totalQueueProgress=computed(()=>{
@@ -4176,14 +4216,44 @@ async function saveQueueSettings(){
 async function openQueueExecutors() {
   const queue = queueSettingsTarget.value
   if (!queue) return
+  const request = ++queueExecutorRequest
   queueExecutorsDialog.value = true
   queueExecutorsLoading.value = true
+  if (queueExecutors.value.some(item => item.queueId !== queue.id)) queueExecutors.value = []
+  sharedExecutorOptions.value = []
+  selectedSharedExecutorId.value = undefined
   try {
-    queueExecutors.value = await crawlerApi.queueExecutors(queue.id)
+    const [executors, options] = await Promise.all([
+      crawlerApi.queueExecutors(queue.id), crawlerApi.sharedExecutorOptions(queue.id),
+    ])
+    if (request !== queueExecutorRequest || queueSettingsTarget.value?.id !== queue.id) return
+    queueExecutors.value = executors
+    sharedExecutorOptions.value = options
   } catch (error: any) {
     message.error(error.response?.data?.message || '执行器配置加载失败')
   } finally {
-    queueExecutorsLoading.value = false
+    if (request === queueExecutorRequest) queueExecutorsLoading.value = false
+  }
+}
+
+async function shareExistingExecutor() {
+  const queue = queueSettingsTarget.value
+  const executorId = selectedSharedExecutorId.value
+  if (!queue || !executorId || sharingExecutor.value || queueExecutorsLoading.value) return
+  if (sharedExecutorOptions.value.some(option => option.id === executorId && option.busy)) return
+  sharingExecutor.value = true
+  try {
+    await crawlerApi.shareQueueExecutor(queue.id, executorId)
+    message.success('共享执行器已加入队列，配置修改会同步影响所有使用它的队列')
+    await loadTaskQueues()
+    if (queueSettingsTarget.value?.id === queue.id) {
+      queueSettingsTarget.value = taskQueues.value.find(item => item.id === queue.id)
+      await openQueueExecutors()
+    }
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '添加共享执行器失败')
+  } finally {
+    sharingExecutor.value = false
   }
 }
 
@@ -4216,6 +4286,33 @@ async function createExecutor() {
   }
 }
 
+watch([queueExecutorsDialog, pollingIntervalSeconds], ([open], _previous, onCleanup) => {
+  if (!open) return
+  let refreshing = false
+  const timer = window.setInterval(async () => {
+    const queue = queueSettingsTarget.value
+    const request = queueExecutorRequest
+    if (!queue || refreshing || queueExecutorsLoading.value || sharingExecutor.value
+        || document.visibilityState === 'hidden') return
+    refreshing = true
+    try {
+      const [executors, options] = await Promise.all([
+        crawlerApi.queueExecutors(queue.id), crawlerApi.sharedExecutorOptions(queue.id),
+      ])
+      if (queueExecutorsDialog.value && request === queueExecutorRequest
+          && queueSettingsTarget.value?.id === queue.id && !queueExecutorsLoading.value) {
+        queueExecutors.value = executors
+        sharedExecutorOptions.value = options
+      }
+    } catch {
+      // Keep the last successful state; the server still checks occupancy for every action.
+    } finally {
+      refreshing = false
+    }
+  }, Math.max(1, pollingIntervalSeconds.value) * 1000)
+  onCleanup(() => window.clearInterval(timer))
+})
+
 function openExecutorSettings(item?: CrawlerQueueExecutor) {
   const queueId = item?.queueId || queueSettingsTarget.value?.id
   if (!queueId) return
@@ -4239,10 +4336,13 @@ async function assignQueueExecutor(item:CrawlerQueueExecutor) {
 
 async function removeQueueExecutor(item: CrawlerQueueExecutor) {
   const queue = queueSettingsTarget.value
-  if (!queue || !await confirm(`确定删除执行器“${item.name}”吗？当前任务会继续完成，后续任务不再使用此执行器。`)) return
+  const confirmation = item.shared
+    ? `确定将共享执行器“${item.name}”移出当前队列吗？其他队列继续使用，忙碌时需要等待当前任务结束。`
+    : `确定删除执行器“${item.name}”吗？当前任务会继续完成，后续任务不再使用此执行器。`
+  if (!queue || !await confirm(confirmation)) return
   try {
     await crawlerApi.deleteQueueExecutor(queue.id, item.id)
-    message.success('已停止接收新任务；若正在运行，将在当前任务结束后删除')
+    message.success(item.shared ? '已移出当前队列，其他队列继续使用' : '已停止接收新任务；若正在运行，将在当前任务结束后删除')
     await Promise.all([openQueueExecutors(), loadTaskQueues()])
     queueSettingsTarget.value = taskQueues.value.find(entry => entry.id === queue.id)
   } catch (error: any) {
@@ -5612,6 +5712,16 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 </script>
 
 <style scoped>
+.queue-executor-share {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+.queue-executor-share .el-select {
+  flex: 1 1 240px;
+}
+
 .scan-result-filter-scroll.chapter-status-filter-scroll {
   flex: 0 0 auto;
   margin: 0 0 10px;

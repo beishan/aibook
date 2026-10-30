@@ -6,5 +6,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CrawlerQueueExecutorRepository extends JpaRepository<CrawlerQueueExecutor, Long> {
     List<CrawlerQueueExecutor> findByDeletionPendingTrue();
-    List<CrawlerQueueExecutor> findByQueueIdOrderBySortOrderAscIdAsc(Long queueId);
+    @org.springframework.data.jpa.repository.Query("""
+            select distinct e from CrawlerQueueExecutor e left join e.sharedQueueIds sharedQueue
+            where e.queue.id = :queueId or sharedQueue = :queueId
+            order by e.sortOrder, e.id
+            """)
+    List<CrawlerQueueExecutor> findByQueueIdOrderBySortOrderAscIdAsc(
+            @org.springframework.data.repository.query.Param("queueId") Long queueId);
 }

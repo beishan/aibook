@@ -387,6 +387,18 @@ public class CrawlerController {
             @RequestParam(defaultValue = "false") boolean failedOnly) {
         return taskService.executorLogs(user(auth), queueId, executorId, page, size, failedOnly);
     }
+    @GetMapping("/tasks/queues/{queueId}/executors/share-options")
+    public List<com.aibook.service.crawler.CrawlerQueueExecutorService.SharedExecutorOption> sharedExecutorOptions(
+            Authentication auth, @PathVariable Long queueId) {
+        return taskService.sharedExecutorOptions(user(auth), queueId);
+    }
+
+    @PostMapping("/tasks/queues/{queueId}/executors/{executorId}/share")
+    public QueueExecutorView shareQueueExecutor(Authentication auth, @PathVariable Long queueId,
+            @PathVariable Long executorId) {
+        return taskService.shareQueueExecutor(user(auth), queueId, executorId);
+    }
+
     @PostMapping("/tasks/queues/{queueId}/executors")
     @ResponseStatus(HttpStatus.CREATED)
     public QueueExecutorView createQueueExecutor(Authentication auth, @PathVariable Long queueId,

@@ -22,6 +22,14 @@ public class CrawlerQueueExecutor {
     @JoinColumn(name = "queue_id", nullable = false)
     private CrawlerTaskQueue queue;
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "crawler_executor_shared_queues",
+            joinColumns = @JoinColumn(name = "executor_id"),
+            uniqueConstraints = @UniqueConstraint(columnNames = {"executor_id", "queue_id"}))
+    @Column(name = "queue_id", nullable = false)
+    @Builder.Default
+    private java.util.Set<Long> sharedQueueIds = new java.util.LinkedHashSet<>();
+
     @Column(nullable = false, length = 100)
     private String name;
 

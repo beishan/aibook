@@ -3,7 +3,7 @@
     <header class="panel-heading">
       <div>
         <h3>执行器配置</h3>
-        <p>配置普通代理或引用系统 Mihomo 节点组；新增后需在爬取任务的队列配置里手动添加。保存后下一章节使用新配置，当前章节及重试继续使用原配置。</p>
+        <p>共享执行器的修改会同步影响所有关联队列。配置普通代理或引用系统 Mihomo 节点组；新增后需在爬取任务的队列配置里手动添加。保存后下一章节使用新配置，当前章节及重试继续使用原配置。</p>
       </div>
       <el-button type="primary" :disabled="!queueId || executors.length >= 16" @click="create">新增执行器</el-button>
     </header>
@@ -17,6 +17,8 @@
       <el-table-column label="执行器" min-width="180">
         <template #default="{ row }">
           <strong>{{ row.name }}</strong>
+          <el-tag v-if="row.shared" size="small">共享</el-tag>
+          <el-tag v-if="row.busy" type="warning" size="small">忙碌</el-tag>
           <el-tag v-if="row.defaultExecutor" size="small">默认</el-tag>
           <small>{{ row.description || '暂无描述' }}</small>
         </template>
@@ -30,8 +32,8 @@
       <el-table-column label="操作" width="270">
         <template #default="{ row }">
           <el-button size="small" @click="openExecutionDetails(row)">执行详情</el-button>
-          <el-button size="small" :disabled="row.deletionPending" @click="edit(row)">配置</el-button>
-          <el-button v-if="!row.deletionPending" size="small" type="danger" plain @click="remove(row)">删除</el-button>
+          <el-button size="small" :disabled="row.deletionPending || (row.shared && row.busy)" @click="edit(row)">配置</el-button>
+          <el-button v-if="!row.deletionPending" size="small" type="danger" plain @click="remove(row)">{{ row.shared ? '移出队列' : '删除' }}</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -640,7 +642,10 @@ async function unbind() {
 }
 
 async function remove(item:CrawlerQueueExecutor) {
-  if (!queueId.value || !await confirm(`删除执行器“${item.name}”？当前任务继续完成，后续任务不再使用此执行器。`)) return
+  const confirmation = item.shared
+    ? `将共享执行器“${item.name}”移出当前队列？其他队列继续使用，忙碌时须等待当前任务结束。`
+    : `删除执行器“${item.name}”？当前任务继续完成，后续任务不再使用此执行器。`
+  if (!queueId.value || !await confirm(confirmation)) return
   try {
     await crawlerApi.deleteQueueExecutor(queueId.value, item.id)
     await loadExecutors()

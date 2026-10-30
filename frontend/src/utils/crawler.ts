@@ -129,7 +129,7 @@ export interface CrawlerExecutorLog {
   createdAt:string
 }
 export interface CrawlerTaskQueueSettings { maxConcurrentTasks:number; runningCount:number; queuedCount:number }
-export interface CrawlerTaskQueue { id:number; siteId:number|null; siteName?:string|null; queueName?:string|null; siteThemeColor?:string; maxConcurrentTasks:number; taskIntervalSeconds:number; runningCount:number; waitingCount:number; pausedCount:number; activeTaskCount:number; progressPercent:number; lastTaskStartedAt?:string }
+export interface CrawlerTaskQueue { enabledExecutorIds?:number[]; id:number; siteId:number|null; siteName?:string|null; queueName?:string|null; siteThemeColor?:string; maxConcurrentTasks:number; taskIntervalSeconds:number; runningCount:number; waitingCount:number; pausedCount:number; activeTaskCount:number; progressPercent:number; lastTaskStartedAt?:string }
 export interface CrawlerQueueExecutorProxy {
   proxyConfigId:number
   proxyName:string
@@ -149,6 +149,10 @@ export interface CrawlerQueueExecutor {
     coolingUntil:string|null
     freezeReason:string|null
   }[]
+  busy?:boolean
+  busyQueueId?:number|null
+  shared?:boolean
+  sourceQueueName?:string
   id:number
   queueId:number
   name:string
@@ -496,6 +500,11 @@ export const crawlerApi = {
   createTaskQueue: (siteId?:number,queueName?:string) => api.post<CrawlerTaskQueue>('/api/crawler/tasks/queues',{siteId,queueName}).then(r => r.data),
   updateTaskQueue: (queueId:number, settings:{maxConcurrentTasks:number;taskIntervalSeconds:number;queueName?:string}) => api.put<CrawlerTaskQueue>(`/api/crawler/tasks/queues/${queueId}`,settings).then(r => r.data),
   queueProxyOptions: () => api.get<CrawlerQueueProxyOption[]>('/api/crawler/tasks/queues/proxy-options').then(r => r.data),
+  sharedExecutorOptions: (queueId:number) => api.get<Array<{
+    id:number; sourceQueueId:number; sourceName:string; name:string; proxyMode:string; enabled:boolean; busy:boolean
+  }>>(`/api/crawler/tasks/queues/${queueId}/executors/share-options`).then(r => r.data),
+  shareQueueExecutor: (queueId:number,executorId:number) =>
+    api.post<CrawlerQueueExecutor>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/share`).then(r => r.data),
   queueExecutors: (queueId:number) => api.get<CrawlerQueueExecutor[]>(`/api/crawler/tasks/queues/${queueId}/executors`).then(r => r.data),
   mihomoPolicy: (queueId:number,executorId:number) => api.get<MihomoPolicyView|null>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo`).then(r => r.data),
   saveMihomoSelection: (queueId:number,executorId:number,payload:MihomoReferencePayload) => api.put<MihomoPolicyView>(`/api/crawler/tasks/queues/${queueId}/executors/${executorId}/mihomo/selection`,payload).then(r => r.data),

@@ -265,7 +265,15 @@ public final class CrawlerDtos {
             Integer defaultProxyCooldownSeconds,
             List<QueueExecutorProxyView> proxies,
             int availableProxyCount, java.time.Instant nextAvailableAt,
-            List<QueueExecutorProxyStateView> proxyStates) { }
+            List<QueueExecutorProxyStateView> proxyStates, boolean shared, String sourceQueueName,
+            boolean busy, Long busyQueueId) {
+        public QueueExecutorView withRuntime(boolean occupied, Long runningQueueId) {
+            return new QueueExecutorView(id, queueId, name, description, defaultExecutor, enabled,
+                    assigned, deletionPending, proxyMode, selectionStrategy, defaultProxyCooldownSeconds,
+                    proxies, availableProxyCount, nextAvailableAt, proxyStates, shared, sourceQueueName,
+                    occupied, runningQueueId);
+        }
+    }
     public record QueueExecutorProxyStateView(String proxyKey, String proxyName,
             boolean available, int consecutiveFailures, java.time.Instant coolingUntil,
             String freezeReason) { }
@@ -276,7 +284,7 @@ public final class CrawlerDtos {
             int maxConcurrentTasks, int taskIntervalSeconds,
             int runningCount, int waitingCount, int pausedCount,
             int activeTaskCount, int progressPercent,
-            LocalDateTime lastTaskStartedAt, String siteThemeColor) { }
+            LocalDateTime lastTaskStartedAt, String siteThemeColor, List<Long> enabledExecutorIds) { }
     public record DiscoveryCandidatesRequest(
             @Min(0) int page, @Min(1) @Max(100) int size,
             String keyword, Long siteId, List<@NotNull @Positive Long> excludedIds) { }

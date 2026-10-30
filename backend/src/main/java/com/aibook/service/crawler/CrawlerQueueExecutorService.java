@@ -202,7 +202,8 @@ public class CrawlerQueueExecutorService {
 
     @Transactional(readOnly = true)
     public List<CrawlerQueueExecutor> enabledExecutors(Long queueId) {
-        return executors(queueId).stream().filter(this::isExecutorEnabled).toList();
+        return executors(queueId).stream()
+                .filter(executor -> isExecutorEnabled(executor) && isAssignedTo(executor, queueId)).toList();
     }
 
     public TaskExecutionView taskExecution(Long executorId) {
@@ -228,8 +229,75 @@ public class CrawlerQueueExecutorService {
         Map<Long, CrawlerProxyView> proxies = proxyMap();
         Map<String, Instant> cooldowns = cooldowns(queueId);
         return executors(queueId).stream()
-                .map(executor -> view(executor, queue.getSite(), proxies, cooldowns))
+                .map(executor -> view(executor, queue.getSite(), proxies, cooldowns, queueId))
                 .toList();
+    }
+
+    public record SharedExecutorOption(Long id, Long sourceQueueId, String sourceName,
+            String name, String proxyMode, boolean enabled, boolean busy) {
+        public SharedExecutorOption withBusy(boolean occupied) {
+            return new SharedExecutorOption(id, sourceQueueId, sourceName, name, proxyMode, enabled, occupied);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<SharedExecutorOption> shareOptions(User user, Long queueId) {
+        ownedQueue(user, queueId);
+        return executorRepository.findAll().stream()
+                .filter(executor -> !Objects.equals(executor.getQueue().getId(), queueId))
+                .filter(executor -> !executor.getSharedQueueIds().contains(queueId))
+                .filter(executor -> !Boolean.TRUE.equals(executor.getDeletionPending()))
+                .filter(executor -> Objects.equals(ownerId(executor.getQueue()), user.getId()))
+                .map(executor -> new SharedExecutorOption(executor.getId(), executor.getQueue().getId(),
+                        executor.getQueue().getSite() == null
+                                ? Objects.toString(executor.getQueue().getQueueName(), "自由队列")
+                                : executor.getQueue().getSite().getSiteName(),
+                        executor.getName(), executor.getProxyMode().name(),
+                        !Boolean.FALSE.equals(executor.getEnabled()), false))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public void validateShareOwnership(User user, Long queueId, Long executorId) {
+        ownedQueue(user, queueId);
+        var executor = executorRepository.findById(executorId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "执行器不存在"));
+        if (!Objects.equals(ownerId(executor.getQueue()), user.getId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "执行器不存在");
+        }
+    }
+
+    @Transactional
+    public QueueExecutorView share(User user, Long queueId, Long executorId) {
+        CrawlerTaskQueue queue = ownedQueue(user, queueId);
+        CrawlerQueueExecutor executor = executorRepository.findById(executorId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "执行器不存在"));
+        if (!Objects.equals(ownerId(executor.getQueue()), user.getId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "执行器不存在");
+        }
+        rejectPendingDeletion(executor);
+        if (Objects.equals(executor.getQueue().getId(), queueId)) return assign(user, queueId, executorId);
+        if (!executor.getSharedQueueIds().contains(queueId) && executors(queueId).size() >= 16) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "每个队列最多配置 16 个执行器");
+        }
+        executor.getSharedQueueIds().add(queueId);
+        executorRepository.save(executor);
+        queue.setExecutorsInitialized(true);
+        queueRepository.save(queue);
+        syncQueueConcurrency(queue, executors(queueId));
+        return view(executor, queue.getSite(), proxyMap(), cooldowns(queueId), queueId);
+    }
+
+    private Long ownerId(CrawlerTaskQueue queue) {
+        return queue.getUser() != null ? queue.getUser().getId()
+                : queue.getSite() == null || queue.getSite().getUser() == null
+                        ? null : queue.getSite().getUser().getId();
+    }
+
+    private boolean isAssignedTo(CrawlerQueueExecutor executor, Long queueId) {
+        return Objects.equals(executor.getQueue().getId(), queueId)
+                ? !Boolean.FALSE.equals(executor.getAssigned())
+                : executor.getSharedQueueIds().contains(queueId);
     }
 
     @Transactional(readOnly = true)
@@ -287,7 +355,14 @@ public class CrawlerQueueExecutorService {
         bindingRepository.flush();
         saveBindings(executor, payload);
         syncQueueConcurrency(queue, executors(queueId));
-        return view(executor, queue.getSite(), proxyMap(), cooldowns(queueId));
+        if (!Objects.equals(executor.getQueue().getId(), queueId)) {
+            syncQueueConcurrency(executor.getQueue(), executors(executor.getQueue().getId()));
+        }
+        for (Long sharedQueueId : executor.getSharedQueueIds()) {
+            queueRepository.findById(sharedQueueId).ifPresent(sharedQueue ->
+                    syncQueueConcurrency(sharedQueue, executors(sharedQueueId)));
+        }
+        return view(executor, queue.getSite(), proxyMap(), cooldowns(queueId), queueId);
     }
 
     @Transactional
@@ -295,7 +370,8 @@ public class CrawlerQueueExecutorService {
         CrawlerTaskQueue queue = ownedQueue(user, queueId);
         CrawlerQueueExecutor executor = ownedExecutor(queueId, executorId);
         rejectPendingDeletion(executor);
-        executor.setAssigned(true);
+        if (Objects.equals(executor.getQueue().getId(), queueId)) executor.setAssigned(true);
+        else executor.getSharedQueueIds().add(queueId);
         executorRepository.save(executor);
         syncQueueConcurrency(queue, executors(queueId));
         return view(executor, queue.getSite(), proxyMap(), cooldowns(queueId));
@@ -313,6 +389,16 @@ public class CrawlerQueueExecutorService {
         CrawlerQueueExecutor executor = ownedExecutor(queueId, executorId);
         queue.setExecutorsInitialized(true);
         queueRepository.save(queue);
+        if (!Objects.equals(executor.getQueue().getId(), queueId) || !executor.getSharedQueueIds().isEmpty()) {
+            if (running) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "共享执行器正在运行，请等待当前任务结束后移出队列");
+            }
+            if (Objects.equals(executor.getQueue().getId(), queueId)) executor.setAssigned(false);
+            else executor.getSharedQueueIds().remove(queueId);
+            executorRepository.save(executor);
+            syncQueueConcurrency(queue, executors(queueId));
+            return;
+        }
         if (running) {
             executor.setDeletionPending(true);
             executor.setAssigned(false);
@@ -351,6 +437,23 @@ public class CrawlerQueueExecutorService {
     @Transactional
     public void deleteQueueData(Long queueId) {
         for (CrawlerQueueExecutor executor : executors(queueId)) {
+            if (!Objects.equals(executor.getQueue().getId(), queueId)) {
+                executor.getSharedQueueIds().remove(queueId);
+                executorRepository.save(executor);
+                continue;
+            }
+            CrawlerTaskQueue replacement = executor.getSharedQueueIds().stream()
+                    .map(queueRepository::findById).flatMap(java.util.Optional::stream)
+                    .filter(candidate -> Objects.equals(ownerId(candidate), ownerId(executor.getQueue())))
+                    .findFirst().orElse(null);
+            if (replacement != null) {
+                executor.getSharedQueueIds().remove(replacement.getId());
+                executor.setQueue(replacement);
+                executor.setAssigned(true);
+                executor.setDefaultExecutor(false);
+                executorRepository.saveAndFlush(executor);
+                continue;
+            }
             mihomoService.delete(executor.getId());
             bindingRepository.deleteByExecutorId(executor.getId());
             executorRepository.delete(executor);
@@ -363,11 +466,16 @@ public class CrawlerQueueExecutorService {
 
     @Transactional(readOnly = true)
     public boolean canExecute(CrawlerSite site, CrawlerQueueExecutor executor) {
+        return canExecute(site, executor, executor.getQueue().getId());
+    }
+
+    @Transactional(readOnly = true)
+    public boolean canExecute(CrawlerSite site, CrawlerQueueExecutor executor, Long queueId) {
         if (!isExecutorEnabled(executor)) return false;
         if (executor.getProxyMode() == CrawlerQueueExecutor.ProxyMode.MIHOMO) {
             return mihomoService.canExecute(executor.getId());
         }
-        Map<String, Instant> blocked = cooldowns(executor.getQueue().getId());
+        Map<String, Instant> blocked = cooldowns(queueId);
         Instant now = Instant.now();
         return candidates(executor, site, proxyMap()).stream()
                 .anyMatch(candidate -> !isCooling(candidate, blocked, now));
@@ -420,11 +528,16 @@ public class CrawlerQueueExecutorService {
 
     private QueueExecutorView view(CrawlerQueueExecutor executor, CrawlerSite site,
             Map<Long, CrawlerProxyView> proxies, Map<String, Instant> cooldowns) {
+        return view(executor, site, proxies, cooldowns, executor.getQueue().getId());
+    }
+
+    private QueueExecutorView view(CrawlerQueueExecutor executor, CrawlerSite site,
+            Map<Long, CrawlerProxyView> proxies, Map<String, Instant> cooldowns, Long queueId) {
         List<CrawlerQueueExecutorProxy> bindings = bindingRepository
                 .findByExecutorIdOrderBySortOrderAscIdAsc(executor.getId());
         List<QueueExecutorProxyView> bindingViews = new ArrayList<>();
         Map<String, CrawlerQueueProxyCooldown> states = new HashMap<>();
-        cooldownRepository.findByQueueId(executor.getQueue().getId())
+        cooldownRepository.findByQueueId(queueId)
                 .forEach(state -> states.put(state.getProxyKey(), state));
         for (CrawlerQueueExecutorProxy binding : bindings) {
             CrawlerProxyView proxy = proxies.get(binding.getProxyConfigId());
@@ -457,14 +570,19 @@ public class CrawlerQueueExecutorService {
                 .filter(Objects::nonNull)
                 .filter(until -> until.isAfter(now))
                 .min(Comparator.naturalOrder()).orElse(null);
-        return new QueueExecutorView(executor.getId(), executor.getQueue().getId(),
-                executor.getName(), executor.getDescription(), executor.isDefaultExecutor(),
+        return new QueueExecutorView(executor.getId(), queueId,
+                executor.getName(), executor.getDescription(),
+                executor.isDefaultExecutor() && Objects.equals(queueId, executor.getQueue().getId()),
                 !Boolean.FALSE.equals(executor.getEnabled()),
-                !Boolean.FALSE.equals(executor.getAssigned()),
+                isAssignedTo(executor, queueId),
                 Boolean.TRUE.equals(executor.getDeletionPending()),
                 executor.getProxyMode().name(), executor.getSelectionStrategy().name(),
                 executor.getDefaultProxyCooldownSeconds(), bindingViews,
-                availableCount, nextAvailable, proxyStates);
+                availableCount, nextAvailable, proxyStates,
+                !executor.getSharedQueueIds().isEmpty(),
+                executor.getQueue().getSite() == null
+                        ? Objects.toString(executor.getQueue().getQueueName(), "自由队列")
+                        : executor.getQueue().getSite().getSiteName(), false, null);
     }
 
     public void recordBoundProxySuccess(ProxyCandidate candidate) {
@@ -492,13 +610,14 @@ public class CrawlerQueueExecutorService {
     private boolean isExecutorEnabled(CrawlerQueueExecutor executor) {
         // Existing rows without the new column retain their previous active behavior.
         return !Boolean.FALSE.equals(executor.getEnabled())
-                && !Boolean.FALSE.equals(executor.getAssigned())
+                && (!Boolean.FALSE.equals(executor.getAssigned()) || !executor.getSharedQueueIds().isEmpty())
                 && !Boolean.TRUE.equals(executor.getDeletionPending());
     }
 
     private void syncQueueConcurrency(CrawlerTaskQueue queue,
             List<CrawlerQueueExecutor> executors) {
-        int enabledCount = (int) executors.stream().filter(this::isExecutorEnabled).count();
+        int enabledCount = (int) executors.stream()
+                .filter(executor -> isExecutorEnabled(executor) && isAssignedTo(executor, queue.getId())).count();
         if (!Objects.equals(queue.getMaxConcurrentTasks(), enabledCount)) {
             queue.setMaxConcurrentTasks(enabledCount);
             queueRepository.save(queue);
@@ -639,7 +758,8 @@ public class CrawlerQueueExecutorService {
         CrawlerQueueExecutor executor = executorRepository.findById(executorId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "执行器不存在"));
-        if (!Objects.equals(executor.getQueue().getId(), queueId)) {
+        if (!Objects.equals(executor.getQueue().getId(), queueId)
+                && !executor.getSharedQueueIds().contains(queueId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "执行器不存在");
         }
         return executor;

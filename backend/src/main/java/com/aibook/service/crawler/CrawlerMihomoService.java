@@ -50,6 +50,8 @@ public class CrawlerMihomoService {
     private ProxySettingsService proxySettingsService;
     @Autowired
     private com.aibook.service.scraper.ScraperProxyConfigStore scraperProxyStore;
+    @Autowired
+    private org.springframework.beans.factory.ObjectProvider<CrawlerTaskService> taskServices;
     private final ThreadLocal<SystemMihomoService.ResolvedConnection> referenceConnection = new ThreadLocal<>();
     private final Map<Long, ReentrantLock> locks = new ConcurrentHashMap<>();
     private final Map<Long, ReentrantLock> configurationLocks = new ConcurrentHashMap<>();
@@ -132,7 +134,7 @@ public class CrawlerMihomoService {
     }
 
     public PolicyView saveReference(User user, Long queueId, Long id, ReferencePayload reference) throws Exception {
-        owned(user, queueId, id);
+        requireIdleShared(owned(user, queueId, id));
         if (reference.systemProxyId() == null || reference.nodeGroupId() == null) bad("请选择 Mihomo 代理与节点组");
         if (reference.switchingMode() == null
                 || !Set.of("MANUAL", "FAILOVER", "TIME", "CHAPTER", "TASK").contains(reference.switchingMode())) bad("请选择有效的节点切换方式");
@@ -155,7 +157,7 @@ public class CrawlerMihomoService {
 
     @Transactional(rollbackFor = Exception.class)
     public PolicyView migrateLegacy(User user, Long queueId, Long id) throws Exception {
-        owned(user, queueId, id);
+        requireIdleShared(owned(user, queueId, id));
         ReentrantLock gate = lock(id);
         gate.lockInterruptibly();
         try {
@@ -188,7 +190,7 @@ public class CrawlerMihomoService {
 
     private PolicyView saveConfiguredExclusive(User user, Long queueId, Long id, PolicyPayload payload,
             ReferencePayload reference) throws Exception {
-        owned(user, queueId, id);
+        requireIdleShared(owned(user, queueId, id));
         // Validate without holding the running-request gate or a database write lock.
         CrawlerMihomoPolicy validation = connection(id, payload);
         validation.setSystemProxyId(reference == null ? null : reference.systemProxyId());
@@ -284,7 +286,7 @@ public class CrawlerMihomoService {
     }
 
     public PolicyView switchManually(User user, Long queueId, Long id, String node) throws Exception {
-        owned(user, queueId, id);
+        requireIdleShared(owned(user, queueId, id));
         ReentrantLock gate = lock(id);
         gate.lockInterruptibly();
         try {
@@ -515,6 +517,7 @@ public class CrawlerMihomoService {
         gate.lockInterruptibly();
         try {
             CrawlerQueueExecutor executor = owned(user, queueId, id);
+            requireIdleShared(executor);
             transactions.executeWithoutResult(status -> {
                 executor.setProxyMode(CrawlerQueueExecutor.ProxyMode.DEFAULT);
                 executors.save(executor);
@@ -694,12 +697,21 @@ public class CrawlerMihomoService {
         }
     }
 
+    private void requireIdleShared(CrawlerQueueExecutor executor) {
+        if (!executor.getSharedQueueIds().isEmpty() && taskServices != null
+                && taskServices.getObject().isExecutorBusy(executor.getId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "共享执行器忙碌，请等待当前任务结束后修改节点或配置");
+        }
+    }
+
     private CrawlerQueueExecutor owned(User user, Long queueId, Long id) {
         CrawlerQueueExecutor executor = executors.findById(id).orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "执行器不存在"));
         CrawlerTaskQueue queue = executor.getQueue();
         Long owner = queue.getUser() != null ? queue.getUser().getId() : queue.getSite().getUser().getId();
-        if (!Objects.equals(queueId, queue.getId()) || !Objects.equals(user.getId(), owner)) {
+        if ((!Objects.equals(queueId, queue.getId()) && !executor.getSharedQueueIds().contains(queueId))
+                || !Objects.equals(user.getId(), owner)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "执行器不存在");
         }
         return executor;

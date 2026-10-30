@@ -252,7 +252,33 @@ public class CrawlerTaskService {
     public List<QueueExecutorView> queueExecutors(User user, Long queueId) {
         CrawlerTaskQueue queue = ownedQueue(user, queueId);
         queueExecutorService.ensureQueueExecutors(queue);
-        return queueExecutorService.list(user, queueId);
+        return queueExecutorService.list(user, queueId).stream().map(view -> {
+            String runningTask = activeTaskExecutors.entrySet().stream()
+                    .filter(entry -> Objects.equals(entry.getValue(), view.id()))
+                    .map(Map.Entry::getKey).findFirst().orElse(null);
+            return view.withRuntime(runningTask != null,
+                    runningTask == null ? null : activeTaskQueues.get(runningTask));
+        }).toList();
+    }
+
+    public boolean isExecutorBusy(Long executorId) {
+        return activeTaskExecutors.containsValue(executorId);
+    }
+
+    public List<CrawlerQueueExecutorService.SharedExecutorOption> sharedExecutorOptions(User user, Long queueId) {
+        return queueExecutorService.shareOptions(user, queueId).stream()
+                .map(option -> option.withBusy(isExecutorBusy(option.id()))).toList();
+    }
+
+    public synchronized QueueExecutorView shareQueueExecutor(User user, Long queueId, Long executorId) {
+        queueExecutorService.validateShareOwnership(user, queueId, executorId);
+        if (isExecutorBusy(executorId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "执行器忙碌，请等待当前任务结束后再共享");
+        }
+        QueueExecutorView shared = queueExecutorService.share(user, queueId, executorId);
+        applyConcurrencyLimit(configuredQueueConcurrency());
+        dispatchWaitingTasks();
+        return shared;
     }
 
     public synchronized QueueExecutorView createQueueExecutor(User user, Long queueId,
@@ -265,6 +291,11 @@ public class CrawlerTaskService {
 
     public synchronized QueueExecutorView updateQueueExecutor(User user, Long queueId, Long executorId,
             QueueExecutorPayload payload) {
+        queueExecutorService.validateOwnership(user, queueId, executorId);
+        if (isExecutorBusy(executorId) && queueExecutorService.list(user, queueId).stream()
+                .anyMatch(view -> Objects.equals(view.id(), executorId) && view.shared())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "共享执行器忙碌，请等待当前任务结束后修改配置");
+        }
         QueueExecutorView updated = queueExecutorService.update(user, queueId, executorId, payload);
         applyConcurrencyLimit(configuredQueueConcurrency());
         dispatchWaitingTasks();
@@ -329,7 +360,9 @@ public class CrawlerTaskService {
                 value(queue.getMaxConcurrentTasks(), 1), value(queue.getTaskIntervalSeconds(), 0),
                 running, waiting, paused, tasks.size(), progress, queue.getLastTaskStartedAt(),
                 queue.getSite() == null || queue.getSite().getThemeColor() == null
-                        ? CrawlerSite.DEFAULT_THEME_COLOR : queue.getSite().getThemeColor());
+                        ? CrawlerSite.DEFAULT_THEME_COLOR : queue.getSite().getThemeColor(),
+                queueExecutorService == null ? List.of() : queueExecutorService.enabledExecutors(queue.getId())
+                        .stream().map(CrawlerQueueExecutor::getId).toList());
     }
 
     private void yieldRunningTasksAbove(int limit) {
@@ -1209,8 +1242,15 @@ public class CrawlerTaskService {
         }
         List<CrawlerTaskQueue> queues = taskQueueRepository.findAll();
         if (queues.isEmpty()) return configuredConcurrency();
-        long total = queues.stream().mapToLong(queue -> value(queue.getMaxConcurrentTasks(), 1)).sum();
-        return (int) Math.max(1, Math.min(Integer.MAX_VALUE, total));
+        return distinctExecutorCapacity(queues);
+    }
+
+    private int distinctExecutorCapacity(List<CrawlerTaskQueue> queues) {
+        long capacity = queueExecutorService == null
+                ? queues.stream().mapToLong(queue -> value(queue.getMaxConcurrentTasks(), 1)).sum()
+                : queues.stream().flatMap(queue -> queueExecutorService.enabledExecutors(queue.getId()).stream())
+                        .map(CrawlerQueueExecutor::getId).filter(Objects::nonNull).distinct().count();
+        return (int) Math.max(1, Math.min(Integer.MAX_VALUE, capacity));
     }
 
     @Scheduled(fixedDelayString = "${crawler.task-queue-dispatch-delay-ms:500}", initialDelay = 1000)
@@ -1232,9 +1272,7 @@ public class CrawlerTaskService {
             queuesById.put(queue.getId(), queue);
             if (queue.getSite() != null) queuesBySite.put(queue.getSite().getId(), queue);
         }
-        long concurrency = queues.stream()
-                .mapToLong(queue -> value(queue.getMaxConcurrentTasks(), 1)).sum();
-        applyConcurrencyLimit((int) Math.max(1, Math.min(Integer.MAX_VALUE, concurrency)));
+        applyConcurrencyLimit(distinctExecutorCapacity(queues));
 
         Map<Long, Integer> scheduledByQueue = new HashMap<>();
         activeTaskQueues.values().forEach(queueId -> scheduledByQueue.merge(queueId, 1, Integer::sum));
@@ -1260,7 +1298,7 @@ public class CrawlerTaskService {
             if (queueActive >= executors.size()) continue;
             CrawlerQueueExecutor selectedExecutor = executors.stream()
                     .filter(candidate -> !activeTaskExecutors.containsValue(candidate.getId()))
-                    .filter(candidate -> queueExecutorService.canExecute(site, candidate))
+                    .filter(candidate -> queueExecutorService.canExecute(site, candidate, queue.getId()))
                     .findFirst().orElse(null);
             if (selectedExecutor == null) continue;
             int intervalSeconds = value(queue.getTaskIntervalSeconds(), 0);

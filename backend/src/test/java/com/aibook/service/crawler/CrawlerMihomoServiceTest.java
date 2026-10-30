@@ -48,6 +48,27 @@ class CrawlerMihomoServiceTest {
     private final CrawlerMihomoPolicy config = new CrawlerMihomoPolicy();
     private String actual = "A";
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void sharedQueueCanReadPolicyButCannotSwitchOrEditWhileOccupied() throws Exception {
+        executor.getSharedQueueIds().add(9L);
+        assertNotNull(service.get(user, 9L, 4L));
+        assertThrows(ResponseStatusException.class, () -> service.get(User.builder().id(99L).build(), 9L, 4L));
+        var tasks = mock(CrawlerTaskService.class);
+        var provider = mock(org.springframework.beans.factory.ObjectProvider.class);
+        when(provider.getObject()).thenReturn(tasks);
+        when(tasks.isExecutorBusy(4L)).thenReturn(true);
+        ReflectionTestUtils.setField(service, "taskServices", provider);
+        var switched = assertThrows(ResponseStatusException.class,
+                () -> service.switchManually(user, 9L, 4L, "B"));
+        assertEquals(409, switched.getStatusCode().value());
+        assertThrows(ResponseStatusException.class, () -> service.saveReference(user, 9L, 4L, null));
+        assertThrows(ResponseStatusException.class, () -> service.save(user, 9L, 4L, null));
+        assertThrows(ResponseStatusException.class, () -> service.unbind(user, 9L, 4L));
+        assertThrows(ResponseStatusException.class, () -> service.migrateLegacy(user, 9L, 4L));
+        assertEquals("A", config.getCurrentNode());
+    }
+
     @BeforeEach
     void setUp() throws Exception {
         config.setExecutorId(4L);

@@ -48,6 +48,107 @@ class CrawlerQueueExecutorLifecycleTest {
         when(cooldowns.findByQueueId(2L)).thenReturn(List.of());
     }
 
+    private CrawlerTaskQueue sharedTarget() {
+        var target = CrawlerTaskQueue.builder().id(9L).user(user).queueName("另一个网站")
+                .executorsInitialized(true).maxConcurrentTasks(0).build();
+        when(queues.findById(9L)).thenReturn(Optional.of(target));
+        when(executors.findByQueueIdOrderBySortOrderAscIdAsc(9L)).thenAnswer(call ->
+                rows.stream().filter(row -> row.getSharedQueueIds().contains(9L)
+                        || Objects.equals(row.getQueue().getId(), 9L)).toList());
+        return target;
+    }
+
+    @Test
+    void sharesSameIdentityAndEditsSynchronizeAcrossQueues() {
+        var target = sharedTarget();
+        executor.setAssigned(false);
+        var shared = service.share(user, 9L, 3L);
+        assertThat(shared.queueId()).isEqualTo(9L);
+        assertThat(shared.assigned()).isTrue();
+        assertThat(shared.shared()).isTrue();
+        assertThat(target.getMaxConcurrentTasks()).isEqualTo(1);
+        assertThat(service.enabledExecutors(9L)).containsExactly(executor);
+        assertThat(service.enabledExecutors(2L)).isEmpty();
+        service.validateOwnership(user, 9L, 3L);
+        service.update(user, 9L, 3L, new QueueExecutorPayload("共享新名称", "同步说明", false,
+                CrawlerQueueExecutor.ProxyMode.DEFAULT,
+                CrawlerQueueExecutor.SelectionStrategy.RANDOM, 60, List.of()));
+        assertThat(executor.getName()).isEqualTo("共享新名称");
+        assertThat(service.list(user, 2L).getFirst().name()).isEqualTo("共享新名称");
+        assertThat(service.enabledExecutors(9L)).isEmpty();
+        assertThat(target.getMaxConcurrentTasks()).isZero();
+        verify(executors, never()).save(argThat(item -> item != executor));
+    }
+
+    @Test
+    void removingSharedQueueDoesNotDeleteExecutorOrProxyConfiguration() {
+        sharedTarget();
+        service.share(user, 9L, 3L);
+        service.delete(user, 9L, 3L, false);
+        assertThat(executor.getSharedQueueIds()).isEmpty();
+        assertThat(service.enabledExecutors(2L)).containsExactly(executor);
+        verify(executors, never()).delete(any());
+        verify(mihomo, never()).delete(anyLong());
+        verify(bindings, never()).deleteByExecutorId(anyLong());
+    }
+
+    @Test
+    void removingSourceQueuePreservesOtherQueueAndBusyRemovalIsRejected() {
+        sharedTarget();
+        service.share(user, 9L, 3L);
+        assertThatThrownBy(() -> service.delete(user, 9L, 3L, true))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThat(executor.getSharedQueueIds()).contains(9L);
+        service.delete(user, 2L, 3L, false);
+        assertThat(executor.getAssigned()).isFalse();
+        assertThat(service.enabledExecutors(9L)).containsExactly(executor);
+        assertThat(service.enabledExecutors(2L)).isEmpty();
+        verify(executors, never()).delete(any());
+    }
+
+    @Test
+    void catalogAndSharingRejectOtherAccountAndPendingDeletion() {
+        sharedTarget();
+        var foreign = CrawlerQueueExecutor.builder().id(12L).name("外部账户")
+                .queue(CrawlerTaskQueue.builder().id(20L).user(User.builder().id(99L).build()).build()).build();
+        when(executors.findAll()).thenReturn(List.of(executor, foreign));
+        when(executors.findById(12L)).thenReturn(Optional.of(foreign));
+        assertThat(service.shareOptions(user, 9L)).extracting(option -> option.id()).containsExactly(3L);
+        assertThatThrownBy(() -> service.share(user, 9L, 12L)).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.share(User.builder().id(99L).build(), 9L, 3L))
+                .isInstanceOf(ResponseStatusException.class);
+        executor.setDeletionPending(true);
+        assertThat(service.shareOptions(user, 9L)).isEmpty();
+        assertThatThrownBy(() -> service.share(user, 9L, 3L)).isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    void duplicateSharingIsIdempotentAndQueueLimitIsEnforced() {
+        sharedTarget();
+        service.share(user, 9L, 3L);
+        service.share(user, 9L, 3L);
+        assertThat(executor.getSharedQueueIds()).containsExactly(9L);
+        assertThat(service.shareOptions(user, 9L)).isEmpty();
+        executor.getSharedQueueIds().clear();
+        when(executors.findByQueueIdOrderBySortOrderAscIdAsc(9L))
+                .thenReturn(java.util.Collections.nCopies(16, executor));
+        assertThatThrownBy(() -> service.share(user, 9L, 3L)).isInstanceOf(ResponseStatusException.class);
+        assertThat(executor.getSharedQueueIds()).isEmpty();
+    }
+
+    @Test
+    void deletingOriginalWebsiteRehomesSharedIdentityWithoutDeletingMihomo() {
+        var target = sharedTarget();
+        service.share(user, 9L, 3L);
+        service.deleteQueueData(2L);
+        assertThat(executor.getQueue()).isSameAs(target);
+        assertThat(executor.getId()).isEqualTo(3L);
+        assertThat(executor.getSharedQueueIds()).doesNotContain(9L);
+        assertThat(executor.getAssigned()).isTrue();
+        verify(mihomo, never()).delete(anyLong());
+        verify(executors, never()).delete(any());
+    }
+
     private QueueExecutorPayload payload() {
         return new QueueExecutorPayload("新执行器", null, true, CrawlerQueueExecutor.ProxyMode.DEFAULT,
                 CrawlerQueueExecutor.SelectionStrategy.ORDERED, null, List.of());
