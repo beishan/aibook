@@ -14,7 +14,7 @@
           :alt="displayBookName(player.book.title)"
           class="audio-art"
         />
-        <div v-else class="audio-art audio-cover-placeholder" aria-hidden="true">♫</div>
+        <div v-else class="audio-art audio-cover-placeholder" aria-hidden="true"><BookCoverPlaceholderText :title="displayBookName(player.book.title)" /></div>
         <h1>{{ displayBookName(player.book.title) }}</h1>
         <p>{{ player.book.author }} · 演播 {{ player.book.narrator || '未填写' }}</p>
         <h2>{{ player.chapter?.title || player.track?.title }}</h2>
@@ -80,6 +80,7 @@
   </main>
 </template>
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessageBox } from 'element-plus'

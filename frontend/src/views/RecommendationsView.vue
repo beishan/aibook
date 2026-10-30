@@ -42,7 +42,7 @@
         <article v-for="book in group.books" :key="book.id" class="recommended-book">
           <router-link :to="`/books/${book.id}`" class="cover" :aria-label="`查看《${displayBookName(book.title)}》详情`">
             <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" alt="" loading="lazy" />
-            <span v-else class="cover-placeholder">{{ displayBookName(book.title).slice(0, 2) }}</span>
+            <span v-else class="cover-placeholder"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></span>
           </router-link>
           <router-link :to="`/books/${book.id}`" class="book-title">{{ displayBookName(book.title) }}</router-link>
           <p class="muted author">{{ book.author || '未知作者' }}</p>
@@ -136,6 +136,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { confirm, message } from '@/utils/message'

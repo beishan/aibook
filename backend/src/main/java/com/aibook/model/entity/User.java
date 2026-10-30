@@ -459,6 +459,14 @@ public class User implements UserDetails {
         preference().setBookCoverVisibilityOverrides(value);
     }
 
+    public String getBookCoverPlaceholderSettings() {
+        return preference().getBookCoverPlaceholderSettings();
+    }
+
+    public void setBookCoverPlaceholderSettings(String value) {
+        preference().setBookCoverPlaceholderSettings(value);
+    }
+
     public String getBookCardBadgeSettings() {
         return preference().getBookCardBadgeSettings();
     }

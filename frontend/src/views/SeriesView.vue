@@ -42,7 +42,7 @@
               <span class="volume-number">{{ book.seriesIndex ?? '—' }}</span>
               <router-link :to="`/books/${book.id}`" class="cover" :aria-label="`查看${displayBookName(book.title)}`">
                 <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 'list')" alt="" loading="lazy" decoding="async" />
-                <span v-else aria-hidden="true">{{ displayBookName(book.title).charAt(0) }}</span>
+                <span v-else aria-hidden="true"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></span>
               </router-link>
               <div class="volume-info"><span class="volume-label">{{ volumeLabel(book.seriesIndex) }}</span>
                 <router-link :to="`/books/${book.id}`" class="volume-title">{{ displayBookName(book.title) }}</router-link>
@@ -62,6 +62,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'

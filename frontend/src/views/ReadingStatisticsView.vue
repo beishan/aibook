@@ -166,7 +166,7 @@
                 :src="getCoverThumbnailUrl(book.coverUrl, 'list')"
                 alt=""
               />
-              <span v-else>{{ displayBookName(book.title).charAt(0) }}</span>
+              <span v-else><BookCoverPlaceholderText :title="displayBookName(book.title)" /></span>
             </div>
             <div class="top-book-meta">
               <div class="top-book-title">{{ displayBookName(book.title) }}</div>
@@ -181,6 +181,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'

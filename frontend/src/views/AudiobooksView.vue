@@ -78,7 +78,7 @@
           :src="getCoverThumbnailUrl(item.coverUrl, 'detail')"
           :alt="`${displayBookName(item.title)}封面`"
         />
-        <div v-else class="audio-cover-placeholder" aria-hidden="true">♫</div>
+        <div v-else class="audio-cover-placeholder" aria-hidden="true"><BookCoverPlaceholderText :title="displayBookName(item.title)" /></div>
         <div class="audio-card-summary">
           <small class="audio-badge">{{ item.ebookFormat ? '电子 + 有声' : '有声版' }}</small>
           <h2>{{ displayBookName(item.title) }}</h2>
@@ -114,6 +114,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/utils/api'

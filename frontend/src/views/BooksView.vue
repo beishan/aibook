@@ -355,7 +355,7 @@
             decoding="async"
           />
           <div v-else class="no-cover">
-            <span>{{ displayBookName(book.title).charAt(0) }}</span>
+            <span><BookCoverPlaceholderText :title="displayBookName(book.title)" /></span>
           </div>
           <BookCoverPrivacyButton
             v-if="book.coverUrl && !selectionMode"
@@ -484,7 +484,7 @@
             :loading="index < PRIORITY_COVER_COUNT ? 'eager' : 'lazy'"
             decoding="async"
           />
-          <div v-else class="no-cover-small">{{ displayBookName(row.title).charAt(0) }}</div>
+          <div v-else class="no-cover-small"><BookCoverPlaceholderText :title="displayBookName(row.title)" /></div>
           <BookCoverPrivacyButton
             v-if="row.coverUrl && !selectionMode"
             :book-id="row.id"
@@ -697,6 +697,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import AudioSegmented from '@/components/audio/AudioSegmented.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, computed, nextTick, onMounted, watch } from 'vue'

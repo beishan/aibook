@@ -7,13 +7,14 @@
       :loading="eager ? 'eager' : 'lazy'"
     />
     <span v-else class="cover-letter" aria-hidden="true">
-      <span>{{ displayBookName(book.title).slice(0, 2) }}</span>
+      <span><BookCoverPlaceholderText :title="displayBookName(book.title)" /></span>
       <small>{{ book.format?.toUpperCase() }}</small>
     </span>
   </span>
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed } from 'vue'
 import type { HomeBook } from '@/utils/home'

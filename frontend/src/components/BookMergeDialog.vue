@@ -39,7 +39,7 @@
             :class="{ selected: targetBookId === book.id }"
             @click="targetBookId = book.id"
           >
-            <span class="merge-book-mark">{{ displayBookName(book.title).slice(0, 1) }}</span>
+            <span class="merge-book-mark"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></span>
             <span class="merge-book-copy">
               <strong>{{ displayBookName(book.title) }}</strong>
               <small>{{ book.author || '未知作者' }} · {{ versionsFor(book.id).length }} 个版本</small>
@@ -92,6 +92,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, ref } from 'vue'
 import type { Book } from '@/stores/book'

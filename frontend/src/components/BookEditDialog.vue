@@ -12,7 +12,7 @@
       <div class="cover-editor">
         <div class="cover-preview">
           <img v-if="previewUrl" :src="previewUrl" alt="封面预览" />
-          <div v-else class="cover-placeholder">{{ form.title.charAt(0) || '书' }}</div>
+          <div v-else class="cover-placeholder"><BookCoverPlaceholderText :title="form.title" /></div>
         </div>
         <div class="cover-upload">
           <el-button @click="coverInput?.click()">选择封面</el-button>
@@ -118,6 +118,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { computed, reactive, ref, watch } from 'vue'
 import { message } from '@/utils/message'
 import { useBookStore, type Book } from '@/stores/book'

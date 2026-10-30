@@ -11,7 +11,7 @@
         :src="getCoverThumbnailUrl(book.coverUrl, 'detail')"
         :alt="displayBookName(book.title)"
       />
-      <div v-else class="audio-cover-placeholder">♫</div>
+      <div v-else class="audio-cover-placeholder"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
       <div class="audio-summary">
         <small>有声书 · {{ book.language }}</small>
         <h1>{{ displayBookName(book.title) }}</h1>
@@ -142,6 +142,7 @@
   <p v-else role="status">正在加载有声版本…</p>
 </template>
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'

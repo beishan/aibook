@@ -50,7 +50,7 @@
                     <article v-for="book in libraryBooks" :key="book.id" class="library-book-card" :class="{ selected: selectedBookId === book.id }">
                       <div class="library-book-cover">
                         <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" :alt="`${displayBookName(book.title)}封面`" loading="lazy" decoding="async" />
-                        <span v-else>{{ displayBookName(book.title)?.charAt(0) || '书' }}</span>
+                        <span v-else><BookCoverPlaceholderText :title="displayBookName(book.title)" /></span>
                         <em>{{ (book.format || '未知').toUpperCase() }}</em>
                       </div>
                       <div class="library-book-info">
@@ -65,7 +65,7 @@
                     <article v-for="book in libraryBooks" :key="book.id" class="library-book-list-row" :class="{ selected: selectedBookId === book.id }">
                       <div class="library-list-cover">
                         <img v-if="book.coverUrl && shouldLoadBookCover(book.id)" :src="getCoverThumbnailUrl(book.coverUrl, 'card')" :alt="`${displayBookName(book.title)}封面`" loading="lazy" decoding="async" />
-                        <span v-else>{{ displayBookName(book.title)?.charAt(0) || '书' }}</span>
+                        <span v-else><BookCoverPlaceholderText :title="displayBookName(book.title)" /></span>
                       </div>
                       <div class="library-list-primary">
                         <h3 :title="displayBookName(book.title)">{{ displayBookName(book.title) }}</h3>
@@ -92,7 +92,7 @@
           <section class="panel source-card">
             <div class="section-title"><div><span class="step">02</span><h2>源书籍信息</h2></div><el-button link @click="activeTab = 'select'">更换源文件</el-button></div>
             <div class="source-grid">
-              <div class="cover-box" @click="coverInput?.click()"><img v-if="coverObjectUrl && shouldLoadBookCover()" :src="coverObjectUrl" alt="书籍封面" /><span v-else>{{ displayBookName(task.title)?.charAt(0) || '书' }}</span><em>点击上传封面</em></div>
+              <div class="cover-box" @click="coverInput?.click()"><img v-if="coverObjectUrl && shouldLoadBookCover()" :src="coverObjectUrl" alt="书籍封面" /><span v-else><BookCoverPlaceholderText :title="displayBookName(task.title)" /></span><em>点击上传封面</em></div>
               <input ref="coverInput" hidden type="file" accept="image/jpeg,image/png,image/webp" @change="uploadCover" />
               <div class="source-main"><h3>{{ displayBookName(task.title) }}</h3><p>{{ task.author || '未知作者' }}</p><div class="facts"><span><b>转换</b> {{ conversionDirection }}</span><span><b>大小</b> {{ formatSize(task.sourceSize) }}</span><span><b>输出编码</b> {{ task.targetFormat === 'txt' ? 'UTF-8' : task.encoding }}</span><span><b>字符</b> {{ formatNumber(task.characterCount) }}</span><span><b>章节</b> {{ task.chapters?.length || 0 }}</span><span><b>换行</b> {{ task.newlineFormat }}</span></div><div class="cover-actions"><el-button @click="coverInput?.click()">上传封面</el-button><el-button @click="openCoverLibrary">封面库</el-button><el-button :loading="randomizing" @click="randomCover">随机一个</el-button></div></div>
             </div>
@@ -149,6 +149,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'

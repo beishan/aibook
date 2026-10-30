@@ -1,9 +1,10 @@
 {
   "name": "aibook-frontend",
-  "version": "1.49.4",
+  "version": "1.49.5",
   "description": "汗牛充栋 - 阅读书籍管理系统前端",
   "type": "module",
   "scripts": {
+    "test:book-cover-placeholder": "node scripts/check-book-cover-placeholder.mjs",
     "test:book-card-badges": "node scripts/check-book-card-badges.mjs",
     "test:other-page-performance": "node scripts/check-other-page-performance.mjs",
     "test:library-card-performance": "node scripts/check-library-card-performance.mjs",

@@ -1,3 +1,4 @@
+import { hydrateBookCoverPlaceholder } from '@/utils/bookCoverPlaceholder'
 import { hydrateBookCardBadges } from '@/utils/bookCardBadges'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
@@ -48,6 +49,7 @@ const bootstrap = async () => {
         hydrateRandomCoverPrivacy(profile.id),
         hydrateBookCoverImageSizes(),
         hydrateBookCardBadges(),
+        hydrateBookCoverPlaceholder(),
       ])
     }
     void dockIconStore.hydrate()

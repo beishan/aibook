@@ -176,7 +176,7 @@
                   loading="lazy"
                   @error="failedCovers.add(book.id)"
                 />
-                <span v-else class="trial-cover-placeholder">{{ displayBookName(book.title) }}</span>
+                <span v-else class="trial-cover-placeholder"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></span>
                 <span v-if="selected?.id === book.id" class="trial-card-check" aria-hidden="true">✓</span>
               </span>
               <span class="trial-card-title" :title="displayBookName(book.title)">{{ displayBookName(book.title) }}</span>
@@ -318,7 +318,7 @@
                 @error="resultCoverFailed = true"
               />
               <div v-else class="trial-cover-placeholder">
-                <strong>{{ displayBookName(formatValue(snapshot.metadata.title)) }}</strong>
+                <strong><BookCoverPlaceholderText :title="displayBookName(formatValue(snapshot.metadata.title))" /></strong>
                 <p>{{ resultCoverMessage }}</p>
                 <el-button v-if="resultCoverFailed && resultCoverVisible" size="small" @click="resultCoverFailed = false">重试加载</el-button>
               </div>
@@ -483,6 +483,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import api from '@/utils/api'

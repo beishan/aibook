@@ -55,7 +55,7 @@
               :src="getCoverThumbnailUrl(book.coverUrl, 'detail')"
               alt=""
             />
-            <span v-else>{{ displayBookName(book.title)?.slice(0, 1) || '书' }}</span>
+            <span v-else><BookCoverPlaceholderText :title="displayBookName(book.title)" /></span>
           </div>
           <div class="reader-book-identity">
             <div class="reader-book-line">
@@ -122,7 +122,7 @@
                   :src="getCoverThumbnailUrl(book.coverUrl, 'detail')"
                   alt=""
                 />
-                <span v-else>{{ displayBookName(book.title)?.slice(0, 1) || '书' }}</span>
+                <span v-else><BookCoverPlaceholderText :title="displayBookName(book.title)" /></span>
               </div>
               <div class="blue-book-details">
                 <strong :title="displayBookName(book.title)">{{ displayBookName(book.title) }}</strong>
@@ -1057,6 +1057,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'

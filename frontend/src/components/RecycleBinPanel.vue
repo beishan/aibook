@@ -87,7 +87,7 @@
                 :src="getCoverThumbnailUrl(row.coverUrl, 'list')"
                 alt=""
               />
-              <span v-else>{{ displayBookName(row.title)?.charAt(0) || '书' }}</span>
+              <span v-else><BookCoverPlaceholderText :title="displayBookName(row.title)" /></span>
             </div>
             <div class="book-summary">
               <strong :title="displayBookName(row.title)">{{ displayBookName(row.title) }}</strong>
@@ -127,6 +127,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { onMounted, ref } from 'vue'
 import { Delete, DeleteFilled, RefreshRight, Search } from '@element-plus/icons-vue'

@@ -91,7 +91,7 @@
               class="cover-image"
             />
             <div v-else class="no-cover">
-              <span>{{ displayBookName(book.title).charAt(0) }}</span>
+              <span><BookCoverPlaceholderText :title="displayBookName(book.title)" /></span>
             </div>
           </div>
           <div class="cover-action-row">
@@ -923,7 +923,7 @@
         <div v-loading="candidateLoading" class="version-candidate-list">
           <button v-for="candidate in versionCandidates" :key="candidate.id" type="button" class="version-candidate" :class="{ selected: isVersionCandidateSelected(candidate.id) }" @click="toggleVersionCandidate(candidate)">
             <el-checkbox :model-value="isVersionCandidateSelected(candidate.id)" tabindex="-1" @click.stop @change="toggleVersionCandidate(candidate)" />
-            <span class="version-candidate-cover">{{ displayBookName(candidate.title).slice(0, 1) }}</span>
+            <span class="version-candidate-cover"><BookCoverPlaceholderText :title="displayBookName(candidate.title)" /></span>
             <span class="version-candidate-info"><strong>{{ displayBookName(candidate.title) }}</strong><small>{{ candidate.author || '未知作者' }} · {{ candidate.format.toUpperCase() }} · {{ candidate.versionCount }} 个版本</small></span>
             <el-tag v-if="candidate.sameTitle" size="small" type="success" effect="plain">同名推荐</el-tag>
           </button>
@@ -1052,6 +1052,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import BookAudiobookPanel from '@/components/audio/BookAudiobookPanel.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { computed, reactive, ref, onMounted, nextTick, watch } from 'vue'

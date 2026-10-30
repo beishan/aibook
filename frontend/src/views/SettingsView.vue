@@ -152,6 +152,7 @@
       <BookNameDisplaySettingsPanel />
       <BookCoverDisplaySettingsPanel />
       <BookCardBadgeSettingsPanel />
+      <BookCoverPlaceholderSettingsPanel />
     </div>
 
     <!-- 扫描目录 -->
@@ -723,6 +724,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderSettingsPanel from '@/components/BookCoverPlaceholderSettingsPanel.vue'
 import BookCardBadgeSettingsPanel from '@/components/BookCardBadgeSettingsPanel.vue'
 import { ref, reactive, onMounted, onUnmounted, computed, watch, defineAsyncComponent, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'

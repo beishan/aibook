@@ -198,7 +198,7 @@
                 :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
                 alt="封面"
               />
-              <div v-else class="no-cover">{{ displayBookName(book.title).charAt(0) }}</div>
+              <div v-else class="no-cover"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
               <BookCoverPrivacyButton
                 v-if="book.coverUrl"
                 :book-id="book.id"
@@ -357,7 +357,7 @@
               :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
               alt="封面"
             />
-            <div v-else class="no-cover">{{ displayBookName(book.title).charAt(0) }}</div>
+            <div v-else class="no-cover"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
             <BookCoverPrivacyButton
               v-if="book.coverUrl"
               :book-id="book.id"
@@ -445,7 +445,7 @@
               :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
               alt="封面"
             />
-            <div v-else class="no-cover">{{ displayBookName(book.title).charAt(0) }}</div>
+            <div v-else class="no-cover"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
             <BookCoverPrivacyButton
               v-if="book.coverUrl"
               :book-id="book.id"
@@ -551,7 +551,7 @@
               :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
               alt="封面"
             />
-            <div v-else class="no-cover">{{ displayBookName(book.title).charAt(0) }}</div>
+            <div v-else class="no-cover"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
             <BookCoverPrivacyButton
               v-if="book.coverUrl"
               :book-id="book.id"
@@ -639,7 +639,7 @@
               :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
               alt="封面"
             />
-            <div v-else class="no-cover">{{ displayBookName(book.title).charAt(0) }}</div>
+            <div v-else class="no-cover"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
             <BookCoverPrivacyButton
               v-if="book.coverUrl"
               :book-id="book.id"
@@ -732,7 +732,7 @@
                 :src="getCoverThumbnailUrl(book.coverUrl, 'list')"
                 alt="封面"
               />
-              <div v-else class="no-cover-small">{{ displayBookName(book.title).charAt(0) }}</div>
+              <div v-else class="no-cover-small"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
               <BookCoverPrivacyButton
                 v-if="book.coverUrl"
                 :book-id="book.id"
@@ -833,6 +833,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import BookCardBadges from '@/components/BookCardBadges.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, computed, onMounted, watch, nextTick } from 'vue'

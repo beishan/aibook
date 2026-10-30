@@ -495,7 +495,7 @@
         <el-table-column label="书籍" min-width="260">
           <template #default="{row}">
             <div class="book-cell">
-              <div class="mini-cover">{{ displayCrawlerBookName(row.bookName).slice(0,1) }}</div>
+              <div class="mini-cover"><BookCoverPlaceholderText :title="displayCrawlerBookName(row.bookName)" /></div>
               <div>
                 <div class="discovery-book-title">
                   <strong><CrawlerBookTitle :title="row.bookName" /></strong>
@@ -603,7 +603,7 @@
               </el-dropdown>
             </div>
             <div class="discovery-card-cover">
-              <span>{{ displayCrawlerBookName(book.bookName).slice(0,1) }}</span>
+              <span><BookCoverPlaceholderText :title="displayCrawlerBookName(book.bookName)" /></span>
               <img
                 v-if="book.coverUrl && shouldLoadBookCover()"
                 v-queued-cover="getCoverThumbnailUrl(book.coverUrl, 'card')"
@@ -717,7 +717,7 @@
         <el-table-column label="书籍" min-width="280">
           <template #default="{ row }">
             <div class="book-cell">
-              <div class="mini-cover">{{ displayCrawlerBookName(row.bookName).slice(0, 1) }}</div>
+              <div class="mini-cover"><BookCoverPlaceholderText :title="displayCrawlerBookName(row.bookName)" /></div>
               <div>
                 <strong><CrawlerBookTitle :title="row.bookName" /></strong>
                 <p class="book-source-line">
@@ -803,7 +803,7 @@
               </el-dropdown>
             </div>
             <div class="discovery-card-cover">
-              <span>{{ displayCrawlerBookName(book.bookName).slice(0,1) }}</span>
+              <span><BookCoverPlaceholderText :title="displayCrawlerBookName(book.bookName)" /></span>
               <img
                 v-if="book.coverUrl && shouldLoadBookCover()"
                 v-queued-cover="getCoverThumbnailUrl(book.coverUrl, 'card')"
@@ -1501,7 +1501,7 @@
       append-to-body
     >
       <div v-if="importTargets.length" class="import-book-dialog">
-        <div v-if="importTarget" class="status-book"><span class="mini-cover">{{ displayCrawlerBookName(importTarget.bookName).slice(0,1) }}</span><div><strong><CrawlerBookTitle :title="importTarget.bookName" /></strong><p>{{ importTarget.author || '未知作者' }} · 已有正文 {{ importTarget.crawledChapterCount }} / {{ importTarget.chapterCount }} 章</p></div></div>
+        <div v-if="importTarget" class="status-book"><span class="mini-cover"><BookCoverPlaceholderText :title="displayCrawlerBookName(importTarget.bookName)" /></span><div><strong><CrawlerBookTitle :title="importTarget.bookName" /></strong><p>{{ importTarget.author || '未知作者' }} · 已有正文 {{ importTarget.crawledChapterCount }} / {{ importTarget.chapterCount }} 章</p></div></div>
         <div v-else class="status-book"><span class="mini-cover">批</span><div><strong>批量处理 {{ importTargets.length }} 本书</strong><p>其中 {{ importTargets.filter(book=>book.importStatus==='IMPORTED').length }} 本已入库，将同步为新版本</p></div></div>
         <div><p class="field-label">选择入库方式与附加导出</p><el-checkbox-group v-model="importFormats" :disabled="importing||Boolean(importResumeJobId)" class="crawler-multiselect-group format-options"><el-checkbox-button class="crawler-multiselect" v-for="option in importFormatOptions" :key="option.value" :value="option.value"><strong>{{ option.label }}</strong><small>{{ option.description }}</small></el-checkbox-button></el-checkbox-group></div>
         <el-alert v-if="importTargets.some(book=>book.crawlStatus!=='COMPLETED')" type="warning" :closable="false" :title="importTargets.length>1?'未完整采集的书籍只会加入已有正文；没有可用正文的书籍会显示失败原因。':'当前书籍尚未完整采集，所选格式只会包含已有正文。'" />
@@ -1625,7 +1625,7 @@
 
     <el-dialog v-model="statusDialog" title="人工修改采集状态" width="min(520px, 94vw)" append-to-body>
       <div v-if="statusBook" class="status-dialog-content">
-        <div class="status-book"><span class="mini-cover">{{ displayCrawlerBookName(statusBook.bookName).slice(0,1) }}</span><div><strong><CrawlerBookTitle :title="statusBook.bookName" /></strong><p>当前状态：{{ statusLabel(statusBook.crawlStatus) }} · 已有正文 {{ statusBook.crawledChapterCount }} / {{ statusBook.chapterCount }} 章</p></div></div>
+        <div class="status-book"><span class="mini-cover"><BookCoverPlaceholderText :title="displayCrawlerBookName(statusBook.bookName)" /></span><div><strong><CrawlerBookTitle :title="statusBook.bookName" /></strong><p>当前状态：{{ statusLabel(statusBook.crawlStatus) }} · 已有正文 {{ statusBook.crawledChapterCount }} / {{ statusBook.chapterCount }} 章</p></div></div>
         <el-form label-position="top"><el-form-item label="修改为"><el-select v-model="manualStatus"><el-option v-for="item in manualStatusOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-form>
         <el-alert type="warning" :closable="false" title="只调整整本书状态，不会补齐缺失章节或改变章节统计；后续任务仍需人工触发。" />
       </div>
@@ -2095,7 +2095,7 @@
     <el-drawer v-model="bookDrawer" size="min(1240px, 98vw)" :title="displayCrawlerBookName(selectedBook?.bookName) || '采集书籍详情'" class="book-detail-drawer">
       <template #header><CrawlerBookTitle :title="selectedBook?.bookName || '采集书籍详情'" /></template>
       <div v-if="selectedBook" class="book-drawer-content">
-        <div class="book-summary"><div class="large-cover">{{ displayCrawlerBookName(selectedBook.bookName).slice(0,1) }}</div><div><h2><CrawlerBookTitle :title="selectedBook.bookName" /></h2><p class="book-source-line"><span>{{ selectedBook.author || '未知作者' }}</span><SiteSourceTag :name="selectedBook.siteName" :color="selectedBook.siteThemeColor" /></p><div v-if="isBookCompleted(selectedBook)" class="book-crawl-result drawer-result"><div><span>采集结果详情</span><strong>采集完成</strong></div><small>正文 {{ selectedBook.crawledChapterCount }} 章 · 待开放 {{ selectedBook.pendingReleaseChapterCount }} 章 · 失败 {{ selectedBook.failedChapterCount }} 章</small></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(selectedBook)}" :percentage="progress(selectedBook)"/><small>正文 {{ selectedBook.crawledChapterCount }} / {{ selectedBook.chapterCount }} 章，待开放 {{ selectedBook.pendingReleaseChapterCount }}，失败 {{ selectedBook.failedChapterCount }}</small></template></div></div>
+        <div class="book-summary"><div class="large-cover"><BookCoverPlaceholderText :title="displayCrawlerBookName(selectedBook.bookName)" /></div><div><h2><CrawlerBookTitle :title="selectedBook.bookName" /></h2><p class="book-source-line"><span>{{ selectedBook.author || '未知作者' }}</span><SiteSourceTag :name="selectedBook.siteName" :color="selectedBook.siteThemeColor" /></p><div v-if="isBookCompleted(selectedBook)" class="book-crawl-result drawer-result"><div><span>采集结果详情</span><strong>采集完成</strong></div><small>正文 {{ selectedBook.crawledChapterCount }} 章 · 待开放 {{ selectedBook.pendingReleaseChapterCount }} 章 · 失败 {{ selectedBook.failedChapterCount }} 章</small></div><template v-else><el-progress :class="{'crawler-running-progress':isBookRunning(selectedBook)}" :percentage="progress(selectedBook)"/><small>正文 {{ selectedBook.crawledChapterCount }} / {{ selectedBook.chapterCount }} 章，待开放 {{ selectedBook.pendingReleaseChapterCount }}，失败 {{ selectedBook.failedChapterCount }}</small></template></div></div>
         <div class="crawler-book-metadata"><span><small>来源状态</small><strong>{{ selectedBook.bookStatus || '未识别' }}</strong></span><span><small>分类</small><strong>{{ selectedBook.category || '未分类' }}</strong></span><span class="metadata-tag-row"><small>标签</small><span v-if="selectedBook.tags?.length" class="metadata-tags"><el-tag v-for="tag in selectedBook.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></span><strong v-else>无</strong></span></div>
         <div v-if="selectedBook.libraryBookId" class="library-sync-control"><div><strong>自动同步到书库</strong><p>检查更新或续采成功后，自动发布为同一本书的新版本。</p></div><el-switch :model-value="selectedBook.autoSyncLibrary" @change="toggleLibrarySync(selectedBook,Boolean($event))" /></div>
         <div class="drawer-actions">
@@ -2427,6 +2427,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import { useCrawlerBookNameDisplay } from '@/composables/useCrawlerBookNameDisplay'
 import CrawlerBookTitle from '@/components/CrawlerBookTitle.vue'
 import {

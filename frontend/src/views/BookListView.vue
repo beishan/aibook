@@ -33,7 +33,7 @@
             :src="getCoverThumbnailUrl(book.coverUrl, 'card')"
             alt="封面"
           />
-          <div v-else class="no-cover">{{ displayBookName(book.title).charAt(0) }}</div>
+          <div v-else class="no-cover"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
           <BookCoverPrivacyButton
             v-if="book.coverUrl"
             :book-id="book.id"
@@ -56,6 +56,7 @@
 </template>
 
 <script setup lang="ts">
+import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import BookCardBadges from '@/components/BookCardBadges.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
 import { ref, onMounted } from 'vue'
