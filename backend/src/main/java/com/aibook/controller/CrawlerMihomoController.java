@@ -13,56 +13,57 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
-@RequestMapping("/api/crawler/tasks/queues/{queueId}/executors/{executorId}/mihomo")
+@RequestMapping({"/api/crawler/tasks/queues/{queueId}/executors/{executorId}/mihomo",
+        "/api/crawler/tasks/executors/{executorId}/mihomo"})
 @RequiredArgsConstructor
 public class CrawlerMihomoController {
     private final CrawlerMihomoService service;
     private final UserService users;
 
     @GetMapping
-    public PolicyView get(Authentication auth, @PathVariable Long queueId, @PathVariable Long executorId) {
+    public PolicyView get(Authentication auth, @PathVariable(required = false) Long queueId, @PathVariable Long executorId) {
         return service.get(users.findByUsername(auth.getName()), queueId, executorId);
     }
 
     @PutMapping
-    public PolicyView save(Authentication auth, @PathVariable Long queueId, @PathVariable Long executorId,
+    public PolicyView save(Authentication auth, @PathVariable(required = false) Long queueId, @PathVariable Long executorId,
             @RequestBody PolicyPayload payload) throws Exception {
         return service.save(users.findByUsername(auth.getName()), queueId, executorId, payload);
     }
 
     @PostMapping("/catalog")
-    public CatalogView catalog(Authentication auth, @PathVariable Long queueId, @PathVariable Long executorId,
+    public CatalogView catalog(Authentication auth, @PathVariable(required = false) Long queueId, @PathVariable Long executorId,
             @RequestBody PolicyPayload draft) throws Exception {
         return service.browse(users.findByUsername(auth.getName()), queueId, executorId, draft);
     }
 
     @PutMapping("/selection")
-    public PolicyView selection(Authentication auth, @PathVariable Long queueId, @PathVariable Long executorId,
+    public PolicyView selection(Authentication auth, @PathVariable(required = false) Long queueId, @PathVariable Long executorId,
             @RequestBody ReferencePayload request) throws Exception {
         return service.saveReference(users.findByUsername(auth.getName()), queueId, executorId, request);
     }
 
     @PostMapping("/migrate")
     @PreAuthorize("hasRole('ADMIN')")
-    public PolicyView migrate(Authentication auth, @PathVariable Long queueId, @PathVariable Long executorId) throws Exception {
+    public PolicyView migrate(Authentication auth, @PathVariable(required = false) Long queueId, @PathVariable Long executorId) throws Exception {
         return service.migrateLegacy(users.findByUsername(auth.getName()), queueId, executorId);
     }
 
     @DeleteMapping("/selection")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void unbind(Authentication auth, @PathVariable Long queueId, @PathVariable Long executorId)
+    public void unbind(Authentication auth, @PathVariable(required = false) Long queueId, @PathVariable Long executorId)
             throws InterruptedException {
         service.unbind(users.findByUsername(auth.getName()), queueId, executorId);
     }
 
     @PostMapping("/delay")
-    public DelayView delay(Authentication auth, @PathVariable Long queueId, @PathVariable Long executorId,
+    public DelayView delay(Authentication auth, @PathVariable(required = false) Long queueId, @PathVariable Long executorId,
             @RequestBody NodeRequest request) throws Exception {
         return service.test(users.findByUsername(auth.getName()), queueId, executorId, request.name());
     }
 
     @PostMapping("/switch")
-    public PolicyView select(Authentication auth, @PathVariable Long queueId, @PathVariable Long executorId,
+    public PolicyView select(Authentication auth, @PathVariable(required = false) Long queueId, @PathVariable Long executorId,
             @RequestBody NodeRequest request) throws Exception {
         return service.switchManually(users.findByUsername(auth.getName()), queueId, executorId, request.name());
     }

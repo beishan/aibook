@@ -35,7 +35,10 @@ class CrawlerQueueExecutorLifecycleTest {
         rows.add(executor);
         when(queues.findById(2L)).thenReturn(Optional.of(queue));
         when(executors.findById(3L)).thenReturn(Optional.of(executor));
-        when(executors.findByQueueIdOrderBySortOrderAscIdAsc(2L)).thenAnswer(call -> new ArrayList<>(rows));
+        when(executors.findByQueueIdOrderBySortOrderAscIdAsc(2L)).thenAnswer(call -> rows.stream()
+                .filter(row -> row.assignedQueueIds().contains(2L)
+                        || row.getQueue() != null && Objects.equals(row.getQueue().getId(), 2L)).toList());
+        when(executors.findAll()).thenAnswer(call -> new ArrayList<>(rows));
         when(executors.save(any())).thenAnswer(call -> {
             CrawlerQueueExecutor row = call.getArgument(0);
             if (row.getId() == null) { row.setId(4L); rows.add(row); }
@@ -53,8 +56,7 @@ class CrawlerQueueExecutorLifecycleTest {
                 .executorsInitialized(true).maxConcurrentTasks(0).build();
         when(queues.findById(9L)).thenReturn(Optional.of(target));
         when(executors.findByQueueIdOrderBySortOrderAscIdAsc(9L)).thenAnswer(call ->
-                rows.stream().filter(row -> row.getSharedQueueIds().contains(9L)
-                        || Objects.equals(row.getQueue().getId(), 9L)).toList());
+                rows.stream().filter(row -> row.assignedQueueIds().contains(9L)).toList());
         return target;
     }
 
@@ -65,7 +67,7 @@ class CrawlerQueueExecutorLifecycleTest {
         var shared = service.share(user, 9L, 3L);
         assertThat(shared.queueId()).isEqualTo(9L);
         assertThat(shared.assigned()).isTrue();
-        assertThat(shared.shared()).isTrue();
+        assertThat(shared.shared()).isFalse();
         assertThat(target.getMaxConcurrentTasks()).isEqualTo(1);
         assertThat(service.enabledExecutors(9L)).containsExactly(executor);
         assertThat(service.enabledExecutors(2L)).isEmpty();
@@ -137,16 +139,41 @@ class CrawlerQueueExecutorLifecycleTest {
     }
 
     @Test
-    void deletingOriginalWebsiteRehomesSharedIdentityWithoutDeletingMihomo() {
+    void deletingWebsiteOnlyRemovesMembershipAndPreservesPublicIdentityAndMihomo() {
         var target = sharedTarget();
         service.share(user, 9L, 3L);
         service.deleteQueueData(2L);
-        assertThat(executor.getQueue()).isSameAs(target);
+        assertThat(executor.getQueue()).isNull();
+        assertThat(executor.getUser()).isSameAs(user);
         assertThat(executor.getId()).isEqualTo(3L);
-        assertThat(executor.getSharedQueueIds()).doesNotContain(9L);
-        assertThat(executor.getAssigned()).isTrue();
+        assertThat(executor.getSharedQueueIds()).containsExactly(9L);
+        assertThat(executor.getAssigned()).isFalse();
+        assertThat(service.enabledExecutors(target.getId())).containsExactly(executor);
         verify(mihomo, never()).delete(anyLong());
         verify(executors, never()).delete(any());
+    }
+
+    @Test
+    void createsPublicExecutorWithoutAnyWebsiteAndListsItOnlyForOwner() {
+        var created = service.create(user, 0L, payload());
+        CrawlerQueueExecutor row = rows.getLast();
+        assertThat(row.getQueue()).isNull();
+        assertThat(row.getUser()).isSameAs(user);
+        assertThat(row.assignedQueueIds()).isEmpty();
+        assertThat(created.queueId()).isZero();
+        assertThat(service.list(user, 0L)).extracting(view -> view.id()).contains(row.getId());
+        assertThat(service.list(User.builder().id(99L).build(), 0L)).isEmpty();
+        assertThatThrownBy(() -> service.update(User.builder().id(99L).build(), 0L, 4L, payload()))
+                .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    void deletingLastUsingWebsiteRetainsExecutorInPublicPool() {
+        service.deleteQueueData(2L);
+        assertThat(executor.getQueue()).isNull();
+        assertThat(executor.assignedQueueIds()).isEmpty();
+        assertThat(service.list(user, 0L)).extracting(view -> view.id()).containsExactly(3L);
+        verify(mihomo, never()).delete(anyLong());
     }
 
     private QueueExecutorPayload payload() {
@@ -179,7 +206,7 @@ class CrawlerQueueExecutorLifecycleTest {
 
     @Test
     void deletingActiveExecutorKeepsCurrentChapterAndNextChapterConfigurationUntilJobEnds() throws Exception {
-        service.delete(user, 2L, 3L, true);
+        service.delete(user, 0L, 3L, true);
         assertThat(executor.getDeletionPending()).isTrue();
         assertThat(service.enabledExecutors(2L)).isEmpty();
         assertThat(queue.getMaxConcurrentTasks()).isZero();
@@ -201,7 +228,7 @@ class CrawlerQueueExecutorLifecycleTest {
 
     @Test
     void pendingExecutorCannotBeReenabledOrAssigned() {
-        service.delete(user, 2L, 3L, true);
+        service.delete(user, 0L, 3L, true);
         assertThatThrownBy(() -> service.assign(user, 2L, 3L))
                 .isInstanceOf(ResponseStatusException.class);
         assertThatThrownBy(() -> service.update(user, 2L, 3L, payload()))
@@ -213,7 +240,8 @@ class CrawlerQueueExecutorLifecycleTest {
     void defaultExecutorCanBeDeletedAndEmptyQueueDoesNotRecreateExecutors() {
         executor.setDefaultExecutor(true);
         service.delete(user, 2L, 3L, false);
-        assertThat(rows).isEmpty();
+        assertThat(rows).containsExactly(executor);
+        assertThat(service.enabledExecutors(2L)).isEmpty();
         service.ensureQueueExecutors(queue);
         verify(executors, never()).saveAll(argThat(list -> list.iterator().hasNext()));
         assertThat(queue.getMaxConcurrentTasks()).isZero();

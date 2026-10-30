@@ -186,6 +186,12 @@ public class AdminUserService {
     }
 
     private void deleteOwnedData(Long userId) {
+        String ownedExecutors = "SELECT id FROM crawler_queue_executors WHERE user_id = ?";
+        update("DELETE FROM crawler_queue_executor_proxies WHERE executor_id IN (" + ownedExecutors + ")", userId);
+        update("DELETE FROM crawler_executor_shared_queues WHERE executor_id IN (" + ownedExecutors + ")", userId);
+        update("DELETE FROM crawler_mihomo_receipts WHERE executor_id IN (" + ownedExecutors + ")", userId);
+        update("DELETE FROM crawler_mihomo_policies WHERE executor_id IN (" + ownedExecutors + ")", userId);
+        update("DELETE FROM crawler_queue_executors WHERE user_id = ?", userId);
         String ownedBooks = "SELECT id FROM books WHERE user_id = ?";
         String ownedVersions = "SELECT bv.id FROM book_versions bv "
                 + "JOIN books b ON b.id = bv.book_id WHERE b.user_id = ?";

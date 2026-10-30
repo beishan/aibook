@@ -250,8 +250,10 @@ public class CrawlerTaskService {
     }
 
     public List<QueueExecutorView> queueExecutors(User user, Long queueId) {
-        CrawlerTaskQueue queue = ownedQueue(user, queueId);
-        queueExecutorService.ensureQueueExecutors(queue);
+        if (queueId != 0) {
+            CrawlerTaskQueue queue = ownedQueue(user, queueId);
+            queueExecutorService.ensureQueueExecutors(queue);
+        }
         return queueExecutorService.list(user, queueId).stream().map(view -> {
             String runningTask = activeTaskExecutors.entrySet().stream()
                     .filter(entry -> Objects.equals(entry.getValue(), view.id()))
@@ -272,13 +274,14 @@ public class CrawlerTaskService {
 
     public synchronized QueueExecutorView shareQueueExecutor(User user, Long queueId, Long executorId) {
         queueExecutorService.validateShareOwnership(user, queueId, executorId);
-        if (isExecutorBusy(executorId)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "执行器忙碌，请等待当前任务结束后再共享");
-        }
         QueueExecutorView shared = queueExecutorService.share(user, queueId, executorId);
         applyConcurrencyLimit(configuredQueueConcurrency());
         dispatchWaitingTasks();
-        return shared;
+        String runningTask = activeTaskExecutors.entrySet().stream()
+                .filter(entry -> Objects.equals(entry.getValue(), executorId))
+                .map(Map.Entry::getKey).findFirst().orElse(null);
+        return shared.withRuntime(runningTask != null,
+                runningTask == null ? null : activeTaskQueues.get(runningTask));
     }
 
     public synchronized QueueExecutorView createQueueExecutor(User user, Long queueId,
@@ -292,8 +295,7 @@ public class CrawlerTaskService {
     public synchronized QueueExecutorView updateQueueExecutor(User user, Long queueId, Long executorId,
             QueueExecutorPayload payload) {
         queueExecutorService.validateOwnership(user, queueId, executorId);
-        if (isExecutorBusy(executorId) && queueExecutorService.list(user, queueId).stream()
-                .anyMatch(view -> Objects.equals(view.id(), executorId) && view.shared())) {
+        if (isExecutorBusy(executorId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "共享执行器忙碌，请等待当前任务结束后修改配置");
         }
         QueueExecutorView updated = queueExecutorService.update(user, queueId, executorId, payload);

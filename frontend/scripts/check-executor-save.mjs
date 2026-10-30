@@ -8,7 +8,7 @@ const functions = [
   source.slice(source.indexOf('async function save()'), source.indexOf('\nasync function unbind()')),
 ].join('\n')
 const js = ts.transpile(functions, { target: ts.ScriptTarget.ES2020 })
-function fixture({ mode = 'MIHOMO', existing = true } = {}) {
+function fixture({ mode = 'MIHOMO', existing = true, queueId = 2 } = {}) {
   const calls = []
   const policy = { value: null }
   const reference = { value: {} }
@@ -31,7 +31,7 @@ function fixture({ mode = 'MIHOMO', existing = true } = {}) {
     'editingId', 'form', 'queueId', 'crawlerApi', 'message', 'error', 'loadExecutors',
     `${js}; return { save, applyPolicy }`)
   const handlers = factory(policy, reference, savedReference, saving, dialog, editingId,
-    form, { value: 2 }, api, { error: text => calls.push(['validation', text]), success: () => calls.push(['success']) },
+    form, { value: queueId }, api, { error: text => calls.push(['validation', text]), success: () => calls.push(['success']) },
     error => calls.push(['error', error.message]), async () => calls.push(['reload']))
   handlers.applyPolicy(value)
   if (!existing) savedReference.value = null
@@ -86,3 +86,10 @@ function fixture({ mode = 'MIHOMO', existing = true } = {}) {
   assert.deepEqual(f.calls.map(call => call[0]), ['update', 'success', 'reload'])
 }
 console.log('Executor save: unchanged policy, changed policy, create ordering, busy draft retention, partial retry and duplicate submission passed.')
+
+{
+  const f = fixture({ mode: 'DEFAULT', existing: false, queueId: 0 })
+  await f.save()
+  assert.deepEqual(f.calls.map(call => call[0]), ['create', 'update', 'success', 'reload'],
+    'public executor can be created and configured without a website or queue')
+}

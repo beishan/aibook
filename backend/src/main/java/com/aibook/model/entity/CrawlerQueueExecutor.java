@@ -18,9 +18,27 @@ public class CrawlerQueueExecutor {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.EAGER, optional = false)
-    @JoinColumn(name = "queue_id", nullable = false)
+    // 仅保留用于旧配置迁移；公共执行器不再归属创建队列。
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "queue_id")
     private CrawlerTaskQueue queue;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "user_id")
+    private User user;
+
+    public Long ownerId() {
+        if (user != null) return user.getId();
+        if (queue == null) return null;
+        return queue.getUser() != null ? queue.getUser().getId()
+                : queue.getSite() == null ? null : queue.getSite().getUser().getId();
+    }
+
+    public java.util.Set<Long> assignedQueueIds() {
+        var ids = new java.util.LinkedHashSet<>(sharedQueueIds);
+        if (queue != null && !Boolean.FALSE.equals(assigned)) ids.add(queue.getId());
+        return ids;
+    }
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "crawler_executor_shared_queues",

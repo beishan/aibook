@@ -46,14 +46,16 @@ class CrawlerSharedExecutorDispatchTest {
         activeQueues.put("running-in-another-queue", 2L);
         var view = new com.aibook.dto.crawler.CrawlerDtos.QueueExecutorView(
                 3L, 9L, "共享执行器", null, false, true, true, false, "DEFAULT", "ORDERED",
-                null, List.of(), 1, null, List.of(), true, "网站一", false, null);
+                null, List.of(), 1, null, List.of(), true, false, null);
         when(execution.list(user, 9L)).thenReturn(List.of(view));
         var runtime = service.queueExecutors(user, 9L).getFirst();
         org.assertj.core.api.Assertions.assertThat(runtime.busy()).isTrue();
         org.assertj.core.api.Assertions.assertThat(runtime.busyQueueId()).isEqualTo(2L);
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.shareQueueExecutor(user, 9L, 3L))
-                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
-        verify(execution, never()).share(user, 9L, 3L);
+        when(execution.share(user, 9L, 3L)).thenReturn(view);
+        var added = service.shareQueueExecutor(user, 9L, 3L);
+        org.assertj.core.api.Assertions.assertThat(added.busy()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(added.busyQueueId()).isEqualTo(2L);
+        verify(execution).share(user, 9L, 3L);
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.updateQueueExecutor(user, 9L, 3L, null))
                 .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
         verify(execution, never()).update(user, 9L, 3L, null);

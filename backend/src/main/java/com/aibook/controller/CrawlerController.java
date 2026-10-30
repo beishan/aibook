@@ -375,17 +375,17 @@ public class CrawlerController {
     public List<QueueProxyOptionView> queueProxyOptions() {
         return taskService.queueProxyOptions();
     }
-    @GetMapping("/tasks/queues/{queueId}/executors")
-    public List<QueueExecutorView> queueExecutors(Authentication auth, @PathVariable Long queueId) {
-        return taskService.queueExecutors(user(auth), queueId);
+    @GetMapping({"/tasks/queues/{queueId}/executors", "/tasks/executors"})
+    public List<QueueExecutorView> queueExecutors(Authentication auth, @PathVariable(required = false) Long queueId) {
+        return taskService.queueExecutors(user(auth), queueId == null ? 0L : queueId);
     }
 
-    @GetMapping("/tasks/queues/{queueId}/executors/{executorId}/logs")
-    public Page<ExecutorLogView> executorLogs(Authentication auth, @PathVariable Long queueId,
+    @GetMapping({"/tasks/queues/{queueId}/executors/{executorId}/logs", "/tasks/executors/{executorId}/logs"})
+    public Page<ExecutorLogView> executorLogs(Authentication auth, @PathVariable(required = false) Long queueId,
             @PathVariable Long executorId, @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "false") boolean failedOnly) {
-        return taskService.executorLogs(user(auth), queueId, executorId, page, size, failedOnly);
+        return taskService.executorLogs(user(auth), queueId == null ? 0L : queueId, executorId, page, size, failedOnly);
     }
     @GetMapping("/tasks/queues/{queueId}/executors/share-options")
     public List<com.aibook.service.crawler.CrawlerQueueExecutorService.SharedExecutorOption> sharedExecutorOptions(
@@ -399,16 +399,16 @@ public class CrawlerController {
         return taskService.shareQueueExecutor(user(auth), queueId, executorId);
     }
 
-    @PostMapping("/tasks/queues/{queueId}/executors")
+    @PostMapping({"/tasks/queues/{queueId}/executors", "/tasks/executors"})
     @ResponseStatus(HttpStatus.CREATED)
-    public QueueExecutorView createQueueExecutor(Authentication auth, @PathVariable Long queueId,
+    public QueueExecutorView createQueueExecutor(Authentication auth, @PathVariable(required = false) Long queueId,
             @RequestBody QueueExecutorPayload request) {
-        return taskService.createQueueExecutor(user(auth), queueId, request);
+        return taskService.createQueueExecutor(user(auth), queueId == null ? 0L : queueId, request);
     }
-    @PutMapping("/tasks/queues/{queueId}/executors/{executorId}")
-    public QueueExecutorView updateQueueExecutor(Authentication auth, @PathVariable Long queueId,
+    @PutMapping({"/tasks/queues/{queueId}/executors/{executorId}", "/tasks/executors/{executorId}"})
+    public QueueExecutorView updateQueueExecutor(Authentication auth, @PathVariable(required = false) Long queueId,
             @PathVariable Long executorId, @RequestBody QueueExecutorPayload request) {
-        return taskService.updateQueueExecutor(user(auth), queueId, executorId, request);
+        return taskService.updateQueueExecutor(user(auth), queueId == null ? 0L : queueId, executorId, request);
     }
     @PostMapping("/tasks/queues/{queueId}/executors/{executorId}/assign")
     public QueueExecutorView assignQueueExecutor(Authentication auth, @PathVariable Long queueId,
@@ -416,11 +416,11 @@ public class CrawlerController {
         return taskService.assignQueueExecutor(user(auth), queueId, executorId);
     }
 
-    @DeleteMapping("/tasks/queues/{queueId}/executors/{executorId}")
+    @DeleteMapping({"/tasks/queues/{queueId}/executors/{executorId}", "/tasks/executors/{executorId}"})
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteQueueExecutor(Authentication auth, @PathVariable Long queueId,
+    public void deleteQueueExecutor(Authentication auth, @PathVariable(required = false) Long queueId,
             @PathVariable Long executorId) {
-        taskService.deleteQueueExecutor(user(auth), queueId, executorId);
+        taskService.deleteQueueExecutor(user(auth), queueId == null ? 0L : queueId, executorId);
     }
     @PutMapping("/tasks/{id}/queue")
     public TaskView assignTaskQueue(Authentication auth, @PathVariable String id,

@@ -265,12 +265,12 @@ public final class CrawlerDtos {
             Integer defaultProxyCooldownSeconds,
             List<QueueExecutorProxyView> proxies,
             int availableProxyCount, java.time.Instant nextAvailableAt,
-            List<QueueExecutorProxyStateView> proxyStates, boolean shared, String sourceQueueName,
+            List<QueueExecutorProxyStateView> proxyStates, boolean shared,
             boolean busy, Long busyQueueId) {
         public QueueExecutorView withRuntime(boolean occupied, Long runningQueueId) {
             return new QueueExecutorView(id, queueId, name, description, defaultExecutor, enabled,
                     assigned, deletionPending, proxyMode, selectionStrategy, defaultProxyCooldownSeconds,
-                    proxies, availableProxyCount, nextAvailableAt, proxyStates, shared, sourceQueueName,
+                    proxies, availableProxyCount, nextAvailableAt, proxyStates, shared,
                     occupied, runningQueueId);
         }
     }

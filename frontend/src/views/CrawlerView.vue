@@ -1897,13 +1897,13 @@
       width="min(700px, 96vw)"
       append-to-body
     >
-      <p class="field-hint">新建执行器需手动加入队列。也可选择当前账户其他网站的执行器共享使用；配置修改同步生效，同一执行器同时只运行一个任务。共享执行器移出当前队列不会删除其他队列的配置，忙碌时须等待当前任务结束。</p>
+      <p class="field-hint">执行器是当前账户的公共资源，不归属创建网站。新建后从公共执行器列表添加到队列；忙碌时也可加入，等待空闲后调度。同一执行器同时只运行一个任务，配置修改影响所有使用它的队列。移出队列不会删除公共配置，忙碌时需等任务结束后移出。</p>
       <div class="queue-executor-share">
         <el-select
           v-model="selectedSharedExecutorId"
           filterable
           clearable
-          placeholder="选择其他网站 / 队列的执行器"
+          placeholder="选择公共执行器"
           aria-label="选择已有执行器共享使用"
           :disabled="queueExecutorsLoading || sharingExecutor"
         >
@@ -1911,23 +1911,22 @@
             v-for="option in sharedExecutorOptions"
             :key="option.id"
             :value="option.id"
-            :label="`${option.sourceName} · ${option.name}${option.busy ? '（忙碌）' : option.enabled ? '' : '（已禁用）'}`"
-            :disabled="option.busy"
+            :label="`${option.name}${option.busy ? '（忙碌，加入后等待空闲）' : option.enabled ? '' : '（已禁用）'}`"
           />
         </el-select>
         <el-button
           type="primary"
           :loading="sharingExecutor"
-          :disabled="!selectedSharedExecutorId || queueExecutorsLoading || queueExecutors.length >= 16 || sharedExecutorOptions.some(option => option.id === selectedSharedExecutorId && option.busy)"
+          :disabled="!selectedSharedExecutorId || queueExecutorsLoading || queueExecutors.length >= 16"
           @click="shareExistingExecutor"
-        >添加共享执行器</el-button>
+        >添加公共执行器</el-button>
       </div>
       <div v-loading="queueExecutorsLoading" class="queue-executor-list">
         <article v-for="item in queueExecutors" :key="item.id" class="queue-executor-card">
           <div>
             <strong>{{ item.name }}</strong>
             <el-tag v-if="item.defaultExecutor" size="small" effect="plain">默认</el-tag>
-            <el-tag v-if="item.shared" size="small" effect="plain">共享 · {{ item.sourceQueueName }}</el-tag>
+            <el-tag v-if="item.shared" size="small" effect="plain">多队列使用</el-tag>
             <el-tag v-if="item.busy" type="warning" size="small">
               忙碌 · {{ item.busyQueueId === item.queueId ? '当前队列运行' : '其他队列运行' }}
             </el-tag>
@@ -1949,14 +1948,14 @@
           </div>
           <div class="queue-executor-actions">
             <el-button v-if="!item.assigned && !item.deletionPending" size="small" type="primary" @click="assignQueueExecutor(item)">添加到队列</el-button>
-            <el-button size="small" :disabled="item.deletionPending || (item.shared && item.busy)" @click="openExecutorSettings(item)">配置执行器</el-button>
+            <el-button size="small" :disabled="item.deletionPending || item.busy" @click="openExecutorSettings(item)">配置执行器</el-button>
             <el-button
               v-if="!item.deletionPending"
               size="small"
               type="danger"
               plain
               @click="removeQueueExecutor(item)"
-            >{{ item.shared ? '移出当前队列' : '删除' }}</el-button>
+            >移出当前队列</el-button>
           </div>
         </article>
       </div>
@@ -2936,7 +2935,7 @@ const newExecutorName = ref('')
 const newExecutorDescription = ref('')
 const newExecutorQueueId = ref<number>()
 const sharedExecutorOptions = ref<Array<{
-  id:number; sourceQueueId:number; sourceName:string; name:string; proxyMode:string; enabled:boolean; busy:boolean
+  id:number; name:string; proxyMode:string; enabled:boolean; busy:boolean
 }>>([])
 const selectedSharedExecutorId = ref<number>()
 const sharingExecutor = ref(false)
@@ -4252,11 +4251,10 @@ async function shareExistingExecutor() {
   const queue = queueSettingsTarget.value
   const executorId = selectedSharedExecutorId.value
   if (!queue || !executorId || sharingExecutor.value || queueExecutorsLoading.value) return
-  if (sharedExecutorOptions.value.some(option => option.id === executorId && option.busy)) return
   sharingExecutor.value = true
   try {
     await crawlerApi.shareQueueExecutor(queue.id, executorId)
-    message.success('共享执行器已加入队列，配置修改会同步影响所有使用它的队列')
+    message.success('公共执行器已加入队列，忙碌时等待空闲后运行')
     await loadTaskQueues()
     if (queueSettingsTarget.value?.id === queue.id) {
       queueSettingsTarget.value = taskQueues.value.find(item => item.id === queue.id)
@@ -4348,13 +4346,11 @@ async function assignQueueExecutor(item:CrawlerQueueExecutor) {
 
 async function removeQueueExecutor(item: CrawlerQueueExecutor) {
   const queue = queueSettingsTarget.value
-  const confirmation = item.shared
-    ? `确定将共享执行器“${item.name}”移出当前队列吗？其他队列继续使用，忙碌时需要等待当前任务结束。`
-    : `确定删除执行器“${item.name}”吗？当前任务会继续完成，后续任务不再使用此执行器。`
+  const confirmation = `确定将执行器“${item.name}”移出当前队列吗？公共配置及其他队列继续保留，忙碌时需要等待当前任务结束。`
   if (!queue || !await confirm(confirmation)) return
   try {
     await crawlerApi.deleteQueueExecutor(queue.id, item.id)
-    message.success(item.shared ? '已移出当前队列，其他队列继续使用' : '已停止接收新任务；若正在运行，将在当前任务结束后删除')
+    message.success('已移出当前队列，公共执行器及其他队列配置保留')
     await Promise.all([openQueueExecutors(), loadTaskQueues()])
     queueSettingsTarget.value = taskQueues.value.find(entry => entry.id === queue.id)
   } catch (error: any) {

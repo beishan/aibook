@@ -49,6 +49,20 @@ class CrawlerMihomoServiceTest {
     private String actual = "A";
 
     @Test
+    void publicExecutorUsesAccountOwnershipWithoutAnyCreationQueue() throws Exception {
+        executor.setUser(user);
+        executor.setQueue(null);
+        executor.getSharedQueueIds().add(9L);
+        SystemMihomoService shared = sharedSource();
+        assertNotNull(service.get(user, null, 4L));
+        assertThrows(ResponseStatusException.class,
+                () -> service.get(User.builder().id(99L).build(), null, 4L));
+        service.saveReference(user, null, 4L, reference("MANUAL", "A"));
+        assertEquals("ok", service.execute(4L, site, () -> "ok"));
+        verify(shared, atLeastOnce()).resolve(7L, 8L, user.getId());
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void sharedQueueCanReadPolicyButCannotSwitchOrEditWhileOccupied() throws Exception {
         executor.getSharedQueueIds().add(9L);

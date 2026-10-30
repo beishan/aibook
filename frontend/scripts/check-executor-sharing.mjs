@@ -33,12 +33,13 @@ assert.equal(queueExecutors.value[0].queueId, 9)
 selectedSharedExecutorId.value = 7
 sharedExecutorOptions.value[0].busy = true
 await shareExistingExecutor()
-assert.deepEqual(calls, [], 'busy executor cannot be newly shared')
+assert.deepEqual(calls, [[9, 7]], 'busy executor can join another queue while runtime slot stays occupied')
 sharedExecutorOptions.value[0].busy = false
+selectedSharedExecutorId.value = 7
 await shareExistingExecutor()
-assert.deepEqual(calls, [[9, 7]])
+assert.deepEqual(calls, [[9, 7], [9, 7]])
 assert.equal(sharingExecutor.value, false)
-assert.ok(notices[0].includes('共享'))
+assert.ok(notices[0].includes('公共'))
 fail = true
 selectedSharedExecutorId.value = 7
 await shareExistingExecutor()

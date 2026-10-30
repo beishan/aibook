@@ -698,7 +698,7 @@ public class CrawlerMihomoService {
     }
 
     private void requireIdleShared(CrawlerQueueExecutor executor) {
-        if (!executor.getSharedQueueIds().isEmpty() && taskServices != null
+        if (taskServices != null
                 && taskServices.getObject().isExecutorBusy(executor.getId())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "共享执行器忙碌，请等待当前任务结束后修改节点或配置");
@@ -708,10 +708,8 @@ public class CrawlerMihomoService {
     private CrawlerQueueExecutor owned(User user, Long queueId, Long id) {
         CrawlerQueueExecutor executor = executors.findById(id).orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "执行器不存在"));
-        CrawlerTaskQueue queue = executor.getQueue();
-        Long owner = queue.getUser() != null ? queue.getUser().getId() : queue.getSite().getUser().getId();
-        if ((!Objects.equals(queueId, queue.getId()) && !executor.getSharedQueueIds().contains(queueId))
-                || !Objects.equals(user.getId(), owner)) {
+        if (!Objects.equals(user.getId(), executor.ownerId())
+                || queueId != null && queueId != 0 && !executor.assignedQueueIds().contains(queueId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "执行器不存在");
         }
         return executor;
@@ -719,7 +717,7 @@ public class CrawlerMihomoService {
 
     private void ensureNotFrozen(Long id) throws CrawlerHttpClient.SiteManuallyFrozenException {
         CrawlerQueueExecutor executor = executors.findById(id).orElse(null);
-        CrawlerSite site = executor == null ? null : executor.getQueue().getSite();
+        CrawlerSite site = executor == null || executor.getQueue() == null ? null : executor.getQueue().getSite();
         Long siteId = executingSiteId.get() != null ? executingSiteId.get() : site == null ? null : site.getId();
         if (siteId != null && sites.isManuallyFrozen(siteId, Instant.now())) {
             throw new CrawlerHttpClient.SiteManuallyFrozenException();
@@ -739,8 +737,7 @@ public class CrawlerMihomoService {
         if (chapterPolicy.get() == config && chapterConnection.get() != null) return chapterConnection.get();
         CrawlerQueueExecutor executor = executors.findById(config.getExecutorId()).orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "执行器不存在"));
-        CrawlerTaskQueue queue = executor.getQueue();
-        Long owner = queue.getUser() != null ? queue.getUser().getId() : queue.getSite().getUser().getId();
+        Long owner = executor.ownerId();
         return systemMihomoService.resolve(config.getSystemProxyId(), config.getNodeGroupId(), owner);
     }
 
