@@ -11,16 +11,42 @@
         </div>
 
         <nav class="header-nav">
-          <router-link
-            v-for="item in menuItems"
-            :key="item.path"
-            :to="item.path"
-            class="nav-item"
-            :class="{ active: isActiveRoute(item.path) }"
-          >
-            <span class="nav-icon">{{ item.icon }}</span>
-            <span class="nav-text">{{ item.title }}</span>
-          </router-link>
+          <template v-for="item in desktopMenuItems" :key="item.path">
+            <el-dropdown v-if="item.path === '/tools'" trigger="click">
+              <button
+                type="button"
+                class="nav-item tools-trigger"
+                :class="{ active: toolItems.some(tool => isActiveRoute(tool.path)) }"
+                aria-label="工具菜单"
+              >
+                <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
+                <span class="nav-text">工具</span>
+                <span aria-hidden="true">⌄</span>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item
+                    v-for="tool in toolItems"
+                    :key="tool.path"
+                    :class="{ 'is-active-tool': isActiveRoute(tool.path) }"
+                    @click="router.push(tool.path)"
+                  >
+                    <span aria-hidden="true">{{ tool.icon }}</span>
+                    <span>{{ tool.title }}</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <router-link
+              v-else
+              :to="item.path"
+              class="nav-item"
+              :class="{ active: isActiveRoute(item.path) }"
+            >
+              <span class="nav-icon">{{ item.icon }}</span>
+              <span class="nav-text">{{ item.title }}</span>
+            </router-link>
+          </template>
         </nav>
 
         <div class="header-right">
@@ -110,6 +136,16 @@ const menuItems = [
   { path: '/statistics', icon: '📊', title: '阅读统计' },
   { path: '/settings', icon: '⚙️', title: '设置' },
 ]
+
+const toolItems = [
+  { path: '/text-repair', icon: '🔧', title: '内容修复' },
+  { path: '/rewrite', icon: '✎', title: '重写' },
+  { path: '/format-conversion', icon: '🔄', title: '格式转换' },
+]
+const desktopMenuItems = menuItems.filter(item =>
+  !toolItems.some(tool => tool.path === item.path),
+)
+desktopMenuItems.splice(2, 0, { path: '/tools', icon: '🧰', title: '工具' })
 
 const isActiveRoute = (path: string) => {
   if (path === '/') return route.path === '/'
@@ -221,6 +257,23 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   font-size: var(--font-size-sm);
   font-weight: 500;
   transition: all var(--transition-fast);
+}
+
+.tools-trigger {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.tools-trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+:global(.el-dropdown-menu__item.is-active-tool) {
+  color: var(--primary);
+  background: var(--primary-alpha-10);
 }
 
 .nav-item:hover {
