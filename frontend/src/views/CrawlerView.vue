@@ -1642,12 +1642,6 @@
       <template #footer><el-button @click="taskEditDialog=false">取消</el-button><el-button type="primary" :loading="savingTask" @click="saveTask">保存修改</el-button></template>
     </el-dialog>
 
-    <CrawlerImportLibrariesDialog
-      v-model="taskLibrariesDialog"
-      :book-id="selectedTask?.bookId || undefined"
-      @saved="refreshTaskLibrarySettings"
-    />
-
     <el-drawer v-model="taskDrawer" size="min(720px, 96vw)" :title="selectedTask ? `${taskTypeLabel(selectedTask.type)}详情` : '采集任务详情'" class="task-detail-drawer">
       <div v-if="selectedTask" v-loading="taskDetailLoading" class="task-detail-content">
         <header class="task-detail-hero">
@@ -1733,7 +1727,6 @@
         <el-alert v-if="selectedTask.errorMessage" type="error" :closable="false" title="任务错误" :description="selectedTask.errorMessage" show-icon />
         <div class="task-detail-actions">
           <el-button @click="openTaskQueueDialog(selectedTask)">调整所在队列</el-button>
-          <el-button v-if="selectedTask.bookId" @click="taskLibrariesDialog = true">加入图书馆</el-button>
           <el-button v-if="selectedTask.bookId" @click="openTaskBook(selectedTask)">查看采集书籍</el-button>
           <el-button v-if="selectedTask.type==='SITE_SCAN'" @click="openScanResults(selectedTask)">查看扫描结果</el-button>
           <el-button v-if="['WAITING','PAUSED','FAILED'].includes(selectedTask.status)" @click="openTaskEditor(selectedTask)">修改优先级</el-button>
@@ -2151,6 +2144,12 @@
       </template>
     </el-dialog>
 
+    <CrawlerImportLibrariesDialog
+      v-model="bookLibrariesDialog"
+      :book-id="selectedBook?.id"
+      @saved="refreshBookLibrarySettings"
+    />
+
     <el-drawer v-model="bookDrawer" size="min(1240px, 98vw)" :title="displayCrawlerBookName(selectedBook?.bookName) || '采集书籍详情'" class="book-detail-drawer">
       <template #header><CrawlerBookTitle :title="selectedBook?.bookName || '采集书籍详情'" /></template>
       <div v-if="selectedBook" class="book-drawer-content">
@@ -2174,6 +2173,7 @@
             :aria-label="selectedBook.autoImportEnabled ? '自动入库设置（已开启）' : '自动入库设置（未开启）'"
             @click="openAutoImport([selectedBook])"
           >自动入库</el-button>
+          <el-button @click="bookLibrariesDialog = true">加入图书馆</el-button>
           <el-button @click="openCrawlerBookLists(selectedBook)">加入书单</el-button>
           <el-button :disabled="isBookTaskActive(selectedBook)" @click="continueCrawl(selectedBook)">
             {{ isBookTaskActive(selectedBook) ? '任务中' : '继续采集' }}
@@ -3045,8 +3045,8 @@ const crawlForm = reactive<{
   autoImportEnabled:boolean
   autoImportFormats:string[]
 }>({url:'', autoImportEnabled:false, autoImportFormats:['STRUCTURED']})
-const taskLibrariesDialog = ref(false)
-async function refreshTaskLibrarySettings(bookId: number) {
+const bookLibrariesDialog = ref(false)
+async function refreshBookLibrarySettings(bookId: number) {
   applyCrawlerBookUpdate(await crawlerApi.book(bookId))
 }
 const autoImportDialog = ref(false)
