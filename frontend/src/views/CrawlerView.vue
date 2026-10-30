@@ -1861,6 +1861,30 @@
     </el-dialog>
 
     <el-dialog
+      v-model="createExecutorDialog"
+      title="新增执行器"
+      width="min(480px, 94vw)"
+      append-to-body
+      :close-on-click-modal="!creatingExecutor"
+      :close-on-press-escape="!creatingExecutor"
+      :show-close="!creatingExecutor"
+    >
+      <el-form label-position="top">
+        <el-form-item label="执行器名称">
+          <el-input v-model="newExecutorName" maxlength="100" />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="newExecutorDescription" type="textarea" maxlength="500" />
+        </el-form-item>
+      </el-form>
+      <p class="field-hint">先以默认代理创建，创建后可配置指定代理或 Mihomo。新执行器需点击“添加到队列”后才接收任务。</p>
+      <template #footer>
+        <el-button :disabled="creatingExecutor" @click="createExecutorDialog = false">取消</el-button>
+        <el-button type="primary" :loading="creatingExecutor" :disabled="!newExecutorName.trim()" @click="createExecutor">创建执行器</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
       v-model="queueExecutorsDialog"
       :title="`${queueSettingsTarget ? queueDisplayName(queueSettingsTarget) : '队列'} · 执行器`"
       width="min(700px, 96vw)"
@@ -1902,7 +1926,7 @@
       </div>
       <template #footer>
         <el-button @click="queueExecutorsDialog=false">关闭</el-button>
-        <el-button type="primary" :disabled="queueExecutors.length >= 16" @click="openExecutorSettings()">配置新执行器</el-button>
+        <el-button type="primary" :disabled="queueExecutorsLoading || queueExecutors.length >= 16" @click="openCreateExecutor">新增执行器</el-button>
       </template>
     </el-dialog>
 
@@ -2869,6 +2893,11 @@ let siteActivityRequestSequence=0
 const queueOverviewDialog = ref(false)
 const queuePopupTab = ref<'config' | 'tasks'>('config')
 const queueSettingsDialog = ref(false)
+const createExecutorDialog = ref(false)
+const creatingExecutor = ref(false)
+const newExecutorName = ref('')
+const newExecutorDescription = ref('')
+const newExecutorQueueId = ref<number>()
 const queueExecutorsDialog = ref(false)
 const queueExecutorsLoading = ref(false)
 const queueExecutors = ref<CrawlerQueueExecutor[]>([])
@@ -4155,6 +4184,35 @@ async function openQueueExecutors() {
     message.error(error.response?.data?.message || '执行器配置加载失败')
   } finally {
     queueExecutorsLoading.value = false
+  }
+}
+
+function openCreateExecutor() {
+  const queue = queueSettingsTarget.value
+  if (!queue || queueExecutorsLoading.value || queueExecutors.value.length >= 16) return
+  newExecutorQueueId.value = queue.id
+  newExecutorName.value = `执行器 ${queueExecutors.value.length + 1}`
+  newExecutorDescription.value = ''
+  createExecutorDialog.value = true
+}
+
+async function createExecutor() {
+  const queueId = newExecutorQueueId.value
+  if (!queueId || creatingExecutor.value || !newExecutorName.value.trim()) return
+  creatingExecutor.value = true
+  try {
+    await crawlerApi.createQueueExecutor(queueId, {
+      name: newExecutorName.value.trim(), description: newExecutorDescription.value.trim(),
+      enabled: true, proxyMode: 'DEFAULT', selectionStrategy: 'ORDERED',
+      defaultProxyCooldownSeconds: 60, proxies: [],
+    })
+    createExecutorDialog.value = false
+    message.success('执行器已创建，请添加到队列后使用')
+    if (queueSettingsTarget.value?.id === queueId) await openQueueExecutors()
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '创建执行器失败')
+  } finally {
+    creatingExecutor.value = false
   }
 }
 
