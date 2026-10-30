@@ -252,15 +252,30 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="manageDialogVisible" title="一键整理标签" width="min(900px, 94vw)">
+    <el-dialog
+      v-model="manageDialogVisible"
+      title="一键整理标签"
+      width="min(900px, 94vw)"
+      class="tag-manage-dialog"
+      :close-on-click-modal="!deletingManageTags"
+      :close-on-press-escape="!deletingManageTags"
+      :show-close="!deletingManageTags"
+    >
       <div class="manage-tools">
         <el-input
           v-model="manageKeyword"
+          :disabled="deletingManageTags"
           clearable
           placeholder="搜索标签名称"
           aria-label="搜索待整理标签"
         />
-        <el-select v-model="manageSourceFilter" clearable placeholder="全部来源">
+        <el-select
+          v-model="manageSourceFilter"
+          :disabled="deletingManageTags"
+          clearable
+          placeholder="全部来源"
+          aria-label="筛选待整理标签来源"
+        >
           <el-option
             v-for="source in sourceOptions"
             :key="source.value"
@@ -270,37 +285,61 @@
         </el-select>
         <span class="manage-count">已选 {{ selectedManageTagIds.length }} 个</span>
       </div>
-      <el-table :data="filteredManageTags" height="460" row-key="id">
-        <el-table-column label="选择" width="70" align="center">
-          <template #default="{ row }">
-            <el-checkbox
-              :model-value="selectedManageTagIds.includes(row.id)"
-              :aria-label="`选择标签 ${row.name}`"
-              @change="toggleManageTag(row.id, Boolean($event))"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column label="标签" min-width="180">
-          <template #default="{ row }">
-            <span class="tag-preview" :style="tagStyle(row.color)">{{ row.name }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="来源" min-width="150">
-          <template #default="{ row }">
-            <div class="manage-source-cell">
-              <el-tag size="small" effect="plain">{{ sourceLabel(row) }}</el-tag>
-              <small v-if="row.sourceType === 'SCRAPER' && row.sourceDetail">
-                {{ row.sourceDetail }}
-              </small>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="使用书籍" prop="bookCount" width="110" align="right">
-          <template #default="{ row }">{{ row.bookCount || 0 }} 本</template>
-        </el-table-column>
-      </el-table>
+      <div class="manage-selection">
+        <el-checkbox
+          :model-value="allManagePageSelected"
+          :indeterminate="someManagePageSelected && !allManagePageSelected"
+          :disabled="deletingManageTags || !pagedManageTags.length"
+          @change="toggleManagePage(Boolean($event))"
+        >
+          选中本页（{{ pagedManageTags.length }}）
+        </el-checkbox>
+        <span>翻页保留选择，切换筛选清空选择</span>
+      </div>
+      <div class="manage-table-wrap">
+        <el-table :data="pagedManageTags" height="100%" row-key="id">
+          <el-table-column label="选择" width="70" align="center">
+            <template #default="{ row }">
+              <el-checkbox
+                :model-value="selectedManageTagIds.includes(row.id)"
+                :disabled="deletingManageTags"
+                :aria-label="`选择标签 ${row.name}`"
+                @change="toggleManageTag(row.id, Boolean($event))"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="标签" min-width="180">
+            <template #default="{ row }">
+              <span class="tag-preview" :style="tagStyle(row.color)">{{ row.name }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="来源" min-width="150">
+            <template #default="{ row }">
+              <div class="manage-source-cell">
+                <el-tag size="small" effect="plain">{{ sourceLabel(row) }}</el-tag>
+                <small v-if="row.sourceType === 'SCRAPER' && row.sourceDetail">
+                  {{ row.sourceDetail }}
+                </small>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="使用书籍" prop="bookCount" width="110" align="right">
+            <template #default="{ row }">{{ row.bookCount || 0 }} 本</template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <div class="manage-pagination">
+        <el-pagination
+          v-model:current-page="managePage"
+          :page-size="managePageSize"
+          :total="filteredManageTags.length"
+          :pager-count="5"
+          :disabled="deletingManageTags"
+          layout="total, prev, pager, next"
+        />
+      </div>
       <template #footer>
-        <el-button @click="manageDialogVisible = false">关闭</el-button>
+        <el-button :disabled="deletingManageTags" @click="manageDialogVisible = false">关闭</el-button>
         <el-button
           type="danger"
           :disabled="selectedManageTagIds.length === 0"
@@ -376,6 +415,8 @@ const addingScannedTags = ref(false)
 const manageDialogVisible = ref(false)
 const manageKeyword = ref('')
 const manageSourceFilter = ref('')
+const managePage = ref(1)
+const managePageSize = 20
 const selectedManageTagIds = ref<number[]>([])
 const deletingManageTags = ref(false)
 const currentPage = ref(1)
@@ -448,6 +489,34 @@ const filteredManageTags = computed(() => {
   })
 })
 
+const pagedManageTags = computed(() => {
+  const start = (managePage.value - 1) * managePageSize
+  return filteredManageTags.value.slice(start, start + managePageSize)
+})
+const allManagePageSelected = computed(() => pagedManageTags.value.length > 0
+  && pagedManageTags.value.every(tag => selectedManageTagIds.value.includes(tag.id)))
+const someManagePageSelected = computed(() =>
+  pagedManageTags.value.some(tag => selectedManageTagIds.value.includes(tag.id)))
+
+const toggleManagePage = (checked: boolean) => {
+  if (deletingManageTags.value) return
+  const pageIds = new Set(pagedManageTags.value.map(tag => tag.id))
+  selectedManageTagIds.value = checked
+    ? [...new Set([...selectedManageTagIds.value, ...pageIds])]
+    : selectedManageTagIds.value.filter(id => !pageIds.has(id))
+}
+
+const resetManageFilter = () => {
+  managePage.value = 1
+  selectedManageTagIds.value = []
+}
+const clampManagePage = () => {
+  const lastPage = Math.max(1, Math.ceil(filteredManageTags.value.length / managePageSize))
+  managePage.value = Math.min(managePage.value, lastPage)
+}
+watch([manageKeyword, manageSourceFilter], resetManageFilter)
+watch(() => filteredManageTags.value.length, clampManagePage)
+
 const tagStyle = (color?: string) => {
   const safeColor = /^#[0-9a-fA-F]{6}$/.test(color || '') ? color! : '#64748B'
   return {
@@ -517,6 +586,7 @@ const confirmAddScannedTags = async () => {
 }
 
 const openManage = () => {
+  managePage.value = 1
   manageKeyword.value = ''
   manageSourceFilter.value = ''
   selectedManageTagIds.value = []
@@ -524,6 +594,7 @@ const openManage = () => {
 }
 
 const toggleManageTag = (id: number, checked: boolean) => {
+  if (deletingManageTags.value) return
   selectedManageTagIds.value = checked
     ? [...new Set([...selectedManageTagIds.value, id])]
     : selectedManageTagIds.value.filter(selectedId => selectedId !== id)
@@ -531,7 +602,7 @@ const toggleManageTag = (id: number, checked: boolean) => {
 
 const deleteSelectedTags = async () => {
   const ids = [...selectedManageTagIds.value]
-  if (!ids.length) return
+  if (!ids.length || deletingManageTags.value) return
   const accepted = await confirm(
     `确定删除选中的 ${ids.length} 个标签吗？标签将从关联书籍中移除。`,
   )
@@ -622,6 +693,74 @@ onMounted(() => tagStore.fetchTags())
 </script>
 
 <style scoped>
+:global(.el-dialog.tag-manage-dialog) {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 48px);
+  height: calc(100dvh - 48px);
+  max-height: calc(100dvh - 48px);
+  margin: 24px auto;
+}
+
+:global(.tag-manage-dialog .el-dialog__header),
+:global(.tag-manage-dialog .el-dialog__footer) {
+  flex: 0 0 auto;
+}
+
+:global(.tag-manage-dialog .el-dialog__body) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.manage-tools,
+.manage-selection,
+.manage-pagination {
+  flex: 0 0 auto;
+}
+
+.manage-selection {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-bottom: 10px;
+}
+
+.manage-selection span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.manage-table-wrap {
+  flex: 1;
+  min-height: 0;
+}
+
+.manage-pagination {
+  margin-top: 14px;
+  overflow-x: auto;
+}
+
+@media (max-height: 540px) {
+  :global(.tag-manage-dialog .el-dialog__body) {
+    overflow-y: auto;
+  }
+
+  .manage-table-wrap {
+    flex: 0 0 180px;
+  }
+}
+
+@media (max-width: 640px) {
+  :global(.el-dialog.tag-manage-dialog) {
+    height: calc(100dvh - max(10px, env(safe-area-inset-top)) - max(10px, env(safe-area-inset-bottom)));
+    max-height: calc(100dvh - max(10px, env(safe-area-inset-top)) - max(10px, env(safe-area-inset-bottom)));
+  }
+}
+
 .tag-management-view {
   width: 100%;
 }
