@@ -21,7 +21,17 @@
               >
                 <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
                 <span class="nav-text">工具</span>
-                <span aria-hidden="true">⌄</span>
+                <svg
+                  class="tools-chevron"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M3 4.5 6 7.5 9 4.5" />
+                </svg>
               </button>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -265,6 +275,17 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   background: transparent;
   cursor: pointer;
   font-family: inherit;
+}
+
+.tools-chevron {
+  flex: 0 0 12px;
+  align-self: center;
+  margin-left: 2px;
+  opacity: 0.65;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .tools-trigger:focus-visible {
