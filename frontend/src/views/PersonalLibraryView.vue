@@ -12,7 +12,7 @@
         返回图书馆列表
       </el-button>
     </el-alert>
-    <div v-if="library" v-loading="busy">
+    <div v-if="library">
       <header class="library-page-heading">
         <div>
           <p class="library-eyebrow">
@@ -40,13 +40,21 @@
           <el-button @click="navigate('settings')">
             设置
           </el-button>
-          <el-button type="primary" @click="pickerOpen = true">
+          <el-button type="primary" :disabled="busy" @click="pickerOpen = true">
             ＋ 添加书籍
           </el-button>
         </div>
       </header>
       <AudioSegmented :model-value="activeTab" label="图书馆栏目" :options="tabOptions" @update:model-value="navigate" />
-      <section v-if="activeTab === 'home'" aria-label="图书馆首页">
+      <div class="library-loading-status" role="status" aria-live="polite">
+        <span v-if="busy">正在加载图书馆内容…</span>
+      </div>
+      <section
+        v-if="activeTab === 'home'"
+        :inert="busy || undefined"
+        :aria-busy="busy"
+        aria-label="图书馆首页"
+      >
         <div class="library-hero">
           <div>
             <p class="library-eyebrow">
@@ -125,7 +133,12 @@
           </el-button>
         </el-empty>
       </section>
-      <section v-else-if="activeTab === 'shelf' || activeTab === 'favorites'" aria-label="馆藏书籍">
+      <section
+        v-else-if="activeTab === 'shelf' || activeTab === 'favorites'"
+        :inert="busy || undefined"
+        :aria-busy="busy"
+        aria-label="馆藏书籍"
+      >
         <div class="library-section-heading" style="margin-top:28px">
           <div>
             <h2>
@@ -310,7 +323,13 @@
           @size-change="value => savePreference('pageSize', value)"
         />
       </section>
-      <section v-else-if="activeTab === 'lists'" class="library-section" aria-label="馆内书单">
+      <section
+        v-else-if="activeTab === 'lists'"
+        :inert="busy || undefined"
+        :aria-busy="busy"
+        class="library-section"
+        aria-label="馆内书单"
+      >
         <div class="library-section-heading">
           <div>
             <h2>
@@ -360,7 +379,13 @@
         </div>
         <el-empty v-if="!library.lists.length" description="把散落的书，串成自己的阅读路线" />
       </section>
-      <section v-else-if="activeTab === 'settings'" class="library-section" aria-label="图书馆设置">
+      <section
+        v-else-if="activeTab === 'settings'"
+        :inert="busy || undefined"
+        :aria-busy="busy"
+        class="library-section"
+        aria-label="图书馆设置"
+      >
         <div class="library-section-heading">
           <div>
             <h2>
@@ -975,6 +1000,13 @@ onMounted(async () => {
 onBeforeUnmount(() => { generation++; bookGeneration++; window.removeEventListener('beforeunload', beforeUnload); });
 </script>
 <style scoped>
+.library-loading-status {
+  min-height: 24px;
+  padding-top: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .library-hero {
   display: flex;
   justify-content: space-between;
