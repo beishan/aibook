@@ -38,6 +38,9 @@ public class CrawlerExportService {
     private final VersionReadingProgressRepository versionProgressRepository;
     private final OperationLogService operationLogService;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private CrawlerImportLibrariesService importLibrariesService;
+
     @Value("${crawler.storage-path:./crawler-data}") private String storagePath;
     @Value("${upload.path:./uploads}") private String uploadPath;
 
@@ -109,7 +112,10 @@ public class CrawlerExportService {
             if (!com.aibook.util.CrawlerAutoImportRules.matches(configuration, book)) return null;
             formats = configuration.formats();
         }
-        return importLibrary(user, bookId, formats);
+        Long importedId = importLibrary(user, bookId, formats);
+        List<Long> libraryIds = CrawlerImportLibrariesService.decode(book.getAutoImportLibraryIds());
+        if (!libraryIds.isEmpty()) importLibrariesService.addCompleted(user, importedId, libraryIds);
+        return importedId;
     }
 
     @Transactional

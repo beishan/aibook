@@ -95,6 +95,12 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
         return updateImportStatus(id, unimportedStatus, CrawlerBook.ImportStatus.IMPORTED);
     }
 
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update CrawlerBook b set b.autoImportLibraryIds = :libraries, "
+            + "b.autoImportEnabled = :enabled where b.id = :id and b.site.user = :user")
+    int updateImportLibraries(@Param("id") Long id, @Param("user") User user,
+            @Param("libraries") String libraries, @Param("enabled") boolean enabled);
+
     List<CrawlerBook> findByIdInAndSiteUser(Collection<Long> ids, User user);
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update CrawlerBook b set b.autoImportEnabled = :enabled, b.autoImportFormats = :formats "

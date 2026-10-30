@@ -408,6 +408,10 @@ export const crawlerApi = {
   importSiteConfiguration: (data:CrawlerSiteConfiguration) => api.post<CrawlerSite>('/api/crawler/sites/configuration/import', data).then(r => r.data),
   crawlUrl: (siteId:number, url:string, autoImportEnabled?:boolean, autoImportFormats?:string[]) =>
     api.post<CrawlerTask>(`/api/crawler/sites/${siteId}/crawl`, { url, autoImportEnabled, autoImportFormats }).then(r => r.data),
+  importLibraries: (id: number) =>
+    api.get<number[]>(`/api/crawler/books/${id}/import-libraries`).then(r => r.data),
+  setImportLibraries: (id: number, libraryIds: number[]) =>
+    api.put<number[]>(`/api/crawler/books/${id}/import-libraries`, { libraryIds }).then(r => r.data),
   setAutoImport: (ids:number[], enabled:boolean, formats:string[]) =>
     api.put<CrawlerBook[]>('/api/crawler/books/batch/auto-import', { ids, enabled, formats }).then(r => r.data),
   scanSite: (siteId:number) => api.post<CrawlerTask>(`/api/crawler/sites/${siteId}/scan`).then(r => r.data),

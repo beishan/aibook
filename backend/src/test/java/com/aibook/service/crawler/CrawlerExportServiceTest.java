@@ -41,6 +41,33 @@ class CrawlerExportServiceTest {
     @TempDir Path temporaryDirectory;
 
     @Test
+    void addsToSavedLibrariesAfterSuccessfulImportAndSkipsIncompleteBooks() {
+        User user = User.builder().id(1L).build();
+        CrawlerBook book = book(user);
+        book.setCrawlStatus(CrawlerBook.CrawlStatus.COMPLETED);
+        book.setAutoImportEnabled(true);
+        book.setAutoImportLibraryIds("7,8");
+        CrawlerExportService service = spy(service(mock(CrawlerManagementService.class),
+                mock(CrawlerChapterRepository.class), mock(CrawlerBookExportRepository.class)));
+        CrawlerBookRepository repository = (CrawlerBookRepository)
+                ReflectionTestUtils.getField(service, "crawlerBookRepository");
+        var targets = mock(CrawlerImportLibrariesService.class);
+        ReflectionTestUtils.setField(service, "importLibrariesService", targets);
+        when(repository.findForLibraryImport(3L, user)).thenReturn(Optional.of(book));
+        doReturn(9L).when(service).importLibrary(eq(user), eq(3L), anyList());
+        assertThat(service.autoImportCompleted(user, 3L)).isEqualTo(9L);
+        verify(targets).addCompleted(user, 9L, List.of(7L, 8L));
+        clearInvocations(targets);
+        book.setCrawlStatus(CrawlerBook.CrawlStatus.PARTIAL_SUCCESS);
+        assertThat(service.autoImportCompleted(user, 3L)).isNull();
+        verifyNoInteractions(targets);
+        book.setCrawlStatus(CrawlerBook.CrawlStatus.COMPLETED);
+        doThrow(new IllegalStateException("入库失败")).when(service).importLibrary(eq(user), eq(3L), anyList());
+        assertThatThrownBy(() -> service.autoImportCompleted(user, 3L)).hasMessage("入库失败");
+        verifyNoInteractions(targets);
+    }
+
+    @Test
     void importsMatchedCompletedBookWithSiteFormatsAndPrefersExplicitBookSettings() {
         User user = User.builder().id(1L).build();
         CrawlerBook book = book(user);

@@ -40,9 +40,16 @@ class CrawlerLibraryImportMappingTest {
                 assertThat(propertyNames).contains("libraryBook", "importStatus");
                 assertThat(persister.getPropertyUpdateability()[propertyNames.indexOf("libraryBook")]).isFalse();
                 assertThat(persister.getPropertyUpdateability()[propertyNames.indexOf("importStatus")]).isFalse();
-                for (String property : java.util.List.of("discoveryStatus", "blacklistedAt")) {
+                for (String property : java.util.List.of("discoveryStatus", "blacklistedAt", "autoImportLibraryIds")) {
                     assertThat(persister.getPropertyUpdateability()[propertyNames.indexOf(property)]).isFalse();
                 }
+                String destinationQuery = CrawlerBookRepository.class.getMethod("updateImportLibraries",
+                        Long.class, User.class, String.class, boolean.class).getAnnotation(Query.class).value();
+                session.createMutationQuery(destinationQuery)
+                        .setParameter("id", 3L)
+                        .setParameter("user", User.builder().id(1L).build())
+                        .setParameter("libraries", "7,8")
+                        .setParameter("enabled", true);
                 String discoveryQuery = CrawlerBookRepository.class.getMethod("updateDiscoveryStatus",
                         java.util.Collection.class, User.class, CrawlerBook.DiscoveryStatus.class,
                         boolean.class, java.time.LocalDateTime.class).getAnnotation(Query.class).value();

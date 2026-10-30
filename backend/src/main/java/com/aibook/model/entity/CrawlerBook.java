@@ -54,6 +54,9 @@ public class CrawlerBook {
     @Builder.Default private Boolean autoImportEnabled = false;
     @Column(nullable = false, updatable = false, columnDefinition = "varchar(100) default 'STRUCTURED'")
     @Builder.Default private String autoImportFormats = "STRUCTURED";
+    // 目标馆独立更新，避免运行中的采集实体覆盖配置。
+    @Column(updatable = false, columnDefinition = "varchar(500) default ''")
+    @Builder.Default private String autoImportLibraryIds = "";
     // 收藏由独立更新语句维护，避免长时间运行的采集任务用旧实体快照覆盖用户选择。
     @Column(nullable = false, updatable = false, columnDefinition = "boolean default false")
     @Builder.Default private Boolean favorite = false;
