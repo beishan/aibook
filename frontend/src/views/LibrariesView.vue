@@ -44,9 +44,7 @@
     <div v-loading="loading" class="personal-library-grid">
       <article v-for="(library, index) in libraries" :key="library.id" class="personal-library-card">
         <button class="library-card-open" @click="router.push(`/libraries/${library.id}`)">
-          <div class="library-landscape" :class="`cover-${library.config.cover || 'landscape'}`" aria-hidden="true">
-            <span />
-          </div>
+          <LibraryLandscape :library-id="library.id" :image-key="library.config.coverImage" :variant="library.config.cover" />
           <div class="library-card-copy">
             <small>
               私人图书馆
@@ -67,6 +65,9 @@
             </footer>
           </div>
         </button>
+        <div class="library-cover-actions">
+          <el-button text :aria-label="`自定义${library.name}封面`" @click="coverLibrary = library; coverEditorOpen = true">自定义封面</el-button>
+        </div>
         <div v-if="sort === 'manual' && !keyword" class="library-card-order">
           <el-button
             text
@@ -109,6 +110,7 @@
       @current-change="load"
       @size-change="changeSize"
     />
+    <LibraryCoverEditor v-model="coverEditorOpen" :library="coverLibrary" @saved="load" />
     <el-dialog
       v-model="createOpen"
       title="创建图书馆"
@@ -147,6 +149,8 @@
   </div>
 </template>
 <script setup lang="ts">
+import LibraryLandscape from '@/components/library/LibraryLandscape.vue'
+import LibraryCoverEditor from '@/components/library/LibraryCoverEditor.vue'
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '@/utils/api';
@@ -158,6 +162,8 @@ const libraries = ref<PersonalLibrary[]>([]);
 const createConfig = ref(defaultLibraryConfig());
 const keyword = ref(''), sort = ref('manual'), name = ref(''), description = ref('');
 const page = ref(1), size = ref(24), total = ref(0);
+const coverEditorOpen = ref(false)
+const coverLibrary = ref<PersonalLibrary | null>(null)
 const loading = ref(false), failed = ref(false), creating = ref(false), createOpen = ref(false), savingOrder = ref(false);
 let generation = 0;
 async function load() {

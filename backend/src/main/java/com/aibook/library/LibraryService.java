@@ -469,6 +469,13 @@ public class LibraryService {
             if (!allowed.contains(value)) throw error(HttpStatus.BAD_REQUEST, "外观选项无效");
             clean.put(key, value);
         }
+        Object coverImage = config.get("coverImage");
+        if (coverImage != null && !String.valueOf(coverImage).isBlank()) {
+            if (!(coverImage instanceof String key) || !key.matches("[a-f0-9-]{36}")) {
+                throw error(HttpStatus.BAD_REQUEST, "自定义封面标识无效");
+            }
+            clean.put("coverImage", coverImage);
+        }
         Object moduleInput = config.getOrDefault("modules", MODULES);
         if (!(moduleInput instanceof List<?> list) || list.size() > 4
                 || list.stream().anyMatch(item -> !(item instanceof String) || !MODULES.contains(item)) || list.stream().distinct().count() != list.size()) {

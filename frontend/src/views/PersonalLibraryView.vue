@@ -70,14 +70,12 @@
               {{ library.bookCount }} 本藏书
             </span>
           </div>
-          <div
+          <LibraryLandscape
             v-if="activeConfig.showCover"
-            class="library-landscape"
-            :class="`cover-${activeConfig.cover}`"
-            aria-hidden="true"
-          >
-            <span />
-          </div>
+            :library-id="id"
+            :image-key="activeConfig.coverImage"
+            :variant="activeConfig.cover"
+          />
         </div>
         <section v-for="module in visibleModules" :key="module" class="library-section">
           <div class="library-section-heading">
@@ -433,6 +431,10 @@
                   <el-option label="暖棕点缀" value="brown" />
                 </el-select>
               </el-form-item>
+              <el-form-item label="自定义封面图片">
+                <el-button :disabled="!!dirty || saving" @click="coverEditorOpen = true">上传 / 更换封面</el-button>
+                <p class="library-muted">同时用于图书馆卡片和馆头。有未保存设置时，请先保存再更换图片。</p>
+              </el-form-item>
               <el-form-item label="馆头封面">
                 <AudioSegmented
                   v-model="draft.config.cover"
@@ -577,14 +579,12 @@
                   {{ library.bookCount }} 本藏书
                 </small>
               </div>
-              <div
+              <LibraryLandscape
                 v-if="draft.config.showCover"
-                class="library-landscape"
-                :class="`cover-${draft.config.cover}`"
-                aria-hidden="true"
-              >
-                <span />
-              </div>
+                :library-id="id"
+                :image-key="draft.config.coverImage"
+                :variant="draft.config.cover"
+              />
             </div>
             <div v-for="key in draft.config.modules" :key="key" class="preview-module">
               <h3>
@@ -602,6 +602,7 @@
       </section>
     </div>
     <el-skeleton v-else-if="busy" :rows="8" animated />
+    <LibraryCoverEditor v-model="coverEditorOpen" :library="library" @saved="refresh" />
     <AddToLibraryDialog v-model="pickerOpen" :library-id="id" :list-id="listId" @added="refresh" />
     <el-dialog
       v-model="collectionOpen"
@@ -635,6 +636,8 @@
   </div>
 </template>
 <script setup lang="ts">
+import LibraryLandscape from '@/components/library/LibraryLandscape.vue'
+import LibraryCoverEditor from '@/components/library/LibraryCoverEditor.vue'
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import AudioSegmented from '@/components/audio/AudioSegmented.vue';
@@ -661,6 +664,7 @@ const categories = ref<{
     id: number;
     name: string;
 }[]>([]);
+const coverEditorOpen = ref(false)
 const busy = ref(false), failed = ref(false), saving = ref(false), pickerOpen = ref(false), conflict = ref(false);
 const query = ref(''), status = ref(''), group = ref(''), sort = ref('added');
 const categoryId = ref<number>(), tagId = ref<number>();
@@ -942,8 +946,9 @@ function moveModule(index: number, direction: number) {
     draft.value.config.modules = moduleOrder.value.filter(item => selected.has(item));
 }
 async function resetAppearance() {
-    if (await confirm('恢复默认外观与首页模块？全部馆藏、分组和书单保留；保存设置后生效。')) {
-        draft.value.config = defaultLibraryConfig();
+    if (await confirm('恢复默认外观与首页模块？全部馆藏、分组、书单及自定义封面图片保留；保存设置后生效。')) {
+        const coverImage = draft.value.config.coverImage;
+        draft.value.config = { ...defaultLibraryConfig(), ...(coverImage ? { coverImage } : {}) };
         moduleOrder.value = Object.keys(moduleLabels);
     }
 }
@@ -977,6 +982,7 @@ function hydrateQuery() {
     page.value = Math.max(1, Number(route.query.page) || pages.get(activeTab.value + (listId.value || '')) || 1);
 }
 watch(() => route.path, async () => {
+    coverEditorOpen.value = false;
     generation++;
     bookGeneration++;
     pickerOpen.value = false;

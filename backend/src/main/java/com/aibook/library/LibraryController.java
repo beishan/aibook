@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 public class LibraryController {
     private final LibraryService service;
     private final UserService users;
+    private final LibraryCoverService covers;
 
     public record LibraryRequest(String name, String description, Map<String, Object> config, long revision) {}
     public record BatchRequest(List<Long> libraryIds, List<Long> bookIds, Long listId) {}
@@ -60,7 +61,9 @@ public class LibraryController {
 
     @DeleteMapping("/{id}")
     public void delete(Authentication auth, @PathVariable long id) {
-        service.delete(user(auth), id);
+        User owner = user(auth);
+        service.delete(owner, id);
+        covers.cleanupDeletedLibrary(owner, id);
     }
 
     public record ItemsRequest(List<Long> bookIds, Long groupId, Boolean favorite, boolean move) {}

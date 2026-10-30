@@ -7,6 +7,7 @@ export interface LibraryConfig {
     layout: string;
     coverSize: string;
     cover: string;
+    coverImage?: string;
     modules: string[];
     bookLimit: number;
     listLimit: number;
