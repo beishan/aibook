@@ -297,11 +297,12 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   outline-offset: 2px;
 }
 
-.topbar-tool-item {
+:global(.el-dropdown-menu__item.topbar-tool-item) {
   gap: 12px;
+  padding-inline: 14px;
 }
 
-.tool-item-icon {
+:global(.topbar-tool-item .tool-item-icon) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
