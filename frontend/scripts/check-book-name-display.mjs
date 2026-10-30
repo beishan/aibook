@@ -50,10 +50,17 @@ setters.setBookNameMaskMode('INVALID')
 assert.equal(writes.length, 3)
 
 const hydration = preferences.slice(preferences.indexOf('      setHideBookNames('), preferences.indexOf('      setShelfPageSize('))
-const restore = new Function('data', 'setHideBookNames', 'setBookNameMaskMode', 'setBookNamePrefixLength', 'setBookNameMaskCharacter', 'normalizeBookNamePrefixLength', 'normalizeBookNameMaskCharacter', ts.transpile(hydration))
-restore({ hideBookNames: true, bookNameMaskMode: 'PREFIX', bookNamePrefixLength: 5 }, ...Object.values(setters), normalizeBookNamePrefixLength, normalizeBookNameMaskCharacter)
+let restoredDisplayTab
+const restoreDisplayTab = (value, syncRemote) => {
+  restoredDisplayTab = value
+  assert.equal(syncRemote, false)
+}
+const restore = new Function('data', 'setHideBookNames', 'setBookNameMaskMode', 'setBookNamePrefixLength', 'setBookNameMaskCharacter', 'normalizeBookNamePrefixLength', 'normalizeBookNameMaskCharacter', 'setBookDisplaySettingsTab', ts.transpile(hydration))
+restore({ hideBookNames: true, bookNameMaskMode: 'PREFIX', bookNamePrefixLength: 5, bookDisplaySettingsTab: 'cover' }, ...Object.values(setters), normalizeBookNamePrefixLength, normalizeBookNameMaskCharacter, restoreDisplayTab)
+assert.equal(restoredDisplayTab, 'cover')
 assert.equal(bookNamePrefixLength.value, 5)
-restore({}, ...Object.values(setters), normalizeBookNamePrefixLength, normalizeBookNameMaskCharacter)
+restore({}, ...Object.values(setters), normalizeBookNamePrefixLength, normalizeBookNameMaskCharacter, restoreDisplayTab)
+assert.equal(restoredDisplayTab, 'name')
 assert.equal(hideBookNames.value, false)
 assert.equal(bookNameMaskMode.value, 'HEAD_TAIL')
 assert.equal(bookNamePrefixLength.value, 2)
@@ -76,9 +83,11 @@ assert.equal(displayBookName('三国演义'), '三**义')
 state.bookNameMaskMode = 'PREFIX'
 assert.equal(displayBookName('三国演义'), '三国**')
 const resetSource = preferences.slice(preferences.indexOf('  const resetHydration ='), preferences.indexOf('    crawlerHideBookNames.value = false', preferences.indexOf('  const resetHydration =')))
-new Function('hideBookNames', 'bookNameMaskMode', 'bookNamePrefixLength', 'bookNameMaskCharacter', 'let hydrationSequence = 0;\n' + resetSource + '}\nresetHydration();')(
-  hideBookNames, bookNameMaskMode, bookNamePrefixLength, bookNameMaskCharacter,
+const bookDisplaySettingsTab = ref('cover')
+new Function('hideBookNames', 'bookNameMaskMode', 'bookNamePrefixLength', 'bookNameMaskCharacter', 'bookDisplaySettingsTab', 'let hydrationSequence = 0;\n' + resetSource + '}\nresetHydration();')(
+  hideBookNames, bookNameMaskMode, bookNamePrefixLength, bookNameMaskCharacter, bookDisplaySettingsTab,
 )
+assert.equal(bookDisplaySettingsTab.value, 'name')
 assert.equal(hideBookNames.value, false)
 assert.equal(bookNameMaskMode.value, 'HEAD_TAIL')
 assert.equal(bookNamePrefixLength.value, 2)
@@ -97,9 +106,10 @@ assert.equal(bookNameMaskCharacter.value, '●')
 assert.deepEqual(writes.at(-1), { bookNameMaskCharacter: '●' })
 setters.setBookNameMaskCharacter('invalid')
 assert.equal(bookNameMaskCharacter.value, '●')
-restore({ bookNameMaskCharacter: '👨‍👩‍👧' }, ...Object.values(setters), normalizeBookNamePrefixLength, normalizeBookNameMaskCharacter)
+restore({ bookNameMaskCharacter: '👨‍👩‍👧' }, ...Object.values(setters), normalizeBookNamePrefixLength, normalizeBookNameMaskCharacter, restoreDisplayTab)
 assert.equal(bookNameMaskCharacter.value, '👨‍👩‍👧')
-restore({}, ...Object.values(setters), normalizeBookNamePrefixLength, normalizeBookNameMaskCharacter)
+restore({}, ...Object.values(setters), normalizeBookNamePrefixLength, normalizeBookNameMaskCharacter, restoreDisplayTab)
+assert.equal(restoredDisplayTab, 'name')
 assert.equal(bookNameMaskCharacter.value, '*')
 state.bookNameMaskCharacter = '●'
 assert.equal(displayBookName('三国演义'), '三国●●')

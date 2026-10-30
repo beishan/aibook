@@ -175,6 +175,11 @@ public class UserService implements UserDetailsService {
         if (request.getHideBookNames() != null) {
             user.setHideBookNames(request.getHideBookNames());
         }
+        if (request.getBookDisplaySettingsTab() != null) {
+            requireAllowed("书籍显示设置栏目", request.getBookDisplaySettingsTab(),
+                    Set.of("name", "cover", "badges", "placeholder"));
+            user.setBookDisplaySettingsTab(request.getBookDisplaySettingsTab());
+        }
         if (request.getBookNameMaskMode() != null) {
             requireAllowed("书名隐藏模式", request.getBookNameMaskMode(), Set.of("HEAD_TAIL", "PREFIX"));
             user.setBookNameMaskMode(request.getBookNameMaskMode());
@@ -338,6 +343,9 @@ public class UserService implements UserDetailsService {
                 .libraryListPageSize(listPageSize)
                 .authorPageSize(normalizeAuthorPageSize(user.getAuthorPageSize()))
                 .hideBookNames(Boolean.TRUE.equals(user.getHideBookNames()))
+                .bookDisplaySettingsTab(Set.of("cover", "badges", "placeholder")
+                        .contains(user.getBookDisplaySettingsTab() == null ? "" : user.getBookDisplaySettingsTab())
+                        ? user.getBookDisplaySettingsTab() : "name")
                 .bookNameMaskMode("PREFIX".equals(user.getBookNameMaskMode()) ? "PREFIX" : "HEAD_TAIL")
                 .bookNameMaskCharacter(isBookNameMaskCharacter(user.getBookNameMaskCharacter())
                         ? user.getBookNameMaskCharacter() : "*")

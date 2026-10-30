@@ -27,6 +27,7 @@ public class UserPreferencesDTO {
     private Integer shelfPageSize;
     private Boolean hideBookNames;
     private String bookNameMaskMode;
+    private String bookDisplaySettingsTab;
     private Integer bookNamePrefixLength;
     private String bookNameMaskCharacter;
 
@@ -315,6 +316,14 @@ public class UserPreferencesDTO {
         this.hideBookNames = value;
     }
 
+    public String getBookDisplaySettingsTab() {
+        return bookDisplaySettingsTab;
+    }
+
+    public void setBookDisplaySettingsTab(String value) {
+        this.bookDisplaySettingsTab = value;
+    }
+
     public String getBookNameMaskMode() {
         return bookNameMaskMode;
     }
@@ -529,6 +538,11 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder hideBookNames(Boolean value) {
             this.value.setHideBookNames(value);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder bookDisplaySettingsTab(String value) {
+            this.value.setBookDisplaySettingsTab(value);
             return this;
         }
 

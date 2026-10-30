@@ -21,6 +21,29 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void bookDisplaySettingsTabPersistsAndIsolatesAccounts() {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+        assertEquals("name", service.getPreferences("reader").getBookDisplaySettingsTab());
+        for (String tab : new String[] {"name", "cover", "badges", "placeholder"}) {
+            var result = service.updatePreferences("reader", UserPreferencesDTO.builder()
+                    .bookDisplaySettingsTab(tab).build());
+            assertEquals(tab, result.getBookDisplaySettingsTab());
+        }
+        service.updatePreferences("reader", UserPreferencesDTO.builder().hideBookNames(true).build());
+        assertEquals("placeholder", service.getPreferences("reader").getBookDisplaySettingsTab());
+        assertEquals("name", service.getPreferences("other").getBookDisplaySettingsTab());
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                UserPreferencesDTO.builder().bookDisplaySettingsTab("invalid").build()));
+        assertEquals("placeholder", reader.getBookDisplaySettingsTab());
+    }
+
+    @Test
     void bookNameReplacementCharacterPersistsValidUnicodeAndRejectsInvisibleOrMultipleCharacters() {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();

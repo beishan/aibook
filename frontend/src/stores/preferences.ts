@@ -134,6 +134,7 @@ interface UserPreferences {
   libraryListPageSize: number | null
   authorPageSize: number | null
   hideBookNames: boolean | null
+  bookDisplaySettingsTab?: string | null
   bookNameMaskMode: BookNameMaskMode | null
   bookNamePrefixLength: number | null
   bookNameMaskCharacter: string | null
@@ -432,6 +433,7 @@ const readLocalReaderSettings = (): ReaderSettings => {
 
 export const usePreferencesStore = defineStore('preferences', () => {
   const hideBookNames = ref(false)
+  const bookDisplaySettingsTab = ref('name')
   const bookNameMaskMode = ref<BookNameMaskMode>('HEAD_TAIL')
   const bookNamePrefixLength = ref(2)
   const bookNameMaskCharacter = ref('*')
@@ -763,6 +765,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
     else persist()
   }
 
+  const setBookDisplaySettingsTab = (value: string, syncRemote = true) => {
+    if (!['name', 'cover', 'badges', 'placeholder'].includes(value)) return
+    bookDisplaySettingsTab.value = value
+    if (syncRemote) persistRemote({ bookDisplaySettingsTab: value })
+  }
+
   const setHideBookNames = (value: boolean, syncRemote = true) => {
     hideBookNames.value = value
     if (syncRemote) persistRemote({ hideBookNames: value })
@@ -1022,6 +1030,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
         }
       }
       setHideBookNames(data.hideBookNames === true, false)
+      setBookDisplaySettingsTab(data.bookDisplaySettingsTab || 'name', false)
       setBookNameMaskMode(data.bookNameMaskMode === 'PREFIX' ? 'PREFIX' : 'HEAD_TAIL', false)
       setBookNamePrefixLength(normalizeBookNamePrefixLength(data.bookNamePrefixLength), false)
       setBookNameMaskCharacter(normalizeBookNameMaskCharacter(data.bookNameMaskCharacter), false)
@@ -1051,6 +1060,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const resetHydration = () => {
     hydrationSequence++
     hideBookNames.value = false
+    bookDisplaySettingsTab.value = 'name'
     bookNameMaskMode.value = 'HEAD_TAIL'
     bookNamePrefixLength.value = 2
     bookNameMaskCharacter.value = '*'
@@ -1079,6 +1089,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   return {
     hideBookNames,
+    bookDisplaySettingsTab,
+    setBookDisplaySettingsTab,
     bookNameMaskMode,
     bookNamePrefixLength,
     bookNameMaskCharacter,

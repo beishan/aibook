@@ -149,10 +149,25 @@
 
     <!-- 书籍显示 -->
     <div v-show="activeTab === 'cover-display'" class="tab-content">
-      <BookNameDisplaySettingsPanel />
-      <BookCoverDisplaySettingsPanel />
-      <BookCardBadgeSettingsPanel />
-      <BookCoverPlaceholderSettingsPanel />
+      <AudioSegmented
+        class="book-display-tabs"
+        :model-value="preferencesStore.bookDisplaySettingsTab"
+        label="书籍显示设置栏目"
+        :options="bookDisplayTabs"
+        @update:model-value="preferencesStore.setBookDisplaySettingsTab"
+      />
+      <section v-show="preferencesStore.bookDisplaySettingsTab === 'name'" aria-label="书名显示设置">
+        <BookNameDisplaySettingsPanel />
+      </section>
+      <section v-show="preferencesStore.bookDisplaySettingsTab === 'cover'" aria-label="封面显示设置">
+        <BookCoverDisplaySettingsPanel />
+      </section>
+      <section v-show="preferencesStore.bookDisplaySettingsTab === 'badges'" aria-label="卡片标签设置">
+        <BookCardBadgeSettingsPanel />
+      </section>
+      <section v-show="preferencesStore.bookDisplaySettingsTab === 'placeholder'" aria-label="无图文字设置">
+        <BookCoverPlaceholderSettingsPanel />
+      </section>
     </div>
 
     <!-- 扫描目录 -->
@@ -724,6 +739,7 @@
 </template>
 
 <script setup lang="ts">
+import AudioSegmented from '@/components/audio/AudioSegmented.vue'
 import BookCoverPlaceholderSettingsPanel from '@/components/BookCoverPlaceholderSettingsPanel.vue'
 import BookCardBadgeSettingsPanel from '@/components/BookCardBadgeSettingsPanel.vue'
 import { ref, reactive, onMounted, onUnmounted, computed, watch, defineAsyncComponent, nextTick } from 'vue'
@@ -1009,6 +1025,12 @@ const getLayoutName = (layout: string) => {
 }
 
 type ThemeSettingsTab = 'style' | 'accent' | 'background' | 'dock'
+const bookDisplayTabs = [
+  { value: 'name', label: '书名显示' },
+  { value: 'cover', label: '封面显示' },
+  { value: 'badges', label: '卡片标签' },
+  { value: 'placeholder', label: '无图文字' },
+]
 const themeSettingsTab = ref<ThemeSettingsTab>('style')
 
 watch(() => themeStore.currentTheme, theme => {
@@ -1550,6 +1572,12 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.book-display-tabs {
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: var(--spacing-lg);
+}
+
 .recycle-settings-card :deep(.recycle-bin-panel) {
   padding: var(--spacing-lg);
 }

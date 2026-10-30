@@ -70,6 +70,8 @@ public class UserPreference {
     private Boolean hideBookNames;
     @Column(name = "book_name_mask_mode", length = 20)
     private String bookNameMaskMode;
+    @Column(name = "book_display_settings_tab", length = 20)
+    private String bookDisplaySettingsTab;
     @Column(name = "book_name_prefix_length")
     private Integer bookNamePrefixLength;
     @Column(name = "book_name_mask_character", length = 64)
