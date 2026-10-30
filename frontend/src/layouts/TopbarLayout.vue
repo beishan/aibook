@@ -28,10 +28,11 @@
                   <el-dropdown-item
                     v-for="tool in toolItems"
                     :key="tool.path"
+                    class="topbar-tool-item"
                     :class="{ 'is-active-tool': isActiveRoute(tool.path) }"
                     @click="router.push(tool.path)"
                   >
-                    <span aria-hidden="true">{{ tool.icon }}</span>
+                    <span class="tool-item-icon" aria-hidden="true">{{ tool.icon }}</span>
                     <span>{{ tool.title }}</span>
                   </el-dropdown-item>
                 </el-dropdown-menu>
@@ -269,6 +270,18 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 .tools-trigger:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
+}
+
+.topbar-tool-item {
+  gap: 12px;
+}
+
+.tool-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex: 0 0 24px;
 }
 
 :global(.el-dropdown-menu__item.is-active-tool) {
