@@ -147,6 +147,10 @@
       <FontManagementPanel />
     </div>
 
+    <div v-show="activeTab === 'navigation'" class="tab-content">
+      <NavigationMenuSettingsPanel />
+    </div>
+
     <!-- 书籍显示 -->
     <div v-show="activeTab === 'cover-display'" class="tab-content">
       <AudioSegmented
@@ -739,6 +743,7 @@
 </template>
 
 <script setup lang="ts">
+import NavigationMenuSettingsPanel from '@/components/NavigationMenuSettingsPanel.vue'
 import AudioSegmented from '@/components/audio/AudioSegmented.vue'
 import BookCoverPlaceholderSettingsPanel from '@/components/BookCoverPlaceholderSettingsPanel.vue'
 import BookCardBadgeSettingsPanel from '@/components/BookCardBadgeSettingsPanel.vue'
@@ -965,6 +970,7 @@ const tabGroups = computed(() => [
     items: [
       { key: 'profile', label: '个人设置', icon: '👤' },
       { key: 'theme', label: '主题与界面', icon: '🎨' },
+      { key: 'navigation', label: '导航菜单', icon: '↕️' },
       { key: 'cover-display', label: '书籍显示', icon: '🖼️' },
     ],
   },

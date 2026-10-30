@@ -84,7 +84,7 @@ state.bookNameMaskMode = 'PREFIX'
 assert.equal(displayBookName('三国演义'), '三国**')
 const resetSource = preferences.slice(preferences.indexOf('  const resetHydration ='), preferences.indexOf('    crawlerHideBookNames.value = false', preferences.indexOf('  const resetHydration =')))
 const bookDisplaySettingsTab = ref('cover')
-new Function('hideBookNames', 'bookNameMaskMode', 'bookNamePrefixLength', 'bookNameMaskCharacter', 'bookDisplaySettingsTab', 'let hydrationSequence = 0;\n' + resetSource + '}\nresetHydration();')(
+new Function('hideBookNames', 'bookNameMaskMode', 'bookNamePrefixLength', 'bookNameMaskCharacter', 'bookDisplaySettingsTab', 'let hydrationSequence = 0; const navigationMenuOrder = { value: [] }; const defaultNavigationMenuOrder = () => [];\n' + resetSource + '}\nresetHydration();')(
   hideBookNames, bookNameMaskMode, bookNamePrefixLength, bookNameMaskCharacter, bookDisplaySettingsTab,
 )
 assert.equal(bookDisplaySettingsTab.value, 'name')

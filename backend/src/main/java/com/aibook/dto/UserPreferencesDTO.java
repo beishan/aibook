@@ -28,6 +28,7 @@ public class UserPreferencesDTO {
     private Boolean hideBookNames;
     private String bookNameMaskMode;
     private String bookDisplaySettingsTab;
+    private List<String> navigationMenuOrder;
     private Integer bookNamePrefixLength;
     private String bookNameMaskCharacter;
 
@@ -316,6 +317,14 @@ public class UserPreferencesDTO {
         this.hideBookNames = value;
     }
 
+    public List<String> getNavigationMenuOrder() {
+        return navigationMenuOrder;
+    }
+
+    public void setNavigationMenuOrder(List<String> value) {
+        this.navigationMenuOrder = value;
+    }
+
     public String getBookDisplaySettingsTab() {
         return bookDisplaySettingsTab;
     }
@@ -538,6 +547,11 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder hideBookNames(Boolean value) {
             this.value.setHideBookNames(value);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder navigationMenuOrder(List<String> value) {
+            this.value.setNavigationMenuOrder(value);
             return this;
         }
 

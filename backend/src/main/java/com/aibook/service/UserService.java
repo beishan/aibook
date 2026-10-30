@@ -175,6 +175,14 @@ public class UserService implements UserDetailsService {
         if (request.getHideBookNames() != null) {
             user.setHideBookNames(request.getHideBookNames());
         }
+        if (request.getNavigationMenuOrder() != null) {
+            var order = request.getNavigationMenuOrder();
+            var defaults = defaultNavigationMenuOrder();
+            if (order.size() != defaults.size() || !new java.util.HashSet<>(order).equals(new java.util.HashSet<>(defaults))) {
+                throw new IllegalArgumentException("导航菜单顺序须包含全部菜单且不能重复");
+            }
+            user.setNavigationMenuOrder(String.join(",", order));
+        }
         if (request.getBookDisplaySettingsTab() != null) {
             requireAllowed("书籍显示设置栏目", request.getBookDisplaySettingsTab(),
                     Set.of("name", "cover", "badges", "placeholder"));
@@ -343,6 +351,7 @@ public class UserService implements UserDetailsService {
                 .libraryListPageSize(listPageSize)
                 .authorPageSize(normalizeAuthorPageSize(user.getAuthorPageSize()))
                 .hideBookNames(Boolean.TRUE.equals(user.getHideBookNames()))
+                .navigationMenuOrder(readNavigationMenuOrder(user.getNavigationMenuOrder()))
                 .bookDisplaySettingsTab(Set.of("cover", "badges", "placeholder")
                         .contains(user.getBookDisplaySettingsTab() == null ? "" : user.getBookDisplaySettingsTab())
                         ? user.getBookDisplaySettingsTab() : "name")
@@ -428,6 +437,23 @@ public class UserService implements UserDetailsService {
         } catch (Exception exception) {
             return List.of();
         }
+    }
+
+    private static List<String> defaultNavigationMenuOrder() {
+        return List.of("/", "/books", "/tools", "/shelf", "/libraries", "/recommendations",
+                "/crawler", "/statistics", "/settings");
+    }
+
+    private List<String> readNavigationMenuOrder(String stored) {
+        var result = new java.util.LinkedHashSet<String>();
+        var defaults = defaultNavigationMenuOrder();
+        if (stored != null) {
+            for (String path : stored.split(",")) {
+                if (defaults.contains(path)) result.add(path);
+            }
+        }
+        result.addAll(defaults);
+        return List.copyOf(result);
     }
 
     private List<DockNavigationItemDTO> normalizeDockNavigationItems(

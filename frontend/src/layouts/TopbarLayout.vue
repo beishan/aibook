@@ -122,7 +122,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { sortNavigationMenu } from '@/utils/navigationMenu'
+import { usePreferencesStore } from '@/stores/preferences'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { confirm } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
@@ -134,7 +136,7 @@ const userStore = useUserStore()
 const searchKeyword = ref('')
 const showDropdown = ref(false)
 
-const menuItems = [
+const baseMenuItems = [
   { path: '/', icon: '🏠', title: '首页' },
   { path: '/books', icon: '📚', title: '书库' },
   { path: '/rewrite', icon: '✎', title: '重写' },
@@ -153,10 +155,12 @@ const toolItems = [
   { path: '/rewrite', icon: '✎', title: '重写' },
   { path: '/format-conversion', icon: '🔄', title: '格式转换' },
 ]
-const desktopMenuItems = menuItems.filter(item =>
-  !toolItems.some(tool => tool.path === item.path),
-)
-desktopMenuItems.splice(2, 0, { path: '/tools', icon: '🧰', title: '工具' })
+const preferencesStore = usePreferencesStore()
+const menuItems = computed(() => sortNavigationMenu(baseMenuItems, preferencesStore.navigationMenuOrder))
+const desktopMenuItems = computed(() => sortNavigationMenu([
+  ...baseMenuItems.filter(item => !toolItems.some(tool => tool.path === item.path)),
+  { path: '/tools', icon: '🧰', title: '工具' },
+], preferencesStore.navigationMenuOrder))
 
 const isActiveRoute = (path: string) => {
   if (path === '/') return route.path === '/'

@@ -72,6 +72,8 @@ public class UserPreference {
     private String bookNameMaskMode;
     @Column(name = "book_display_settings_tab", length = 20)
     private String bookDisplaySettingsTab;
+    @Column(name = "navigation_menu_order", columnDefinition = "TEXT")
+    private String navigationMenuOrder;
     @Column(name = "book_name_prefix_length")
     private Integer bookNamePrefixLength;
     @Column(name = "book_name_mask_character", length = 64)

@@ -147,6 +147,8 @@
 </template>
 
 <script setup lang="ts">
+import { sortNavigationMenu } from '@/utils/navigationMenu'
+import { usePreferencesStore } from '@/stores/preferences'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -177,7 +179,7 @@ const searchKeyword = ref('')
 const sidebarCollapsed = ref(false)
 const showMobileMenu = ref(false)
 
-const menuItems = [
+const baseMenuItems = [
   { path: '/', icon: House, title: '首页' },
   { path: '/books', icon: Collection, title: '书库' },
   { path: '/rewrite', icon: EditPen, title: '书籍重写' },
@@ -191,10 +193,13 @@ const menuItems = [
   { path: '/settings', icon: Setting, title: '设置' },
 ]
 
+const preferencesStore = usePreferencesStore()
+const menuItems = computed(() => sortNavigationMenu(baseMenuItems, preferencesStore.navigationMenuOrder))
+
 const sidebarWidth = computed(() => (sidebarCollapsed.value ? '64px' : '224px'))
 
 const activeMenu = computed(() => {
-  const matched = menuItems.find(item =>
+  const matched = menuItems.value.find(item =>
     item.path === '/' ? route.path === '/' : route.path.startsWith(item.path)
   )
   return matched?.path || ''

@@ -21,6 +21,34 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void navigationOrderPersistsAndRejectsMissingOrRepeatedItems() {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+        var defaults = service.getPreferences("reader").getNavigationMenuOrder();
+        var reversed = new java.util.ArrayList<>(defaults);
+        java.util.Collections.reverse(reversed);
+        assertEquals(reversed, service.updatePreferences("reader", UserPreferencesDTO.builder()
+                .navigationMenuOrder(reversed).build()).getNavigationMenuOrder());
+        assertEquals(defaults, service.getPreferences("other").getNavigationMenuOrder());
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                UserPreferencesDTO.builder().navigationMenuOrder(java.util.List.of("/")).build()));
+        var repeated = new java.util.ArrayList<>(defaults);
+        repeated.set(0, repeated.get(1));
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                UserPreferencesDTO.builder().navigationMenuOrder(repeated).build()));
+        service.updatePreferences("reader", UserPreferencesDTO.builder().hideBookNames(true).build());
+        assertEquals(reversed, service.getPreferences("reader").getNavigationMenuOrder());
+        reader.setNavigationMenuOrder("/settings,/unknown,/settings");
+        assertEquals("/settings", service.getPreferences("reader").getNavigationMenuOrder().getFirst());
+        assertEquals(defaults.size(), service.getPreferences("reader").getNavigationMenuOrder().size());
+    }
+
+    @Test
     void bookDisplaySettingsTabPersistsAndIsolatesAccounts() {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();

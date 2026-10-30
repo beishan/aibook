@@ -459,6 +459,14 @@ public class User implements UserDetails {
         preference().setBookCoverVisibilityOverrides(value);
     }
 
+    public String getNavigationMenuOrder() {
+        return preference().getNavigationMenuOrder();
+    }
+
+    public void setNavigationMenuOrder(String value) {
+        preference().setNavigationMenuOrder(value);
+    }
+
     public String getBookDisplaySettingsTab() {
         return preference().getBookDisplaySettingsTab();
     }
