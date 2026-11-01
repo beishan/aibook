@@ -165,10 +165,9 @@
     </section>
     <section class="blue-appearance-settings">
       <h3>界面样式</h3>
-      <ReaderBlueGraySegmented
+      <ReaderAppearancePicker
         :model-value="settings.appearance"
         :options="appearances"
-        label="正式阅读器界面样式"
         @update:model-value="$emit('appearance', $event)"
       />
     </section>
@@ -182,6 +181,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ReaderContentWidth, ReaderSettings, ReaderTypography } from '@/stores/preferences'
+import ReaderAppearancePicker from './ReaderAppearancePicker.vue'
 import ReaderBlueGraySegmented from './ReaderBlueGraySegmented.vue'
 import ReaderBlueGrayIcon from './ReaderBlueGrayIcon.vue'
 
@@ -190,7 +190,7 @@ const props = defineProps<{
   fixedLayout?: boolean
   settings: ReaderSettings
   typography: ReaderTypography
-  appearances: Array<{ value: string; label: string }>
+  appearances: Array<{ value: string; label: string; description?: string }>
   fonts: Array<{ value: string; label: string }>
   backgrounds: Array<{ id: string; name: string }>
   pagination: boolean

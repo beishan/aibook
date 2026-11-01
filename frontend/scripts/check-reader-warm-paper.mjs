@@ -83,7 +83,7 @@ try {
   await appearance.getByRole('radio', { name: '经典', exact: true }).click()
   await page.locator('.reader-view:not(.blue-gray-mode):not(.warm-paper-mode)').waitFor()
   assert.equal(await page.locator('.reader-body').evaluate(el => getComputedStyle(el).fontSize), '16px')
-  await page.getByRole('radio', { name: '温暖纸感 草木与书香' }).click()
+  await page.getByRole('radio', { name: '温暖纸感', exact: true }).click()
   await page.getByRole('button', { name: '增大字号' }).waitFor()
   assert.equal(await page.locator('.reader-text p').first().evaluate(el => getComputedStyle(el).fontSize), '25px')
   await page.keyboard.press('Escape')

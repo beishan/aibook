@@ -13,19 +13,14 @@ assert.match(
 )
 assert.match(
   preferencesSource,
-  /type ReaderAppearance = 'classic' \| 'readingRoom' \| 'trialReader'/,
+  /type ReaderAppearance =[\s\S]*?'classic'[\s\S]*?'readingRoom'[\s\S]*?'trialReader'/,
 )
 assert.match(
   readerSource,
   /value: 'trialReader', label: '临时阅读', description: '轻量试读布局'/,
 )
 assert.match(readerSource, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
-assert.match(readerSource, /\.appearance-segmented--trialReader\s*{\s*--appearance-index: 2;/)
-assert.match(
-  readerSource,
-  /appearanceOptions\.findIndex\(option => option\.value === settings\.value\.appearance\)/,
-  'keyboard navigation must support every layout option',
-)
+assert.match(readerSource, /<ReaderAppearancePicker[\s\S]*?:options="appearanceOptions"/)
 
 for (const selector of [
   '.trial-reader-mode .reader-header',

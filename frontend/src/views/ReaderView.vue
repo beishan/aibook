@@ -850,30 +850,11 @@
 
               <div class="setting-section appearance-setting-section">
                 <h4 class="section-title">界面样式</h4>
-                <div
-                  class="appearance-segmented"
-                  :class="`appearance-segmented--${settings.appearance}`"
-                  role="radiogroup"
-                  aria-label="正式阅读器界面样式"
-                  @keydown="handleAppearanceKeydown"
-                >
-                  <div class="appearance-segmented-track">
-                    <span class="appearance-segmented-indicator" aria-hidden="true"></span>
-                    <button
-                      v-for="appearance in appearanceOptions"
-                      :key="appearance.value"
-                      type="button"
-                      class="appearance-segmented-option"
-                      role="radio"
-                      :aria-checked="settings.appearance === appearance.value"
-                      :tabindex="settings.appearance === appearance.value ? 0 : -1"
-                      @click="settings.appearance = appearance.value"
-                    >
-                      <strong>{{ appearance.label }}</strong>
-                      <small>{{ appearance.description }}</small>
-                    </button>
-                  </div>
-                </div>
+                <ReaderAppearancePicker
+                  :model-value="settings.appearance"
+                  :options="appearanceOptions"
+                  @update:model-value="settings.appearance = $event as ReaderAppearance"
+                />
               </div>
 
               <!-- 字体设置 -->
@@ -1157,6 +1138,7 @@ import PdfReader from '@/components/reader/PdfReader.vue'
 import ReaderBlueGrayIcon from '@/components/reader/ReaderBlueGrayIcon.vue'
 import ReaderSpreadsheetHeader from '@/components/reader/ReaderSpreadsheetHeader.vue'
 import ReaderBlueGrayTopbar from '@/components/reader/ReaderBlueGrayTopbar.vue'
+import ReaderAppearancePicker from '@/components/reader/ReaderAppearancePicker.vue'
 import ReaderBlueGraySegmented from '@/components/reader/ReaderBlueGraySegmented.vue'
 import ReaderBlueGraySettings from '@/components/reader/ReaderBlueGraySettings.vue'
 import QuickChapterTitleSettings from '@/components/reader/QuickChapterTitleSettings.vue'
@@ -1694,27 +1676,6 @@ const readerShellStyle = computed(() => {
     backgroundSize: 'cover',
   }
 })
-
-const handleAppearanceKeydown = (event: KeyboardEvent) => {
-  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-  event.preventDefault()
-  const group = event.currentTarget as HTMLElement | null
-  const currentIndex = Math.max(
-    0,
-    appearanceOptions.findIndex(option => option.value === settings.value.appearance),
-  )
-  const nextIndex = event.key === 'Home'
-    ? 0
-    : event.key === 'End'
-      ? appearanceOptions.length - 1
-      : event.key === 'ArrowLeft'
-        ? (currentIndex - 1 + appearanceOptions.length) % appearanceOptions.length
-        : (currentIndex + 1) % appearanceOptions.length
-  settings.value.appearance = appearanceOptions[nextIndex].value
-  nextTick(() => {
-    group?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus()
-  })
-}
 
 const pageTurnZoneStyle = computed(() => ({
   '--reader-content-width': readerStyle.value.maxWidth,
@@ -6176,101 +6137,6 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 
-/* 正式阅读器界面样式选择 */
-.appearance-segmented {
-  --appearance-index: 0;
-  position: relative;
-  display: block;
-  overflow-x: auto;
-  border: 1px solid var(--border-color-light);
-  border-radius: 16px;
-  background: var(--bg-secondary);
-}
-
-.appearance-segmented-track {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  min-width: 560px;
-  padding: 4px;
-}
-
-.appearance-segmented--readingRoom {
-  --appearance-index: 1;
-}
-
-.appearance-segmented--trialReader {
-  --appearance-index: 2;
-}
-
-.appearance-segmented--blueGray {
-  --appearance-index: 3;
-}
-
-.appearance-segmented--warmPaper {
-  --appearance-index: 4;
-}
-
-.appearance-segmented--spreadsheet {
-  --appearance-index: 5;
-}
-
-.appearance-segmented--spreadsheetWarm {
-  --appearance-index: 6;
-}
-
-.appearance-segmented-indicator {
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  left: 4px;
-  width: calc((100% - 8px) / 7);
-  border: 1px solid var(--border-color-light);
-  border-radius: 12px;
-  background: var(--surface-elevated);
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.09);
-  transform: translateX(calc(var(--appearance-index) * 100%));
-  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.appearance-segmented-option {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  padding: 9px 8px;
-  border: 0;
-  border-radius: 12px;
-  outline: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  text-align: center;
-}
-
-.appearance-segmented-option strong {
-  color: inherit;
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.appearance-segmented-option small {
-  overflow: hidden;
-  color: var(--text-tertiary);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.appearance-segmented-option[aria-checked="true"] {
-  color: var(--primary);
-}
-
-.appearance-segmented-option:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--primary);
-}
-
 /* 书房：复用同一个 ReaderView，仅重塑界面，不分叉阅读逻辑 */
 .reading-room-mode {
   --room-border: color-mix(in srgb, var(--reader-room-text) 14%, transparent);
@@ -6487,12 +6353,6 @@ onBeforeUnmount(() => {
 .reading-room-mode .section-title {
   color: var(--room-muted);
   letter-spacing: 0.1em;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .appearance-segmented-indicator {
-    transition: none;
-  }
 }
 
 /* 动画 */

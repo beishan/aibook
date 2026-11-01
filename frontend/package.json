@@ -1,6 +1,6 @@
 {
   "name": "aibook-frontend",
-  "version": "1.49.27",
+  "version": "1.49.28",
   "description": "汗牛充栋 - 阅读书籍管理系统前端",
   "type": "module",
   "scripts": {
@@ -101,7 +101,8 @@
     "test:reader-blue-gray": "node scripts/check-reader-blue-gray.mjs",
     "test:reader-readium-progress": "node scripts/check-reader-readium-progress.mjs",
     "test:reader-warm-paper": "node scripts/check-reader-warm-paper.mjs",
-    "test:reader-spreadsheet": "node scripts/check-reader-spreadsheet.mjs"
+    "test:reader-spreadsheet": "node scripts/check-reader-spreadsheet.mjs",
+    "test:reader-appearance-picker": "node scripts/check-reader-appearance-picker.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
