@@ -1,0 +1,353 @@
+/* Spreadsheet chrome surrounds the existing engines; no editable grid owns the book text. */
+.reader-view.blue-gray-mode.spreadsheet-mode {
+  --sheet-accent: #217346;
+  --sheet-line: #d9dfda;
+  --sheet-chrome: #f3f5f3;
+  --sheet-paper: var(--reader-room-background);
+  --blue-accent: var(--sheet-accent);
+  --reader-control-accent: var(--sheet-accent);
+  --blue-footer-height: 76px;
+  --blue-sidebar-width: min(330px, 82vw);
+  color: var(--reader-room-text);
+}
+.reader-view.blue-gray-mode.spreadsheet-mode.spreadsheet-warm {
+  --sheet-accent: #4b7651;
+  --sheet-line: #dedbcf;
+  --sheet-chrome: #f1eee5;
+}
+.spreadsheet-mode .reader-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+}
+.spreadsheet-mode .sheet-header {
+  position: relative;
+  flex: 0 0 auto;
+  color: #26352b;
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+  background: var(--sheet-chrome);
+  z-index: 20;
+}
+.spreadsheet-mode button:focus-visible,
+.spreadsheet-mode select:focus-visible,
+.spreadsheet-mode input:focus-visible {
+  outline: 2px solid var(--sheet-accent);
+  outline-offset: -2px;
+}
+.sheet-header button,
+.sheet-footer button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 7px 12px;
+  white-space: nowrap;
+}
+.sheet-header button:hover,
+.sheet-footer button:hover {
+  background: #21734615;
+}
+.sheet-header button:disabled {
+  opacity: .4;
+  cursor: default;
+}
+.sheet-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 12px;
+  min-height: 36px;
+  background: var(--sheet-accent);
+  color: #fff;
+}
+.sheet-titlebar strong {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.sheet-titlebar button:hover {
+  background: #ffffff25;
+}
+.sheet-app-icon {
+  font-size: 23px;
+}
+.sheet-menus {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--sheet-line);
+}
+.sheet-menus .blue-segmented {
+  width: 230px;
+}
+.sheet-ribbon {
+  display: flex;
+  overflow-x: auto;
+  min-height: 92px;
+  padding: 8px 14px 5px;
+  gap: 12px;
+}
+.sheet-ribbon fieldset {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 6px;
+  margin: 0;
+  padding: 0 14px 6px 0;
+  border: 0;
+  border-right: 1px solid var(--sheet-line);
+}
+.sheet-ribbon legend {
+  font-size: 11px;
+  color: #657268;
+}
+.sheet-ribbon button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+.sheet-ribbon button b,
+.sheet-ribbon button > svg {
+  width: 24px;
+  height: 24px;
+  font-size: 24px;
+  font-weight: 400;
+  color: var(--sheet-accent);
+}
+.sheet-ribbon select,
+.sheet-ribbon input {
+  min-height: 30px;
+  border: 1px solid var(--sheet-line);
+  border-radius: 2px;
+  background: #fff;
+  color: #27372d;
+  padding: 3px 6px;
+  font: inherit;
+}
+.sheet-ribbon select:first-of-type {
+  width: 145px;
+  max-width: 155px;
+}
+.sheet-ribbon input {
+  width: 52px;
+}
+.sheet-formula {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px;
+  border-top: 1px solid var(--sheet-line);
+  border-bottom: 1px solid var(--sheet-line);
+}
+.sheet-cell-address,
+.sheet-formula-text {
+  background: var(--sheet-paper);
+  border: 1px solid var(--sheet-line);
+  padding: 4px 12px;
+}
+.sheet-cell-address {
+  width: 80px;
+  text-align: center;
+}
+.sheet-formula-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--reader-room-text);
+}
+.sheet-column-ruler {
+  display: grid;
+  grid-template-columns: 34px repeat(14, minmax(0, 1fr));
+  height: 26px;
+}
+.sheet-column-ruler span {
+  text-align: center;
+  border-right: 1px solid var(--sheet-line);
+  border-bottom: 1px solid var(--sheet-line);
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 26px;
+}
+.reader-view.blue-gray-mode.spreadsheet-mode .reader-body-wrapper {
+  display: grid;
+  grid-template-columns: var(--blue-visible-sidebar) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  background-color: var(--sheet-paper);
+  background-image: linear-gradient(var(--sheet-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--sheet-line) 1px, transparent 1px);
+  background-size: calc((100% - 34px) / 14) 28px;
+  background-position: 34px 0;
+}
+.reader-view.blue-gray-mode.spreadsheet-mode .reader-body {
+  grid-column: 2;
+  grid-row: 1;
+  width: calc(100% - 100px);
+  max-width: var(--blue-content-width);
+  height: 100%;
+  max-height: 100%;
+  margin: 0 auto;
+  padding: 32px clamp(20px, 3vw, 48px) 48px;
+  background: var(--sheet-paper) !important;
+  color: var(--reader-room-text);
+}
+.reader-view.blue-gray-mode.spreadsheet-mode .reader-text,
+.reader-view.blue-gray-mode.spreadsheet-mode .reader-html {
+  padding: 0;
+}
+.reader-view.blue-gray-mode.spreadsheet-mode .chapter-title {
+  margin: 0 0 1em;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+}
+.spreadsheet-mode .chapter-title::after {
+  display: none;
+}
+.spreadsheet-mode .reader-text p:hover {
+  outline: 1px solid var(--sheet-accent);
+  outline-offset: 6px;
+}
+.sheet-row-ruler {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--blue-visible-sidebar);
+  width: 34px;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--sheet-chrome);
+  border-right: 1px solid var(--sheet-line);
+  color: #69716b;
+  z-index: 2;
+}
+.sheet-row-ruler span {
+  display: block;
+  height: 28px;
+  border-bottom: 1px solid var(--sheet-line);
+  text-align: center;
+  font: 12px/28px sans-serif;
+  box-sizing: border-box;
+}
+.reader-view.blue-gray-mode.spreadsheet-mode .side-panel {
+  grid-row: 1;
+  border-right-color: var(--sheet-line);
+  background: var(--sheet-chrome);
+}
+.sheet-footer {
+  flex: 0 0 auto;
+  background: var(--sheet-chrome);
+  color: #344439;
+  font: 12px/1.4 -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  z-index: 10;
+}
+.sheet-worksheets {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 3px 8px;
+  border-top: 1px solid var(--sheet-line);
+}
+.sheet-worksheets .blue-segmented {
+  flex: 0 1 760px;
+  min-width: 0;
+  border-radius: 3px;
+}
+.sheet-worksheets .blue-segmented button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+.sheet-status {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 2px 14px;
+  border-top: 1px solid var(--sheet-line);
+}
+.sheet-status label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sheet-status input {
+  width: 130px;
+  accent-color: var(--sheet-accent);
+}
+.sheet-status button {
+  margin-left: auto;
+}
+@media (max-width: 760px) {
+  .sheet-titlebar {
+    gap: 4px;
+    font-size: 12px;
+  }
+  .sheet-titlebar button:first-of-type,
+  .sheet-common-actions {
+    display: none !important;
+  }
+  .sheet-ribbon {
+    min-height: 78px;
+    padding: 4px 8px;
+  }
+  .sheet-ribbon fieldset {
+    gap: 2px;
+    padding-right: 6px;
+  }
+  .sheet-ribbon button {
+    padding: 5px 8px;
+  }
+  .reader-view.blue-gray-mode.spreadsheet-mode .reader-body {
+    width: calc(100% - 48px);
+    margin: 0 0 0 40px;
+    padding: 22px 16px 36px;
+  }
+  .sheet-status {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .sheet-status input {
+    width: 70px;
+  }
+  .sheet-status > span:first-child {
+    display: none;
+  }
+}
+
+
+.reader-view.blue-gray-mode.spreadsheet-mode .reader-text ::selection,
+.reader-view.blue-gray-mode.spreadsheet-mode .reader-html ::selection {
+  background: #c8ddbf;
+  color: #203322;
+}
+@media (max-height: 560px) {
+  .sheet-ribbon {
+    min-height: 40px;
+    padding: 3px 8px;
+  }
+  .sheet-ribbon legend,
+  .sheet-ribbon button b,
+  .sheet-ribbon button > svg {
+    display: none;
+  }
+  .sheet-ribbon button {
+    padding: 5px 8px;
+  }
+}
+
+.sheet-menus .blue-segmented,
+.sheet-worksheets .blue-segmented {
+  border-color: var(--sheet-line);
+  background: var(--sheet-chrome);
+}

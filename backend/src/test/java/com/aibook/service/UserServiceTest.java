@@ -21,6 +21,26 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void spreadsheetThemesPersistForCurrentAccount() {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+        var settings = validReaderSettings();
+        for (String appearance : new String[] {"spreadsheet", "spreadsheetWarm"}) {
+            settings.setAppearance(appearance);
+            service.updatePreferences("reader", UserPreferencesDTO.builder().readerSettings(settings).build());
+            var restored = service.getPreferences("reader").getReaderSettings();
+            assertEquals(appearance, restored.getAppearance());
+            assertEquals(settings.getFontSize(), restored.getFontSize());
+            assertEquals(null, service.getPreferences("other").getReaderSettings());
+        }
+    }
+
+    @Test
     void quickChapterTitleSettingsPersistAndValidateIndependentlyOfBodyTypography() throws Exception {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();

@@ -51,7 +51,14 @@ export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
 export const SHELF_PAGE_SIZE_OPTIONS = [12, 24, 48, 96] as const
 export const AUTHOR_PAGE_SIZE_OPTIONS = [10, 20, 50] as const
 export type AuthorPageSize = (typeof AUTHOR_PAGE_SIZE_OPTIONS)[number]
-export type ReaderAppearance = 'classic' | 'readingRoom' | 'trialReader' | 'blueGray' | 'warmPaper'
+export type ReaderAppearance =
+  | 'classic'
+  | 'readingRoom'
+  | 'trialReader'
+  | 'blueGray'
+  | 'warmPaper'
+  | 'spreadsheet'
+  | 'spreadsheetWarm'
 export type ReaderEpubEngine = 'epubjs' | 'readium'
 export type ReaderContentWidth = 'narrow' | 'medium' | 'wide' | 'wider' | 'full'
 export type ReaderScreenMode = 'single' | 'double'
@@ -309,7 +316,10 @@ const isBackgroundSettings = (value: unknown): value is ThemeBackgroundSettings 
     && isBackgroundConfig(settings.macos26)
 }
 
-const READER_APPEARANCES: ReaderAppearance[] = ['classic', 'readingRoom', 'trialReader', 'blueGray', 'warmPaper']
+const READER_APPEARANCES: ReaderAppearance[] = [
+  'classic', 'readingRoom', 'trialReader', 'blueGray', 'warmPaper',
+  'spreadsheet', 'spreadsheetWarm',
+]
 const READER_EPUB_ENGINES: ReaderEpubEngine[] = ['epubjs', 'readium']
 const READER_CONTENT_WIDTHS: ReaderContentWidth[] = ['narrow', 'medium', 'wide', 'wider', 'full']
 const READER_SCREEN_MODES: ReaderScreenMode[] = ['single', 'double']

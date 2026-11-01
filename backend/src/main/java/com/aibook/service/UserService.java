@@ -48,7 +48,8 @@ public class UserService implements UserDetailsService {
     private static final Set<String> CRAWLER_DISCOVERY_VIEW_MODES = Set.of("table", "card");
     private static final Set<String> CRAWLER_BOOK_VIEW_MODES = Set.of("table", "card");
     private static final Set<String> READER_APPEARANCES =
-            Set.of("classic", "readingRoom", "trialReader", "blueGray", "warmPaper");
+            Set.of("classic", "readingRoom", "trialReader", "blueGray", "warmPaper",
+                    "spreadsheet", "spreadsheetWarm");
     private static final Set<String> READER_EPUB_ENGINES = Set.of("epubjs", "readium");
     private static final Set<String> READER_CONTENT_WIDTHS =
             Set.of("narrow", "medium", "wide", "wider", "full");

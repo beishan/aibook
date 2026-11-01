@@ -7,8 +7,10 @@
       'quick-window-mode': isQuickWindow,
       'reading-room-mode': settings.appearance === 'readingRoom',
       'trial-reader-mode': settings.appearance === 'trialReader',
-      'blue-gray-mode': settings.appearance === 'blueGray',
+      'blue-gray-mode': settings.appearance === 'blueGray' || isSpreadsheet,
       'warm-paper-mode': isWarmPaper,
+      'spreadsheet-mode': isSpreadsheet,
+      'spreadsheet-warm': settings.appearance === 'spreadsheetWarm',
       'warm-settings-open': isWarmPaper && showSettings,
       'warm-left-open': isWarmPaper && blueSidebarVisible && !warmRightPanel,
       'warm-right-open': isWarmPaper && blueSidebarVisible && warmRightPanel,
@@ -31,12 +33,38 @@
     <!-- 阅读器内容 -->
     <div v-if="book" class="reader-content">
       <ReaderBlueGrayTopbar
-        v-if="usesWorkspaceChrome && !isWarmPaper && !isFullscreen"
+        v-if="usesWorkspaceChrome && !isWarmPaper && !isSpreadsheet && !isFullscreen"
         :active-tab="activeTab"
         :quick-window="isQuickWindow"
         @read="focusBlueReading"
         @panel="activatePanelTab"
         @close="goBack"
+      />
+      <ReaderSpreadsheetHeader
+        v-if="isSpreadsheet"
+        :title="displayBookName(book.title)"
+        :chapter="headerChapterName"
+        :selection="pendingBlueSelection?.text || ''"
+        :typography="readingTypography"
+        :fonts="fontOptions"
+        :quick-window="isQuickWindow"
+        :fixed-layout="book.format === 'pdf'"
+        :can-previous="blueCanPrevious"
+        :can-next="blueCanNext"
+        :previous-label="blueNavigationLabel(-1)"
+        :next-label="blueNavigationLabel(1)"
+        @close="goBack"
+        @settings="showSettings = !showSettings"
+        @panel="toggleWarmPanel"
+        @typography="updateBlueTypography"
+        @font="selectBlueFont"
+        @previous="turnBlueChapter(-1)"
+        @next="turnBlueChapter(1)"
+        @bookmark="handleAddBookmark"
+        @highlight="saveBlueSelection('#a9c694')"
+        @note="writeBlueNote"
+        @copy="copyBlueSelection"
+        @fullscreen="toggleFullscreen"
       />
       <!-- 阅读器头部 -->
       <header
@@ -426,7 +454,7 @@
           @download="handleDownload"
           @fullscreen="toggleFullscreen"
         />
-        <div v-if="usesWorkspaceChrome && !isWarmPaper" class="blue-reading-toolbar">
+        <div v-if="usesWorkspaceChrome && !isWarmPaper && !isSpreadsheet" class="blue-reading-toolbar">
           <button
             class="blue-icon-button blue-sidebar-toggle"
             type="button"
@@ -499,6 +527,9 @@
               <ReaderBlueGrayIcon name="fullscreen" />
             </button>
           </div>
+        </div>
+        <div v-if="isSpreadsheet" class="sheet-row-ruler" aria-hidden="true">
+          <span v-for="row in 80" :key="row">{{ row }}</span>
         </div>
         <!-- 阅读器内容 -->
         <div
@@ -659,7 +690,7 @@
           <ReaderBlueGrayIcon name="close" />
         </button>
       </div>
-      <footer v-if="usesWorkspaceChrome && supportsPageTurning" class="blue-reader-footer">
+      <footer v-if="usesWorkspaceChrome && !isSpreadsheet && supportsPageTurning" class="blue-reader-footer">
         <button v-if="isWarmPaper" class="warm-footer-location" type="button" title="目录" @click="toggleWarmPanel('toc')">
           <ReaderBlueGrayIcon name="menu" />
           <span>{{ headerChapterName }}</span>
@@ -722,6 +753,31 @@
           <span>{{ blueNavigationLabel(1) }}</span>
           <ReaderBlueGrayIcon name="right" />
         </button>
+      </footer>
+      <footer v-if="isSpreadsheet" class="sheet-footer">
+        <div class="sheet-worksheets">
+          <button type="button" aria-label="打开完整目录" @click="toggleWarmPanel('toc')">☷</button>
+          <ReaderBlueGraySegmented
+            v-if="sheetChapterOptions.length"
+            :model-value="String(blueCurrentChapterIndex)"
+            :options="sheetChapterOptions"
+            label="工作表章节"
+            @update:model-value="goToTocItem(tocItems[Number($event)])"
+          />
+          <span v-else class="sheet-current-chapter">{{ headerChapterName }}</span>
+          <button type="button" @click="toggleWarmPanel('bookmarks')">书签</button>
+          <button type="button" @click="toggleWarmPanel('notes')">批注</button>
+        </div>
+        <div class="sheet-status">
+          <span>{{ settings.appearance === 'spreadsheetWarm' ? '暖纸表格' : '经典表格' }}</span>
+          <label v-if="settings.showProgress">
+            阅读进度 {{ headerProgress }}%
+            <input type="range" min="0" max="100" :value="headerProgress" aria-label="跳转全书阅读进度"
+              @change="seekBlueProgress(Number(($event.target as HTMLInputElement).value))" />
+          </label>
+          <span>{{ pageProgressLabel }} 页</span>
+          <button type="button" @click="showSettings = true">阅读设置</button>
+        </div>
       </footer>
       <!-- 全屏模式下的浮动控制条 -->
       <div v-if="isFullscreen && !usesWorkspaceChrome" class="fullscreen-controls" @mouseenter="showFullscreenControls = true" @mouseleave="showFullscreenControls = false">
@@ -801,20 +857,22 @@
                   aria-label="正式阅读器界面样式"
                   @keydown="handleAppearanceKeydown"
                 >
-                  <span class="appearance-segmented-indicator" aria-hidden="true"></span>
-                  <button
-                    v-for="appearance in appearanceOptions"
-                    :key="appearance.value"
-                    type="button"
-                    class="appearance-segmented-option"
-                    role="radio"
-                    :aria-checked="settings.appearance === appearance.value"
-                    :tabindex="settings.appearance === appearance.value ? 0 : -1"
-                    @click="settings.appearance = appearance.value"
-                  >
-                    <strong>{{ appearance.label }}</strong>
-                    <small>{{ appearance.description }}</small>
-                  </button>
+                  <div class="appearance-segmented-track">
+                    <span class="appearance-segmented-indicator" aria-hidden="true"></span>
+                    <button
+                      v-for="appearance in appearanceOptions"
+                      :key="appearance.value"
+                      type="button"
+                      class="appearance-segmented-option"
+                      role="radio"
+                      :aria-checked="settings.appearance === appearance.value"
+                      :tabindex="settings.appearance === appearance.value ? 0 : -1"
+                      @click="settings.appearance = appearance.value"
+                    >
+                      <strong>{{ appearance.label }}</strong>
+                      <small>{{ appearance.description }}</small>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1097,6 +1155,7 @@ import {
 import { useFontStore } from '@/stores/font'
 import PdfReader from '@/components/reader/PdfReader.vue'
 import ReaderBlueGrayIcon from '@/components/reader/ReaderBlueGrayIcon.vue'
+import ReaderSpreadsheetHeader from '@/components/reader/ReaderSpreadsheetHeader.vue'
 import ReaderBlueGrayTopbar from '@/components/reader/ReaderBlueGrayTopbar.vue'
 import ReaderBlueGraySegmented from '@/components/reader/ReaderBlueGraySegmented.vue'
 import ReaderBlueGraySettings from '@/components/reader/ReaderBlueGraySettings.vue'
@@ -1424,16 +1483,22 @@ const appearanceOptions: Array<{
   { value: 'trialReader', label: '临时阅读', description: '轻量试读布局' },
   { value: 'blueGray', label: '浅蓝灰', description: '阅读工作台' },
   { value: 'warmPaper', label: '温暖纸感', description: '草木与书香' },
+  { value: 'spreadsheet', label: '经典表格', description: '白色工作表' },
+  { value: 'spreadsheetWarm', label: '暖纸表格', description: '暖纸与批注' },
 ]
 
 const settings = ref<ReaderSettings>({ ...DEFAULT_READER_SETTINGS })
+// Spreadsheet skins share workspace actions and retain the legacy typography preferences.
+const isSpreadsheet = computed(() => ['spreadsheet', 'spreadsheetWarm'].includes(settings.value.appearance))
 const isWarmPaper = computed(() => settings.value.appearance === 'warmPaper')
-const usesWorkspaceChrome = computed(() => settings.value.appearance === 'blueGray' || isWarmPaper.value)
-const readingTypography = computed<ReaderTypography>(() => isWarmPaper.value
-  ? { ...DEFAULT_WARM_PAPER_TYPOGRAPHY, ...settings.value.warmPaper }
-  : usesWorkspaceChrome.value
-    ? { ...DEFAULT_BLUE_GRAY_TYPOGRAPHY, ...settings.value.blueGray }
-    : settings.value)
+const usesWorkspaceChrome = computed(() => settings.value.appearance === 'blueGray' || isWarmPaper.value || isSpreadsheet.value)
+const readingTypography = computed<ReaderTypography>(() => isSpreadsheet.value
+  ? settings.value
+  : isWarmPaper.value
+    ? { ...DEFAULT_WARM_PAPER_TYPOGRAPHY, ...settings.value.warmPaper }
+    : usesWorkspaceChrome.value
+      ? { ...DEFAULT_BLUE_GRAY_TYPOGRAPHY, ...settings.value.blueGray }
+      : settings.value)
 const quickChapterTitleOptions = computed(() => isQuickWindow.value && book.value?.format !== 'pdf'
   ? {
     style: settings.value.quickChapterTitleStyle,
@@ -1442,7 +1507,9 @@ const quickChapterTitleOptions = computed(() => isQuickWindow.value && book.valu
   }
   : null)
 const updateBlueTypography = (patch: Partial<ReaderTypography>) => {
-  if (isWarmPaper.value) {
+  if (isSpreadsheet.value) {
+    Object.assign(settings.value, patch)
+  } else if (isWarmPaper.value) {
     settings.value.warmPaper = { ...DEFAULT_WARM_PAPER_TYPOGRAPHY, ...settings.value.warmPaper, ...patch }
   } else {
     settings.value.blueGray = { ...DEFAULT_BLUE_GRAY_TYPOGRAPHY, ...settings.value.blueGray, ...patch }
@@ -1553,6 +1620,12 @@ const widthOptions = [
 // 获取实际背景色和文字色（处理 'auto' 跟随主题）
 const getResolvedColors = (bg: string) => {
   if (bg === 'auto') {
+    if (isSpreadsheet.value) {
+      return {
+        bg: settings.value.appearance === 'spreadsheetWarm' ? '#faf6eb' : '#ffffff',
+        text: '#262b28',
+      }
+    }
     return usesWorkspaceChrome.value
       ? (isWarmPaper.value ? { bg: '#faf8f2', text: '#242821' } : { bg: '#fcfdff', text: '#172235' })
       : { bg: autoThemeColors.value.bg, text: autoThemeColors.value.text }
@@ -1592,7 +1665,8 @@ const readerStyle = computed(() => {
     lineHeight: readingTypography.value.lineHeight,
     color: colors.text,
     // 两屏模式下不限制宽度，让两栏均匀分布
-    maxWidth: usesWorkspaceChrome.value ? 'none' : isDoubleScreen ? '100%' : widthOption.maxWidth,
+    maxWidth: isSpreadsheet.value ? widthOption.maxWidth
+      : usesWorkspaceChrome.value ? 'none' : isDoubleScreen ? '100%' : widthOption.maxWidth,
   }
 })
 
@@ -2180,7 +2254,7 @@ const closeHighlightEditor = () => {
 
 const openHighlightEditor = (value: Omit<HighlightEditorState, 'note' | 'color'>) => {
   if (!value.text.trim()) return
-  highlightEditor.value = { ...value, color: usesWorkspaceChrome.value ? '#9ed0ff' : '#ffe066', note: '' }
+  highlightEditor.value = { ...value, color: isSpreadsheet.value ? '#a9c694' : usesWorkspaceChrome.value ? '#9ed0ff' : '#ffe066', note: '' }
 }
 
 const editHighlight = (highlight: Highlight) => {
@@ -4283,7 +4357,7 @@ const dismissBlueSelection = () => {
 
 const handleBluePointerDown = (event: PointerEvent) => {
   if (!usesWorkspaceChrome.value || !pendingBlueSelection.value) return
-  if (!(event.target as Element | null)?.closest('.blue-selection-toolbar')) {
+  if (!(event.target as Element | null)?.closest('.blue-selection-toolbar, .sheet-header')) {
     dismissBlueSelection()
   }
 }
@@ -4353,6 +4427,12 @@ const blueCurrentChapterIndex = computed(() => {
   if (matched >= 0) return matched
   return tocItems.value.findIndex(item => item.title === currentChapterName.value)
 })
+const sheetChapterOptions = computed(() => {
+  const start = Math.max(0, blueCurrentChapterIndex.value - 1)
+  return tocItems.value.slice(start, start + 5).map((item, index) => ({
+    value: String(start + index), label: item.title,
+  }))
+})
 const blueHasChapters = computed(() => book.value?.format !== 'pdf' && tocItems.value.length > 0)
 const blueCanPrevious = computed(() => blueHasChapters.value ? blueCurrentChapterIndex.value > 0 : canGoPrevious.value)
 const blueCanNext = computed(() => blueHasChapters.value
@@ -4401,14 +4481,14 @@ const seekBlueProgress = async (percentage: number) => {
   }
 }
 
-watch([usesWorkspaceChrome, isWarmPaper], async ([active]) => {
+watch([usesWorkspaceChrome, isWarmPaper, isSpreadsheet], async ([active]) => {
   const textIndex = book.value && isTextFormat(book.value.format) ? visibleTextIndex() : undefined
   dismissBlueSelection()
   closeHighlightEditor()
   if (active) {
-    blueSidebarOpen.value = !isWarmPaper.value && window.innerWidth > 900
+    blueSidebarOpen.value = !isWarmPaper.value && !isSpreadsheet.value && window.innerWidth > 900
     activatePanelTab('toc')
-    blueSidebarOpen.value = !isWarmPaper.value && window.innerWidth > 900
+    blueSidebarOpen.value = !isWarmPaper.value && !isSpreadsheet.value && window.innerWidth > 900
     const id = managedFontId(readingTypography.value.fontFamily)
     if (id != null) await selectBlueFont(readingTypography.value.fontFamily)
   } else if (activeTab.value === 'notes') {
@@ -4428,7 +4508,7 @@ watch([usesWorkspaceChrome, isWarmPaper], async ([active]) => {
 })
 
 watch(isFullscreen, () => {
-  if (usesWorkspaceChrome.value) blueSidebarOpen.value = !isWarmPaper.value && !isFullscreen.value && window.innerWidth > 900
+  if (usesWorkspaceChrome.value) blueSidebarOpen.value = !isWarmPaper.value && !isSpreadsheet.value && !isFullscreen.value && window.innerWidth > 900
   dismissBlueSelection()
 })
 watch([blueSidebarVisible, showSettings, highlightEditor], () => {
@@ -4468,7 +4548,7 @@ const initializeReader = async () => {
     }
   }
   if (usesWorkspaceChrome.value) {
-    blueSidebarOpen.value = !isWarmPaper.value && window.innerWidth > 900
+    blueSidebarOpen.value = !isWarmPaper.value && !isSpreadsheet.value && window.innerWidth > 900
     const id = managedFontId(readingTypography.value.fontFamily)
     if (id != null) await selectBlueFont(readingTypography.value.fontFamily)
   }
@@ -6100,13 +6180,19 @@ onBeforeUnmount(() => {
 .appearance-segmented {
   --appearance-index: 0;
   position: relative;
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  padding: 4px;
+  display: block;
   overflow-x: auto;
   border: 1px solid var(--border-color-light);
   border-radius: 16px;
   background: var(--bg-secondary);
+}
+
+.appearance-segmented-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  min-width: 560px;
+  padding: 4px;
 }
 
 .appearance-segmented--readingRoom {
@@ -6125,12 +6211,20 @@ onBeforeUnmount(() => {
   --appearance-index: 4;
 }
 
+.appearance-segmented--spreadsheet {
+  --appearance-index: 5;
+}
+
+.appearance-segmented--spreadsheetWarm {
+  --appearance-index: 6;
+}
+
 .appearance-segmented-indicator {
   position: absolute;
   top: 4px;
   bottom: 4px;
   left: 4px;
-  width: calc((100% - 8px) / 5);
+  width: calc((100% - 8px) / 7);
   border: 1px solid var(--border-color-light);
   border-radius: 12px;
   background: var(--surface-elevated);
@@ -7644,3 +7738,5 @@ onBeforeUnmount(() => {
 <style scoped src="../assets/reader-blue-gray.css"></style>
 
 <style src="../assets/reader-warm-paper.css"></style>
+
+<style src="../assets/reader-spreadsheet.css"></style>
