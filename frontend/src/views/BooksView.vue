@@ -239,7 +239,7 @@
     <div v-if="selectionMode && selectedBooks.size > 0" class="batch-toolbar glass">
       <span class="selection-count">已选择 {{ selectedBooks.size }} 本</span>
       <div class="batch-actions">
-        <button class="btn" @click="showLibraryDialog = true">添加到图书馆</button>
+        <button class="btn" @click="openLibraryDialog(Array.from(selectedBooks))">添加到图书馆</button>
         <div class="batch-action-group" role="group" aria-label="批量选择">
           <button class="btn btn-text" @click="selectAllCurrentPage">全选当前页</button>
           <button class="btn btn-text" @click="clearSelection">取消全选</button>
@@ -383,15 +383,6 @@
             </button>
             <button
               class="action-btn"
-              :class="{ 'active-shelf': book.onShelf }"
-              :aria-label="book.onShelf ? '移出书架' : '加入书架'"
-              :title="book.onShelf ? '移出书架' : '加入书架'"
-              @click.stop="handleToggleShelf(book)"
-            >
-              <span class="action-icon">{{ book.onShelf ? '📚' : '➕' }}</span>
-            </button>
-            <button
-              class="action-btn"
               :class="{ 'is-processing': downloadingBookId === book.id }"
               :disabled="downloadingBookId !== null"
               aria-label="下载到本地"
@@ -452,6 +443,25 @@
             <span v-if="book.tags.length > 3" class="book-tag-more">
               +{{ book.tags.length - 3 }}
             </span>
+          </div>
+          <div v-if="!selectionMode" class="book-membership-actions" @click.stop>
+            <button
+              type="button"
+              class="book-membership-button"
+              :class="{ 'is-on-shelf': book.onShelf }"
+              :title="book.onShelf ? '移出书架' : '加入书架'"
+              :aria-label="book.onShelf ? '移出书架' : '加入书架'"
+              @click.stop="handleToggleShelf(book)"
+            >
+              {{ book.onShelf ? '移出书架' : '加入书架' }}
+            </button>
+            <button
+              type="button"
+              class="book-membership-button"
+              @click.stop="openLibraryDialog([book.id])"
+            >
+              加入图书馆
+            </button>
           </div>
         </div>
       </div>
@@ -535,10 +545,18 @@
             class="btn btn-text list-state-button"
             :class="{ 'is-on-shelf': row.onShelf }"
             :title="row.onShelf ? '移出书架' : '加入书架'"
+            :aria-label="row.onShelf ? '移出书架' : '加入书架'"
             @click.stop="handleToggleShelf(row)"
           >
             <span>{{ row.onShelf ? '📚' : '➕' }}</span>
-            <span class="list-action-label">{{ row.onShelf ? '已在书架' : '加入书架' }}</span>
+            <span class="list-action-label">{{ row.onShelf ? '移出书架' : '加入书架' }}</span>
+          </button>
+          <button
+            type="button"
+            class="btn btn-text list-state-button"
+            @click.stop="openLibraryDialog([row.id])"
+          >
+            加入图书馆
           </button>
           <button class="btn btn-text" @click.stop="$router.push(`/reader/${row.id}`)">阅读</button>
           <button class="btn btn-text" @click.stop="openQuickReader(row)">小窗阅读</button>
@@ -666,7 +684,7 @@
       @saved="handleBookSaved"
     />
 
-    <AddToLibraryDialog v-model="showLibraryDialog" :book-ids="Array.from(selectedBooks)" />
+    <AddToLibraryDialog v-model="showLibraryDialog" :book-ids="libraryBookIds" />
     <AddToBookListDialog
       :visible="showAddToListDialog"
       :book="bookToAddToList"
@@ -788,6 +806,13 @@ const showScraperDialog = ref(false)
 const showEditDialog = ref(false)
 const editingBook = ref<Book | null>(null)
 const showLibraryDialog = ref(false)
+const libraryBookIds = ref<number[]>([])
+
+function openLibraryDialog(bookIds: number[]) {
+  libraryBookIds.value = [...bookIds]
+  showLibraryDialog.value = true
+}
+
 const showAddToListDialog = ref(false)
 const bookToAddToList = ref<Book | null>(null)
 const processingBookId = ref<number | null>(null)
@@ -1864,6 +1889,38 @@ onMounted(async () => {
   height: 150px;
 }
 
+.book-membership-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--spacing-sm);
+}
+
+.book-membership-button {
+  flex: 1 1 auto;
+  padding: 6px 7px;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.book-membership-button:hover,
+.book-membership-button.is-on-shelf {
+  border-color: var(--primary);
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+}
+
+.book-membership-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .books-grid-compact .book-info {
   padding: var(--spacing-xs) var(--spacing-sm);
 }
@@ -2224,6 +2281,8 @@ onMounted(async () => {
 
 .book-list-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-sm);
 }
