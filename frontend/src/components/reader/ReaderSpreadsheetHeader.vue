@@ -5,6 +5,7 @@
       <strong :title="title">汗牛充栋 · {{ title }}.xlsx</strong>
       <button type="button" @click="$emit('panel', 'search')">⌕ 搜索本书</button>
       <button type="button" @click="$emit('close')">{{ quickWindow ? '关闭小窗 ×' : '返回书库' }}</button>
+      <QuickReaderDrag v-if="quickWindow" />
     </div>
     <nav class="sheet-menus" aria-label="表格阅读功能区">
       <button type="button" @click="$emit('settings')">文件与设置</button>
@@ -103,6 +104,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { ReaderTypography } from '@/stores/preferences'
+import QuickReaderDrag from './QuickReaderDrag.vue'
 import ReaderBlueGrayIcon from './ReaderBlueGrayIcon.vue'
 import ReaderBlueGraySegmented from './ReaderBlueGraySegmented.vue'
 

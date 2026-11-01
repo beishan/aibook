@@ -64,6 +64,7 @@
       <ReaderBlueGrayIcon name="close" />
     </button>
     <button
+      v-if="!quickWindow"
       class="blue-avatar"
       type="button"
       aria-label="个人设置"
@@ -72,6 +73,7 @@
       <img v-if="userStore.avatarObjectUrl" :src="userStore.avatarObjectUrl" alt="" />
       <ReaderBlueGrayIcon v-else name="user" />
     </button>
+    <QuickReaderDrag v-if="quickWindow" />
   </header>
 </template>
 
@@ -79,6 +81,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import QuickReaderDrag from './QuickReaderDrag.vue'
 import ReaderBlueGrayIcon from './ReaderBlueGrayIcon.vue'
 
 defineProps<{ activeTab: string; quickWindow?: boolean }>()

@@ -52,11 +52,13 @@
           </button>
         </div>
       </details>
+      <QuickReaderDrag v-if="quickWindow" />
     </nav>
   </header>
 </template>
 
 <script setup lang="ts">
+import QuickReaderDrag from './QuickReaderDrag.vue'
 import ReaderBlueGrayIcon from './ReaderBlueGrayIcon.vue'
 
 defineProps<{

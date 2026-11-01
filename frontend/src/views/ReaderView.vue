@@ -72,7 +72,12 @@
         class="reader-header"
         :style="readerHeaderStyle"
       >
-        <button type="button" class="back-btn" @click="goBack">
+        <button
+          type="button"
+          class="back-btn"
+          :aria-label="isQuickWindow ? '关闭小窗' : '返回书库'"
+          @click="goBack"
+        >
           <span class="reader-icon" aria-hidden="true">{{ isQuickWindow ? '×' : '←' }}</span>
           <span>{{ isQuickWindow ? '关闭小窗' : '返回书库' }}</span>
         </button>
@@ -125,6 +130,7 @@
             我的书架
           </button>
         </div>
+        <QuickReaderDrag v-if="isQuickWindow" />
       </header>
 
       <ReaderWarmPaperRail
@@ -526,6 +532,7 @@
             >
               <ReaderBlueGrayIcon name="fullscreen" />
             </button>
+            <QuickReaderDrag v-if="isQuickWindow && isFullscreen" />
           </div>
         </div>
         <div v-if="isSpreadsheet" class="sheet-row-ruler" aria-hidden="true">
@@ -796,6 +803,7 @@
             <button class="btn btn-icon" @click="toggleFullscreen" title="退出全屏">
               <span>⊡</span>
             </button>
+            <QuickReaderDrag v-if="isQuickWindow" />
           </div>
         </Transition>
       </div>
@@ -828,6 +836,7 @@
               @mode="setReadingMode"
             >
               <template #chapter-title>
+                <QuickReaderWindowSettings v-if="isQuickWindow" />
                 <QuickChapterTitleSettings
                   v-if="isQuickWindow && book.format !== 'pdf'"
                   :mode="settings.quickChapterTitleStyle"
@@ -839,6 +848,7 @@
               </template>
             </ReaderBlueGraySettings>
             <div v-else class="settings-body">
+              <QuickReaderWindowSettings v-if="isQuickWindow" />
               <QuickChapterTitleSettings
                 v-if="isQuickWindow && book.format !== 'pdf'"
                 :mode="settings.quickChapterTitleStyle"
@@ -1138,6 +1148,8 @@ import PdfReader from '@/components/reader/PdfReader.vue'
 import ReaderBlueGrayIcon from '@/components/reader/ReaderBlueGrayIcon.vue'
 import ReaderSpreadsheetHeader from '@/components/reader/ReaderSpreadsheetHeader.vue'
 import ReaderBlueGrayTopbar from '@/components/reader/ReaderBlueGrayTopbar.vue'
+import QuickReaderDrag from '@/components/reader/QuickReaderDrag.vue'
+import QuickReaderWindowSettings from '@/components/reader/QuickReaderWindowSettings.vue'
 import ReaderAppearancePicker from '@/components/reader/ReaderAppearancePicker.vue'
 import ReaderBlueGraySegmented from '@/components/reader/ReaderBlueGraySegmented.vue'
 import ReaderBlueGraySettings from '@/components/reader/ReaderBlueGraySettings.vue'

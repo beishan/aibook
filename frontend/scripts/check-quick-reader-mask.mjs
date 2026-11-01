@@ -41,7 +41,7 @@ vm.runInContext(ts.transpile(declarations(script, names))
 assert.equal(context.mask.overlayTransparency.value, 50)
 assert.equal(context.mask.quickReaderMaskColor.value, 'rgba(0, 0, 0, 0.5)')
 for (const [value, alpha] of [[0, 1], [35, 0.65], [100, 0]]) {
-  context.mask.setOverlayTransparency({ target: { value: String(value) } })
+  context.mask.setOverlayTransparency(value)
   assert.equal(stored.value.overlayTransparency, value)
   assert.equal(context.mask.quickReaderMaskColor.value, `rgba(0, 0, 0, ${alpha})`)
   assert.equal(stored.value.width, 800)
@@ -50,7 +50,7 @@ context.mask.saveQuickReaderWindow()
 assert.equal(stored.value.overlayTransparency, 100, 'moving/resizing must retain transparency')
 assert.deepEqual(Array.from(saved.at(-1).options), [true, true], 'use account persistence with debounce')
 const count = saved.length
-for (const value of ['-1', '101', 'NaN', '0.5']) context.mask.setOverlayTransparency({ target: { value } })
+for (const value of [-1, 101, NaN, 0.5]) context.mask.setOverlayTransparency(value)
 assert.equal(saved.length, count)
 stored.value = { width: 800, height: 600, left: 20, top: 30 }
 assert.equal(context.mask.overlayTransparency.value, 50, 'older accounts retain the previous mask default')
@@ -80,27 +80,33 @@ const overlayCss = await readFile(new URL('../node_modules/element-plus/theme-ch
 assert.match(overlayCss, /background-color:\s*var\(--el-overlay-color-lighter\)/)
 assert.match(source, /modal-class="book-quick-reader-overlay"/)
 assert.match(source, /:close-on-click-modal="false"/)
-assert.match(source, /@change="preferencesStore.flushQuickReaderWindow\(\)"/)
-const toolbarStart = source.indexOf('<header class="book-quick-reader-window-toolbar"')
-const toolbarEnd = source.indexOf('</header>', toolbarStart)
-const frameStart = source.indexOf('<iframe', toolbarEnd)
-assert.ok(toolbarStart > 0 && toolbarEnd > toolbarStart && frameStart > toolbarEnd)
-const toolbar = source.slice(toolbarStart, toolbarEnd)
-assert.match(toolbar, /class="book-quick-reader-drag"/)
-assert.match(toolbar, /class="book-quick-reader-mask-controls"/)
-assert.match(source, /\.book-quick-reader-window-toolbar\s*\{[^}]*flex: 0 0 auto;/)
+assert.doesNotMatch(source, /book-quick-reader-window-toolbar/)
+assert.doesNotMatch(source, /class="book-quick-reader-drag"/)
 assert.match(source, /\.book-quick-reader-frame\s*\{[^}]*height: 0;[^}]*min-height: 0;[^}]*flex: 1 1 auto;/)
-assert.doesNotMatch(source.match(/\.book-quick-reader-drag\s*\{[^}]*}/)[0], /position: absolute/)
 const readerSource = await readFile(new URL('../src/views/ReaderView.vue', import.meta.url), 'utf8')
-assert.doesNotMatch(readerSource, /padding-right: 122px/)
+assert.match(readerSource, /<QuickReaderWindowSettings v-if="isQuickWindow"/)
 context.window = { innerWidth: 1200, innerHeight: 900 }
+context.quickReaderOpen = { value: true }
+context.quickReaderFrame = { value: { contentWindow: {} } }
+context.window.location = { origin: 'http://localhost' }
 vm.runInContext(ts.transpile(declarations(script, [
   'constrainQuickReaderPosition', 'constrainQuickReaderSize',
-  'moveQuickReaderWithKeyboard', 'resizeQuickReaderWithKeyboard',
-])) + '\nglobalThis.moveWindow = moveQuickReaderWithKeyboard; globalThis.resizeWindow = resizeQuickReaderWithKeyboard', context)
-context.moveWindow({ key: 'ArrowRight', preventDefault() {} })
+  'handleQuickReaderWindowControl', 'handleQuickReaderMessage', 'resizeQuickReaderWithKeyboard',
+])) + '\nglobalThis.control = handleQuickReaderWindowControl; globalThis.receive = handleQuickReaderMessage; globalThis.resizeWindow = resizeQuickReaderWithKeyboard', context)
+context.control({ action: 'move', dx: 16, dy: 0, persist: true })
 assert.equal(stored.value.left, 36)
 context.resizeWindow({ key: 'ArrowDown', shiftKey: true, preventDefault() {} })
 assert.equal(stored.value.height, 648)
 assert.equal(stored.value.overlayTransparency, 50)
-console.log('Quick reader: separate window toolbar, frame sizing, keyboard movement/resizing, mask and account settings passed')
+const before = saved.length
+context.receive({ origin: 'http://other', source: context.quickReaderFrame.value.contentWindow,
+  data: { type: 'aibook:quick-reader-window-control', action: 'mask', value: 0 } })
+context.receive({ origin: 'http://localhost', source: {},
+  data: { type: 'aibook:quick-reader-window-control', action: 'mask', value: 0 } })
+assert.equal(saved.length, before, 'reject messages from another origin or window')
+context.control({ action: 'move', dx: Infinity, dy: 0 })
+assert.equal(saved.length, before)
+context.receive({ origin: 'http://localhost', source: context.quickReaderFrame.value.contentWindow,
+  data: { type: 'aibook:quick-reader-window-control', action: 'mask', value: 35 } })
+assert.equal(stored.value.overlayTransparency, 35)
+console.log('Quick reader: toolbar integration, validated frame bridge, movement/resizing, mask and account settings passed')

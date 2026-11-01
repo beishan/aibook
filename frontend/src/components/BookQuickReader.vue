@@ -11,53 +11,6 @@
       destroy-on-close
       @closed="resetQuickReader"
     >
-      <header class="book-quick-reader-window-toolbar" aria-label="小窗窗口控制">
-        <span class="book-quick-reader-window-label">小窗阅读</span>
-        <div class="book-quick-reader-mask-controls">
-          <button
-            class="book-quick-reader-mask-toggle"
-            type="button"
-            :aria-expanded="maskSettingsOpen"
-            aria-controls="quick-reader-mask-settings"
-            @click="maskSettingsOpen = !maskSettingsOpen"
-          >
-            蒙板
-          </button>
-          <section
-            v-if="maskSettingsOpen"
-            id="quick-reader-mask-settings"
-            class="book-quick-reader-mask-settings"
-            aria-label="小窗外部蒙板设置"
-          >
-            <label for="quick-reader-mask-transparency">
-              蒙板透明度 <output>{{ overlayTransparency }}%</output>
-            </label>
-            <input
-              id="quick-reader-mask-transparency"
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              :value="overlayTransparency"
-              @input="setOverlayTransparency"
-              @change="preferencesStore.flushQuickReaderWindow()"
-            />
-            <p>0% 完全遮黑，100% 完全透明</p>
-          </section>
-        </div>
-        <button
-          class="book-quick-reader-drag"
-          type="button"
-          aria-label="窗口拖动手柄：拖动调整位置，也可使用方向键"
-          title="拖动移动窗口，方向键微调位置"
-          @pointerdown="startQuickReaderMove"
-          @pointermove="updateQuickReaderMove"
-          @pointerup="stopQuickReaderMove"
-          @pointercancel="stopQuickReaderMove"
-          @lostpointercapture="stopQuickReaderMove"
-          @keydown="moveQuickReaderWithKeyboard"
-        />
-      </header>
       <iframe
         v-if="quickReaderOpen && quickReaderSrc"
         ref="quickReaderFrame"
@@ -99,28 +52,23 @@ const quickReaderOpen = ref(false)
 const quickReaderBook = ref<Book | null>(null)
 const quickReaderFrame = ref<HTMLIFrameElement | null>(null)
 const quickReaderSize = ref({ width: 0, height: 0, left: 0, top: 0 })
-const maskSettingsOpen = ref(false)
 const overlayTransparency = computed(() => quickReaderWindow.value?.overlayTransparency ?? 50)
 const quickReaderMaskColor = computed(() => `rgba(0, 0, 0, ${1 - overlayTransparency.value / 100})`)
 
 watch([quickReaderFrame, quickReaderMaskColor], ([frame, color]) => {
   const overlay = frame?.closest<HTMLElement>('.book-quick-reader-overlay')
   overlay?.style.setProperty('--el-overlay-color-lighter', color)
+  frame?.contentWindow?.postMessage({
+    type: 'aibook:quick-reader-window-state',
+    overlayTransparency: overlayTransparency.value,
+  }, window.location.origin)
 }, { flush: 'post' })
 
-const setOverlayTransparency = (event: Event) => {
-  const transparency = Number((event.target as HTMLInputElement).value)
+const setOverlayTransparency = (transparency: number) => {
   if (!Number.isInteger(transparency) || transparency < 0 || transparency > 100) return
   saveQuickReaderWindow(true, transparency)
 }
 
-const quickReaderMoveStart = ref<{
-  pointerId: number
-  x: number
-  y: number
-  left: number
-  top: number
-} | null>(null)
 const quickReaderResizeStart = ref<{
   pointerId: number
   x: number
@@ -228,57 +176,6 @@ const constrainQuickReaderPosition = (left: number, top: number) => {
   }
 }
 
-const startQuickReaderMove = (event: PointerEvent) => {
-  if (event.button !== 0 || !quickReaderOpen.value) return
-  const handle = event.currentTarget
-  if (!(handle instanceof HTMLElement)) return
-
-  event.preventDefault()
-  handle.setPointerCapture(event.pointerId)
-  quickReaderMoveStart.value = {
-    pointerId: event.pointerId,
-    x: event.clientX,
-    y: event.clientY,
-    left: quickReaderSize.value.left,
-    top: quickReaderSize.value.top,
-  }
-}
-
-const updateQuickReaderMove = (event: PointerEvent) => {
-  const start = quickReaderMoveStart.value
-  if (!start || event.pointerId !== start.pointerId) return
-  constrainQuickReaderPosition(
-    start.left + event.clientX - start.x,
-    start.top + event.clientY - start.y,
-  )
-}
-
-const stopQuickReaderMove = (event: PointerEvent) => {
-  if (quickReaderMoveStart.value?.pointerId === event.pointerId) {
-    quickReaderMoveStart.value = null
-    saveQuickReaderWindow()
-  }
-}
-
-const moveQuickReaderWithKeyboard = (event: KeyboardEvent) => {
-  const step = event.shiftKey ? 48 : 16
-  const deltas: Record<string, [number, number]> = {
-    ArrowRight: [step, 0],
-    ArrowLeft: [-step, 0],
-    ArrowDown: [0, step],
-    ArrowUp: [0, -step],
-  }
-  const delta = deltas[event.key]
-  if (!delta) return
-
-  event.preventDefault()
-  constrainQuickReaderPosition(
-    quickReaderSize.value.left + delta[0],
-    quickReaderSize.value.top + delta[1],
-  )
-  saveQuickReaderWindow()
-}
-
 const startQuickReaderResize = (event: PointerEvent) => {
   if (event.button !== 0 || !quickReaderOpen.value) return
   const handle = event.currentTarget
@@ -346,21 +243,45 @@ const handleQuickReaderViewportResize = () => {
   }
 }
 
+const handleQuickReaderWindowControl = (data: Record<string, unknown>) => {
+  if (!quickReaderOpen.value) return
+  if (data.action === 'ready') {
+    quickReaderFrame.value?.contentWindow?.postMessage({
+      type: 'aibook:quick-reader-window-state',
+      overlayTransparency: overlayTransparency.value,
+    }, window.location.origin)
+  } else if (data.action === 'mask' && typeof data.value === 'number') {
+    setOverlayTransparency(data.value)
+  } else if (data.action === 'move') {
+    if (typeof data.dx !== 'number' || typeof data.dy !== 'number'
+        || !Number.isFinite(data.dx) || !Number.isFinite(data.dy)) return
+    constrainQuickReaderPosition(
+      quickReaderSize.value.left + data.dx,
+      quickReaderSize.value.top + data.dy,
+    )
+    if (data.persist === true) saveQuickReaderWindow()
+  } else if (data.action === 'move-end') {
+    saveQuickReaderWindow()
+  } else if (data.action === 'flush') {
+    void preferencesStore.flushQuickReaderWindow()
+  }
+}
+
 const handleQuickReaderMessage = (event: MessageEvent) => {
   if (event.origin !== window.location.origin) return
   if (event.source !== quickReaderFrame.value?.contentWindow) return
   if (!event.data || typeof event.data !== 'object') return
-  if (event.data.type === 'aibook:quick-reader-close') {
+  if (event.data.type === 'aibook:quick-reader-window-control') {
+    handleQuickReaderWindowControl(event.data)
+  } else if (event.data.type === 'aibook:quick-reader-close') {
     quickReaderOpen.value = false
   }
 }
 
 const resetQuickReader = () => {
-  maskSettingsOpen.value = false
   void preferencesStore.flushQuickReaderWindow()
   if (quickReaderBook.value) emit('closed', quickReaderBook.value.id)
   quickReaderBook.value = null
-  quickReaderMoveStart.value = null
   quickReaderResizeStart.value = null
 }
 
@@ -378,91 +299,6 @@ defineExpose({ open:openQuickReader })
 </script>
 
 <style scoped>
-.book-quick-reader-window-toolbar {
-  position: relative;
-  z-index: 3;
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  min-height: 52px;
-  box-sizing: border-box;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border-color-light);
-  background: var(--surface-card);
-}
-
-.book-quick-reader-window-label {
-  min-width: 0;
-  margin-right: auto;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.book-quick-reader-mask-controls {
-  position: relative;
-  flex: none;
-}
-
-.book-quick-reader-mask-toggle {
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid var(--border-color-light);
-  border-radius: 10px;
-  background: var(--surface-card);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.book-quick-reader-mask-toggle:hover,
-.book-quick-reader-mask-toggle[aria-expanded="true"] {
-  background: var(--surface-hover);
-  color: var(--primary);
-}
-
-.book-quick-reader-mask-toggle:focus-visible,
-.book-quick-reader-mask-settings input:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-.book-quick-reader-mask-settings {
-  position: absolute;
-  top: 44px;
-  right: 0;
-  width: min(240px, calc(100vw - 100px));
-  padding: 14px;
-  border: 1px solid var(--border-color-light);
-  border-radius: 12px;
-  background: var(--surface-card);
-  color: var(--text-primary);
-}
-
-.book-quick-reader-mask-settings label {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 13px;
-}
-
-.book-quick-reader-mask-settings input {
-  width: 100%;
-  margin: 14px 0 8px;
-  accent-color: var(--primary);
-}
-
-.book-quick-reader-mask-settings p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
 .book-quick-reader-frame {
   display: block;
   width: 100%;
@@ -471,45 +307,6 @@ defineExpose({ open:openQuickReader })
   flex: 1 1 auto;
   border: 0;
   background: var(--surface-card);
-}
-
-.book-quick-reader-drag {
-  display: grid;
-  flex: 0 0 36px;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--border-color-light, rgba(80, 90, 100, 0.2));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface-card, #fff) 88%, transparent);
-  color: var(--text-secondary, #667085);
-  cursor: move;
-  touch-action: none;
-  user-select: none;
-}
-
-.book-quick-reader-drag::before {
-  width: 12px;
-  height: 18px;
-  background-image: radial-gradient(circle, currentColor 1.3px, transparent 1.6px);
-  background-size: 6px 6px;
-  content: '';
-  opacity: 0.75;
-}
-
-.book-quick-reader-drag:hover {
-  background: var(--surface-card, #fff);
-  color: var(--primary, #409eff);
-}
-
-.book-quick-reader-drag:active {
-  cursor: grabbing;
-}
-
-.book-quick-reader-drag:focus-visible {
-  outline: 2px solid var(--primary, #409eff);
-  outline-offset: -2px;
 }
 
 :global(.book-quick-reader-dialog.el-dialog) {

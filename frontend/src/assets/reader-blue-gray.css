@@ -866,7 +866,7 @@
   font-size: 22px;
 }
 
-:is(.blue-gray-mode, .warm-paper-mode).fullscreen-mode .blue-reading-actions > :not(:last-child) {
+:is(.blue-gray-mode, .warm-paper-mode).fullscreen-mode .blue-reading-actions > :not(:last-child):not([aria-label="退出全屏"]) {
   display: none;
 }
 
