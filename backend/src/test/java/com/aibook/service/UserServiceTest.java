@@ -21,6 +21,39 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void readerFlowChoiceAndQuickTocPersistAndMigrateOlderScrollChoice() throws Exception {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+        var settings = validReaderSettings();
+        reader.setReaderSettings(new ObjectMapper().writeValueAsString(settings));
+        assertEquals(false, service.getPreferences("reader").getReaderSettings().getPreferScrollMode());
+        assertEquals(null, service.getPreferences("reader").getReaderSettings().getQuickReaderTocOpen());
+        settings.setPaginationMode(false);
+        reader.setReaderSettings(new ObjectMapper().writeValueAsString(settings));
+        assertEquals(true, service.getPreferences("reader").getReaderSettings().getPreferScrollMode());
+        settings.setPreferScrollMode(true);
+        for (boolean open : new boolean[] {false, true}) {
+            settings.setQuickReaderTocOpen(open);
+            service.updatePreferences("reader", UserPreferencesDTO.builder().readerSettings(settings).build());
+            var restored = service.getPreferences("reader").getReaderSettings();
+            assertEquals(false, restored.getPaginationMode());
+            assertEquals(true, restored.getPreferScrollMode());
+            assertEquals(open, restored.getQuickReaderTocOpen());
+        }
+        settings.setPaginationMode(true);
+        settings.setPreferScrollMode(false);
+        service.updatePreferences("reader", UserPreferencesDTO.builder().readerSettings(settings).build());
+        assertEquals(true, service.getPreferences("reader").getReaderSettings().getPaginationMode());
+        assertEquals(false, service.getPreferences("reader").getReaderSettings().getPreferScrollMode());
+        assertEquals(null, service.getPreferences("other").getReaderSettings());
+    }
+
+    @Test
     void spreadsheetThemesPersistForCurrentAccount() {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();

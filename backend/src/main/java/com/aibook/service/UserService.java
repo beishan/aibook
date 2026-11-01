@@ -696,6 +696,9 @@ public class UserService implements UserDetailsService {
         }
         requireAllowed("单双页模式", settings.getScreenMode(), READER_SCREEN_MODES);
         requireValue("翻页模式", settings.getPaginationMode());
+        if (settings.getPreferScrollMode() == null) {
+            settings.setPreferScrollMode(!settings.getPaginationMode());
+        }
         requireValue("首行缩进", settings.getTextIndent());
         requireValue("阅读进度显示", settings.getShowProgress());
         if (settings.getBlueGray() != null) {

@@ -669,6 +669,8 @@ public class UserPreferencesDTO {
         private String backgroundColor;
         private String backgroundImageId;
         private Boolean paginationMode;
+        private Boolean preferScrollMode;
+        private Boolean quickReaderTocOpen;
         private String screenMode;
         private Boolean textIndent;
         private Boolean showProgress;
@@ -743,6 +745,10 @@ public class UserPreferencesDTO {
         public void setBackgroundColor(String value) { backgroundColor = value; }
         public String getBackgroundImageId() { return backgroundImageId; }
         public void setBackgroundImageId(String value) { backgroundImageId = value; }
+        public Boolean getPreferScrollMode() { return preferScrollMode; }
+        public void setPreferScrollMode(Boolean value) { preferScrollMode = value; }
+        public Boolean getQuickReaderTocOpen() { return quickReaderTocOpen; }
+        public void setQuickReaderTocOpen(Boolean value) { quickReaderTocOpen = value; }
         public Boolean getPaginationMode() { return paginationMode; }
         public void setPaginationMode(Boolean value) { paginationMode = value; }
         public String getScreenMode() { return screenMode; }

@@ -84,6 +84,8 @@ export interface ReaderSettings {
   textIndent: boolean
   showProgress: boolean
   paginationMode: boolean
+  preferScrollMode: boolean
+  quickReaderTocOpen: boolean | null
   contentWidth: ReaderContentWidth
   screenMode: ReaderScreenMode
   blueGray?: ReaderTypography
@@ -136,6 +138,8 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
   textIndent: true,
   showProgress: true,
   paginationMode: false,
+  preferScrollMode: false,
+  quickReaderTocOpen: null,
   contentWidth: 'medium',
   screenMode: 'single',
 }
@@ -402,6 +406,9 @@ export const normalizeReaderSettings = (value: unknown): ReaderSettings => {
       ? source.textIndent : DEFAULT_READER_SETTINGS.textIndent,
     showProgress: typeof source.showProgress === 'boolean'
       ? source.showProgress : DEFAULT_READER_SETTINGS.showProgress,
+    preferScrollMode: typeof source.preferScrollMode === 'boolean'
+      ? source.preferScrollMode : source.paginationMode === false,
+    quickReaderTocOpen: typeof source.quickReaderTocOpen === 'boolean' ? source.quickReaderTocOpen : null,
     paginationMode: typeof source.paginationMode === 'boolean'
       ? source.paginationMode : DEFAULT_READER_SETTINGS.paginationMode,
     contentWidth: isOneOf(source.contentWidth, READER_CONTENT_WIDTHS)

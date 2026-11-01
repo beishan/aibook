@@ -37,7 +37,7 @@
         :active-tab="activeTab"
         :quick-window="isQuickWindow"
         @read="focusBlueReading"
-        @panel="activatePanelTab"
+        @panel="activatePanelTab($event, true)"
         @close="goBack"
       />
       <ReaderSpreadsheetHeader
@@ -184,7 +184,7 @@
             <!-- 面板标签页 -->
             <div v-if="isWarmPaper && !warmRightPanel" class="warm-panel-heading">
               <strong>{{ activeTab === 'search' ? '书内搜索' : '目录' }}</strong>
-              <button class="blue-icon-button" type="button" aria-label="关闭侧栏" @click="blueSidebarOpen = false">
+              <button class="blue-icon-button" type="button" aria-label="关闭侧栏" @click="closeReaderSidebar">
                 <ReaderBlueGrayIcon name="close" />
               </button>
             </div>
@@ -193,13 +193,13 @@
                 :model-value="activeTab === 'search' ? blueLastTab : activeTab"
                 :options="isWarmPaper ? warmAnnotationTabs : bluePanelTabs"
                 label="阅读侧栏"
-                @update:model-value="activatePanelTab($event as PanelTab)"
+                @update:model-value="activatePanelTab($event as PanelTab, true)"
               />
               <button
                 class="blue-icon-button blue-close-sidebar"
                 type="button"
                 aria-label="收起侧栏"
-                @click="blueSidebarOpen = false"
+                @click="closeReaderSidebar"
               >
                 <ReaderBlueGrayIcon name="close" />
               </button>
@@ -222,7 +222,7 @@
                   type="button"
                   role="tab"
                   :aria-selected="activeTab === tab.value"
-                  @click="activatePanelTab(tab.value)"
+                  @click="activatePanelTab(tab.value, true)"
                 >
                   {{ tab.label }}
                 </button>
@@ -236,7 +236,7 @@
                 type="button"
                 title="关闭侧栏"
                 aria-label="关闭侧栏"
-                @click="closeAllPanels"
+                @click="closeAllPanels(true)"
               >
                 ✕
               </button>
@@ -456,7 +456,7 @@
           @back="goBack"
           @settings="toggleWarmSettings"
           @night="toggleWarmNight"
-          @notes="activatePanelTab('notes')"
+          @notes="activatePanelTab('notes', true)"
           @download="handleDownload"
           @fullscreen="toggleFullscreen"
         />
@@ -466,7 +466,7 @@
             type="button"
             :aria-expanded="blueSidebarVisible"
             aria-label="切换阅读侧栏"
-            @click="blueSidebarOpen = !blueSidebarVisible"
+            @click="toggleReaderSidebar"
           >
             <ReaderBlueGrayIcon name="menu" />
           </button>
@@ -499,7 +499,7 @@
               type="button"
               aria-label="查看笔记"
               title="查看笔记"
-              @click="activatePanelTab('notes')"
+              @click="activatePanelTab('notes', true)"
             >
               <ReaderBlueGrayIcon name="note" />
             </button>
@@ -703,15 +703,15 @@
           <span>{{ headerChapterName }}</span>
         </button>
         <div v-if="isFullscreen" class="blue-fullscreen-tools" aria-label="全屏阅读工具">
-          <button type="button" @click="activatePanelTab('toc')">
+          <button type="button" @click="activatePanelTab('toc', true)">
             <ReaderBlueGrayIcon name="menu" />
             目录
           </button>
-          <button type="button" @click="activatePanelTab('bookmarks')">
+          <button type="button" @click="activatePanelTab('bookmarks', true)">
             <ReaderBlueGrayIcon name="bookmark" />
             书签
           </button>
-          <button type="button" @click="activatePanelTab('notes')">
+          <button type="button" @click="activatePanelTab('notes', true)">
             <ReaderBlueGrayIcon name="note" />
             笔记
           </button>
@@ -1509,6 +1509,32 @@ const updateBlueTypography = (patch: Partial<ReaderTypography>) => {
     settings.value.blueGray = { ...DEFAULT_BLUE_GRAY_TYPOGRAPHY, ...settings.value.blueGray, ...patch }
   }
 }
+const rememberQuickToc = (open: boolean) => {
+  if (isQuickWindow.value && readerSettingsReady) settings.value.quickReaderTocOpen = open
+}
+const defaultSidebarOpen = () => {
+  if (isQuickWindow.value && settings.value.quickReaderTocOpen !== null) {
+    return settings.value.quickReaderTocOpen
+  }
+  return !isWarmPaper.value && !isSpreadsheet.value && window.innerWidth > 900
+}
+const restoreQuickToc = () => {
+  if (!isQuickWindow.value || settings.value.quickReaderTocOpen === null) return
+  if (settings.value.quickReaderTocOpen) activatePanelTab('toc')
+  else {
+    blueSidebarOpen.value = false
+    showToc.value = false
+  }
+}
+const closeReaderSidebar = () => {
+  rememberQuickToc(false)
+  blueSidebarOpen.value = false
+}
+const toggleReaderSidebar = () => {
+  const open = !blueSidebarVisible.value
+  rememberQuickToc(open && activeTab.value === 'toc')
+  blueSidebarOpen.value = open
+}
 const blueSidebarOpen = ref(false)
 const blueSidebarVisible = computed(() => blueSidebarOpen.value)
 const warmAnnotationTabs = [
@@ -1518,6 +1544,7 @@ const warmAnnotationTabs = [
 ]
 const warmRightPanel = computed(() => ['bookmarks', 'notes', 'highlights'].includes(activeTab.value))
 const toggleWarmPanel = (panel: string) => {
+  rememberQuickToc(panel === 'toc' && !(blueSidebarOpen.value && activeTab.value === panel))
   if (blueSidebarOpen.value && activeTab.value === panel) {
     blueSidebarOpen.value = false
   } else {
@@ -1883,7 +1910,7 @@ const handleKeydown = (e: KeyboardEvent) => {
       return
     }
     if (usesWorkspaceChrome.value && blueSidebarVisible.value) {
-      blueSidebarOpen.value = false
+      closeReaderSidebar()
       return
     }
   }
@@ -1897,7 +1924,7 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 
   if (e.key === 'Escape' && showSidePanel.value) {
-    closeAllPanels()
+    closeAllPanels(true)
     return
   }
 
@@ -3095,7 +3122,7 @@ const loadTextContent = async () => {
 }
 
 const enableLargeTextPerformanceMode = () => {
-  if (settings.value.paginationMode) {
+  if (settings.value.paginationMode || settings.value.preferScrollMode) {
     performancePaginationMode.value = false
     return
   }
@@ -3112,13 +3139,15 @@ const setReadingMode = async (mode: ReaderFlowMode) => {
   const persistAutomaticPagination = mode === 'pagination'
     && performancePaginationMode.value
     && !settings.value.paginationMode
-  if (mode === activeReadingMode.value && !persistAutomaticPagination) return
+  const persistScrollChoice = mode === 'scroll' && !settings.value.preferScrollMode
+  if (mode === activeReadingMode.value && !persistAutomaticPagination && !persistScrollChoice) return
 
   if (mode === 'scroll') {
     scrollRenderLimit.value = Math.min(content.value.length, SCROLL_RENDER_BATCH_SIZE)
   }
   performancePaginationMode.value = false
   settings.value.paginationMode = mode === 'pagination'
+  settings.value.preferScrollMode = mode === 'scroll'
   await nextTick()
   await flushPendingReaderSettings(true)
   if (mode === 'pagination') {
@@ -3887,7 +3916,8 @@ const goToSearchResult = async (result: ReaderSearchResult) => {
   }
 }
 
-const activatePanelTab = (panel: PanelTab) => {
+const activatePanelTab = (panel: PanelTab, remember = false) => {
+  if (remember) rememberQuickToc(panel === 'toc')
   if (usesWorkspaceChrome.value) {
     dismissBlueSelection()
     if (panel !== 'search') clearCurrentSearchHighlight()
@@ -3912,13 +3942,13 @@ const handlePanelTabKeydown = (event: KeyboardEvent) => {
     : event.key === 'End'
       ? tabs.length - 1
       : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
-  activatePanelTab(tabs[targetIndex].value)
+  activatePanelTab(tabs[targetIndex].value, true)
   nextTick(() => {
     document.querySelectorAll<HTMLButtonElement>('.panel-tabs-nav .tab-btn')[targetIndex]?.focus()
   })
 }
 
-const openSearchPanel = () => activatePanelTab('search')
+const openSearchPanel = () => activatePanelTab('search', true)
 
 const togglePanel = (panel: PanelTab) => {
   const isOpen = (panel === 'search' && showSearch.value)
@@ -3926,14 +3956,15 @@ const togglePanel = (panel: PanelTab) => {
     || (panel === 'bookmarks' && showBookmarks.value)
     || (panel === 'highlights' && showHighlights.value)
   if (isOpen) {
-    closeAllPanels()
+    closeAllPanels(true)
   } else {
-    activatePanelTab(panel)
+    activatePanelTab(panel, true)
   }
 }
 
-const closeAllPanels = () => {
-  if (usesWorkspaceChrome.value && window.innerWidth > 900 && !isFullscreen.value) return
+const closeAllPanels = (remember = false) => {
+  if (remember) rememberQuickToc(false)
+  if (!remember && usesWorkspaceChrome.value && window.innerWidth > 900 && !isFullscreen.value) return
   if (usesWorkspaceChrome.value) blueSidebarOpen.value = false
   showSearch.value = false
   showToc.value = false
@@ -4459,9 +4490,9 @@ watch([usesWorkspaceChrome, isWarmPaper, isSpreadsheet], async ([active]) => {
   dismissBlueSelection()
   closeHighlightEditor()
   if (active) {
-    blueSidebarOpen.value = !isWarmPaper.value && !isSpreadsheet.value && window.innerWidth > 900
+    blueSidebarOpen.value = defaultSidebarOpen()
     activatePanelTab('toc')
-    blueSidebarOpen.value = !isWarmPaper.value && !isSpreadsheet.value && window.innerWidth > 900
+    blueSidebarOpen.value = defaultSidebarOpen()
     const id = managedFontId(readingTypography.value.fontFamily)
     if (id != null) await selectBlueFont(readingTypography.value.fontFamily)
   } else if (activeTab.value === 'notes') {
@@ -4476,12 +4507,13 @@ watch([usesWorkspaceChrome, isWarmPaper, isSpreadsheet], async ([active]) => {
         ?.scrollIntoView({ block: 'start' })
     }
   }
+  restoreQuickToc()
   rendition?.resize?.()
   handleResize()
 })
 
 watch(isFullscreen, () => {
-  if (usesWorkspaceChrome.value) blueSidebarOpen.value = !isWarmPaper.value && !isSpreadsheet.value && !isFullscreen.value && window.innerWidth > 900
+  if (usesWorkspaceChrome.value) blueSidebarOpen.value = !isFullscreen.value && defaultSidebarOpen()
   dismissBlueSelection()
 })
 watch([blueSidebarVisible, showSettings, highlightEditor], () => {
@@ -4521,10 +4553,11 @@ const initializeReader = async () => {
     }
   }
   if (usesWorkspaceChrome.value) {
-    blueSidebarOpen.value = !isWarmPaper.value && !isSpreadsheet.value && window.innerWidth > 900
+    blueSidebarOpen.value = defaultSidebarOpen()
     const id = managedFontId(readingTypography.value.fontFamily)
     if (id != null) await selectBlueFont(readingTypography.value.fontFamily)
   }
+  restoreQuickToc()
   await loadBook()
   await nextTick()
   handleScroll()
