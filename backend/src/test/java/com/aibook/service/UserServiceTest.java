@@ -21,6 +21,36 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void quickReaderTransparencyPersistsAndValidatesWithoutChangingOtherAccounts() {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+        var window = new UserPreferencesDTO.QuickReaderWindowDTO(800, 600, 20, 30);
+        reader.setQuickReaderWindow("{\"width\":800,\"height\":600,\"left\":20,\"top\":30}");
+        assertEquals(50, service.getPreferences("reader").getQuickReaderWindow().getOverlayTransparency());
+        for (int transparency : new int[] {0, 35, 100}) {
+            window.setOverlayTransparency(transparency);
+            var result = service.updatePreferences("reader", UserPreferencesDTO.builder()
+                    .quickReaderWindow(window).build()).getQuickReaderWindow();
+            assertEquals(transparency, result.getOverlayTransparency());
+            assertEquals(800, result.getWidth());
+            assertEquals(transparency,
+                    service.getPreferences("reader").getQuickReaderWindow().getOverlayTransparency());
+        }
+        assertEquals(null, service.getPreferences("other").getQuickReaderWindow());
+        for (int invalid : new int[] {-1, 101}) {
+            window.setOverlayTransparency(invalid);
+            assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                    UserPreferencesDTO.builder().quickReaderWindow(window).build()));
+        }
+        assertEquals(100, service.getPreferences("reader").getQuickReaderWindow().getOverlayTransparency());
+    }
+
+    @Test
     void navigationOrderPersistsAndRejectsMissingOrRepeatedItems() {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();

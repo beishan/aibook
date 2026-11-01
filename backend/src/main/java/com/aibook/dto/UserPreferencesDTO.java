@@ -597,6 +597,7 @@ public class UserPreferencesDTO {
     }
 
     public static class QuickReaderWindowDTO {
+        private Integer overlayTransparency;
         private Integer width;
         private Integer height;
         private Integer left;
@@ -610,6 +611,14 @@ public class UserPreferencesDTO {
             this.height = height;
             this.left = left;
             this.top = top;
+        }
+
+        public Integer getOverlayTransparency() {
+            return overlayTransparency;
+        }
+
+        public void setOverlayTransparency(Integer overlayTransparency) {
+            this.overlayTransparency = overlayTransparency;
         }
 
         public Integer getWidth() {

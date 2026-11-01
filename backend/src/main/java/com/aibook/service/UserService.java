@@ -739,6 +739,10 @@ public class UserService implements UserDetailsService {
         if (window == null) {
             return null;
         }
+        if (window.getOverlayTransparency() == null) {
+            window.setOverlayTransparency(50);
+        }
+        requireRange("小窗阅读蒙板透明度", window.getOverlayTransparency(), 0, 100);
         requireRange("小窗阅读宽度", requireValue("小窗阅读宽度", window.getWidth()), 120, 10000);
         requireRange("小窗阅读高度", requireValue("小窗阅读高度", window.getHeight()), 160, 10000);
         requireRange("小窗阅读左侧位置", requireValue("小窗阅读左侧位置", window.getLeft()), 0, 10000);

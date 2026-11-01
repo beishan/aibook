@@ -55,6 +55,7 @@ export type ReaderEpubEngine = 'epubjs' | 'readium'
 export type ReaderContentWidth = 'narrow' | 'medium' | 'wide' | 'wider' | 'full'
 export type ReaderScreenMode = 'single' | 'double'
 export interface QuickReaderWindow {
+  overlayTransparency?: number
   width: number
   height: number
   left: number
@@ -329,6 +330,9 @@ const isQuickReaderWindow = (value: unknown): value is QuickReaderWindow => {
     && Number.isInteger(window.height) && window.height! >= 160 && window.height! <= 10000
     && Number.isInteger(window.left) && window.left! >= 0 && window.left! <= 10000
     && Number.isInteger(window.top) && window.top! >= 0 && window.top! <= 10000
+    && (window.overlayTransparency === undefined
+      || (Number.isInteger(window.overlayTransparency)
+        && window.overlayTransparency >= 0 && window.overlayTransparency <= 100))
 }
 
 const readLocalQuickReaderWindow = (): QuickReaderWindow | null => {

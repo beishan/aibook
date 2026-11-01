@@ -7586,9 +7586,11 @@ onBeforeUnmount(() => {
     right: 10px;
   }
 }
-.reader-view.quick-window-mode .reader-header {
-  /* 为父窗口右上角的独立拖动手柄留出空间，避免遮挡阅读器操作。 */
-  padding-right: 64px;
+.reader-view.quick-window-mode .reader-header,
+.reader-view.quick-window-mode :deep(.blue-topbar),
+.reader-view.quick-window-mode :deep(.warm-reader-header) {
+  /* 为父窗口的蒙板设置和拖动手柄留出空间。 */
+  padding-right: 122px;
 }
 
 @media (max-width: 768px) {
