@@ -205,75 +205,81 @@
                 :book-title="book.title"
                 :compact="viewMode === 'list'"
               />
-              <el-popover
-              v-if="viewMode === 'grid'"
-              trigger="click"
-              placement="bottom-end"
-              :width="240"
-              :persistent="false"
-            >
-              <template #reference>
-                <button
-                  type="button"
-                  class="book-menu-trigger"
-                  :aria-label="displayBookName(book.title) + '的操作菜单'"
-                  title="书籍操作"
-                  @click.stop
-                >⋯</button>
-              </template>
-              <div class="book-cover-actions shelf-book-actions" @click.stop>
-                <ShelfBookActions :book="book" :small="cardSize === 'small'"
-                  :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
-                  @action="handleBookAction" />
-                <button
-                  v-if="selectedShelfGroup !== 'all' && !shelfKeyword.trim()"
-                  class="action-btn"
-                  :disabled="shelfPageOffset + bookIndex === 0 || shelfActionBookId === book.id"
-                  title="向前移动"
-                  @click="moveShelfBookOrder(shelfPageOffset + bookIndex, -1)"
-                ><span class="action-icon">↑</span></button>
-                <button
-                  v-if="selectedShelfGroup !== 'all' && !shelfKeyword.trim()"
-                  class="action-btn"
-                  :disabled="shelfPageOffset + bookIndex === displayedShelfBooks.length - 1 || shelfActionBookId === book.id"
-                  title="向后移动"
-                  @click="moveShelfBookOrder(shelfPageOffset + bookIndex, 1)"
-                ><span class="action-icon">↓</span></button>
-                <el-dropdown
-                  :persistent="false"
-                  trigger="click"
-                  @command="command => moveBookToShelfGroup(book, command)"
-                >
-                  <button class="action-btn" title="移动到分组" @click.stop>
-                    <span class="action-icon">📁</span>
+              <ShelfBookMenu
+                v-if="viewMode === 'grid'"
+                :book="book"
+                :title="displayBookName(book.title)"
+                :hide-shelf="activeTab === 'shelf'"
+                :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+                @action="handleBookAction"
+              >
+                <template #default="{ close }">
+                  <button
+                    v-if="selectedShelfGroup !== 'all' && !shelfKeyword.trim()"
+                    class="shelf-menu-action"
+                    type="button"
+                    role="menuitem"
+                    :disabled="shelfPageOffset + bookIndex === 0 || shelfActionBookId === book.id"
+                    @click="close(); moveShelfBookOrder(shelfPageOffset + bookIndex, -1)"
+                  >
+                    <el-icon><ArrowUp /></el-icon>
+                    <span>向前移动</span>
                   </button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item command="ungrouped" :disabled="!book.shelfGroupId">未分组</el-dropdown-item>
-                      <el-dropdown-item
-                        v-for="group in shelfOverview.groups"
-                        :key="group.id"
-                        :command="String(group.id)"
-                        :disabled="book.shelfGroupId === group.id"
-                      >{{ group.icon }} {{ group.name }}</el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-                <button
-                  class="action-btn"
-                  :disabled="downloadingBookId !== null"
-                  aria-label="下载到本地"
-                  title="下载到本地"
-                  @click.stop="handleDownloadBook(book)"
-                ><span class="action-icon">{{ downloadingBookId === book.id ? '…' : '⇩' }}</span></button>
-                <button
-                  class="action-btn remove-reading-action"
-                  :disabled="shelfActionBookId === book.id"
-                  title="移出书架"
-                  @click="removeShelfBook(book)"
-                ><span class="action-icon">✕</span></button>
-              </div>
-            </el-popover>
+                  <button
+                    v-if="selectedShelfGroup !== 'all' && !shelfKeyword.trim()"
+                    class="shelf-menu-action"
+                    type="button"
+                    role="menuitem"
+                    :disabled="shelfPageOffset + bookIndex === displayedShelfBooks.length - 1 || shelfActionBookId === book.id"
+                    @click="close(); moveShelfBookOrder(shelfPageOffset + bookIndex, 1)"
+                  >
+                    <el-icon><ArrowDown /></el-icon>
+                    <span>向后移动</span>
+                  </button>
+                  <el-dropdown
+                    :persistent="false"
+                    trigger="click"
+                    @command="command => { close(); moveBookToShelfGroup(book, command) }"
+                  >
+                    <button class="shelf-menu-action" type="button" aria-label="移动到分组" @click.stop>
+                      <el-icon><Folder /></el-icon>
+                      <span>移动到分组</span>
+                    </button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="ungrouped" :disabled="!book.shelfGroupId">未分组</el-dropdown-item>
+                        <el-dropdown-item
+                          v-for="group in shelfOverview.groups"
+                          :key="group.id"
+                          :command="String(group.id)"
+                          :disabled="book.shelfGroupId === group.id"
+                        >{{ group.icon }} {{ group.name }}</el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                  <button
+                    class="shelf-menu-action"
+                    type="button"
+                    role="menuitem"
+                    :disabled="downloadingBookId !== null"
+                    aria-label="下载到本地"
+                    @click.stop="close(); handleDownloadBook(book)"
+                  >
+                    <el-icon><Download /></el-icon>
+                    <span>{{ downloadingBookId === book.id ? '下载中…' : '下载到本地' }}</span>
+                  </button>
+                  <button
+                    class="shelf-menu-action"
+                    type="button"
+                    role="menuitem"
+                    :disabled="shelfActionBookId === book.id"
+                    @click.stop="close(); removeShelfBook(book)"
+                  >
+                    <el-icon><Close /></el-icon>
+                    <span>移出书架</span>
+                  </button>
+                </template>
+              </ShelfBookMenu>
             </div>
             <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
               <div class="book-title">{{ displayBookName(book.title) }}</div>
@@ -364,35 +370,28 @@
               :book-title="book.title"
               :compact="viewMode === 'list'"
             />
-            <el-popover
+            <ShelfBookMenu
               v-if="viewMode === 'grid'"
-              trigger="click"
-              placement="bottom-end"
-              :width="240"
-              :persistent="false"
+              :book="book"
+              :title="displayBookName(book.title)"
+              :hide-shelf="activeTab === 'shelf'"
+              :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+              @action="handleBookAction"
             >
-              <template #reference>
+              <template #default="{ close }">
                 <button
+                  class="shelf-menu-action"
                   type="button"
-                  class="book-menu-trigger"
-                  :aria-label="displayBookName(book.title) + '的操作菜单'"
-                  title="书籍操作"
-                  @click.stop
-                >⋯</button>
+                  role="menuitem"
+                  :disabled="downloadingBookId !== null"
+                  aria-label="下载到本地"
+                  @click.stop="close(); handleDownloadBook(book)"
+                >
+                  <el-icon><Download /></el-icon>
+                  <span>{{ downloadingBookId === book.id ? '下载中…' : '下载到本地' }}</span>
+                </button>
               </template>
-              <div class="book-cover-actions shelf-book-actions" @click.stop>
-                <ShelfBookActions :book="book" :small="cardSize === 'small'"
-                  :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
-                  @action="handleBookAction" />
-              <button
-                class="action-btn"
-                :disabled="downloadingBookId !== null"
-                aria-label="下载到本地"
-                title="下载到本地"
-                @click.stop="handleDownloadBook(book)"
-              ><span class="action-icon">{{ downloadingBookId === book.id ? '…' : '⇩' }}</span></button>
-            </div>
-            </el-popover>
+            </ShelfBookMenu>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
@@ -452,46 +451,38 @@
               :book-title="book.title"
               :compact="viewMode === 'list'"
             />
-            <el-popover
+            <ShelfBookMenu
               v-if="viewMode === 'grid'"
-              trigger="click"
-              placement="bottom-end"
-              :width="240"
-              :persistent="false"
+              :book="book"
+              :title="displayBookName(book.title)"
+              :hide-shelf="activeTab === 'shelf'"
+              :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+              @action="handleBookAction"
             >
-              <template #reference>
+              <template #default="{ close }">
                 <button
+                  class="shelf-menu-action"
                   type="button"
-                  class="book-menu-trigger"
-                  :aria-label="displayBookName(book.title) + '的操作菜单'"
-                  title="书籍操作"
-                  @click.stop
-                >⋯</button>
+                  role="menuitem"
+                  :disabled="downloadingBookId !== null"
+                  aria-label="下载到本地"
+                  @click.stop="close(); handleDownloadBook(book)"
+                >
+                  <el-icon><Download /></el-icon>
+                  <span>{{ downloadingBookId === book.id ? '下载中…' : '下载到本地' }}</span>
+                </button>
+                <button
+                  class="shelf-menu-action"
+                  type="button"
+                  role="menuitem"
+                  :disabled="removingReadingIds.has(book.id)"
+                  @click.stop="close(); removeFromReading(book)"
+                >
+                  <el-icon><Close /></el-icon>
+                  <span>移除正在阅读</span>
+                </button>
               </template>
-              <div class="book-cover-actions shelf-book-actions" @click.stop>
-                <ShelfBookActions :book="book" :small="cardSize === 'small'"
-                  :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
-                  @action="handleBookAction" />
-              <button
-                class="action-btn"
-                :disabled="downloadingBookId !== null"
-                aria-label="下载到本地"
-                title="下载到本地"
-                @click.stop="handleDownloadBook(book)"
-              >
-                <span class="action-icon">{{ downloadingBookId === book.id ? '…' : '⇩' }}</span>
-              </button>
-              <button
-                class="action-btn remove-reading-action"
-                :disabled="removingReadingIds.has(book.id)"
-                aria-label="移除正在阅读"
-                title="移除正在阅读"
-                @click.stop="removeFromReading(book)"
-              >
-                <span class="action-icon">{{ removingReadingIds.has(book.id) ? '…' : '✕' }}</span>
-              </button>
-            </div>
-            </el-popover>
+            </ShelfBookMenu>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
@@ -558,35 +549,28 @@
               :book-title="book.title"
               :compact="viewMode === 'list'"
             />
-            <el-popover
+            <ShelfBookMenu
               v-if="viewMode === 'grid'"
-              trigger="click"
-              placement="bottom-end"
-              :width="240"
-              :persistent="false"
+              :book="book"
+              :title="displayBookName(book.title)"
+              :hide-shelf="activeTab === 'shelf'"
+              :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+              @action="handleBookAction"
             >
-              <template #reference>
+              <template #default="{ close }">
                 <button
+                  class="shelf-menu-action"
                   type="button"
-                  class="book-menu-trigger"
-                  :aria-label="displayBookName(book.title) + '的操作菜单'"
-                  title="书籍操作"
-                  @click.stop
-                >⋯</button>
+                  role="menuitem"
+                  :disabled="downloadingBookId !== null"
+                  aria-label="下载到本地"
+                  @click.stop="close(); handleDownloadBook(book)"
+                >
+                  <el-icon><Download /></el-icon>
+                  <span>{{ downloadingBookId === book.id ? '下载中…' : '下载到本地' }}</span>
+                </button>
               </template>
-              <div class="book-cover-actions shelf-book-actions" @click.stop>
-                <ShelfBookActions :book="book" :small="cardSize === 'small'"
-                  :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
-                  @action="handleBookAction" />
-              <button
-                class="action-btn"
-                :disabled="downloadingBookId !== null"
-                aria-label="下载到本地"
-                title="下载到本地"
-                @click.stop="handleDownloadBook(book)"
-              ><span class="action-icon">{{ downloadingBookId === book.id ? '…' : '⇩' }}</span></button>
-            </div>
-            </el-popover>
+            </ShelfBookMenu>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
@@ -646,35 +630,28 @@
               :book-title="book.title"
               :compact="viewMode === 'list'"
             />
-            <el-popover
+            <ShelfBookMenu
               v-if="viewMode === 'grid'"
-              trigger="click"
-              placement="bottom-end"
-              :width="240"
-              :persistent="false"
+              :book="book"
+              :title="displayBookName(book.title)"
+              :hide-shelf="activeTab === 'shelf'"
+              :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+              @action="handleBookAction"
             >
-              <template #reference>
+              <template #default="{ close }">
                 <button
+                  class="shelf-menu-action"
                   type="button"
-                  class="book-menu-trigger"
-                  :aria-label="displayBookName(book.title) + '的操作菜单'"
-                  title="书籍操作"
-                  @click.stop
-                >⋯</button>
+                  role="menuitem"
+                  :disabled="downloadingBookId !== null"
+                  aria-label="下载到本地"
+                  @click.stop="close(); handleDownloadBook(book)"
+                >
+                  <el-icon><Download /></el-icon>
+                  <span>{{ downloadingBookId === book.id ? '下载中…' : '下载到本地' }}</span>
+                </button>
               </template>
-              <div class="book-cover-actions shelf-book-actions" @click.stop>
-                <ShelfBookActions :book="book" :small="cardSize === 'small'"
-                  :hide-shelf="activeTab === 'shelf'" :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
-                  @action="handleBookAction" />
-              <button
-                class="action-btn"
-                :disabled="downloadingBookId !== null"
-                aria-label="下载到本地"
-                title="下载到本地"
-                @click.stop="handleDownloadBook(book)"
-              ><span class="action-icon">{{ downloadingBookId === book.id ? '…' : '⇩' }}</span></button>
-            </div>
-            </el-popover>
+            </ShelfBookMenu>
           </div>
           <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
@@ -844,6 +821,8 @@ import api from '@/utils/api'
 import { SHELF_PAGE_SIZE_OPTIONS, usePreferencesStore } from '@/stores/preferences'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
+import { ArrowUp, ArrowDown, Folder, Download, Close } from '@element-plus/icons-vue'
+import ShelfBookMenu from '@/components/ShelfBookMenu.vue'
 import ShelfBookActions from '@/components/ShelfBookActions.vue'
 import BookQuickReader from '@/components/BookQuickReader.vue'
 import BookEditDialog from '@/components/BookEditDialog.vue'
@@ -2107,19 +2086,6 @@ button.shelf-folder-card {
   font-size: var(--font-size-xs);
 }
 
-.books-grid.card-small .shelf-book-actions {
-  gap: 3px;
-  padding: 5px;
-}
-
-.books-grid.card-small .shelf-book-actions .action-btn {
-  min-width: 16px;
-  flex-basis: 24px;
-  width: 24px;
-  height: 24px;
-  font-size: 12px;
-}
-
 .books-grid.card-small .book-author {
   font-size: 10px;
 }
@@ -2221,42 +2187,6 @@ button.shelf-folder-card {
 .book-card:focus-within .book-cover-actions {
   opacity: 1;
   transform: translateY(0);
-}
-
-.action-btn {
-  position: relative;
-  display: flex;
-  flex: 0 1 30px;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  overflow: hidden;
-  color: rgba(255, 255, 255, 0.96);
-  font-size: 14px;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.34);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.action-btn:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.82);
-  border-color: rgba(254, 202, 202, 0.9);
-  transform: translateY(-1px);
-}
-
-.action-btn:disabled {
-  cursor: wait;
-  opacity: 0.55;
-}
-
-.action-icon {
-  position: relative;
-  z-index: 1;
 }
 
 .remove-reading-list-action {
@@ -2907,41 +2837,4 @@ button.shelf-folder-card .shelf-folder-icon {
   }
 }
 
-/* 操作面板按需弹出，不再在窄封面上换行堆叠。 */
-.book-menu-trigger {
-  position: absolute;
-  z-index: 4;
-  top: 7px;
-  right: 7px;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
-  border-radius: 8px;
-  background: var(--surface-card);
-  color: var(--text-primary);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-}
-.book-menu-trigger:hover {
-  background: var(--surface-hover);
-}
-.book-menu-trigger:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-.book-cover-actions {
-  position: static;
-  justify-content: flex-start;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 10px;
-  border: 0;
-  opacity: 1;
-  transform: none;
-  transition: none;
-}
 </style>

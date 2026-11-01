@@ -1,32 +1,51 @@
 <template>
-  <div class="shelf-common-actions" :class="{ 'is-list': list, 'is-small': small }" @click.stop>
-    <button type="button" class="common-action" :class="{ active:book.isFavorite }" :disabled="disabled"
+  <div class="shelf-common-actions" :class="{ 'is-list': list, 'is-small': small, 'is-expanded': expanded }" @click.stop>
+    <button type="button" :role="expanded ? 'menuitem' : undefined" class="common-action" :class="{ active:book.isFavorite }" :disabled="disabled"
       :title="book.isFavorite ? '取消收藏' : '收藏'" :aria-label="book.isFavorite ? '取消收藏' : '收藏'"
       @click="emit('action', 'favorite', book)">
-      <span aria-hidden="true">{{ book.isFavorite ? '⭐' : '☆' }}</span>
-      <span v-if="list">{{ book.isFavorite ? '已收藏' : '收藏' }}</span>
+      <el-icon v-if="expanded"><Star /></el-icon>
+      <span v-else aria-hidden="true">{{ book.isFavorite ? '⭐' : '☆' }}</span>
+      <span v-if="list || expanded">{{ book.isFavorite ? '已收藏' : '收藏' }}</span>
     </button>
-    <button type="button" class="common-action" :class="{ active:book.isWanted }" :disabled="disabled"
+    <button type="button" :role="expanded ? 'menuitem' : undefined" class="common-action" :class="{ active:book.isWanted }" :disabled="disabled"
       :title="book.isWanted ? '取消想读' : '想读'" :aria-label="book.isWanted ? '取消想读' : '想读'"
       @click="emit('action', 'wanted', book)">
-      <span aria-hidden="true">{{ book.isWanted ? '🔖' : '📑' }}</span>
-      <span v-if="list">{{ book.isWanted ? '已想读' : '想读' }}</span>
+      <el-icon v-if="expanded"><CollectionTag /></el-icon>
+      <span v-else aria-hidden="true">{{ book.isWanted ? '🔖' : '📑' }}</span>
+      <span v-if="list || expanded">{{ book.isWanted ? '已想读' : '想读' }}</span>
     </button>
-    <button v-if="!hideShelf" type="button" class="common-action" :class="{ active:book.onShelf }"
+    <button v-if="!hideShelf" type="button" :role="expanded ? 'menuitem' : undefined" class="common-action" :class="{ active:book.onShelf }"
       :disabled="disabled" :title="book.onShelf ? '移出书架' : '加入书架'"
       :aria-label="book.onShelf ? '移出书架' : '加入书架'" @click="emit('action', 'shelf', book)">
-      <span aria-hidden="true">{{ book.onShelf ? '📚' : '➕' }}</span>
-      <span v-if="list">{{ book.onShelf ? '已在书架' : '加入书架' }}</span>
+      <el-icon v-if="expanded"><Reading /></el-icon>
+      <span v-else aria-hidden="true">{{ book.onShelf ? '📚' : '➕' }}</span>
+      <span v-if="list || expanded">{{ book.onShelf ? '已在书架' : '加入书架' }}</span>
     </button>
-    <button v-if="list" type="button" class="common-action" :disabled="disabled"
+    <button v-if="list" type="button" :role="expanded ? 'menuitem' : undefined" class="common-action" :disabled="disabled"
       @click="emit('action', 'quick-read', book)">小窗阅读</button>
+    <template v-if="expanded">
+      <div class="shelf-menu-divider" role="separator"></div>
+      <button
+        v-for="action in expandedActions"
+        :key="action.value"
+        type="button"
+        role="menuitem"
+        class="common-action"
+        :disabled="disabled"
+        @click="emit('action', action.value, book)"
+      >
+        <el-icon><component :is="action.icon" /></el-icon>
+        <span>{{ action.label }}</span>
+      </button>
+    </template>
     <el-dropdown
+      v-else
       :persistent="false"
       trigger="click"
       :disabled="disabled"
       @command="command => emit('action', String(command), book)"
     >
-      <button type="button" class="common-action" :disabled="disabled" title="更多操作" aria-label="更多操作">
+      <button type="button" :role="expanded ? 'menuitem' : undefined" class="common-action" :disabled="disabled" title="更多操作" aria-label="更多操作">
         <span>{{ list ? '更多' : '⋯' }}</span>
       </button>
       <template #dropdown>
@@ -46,6 +65,7 @@
 </template>
 
 <script setup lang="ts">
+import { Star, CollectionTag, Reading, MagicStick, Picture, Refresh, Tools, Edit, Collection } from '@element-plus/icons-vue'
 import type { Book } from '@/stores/book'
 
 defineProps<{
@@ -53,8 +73,18 @@ defineProps<{
   list?:boolean
   small?:boolean
   hideShelf?:boolean
+  expanded?:boolean
   disabled?:boolean
 }>()
+const expandedActions = [
+  { value: 'quick-read', label: '小窗阅读', icon: Reading },
+  { value: 'scrape', label: '刮削元数据', icon: MagicStick },
+  { value: 'random-cover', label: '随机封面', icon: Picture },
+  { value: 'reparse', label: '重新解析', icon: Refresh },
+  { value: 'repair', label: '内容修复', icon: Tools },
+  { value: 'edit', label: '编辑书籍', icon: Edit },
+  { value: 'add-to-list', label: '加入书单', icon: Collection },
+]
 const emit = defineEmits<{ (event:'action', command:string, book:Book):void }>()
 </script>
 
