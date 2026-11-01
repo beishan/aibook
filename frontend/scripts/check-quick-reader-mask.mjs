@@ -81,4 +81,26 @@ assert.match(overlayCss, /background-color:\s*var\(--el-overlay-color-lighter\)/
 assert.match(source, /modal-class="book-quick-reader-overlay"/)
 assert.match(source, /:close-on-click-modal="false"/)
 assert.match(source, /@change="preferencesStore.flushQuickReaderWindow\(\)"/)
-console.log('Quick reader mask: opacity bounds, live updates, per-overlay styling, geometry preservation and account persistence passed')
+const toolbarStart = source.indexOf('<header class="book-quick-reader-window-toolbar"')
+const toolbarEnd = source.indexOf('</header>', toolbarStart)
+const frameStart = source.indexOf('<iframe', toolbarEnd)
+assert.ok(toolbarStart > 0 && toolbarEnd > toolbarStart && frameStart > toolbarEnd)
+const toolbar = source.slice(toolbarStart, toolbarEnd)
+assert.match(toolbar, /class="book-quick-reader-drag"/)
+assert.match(toolbar, /class="book-quick-reader-mask-controls"/)
+assert.match(source, /\.book-quick-reader-window-toolbar\s*\{[^}]*flex: 0 0 auto;/)
+assert.match(source, /\.book-quick-reader-frame\s*\{[^}]*height: 0;[^}]*min-height: 0;[^}]*flex: 1 1 auto;/)
+assert.doesNotMatch(source.match(/\.book-quick-reader-drag\s*\{[^}]*}/)[0], /position: absolute/)
+const readerSource = await readFile(new URL('../src/views/ReaderView.vue', import.meta.url), 'utf8')
+assert.doesNotMatch(readerSource, /padding-right: 122px/)
+context.window = { innerWidth: 1200, innerHeight: 900 }
+vm.runInContext(ts.transpile(declarations(script, [
+  'constrainQuickReaderPosition', 'constrainQuickReaderSize',
+  'moveQuickReaderWithKeyboard', 'resizeQuickReaderWithKeyboard',
+])) + '\nglobalThis.moveWindow = moveQuickReaderWithKeyboard; globalThis.resizeWindow = resizeQuickReaderWithKeyboard', context)
+context.moveWindow({ key: 'ArrowRight', preventDefault() {} })
+assert.equal(stored.value.left, 36)
+context.resizeWindow({ key: 'ArrowDown', shiftKey: true, preventDefault() {} })
+assert.equal(stored.value.height, 648)
+assert.equal(stored.value.overlayTransparency, 50)
+console.log('Quick reader: separate window toolbar, frame sizing, keyboard movement/resizing, mask and account settings passed')

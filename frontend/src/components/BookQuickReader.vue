@@ -11,6 +11,53 @@
       destroy-on-close
       @closed="resetQuickReader"
     >
+      <header class="book-quick-reader-window-toolbar" aria-label="小窗窗口控制">
+        <span class="book-quick-reader-window-label">小窗阅读</span>
+        <div class="book-quick-reader-mask-controls">
+          <button
+            class="book-quick-reader-mask-toggle"
+            type="button"
+            :aria-expanded="maskSettingsOpen"
+            aria-controls="quick-reader-mask-settings"
+            @click="maskSettingsOpen = !maskSettingsOpen"
+          >
+            蒙板
+          </button>
+          <section
+            v-if="maskSettingsOpen"
+            id="quick-reader-mask-settings"
+            class="book-quick-reader-mask-settings"
+            aria-label="小窗外部蒙板设置"
+          >
+            <label for="quick-reader-mask-transparency">
+              蒙板透明度 <output>{{ overlayTransparency }}%</output>
+            </label>
+            <input
+              id="quick-reader-mask-transparency"
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              :value="overlayTransparency"
+              @input="setOverlayTransparency"
+              @change="preferencesStore.flushQuickReaderWindow()"
+            />
+            <p>0% 完全遮黑，100% 完全透明</p>
+          </section>
+        </div>
+        <button
+          class="book-quick-reader-drag"
+          type="button"
+          aria-label="窗口拖动手柄：拖动调整位置，也可使用方向键"
+          title="拖动移动窗口，方向键微调位置"
+          @pointerdown="startQuickReaderMove"
+          @pointermove="updateQuickReaderMove"
+          @pointerup="stopQuickReaderMove"
+          @pointercancel="stopQuickReaderMove"
+          @lostpointercapture="stopQuickReaderMove"
+          @keydown="moveQuickReaderWithKeyboard"
+        />
+      </header>
       <iframe
         v-if="quickReaderOpen && quickReaderSrc"
         ref="quickReaderFrame"
@@ -18,50 +65,6 @@
         :src="quickReaderSrc"
         :title="`小窗阅读：${displayBookName(quickReaderBook?.title) || ''}`"
         allow="fullscreen"
-      />
-      <div class="book-quick-reader-mask-controls">
-        <button
-          class="book-quick-reader-mask-toggle"
-          type="button"
-          :aria-expanded="maskSettingsOpen"
-          aria-controls="quick-reader-mask-settings"
-          @click="maskSettingsOpen = !maskSettingsOpen"
-        >
-          蒙板
-        </button>
-        <section
-          v-if="maskSettingsOpen"
-          id="quick-reader-mask-settings"
-          class="book-quick-reader-mask-settings"
-          aria-label="小窗外部蒙板设置"
-        >
-          <label for="quick-reader-mask-transparency">
-            蒙板透明度 <output>{{ overlayTransparency }}%</output>
-          </label>
-          <input
-            id="quick-reader-mask-transparency"
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            :value="overlayTransparency"
-            @input="setOverlayTransparency"
-            @change="preferencesStore.flushQuickReaderWindow()"
-          />
-          <p>0% 完全遮黑，100% 完全透明</p>
-        </section>
-      </div>
-      <button
-        class="book-quick-reader-drag"
-        type="button"
-        aria-label="窗口拖动手柄：拖动调整位置，也可使用方向键"
-        title="拖动移动窗口，方向键微调位置"
-        @pointerdown="startQuickReaderMove"
-        @pointermove="updateQuickReaderMove"
-        @pointerup="stopQuickReaderMove"
-        @pointercancel="stopQuickReaderMove"
-        @lostpointercapture="stopQuickReaderMove"
-        @keydown="moveQuickReaderWithKeyboard"
       />
       <button
         class="book-quick-reader-resize"
@@ -375,11 +378,34 @@ defineExpose({ open:openQuickReader })
 </script>
 
 <style scoped>
-.book-quick-reader-mask-controls {
-  position: absolute;
-  top: 10px;
-  right: 54px;
+.book-quick-reader-window-toolbar {
+  position: relative;
   z-index: 3;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 52px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color-light);
+  background: var(--surface-card);
+}
+
+.book-quick-reader-window-label {
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.book-quick-reader-mask-controls {
+  position: relative;
+  flex: none;
 }
 
 .book-quick-reader-mask-toggle {
@@ -440,18 +466,16 @@ defineExpose({ open:openQuickReader })
 .book-quick-reader-frame {
   display: block;
   width: 100%;
-  height: 100%;
+  height: 0;
   min-height: 0;
+  flex: 1 1 auto;
   border: 0;
   background: var(--surface-card);
 }
 
 .book-quick-reader-drag {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 2;
   display: grid;
+  flex: 0 0 36px;
   width: 36px;
   height: 36px;
   place-items: center;
@@ -503,6 +527,7 @@ defineExpose({ open:openQuickReader })
 :global(.book-quick-reader-dialog .el-dialog__body) {
   position: relative;
   display: flex;
+  flex-direction: column;
   min-height: 0;
   flex: 1;
   overflow: hidden;
