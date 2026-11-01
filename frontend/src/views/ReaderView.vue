@@ -509,6 +509,8 @@
             `reader-body--${book.format}`,
           ]"
           :style="readerStyle"
+          :data-quick-chapter-title="quickChapterTitleOptions?.style"
+          :data-quick-chapter-title-custom-size="quickChapterTitleOptions?.fontSize != null ? '' : undefined"
           @scroll="handleReaderBodyScroll"
           @mouseup="captureDocumentSelection"
           @touchend="captureDocumentSelection"
@@ -768,8 +770,28 @@
               @settings="Object.assign(settings, $event)"
               @font="selectBlueFont"
               @mode="setReadingMode"
-            />
+            >
+              <template #chapter-title>
+                <QuickChapterTitleSettings
+                  v-if="isQuickWindow && book.format !== 'pdf'"
+                  :mode="settings.quickChapterTitleStyle"
+                  :font-size="settings.quickChapterTitleFontSize"
+                  :body-font-size="readingTypography.fontSize"
+                  @style="settings.quickChapterTitleStyle = $event"
+                  @size="settings.quickChapterTitleFontSize = $event"
+                />
+              </template>
+            </ReaderBlueGraySettings>
             <div v-else class="settings-body">
+              <QuickChapterTitleSettings
+                v-if="isQuickWindow && book.format !== 'pdf'"
+                :mode="settings.quickChapterTitleStyle"
+                :font-size="settings.quickChapterTitleFontSize"
+                :body-font-size="readingTypography.fontSize"
+                @style="settings.quickChapterTitleStyle = $event"
+                @size="settings.quickChapterTitleFontSize = $event"
+              />
+
               <div class="setting-section appearance-setting-section">
                 <h4 class="section-title">界面样式</h4>
                 <div
@@ -1078,6 +1100,9 @@ import ReaderBlueGrayIcon from '@/components/reader/ReaderBlueGrayIcon.vue'
 import ReaderBlueGrayTopbar from '@/components/reader/ReaderBlueGrayTopbar.vue'
 import ReaderBlueGraySegmented from '@/components/reader/ReaderBlueGraySegmented.vue'
 import ReaderBlueGraySettings from '@/components/reader/ReaderBlueGraySettings.vue'
+import QuickChapterTitleSettings from '@/components/reader/QuickChapterTitleSettings.vue'
+import { applyQuickChapterTitle, chapterTitleFontSize } from '@/reader/chapterTitle'
+import '@/reader/chapterTitle.css'
 import ReaderWarmPaperRail from '@/components/reader/ReaderWarmPaperRail.vue'
 import ReaderWarmPaperHeader from '@/components/reader/ReaderWarmPaperHeader.vue'
 import { EpubJsReaderEngine } from '@/reader/EpubJsReaderEngine'
@@ -1409,6 +1434,13 @@ const readingTypography = computed<ReaderTypography>(() => isWarmPaper.value
   : usesWorkspaceChrome.value
     ? { ...DEFAULT_BLUE_GRAY_TYPOGRAPHY, ...settings.value.blueGray }
     : settings.value)
+const quickChapterTitleOptions = computed(() => isQuickWindow.value && book.value?.format !== 'pdf'
+  ? {
+    style: settings.value.quickChapterTitleStyle,
+    fontSize: settings.value.quickChapterTitleFontSize,
+    bodyFontSize: readingTypography.value.fontSize,
+  }
+  : null)
 const updateBlueTypography = (patch: Partial<ReaderTypography>) => {
   if (isWarmPaper.value) {
     settings.value.warmPaper = { ...DEFAULT_WARM_PAPER_TYPOGRAPHY, ...settings.value.warmPaper, ...patch }
@@ -1553,6 +1585,8 @@ const readerStyle = computed(() => {
   const widthOption = widthOptions.find(w => w.value === readingTypography.value.contentWidth) || widthOptions[1]
   const isDoubleScreen = settings.value.screenMode === 'double'
   return {
+    '--quick-chapter-title-size': quickChapterTitleOptions.value
+      ? `${chapterTitleFontSize(quickChapterTitleOptions.value)}px` : undefined,
     fontFamily: resolveReaderFontFamily(readingTypography.value.fontFamily),
     fontSize: `${readingTypography.value.fontSize}px`,
     lineHeight: readingTypography.value.lineHeight,
@@ -3274,6 +3308,7 @@ const toEngineSettings = (): ReaderEngineSettings => {
     fontSize: Number(readingTypography.value.fontSize),
     lineHeight: Number(readingTypography.value.lineHeight),
     paragraphSpacing: Number(readingTypography.value.paragraphSpacing),
+    chapterTitle: quickChapterTitleOptions.value,
     // 阅读舞台统一绘制主题背景，EPUB iframe 保持透明，避免形成独立书页边界。
     backgroundColor: 'transparent',
     textColor: colors.text,
@@ -4086,7 +4121,11 @@ const applyThemeToContent = (contents: any) => {
         ::selection { background: #d8eaff; }
         ` : ''}
       `
+      const previous = doc.getElementById('aibook-reader-theme')
+      previous?.remove()
+      style.id = 'aibook-reader-theme'
       doc.head.appendChild(style)
+      applyQuickChapterTitle(doc, quickChapterTitleOptions.value)
     }
   } catch (e) {
     // 忽略跨域错误

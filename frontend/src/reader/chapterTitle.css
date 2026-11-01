@@ -1,0 +1,52 @@
+[data-quick-chapter-title]:where(:not([data-quick-chapter-title="original"])) :is(.chapter-title, h1, h2) {
+  display: block !important;
+  margin: 1.2em 0 1em !important;
+  padding: 0 !important;
+  border: 0 !important;
+  font-family: inherit !important;
+  font-weight: 600 !important;
+  line-height: 1.5 !important;
+  letter-spacing: normal !important;
+  text-align: left !important;
+  text-indent: 0 !important;
+  overflow-wrap: anywhere !important;
+}
+
+[data-quick-chapter-title]:where(:not([data-quick-chapter-title="original"])) :is(.chapter-title, h1, h2)::before,
+[data-quick-chapter-title]:where(:not([data-quick-chapter-title="original"])) :is(.chapter-title, h1, h2)::after {
+  display: none !important;
+  content: none !important;
+}
+
+[data-quick-chapter-title]:where(:not([data-quick-chapter-title="original"])) :is(.chapter-title, h1, h2),
+[data-quick-chapter-title]:where(:not([data-quick-chapter-title="original"])) :is(.chapter-title, h1, h2) *,
+[data-quick-chapter-title-custom-size] :is(.chapter-title, h1, h2),
+[data-quick-chapter-title-custom-size] :is(.chapter-title, h1, h2) * {
+  font-size: var(--quick-chapter-title-size) !important;
+}
+
+[data-quick-chapter-title="body"] :is(.chapter-title, h1, h2) {
+  font-weight: normal !important;
+  line-height: inherit !important;
+}
+
+[data-quick-chapter-title="divider"] :is(.chapter-title, h1, h2) {
+  display: flex !important;
+  align-items: center !important;
+  gap: .75em !important;
+  text-align: center !important;
+}
+
+[data-quick-chapter-title="divider"] :is(.chapter-title, h1, h2)::before,
+[data-quick-chapter-title="divider"] :is(.chapter-title, h1, h2)::after {
+  display: block !important;
+  flex: 1 1 40px !important;
+  min-width: 12px !important;
+  height: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-top: 1px solid currentColor !important;
+  background: none !important;
+  opacity: .35 !important;
+  content: "" !important;
+}

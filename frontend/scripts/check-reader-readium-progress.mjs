@@ -1,3 +1,4 @@
+import { chapterTitleModuleUrl } from './reader-chapter-title-module.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import ts from 'typescript'
@@ -7,7 +8,7 @@ import { Locator } from '@readium/shared'
 const source = await readFile(new URL('../src/reader/ReadiumReaderEngine.ts', import.meta.url), 'utf8')
 const js = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
-}).outputText.replaceAll("import('@readium/shared')", `import(${JSON.stringify(import.meta.resolve('@readium/shared'))})`)
+}).outputText.replace('./chapterTitle', chapterTitleModuleUrl).replaceAll("import('@readium/shared')", `import(${JSON.stringify(import.meta.resolve('@readium/shared'))})`)
 const { ReadiumReaderEngine } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`)
 const locations = [0, 0.33, 0.66].map((progression, i) => Locator.deserialize({
   href: `chapter-${i + 1}.xhtml`, type: 'application/xhtml+xml',

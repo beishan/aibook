@@ -666,6 +666,14 @@ public class UserService implements UserDetailsService {
 
     private UserPreferencesDTO.ReaderSettingsDTO normalizeReaderSettings(
             UserPreferencesDTO.ReaderSettingsDTO settings) {
+        if (settings.getQuickChapterTitleStyle() == null) {
+            settings.setQuickChapterTitleStyle("original");
+        }
+        requireAllowed("小窗章节标题样式", settings.getQuickChapterTitleStyle(),
+                Set.of("original", "compact", "body", "divider"));
+        if (settings.getQuickChapterTitleFontSize() != null) {
+            requireRange("小窗章节标题字号", settings.getQuickChapterTitleFontSize(), 12, 40);
+        }
         requireAllowed("阅读器外观", settings.getAppearance(), READER_APPEARANCES);
         requireAllowed("EPUB 阅读引擎", settings.getEpubEngine(), READER_EPUB_ENGINES);
         if (!READER_BUILT_IN_FONTS.contains(settings.getFontFamily())

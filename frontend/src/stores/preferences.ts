@@ -1,3 +1,4 @@
+import { CHAPTER_TITLE_STYLES, type ChapterTitleStyle } from '@/reader/chapterTitle'
 import { defaultNavigationMenuOrder, normalizeNavigationMenuOrder } from '@/utils/navigationMenu'
 import { isBookNameMaskCharacter, normalizeBookNameMaskCharacter, normalizeBookNamePrefixLength, type BookNameMaskMode } from '@/utils/bookName'
 import { parseStatisticsWindow } from '../utils/crawlerStatistics'
@@ -63,6 +64,8 @@ export interface QuickReaderWindow {
 }
 
 export interface ReaderSettings {
+  quickChapterTitleStyle: ChapterTitleStyle
+  quickChapterTitleFontSize: number | null
   appearance: ReaderAppearance
   epubEngine: ReaderEpubEngine
   fontFamily: string
@@ -113,6 +116,8 @@ export const DEFAULT_WARM_PAPER_TYPOGRAPHY: ReaderTypography = {
 }
 
 export const DEFAULT_READER_SETTINGS: ReaderSettings = {
+  quickChapterTitleStyle: 'original',
+  quickChapterTitleFontSize: null,
   appearance: 'classic',
   epubEngine: 'epubjs',
   fontFamily: 'default',
@@ -364,6 +369,12 @@ export const normalizeReaderSettings = (value: unknown): ReaderSettings => {
   const paperDefaults = DEFAULT_WARM_PAPER_TYPOGRAPHY
 
   return {
+    quickChapterTitleStyle: isOneOf(source.quickChapterTitleStyle, CHAPTER_TITLE_STYLES)
+      ? source.quickChapterTitleStyle : 'original',
+    quickChapterTitleFontSize: typeof source.quickChapterTitleFontSize === 'number'
+      && Number.isInteger(source.quickChapterTitleFontSize)
+      && source.quickChapterTitleFontSize >= 12 && source.quickChapterTitleFontSize <= 40
+      ? source.quickChapterTitleFontSize : null,
     appearance: isOneOf(source.appearance, READER_APPEARANCES)
       ? source.appearance : DEFAULT_READER_SETTINGS.appearance,
     epubEngine: isOneOf(source.epubEngine, READER_EPUB_ENGINES)

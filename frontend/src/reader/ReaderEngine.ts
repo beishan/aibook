@@ -1,3 +1,5 @@
+import type { QuickChapterTitleOptions } from './chapterTitle'
+
 export type ReaderEngineKind = 'epubjs' | 'readium'
 
 export interface ReaderEngineLocator {
@@ -11,6 +13,7 @@ export interface ReaderEngineLocator {
 }
 
 export interface ReaderEngineSettings {
+  chapterTitle?: QuickChapterTitleOptions | null
   textAlign?: 'left' | 'center' | 'justify'
   fontFamily: string
   fontSize: number

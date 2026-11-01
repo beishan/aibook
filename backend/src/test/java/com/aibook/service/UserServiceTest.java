@@ -21,6 +21,47 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void quickChapterTitleSettingsPersistAndValidateIndependentlyOfBodyTypography() throws Exception {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+        var settings = validReaderSettings();
+        reader.setReaderSettings(new ObjectMapper().writeValueAsString(settings));
+        assertEquals("original", service.getPreferences("reader").getReaderSettings().getQuickChapterTitleStyle());
+        for (String style : new String[] {"original", "compact", "body", "divider"}) {
+            settings.setQuickChapterTitleStyle(style);
+            settings.setQuickChapterTitleFontSize(18);
+            service.updatePreferences("reader", UserPreferencesDTO.builder().readerSettings(settings).build());
+            var restored = service.getPreferences("reader").getReaderSettings();
+            assertEquals(style, restored.getQuickChapterTitleStyle());
+            assertEquals(18, restored.getQuickChapterTitleFontSize());
+            assertEquals(settings.getFontSize(), restored.getFontSize());
+        }
+        assertEquals(null, service.getPreferences("other").getReaderSettings());
+        for (int size : new int[] {12, 40}) {
+            settings.setQuickChapterTitleFontSize(size);
+            assertEquals(size, service.updatePreferences("reader", UserPreferencesDTO.builder()
+                    .readerSettings(settings).build()).getReaderSettings().getQuickChapterTitleFontSize());
+        }
+        for (int size : new int[] {11, 41}) {
+            settings.setQuickChapterTitleFontSize(size);
+            assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                    UserPreferencesDTO.builder().readerSettings(settings).build()));
+        }
+        settings.setQuickChapterTitleFontSize(null);
+        settings.setQuickChapterTitleStyle("unknown");
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                UserPreferencesDTO.builder().readerSettings(settings).build()));
+        settings.setQuickChapterTitleStyle("body");
+        assertEquals(null, service.updatePreferences("reader", UserPreferencesDTO.builder()
+                .readerSettings(settings).build()).getReaderSettings().getQuickChapterTitleFontSize());
+    }
+
+    @Test
     void quickReaderTransparencyPersistsAndValidatesWithoutChangingOtherAccounts() {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();

@@ -655,6 +655,8 @@ public class UserPreferencesDTO {
     }
 
     public static class ReaderSettingsDTO {
+        private String quickChapterTitleStyle;
+        private Integer quickChapterTitleFontSize;
         private ReaderTypographyDTO blueGray;
         private ReaderTypographyDTO warmPaper;
         private String appearance;
@@ -704,6 +706,22 @@ public class UserPreferencesDTO {
         }
 
         public String getAppearance() { return appearance; }
+        public String getQuickChapterTitleStyle() {
+            return quickChapterTitleStyle;
+        }
+
+        public void setQuickChapterTitleStyle(String value) {
+            quickChapterTitleStyle = value;
+        }
+
+        public Integer getQuickChapterTitleFontSize() {
+            return quickChapterTitleFontSize;
+        }
+
+        public void setQuickChapterTitleFontSize(Integer value) {
+            quickChapterTitleFontSize = value;
+        }
+
         public ReaderTypographyDTO getWarmPaper() { return warmPaper; }
         public void setWarmPaper(ReaderTypographyDTO value) { warmPaper = value; }
         public ReaderTypographyDTO getBlueGray() { return blueGray; }

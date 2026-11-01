@@ -1,5 +1,6 @@
 <template>
   <div class="blue-settings-content" :class="{ 'paper-settings-content': paper }">
+    <slot name="chapter-title" />
     <section class="blue-type-settings">
       <label class="blue-setting-row">
         <span>字体</span>

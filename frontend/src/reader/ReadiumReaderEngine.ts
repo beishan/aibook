@@ -1,3 +1,4 @@
+import { applyQuickChapterTitle, type QuickChapterTitleOptions } from './chapterTitle'
 import type { Locator } from '@readium/shared'
 import type { TextAlignment } from '@readium/navigator'
 import type {
@@ -19,6 +20,8 @@ export class ReadiumReaderEngine implements ReaderEngine {
   readonly kind = 'readium' as const
   readonly capabilities = { search: false, highlights: false, textSelection: true }
 
+  private chapterTitle: QuickChapterTitleOptions | null = null
+  private chapterTitleDocuments = new Set<Document>()
   private navigator: any = null
   private publication: any = null
   private currentLocator: ReaderEngineLocator | null = null
@@ -34,6 +37,7 @@ export class ReadiumReaderEngine implements ReaderEngine {
   }
 
   private async load(source: ReadiumEngineSource) {
+    this.chapterTitle = source.settings.chapterTitle ?? null
     const [{ EpubNavigator }, { HttpFetcher, Manifest, Publication, Locator }] =
       await Promise.all([import('@readium/navigator'), import('@readium/shared')])
 
@@ -72,7 +76,15 @@ export class ReadiumReaderEngine implements ReaderEngine {
     }
 
     const listeners = {
-      frameLoaded: () => undefined,
+      frameLoaded: (wnd: Window) => {
+        for (const doc of this.chapterTitleDocuments) {
+          if (doc.defaultView?.frameElement?.isConnected === false) {
+            this.chapterTitleDocuments.delete(doc)
+          }
+        }
+        this.chapterTitleDocuments.add(wnd.document)
+        applyQuickChapterTitle(wnd.document, this.chapterTitle)
+      },
       positionChanged: (locator: Locator) => {
         this.currentLocator = this.fromReadiumLocator(locator)
         this.events.onPositionChanged(this.currentLocator)
@@ -153,6 +165,14 @@ export class ReadiumReaderEngine implements ReaderEngine {
   }
 
   async applySettings(settings: ReaderEngineSettings) {
+    this.chapterTitle = settings.chapterTitle ?? null
+    for (const doc of this.chapterTitleDocuments) {
+      if (doc.defaultView?.frameElement?.isConnected === false) {
+        this.chapterTitleDocuments.delete(doc)
+      } else {
+        applyQuickChapterTitle(doc, this.chapterTitle)
+      }
+    }
     const { EpubPreferences } = await import('@readium/navigator')
     await this.navigator.submitPreferences(new EpubPreferences(this.toPreferences(settings)))
   }
@@ -161,6 +181,7 @@ export class ReadiumReaderEngine implements ReaderEngine {
     if (this.navigator) await this.navigator.destroy()
     this.navigator = null
     this.publication = null
+    this.chapterTitleDocuments.clear()
   }
 
   private toPreferences(settings: ReaderEngineSettings) {
