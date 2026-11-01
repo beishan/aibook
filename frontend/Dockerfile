@@ -4,11 +4,20 @@
 # 第一阶段：构建
 FROM node:24-alpine AS builder
 
+ARG NPM_REGISTRY=https://registry.npmjs.org
+
 WORKDIR /app
 
 # 复制 package.json 并安装依赖（利用 Docker 缓存）
 COPY package*.json ./
-RUN npm ci
+RUN --mount=type=cache,id=aibook-frontend-npm-cache,target=/root/.npm,sharing=locked \
+    npm ci --registry="${NPM_REGISTRY}" \
+    --prefer-offline --no-audit --no-fund \
+    --fetch-retries=5 \
+    --fetch-retry-mintimeout=10000 \
+    --fetch-retry-maxtimeout=60000 \
+    --fetch-timeout=300000 \
+    --maxsockets=5
 
 # 复制源代码并构建
 COPY . .

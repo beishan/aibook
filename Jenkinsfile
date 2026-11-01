@@ -48,11 +48,17 @@ pipeline {
             defaultValue: '',
             description: '附加字体目录所需的数字 GID，多个值使用逗号分隔'
         )
+        string(
+            name: 'NPM_REGISTRY',
+            defaultValue: '',
+            description: '前端构建 npm 源；留空沿用 Secret file 配置，否则使用官方源；可填写可信镜像源地址'
+        )
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '紧急部署时跳过后端测试')
     }
 
     environment {
         APP_NAME = 'aibook'
+        NPM_REGISTRY = "${params.NPM_REGISTRY ?: ''}"
         COMPOSE_PROJECT_NAME = 'aibook'
         BACKUP_PATH = "${params.BACKUP_PATH}"
         BACKUP_GID = "${params.BACKUP_GID}"

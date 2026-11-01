@@ -80,6 +80,8 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
       labels:
         com.aibook.image-scope: frontend
     container_name: aibook-frontend

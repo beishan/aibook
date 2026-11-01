@@ -309,6 +309,13 @@ prepare_mounts_override() {
     echo "已生成动态目录配置：${#OVERRIDE_MOUNT_SOURCES[@]} 个目录，${#OVERRIDE_GIDS[@]} 个附加 GID。"
 }
 
+# Jenkins 留空时沿用 Secret file；Compose 在两处都未配置时使用官方源。
+npm_registry="$(trim_whitespace "${NPM_REGISTRY:-}")"
+if [[ -z "${npm_registry}" ]]; then
+    npm_registry="$(trim_whitespace "$(env_file_value NPM_REGISTRY)")"
+fi
+export NPM_REGISTRY="${npm_registry}"
+
 prepare_mounts_override
 
 compose() {

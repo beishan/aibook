@@ -214,6 +214,7 @@ git@github.com:beishan/aibook.git
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
+| `NPM_REGISTRY` | 留空 | 前端构建 npm 源；非空参数优先，其次 Secret file 配置，最后使用官方源 |
 | `NAS_HOST` | `192.168.31.155` | Jenkins 用于访问部署结果的 NAS 地址 |
 | `FRONTEND_PORT` | `8291` | Web 前端端口 |
 | `BACKEND_PORT` | `8292` | 后端健康检查端口 |
@@ -440,3 +441,30 @@ Validate、Backend Test、Build Images、Deploy 和 Public Health Check 阶段�
 如果要求即使 GitHub 完全不可达也始终生成完整 Stage View，只能把流水线定义改为
 Jenkins 本地保存的 `Pipeline script`（或本地共享库），因为远程 Jenkinsfile 尚未读取
 时，Jenkins 无法知道仓库中定义了哪些阶段。
+
+### 前端 npm ci 下载超时（ETIMEDOUT）
+
+如果构建停在 `frontend builder` 的 `npm ci`，并显示下载某个 `.tgz` 超时，
+这是 Docker 构建网络到 npm 源的连接失败，尚未进入前端编译；npm 的升级提示
+不是本次失败原因。先重新运行构建；网络短暂抖动会由下载重试及持久缓存缓解。
+
+前端构建复用 BuildKit 的 `/root/.npm` 下载缓存，优先使用已缓存且通过锁文件
+完整性校验的包；每个下载请求最多重试 5 次，退避 10–60 秒、单次请求超时
+5 分钟，并将下载并发限制为 5。持续断网或源不可达仍会构建失败。
+
+若官方源在 NAS 网络中持续超时，在 Jenkins 的构建参数 `NPM_REGISTRY` 中
+填写你信任且 NAS 可访问的 npm 镜像源，再执行构建；也可在 Secret file 中
+配置 `NPM_REGISTRY`，Jenkins 参数留空时沿用该值。两处都未配置时仍使用
+`https://registry.npmjs.org`，不会自动切换到第三方源。
+
+直接构建时可传入同名构建参数：
+
+```bash
+docker build --build-arg NPM_REGISTRY=https://registry.npmjs.org -t aibook-frontend ./frontend
+```
+
+将示例地址替换为所选源。仍保留 `npm ci`、锁定版本和完整性校验，无需删除
+`package-lock.json` 或升级 Vue/npm。若换源后仍然超时，应检查 NAS 的 DNS、
+出站网络及 Docker 构建网络；宿主机能联网不代表构建容器一定能连接同一地址。
+配置 HTTP/HTTPS 代理时应使用 Docker 支持的构建代理参数，不要将代理凭据
+写进 Dockerfile 或提交到仓库。镜像构建成功后再按正常部署流程更新服务。
