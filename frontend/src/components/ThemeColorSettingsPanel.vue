@@ -70,7 +70,7 @@
 
         <section class="control-section">
           <strong>常用色</strong>
-          <p>为「{{ currentThemeName }}」挑选的协调色组。</p>
+          <p>为「{{ currentThemeName }}」精选 {{ currentPresets.length }} 种配色，点击即可应用并保存。</p>
           <div class="preset-grid">
             <button
               v-for="preset in currentPresets"
@@ -104,24 +104,60 @@ import { confirm, message } from '@/utils/message'
 
 const presetGroups: Record<ThemeId, Array<{ name: string; color: string }>> = {
   modern: [
-    { name: '钴蓝', color: '#2563EB' }, { name: '科技青', color: '#0891B2' },
-    { name: '翡翠', color: '#059669' }, { name: '石墨', color: '#475569' },
-    { name: '炽橙', color: '#EA580C' }, { name: '朱红', color: '#DC2626' },
+    { name: '钴蓝', color: '#2563EB' },
+    { name: '科技青', color: '#0891B2' },
+    { name: '翡翠', color: '#059669' },
+    { name: '石墨', color: '#475569' },
+    { name: '炽橙', color: '#EA580C' },
+    { name: '朱红', color: '#DC2626' },
+    { name: '鸢尾紫', color: '#7C3AED' },
+    { name: '玫瑰粉', color: '#DB2777' },
+    { name: '靛青', color: '#4F46E5' },
+    { name: '海松绿', color: '#0F766E' },
+    { name: '琥珀金', color: '#B45309' },
+    { name: '午夜蓝', color: '#1E3A8A' },
   ],
   warm: [
-    { name: '陶土', color: '#A0522D' }, { name: '焦糖', color: '#C56A3A' },
-    { name: '琥珀', color: '#B7791F' }, { name: '橄榄', color: '#6F713F' },
-    { name: '酒红', color: '#9B4A4A' }, { name: '胡桃', color: '#7C5C47' },
+    { name: '陶土', color: '#A0522D' },
+    { name: '焦糖', color: '#C56A3A' },
+    { name: '琥珀', color: '#B7791F' },
+    { name: '橄榄', color: '#6F713F' },
+    { name: '酒红', color: '#9B4A4A' },
+    { name: '胡桃', color: '#7C5C47' },
+    { name: '豆沙', color: '#B56576' },
+    { name: '梅紫', color: '#8E5572' },
+    { name: '赭石', color: '#B85C38' },
+    { name: '墨绿', color: '#52796F' },
+    { name: '雾蓝', color: '#5B7B95' },
+    { name: '栗棕', color: '#854D3D' },
   ],
   natural: [
-    { name: '苔藓', color: '#2E7D5A' }, { name: '青瓷', color: '#3C8D78' },
-    { name: '湖水', color: '#2F7F83' }, { name: '松针', color: '#316B52' },
-    { name: '鼠尾草', color: '#718C62' }, { name: '银杏', color: '#A77A3D' },
+    { name: '苔藓', color: '#2E7D5A' },
+    { name: '青瓷', color: '#3C8D78' },
+    { name: '湖水', color: '#2F7F83' },
+    { name: '松针', color: '#316B52' },
+    { name: '鼠尾草', color: '#718C62' },
+    { name: '银杏', color: '#A77A3D' },
+    { name: '竹青', color: '#4D7C0F' },
+    { name: '海蓝', color: '#2874A6' },
+    { name: '薰衣草', color: '#8064A2' },
+    { name: '蔷薇', color: '#B45B73' },
+    { name: '赤陶', color: '#B56845' },
+    { name: '岩灰', color: '#64716B' },
   ],
   macos26: [
-    { name: '系统蓝', color: '#007AFF' }, { name: '天际蓝', color: '#32ADE6' },
-    { name: '薄荷绿', color: '#00C7BE' }, { name: '虹彩紫', color: '#AF52DE' },
-    { name: '活力橙', color: '#FF9500' }, { name: '珊瑚红', color: '#FF3B30' },
+    { name: '系统蓝', color: '#007AFF' },
+    { name: '天际蓝', color: '#32ADE6' },
+    { name: '薄荷绿', color: '#00C7BE' },
+    { name: '虹彩紫', color: '#AF52DE' },
+    { name: '活力橙', color: '#FF9500' },
+    { name: '珊瑚红', color: '#FF3B30' },
+    { name: '靛蓝', color: '#5856D6' },
+    { name: '樱花粉', color: '#FF2D55' },
+    { name: '青草绿', color: '#248A3D' },
+    { name: '深海青', color: '#008B8B' },
+    { name: '暖棕', color: '#A2845E' },
+    { name: '太空灰', color: '#636366' },
   ],
 }
 
