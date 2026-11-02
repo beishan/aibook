@@ -31,4 +31,6 @@ public class CrawlerBlacklistScreenResult {
     private String siteName;
     @Column(columnDefinition = "TEXT")
     private String reason;
+    @Column(columnDefinition = "TEXT")
+    private String matchDetailsJson;
 }

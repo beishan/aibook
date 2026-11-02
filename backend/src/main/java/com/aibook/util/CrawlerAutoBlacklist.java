@@ -3,6 +3,7 @@ package com.aibook.util;
 import com.aibook.model.entity.CrawlerBook;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.constraints.Size;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -68,6 +69,84 @@ public final class CrawlerAutoBlacklist {
             }
         }
         return null;
+    }
+
+    public record MatchDetail(String type, String field, String value, String evidence) { }
+
+    /** Capture every match using the same literal matching rules as automatic enforcement. */
+    public static List<MatchDetail> matchDetails(Configuration config, CrawlerBook book) {
+        if (!config.enabled() || book == null) return List.of();
+        List<MatchDetail> matches = new ArrayList<>();
+        for (String keyword : config.keywords()) {
+            addKeywordMatch(matches, "书名", book.getBookName(), keyword);
+            addKeywordMatch(matches, "作者", book.getAuthor(), keyword);
+            addKeywordMatch(matches, "简介", book.getDescription(), keyword);
+        }
+        List<String> tags = book.getTags() == null ? List.of()
+                : Arrays.stream(book.getTags().split("[\\r\\n,，、]+"))
+                        .map(String::trim).filter(tag -> !tag.isEmpty()).distinct().toList();
+        for (String configured : config.tags()) {
+            for (String actual : tags) {
+                if (configured.equalsIgnoreCase(actual)) {
+                    matches.add(new MatchDetail("TAG", "标签", configured, actual));
+                }
+            }
+        }
+        return List.copyOf(matches);
+    }
+
+    private static void addKeywordMatch(List<MatchDetail> matches, String field,
+            String text, String keyword) {
+        if (contains(text, keyword)) {
+            matches.add(new MatchDetail("KEYWORD", field, keyword, excerpt(text, keyword)));
+        }
+    }
+
+    private static String excerpt(String text, String keyword) {
+        String foldedKeyword = keyword.toLowerCase(Locale.ROOT);
+        String foldedText = text.toLowerCase(Locale.ROOT);
+        int foldedPosition = foldedText.indexOf(foldedKeyword);
+        boolean sameLength = text.length() == foldedText.length();
+        int position = sameLength ? foldedPosition : originalOffset(text, foldedPosition);
+        int matchEnd = sameLength ? foldedPosition + foldedKeyword.length()
+                : originalOffset(text, foldedPosition + foldedKeyword.length());
+        int start = Math.max(0, position - 40);
+        int end = Math.min(text.length(), matchEnd + 40);
+        // Keep supplementary characters intact when a context boundary lands inside a pair.
+        if (start > 0 && Character.isLowSurrogate(text.charAt(start))) start--;
+        if (end < text.length() && end > 0 && Character.isLowSurrogate(text.charAt(end))) end++;
+        return (start > 0 ? "…" : "") + text.substring(start, end) + (end < text.length() ? "…" : "");
+    }
+
+    private static int originalOffset(String text, int foldedOffset) {
+        int offset = 0;
+        int consumed = 0;
+        while (offset < text.length() && consumed < foldedOffset) {
+            int codePoint = text.codePointAt(offset);
+            String character = new String(Character.toChars(codePoint));
+            int width = character.toLowerCase(Locale.ROOT).length();
+            if (consumed + width > foldedOffset) return offset;
+            consumed += width;
+            offset += Character.charCount(codePoint);
+        }
+        return offset;
+    }
+
+    public static String detailsJson(List<MatchDetail> details) {
+        try {
+            return MAPPER.writeValueAsString(details);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException("保存黑名单命中详情失败", exception);
+        }
+    }
+
+    public static List<MatchDetail> decodeDetails(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            return List.of(MAPPER.readValue(json, MatchDetail[].class));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException("黑名单命中详情损坏，请重新筛选", exception);
+        }
     }
 
     private static boolean contains(String text, String keyword) {

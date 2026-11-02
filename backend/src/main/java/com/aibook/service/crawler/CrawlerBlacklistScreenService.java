@@ -102,7 +102,8 @@ public class CrawlerBlacklistScreenService implements AutoCloseable {
             CrawlerBook book = current.get(row.getBookId());
             return new Item(row.getBookId(), row.getBookName(), row.getAuthor(), row.getSiteName(),
                     row.getReason(), book != null
-                            && book.getDiscoveryStatus() == CrawlerBook.DiscoveryStatus.BLACKLISTED, book != null);
+                            && book.getDiscoveryStatus() == CrawlerBook.DiscoveryStatus.BLACKLISTED, book != null,
+                    CrawlerAutoBlacklist.decodeDetails(row.getMatchDetailsJson()));
         });
     }
 
@@ -143,11 +144,16 @@ public class CrawlerBlacklistScreenService implements AutoCloseable {
                 List<CrawlerBlacklistScreenResult> matches = new ArrayList<>();
                 for (CrawlerBook book : batch) {
                     afterId = book.getId();
-                    String reason = CrawlerAutoBlacklist.reason(configurations.get(book.getSite().getId()), book);
-                    if (reason != null) {
+                    var details = CrawlerAutoBlacklist.matchDetails(configurations.get(book.getSite().getId()), book);
+                    if (!details.isEmpty()) {
+                        var first = details.getFirst();
+                        String reason = first.field() + ("TAG".equals(first.type())
+                                ? "完整匹配标签：" : "包含关键字：") + first.value()
+                                + (details.size() > 1 ? "（共 " + details.size() + " 项命中）" : "");
                         matches.add(CrawlerBlacklistScreenResult.builder().job(job).bookId(book.getId())
                                 .bookName(book.getBookName()).author(book.getAuthor())
-                                .siteName(book.getSite().getSiteName()).reason(reason).build());
+                                .siteName(book.getSite().getSiteName()).reason(reason)
+                                .matchDetailsJson(CrawlerAutoBlacklist.detailsJson(details)).build());
                     }
                 }
                 long previousProcessed = job.getProcessed();

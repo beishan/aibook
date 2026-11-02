@@ -12,7 +12,15 @@ export interface BlacklistScreenJob {
   createdAt: string
 }
 
+export interface BlacklistMatchDetail {
+  type: 'KEYWORD' | 'TAG'
+  field: string
+  value: string
+  evidence: string
+}
+
 export interface BlacklistScreenItem {
+  matchDetails?: BlacklistMatchDetail[]
   bookId: number
   bookName: string
   author: string

@@ -48,13 +48,49 @@
         ref="table" v-loading="loadingResults" :data="rows" row-key="bookId" max-height="42vh"
         @selection-change="selectionChanged"
       >
+        <el-table-column type="expand" width="40">
+          <template #default="{ row }">
+            <section class="match-details" aria-label="黑名单命中详情">
+              <h4>命中详情 · 筛选时记录</h4>
+              <p>以下为本次筛选时保存的规则与原文片段，之后修改规则或书籍信息不会改变此记录。</p>
+              <template v-if="row.matchDetails?.length">
+                <article v-for="(detail, index) in row.matchDetails" :key="index" class="match-detail">
+                  <div>
+                    <el-tag size="small" :type="detail.type === 'TAG' ? 'warning' : 'danger'">
+                      {{ detail.type === 'TAG' ? '标签规则' : '关键字规则' }}
+                    </el-tag>
+                    <strong>{{ detail.field }}{{ detail.type === 'TAG' ? '完整匹配标签' : '包含关键字' }}「{{ detail.value }}」</strong>
+                  </div>
+                  <blockquote>
+                    <CrawlerBookTitle v-if="detail.field === '书名'" :title="detail.evidence" />
+                    <template v-else>{{ detail.evidence }}</template>
+                  </blockquote>
+                </article>
+              </template>
+              <el-alert
+                v-else type="info" :closable="false"
+                :title="row.reason || '旧筛选结果未记录命中原因'"
+                description="此历史结果未保存详细匹配记录。重新开始筛选后，可查看匹配字段和原文片段。"
+              />
+            </section>
+          </template>
+        </el-table-column>
         <el-table-column type="selection" width="48" :selectable="rowSelectable" />
         <el-table-column label="书名" min-width="180">
           <template #default="{ row }"><CrawlerBookTitle :title="row.bookName" /></template>
         </el-table-column>
         <el-table-column prop="author" label="作者" min-width="100" show-overflow-tooltip />
         <el-table-column prop="siteName" label="来源网站" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="reason" label="命中原因" min-width="180" show-overflow-tooltip />
+        <el-table-column label="命中原因" min-width="220">
+          <template #default="{ row }">
+            <div class="match-reason">
+              <span>{{ row.reason || '未记录命中原因' }}</span>
+              <el-button link type="primary" @click="toggleMatchDetails(row)">
+                查看详情<template v-if="row.matchDetails?.length">（{{ row.matchDetails.length }}）</template>
+              </el-button>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
             <el-tag :type="row.blacklisted ? 'danger' : 'info'">
@@ -231,6 +267,10 @@ function pageSizeChanged() {
   void loadPage()
 }
 
+function toggleMatchDetails(row: BlacklistScreenItem) {
+  table.value?.toggleRowExpansion(row)
+}
+
 function rowSelectable(row: BlacklistScreenItem) {
   return canApply.value && row.available && !row.blacklisted
 }
@@ -263,6 +303,49 @@ async function apply(all: boolean) {
 </script>
 
 <style scoped>
+.match-reason {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+.match-details {
+  padding: 16px 24px;
+  max-height: 360px;
+  overflow: auto;
+}
+.match-details h4 {
+  margin: 0 0 8px;
+}
+.match-details > p {
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+}
+.match-detail {
+  padding: 12px 0;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.match-detail > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.match-detail strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.match-detail blockquote {
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--el-color-warning);
+  background: var(--el-fill-color-light);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
 .screen-description,
 .screen-progress p {
   color: var(--el-text-color-secondary);

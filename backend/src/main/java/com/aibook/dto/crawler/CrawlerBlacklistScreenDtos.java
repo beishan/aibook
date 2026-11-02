@@ -21,6 +21,7 @@ public final class CrawlerBlacklistScreenDtos {
     public record JobView(String id, Long siteId, String status, long total,
             long processed, long matched, String errorMessage, LocalDateTime createdAt, String scope) { }
     public record Item(Long bookId, String bookName, String author, String siteName,
-            String reason, boolean blacklisted, boolean available) { }
+            String reason, boolean blacklisted, boolean available,
+            List<com.aibook.util.CrawlerAutoBlacklist.MatchDetail> matchDetails) { }
     public record ApplyResult(int affectedCount) { }
 }

@@ -59,6 +59,7 @@ context.selectableRows = { get value() { return context.rows.value.filter(row =>
 const selected = []
 context.table = ref({
   clearSelection() { selected.length = 0; context.selectedIds.value = [] },
+  toggleRowExpansion(row) { requests.push({ type: 'expand', bookId: row.bookId }) },
   toggleRowSelection(row, value) {
     if (value) selected.push(row)
     run('selectionChanged(selectedRows)', { selectedRows: selected })
@@ -138,4 +139,15 @@ fetchLatest = async () => ({ ...completed, scope: 'MANAGED' })
 await run('restore()')
 assert.equal(requests.filter(req => req.type === 'latest').at(-1).scope, 'MANAGED')
 assert.equal(context.job.value.id, 'job-a', 'managed entry restores its own history')
-console.log('黑名单筛选：发现/采集范围传递与历史隔离、默认范围、进度恢复、分页、当页选择、选中/跨页全部加入、失败重试与过期响应隔离通过')
+const selectionsBeforeDetails = [...context.selectedIds.value]
+run('toggleMatchDetails(detailRow)', { detailRow: {
+  ...data[0], matchDetails: [{ type: 'KEYWORD', field: '简介', value: '<词>', evidence: '<script>原文</script>' }],
+} })
+run('toggleMatchDetails(detailRow)', { detailRow: data[1] })
+assert.deepEqual(requests.filter(req => req.type === 'expand').map(req => req.bookId), [1, 2],
+  'details can be expanded for both current and legacy/already-blacklisted rows')
+assert.deepEqual([...context.selectedIds.value], selectionsBeforeDetails, 'opening details does not change selection')
+assert.ok(source.includes('{{ detail.evidence }}'), 'evidence is rendered as escaped text')
+assert.ok(!source.includes('v-html'), 'source snippets cannot execute HTML')
+assert.ok(source.includes('此历史结果未保存详细匹配记录'), 'legacy records explain missing snapshots')
+console.log('黑名单筛选：命中详情展开/旧记录/安全文本、发现/采集范围传递与历史隔离、默认范围、进度恢复、分页、当页选择、选中/跨页全部加入、失败重试与过期响应隔离通过')

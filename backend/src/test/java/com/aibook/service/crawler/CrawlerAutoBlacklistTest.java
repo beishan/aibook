@@ -108,6 +108,47 @@ class CrawlerAutoBlacklistTest {
         }
     }
 
+    @Test
+    void detailsCaptureEveryMatchingFieldRuleAndOriginalEvidence() {
+        var config = new Configuration(true, List.of("MYTH", "[.*]"), List.of("AAA"));
+        var book = CrawlerBook.builder().bookName("Myth故事").author("MYTH writer")
+                .description("前文".repeat(300) + "myth [.*] 原始片段" + "后文".repeat(300))
+                .tags("aaa1，aaa").build();
+        var details = CrawlerAutoBlacklist.matchDetails(config, book);
+        assertThat(details).hasSize(5);
+        assertThat(details).extracting(CrawlerAutoBlacklist.MatchDetail::field)
+                .containsExactly("书名", "作者", "简介", "简介", "标签");
+        assertThat(details.get(2).evidence()).contains("myth").startsWith("…").endsWith("…");
+        assertThat(details.get(2).evidence().length()).isLessThan(300);
+        assertThat(details.get(3).evidence()).contains("[.*]");
+        assertThat(details.getLast().value()).isEqualTo("AAA");
+        assertThat(details.getLast().evidence()).isEqualTo("aaa");
+        assertThat(CrawlerAutoBlacklist.decodeDetails(CrawlerAutoBlacklist.detailsJson(details))).isEqualTo(details);
+        assertThat(CrawlerAutoBlacklist.decodeDetails(null)).isEmpty();
+        assertThat(CrawlerAutoBlacklist.matchDetails(new Configuration(false, List.of("MYTH"), List.of()), book))
+                .isEmpty();
+        assertThat(CrawlerAutoBlacklist.matchDetails(config, null)).isEmpty();
+    }
+
+    @Test
+    void evidenceUsesOriginalOffsetsWhenCaseFoldingExpandsUnicodeAndPreservesSurrogates() {
+        var book = CrawlerBook.builder().description("İ".repeat(80) + "x".repeat(100)
+                + "MyTh" + "😀".repeat(100)).build();
+        var details = CrawlerAutoBlacklist.matchDetails(
+                new Configuration(true, List.of("MYTH"), List.of()), book);
+        assertThat(details).hasSize(1);
+        String evidence = details.getFirst().evidence();
+        assertThat(evidence).contains("MyTh");
+        for (int i = 0; i < evidence.length(); i++) {
+            if (Character.isHighSurrogate(evidence.charAt(i))) {
+                assertThat(i + 1).isLessThan(evidence.length());
+                assertThat(Character.isLowSurrogate(evidence.charAt(++i))).isTrue();
+            } else {
+                assertThat(Character.isLowSurrogate(evidence.charAt(i))).isFalse();
+            }
+        }
+    }
+
     private static BookCrawlerParser.ParsedBook metadata() {
         return new BookCrawlerParser.ParsedBook("external", "书", "作者", "", "简介", "分类",
                 List.of("禁止"), "连载", "", "https://example.com/chapters");

@@ -80,6 +80,10 @@ class CrawlerBlacklistScreenServiceTest {
             verify(results, times(2)).saveAll(saved.capture());
             assertThat(saved.getAllValues().stream().flatMap(List::stream).toList())
                     .extracting(CrawlerBlacklistScreenResult::getBookId).containsExactly(10L, 12L);
+            var firstResult = saved.getAllValues().getFirst().getFirst();
+            assertThat(firstResult.getReason()).contains("书名", "禁用词");
+            assertThat(CrawlerAutoBlacklist.decodeDetails(firstResult.getMatchDetailsJson()).getFirst().evidence())
+                    .isEqualTo("含禁用词的书");
             verify(books, never()).updateDiscoveryStatus(any(), any(), any(), anyBoolean(), any());
             verify(books, never()).blacklistAllScreenResults(any(), anyString(), any());
         }
@@ -141,17 +145,22 @@ class CrawlerBlacklistScreenServiceTest {
     void resultPagesReflectLiveBlacklistAndDeletionAndRemainOwnerScoped() {
         var job = job("COMPLETED");
         when(jobs.findByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
-        var a = CrawlerBlacklistScreenResult.builder().job(job).bookId(10L).bookName("甲").build();
+        var evidence = new CrawlerAutoBlacklist.MatchDetail("KEYWORD", "简介", "词", "筛选时的词与简介");
+        var a = CrawlerBlacklistScreenResult.builder().job(job).bookId(10L).bookName("甲")
+                .matchDetailsJson(CrawlerAutoBlacklist.detailsJson(List.of(evidence))).build();
         var b = CrawlerBlacklistScreenResult.builder().job(job).bookId(11L).bookName("乙").build();
         when(results.findByJobIdOrderByIdAsc(job.getId(), PageRequest.of(1, 20)))
                 .thenReturn(new PageImpl<>(List.of(a, b), PageRequest.of(1, 20), 42));
         CrawlerBook current = book(10L, "甲");
         current.setDiscoveryStatus(CrawlerBook.DiscoveryStatus.BLACKLISTED);
+        current.setDescription("后来修改的简介，不再命中");
         when(books.findAllById(List.of(10L, 11L))).thenReturn(List.of(current));
         try (var service = service()) {
             var page = service.page(user, job.getId(), 1, 20);
             assertThat(page.getTotalElements()).isEqualTo(42);
             assertThat(page.getContent().getFirst().blacklisted()).isTrue();
+            assertThat(page.getContent().getFirst().matchDetails()).containsExactly(evidence);
+            assertThat(page.getContent().getLast().matchDetails()).isEmpty();
             assertThat(page.getContent().getLast().available()).isFalse();
             User stranger = User.builder().id(2L).build();
             assertThatThrownBy(() -> service.page(stranger, job.getId(), 0, 20))
