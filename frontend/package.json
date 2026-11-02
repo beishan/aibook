@@ -1,9 +1,10 @@
 {
   "name": "aibook-frontend",
-  "version": "1.49.31",
+  "version": "1.49.33",
   "description": "汗牛充栋 - 阅读书籍管理系统前端",
   "type": "module",
   "scripts": {
+    "test:desktop-reader": "node scripts/check-desktop-reader.mjs",
     "test:quick-chapter-title-settings": "node scripts/check-quick-chapter-title-settings.mjs",
     "test:quick-reader-chapter-title": "node scripts/check-quick-reader-chapter-title.mjs",
     "test:quick-reader-mask": "node scripts/check-quick-reader-mask.mjs",

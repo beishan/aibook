@@ -73,8 +73,9 @@ async function capture(page, filename) {
   await page.screenshot({ path: filename, animations: 'disabled' })
 }
 
-async function setup(width = 1536, settings = initialSettings, format = 'txt') {
+async function setup(width = 1536, settings = initialSettings, format = 'txt', initScript = null) {
   const context = await browser.newContext({ viewport: { width, height: 1024 }, reducedMotion: 'reduce' })
+  if (initScript) await context.addInitScript(initScript)
   let preferences = { readerSettings: structuredClone(settings) }
   const updates = []
   const binary = format === 'epub' ? await makeEpub() : format === 'pdf' ? makePdf() : null

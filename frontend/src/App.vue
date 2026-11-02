@@ -1,9 +1,11 @@
 <template>
   <router-view />
+  <DesktopReaderControls v-if="desktop" />
 </template>
 
 <script setup lang="ts">
-// App 主组件
+import DesktopReaderControls from '@/components/DesktopReaderControls.vue'
+const desktop = !!window.desktopReader
 </script>
 
 <style>

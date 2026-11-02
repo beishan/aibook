@@ -1,0 +1,95 @@
+/* Applied only inside the Electron reader, never in regular browser sessions. */
+html.desktop-reading,
+html.desktop-reading body,
+html.desktop-reading body #app,
+.desktop-reading .app-layout,
+.desktop-reading .layout-main,
+.desktop-reading .main-content,
+.desktop-reading .reader-view,
+.desktop-reading .reader-content,
+.desktop-reading .reader-body-wrapper,
+.desktop-reading .reader-body,
+.desktop-reading .reader-text,
+.desktop-reading .reader-html,
+.desktop-reading .epub-container {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  transition: none !important;
+}
+.desktop-reading .reader-view {
+  background: rgba(245, 243, 235, var(--desktop-background-alpha)) !important;
+  --reader-header-height: 0px;
+}
+.desktop-reading .reader-header,
+.desktop-reading .modern-sidebar,
+.desktop-reading .modern-header,
+.desktop-reading .layout-header,
+.desktop-reading .dock-nav,
+.desktop-reading .blue-reader-footer,
+.desktop-reading .sheet-footer,
+.desktop-reading .floating-toolbar,
+.desktop-reading .floating-bar,
+.desktop-reading .blue-topbar,
+.desktop-reading .warm-reader-header,
+.desktop-reading .warm-tool-rail,
+.desktop-reading .blue-reading-toolbar,
+.desktop-reading .sheet-header,
+.desktop-reading .sheet-row-ruler,
+.desktop-reading .reader-tool-rail,
+.desktop-reading .reader-progress-dock,
+.desktop-reading .side-panel,
+.desktop-reading .reader-footer,
+.desktop-reading .mobile-navigation,
+.desktop-reading .audio-mini-player {
+  display: none !important;
+}
+.desktop-reading .reader-body {
+  margin: 0 !important;
+  padding: 24px !important;
+  width: 100% !important;
+}
+.desktop-reading .reader-text,
+.desktop-reading .reader-html,
+.desktop-reading .epub-container {
+  opacity: var(--desktop-text-alpha);
+}
+
+/* Override skin-specific grid tracks and paper margins without changing preferences. */
+html.desktop-reading body #app .reader-view {
+  --reader-header-height: 0px !important;
+  --blue-visible-sidebar: 0px !important;
+  --blue-footer-height: 0px !important;
+  --warm-rail-width: 0px !important;
+}
+html.desktop-reading body #app .reader-content {
+  padding: 0 !important;
+}
+html.desktop-reading body #app .modern-main,
+html.desktop-reading body #app .content-shell,
+html.desktop-reading body #app .content-wrapper {
+  background: transparent !important;
+}
+html.desktop-reading body #app .reader-body-wrapper {
+  display: block !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+html.desktop-reading body #app .reader-body {
+  height: 100% !important;
+  max-width: none !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+html.desktop-reading body #app .reader-text,
+html.desktop-reading body #app .reader-html {
+  background: transparent !important;
+}
+html.desktop-reading body #app .reader-view::before,
+html.desktop-reading body #app .reader-view::after,
+html.desktop-reading body #app .reader-body::before,
+html.desktop-reading body #app .reader-body::after {
+  display: none !important;
+}

@@ -654,7 +654,21 @@ public class UserPreferencesDTO {
         }
     }
 
+    public record DesktopReaderSettingsDTO(
+            Integer opacity, Integer backgroundOpacity, Integer textOpacity, Boolean alwaysOnTop) {
+    }
+
     public static class ReaderSettingsDTO {
+        private DesktopReaderSettingsDTO desktop;
+
+        public DesktopReaderSettingsDTO getDesktop() {
+            return desktop;
+        }
+
+        public void setDesktop(DesktopReaderSettingsDTO value) {
+            desktop = value;
+        }
+
         private String quickChapterTitleStyle;
         private Integer quickChapterTitleFontSize;
         private ReaderTypographyDTO blueGray;

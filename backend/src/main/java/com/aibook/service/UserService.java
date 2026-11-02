@@ -667,6 +667,13 @@ public class UserService implements UserDetailsService {
 
     private UserPreferencesDTO.ReaderSettingsDTO normalizeReaderSettings(
             UserPreferencesDTO.ReaderSettingsDTO settings) {
+        var desktop = settings.getDesktop();
+        if (desktop != null) {
+            requireRange("桌面整体不透明度", requireValue("桌面整体不透明度", desktop.opacity()), 15, 100);
+            requireRange("桌面背景不透明度", requireValue("桌面背景不透明度", desktop.backgroundOpacity()), 0, 100);
+            requireRange("桌面文字不透明度", requireValue("桌面文字不透明度", desktop.textOpacity()), 15, 100);
+            requireValue("桌面置顶", desktop.alwaysOnTop());
+        }
         if (settings.getQuickChapterTitleStyle() == null) {
             settings.setQuickChapterTitleStyle("original");
         }

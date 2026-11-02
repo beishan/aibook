@@ -21,6 +21,35 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void desktopReaderSettingsPersistWithAccountAndRejectInvalidOpacity() throws Exception {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+        var settings = validReaderSettings();
+        reader.setReaderSettings(new ObjectMapper().writeValueAsString(settings));
+        assertEquals(null, service.getPreferences("reader").getReaderSettings().getDesktop());
+        var desktop = new UserPreferencesDTO.DesktopReaderSettingsDTO(35, 0, 65, true);
+        settings.setDesktop(desktop);
+        service.updatePreferences("reader", UserPreferencesDTO.builder().readerSettings(settings).build());
+        assertEquals(desktop, service.getPreferences("reader").getReaderSettings().getDesktop());
+        assertEquals(null, service.getPreferences("other").getReaderSettings());
+        for (var invalid : new UserPreferencesDTO.DesktopReaderSettingsDTO[] {
+                new UserPreferencesDTO.DesktopReaderSettingsDTO(0, 0, 65, true),
+                new UserPreferencesDTO.DesktopReaderSettingsDTO(35, 101, 65, true),
+                new UserPreferencesDTO.DesktopReaderSettingsDTO(35, 0, 0, true),
+                new UserPreferencesDTO.DesktopReaderSettingsDTO(35, 0, 65, null)}) {
+            settings.setDesktop(invalid);
+            assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                    UserPreferencesDTO.builder().readerSettings(settings).build()));
+        }
+    }
+
+
+    @Test
     void readerFlowChoiceAndQuickTocPersistAndMigrateOlderScrollChoice() throws Exception {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();

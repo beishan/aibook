@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>汗牛充栋</title>
+  <link rel="stylesheet" href="launcher.css">
+</head>
+<body>
+  <header><span>汗牛充栋 · 桌面阅读</span><button id="quit" aria-label="退出应用">×</button></header>
+  <main>
+    <p class="eyebrow">你的书库，随处可读</p>
+    <h1>留一隅，给阅读。</h1>
+    <p>连接家庭书库，登录后选择书籍，再进入透明的沉浸阅读窗。</p>
+    <form>
+      <label for="server">书库地址</label>
+      <input id="server" type="url" placeholder="http://192.168.1.10:8080" required autofocus>
+      <button id="connect">连接书库 →</button>
+      <p id="status" role="status"></p>
+    </form>
+    <footer>隐藏 / 恢复：Ctrl / ⌘ + Shift + H<br>恢复窗口并退出鼠标穿透：Ctrl / ⌘ + Shift + R</footer>
+  </main>
+  <script src="launcher.js"></script>
+</body>
+</html>

@@ -70,7 +70,22 @@ export interface QuickReaderWindow {
   top: number
 }
 
+export interface DesktopReaderSettings {
+  opacity: number
+  backgroundOpacity: number
+  textOpacity: number
+  alwaysOnTop: boolean
+}
+
+export const DEFAULT_DESKTOP_READER_SETTINGS: DesktopReaderSettings = {
+  opacity: 100,
+  backgroundOpacity: 0,
+  textOpacity: 85,
+  alwaysOnTop: true,
+}
+
 export interface ReaderSettings {
+  desktop?: DesktopReaderSettings
   quickChapterTitleStyle: ChapterTitleStyle
   quickChapterTitleFontSize: number | null
   appearance: ReaderAppearance
@@ -383,6 +398,12 @@ export const normalizeReaderSettings = (value: unknown): ReaderSettings => {
   const paperDefaults = DEFAULT_WARM_PAPER_TYPOGRAPHY
 
   return {
+    desktop: {
+      opacity: normalizedNumber(source.desktop?.opacity, 100, 15, 100),
+      backgroundOpacity: normalizedNumber(source.desktop?.backgroundOpacity, 0, 0, 100),
+      textOpacity: normalizedNumber(source.desktop?.textOpacity, 85, 15, 100),
+      alwaysOnTop: typeof source.desktop?.alwaysOnTop === 'boolean' ? source.desktop.alwaysOnTop : true,
+    },
     quickChapterTitleStyle: isOneOf(source.quickChapterTitleStyle, CHAPTER_TITLE_STYLES)
       ? source.quickChapterTitleStyle : 'original',
     quickChapterTitleFontSize: typeof source.quickChapterTitleFontSize === 'number'
@@ -780,6 +801,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     debounceRemote = true,
   ) => {
     const normalized = normalizeReaderSettings(value)
+    // ReaderView holds a local draft; later saves must preserve desktop controls.
+    if (syncRemote) normalized.desktop = readerSettings.value.desktop ?? normalized.desktop
     readerSettings.value = normalized
     const accountToken = localStorage.getItem('token')
     if (!accountToken) {
