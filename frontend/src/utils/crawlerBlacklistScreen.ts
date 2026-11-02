@@ -20,6 +20,7 @@ export interface BlacklistMatchDetail {
 }
 
 export interface BlacklistScreenItem {
+  ignored?: boolean
   matchDetails?: BlacklistMatchDetail[]
   bookId: number
   bookName: string

@@ -36,7 +36,7 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
             + "b.blacklistedAt = :now, b.updatedAt = :now where b.site.user = :user "
             + "and (b.discoveryStatus is null or b.discoveryStatus <> 'BLACKLISTED') "
             + "and b.id in (select r.bookId from CrawlerBlacklistScreenResult r "
-            + "where r.job.id = :jobId and r.job.user = :user)")
+            + "where r.job.id = :jobId and r.job.user = :user and coalesce(r.ignored, false) = false)")
     int blacklistAllScreenResults(@Param("user") User user, @Param("jobId") String jobId,
             @Param("now") java.time.LocalDateTime now);
 

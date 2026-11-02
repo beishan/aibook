@@ -18,7 +18,7 @@
         <el-option :value="0" label="全部网站" />
         <el-option v-for="site in sites" :key="site.id" :value="site.id" :label="site.siteName" />
       </el-select>
-      <el-button type="primary" :loading="starting" :disabled="running || !!applying || restoring" @click="start">
+      <el-button type="primary" :loading="starting" :disabled="busy || restoring" @click="start">
         开始筛选
       </el-button>
       <el-button v-if="error" :disabled="busy && !running" @click="restore">重新查询进度与结果</el-button>
@@ -32,7 +32,7 @@
       <el-progress :percentage="percentage" :status="job.status === 'FAILED' ? 'exception' : job.status === 'COMPLETED' ? 'success' : undefined" />
       <p v-if="job.status === 'RUNNING'">可关闭弹窗，后台继续筛选；再次打开可恢复进度。</p>
       <p v-else-if="job.status === 'FAILED'">{{ job.errorMessage }}；下方可能是部分结果，请重新筛选后再加入黑名单。</p>
-      <p v-else>本次结果共 {{ total }} 本，分页切换会清空勾选；“全部加入”包含本次筛选所有页。</p>
+      <p v-else>本次结果共 {{ total }} 本，分页切换会清空勾选；“全部加入”包含本次筛选所有页，自动跳过已忽略项；忽略仅限本次结果。</p>
     </section>
     <template v-if="job && !running">
       <div class="screen-actions">
@@ -41,7 +41,7 @@
           加入黑名单（{{ selectedIds.length }}）
         </el-button>
         <el-button type="danger" plain :disabled="!canApply || !total" :loading="applying === 'all'" @click="apply(true)">
-          一键全部加入黑名单（{{ total }}）
+          一键全部加入黑名单（跳过已忽略）
         </el-button>
       </div>
       <el-table
@@ -94,8 +94,19 @@
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
             <el-tag :type="row.blacklisted ? 'danger' : 'info'">
-              {{ !row.available ? '书籍已删除' : row.blacklisted ? '已加入' : '待确认' }}
+              {{ !row.available ? '书籍已删除' : row.blacklisted ? '已加入' : row.ignored ? '已忽略' : '待确认' }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="110">
+          <template #default="{ row }">
+            <el-button
+              link type="primary" :loading="ignoringId === row.bookId"
+              :disabled="!canApply || !row.available || row.blacklisted"
+              @click="toggleIgnored(row)"
+            >
+              {{ row.ignored ? '取消忽略' : '忽略' }}
+            </el-button>
           </template>
         </el-table-column>
         <template #empty>{{ loadingResults ? '加载中' : '本次筛选没有匹配书籍' }}</template>
@@ -103,7 +114,7 @@
       <div class="screen-pagination">
         <el-pagination
           v-model:current-page="page" v-model:page-size="pageSize" :total="total" :page-sizes="[20, 50, 100]"
-          :disabled="!!applying || loadingResults" layout="total, sizes, prev, pager, next" small
+          :disabled="busy || loadingResults" layout="total, sizes, prev, pager, next" small
           @current-change="loadPage" @size-change="pageSizeChanged"
         />
       </div>
@@ -140,15 +151,16 @@ const restoring = ref(false)
 const starting = ref(false)
 const loadingResults = ref(false)
 const applying = ref<false | 'all' | 'selected'>(false)
+const ignoringId = ref<number | null>(null)
 const error = ref('')
 let generation = 0
 let pageRequest = 0
 let timer: ReturnType<typeof setTimeout> | undefined
 const running = computed(() => job.value?.status === 'RUNNING')
-const busy = computed(() => starting.value || running.value || !!applying.value)
+const busy = computed(() => starting.value || running.value || !!applying.value || ignoringId.value !== null)
 const canApply = computed(() => job.value?.status === 'COMPLETED'
   && !busy.value && !restoring.value && !loadingResults.value && !error.value)
-const selectableRows = computed(() => rows.value.filter(row => row.available && !row.blacklisted))
+const selectableRows = computed(() => rows.value.filter(row => row.available && !row.blacklisted && !row.ignored))
 const percentage = computed(() => job.value?.status === 'COMPLETED' ? 100
   : job.value?.total ? Math.min(99, Math.floor(job.value.processed / job.value.total * 100)) : 0)
 const statusLabel = computed(() => job.value?.status === 'COMPLETED' ? '筛选完成'
@@ -168,6 +180,7 @@ function stopPolling() {
   starting.value = false
   loadingResults.value = false
   restoring.value = false
+  ignoringId.value = null
   if (timer) clearTimeout(timer)
 }
 
@@ -272,17 +285,40 @@ function toggleMatchDetails(row: BlacklistScreenItem) {
 }
 
 function rowSelectable(row: BlacklistScreenItem) {
-  return canApply.value && row.available && !row.blacklisted
+  return canApply.value && row.available && !row.blacklisted && !row.ignored
 }
 
 function selectionChanged(selected: BlacklistScreenItem[]) {
-  selectedIds.value = selected.filter(row => row.available && !row.blacklisted).map(row => row.bookId)
+  selectedIds.value = selected.filter(row => row.available && !row.blacklisted && !row.ignored).map(row => row.bookId)
 }
 
 function selectPage() {
   if (!canApply.value) return
   table.value?.clearSelection()
   for (const row of selectableRows.value) table.value?.toggleRowSelection(row, true)
+}
+
+async function toggleIgnored(row: BlacklistScreenItem) {
+  if (!canApply.value || !job.value || !row.available || row.blacklisted) return
+  const currentGeneration = generation
+  const ignored = !row.ignored
+  ignoringId.value = row.bookId
+  try {
+    await crawlerApi.ignoreBlacklistScreenResult(job.value.id, row.bookId, ignored)
+    if (currentGeneration !== generation) return
+    row.ignored = ignored
+    if (ignored) {
+      selectedIds.value = selectedIds.value.filter(id => id !== row.bookId)
+      table.value?.toggleRowSelection(row, false)
+    }
+    ElMessage.success(ignored ? '已忽略，仅对本次筛选结果生效' : '已取消本次忽略')
+  } catch (failure) {
+    if (currentGeneration === generation) {
+      ElMessage.error(reason(failure, '忽略状态未确认，请重新查询结果'))
+    }
+  } finally {
+    if (currentGeneration === generation) ignoringId.value = null
+  }
 }
 
 async function apply(all: boolean) {

@@ -103,13 +103,13 @@ public class CrawlerBlacklistScreenService implements AutoCloseable {
             return new Item(row.getBookId(), row.getBookName(), row.getAuthor(), row.getSiteName(),
                     row.getReason(), book != null
                             && book.getDiscoveryStatus() == CrawlerBook.DiscoveryStatus.BLACKLISTED, book != null,
-                    CrawlerAutoBlacklist.decodeDetails(row.getMatchDetailsJson()));
+                    CrawlerAutoBlacklist.decodeDetails(row.getMatchDetailsJson()), Boolean.TRUE.equals(row.getIgnored()));
         });
     }
 
     @Transactional
     public ApplyResult apply(User user, String id, ApplyRequest request) {
-        var job = owned(user, id);
+        var job = ownedForUpdate(user, id);
         if (!"COMPLETED".equals(job.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "筛选尚未成功完成，请完成后再加入黑名单");
         }
@@ -124,8 +124,26 @@ public class CrawlerBlacklistScreenService implements AutoCloseable {
         if (matches.size() != ids.size()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "所选书籍不属于本次筛选结果");
         }
-        return new ApplyResult(books.updateDiscoveryStatus(matches, user,
+        List<Long> eligible = results.eligibleMatchedIds(id, matches);
+        if (eligible.isEmpty()) return new ApplyResult(0);
+        return new ApplyResult(books.updateDiscoveryStatus(eligible, user,
                 CrawlerBook.DiscoveryStatus.BLACKLISTED, true, LocalDateTime.now()));
+    }
+
+    @Transactional
+    public void setIgnored(User user, String id, Long bookId, boolean ignored) {
+        var job = ownedForUpdate(user, id);
+        if (!"COMPLETED".equals(job.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "筛选尚未成功完成，不能修改忽略状态");
+        }
+        if (results.updateIgnored(id, bookId, ignored) != 1) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "书籍不属于本次筛选结果");
+        }
+    }
+
+    private CrawlerBlacklistScreenJob ownedForUpdate(User user, String id) {
+        return jobs.findLockedByIdAndUser(id, user).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "筛选记录不存在"));
     }
 
     void process(CrawlerBlacklistScreenJob job,

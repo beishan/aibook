@@ -66,6 +66,13 @@ public class CrawlerController {
         return blacklistScreenService.page(user(auth), id, page, size);
     }
 
+    @PutMapping("/blacklist-screenings/{id}/results/{bookId}/ignore")
+    public void ignoreBlacklistScreenResult(Authentication auth, @PathVariable String id,
+            @PathVariable Long bookId,
+            @Valid @RequestBody com.aibook.dto.crawler.CrawlerBlacklistScreenDtos.IgnoreRequest request) {
+        blacklistScreenService.setIgnored(user(auth), id, bookId, request.ignored());
+    }
+
     @PostMapping("/blacklist-screenings/{id}/apply")
     public com.aibook.dto.crawler.CrawlerBlacklistScreenDtos.ApplyResult applyBlacklistScreen(
             Authentication auth, @PathVariable String id,

@@ -107,7 +107,7 @@ class CrawlerBlacklistScreenServiceTest {
     @Test
     void allApplyUsesEntireSnapshotRatherThanClientOrCurrentPageIds() {
         var job = job("COMPLETED");
-        when(jobs.findByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
+        when(jobs.findLockedByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
         when(books.blacklistAllScreenResults(eq(user), eq(job.getId()), any())).thenReturn(203);
         try (var service = service()) {
             assertThat(service.apply(user, job.getId(), new ApplyRequest(true, List.of(10L))).affectedCount())
@@ -120,8 +120,9 @@ class CrawlerBlacklistScreenServiceTest {
     @Test
     void selectedApplyRestrictsIdsToOwnedCompletedSnapshotAndKeepsTimestampSemantics() {
         var job = job("COMPLETED");
-        when(jobs.findByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
+        when(jobs.findLockedByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
         when(results.matchedIds(job.getId(), List.of(10L, 11L))).thenReturn(List.of(10L, 11L));
+        when(results.eligibleMatchedIds(job.getId(), List.of(10L, 11L))).thenReturn(List.of(10L, 11L));
         when(books.updateDiscoveryStatus(any(), eq(user), any(), eq(true), any())).thenReturn(2);
         try (var service = service()) {
             assertThat(service.apply(user, job.getId(), new ApplyRequest(false, List.of(10L, 11L, 10L)))
@@ -147,8 +148,8 @@ class CrawlerBlacklistScreenServiceTest {
         when(jobs.findByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
         var evidence = new CrawlerAutoBlacklist.MatchDetail("KEYWORD", "简介", "词", "筛选时的词与简介");
         var a = CrawlerBlacklistScreenResult.builder().job(job).bookId(10L).bookName("甲")
-                .matchDetailsJson(CrawlerAutoBlacklist.detailsJson(List.of(evidence))).build();
-        var b = CrawlerBlacklistScreenResult.builder().job(job).bookId(11L).bookName("乙").build();
+                .matchDetailsJson(CrawlerAutoBlacklist.detailsJson(List.of(evidence))).ignored(null).build();
+        var b = CrawlerBlacklistScreenResult.builder().job(job).bookId(11L).bookName("乙").ignored(true).build();
         when(results.findByJobIdOrderByIdAsc(job.getId(), PageRequest.of(1, 20)))
                 .thenReturn(new PageImpl<>(List.of(a, b), PageRequest.of(1, 20), 42));
         CrawlerBook current = book(10L, "甲");
@@ -162,6 +163,8 @@ class CrawlerBlacklistScreenServiceTest {
             assertThat(page.getContent().getFirst().matchDetails()).containsExactly(evidence);
             assertThat(page.getContent().getLast().matchDetails()).isEmpty();
             assertThat(page.getContent().getLast().available()).isFalse();
+            assertThat(page.getContent().getFirst().ignored()).isFalse();
+            assertThat(page.getContent().getLast().ignored()).isTrue();
             User stranger = User.builder().id(2L).build();
             assertThatThrownBy(() -> service.page(stranger, job.getId(), 0, 20))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("404");
@@ -214,6 +217,52 @@ class CrawlerBlacklistScreenServiceTest {
             assertThatThrownBy(() -> service.submit(user, new Request(null, "ALL")))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("400");
             verify(jobs, never()).save(any());
+        }
+    }
+
+    @Test
+    void selectedApplySilentlySkipsIgnoredRowsIncludingStaleClientSelections() {
+        var job = job("COMPLETED");
+        when(jobs.findLockedByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
+        when(results.matchedIds(job.getId(), List.of(10L, 11L))).thenReturn(List.of(10L, 11L));
+        when(results.eligibleMatchedIds(job.getId(), List.of(10L, 11L))).thenReturn(List.of(11L));
+        when(books.updateDiscoveryStatus(eq(List.of(11L)), eq(user), any(), eq(true), any())).thenReturn(1);
+        try (var service = service()) {
+            assertThat(service.apply(user, job.getId(), new ApplyRequest(false, List.of(10L, 11L)))
+                    .affectedCount()).isEqualTo(1);
+            verify(books).updateDiscoveryStatus(eq(List.of(11L)), eq(user),
+                    eq(CrawlerBook.DiscoveryStatus.BLACKLISTED), eq(true), any());
+            when(results.eligibleMatchedIds(job.getId(), List.of(10L, 11L))).thenReturn(List.of());
+            assertThat(service.apply(user, job.getId(), new ApplyRequest(false, List.of(10L, 11L)))
+                    .affectedCount()).isZero();
+            verify(books, times(1)).updateDiscoveryStatus(any(), any(), any(), anyBoolean(), any());
+        }
+    }
+
+    @Test
+    void ignoreIsStoredOnlyOnOwnedCompletedSnapshotAndCanBeUndone() {
+        var job = job("COMPLETED");
+        when(jobs.findLockedByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
+        when(results.updateIgnored(job.getId(), 10L, true)).thenReturn(1);
+        when(results.updateIgnored(job.getId(), 10L, false)).thenReturn(1);
+        try (var service = service()) {
+            service.setIgnored(user, job.getId(), 10L, true);
+            service.setIgnored(user, job.getId(), 10L, false);
+            verify(results).updateIgnored(job.getId(), 10L, true);
+            verify(results).updateIgnored(job.getId(), 10L, false);
+            verifyNoInteractions(books);
+            assertThatThrownBy(() -> service.setIgnored(user, job.getId(), 99L, true))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("404");
+            User stranger = User.builder().id(99L).build();
+            assertThatThrownBy(() -> service.setIgnored(stranger, job.getId(), 10L, true))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("404");
+            job.setStatus("RUNNING");
+            assertThatThrownBy(() -> service.setIgnored(user, job.getId(), 10L, true))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("409");
+            var next = job("COMPLETED");
+            when(jobs.findLockedByIdAndUser(next.getId(), user)).thenReturn(Optional.of(next));
+            assertThatThrownBy(() -> service.setIgnored(user, next.getId(), 10L, true))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("404");
         }
     }
 

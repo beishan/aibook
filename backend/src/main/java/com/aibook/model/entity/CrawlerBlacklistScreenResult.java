@@ -33,4 +33,7 @@ public class CrawlerBlacklistScreenResult {
     private String reason;
     @Column(columnDefinition = "TEXT")
     private String matchDetailsJson;
+    /** Per-screening exclusion only; legacy null values mean false. */
+    @Builder.Default
+    private Boolean ignored = false;
 }

@@ -11,6 +11,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface CrawlerBlacklistScreenJobRepository extends JpaRepository<CrawlerBlacklistScreenJob, String> {
     Optional<CrawlerBlacklistScreenJob> findByIdAndUser(String id, User user);
+
+    @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select j from CrawlerBlacklistScreenJob j where j.id = :id and j.user = :user")
+    Optional<CrawlerBlacklistScreenJob> findLockedByIdAndUser(@Param("id") String id, @Param("user") User user);
     Optional<CrawlerBlacklistScreenJob> findFirstByUserOrderByCreatedAtDesc(User user);
 
     @Query("select j from CrawlerBlacklistScreenJob j where j.user = :user "
