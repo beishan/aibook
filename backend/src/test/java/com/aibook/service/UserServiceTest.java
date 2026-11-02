@@ -21,6 +21,36 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void desktopIconsPersistPerAccountAndValidatePngSizeAndFormat() throws Exception {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+        var settings = validReaderSettings();
+        var output = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(
+                32, 32, java.awt.image.BufferedImage.TYPE_INT_ARGB), "png", output);
+        String png = "data:image/png;base64,"
+                + java.util.Base64.getEncoder().encodeToString(output.toByteArray());
+        for (String icon : new String[] {"book", "note", "grid", "calendar", png}) {
+            settings.setDesktop(new UserPreferencesDTO.DesktopReaderSettingsDTO(100, 0, 85, true, icon));
+            service.updatePreferences("reader", UserPreferencesDTO.builder().readerSettings(settings).build());
+            assertEquals(icon, service.getPreferences("reader").getReaderSettings().getDesktop().icon());
+            assertEquals(null, service.getPreferences("other").getReaderSettings());
+        }
+        for (String icon : new String[] {"file:///private.png", "https://test/icon.png",
+                "data:image/svg+xml,<svg/>", "data:image/png;base64,AAAA",
+                "data:image/png;base64," + "A".repeat(44000)}) {
+            settings.setDesktop(new UserPreferencesDTO.DesktopReaderSettingsDTO(100, 0, 85, true, icon));
+            assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                    UserPreferencesDTO.builder().readerSettings(settings).build()));
+        }
+    }
+
+    @Test
     void desktopReaderSettingsPersistWithAccountAndRejectInvalidOpacity() throws Exception {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();

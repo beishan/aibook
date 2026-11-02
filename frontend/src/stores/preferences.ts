@@ -72,6 +72,7 @@ export interface QuickReaderWindow {
 }
 
 export interface DesktopReaderSettings {
+  icon?: string
   opacity: number
   backgroundOpacity: number
   textOpacity: number
@@ -79,6 +80,7 @@ export interface DesktopReaderSettings {
 }
 
 export const DEFAULT_DESKTOP_READER_SETTINGS: DesktopReaderSettings = {
+  icon: 'book',
   opacity: 100,
   backgroundOpacity: 0,
   textOpacity: 85,
@@ -401,6 +403,10 @@ export const normalizeReaderSettings = (value: unknown): ReaderSettings => {
 
   return {
     desktop: {
+      icon: typeof source.desktop?.icon === 'string'
+        && (['book', 'note', 'grid', 'calendar'].includes(source.desktop.icon)
+          || (source.desktop.icon.length <= 43714 && /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(source.desktop.icon)))
+        ? source.desktop.icon : 'book',
       opacity: normalizedNumber(source.desktop?.opacity, 100, 15, 100),
       backgroundOpacity: normalizedNumber(source.desktop?.backgroundOpacity, 0, 0, 100),
       textOpacity: normalizedNumber(source.desktop?.textOpacity, 85, 15, 100),

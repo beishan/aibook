@@ -669,7 +669,12 @@ public class UserPreferencesDTO {
     }
 
     public record DesktopReaderSettingsDTO(
-            Integer opacity, Integer backgroundOpacity, Integer textOpacity, Boolean alwaysOnTop) {
+            Integer opacity, Integer backgroundOpacity, Integer textOpacity, Boolean alwaysOnTop,
+            String icon) {
+        public DesktopReaderSettingsDTO(
+                Integer opacity, Integer backgroundOpacity, Integer textOpacity, Boolean alwaysOnTop) {
+            this(opacity, backgroundOpacity, textOpacity, alwaysOnTop, null);
+        }
     }
 
     public static class ReaderSettingsDTO {

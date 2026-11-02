@@ -3,6 +3,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { readFile, writeFile } = require('node:fs/promises');
 const { serverOrigin, sameOrigin, windowSettings, partitionFor } = require('./policy.cjs');
+const { createIcon } = require('./icons.cjs');
 
 let win;
 let tray;
@@ -10,8 +11,24 @@ let origin = null;
 let quitting = false;
 let passthrough = false;
 let recoveryAvailable = false;
+let currentIcon;
+let currentIconValue;
 const launcher = pathToFileURL(path.join(__dirname, 'launcher.html')).href;
 const shortcuts = { hide: 'CommandOrControl+Shift+H', recover: 'CommandOrControl+Shift+R' };
+
+function applyIcon(value = 'book') {
+  if (value === currentIconValue && currentIcon) return currentIcon.toDataURL();
+  const image = createIcon(nativeImage, value);
+  if (process.platform === 'darwin') {
+    app.dock?.setIcon(image);
+  } else if (win && !win.isDestroyed()) {
+    win.setIcon(image);
+  }
+  tray?.setImage(image.resize({ width: process.platform === 'darwin' ? 20 : 32 }));
+  currentIcon = image;
+  currentIconValue = value;
+  return image.toDataURL();
+}
 
 function recover() {
   if (!win || win.isDestroyed()) return;
@@ -57,6 +74,7 @@ function createWindow(partition) {
   const window = new BrowserWindow({
     title: '汗牛充栋', width: 1000, height: 760, minWidth: 380, minHeight: 300,
     frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false,
+    icon: currentIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'), partition,
       nodeIntegration: false, contextIsolation: true, sandbox: true,
@@ -75,6 +93,7 @@ function createWindow(partition) {
 
 async function showLauncher() {
   origin = null;
+  applyIcon('book');
   const previous = win;
   win = createWindow();
   previous?.destroy();
@@ -117,6 +136,11 @@ ipcMain.handle('desktop:settings', (event, value) => {
   }
 });
 
+ipcMain.handle('desktop:icon', (event, value) => {
+  trusted(event);
+  return applyIcon(value);
+});
+
 ipcMain.handle('desktop:action', async (event, action) => {
   trusted(event, event.senderFrame.url === launcher);
   switch (action) {
@@ -141,20 +165,8 @@ else {
   app.on('second-instance', recover);
   app.whenReady().then(async () => {
     Menu.setApplicationMenu(null);
-    // Template image works in macOS menu bar and Windows notification area.
-    const pixels = Buffer.alloc(16 * 16 * 4);
-    for (let y = 2; y < 14; y++) {
-      for (let x = 3; x < 13; x++) {
-        if (x === 3 || x === 12 || y === 2 || y === 13 || x === 7) {
-          const offset = (y * 16 + x) * 4;
-          pixels[offset] = pixels[offset + 1] = pixels[offset + 2] = 80;
-          pixels[offset + 3] = 255;
-        }
-      }
-    }
-    const icon = nativeImage.createFromBitmap(pixels, { width: 16, height: 16 });
-    icon.setTemplateImage(true);
-    tray = new Tray(icon);
+    const icon = createIcon(nativeImage, 'book');
+    tray = new Tray(icon.resize({ width: process.platform === 'darwin' ? 20 : 32 }));
     tray.setToolTip('汗牛充栋 · 阅读');
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: '恢复窗口 / 退出穿透', click: recover },

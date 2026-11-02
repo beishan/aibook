@@ -681,6 +681,27 @@ public class UserService implements UserDetailsService {
             requireRange("桌面背景不透明度", requireValue("桌面背景不透明度", desktop.backgroundOpacity()), 0, 100);
             requireRange("桌面文字不透明度", requireValue("桌面文字不透明度", desktop.textOpacity()), 15, 100);
             requireValue("桌面置顶", desktop.alwaysOnTop());
+            String icon = desktop.icon();
+            if (icon != null && !Set.of("book", "note", "grid", "calendar").contains(icon)) {
+                String prefix = "data:image/png;base64,";
+                if (icon.length() > 43714 || !icon.startsWith(prefix)) {
+                    throw new IllegalArgumentException("桌面图标仅支持内置样式或 32 KiB 以内 PNG");
+                }
+                byte[] bytes = java.util.Base64.getDecoder().decode(icon.substring(prefix.length()));
+                byte[] signature = {(byte) 137, 80, 78, 71, 13, 10, 26, 10};
+                if (bytes.length < 33 || bytes.length > 32768
+                        || !java.util.Arrays.equals(signature, java.util.Arrays.copyOf(bytes, 8))
+                        || bytes[12] != 'I' || bytes[13] != 'H'
+                        || bytes[14] != 'D' || bytes[15] != 'R') {
+                    throw new IllegalArgumentException("桌面 PNG 图标内容无效");
+                }
+                var buffer = java.nio.ByteBuffer.wrap(bytes);
+                int width = buffer.getInt(16);
+                int height = buffer.getInt(20);
+                if (width < 16 || height < 16 || width > 256 || height > 256) {
+                    throw new IllegalArgumentException("桌面图标尺寸需在 16–256 像素之间");
+                }
+            }
         }
         if (settings.getQuickChapterTitleStyle() == null) {
             settings.setQuickChapterTitleStyle("original");

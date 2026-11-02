@@ -11,11 +11,17 @@ const { _electron } = require(process.env.DESKTOP_PLAYWRIGHT_PATH || 'playwright
     response.end('<!doctype html><title>阅读测试</title><p>透明阅读测试</p><script>window.desktopReader.onRecover(() => { document.body.dataset.recovered = "true" })</script>');
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  server.unref();
+  const dataPath = path.join(__dirname, `../dist/native-smoke-${process.pid}`);
+  await mkdir(dataPath, { recursive: true });
   const environment = { ...process.env };
   delete environment.ELECTRON_RUN_AS_NODE;
   const application = await _electron.launch({
     executablePath: process.env.DESKTOP_EXECUTABLE_PATH || require('electron'),
-    args: process.env.DESKTOP_EXECUTABLE_PATH ? [] : [path.join(__dirname, '..')],
+    args: [
+      `--user-data-dir=${dataPath}`,
+      ...(process.env.DESKTOP_EXECUTABLE_PATH ? [] : [path.join(__dirname, '..')]),
+    ],
     env: environment,
   });
   try {
@@ -50,13 +56,28 @@ const { _electron } = require(process.env.DESKTOP_PLAYWRIGHT_PATH || 'playwright
     await application.evaluate(({ app }) => app.emit('second-instance'));
     assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), true);
     assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getOpacity()), 1);
-    const dataPath = path.join(__dirname, '../dist/native-smoke');
-    await mkdir(dataPath, { recursive: true });
     await application.evaluate(({ app }, directory) => app.setPath('userData', directory), dataPath);
     const nextWindow = application.waitForEvent('window');
     void page.evaluate(address => window.desktopReader.connect(address), `http://127.0.0.1:${server.address().port}`).catch(() => {});
     const reader = await nextWindow;
     await reader.getByText('透明阅读测试', { exact: true }).waitFor();
+    const previews = [];
+    for (const value of ['book', 'note', 'grid', 'calendar']) {
+      const png = await reader.evaluate(icon => window.desktopReader.icon(icon), value);
+      assert.ok(png.startsWith('data:image/png;base64,'));
+      previews.push(png);
+    }
+    assert.equal(new Set(previews).size, 4);
+    const size = await application.evaluate(({ nativeImage }, png) => nativeImage.createFromDataURL(png).getSize(), previews[1]);
+    assert.deepEqual(size, { width: 128, height: 128 });
+    assert.equal(await reader.evaluate(png => window.desktopReader.icon(png), previews[1]), previews[1]);
+    const iconDenied = await reader.evaluate(async () => {
+      try {
+        await window.desktopReader.icon('file:///private.png');
+        return false;
+      } catch { return true; }
+    });
+    assert.equal(iconDenied, true);
     await reader.evaluate(() => window.desktopReader.settings({ immersive: true, opacity: 35, alwaysOnTop: true }));
     const state = await application.evaluate(({ BrowserWindow }) => {
       const win = BrowserWindow.getAllWindows()[0];
@@ -72,15 +93,23 @@ const { _electron } = require(process.env.DESKTOP_PLAYWRIGHT_PATH || 'playwright
       } catch { return true; }
     });
     assert.equal(invalid, true);
-    assert.equal(await reader.evaluate(() => window.desktopReader.action('passthrough')), true);
+    const recoveryReady = await application.evaluate(({ globalShortcut }) =>
+      globalShortcut.isRegistered('CommandOrControl+Shift+R'));
+    if (recoveryReady) {
+      assert.equal(await reader.evaluate(() => window.desktopReader.action('passthrough')), true);
+    } else {
+      await assert.rejects(reader.evaluate(() => window.desktopReader.action('passthrough')), /恢复快捷键不可用/);
+    }
     // Recovery from the host must restore full opacity even without renderer cooperation.
     await reader.evaluate(() => window.desktopReader.action('hide'));
     await application.evaluate(({ app }) => app.emit('second-instance'));
     assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getOpacity()), 1);
     await reader.waitForFunction(() => document.body.dataset.recovered === 'true');
     assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isAlwaysOnTop()), false);
-    assert.equal(await reader.evaluate(() => window.desktopReader.action('passthrough')), true);
-    assert.equal(await reader.evaluate(() => window.desktopReader.action('passthrough')), false);
+    if (recoveryReady) {
+      assert.equal(await reader.evaluate(() => window.desktopReader.action('passthrough')), true);
+      assert.equal(await reader.evaluate(() => window.desktopReader.action('passthrough')), false);
+    }
     console.log('Electron native smoke passed: launcher, sandbox, IPC origin checks, resize, remote connection, opacity, on-top, hide and recovery');
   } finally {
     await application.close();

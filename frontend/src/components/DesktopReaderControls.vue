@@ -11,6 +11,26 @@
     </div>
     <div v-if="expanded" class="desktop-controls__panel">
       <p class="desktop-controls__heading">留一隅，给阅读。</p>
+      <section v-if="supportsIcon" aria-label="图标设置">
+        <div class="desktop-controls__icon">
+          <img v-if="iconPreview" :src="iconPreview" alt="当前应用图标" width="48" height="48">
+          <label>
+            应用图标
+            <select :value="selectedIcon" aria-label="应用图标" @change="updateIcon(($event.target as HTMLSelectElement).value)">
+              <option value="book">书页（默认）</option>
+              <option value="note">便签</option>
+              <option value="grid">方格</option>
+              <option value="calendar">日历</option>
+              <option v-if="selectedIcon === 'custom'" value="custom" disabled>自定义 PNG</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          上传 PNG 图标（最大 2 MiB）
+          <input type="file" accept="image/png,.png" aria-label="上传 PNG 图标" :disabled="iconBusy" @change="uploadIcon">
+        </label>
+        <p>图标按账户保存，更新运行中的窗口、托盘及 Mac Dock；EXE 文件、Finder 应用包和已固定快捷方式的图标保持打包时的样式。</p>
+      </section>
       <label v-for="slider in sliders" :key="slider.key">
         <span>{{ slider.label }} <output>{{ desktop[slider.key] }}%</output></span>
         <input
@@ -46,15 +66,20 @@ import { computed, onBeforeUnmount, ref, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import { DEFAULT_DESKTOP_READER_SETTINGS, usePreferencesStore, type DesktopReaderSettings } from '@/stores/preferences'
 import '@/assets/desktop-reader.css'
+import { prepareDesktopIcon } from '@/utils/desktopIcon'
 
 const bridge = window.desktopReader!
+const supportsIcon = typeof bridge.icon === 'function'
 const route = useRoute()
 const preferences = usePreferencesStore()
 const reading = computed(() => route.name === 'Reader')
 const immersive = ref(false)
 const expanded = ref(false)
 const error = ref('')
+const iconPreview = ref('')
+const iconBusy = ref(false)
 const desktop = computed(() => preferences.readerSettings.desktop ?? DEFAULT_DESKTOP_READER_SETTINGS)
+const selectedIcon = computed(() => desktop.value.icon?.startsWith('data:') ? 'custom' : desktop.value.icon ?? 'book')
 const sliders = [
   { key: 'opacity' as const, label: '整体不透明度', min: 15 },
   { key: 'backgroundOpacity' as const, label: '背景不透明度', min: 0 },
@@ -65,6 +90,45 @@ function update(key: keyof DesktopReaderSettings, value: number | boolean) {
   preferences.readerSettings.desktop = { ...desktop.value, [key]: value }
   preferences.setReaderSettings({ ...preferences.readerSettings })
 }
+
+async function updateIcon(value: string, accountToken = localStorage.getItem('token')) {
+  error.value = ''
+  try {
+    if (localStorage.getItem('token') !== accountToken) return
+    // Validate in the native process before changing the saved preference.
+    iconPreview.value = await bridge.icon(value)
+    if (localStorage.getItem('token') !== accountToken) return
+    preferences.readerSettings.desktop = { ...desktop.value, icon: value }
+    preferences.setReaderSettings({ ...preferences.readerSettings })
+    await flush()
+  } catch (reason) {
+    error.value = String(reason)
+  }
+}
+
+async function uploadIcon(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  iconBusy.value = true
+  error.value = ''
+  const accountToken = localStorage.getItem('token')
+  try {
+    await updateIcon(await prepareDesktopIcon(file), accountToken)
+  } catch (reason) {
+    error.value = String(reason)
+  } finally {
+    iconBusy.value = false
+    input.value = ''
+  }
+}
+
+watch(() => desktop.value.icon, value => {
+  if (!supportsIcon) return
+  void bridge.icon(value ?? 'book')
+    .then(preview => { iconPreview.value = preview })
+    .catch(reason => { error.value = String(reason) })
+}, { immediate: true })
 
 async function flush() {
   try { await preferences.flushReaderSettings() } catch { error.value = '设置同步失败，请检查网络后重试。' }
@@ -132,7 +196,9 @@ onBeforeUnmount(() => {
 }
 .desktop-controls button:hover { background: #e1e6d9; }
 .desktop-controls button:disabled { opacity: .45; cursor: default; }
-.desktop-controls button:focus-visible, .desktop-controls input:focus-visible {
+.desktop-controls button:focus-visible,
+.desktop-controls input:focus-visible,
+.desktop-controls select:focus-visible {
   outline: 2px solid #63765a;
   outline-offset: 2px;
 }
@@ -149,6 +215,23 @@ onBeforeUnmount(() => {
   background: #f5f3eb;
 }
 .desktop-controls__heading { font-size: 19px; margin-bottom: 16px; }
+.desktop-controls__icon {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.desktop-controls__icon img {
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.desktop-controls select {
+  padding: 6px 10px;
+  border: 1px solid #c7ccbd;
+  border-radius: 6px;
+  background: #fffdf8;
+  color: inherit;
+  font: inherit;
+}
 .desktop-controls label { display: grid; gap: 6px; margin: 14px 0; }
 .desktop-controls output { float: right; font-variant-numeric: tabular-nums; }
 .desktop-controls input[type="range"] { width: 100%; accent-color: #63765a; }

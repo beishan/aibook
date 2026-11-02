@@ -5,6 +5,7 @@ declare global {
     desktopReader?: {
       connect(address: string): Promise<{ ok: boolean; error?: string }>
       settings(value: { immersive: boolean; alwaysOnTop: boolean; opacity: number }): Promise<void>
+      icon(value: string): Promise<string>
       action(action: string): Promise<boolean | void>
       onRecover(callback: () => void): () => void
     }
