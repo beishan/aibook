@@ -23,6 +23,7 @@ public class UserPreferencesDTO {
     private Integer libraryCardPageSize;
     private Integer libraryListPageSize;
     private Integer authorPageSize;
+    private Integer tagManagePageSize;
     private Integer categoryPageSize;
     private Integer shelfPageSize;
     private Boolean hideBookNames;
@@ -143,6 +144,14 @@ public class UserPreferencesDTO {
 
     public void setLibraryListPageSize(Integer libraryListPageSize) {
         this.libraryListPageSize = libraryListPageSize;
+    }
+
+    public Integer getTagManagePageSize() {
+        return tagManagePageSize;
+    }
+
+    public void setTagManagePageSize(Integer value) {
+        tagManagePageSize = value;
     }
 
     public Integer getAuthorPageSize() {
@@ -416,6 +425,11 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder libraryListPageSize(Integer libraryListPageSize) {
             value.setLibraryListPageSize(libraryListPageSize);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder tagManagePageSize(Integer tagManagePageSize) {
+            value.setTagManagePageSize(tagManagePageSize);
             return this;
         }
 

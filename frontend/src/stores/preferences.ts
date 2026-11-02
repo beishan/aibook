@@ -49,6 +49,7 @@ export const DEFAULT_DOCK_NAVIGATION_ITEMS: DockNavigationItem[] = [
 export const LIBRARY_PAGE_SIZE_OPTIONS = [10, 30, 50, 100, 200] as const
 export type LibraryPageSize = (typeof LIBRARY_PAGE_SIZE_OPTIONS)[number]
 export const SHELF_PAGE_SIZE_OPTIONS = [12, 24, 48, 96] as const
+export const TAG_MANAGE_PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const
 export const AUTHOR_PAGE_SIZE_OPTIONS = [10, 20, 50] as const
 export type AuthorPageSize = (typeof AUTHOR_PAGE_SIZE_OPTIONS)[number]
 export type ReaderAppearance =
@@ -151,6 +152,7 @@ interface UserPreferences {
   libraryCardPageSize: number | null
   libraryListPageSize: number | null
   authorPageSize: number | null
+  tagManagePageSize: number | null
   hideBookNames: boolean | null
   navigationMenuOrder?: string[] | null
   bookDisplaySettingsTab?: string | null
@@ -482,6 +484,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const libraryListPageSize = ref<LibraryPageSize>(
     readLocalLibraryPageSize(LIBRARY_LIST_PAGE_SIZE_KEY)
   )
+  const tagManagePageSize = ref(20)
+  let tagManagePageSizeRevision = 0
   const storedAuthorPageSize = Number(localStorage.getItem(AUTHOR_PAGE_SIZE_KEY))
   const authorPageSize = ref<AuthorPageSize>(
     isAuthorPageSize(storedAuthorPageSize) ? storedAuthorPageSize : DEFAULT_AUTHOR_PAGE_SIZE
@@ -574,6 +578,15 @@ export const usePreferencesStore = defineStore('preferences', () => {
     libraryListPageSize.value = value
     localStorage.setItem(LIBRARY_LIST_PAGE_SIZE_KEY, String(value))
     if (syncRemote) persistRemote({ libraryListPageSize: value })
+  }
+
+  const setTagManagePageSize = (value: number, syncRemote = true) => {
+    if (!(TAG_MANAGE_PAGE_SIZE_OPTIONS as readonly number[]).includes(value)) return
+    tagManagePageSize.value = value
+    if (syncRemote) {
+      tagManagePageSizeRevision++
+      return persistRemote({ tagManagePageSize: value })
+    }
   }
 
   const setAuthorPageSize = (value: number, syncRemote = true) => {
@@ -923,6 +936,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const accountToken = localStorage.getItem('token')
     if (!accountToken) return
     const sequence = ++hydrationSequence
+    const tagPageRevision = tagManagePageSizeRevision
 
     try {
       const { data } = await api.get<UserPreferences>('/api/user/preferences')
@@ -962,6 +976,10 @@ export const usePreferencesStore = defineStore('preferences', () => {
         missingPreferences.libraryListPageSize = libraryListPageSize.value
       }
 
+      if (tagPageRevision === tagManagePageSizeRevision) {
+        setTagManagePageSize((TAG_MANAGE_PAGE_SIZE_OPTIONS as readonly number[]).includes(data.tagManagePageSize ?? 0)
+          ? data.tagManagePageSize! : 20, false)
+      }
       if (isAuthorPageSize(data.authorPageSize)) {
         setAuthorPageSize(data.authorPageSize, false)
       } else {
@@ -1102,6 +1120,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   const resetHydration = () => {
     hydrationSequence++
+    tagManagePageSizeRevision++
+    tagManagePageSize.value = 20
     hideBookNames.value = false
     navigationMenuOrder.value = defaultNavigationMenuOrder()
     bookDisplaySettingsTab.value = 'name'
@@ -1148,6 +1168,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     libraryCardPageSize,
     libraryListPageSize,
     authorPageSize,
+    tagManagePageSize,
     shelfPageSize,
     categoryPageSize,
     scanThreadCount,
@@ -1177,6 +1198,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setLibraryCardPageSize,
     setLibraryListPageSize,
     setAuthorPageSize,
+    setTagManagePageSize,
     setShelfPageSize,
     setCategoryPageSize,
     setScanThreadCount,

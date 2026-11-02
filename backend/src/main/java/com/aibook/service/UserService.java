@@ -40,6 +40,7 @@ public class UserService implements UserDetailsService {
             Set.of("card", "compact-card", "list");
     private static final Set<Integer> LIBRARY_PAGE_SIZES =
             Set.of(10, 30, 50, 100, 200);
+    private static final Set<Integer> TAG_MANAGE_PAGE_SIZES = Set.of(10, 20, 50, 100);
     private static final Set<Integer> AUTHOR_PAGE_SIZES = Set.of(10, 20, 50);
     private static final Set<Integer> CATEGORY_PAGE_SIZES = Set.of(10, 20, 50, 100);
     private static final Set<Integer> CRAWLER_CHAPTER_PAGE_SIZES = Set.of(20, 50, 100);
@@ -207,6 +208,10 @@ public class UserService implements UserDetailsService {
             requireAllowed("书架分页大小", request.getShelfPageSize(), Set.of(12, 24, 48, 96));
             user.setShelfPageSize(request.getShelfPageSize());
         }
+        if (request.getTagManagePageSize() != null) {
+            requireAllowed("标签整理分页大小", request.getTagManagePageSize(), TAG_MANAGE_PAGE_SIZES);
+            user.setTagManagePageSize(request.getTagManagePageSize());
+        }
         if (request.getAuthorPageSize() != null) {
             requireAllowed("作者列表分页大小", request.getAuthorPageSize(), AUTHOR_PAGE_SIZES);
             user.setAuthorPageSize(request.getAuthorPageSize());
@@ -351,6 +356,9 @@ public class UserService implements UserDetailsService {
                 .libraryCardPageSize(cardPageSize)
                 .libraryListPageSize(listPageSize)
                 .authorPageSize(normalizeAuthorPageSize(user.getAuthorPageSize()))
+                .tagManagePageSize(user.getTagManagePageSize() != null
+                        && TAG_MANAGE_PAGE_SIZES.contains(user.getTagManagePageSize())
+                        ? user.getTagManagePageSize() : 20)
                 .hideBookNames(Boolean.TRUE.equals(user.getHideBookNames()))
                 .navigationMenuOrder(readNavigationMenuOrder(user.getNavigationMenuOrder()))
                 .bookDisplaySettingsTab(Set.of("cover", "badges", "placeholder")
