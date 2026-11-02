@@ -10,6 +10,32 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 
 public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> {
+    @Query("select coalesce(max(b.id), 0) from CrawlerBook b where b.site.user = :user")
+    long blacklistScreenUpperId(@Param("user") User user);
+
+    @Query("select count(b) from CrawlerBook b where b.site.user = :user "
+            + "and b.site.id in :siteIds and b.id <= :upperId "
+            + "and b.discoveryStatus = 'ACTIVE' and b.crawlStatus <> 'DISCOVERED'")
+    long countBlacklistScreenCandidates(@Param("user") User user,
+            @Param("siteIds") Collection<Long> siteIds, @Param("upperId") long upperId);
+
+    @Query("select b from CrawlerBook b where b.site.user = :user "
+            + "and b.site.id in :siteIds and b.id > :afterId and b.id <= :upperId "
+            + "and b.discoveryStatus = 'ACTIVE' and b.crawlStatus <> 'DISCOVERED' order by b.id")
+    List<CrawlerBook> blacklistScreenCandidates(@Param("user") User user,
+            @Param("siteIds") Collection<Long> siteIds, @Param("afterId") long afterId,
+            @Param("upperId") long upperId, Pageable pageable);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update CrawlerBook b set b.discoveryStatus = 'BLACKLISTED', "
+            + "b.blacklistedAt = :now, b.updatedAt = :now where b.site.user = :user "
+            + "and (b.discoveryStatus is null or b.discoveryStatus <> 'BLACKLISTED') "
+            + "and b.id in (select r.bookId from CrawlerBlacklistScreenResult r "
+            + "where r.job.id = :jobId and r.job.user = :user)")
+    int blacklistAllScreenResults(@Param("user") User user, @Param("jobId") String jobId,
+            @Param("now") java.time.LocalDateTime now);
+
+
     @Query("""
             select b from CrawlerBook b
             where b.site.user = :user

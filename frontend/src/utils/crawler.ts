@@ -1,3 +1,4 @@
+import type { BlacklistScreenJob, BlacklistScreenItem } from './crawlerBlacklistScreen'
 import type { CrawlerImportJob } from './crawlerImport'
 import type { StatisticsGranularity } from './crawlerStatistics'
 import api from '@/utils/api'
@@ -396,6 +397,16 @@ export const crawlerApi = {
     params: { range, granularity, end, page, size },
   }).then(r => r.data),
   sites: () => api.get<CrawlerSite[]>('/api/crawler/sites').then(r => r.data),
+  startBlacklistScreen: (siteId?: number) => api.post<BlacklistScreenJob>(
+    '/api/crawler/blacklist-screenings', { siteId }).then(r => r.data),
+  latestBlacklistScreen: () => api.get<BlacklistScreenJob | null>(
+    '/api/crawler/blacklist-screenings/latest').then(r => r.data),
+  blacklistScreenProgress: (id: string) => api.get<BlacklistScreenJob>(
+    `/api/crawler/blacklist-screenings/${id}`).then(r => r.data),
+  blacklistScreenResults: (id: string, page: number, size: number) => api.get<PageResult<BlacklistScreenItem>>(
+    `/api/crawler/blacklist-screenings/${id}/results`, { params: { page, size } }).then(r => r.data),
+  applyBlacklistScreen: (id: string, all: boolean, bookIds: number[]) => api.post<{ affectedCount: number }>(
+    `/api/crawler/blacklist-screenings/${id}/apply`, { all, bookIds }).then(r => r.data),
   siteAutoBlacklist: (id: number) => api.get<CrawlerSiteAutoBlacklist>(
     `/api/crawler/sites/${id}/auto-blacklist`).then(r => r.data),
   setSiteAutoBlacklist: (id: number, configuration: CrawlerSiteAutoBlacklist) =>
