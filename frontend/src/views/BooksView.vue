@@ -411,7 +411,11 @@
                 </span>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="quick-read">▣ 小窗阅读</el-dropdown-item>
+                    <el-dropdown-item command="toggle-shelf">
+                      {{ book.onShelf ? '移出书架' : '加入书架' }}
+                    </el-dropdown-item>
+                    <el-dropdown-item command="add-to-library">加入图书馆</el-dropdown-item>
+                    <el-dropdown-item divided command="quick-read">▣ 小窗阅读</el-dropdown-item>
                     <el-dropdown-item command="scrape">✨ 刮削元数据</el-dropdown-item>
                     <el-dropdown-item command="random-cover">🎲 随机封面</el-dropdown-item>
                     <el-dropdown-item command="reparse">🔄 重新解析</el-dropdown-item>
@@ -443,25 +447,6 @@
             <span v-if="book.tags.length > 3" class="book-tag-more">
               +{{ book.tags.length - 3 }}
             </span>
-          </div>
-          <div v-if="!selectionMode" class="book-membership-actions" @click.stop>
-            <button
-              type="button"
-              class="book-membership-button"
-              :class="{ 'is-on-shelf': book.onShelf }"
-              :title="book.onShelf ? '移出书架' : '加入书架'"
-              :aria-label="book.onShelf ? '移出书架' : '加入书架'"
-              @click.stop="handleToggleShelf(book)"
-            >
-              {{ book.onShelf ? '移出书架' : '加入书架' }}
-            </button>
-            <button
-              type="button"
-              class="book-membership-button"
-              @click.stop="openLibraryDialog([book.id])"
-            >
-              加入图书馆
-            </button>
           </div>
         </div>
       </div>
@@ -1253,6 +1238,12 @@ const handleDelete = async (id: number) => {
 
 const handleMoreCommand = async (command: string, book: Book) => {
   switch (command) {
+    case 'toggle-shelf':
+      await handleToggleShelf(book)
+      break
+    case 'add-to-library':
+      openLibraryDialog([book.id])
+      break
     case 'quick-read':
       openQuickReader(book)
       break
@@ -1887,38 +1878,6 @@ onMounted(async () => {
 
 .books-grid-compact .book-cover {
   height: 150px;
-}
-
-.book-membership-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: var(--spacing-sm);
-}
-
-.book-membership-button {
-  flex: 1 1 auto;
-  padding: 6px 7px;
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-sm);
-  background: var(--surface-card);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 11px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.book-membership-button:hover,
-.book-membership-button.is-on-shelf {
-  border-color: var(--primary);
-  background: var(--primary-alpha-10);
-  color: var(--primary);
-}
-
-.book-membership-button:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
 }
 
 .books-grid-compact .book-info {
