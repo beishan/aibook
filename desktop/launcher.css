@@ -15,8 +15,14 @@ header {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
   border-bottom: 1px solid #dedfd4;
+}
+header [data-desktop-drag] {
+  display: inline-flex;
+  align-items: center;
+  flex: 1;
+  user-select: none;
 }
 button, input {
   font: inherit;

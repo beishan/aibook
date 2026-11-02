@@ -28,7 +28,7 @@ async function main() {
   }
   const application = path.join(resources, 'app');
   await mkdir(application, { recursive: true });
-  for (const name of ['main.cjs', 'preload.cjs', 'policy.cjs', 'icons.cjs', 'launcher.html', 'launcher.css', 'launcher.js']) {
+  for (const name of ['main.cjs', 'preload.cjs', 'policy.cjs', 'icons.cjs', 'drag.cjs', 'launcher.html', 'launcher.css', 'launcher.js']) {
     await cp(path.join(__dirname, name), path.join(application, name));
   }
   await writeFile(path.join(application, 'package.json'), JSON.stringify({

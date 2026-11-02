@@ -1,7 +1,7 @@
 <template>
   <aside class="desktop-controls" :class="{ 'desktop-controls--quiet': immersive }" aria-label="桌面阅读控制">
     <div class="desktop-controls__bar">
-      <span class="desktop-controls__drag" title="拖动窗口">⠿</span>
+      <span class="desktop-controls__drag" data-desktop-drag role="button" tabindex="0" aria-label="移动窗口" title="拖动窗口；方向键微调，Shift 加速">⠿ 移动</span>
       <button v-if="reading" :aria-pressed="immersive" @click="immersive = !immersive">
         {{ immersive ? '退出隐身' : '隐身阅读' }}
       </button>
@@ -202,7 +202,24 @@ onBeforeUnmount(() => {
   outline: 2px solid #63765a;
   outline-offset: 2px;
 }
-.desktop-controls__drag { padding: 6px 12px; -webkit-app-region: drag; cursor: move; }
+.desktop-controls__drag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  min-height: 36px;
+  padding: 6px 10px;
+  -webkit-app-region: drag;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+  white-space: nowrap;
+}
+.desktop-controls__drag:focus-visible {
+  outline: 2px solid #63765a;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
 .desktop-controls__panel {
   width: 320px;
   max-width: 100%;

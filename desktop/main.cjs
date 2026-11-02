@@ -4,6 +4,7 @@ const { pathToFileURL } = require('node:url');
 const { readFile, writeFile } = require('node:fs/promises');
 const { serverOrigin, sameOrigin, windowSettings, partitionFor } = require('./policy.cjs');
 const { createIcon } = require('./icons.cjs');
+const { dragPoint, dragPosition } = require('./drag.cjs');
 
 let win;
 let tray;
@@ -13,6 +14,7 @@ let passthrough = false;
 let recoveryAvailable = false;
 let currentIcon;
 let currentIconValue;
+let dragSession;
 const launcher = pathToFileURL(path.join(__dirname, 'launcher.html')).href;
 const shortcuts = { hide: 'CommandOrControl+Shift+H', recover: 'CommandOrControl+Shift+R' };
 
@@ -33,6 +35,7 @@ function applyIcon(value = 'book') {
 function recover() {
   if (!win || win.isDestroyed()) return;
   passthrough = false;
+  dragSession = null;
   win.setIgnoreMouseEvents(false);
   win.setAlwaysOnTop(false);
   win.setOpacity(1);
@@ -60,6 +63,9 @@ function attachSecurity(window) {
   contents.on('will-navigate', guard);
   contents.on('will-redirect', guard);
   contents.on('will-attach-webview', event => event.preventDefault());
+  contents.on('did-start-navigation', () => { dragSession = null; });
+  window.on('blur', () => { dragSession = null; });
+  window.on('closed', () => { dragSession = null; });
   contents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   contents.session.setPermissionCheckHandler(() => false);
   contents.session.on('will-download', event => event.preventDefault());
@@ -141,6 +147,28 @@ ipcMain.handle('desktop:icon', (event, value) => {
   return applyIcon(value);
 });
 
+ipcMain.handle('desktop:drag', (event, phase, value) => {
+  trusted(event, event.senderFrame.url === launcher);
+  if (phase === 'end') {
+    dragSession = null;
+    return;
+  }
+  if (passthrough || win.isMaximized() || win.isFullScreen()) return;
+  const point = dragPoint(value);
+  if (phase === 'begin') {
+    dragSession = { sender: event.sender.id, window: win, position: win.getPosition(), pointer: point };
+  } else if (phase === 'move') {
+    if (dragSession?.window !== win || dragSession.sender !== event.sender.id) return;
+    win.setPosition(...dragPosition(dragSession.position, dragSession.pointer, point), false);
+  } else if (phase === 'nudge') {
+    if (Math.abs(point.x) > 40 || Math.abs(point.y) > 40) throw new Error('移动步长超出限制');
+    const [x, y] = win.getPosition();
+    win.setPosition(x + Math.round(point.x), y + Math.round(point.y), false);
+  } else {
+    throw new Error('未知拖动操作');
+  }
+});
+
 ipcMain.handle('desktop:action', async (event, action) => {
   trusted(event, event.senderFrame.url === launcher);
   switch (action) {
@@ -154,6 +182,7 @@ ipcMain.handle('desktop:action', async (event, action) => {
     case 'passthrough':
       if (!recoveryAvailable || !tray) throw new Error('恢复快捷键不可用，无法启用鼠标穿透');
       passthrough = !passthrough;
+      dragSession = null;
       win.setIgnoreMouseEvents(passthrough, { forward: true });
       return passthrough;
     default: throw new Error('未知窗口操作');

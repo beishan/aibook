@@ -8,7 +8,7 @@ const { _electron } = require(process.env.DESKTOP_PLAYWRIGHT_PATH || 'playwright
 (async () => {
   const server = createServer((_request, response) => {
     response.setHeader('Content-Type', 'text/html; charset=utf-8');
-    response.end('<!doctype html><title>阅读测试</title><p>透明阅读测试</p><script>window.desktopReader.onRecover(() => { document.body.dataset.recovered = "true" })</script>');
+    response.end('<!doctype html><title>阅读测试</title><p>透明阅读测试</p><span class="desktop-controls__drag" style="display:inline-flex;padding:12px;-webkit-app-region:drag">移动窗口</span><button id="control">普通按钮</button><script>window.desktopReader.onRecover(() => { document.body.dataset.recovered = "true" })</script>');
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   server.unref();
@@ -25,8 +25,34 @@ const { _electron } = require(process.env.DESKTOP_PLAYWRIGHT_PATH || 'playwright
     env: environment,
   });
   try {
+    const position = () => application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getPosition());
+    async function dragWindow(page, selector) {
+      const target = page.locator(selector);
+      await target.waitFor();
+      await page.waitForFunction(selector => getComputedStyle(document.querySelector(selector)).getPropertyValue('-webkit-app-region') === 'no-drag', selector);
+      const before = await position();
+      const box = await target.boundingBox();
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 40, y + 24);
+      await page.waitForTimeout(80);
+      await page.mouse.up();
+      const after = await position();
+      assert.deepEqual(after, [before[0] + 40, before[1] + 24]);
+      await page.mouse.move(x + 80, y + 60);
+      await page.waitForTimeout(40);
+      assert.deepEqual(await position(), after, 'released pointer must not keep moving the window');
+      await target.focus();
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('Shift+ArrowDown');
+      await page.waitForTimeout(60);
+      assert.deepEqual(await position(), [after[0] + 5, after[1] + 20]);
+    }
     const page = await application.firstWindow();
     await page.getByRole('heading', { name: '留一隅，给阅读。' }).waitFor();
+    await dragWindow(page, '[data-desktop-drag]');
     assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
     assert.equal(await page.evaluate(() => typeof window.desktopReader.action), 'function');
     const options = await application.evaluate(({ BrowserWindow }) => {
@@ -50,7 +76,10 @@ const { _electron } = require(process.env.DESKTOP_PLAYWRIGHT_PATH || 'playwright
     });
     assert.equal(unauthorized, true);
     await page.evaluate(() => window.desktopReader.action('resize-small'));
-    assert.deepEqual(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize()), [480, 620]);
+    await page.waitForTimeout(100);
+    const smallSize = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize());
+    // Windows may round frameless bounds by a couple of DIPs after moving.
+    assert.ok(Math.abs(smallSize[0] - 480) <= 2 && Math.abs(smallSize[1] - 620) <= 2);
     await page.evaluate(() => window.desktopReader.action('hide'));
     assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), false);
     await application.evaluate(({ app }) => app.emit('second-instance'));
@@ -61,6 +90,15 @@ const { _electron } = require(process.env.DESKTOP_PLAYWRIGHT_PATH || 'playwright
     void page.evaluate(address => window.desktopReader.connect(address), `http://127.0.0.1:${server.address().port}`).catch(() => {});
     const reader = await nextWindow;
     await reader.getByText('透明阅读测试', { exact: true }).waitFor();
+    await dragWindow(reader, '.desktop-controls__drag');
+    // Ordinary controls must not move the window.
+    const beforeControl = await position();
+    const controlBox = await reader.locator('#control').boundingBox();
+    await reader.mouse.move(controlBox.x + 10, controlBox.y + 10);
+    await reader.mouse.down();
+    await reader.mouse.move(controlBox.x + 30, controlBox.y + 20);
+    await reader.mouse.up();
+    assert.deepEqual(await position(), beforeControl);
     const previews = [];
     for (const value of ['book', 'note', 'grid', 'calendar']) {
       const png = await reader.evaluate(icon => window.desktopReader.icon(icon), value);
@@ -110,7 +148,7 @@ const { _electron } = require(process.env.DESKTOP_PLAYWRIGHT_PATH || 'playwright
       assert.equal(await reader.evaluate(() => window.desktopReader.action('passthrough')), true);
       assert.equal(await reader.evaluate(() => window.desktopReader.action('passthrough')), false);
     }
-    console.log('Electron native smoke passed: launcher, sandbox, IPC origin checks, resize, remote connection, opacity, on-top, hide and recovery');
+    console.log('Electron native smoke passed: launcher/remote pointer drag, release, keyboard movement, sandbox, icons, resize, opacity, on-top, hide and recovery');
   } finally {
     await application.close();
     server.close();
