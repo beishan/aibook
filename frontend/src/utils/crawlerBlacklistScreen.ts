@@ -1,4 +1,7 @@
+export type BlacklistScreenScope = 'MANAGED' | 'DISCOVERED'
+
 export interface BlacklistScreenJob {
+  scope: BlacklistScreenScope
   id: string
   siteId: number | null
   status: 'RUNNING' | 'COMPLETED' | 'FAILED'

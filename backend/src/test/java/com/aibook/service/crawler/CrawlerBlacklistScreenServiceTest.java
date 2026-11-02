@@ -42,17 +42,19 @@ class CrawlerBlacklistScreenServiceTest {
         when(sites.findByUserOrderByCreatedAtDesc(user)).thenReturn(List.of(site));
     }
 
-    @Test
-    void asyncScanUsesSelectedSiteBoundedBatchesAndPersistsMatchesWithoutBlacklisting() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void asyncScanUsesSelectedSiteBoundedBatchesAndPersistsMatchesWithoutBlacklisting(
+            boolean discoveryOnly) throws Exception {
         CrawlerBook first = book(10L, "含禁用词的书");
         CrawlerBook normal = book(11L, "普通书");
         CrawlerBook tagged = book(12L, "标签书");
         tagged.setTags("其他，屏蔽标签");
         when(books.blacklistScreenUpperId(user)).thenReturn(12L);
-        when(books.countBlacklistScreenCandidates(eq(user), anyCollection(), eq(12L))).thenReturn(3L);
-        when(books.blacklistScreenCandidates(eq(user), anyCollection(), eq(0L), eq(12L), any()))
+        when(books.countBlacklistScreenCandidates(eq(user), anyCollection(), eq(12L), eq(discoveryOnly))).thenReturn(3L);
+        when(books.blacklistScreenCandidates(eq(user), anyCollection(), eq(0L), eq(12L), eq(discoveryOnly), any()))
                 .thenReturn(List.of(first, normal));
-        when(books.blacklistScreenCandidates(eq(user), anyCollection(), eq(11L), eq(12L), any()))
+        when(books.blacklistScreenCandidates(eq(user), anyCollection(), eq(11L), eq(12L), eq(discoveryOnly), any()))
                 .thenReturn(List.of(tagged));
         CountDownLatch finished = new CountDownLatch(1);
         var capturedJob = ArgumentCaptor.forClass(CrawlerBlacklistScreenJob.class);
@@ -62,16 +64,17 @@ class CrawlerBlacklistScreenServiceTest {
             return job;
         }).when(jobs).save(any());
         try (var service = service()) {
-            var submitted = service.submit(user, new Request(7L));
+            var submitted = service.submit(user, new Request(7L, discoveryOnly ? "DISCOVERED" : "MANAGED"));
             assertThat(finished.await(5, TimeUnit.SECONDS)).isTrue();
             verify(jobs, atLeastOnce()).save(capturedJob.capture());
             var job = capturedJob.getAllValues().getLast();
             assertThat(job.getId()).isEqualTo(submitted.id());
+            assertThat(job.getScope()).isEqualTo(discoveryOnly ? "DISCOVERED" : "MANAGED");
             assertThat(job.getProcessed()).isEqualTo(3);
             assertThat(job.getMatched()).isEqualTo(2);
             assertThat(job.getFinishedAt()).isNotNull();
             verify(books, times(3)).blacklistScreenCandidates(eq(user), eq(Set.of(7L)),
-                    anyLong(), eq(12L), eq(PageRequest.of(0, 200)));
+                    anyLong(), eq(12L), eq(discoveryOnly), eq(PageRequest.of(0, 200)));
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<CrawlerBlacklistScreenResult>> saved = ArgumentCaptor.forClass(List.class);
             verify(results, times(2)).saveAll(saved.capture());
@@ -159,7 +162,7 @@ class CrawlerBlacklistScreenServiceTest {
     @Test
     void failureIsRecordedAndRestartRecoveryDoesNotPretendToBeRunning() {
         var job = job("RUNNING");
-        when(books.blacklistScreenCandidates(any(), anyCollection(), anyLong(), anyLong(), any()))
+        when(books.blacklistScreenCandidates(any(), anyCollection(), anyLong(), anyLong(), anyBoolean(), any()))
                 .thenThrow(new IllegalStateException("database unavailable"));
         try (var service = service()) {
             service.process(job, Map.of(7L, CrawlerAutoBlacklist.decode(site.getAutoBlacklistJson())), 100L);
@@ -174,7 +177,7 @@ class CrawlerBlacklistScreenServiceTest {
     @Test
     void failedBatchDoesNotCountRolledBackMatchesAsPersistedResults() {
         var job = job("RUNNING");
-        when(books.blacklistScreenCandidates(any(), anyCollection(), anyLong(), anyLong(), any()))
+        when(books.blacklistScreenCandidates(any(), anyCollection(), anyLong(), anyLong(), anyBoolean(), any()))
                 .thenReturn(List.of(book(10L, "禁用词")));
         when(results.saveAll(anyList())).thenThrow(new IllegalStateException("disk full"));
         try (var service = service()) {
@@ -183,6 +186,25 @@ class CrawlerBlacklistScreenServiceTest {
             assertThat(job.getProcessed()).isZero();
             assertThat(job.getMatched()).isZero();
             verify(transactions).rollback(any());
+        }
+    }
+
+    @Test
+    void latestResultsAreScopedAndLegacyJobsRemainManaged() {
+        var legacy = job("COMPLETED");
+        var discovered = job("COMPLETED");
+        discovered.setScope("DISCOVERED");
+        when(jobs.latestForScope(user, "MANAGED", PageRequest.of(0, 1))).thenReturn(List.of(legacy));
+        when(jobs.latestForScope(user, "DISCOVERED", PageRequest.of(0, 1))).thenReturn(List.of(discovered));
+        try (var service = service()) {
+            assertThat(service.latest(user, null).scope()).isEqualTo("MANAGED");
+            assertThat(service.latest(user, "DISCOVERED").id()).isEqualTo(discovered.getId());
+            assertThat(service.latest(user, "MANAGED").id()).isEqualTo(legacy.getId());
+            assertThatThrownBy(() -> service.latest(user, "ALL"))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("400");
+            assertThatThrownBy(() -> service.submit(user, new Request(null, "ALL")))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("400");
+            verify(jobs, never()).save(any());
         }
     }
 

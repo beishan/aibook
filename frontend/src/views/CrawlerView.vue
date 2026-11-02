@@ -361,6 +361,7 @@
           <h2>发现书籍</h2>
         </div>
         <div class="discovery-heading-actions">
+          <el-button @click="discoveryBlacklistScreenOpen = true">一键筛选黑名单</el-button>
           <el-button @click="chapterListPickerOpen = true">采集章节信息</el-button>
           <el-button :disabled="batchDiscoveryCrawling" @click="advancedCrawlOpen = true">高级批量采集</el-button>
           <div
@@ -2488,6 +2489,12 @@
       </div>
     </el-dialog>
     <CrawlerBlacklistScreenDialog
+      v-model="discoveryBlacklistScreenOpen"
+      :sites="sites"
+      scope="DISCOVERED"
+      @changed="refresh"
+    />
+    <CrawlerBlacklistScreenDialog
       v-model="blacklistScreenOpen"
       :sites="sites"
       @changed="refresh"
@@ -2844,6 +2851,7 @@ async function loadDiscoveryFilterOptions(visible:boolean) {
 
 const siteDialog=ref(false), siteProtectionDialog=ref(false), protectionDetailSite=ref<CrawlerSite>(), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'|'metadata'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'|'EXTREME'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
 const chapterReaderSurface=ref<HTMLElement>(), chapterReaderActive=ref<CrawlerChapter>(), chapterReaderChapters=ref<CrawlerChapter[]>([]), chapterReaderBookId=ref<number>(), chapterReaderLoading=ref(false), chapterReaderSettingsOpen=ref(false), chapterEditing=ref(false), chapterEditContent=ref(''), savingChapter=ref(false)
+const discoveryBlacklistScreenOpen = ref(false)
 const blacklistScreenOpen = ref(false)
 const siteAutoBlacklistOpen = ref(false)
 const siteAutoBlacklistSite = ref<CrawlerSite>()

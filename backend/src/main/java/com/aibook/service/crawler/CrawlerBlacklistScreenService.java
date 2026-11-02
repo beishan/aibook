@@ -41,9 +41,12 @@ public class CrawlerBlacklistScreenService implements AutoCloseable {
 
     /** Save before dispatch: workers must never race an uncommitted job. */
     public synchronized JobView submit(User user, Request request) {
+        String scope = normalizeScope(request.scope());
         var latest = jobs.findFirstByUserOrderByCreatedAtDesc(user);
         if (latest.isPresent() && "RUNNING".equals(latest.get().getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "已有筛选正在执行，请等待完成");
+            String activeScope = "DISCOVERED".equals(latest.get().getScope()) ? "发现书籍" : "采集书籍";
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "已有" + activeScope + "筛选正在执行，请到对应页面查看进度");
         }
         List<CrawlerSite> owned = sites.findByUserOrderByCreatedAtDesc(user);
         if (request.siteId() != null && owned.stream().noneMatch(s -> s.getId().equals(request.siteId()))) {
@@ -62,8 +65,9 @@ public class CrawlerBlacklistScreenService implements AutoCloseable {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "所选范围没有已启用的非空自动黑名单规则，请先到采集网站配置");
         }
         long upperId = books.blacklistScreenUpperId(user);
-        var job = CrawlerBlacklistScreenJob.builder().user(user).siteId(request.siteId())
-                .total(books.countBlacklistScreenCandidates(user, configurations.keySet(), upperId)).build();
+        var job = CrawlerBlacklistScreenJob.builder().user(user).siteId(request.siteId()).scope(scope)
+                .total(books.countBlacklistScreenCandidates(
+                        user, configurations.keySet(), upperId, "DISCOVERED".equals(scope))).build();
         jobs.save(job);
         JobView initial = view(job);
         try {
@@ -76,8 +80,9 @@ public class CrawlerBlacklistScreenService implements AutoCloseable {
     }
 
     @Transactional(readOnly = true)
-    public JobView latest(User user) {
-        return jobs.findFirstByUserOrderByCreatedAtDesc(user).map(this::view).orElse(null);
+    public JobView latest(User user, String scope) {
+        return jobs.latestForScope(user, normalizeScope(scope), PageRequest.of(0, 1)).stream()
+                .findFirst().map(this::view).orElse(null);
     }
 
     @Transactional(readOnly = true)
@@ -128,7 +133,7 @@ public class CrawlerBlacklistScreenService implements AutoCloseable {
             long afterId = 0;
             while (!Thread.currentThread().isInterrupted()) {
                 List<CrawlerBook> batch = books.blacklistScreenCandidates(job.getUser(),
-                        configurations.keySet(), afterId, upperId, PageRequest.of(0, 200));
+                        configurations.keySet(), afterId, upperId, "DISCOVERED".equals(job.getScope()), PageRequest.of(0, 200));
                 if (batch.isEmpty()) {
                     job.setStatus("COMPLETED");
                     job.setFinishedAt(LocalDateTime.now());
@@ -181,7 +186,14 @@ public class CrawlerBlacklistScreenService implements AutoCloseable {
 
     private JobView view(CrawlerBlacklistScreenJob job) {
         return new JobView(job.getId(), job.getSiteId(), job.getStatus(), job.getTotal(),
-                job.getProcessed(), job.getMatched(), job.getErrorMessage(), job.getCreatedAt());
+                job.getProcessed(), job.getMatched(), job.getErrorMessage(), job.getCreatedAt(),
+                normalizeScope(job.getScope()));
+    }
+
+    private String normalizeScope(String scope) {
+        if (scope == null || scope.equals("MANAGED")) return "MANAGED";
+        if (scope.equals("DISCOVERED")) return "DISCOVERED";
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无效的书籍筛选范围");
     }
 
     @PreDestroy

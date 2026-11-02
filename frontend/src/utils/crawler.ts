@@ -1,4 +1,4 @@
-import type { BlacklistScreenJob, BlacklistScreenItem } from './crawlerBlacklistScreen'
+import type { BlacklistScreenJob, BlacklistScreenItem, BlacklistScreenScope } from './crawlerBlacklistScreen'
 import type { CrawlerImportJob } from './crawlerImport'
 import type { StatisticsGranularity } from './crawlerStatistics'
 import api from '@/utils/api'
@@ -397,10 +397,10 @@ export const crawlerApi = {
     params: { range, granularity, end, page, size },
   }).then(r => r.data),
   sites: () => api.get<CrawlerSite[]>('/api/crawler/sites').then(r => r.data),
-  startBlacklistScreen: (siteId?: number) => api.post<BlacklistScreenJob>(
-    '/api/crawler/blacklist-screenings', { siteId }).then(r => r.data),
-  latestBlacklistScreen: () => api.get<BlacklistScreenJob | null>(
-    '/api/crawler/blacklist-screenings/latest').then(r => r.data),
+  startBlacklistScreen: (siteId?: number, scope: BlacklistScreenScope = 'MANAGED') => api.post<BlacklistScreenJob>(
+    '/api/crawler/blacklist-screenings', { siteId, scope }).then(r => r.data),
+  latestBlacklistScreen: (scope: BlacklistScreenScope = 'MANAGED') => api.get<BlacklistScreenJob | null>(
+    '/api/crawler/blacklist-screenings/latest', { params: { scope } }).then(r => r.data),
   blacklistScreenProgress: (id: string) => api.get<BlacklistScreenJob>(
     `/api/crawler/blacklist-screenings/${id}`).then(r => r.data),
   blacklistScreenResults: (id: string, page: number, size: number) => api.get<PageResult<BlacklistScreenItem>>(

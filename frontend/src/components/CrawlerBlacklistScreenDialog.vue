@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="modelValue"
-    title="一键筛选黑名单书籍"
+    :title="`${bookScopeLabel} · 一键筛选黑名单`"
     width="min(960px, 96vw)"
     append-to-body
     :close-on-click-modal="!applying"
@@ -10,7 +10,7 @@
     @update:model-value="emit('update:modelValue', $event)"
   >
     <p class="screen-description">
-      按各网站已启用的自动黑名单规则，筛选本地采集书籍的书名、作者、简介与标签，不访问源网站。
+      按各网站已启用的自动黑名单规则，筛选本地{{ bookScopeLabel }}的书名、作者、简介与标签，不访问源网站。
       筛选不会自动拉黑，确认结果后再加入黑名单。
     </p>
     <div class="screen-controls">
@@ -83,9 +83,14 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, type TableInstance } from 'element-plus'
 import CrawlerBookTitle from '@/components/CrawlerBookTitle.vue'
 import { crawlerApi, type CrawlerSite } from '@/utils/crawler'
-import type { BlacklistScreenJob, BlacklistScreenItem } from '@/utils/crawlerBlacklistScreen'
+import type { BlacklistScreenJob, BlacklistScreenItem, BlacklistScreenScope } from '@/utils/crawlerBlacklistScreen'
 
-const props = defineProps<{ modelValue: boolean; sites: CrawlerSite[] }>()
+const props = withDefaults(defineProps<{
+  modelValue: boolean
+  sites: CrawlerSite[]
+  scope?: BlacklistScreenScope
+}>(), { scope: 'MANAGED' })
+const bookScopeLabel = computed(() => props.scope === 'DISCOVERED' ? '发现书籍' : '采集书籍')
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; changed: [] }>()
 const siteId = ref(0)
 const job = ref<BlacklistScreenJob>()
@@ -140,7 +145,7 @@ async function restore() {
   restoring.value = true
   error.value = ''
   try {
-    const latest = await crawlerApi.latestBlacklistScreen()
+    const latest = await crawlerApi.latestBlacklistScreen(props.scope)
     if (current !== generation) return
     if (job.value?.id !== latest?.id) page.value = 1
     job.value = latest || undefined
@@ -166,7 +171,7 @@ async function start() {
   error.value = ''
   selectedIds.value = []
   try {
-    const created = await crawlerApi.startBlacklistScreen(siteId.value || undefined)
+    const created = await crawlerApi.startBlacklistScreen(siteId.value || undefined, props.scope)
     if (current !== generation) return
     job.value = created
     rows.value = []

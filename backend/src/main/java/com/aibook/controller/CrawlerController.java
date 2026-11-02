@@ -48,8 +48,9 @@ public class CrawlerController {
     }
 
     @GetMapping("/blacklist-screenings/latest")
-    public com.aibook.dto.crawler.CrawlerBlacklistScreenDtos.JobView latestBlacklistScreen(Authentication auth) {
-        return blacklistScreenService.latest(user(auth));
+    public com.aibook.dto.crawler.CrawlerBlacklistScreenDtos.JobView latestBlacklistScreen(
+            Authentication auth, @RequestParam(defaultValue = "MANAGED") String scope) {
+        return blacklistScreenService.latest(user(auth), scope);
     }
 
     @GetMapping("/blacklist-screenings/{id}")

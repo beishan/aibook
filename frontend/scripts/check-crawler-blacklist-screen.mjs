@@ -23,7 +23,7 @@ let fetchProgress = async () => structuredClone(completed)
 let failApply = false
 let scheduled = []
 const context = vm.createContext({
-  props: { modelValue: true, sites: [] },
+  props: { modelValue: true, sites: [], scope: 'MANAGED' },
   siteId: ref(0), job: ref(undefined), rows: ref([]), selectedIds: ref([]),
   page: ref(1), pageSize: ref(20), total: ref(0), restoring: ref(false), starting: ref(false),
   loadingResults: ref(false), applying: ref(false), error: ref(''),
@@ -31,11 +31,11 @@ const context = vm.createContext({
   setTimeout: callback => { scheduled.push(callback); return scheduled.length },
   clearTimeout() {},
   crawlerApi: {
-    startBlacklistScreen: async siteId => {
-      requests.push({ type: 'start', siteId })
+    startBlacklistScreen: async (siteId, scope) => {
+      requests.push({ type: 'start', siteId, scope })
       return { ...completed, status: 'RUNNING', processed: 0 }
     },
-    latestBlacklistScreen: () => fetchLatest(),
+    latestBlacklistScreen: scope => { requests.push({ type: 'latest', scope }); return fetchLatest() },
     blacklistScreenProgress: id => { requests.push({ type: 'progress', id }); return fetchProgress() },
     blacklistScreenResults: (id, page, size) => {
       requests.push({ type: 'page', id, page, size }); return pageData()
@@ -122,4 +122,20 @@ assert.equal(context.canApply.value, false)
 context.starting.value = true
 run('stopPolling()')
 assert.equal(context.starting.value, false, 'closing a pending start cannot leave dialog stuck')
-console.log('黑名单筛选：默认范围、进度恢复、分页、当页选择、选中/跨页全部加入、失败重试与过期响应隔离通过')
+context.job.value = { ...completed }
+context.props.scope = 'DISCOVERED'
+context.siteId.value = 7
+await run('start()')
+assert.deepEqual(requests.filter(req => req.type === 'start').at(-1),
+  { type: 'start', siteId: 7, scope: 'DISCOVERED' }, 'discovery entry submits its own candidate range')
+run('stopPolling()')
+fetchLatest = async () => ({ ...completed, id: 'discovery-job', scope: 'DISCOVERED' })
+await run('restore()')
+assert.equal(requests.filter(req => req.type === 'latest').at(-1).scope, 'DISCOVERED')
+assert.equal(context.job.value.id, 'discovery-job', 'discovery entry restores discovery history')
+context.props.scope = 'MANAGED'
+fetchLatest = async () => ({ ...completed, scope: 'MANAGED' })
+await run('restore()')
+assert.equal(requests.filter(req => req.type === 'latest').at(-1).scope, 'MANAGED')
+assert.equal(context.job.value.id, 'job-a', 'managed entry restores its own history')
+console.log('黑名单筛选：发现/采集范围传递与历史隔离、默认范围、进度恢复、分页、当页选择、选中/跨页全部加入、失败重试与过期响应隔离通过')

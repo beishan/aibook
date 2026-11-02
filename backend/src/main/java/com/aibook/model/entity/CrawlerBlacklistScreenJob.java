@@ -24,6 +24,9 @@ public class CrawlerBlacklistScreenJob {
     @OnDelete(action = OnDeleteAction.CASCADE)
     private User user;
     private Long siteId;
+    /** Null on legacy jobs means MANAGED. */
+    @Column(length = 20)
+    private String scope;
     @Builder.Default
     private String status = "RUNNING";
     private long total;

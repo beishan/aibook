@@ -24,7 +24,7 @@ class CrawlerBlacklistScreenQueryTest {
         }
         try (var factory = configuration.buildSessionFactory(); var session = factory.openSession()) {
             Set<String> methods = Set.of("blacklistScreenUpperId", "countBlacklistScreenCandidates",
-                    "blacklistScreenCandidates", "blacklistAllScreenResults", "matchedIds", "interruptUnfinished");
+                    "blacklistScreenCandidates", "blacklistAllScreenResults", "matchedIds", "interruptUnfinished", "latestForScope");
             for (Class<?> repository : new Class<?>[] {CrawlerBookRepository.class,
                     CrawlerBlacklistScreenResultRepository.class, CrawlerBlacklistScreenJobRepository.class}) {
                 for (Method method : repository.getMethods()) {

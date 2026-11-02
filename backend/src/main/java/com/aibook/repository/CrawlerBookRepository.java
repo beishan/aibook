@@ -15,16 +15,21 @@ public interface CrawlerBookRepository extends JpaRepository<CrawlerBook, Long> 
 
     @Query("select count(b) from CrawlerBook b where b.site.user = :user "
             + "and b.site.id in :siteIds and b.id <= :upperId "
-            + "and b.discoveryStatus = 'ACTIVE' and b.crawlStatus <> 'DISCOVERED'")
+            + "and b.discoveryStatus = 'ACTIVE' "
+            + "and ((:discoveryOnly = true and b.crawlStatus = 'DISCOVERED') "
+            + "or (:discoveryOnly = false and b.crawlStatus <> 'DISCOVERED'))")
     long countBlacklistScreenCandidates(@Param("user") User user,
-            @Param("siteIds") Collection<Long> siteIds, @Param("upperId") long upperId);
+            @Param("siteIds") Collection<Long> siteIds, @Param("upperId") long upperId,
+            @Param("discoveryOnly") boolean discoveryOnly);
 
     @Query("select b from CrawlerBook b where b.site.user = :user "
             + "and b.site.id in :siteIds and b.id > :afterId and b.id <= :upperId "
-            + "and b.discoveryStatus = 'ACTIVE' and b.crawlStatus <> 'DISCOVERED' order by b.id")
+            + "and b.discoveryStatus = 'ACTIVE' "
+            + "and ((:discoveryOnly = true and b.crawlStatus = 'DISCOVERED') "
+            + "or (:discoveryOnly = false and b.crawlStatus <> 'DISCOVERED')) order by b.id")
     List<CrawlerBook> blacklistScreenCandidates(@Param("user") User user,
             @Param("siteIds") Collection<Long> siteIds, @Param("afterId") long afterId,
-            @Param("upperId") long upperId, Pageable pageable);
+            @Param("upperId") long upperId, @Param("discoveryOnly") boolean discoveryOnly, Pageable pageable);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update CrawlerBook b set b.discoveryStatus = 'BLACKLISTED', "
