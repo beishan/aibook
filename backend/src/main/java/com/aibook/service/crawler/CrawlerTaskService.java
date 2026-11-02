@@ -1505,6 +1505,8 @@ public class CrawlerTaskService {
         try {
             CrawlerBook book = task.getCrawlerBook();
             CrawlerSite site = task.getSite();
+            site = siteRepository.findById(site.getId()).orElse(site);
+            if (book != null && stopForAutoBlacklist(task, book, site)) return;
             CrawlerSiteRule rule = site.getRule();
             BookCrawlerParser parser = parser(site);
             log.info("[采集任务] 开始执行: taskId={}, type={}, site={}, book={}, url={}", taskId,
@@ -1531,6 +1533,14 @@ public class CrawlerTaskService {
                 if (task == null) return;
                 BookCrawlerParser.ParsedBook metadata = parser.parseBookDetail(detailResponse.html(), book.getBookUrl(), rule);
                 if (!chapterListOnly) applyMetadata(book, metadata);
+                CrawlerBook checkedBook = chapterListOnly ? CrawlerBook.builder().build() : book;
+                if (chapterListOnly) applyMetadata(checkedBook, metadata);
+                String blacklistReason = com.aibook.util.CrawlerAutoBlacklist.reason(
+                        com.aibook.util.CrawlerAutoBlacklist.decode(site.getAutoBlacklistJson()), checkedBook);
+                if (blacklistReason != null) {
+                    stopBlacklistedTask(task, book, blacklistReason);
+                    return;
+                }
                 log.info("[采集任务] 书籍信息解析完毕: taskId={}, book={}, author={}, status={}, chapterListUrl={}",
                         taskId, bookName(book), metadata.author(), metadata.status(), metadata.chapterListUrl());
                 recordCrawlerEvent(task, "书籍信息解析完毕", "作者：" + metadata.author()
@@ -2038,7 +2048,22 @@ public class CrawlerTaskService {
                         book.setDiscoveryPageId(task.getDiscoveryPageId());
                         book.setDiscoveryPageName(task.getDiscoveryPageName());
                     }
+                    var blacklist = com.aibook.util.CrawlerAutoBlacklist.decode(site.getAutoBlacklistJson());
+                    String blacklistReason = com.aibook.util.CrawlerAutoBlacklist.reason(blacklist, book);
+                    if (blacklistReason == null && blacklist.enabled()
+                            && (!blacklist.tags().isEmpty() || !blacklist.keywords().isEmpty())) {
+                        CrawlerHttpClient.FetchResult detail = httpClient.get(site, validatedUrl);
+                        applyMetadata(book, parser.parseBookDetail(detail.html(), validatedUrl, rule));
+                        blacklistReason = com.aibook.util.CrawlerAutoBlacklist.reason(blacklist, book);
+                    }
                     book = bookRepository.save(book);
+                    if (blacklistReason != null) {
+                        managementService.markAutoBlacklisted(book);
+                        failed++;
+                        saveScanResult(task, book.getId(), bookName(book), validatedUrl,
+                                CrawlerScanResult.ResultStatus.BLACKLISTED, blacklistReason);
+                        continue;
+                    }
                     CrawlerScanResult.ResultStatus resultStatus = existing.isPresent()
                             ? CrawlerScanResult.ResultStatus.DUPLICATE : CrawlerScanResult.ResultStatus.NEW;
                     if (existing.isPresent()) duplicates++; else newBooks++;
@@ -2272,6 +2297,31 @@ public class CrawlerTaskService {
             current.setCurrentSubStep(subStep);
             taskRepository.save(current);
         }
+    }
+
+    private boolean stopForAutoBlacklist(CrawlerTask task, CrawlerBook book, CrawlerSite site) {
+        String reason = com.aibook.util.CrawlerAutoBlacklist.reason(
+                com.aibook.util.CrawlerAutoBlacklist.decode(site.getAutoBlacklistJson()), book);
+        if (reason == null && discoveryStatus(book) == CrawlerBook.DiscoveryStatus.BLACKLISTED) {
+            reason = "书籍已在黑名单中";
+        }
+        if (reason == null) return false;
+        stopBlacklistedTask(task, book, reason);
+        return true;
+    }
+
+    private void stopBlacklistedTask(CrawlerTask task, CrawlerBook book, String reason) {
+        managementService.markAutoBlacklisted(book);
+        book.setCrawlStatus(CrawlerBook.CrawlStatus.PAUSED);
+        bookRepository.save(book);
+        task.setStatus(CrawlerTask.TaskStatus.CANCELLED);
+        task.setErrorMessage(reason);
+        task.setFinishedAt(LocalDateTime.now());
+        task.setWaitingCount(0);
+        task.setCurrentChapter(null);
+        task.setCurrentSubStep(null);
+        finishIfRunning(task);
+        recordCrawlerEvent(task, "黑名单拦截，任务已停止", reason);
     }
 
     private CrawlerTask finishIfRunning(CrawlerTask source) {

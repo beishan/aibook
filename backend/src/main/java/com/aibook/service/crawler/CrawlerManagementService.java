@@ -71,6 +71,30 @@ public class CrawlerManagementService {
     public List<SiteView> sites(User user) { return siteRepository.findByUserOrderByCreatedAtDesc(user).stream().map(this::siteView).toList(); }
 
     @Transactional(readOnly = true)
+    public com.aibook.util.CrawlerAutoBlacklist.Configuration siteAutoBlacklist(User user, Long id) {
+        return com.aibook.util.CrawlerAutoBlacklist.decode(ownedSite(user, id).getAutoBlacklistJson());
+    }
+
+    @Transactional
+    public com.aibook.util.CrawlerAutoBlacklist.Configuration setSiteAutoBlacklist(User user,
+            Long id, com.aibook.util.CrawlerAutoBlacklist.Configuration configuration) {
+        ownedSite(user, id);
+        var normalized = com.aibook.util.CrawlerAutoBlacklist.normalize(configuration);
+        if (siteRepository.updateAutoBlacklist(id, user,
+                com.aibook.util.CrawlerAutoBlacklist.encode(normalized)) != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "网站已发生变化，请刷新后重试");
+        }
+        return normalized;
+    }
+
+    @Transactional
+    public void markAutoBlacklisted(CrawlerBook book) {
+        bookRepository.updateDiscoveryStatus(List.of(book.getId()), book.getSite().getUser(),
+                CrawlerBook.DiscoveryStatus.BLACKLISTED, true, java.time.LocalDateTime.now());
+        book.setDiscoveryStatus(CrawlerBook.DiscoveryStatus.BLACKLISTED);
+    }
+
+    @Transactional(readOnly = true)
     public com.aibook.dto.crawler.CrawlerAutoImportDtos.Configuration siteAutoImport(User user, Long id) {
         return com.aibook.util.CrawlerAutoImportRules.decode(ownedSite(user, id).getAutoImportRulesJson());
     }

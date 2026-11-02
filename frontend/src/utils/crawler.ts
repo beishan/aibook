@@ -33,6 +33,11 @@ export interface CrawlerAutoImportRule {
   name: string
   expressions: CrawlerAutoImportExpression[]
 }
+export interface CrawlerSiteAutoBlacklist {
+  enabled: boolean
+  keywords: string[]
+  tags: string[]
+}
 export interface CrawlerSiteAutoImport {
   enabled: boolean
   formats: string[]
@@ -318,6 +323,7 @@ export interface CrawlerRuleVersion { id:number; version:number; changeSummary:s
 export interface CrawlerRuleSave { version:number; changeSummary:string; rule:CrawlerRule; enabled:boolean }
 export interface CrawlerRuleExport { schemaVersion:number; siteCode:string; version:number; changeSummary:string; rule:CrawlerRule; enabled?:boolean }
 export interface CrawlerSiteConfiguration {
+  autoBlacklist?: CrawlerSiteAutoBlacklist
   schemaVersion: number
   type: 'AIBOOK_CRAWLER_SITE'
   site: CrawlerSitePayload
@@ -390,6 +396,10 @@ export const crawlerApi = {
     params: { range, granularity, end, page, size },
   }).then(r => r.data),
   sites: () => api.get<CrawlerSite[]>('/api/crawler/sites').then(r => r.data),
+  siteAutoBlacklist: (id: number) => api.get<CrawlerSiteAutoBlacklist>(
+    `/api/crawler/sites/${id}/auto-blacklist`).then(r => r.data),
+  setSiteAutoBlacklist: (id: number, configuration: CrawlerSiteAutoBlacklist) =>
+    api.put<CrawlerSiteAutoBlacklist>(`/api/crawler/sites/${id}/auto-blacklist`, configuration).then(r => r.data),
   siteAutoImport: (id: number) => api.get<CrawlerSiteAutoImport>(
     `/api/crawler/sites/${id}/auto-import`,
   ).then(r => r.data),

@@ -49,6 +49,8 @@ public class CrawlerSite {
     // Independently updated so stale crawler/site editor entities cannot overwrite these rules.
     @Column(columnDefinition = "TEXT", updatable = false)
     private String autoImportRulesJson;
+    @Column(columnDefinition = "TEXT", updatable = false)
+    private String autoBlacklistJson;
     @Builder.Default private Integer scanIntervalMinutes = 360;
     @Builder.Default private Integer updateIntervalMinutes = 30;
     @Builder.Default private Integer maxDiscoveryPages = 3;

@@ -65,6 +65,19 @@ public class CrawlerController {
                 range == null ? days : range, end, page, size);
     }
     @GetMapping("/sites") public List<SiteView> sites(Authentication auth) { return managementService.sites(user(auth)); }
+    @GetMapping("/sites/{id}/auto-blacklist")
+    public com.aibook.util.CrawlerAutoBlacklist.Configuration siteAutoBlacklist(
+            Authentication auth, @PathVariable Long id) {
+        return managementService.siteAutoBlacklist(user(auth), id);
+    }
+
+    @PutMapping("/sites/{id}/auto-blacklist")
+    public com.aibook.util.CrawlerAutoBlacklist.Configuration setSiteAutoBlacklist(
+            Authentication auth, @PathVariable Long id,
+            @Valid @RequestBody com.aibook.util.CrawlerAutoBlacklist.Configuration configuration) {
+        return managementService.setSiteAutoBlacklist(user(auth), id, configuration);
+    }
+
     @GetMapping("/sites/{id}/auto-import")
     public com.aibook.dto.crawler.CrawlerAutoImportDtos.Configuration siteAutoImport(
             Authentication auth, @PathVariable Long id) {

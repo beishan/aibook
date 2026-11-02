@@ -46,7 +46,8 @@ public class CrawlerSiteConfigurationService {
                 .map(this::discoveryPagePayload).toList();
         return new SiteConfigurationPayload(SCHEMA_VERSION, CONFIGURATION_TYPE,
                 sitePayload, rules, discoveryPages,
-                com.aibook.util.CrawlerAutoImportRules.decode(site.getAutoImportRulesJson()));
+                com.aibook.util.CrawlerAutoImportRules.decode(site.getAutoImportRulesJson()),
+                com.aibook.util.CrawlerAutoBlacklist.decode(site.getAutoBlacklistJson()));
     }
 
     @Transactional
@@ -68,6 +69,9 @@ public class CrawlerSiteConfigurationService {
         }
         for (DiscoveryPagePayload page : values(configuration.discoveryPages())) {
             discoveryPageService.create(user, importedSite.id(), page);
+        }
+        if (configuration.autoBlacklist() != null) {
+            managementService.setSiteAutoBlacklist(user, importedSite.id(), configuration.autoBlacklist());
         }
         if (configuration.autoImport() != null) {
             managementService.setSiteAutoImport(user, importedSite.id(), configuration.autoImport());
