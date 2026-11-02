@@ -345,6 +345,7 @@
           <p class="health-line" :class="{error:site.status==='RULE_ERROR'}">{{ site.ruleVersion ? `生效规则 v${site.ruleVersion}` : '暂无生效规则' }} · 共 {{ site.ruleCount }} 个版本</p>
           <div class="site-activity-action-row">
             <el-button type="primary" plain @click="openSiteActivities(site)">查看网站行为记录</el-button>
+            <el-button plain @click="openSiteAutoBlacklist(site)">自动黑名单配置</el-button>
             <el-button type="primary" plain @click="openSiteAutoImport(site)">自动入库配置</el-button>
           </div>
           <footer><el-button v-if="hasSiteProtection(site)" text type="warning" @click="resetSiteProtection(site)">解除保护</el-button><el-button type="primary" plain @click="openDiscoveryPages(site)">发现页管理（{{ discoveryPagesBySite[site.id]?.length || 0 }}）</el-button><el-button type="primary" plain @click="openRuleManager(site)">规则管理</el-button><el-button text :icon="Download" @click="exportSiteConfiguration(site)">导出配置</el-button><el-button text @click="openSite(site)">编辑网站</el-button><el-button text @click="openCrawl(site.id)">采集 URL</el-button><el-button text type="danger" @click="removeSite(site)">删除</el-button></footer>
@@ -360,6 +361,7 @@
           <h2>发现书籍</h2>
         </div>
         <div class="discovery-heading-actions">
+          <el-button @click="discoveryBlacklistScreenOpen = true">一键筛选黑名单</el-button>
           <el-button @click="chapterListPickerOpen = true">采集章节信息</el-button>
           <el-button :disabled="batchDiscoveryCrawling" @click="advancedCrawlOpen = true">高级批量采集</el-button>
           <div
@@ -634,6 +636,7 @@
           <h2>采集书籍</h2>
         </div>
         <div class="crawler-book-heading-actions">
+          <el-button @click="blacklistScreenOpen = true">一键筛选黑名单</el-button>
           <el-button :disabled="batchBookBusy" @click="openCategoryCleanup">清理异常分类</el-button>
           <el-button :disabled="!selectedBooks.length || batchBookBusy" @click="openAutoImport(selectedBooks)">
             批量自动入库
@@ -1724,7 +1727,14 @@
           <div><span>完成时间</span><strong>{{ formatTime(selectedTask.finishedAt) }}</strong></div>
         </section>
 
-        <el-alert v-if="selectedTask.errorMessage" type="error" :closable="false" title="任务错误" :description="selectedTask.errorMessage" show-icon />
+        <el-alert
+          v-if="selectedTask.errorMessage"
+          :type="selectedTask.status === 'CANCELLED' ? 'warning' : 'error'"
+          :closable="false"
+          title="任务说明"
+          :description="selectedTask.errorMessage"
+          show-icon
+        />
         <div class="task-detail-actions">
           <el-button @click="openTaskQueueDialog(selectedTask)">调整所在队列</el-button>
           <el-button v-if="selectedTask.bookId" @click="openTaskBook(selectedTask)">查看采集书籍</el-button>
@@ -2478,6 +2488,21 @@
         </footer>
       </div>
     </el-dialog>
+    <CrawlerBlacklistScreenDialog
+      v-model="discoveryBlacklistScreenOpen"
+      :sites="sites"
+      scope="DISCOVERED"
+      @changed="refresh"
+    />
+    <CrawlerBlacklistScreenDialog
+      v-model="blacklistScreenOpen"
+      :sites="sites"
+      @changed="refresh"
+    />
+    <CrawlerSiteAutoBlacklistDialog
+      v-model="siteAutoBlacklistOpen"
+      :site="siteAutoBlacklistSite"
+    />
     <CrawlerSiteAutoImportDialog
       v-model="siteAutoImportOpen"
       :site="siteAutoImportSite"
@@ -2509,6 +2534,8 @@ import { Collection, Connection, DataAnalysis, Document, Download, Edit, Link, L
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElProgress, ElTable, ElTableColumn, ElTag, ElTooltip, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
 import DiscoveryChapterListDialog from '@/components/DiscoveryChapterListDialog.vue'
 import CrawlerImportLibrariesDialog from '@/components/CrawlerImportLibrariesDialog.vue'
+import CrawlerBlacklistScreenDialog from '@/components/CrawlerBlacklistScreenDialog.vue'
+import CrawlerSiteAutoBlacklistDialog from '@/components/CrawlerSiteAutoBlacklistDialog.vue'
 import CrawlerSiteAutoImportDialog from '@/components/CrawlerSiteAutoImportDialog.vue'
 import SiteSourceTag from '@/components/SiteSourceTag.vue'
 import CrawlerSiteIcon from '@/components/CrawlerSiteIcon.vue'
@@ -2824,6 +2851,15 @@ async function loadDiscoveryFilterOptions(visible:boolean) {
 
 const siteDialog=ref(false), siteProtectionDialog=ref(false), protectionDetailSite=ref<CrawlerSite>(), discoveryManagerDialog=ref(false), discoveryPageDialog=ref(false), crawlDialog=ref(false), bookDrawer=ref(false), taskDrawer=ref(false), chapterDialog=ref(false), ruleTestDialog=ref(false), ruleManagerDialog=ref(false), ruleEditorDialog=ref(false), ruleImportDialog=ref(false), siteConfigurationImportDialog=ref(false), statusDialog=ref(false), taskEditDialog=ref(false), saving=ref(false), savingSiteConfiguration=ref(false), savingStatus=ref(false), savingTask=ref(false), testingRule=ref(false), discoveryLoading=ref(false), taskDetailLoading=ref(false), editingSite=ref<CrawlerSite>(), discoveryManagerSite=ref<CrawlerSite>(), discoveryPageSite=ref<CrawlerSite>(), editingDiscoveryPage=ref<CrawlerDiscoveryPage>(), selectedBook=ref<CrawlerBook>(), selectedTask=ref<CrawlerTask>(), statusBook=ref<CrawlerBook>(), editingTask=ref<CrawlerTask>(), selectedDiscoveries=ref<CrawlerBook[]>([]), selectedBooks=ref<CrawlerBook[]>([]), batchBookStatus=ref('COMPLETED'), batchBookStatusSaving=ref(false), batchBookAction=ref<'continue'|'updates'|'metadata'>(), chapters=ref<CrawlerChapter[]>([]), crawlerLogs=ref<CrawlerLog[]>([]), bookKeyword=ref(''), manualStatus=ref('COMPLETED'), taskPriority=ref<'LOW'|'NORMAL'|'HIGH'|'EXTREME'>('NORMAL'), discoveryPage=ref(1), discoveryPageSize=ref(20), discoveredTotal=ref(0), discoveryKeyword=ref(''), discoverySiteId=ref<number>(), discoverySort=ref('DISCOVER_TIME_DESC')
 const chapterReaderSurface=ref<HTMLElement>(), chapterReaderActive=ref<CrawlerChapter>(), chapterReaderChapters=ref<CrawlerChapter[]>([]), chapterReaderBookId=ref<number>(), chapterReaderLoading=ref(false), chapterReaderSettingsOpen=ref(false), chapterEditing=ref(false), chapterEditContent=ref(''), savingChapter=ref(false)
+const discoveryBlacklistScreenOpen = ref(false)
+const blacklistScreenOpen = ref(false)
+const siteAutoBlacklistOpen = ref(false)
+const siteAutoBlacklistSite = ref<CrawlerSite>()
+function openSiteAutoBlacklist(site: CrawlerSite) {
+  siteAutoBlacklistSite.value = site
+  siteAutoBlacklistOpen.value = true
+}
+
 const siteAutoImportOpen = ref(false)
 const siteAutoImportSite = ref<CrawlerSite>()
 function openSiteAutoImport(site: CrawlerSite) {
@@ -5701,7 +5737,19 @@ function priorityType(priority:string):''|'success'|'warning'|'info'|'danger'{re
 function scanTaskPercentage(task:CrawlerTask){return Math.max(0,Math.min(100,task.progressPercent??(['SUCCESS','PARTIAL_SUCCESS'].includes(task.status)?100:0)))}
 function taskProgress(task:CrawlerTask){return scanTaskPercentage(task)}
 function taskCircleStatus(status:string):'success'|'exception'|'warning'|undefined{if(status==='SUCCESS')return'success';if(status==='FAILED')return'exception';if(['PAUSED','PARTIAL_SUCCESS'].includes(status))return'warning';return undefined}
-function taskProgressDescription(task:CrawlerTask){if(task.type==='SITE_SCAN')return scanTaskProgressText(task);if(task.currentChapter)return task.currentChapter;if(task.status==='WAITING')return '任务正在队列中等待执行';if(task.status==='SUCCESS')return `处理完成 · 成功 ${task.successCount} 项`;if(task.status==='PARTIAL_SUCCESS')return `处理完成 · 成功 ${task.successCount} 项，失败 ${task.failedCount} 项`;if(task.status==='FAILED')return task.errorMessage||'任务执行失败';if(task.status==='PAUSED')return '任务已暂停，可从下方继续执行';if(task.status==='CANCELLED')return '任务已取消';return `已处理 ${task.successCount+task.failedCount} / ${task.totalCount} 项`}
+function taskProgressDescription(task: CrawlerTask) {
+  if (task.type === 'SITE_SCAN') return scanTaskProgressText(task)
+  if (task.currentChapter) return task.currentChapter
+  if (task.status === 'WAITING') return '任务正在队列中等待执行'
+  if (task.status === 'SUCCESS') return `处理完成 · 成功 ${task.successCount} 项`
+  if (task.status === 'PARTIAL_SUCCESS') {
+    return `处理完成 · 成功 ${task.successCount} 项，失败 ${task.failedCount} 项`
+  }
+  if (task.status === 'FAILED') return task.errorMessage || '任务执行失败'
+  if (task.status === 'PAUSED') return '任务已暂停，可从下方继续执行'
+  if (task.status === 'CANCELLED') return task.errorMessage || '任务已取消'
+  return `已处理 ${task.successCount + task.failedCount} / ${task.totalCount} 项`
+}
 function scanTaskProgressText(task:CrawlerTask){if(task.status==='WAITING')return `等待扫描 · 分页上限 ${task.scanMaxPages||'—'} 页`;if(['SUCCESS','PARTIAL_SUCCESS'].includes(task.status))return task.scannedPageCount>0?`扫描完成 · 共扫描 ${task.scannedPageCount} 页`:'扫描完成';return task.currentChapter||`已扫描 ${task.scannedPageCount||0} / ${task.scanMaxPages||'—'} 页`}
 function scanResultLabel(status:CrawlerScanResult['resultStatus']){return({NEW:'新增',DUPLICATE:'重复',BLACKLISTED:'黑名单',FAILED:'失败'} as const)[status]}
 function scanResultType(status:CrawlerScanResult['resultStatus']):'success'|'warning'|'info'|'danger'{return status==='NEW'?'success':status==='DUPLICATE'?'warning':status==='BLACKLISTED'?'info':'danger'}

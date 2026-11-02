@@ -62,6 +62,8 @@ public class UserPreference {
     private Integer libraryListPageSize;
     @Column(name = "author_page_size")
     private Integer authorPageSize;
+    @Column(name = "tag_manage_page_size")
+    private Integer tagManagePageSize;
     @Column(name = "category_page_size")
     private Integer categoryPageSize;
     @Column(name = "shelf_page_size")

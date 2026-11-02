@@ -24,6 +24,7 @@ class CrawlerSiteConfigurationServiceTest {
     void exportsSiteRulesAndDiscoveryPages() {
         User user = User.builder().id(1L).username("owner").build();
         CrawlerSite site = CrawlerSite.builder().id(7L).user(user).build();
+        site.setAutoBlacklistJson(com.aibook.util.CrawlerAutoBlacklist.encode(autoBlacklistConfiguration()));
         site.setAutoImportRulesJson(com.aibook.util.CrawlerAutoImportRules.encode(autoImportConfiguration()));
         CrawlerManagementService management = mock(CrawlerManagementService.class);
         CrawlerDiscoveryPageService discoveryPages = mock(CrawlerDiscoveryPageService.class);
@@ -48,6 +49,7 @@ class CrawlerSiteConfigurationServiceTest {
 
         assertThat(result.discoveryPages().getFirst().autoCrawlEnabled()).isTrue();
         assertThat(result.schemaVersion()).isEqualTo(1);
+        assertThat(result.autoBlacklist()).isEqualTo(autoBlacklistConfiguration());
         assertThat(result.autoImport()).isEqualTo(autoImportConfiguration());
         assertThat(result.type()).isEqualTo("AIBOOK_CRAWLER_SITE");
         assertThat(result.site().siteCode()).isEqualTo("demo");
@@ -86,13 +88,14 @@ class CrawlerSiteConfigurationServiceTest {
         when(management.siteView(importedEntity)).thenReturn(created);
         SiteConfigurationPayload configuration = new SiteConfigurationPayload(
                 1, "AIBOOK_CRAWLER_SITE", sitePayload, List.of(rule), List.of(page),
-                includeAutoImport ? autoImportConfiguration() : null);
+                includeAutoImport ? autoImportConfiguration() : null, autoBlacklistConfiguration());
         CrawlerSiteConfigurationService service =
                 new CrawlerSiteConfigurationService(management, discoveryPages);
 
         SiteView result = service.importConfiguration(user, configuration);
 
         assertThat(result).isSameAs(created);
+        verify(management).setSiteAutoBlacklist(user, 9L, autoBlacklistConfiguration());
         verify(management).createRule(user, 9L, rule);
         verify(discoveryPages).create(user, 9L, page);
         if (includeAutoImport) {
@@ -118,4 +121,9 @@ class CrawlerSiteConfigurationServiceTest {
                 null, null, null, null, null, null, null, null, null, null,
                 true, false);
     }
+    private static com.aibook.util.CrawlerAutoBlacklist.Configuration autoBlacklistConfiguration() {
+        return new com.aibook.util.CrawlerAutoBlacklist.Configuration(
+                true, List.of("屏蔽词"), List.of("屏蔽标签"));
+    }
+
 }

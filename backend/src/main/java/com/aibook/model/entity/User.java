@@ -203,6 +203,14 @@ public class User implements UserDetails {
         preference().setLibraryListPageSize(value);
     }
 
+    public Integer getTagManagePageSize() {
+        return preference().getTagManagePageSize();
+    }
+
+    public void setTagManagePageSize(Integer value) {
+        preference().setTagManagePageSize(value);
+    }
+
     public Integer getAuthorPageSize() {
         return preference().getAuthorPageSize();
     }

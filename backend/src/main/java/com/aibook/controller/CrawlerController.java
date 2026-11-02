@@ -38,6 +38,47 @@ public class CrawlerController {
     private final CrawlerStatisticsService statisticsService;
     private final CrawlerChapterRepository chapterRepository;
     private final CrawlerSiteIconService siteIconService;
+    private final CrawlerBlacklistScreenService blacklistScreenService;
+
+    @PostMapping("/blacklist-screenings")
+    public com.aibook.dto.crawler.CrawlerBlacklistScreenDtos.JobView startBlacklistScreen(
+            Authentication auth,
+            @Valid @RequestBody com.aibook.dto.crawler.CrawlerBlacklistScreenDtos.Request request) {
+        return blacklistScreenService.submit(user(auth), request);
+    }
+
+    @GetMapping("/blacklist-screenings/latest")
+    public com.aibook.dto.crawler.CrawlerBlacklistScreenDtos.JobView latestBlacklistScreen(
+            Authentication auth, @RequestParam(defaultValue = "MANAGED") String scope) {
+        return blacklistScreenService.latest(user(auth), scope);
+    }
+
+    @GetMapping("/blacklist-screenings/{id}")
+    public com.aibook.dto.crawler.CrawlerBlacklistScreenDtos.JobView blacklistScreenProgress(
+            Authentication auth, @PathVariable String id) {
+        return blacklistScreenService.progress(user(auth), id);
+    }
+
+    @GetMapping("/blacklist-screenings/{id}/results")
+    public Page<com.aibook.dto.crawler.CrawlerBlacklistScreenDtos.Item> blacklistScreenResults(
+            Authentication auth, @PathVariable String id,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return blacklistScreenService.page(user(auth), id, page, size);
+    }
+
+    @PutMapping("/blacklist-screenings/{id}/results/{bookId}/ignore")
+    public void ignoreBlacklistScreenResult(Authentication auth, @PathVariable String id,
+            @PathVariable Long bookId,
+            @Valid @RequestBody com.aibook.dto.crawler.CrawlerBlacklistScreenDtos.IgnoreRequest request) {
+        blacklistScreenService.setIgnored(user(auth), id, bookId, request.ignored());
+    }
+
+    @PostMapping("/blacklist-screenings/{id}/apply")
+    public com.aibook.dto.crawler.CrawlerBlacklistScreenDtos.ApplyResult applyBlacklistScreen(
+            Authentication auth, @PathVariable String id,
+            @Valid @RequestBody com.aibook.dto.crawler.CrawlerBlacklistScreenDtos.ApplyRequest request) {
+        return blacklistScreenService.apply(user(auth), id, request);
+    }
 
     @GetMapping("/dashboard") public DashboardView dashboard(Authentication auth) { return managementService.dashboard(user(auth)); }
     @GetMapping("/dashboard/statistics")
@@ -65,6 +106,19 @@ public class CrawlerController {
                 range == null ? days : range, end, page, size);
     }
     @GetMapping("/sites") public List<SiteView> sites(Authentication auth) { return managementService.sites(user(auth)); }
+    @GetMapping("/sites/{id}/auto-blacklist")
+    public com.aibook.util.CrawlerAutoBlacklist.Configuration siteAutoBlacklist(
+            Authentication auth, @PathVariable Long id) {
+        return managementService.siteAutoBlacklist(user(auth), id);
+    }
+
+    @PutMapping("/sites/{id}/auto-blacklist")
+    public com.aibook.util.CrawlerAutoBlacklist.Configuration setSiteAutoBlacklist(
+            Authentication auth, @PathVariable Long id,
+            @Valid @RequestBody com.aibook.util.CrawlerAutoBlacklist.Configuration configuration) {
+        return managementService.setSiteAutoBlacklist(user(auth), id, configuration);
+    }
+
     @GetMapping("/sites/{id}/auto-import")
     public com.aibook.dto.crawler.CrawlerAutoImportDtos.Configuration siteAutoImport(
             Authentication auth, @PathVariable Long id) {

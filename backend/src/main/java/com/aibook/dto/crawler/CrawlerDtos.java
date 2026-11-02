@@ -318,7 +318,13 @@ public final class CrawlerDtos {
             @Valid @NotNull SitePayload site,
             @Size(max = 100) List<@Valid @NotNull RuleSaveRequest> rules,
             @Size(max = 100) List<@Valid @NotNull DiscoveryPagePayload> discoveryPages,
-            @Valid CrawlerAutoImportDtos.Configuration autoImport) {
+            @Valid CrawlerAutoImportDtos.Configuration autoImport,
+            @Valid com.aibook.util.CrawlerAutoBlacklist.Configuration autoBlacklist) {
+        public SiteConfigurationPayload(int schemaVersion, String type, SitePayload site,
+                List<RuleSaveRequest> rules, List<DiscoveryPagePayload> discoveryPages,
+                CrawlerAutoImportDtos.Configuration autoImport) {
+            this(schemaVersion, type, site, rules, discoveryPages, autoImport, null);
+        }
         public SiteConfigurationPayload(int schemaVersion, String type, SitePayload site,
                 List<RuleSaveRequest> rules, List<DiscoveryPagePayload> discoveryPages) {
             this(schemaVersion, type, site, rules, discoveryPages, null);

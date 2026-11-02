@@ -42,6 +42,37 @@ import static org.mockito.Mockito.*;
 
 class CrawlerManagementServiceTest {
     @Test
+    void autoBlacklistConfigurationIsOwnerScopedAndWrittenIndependently() {
+        User owner = user();
+        CrawlerSite site = CrawlerSite.builder().id(7L).user(owner).build();
+        when(sites.findByIdAndUser(7L, owner)).thenReturn(Optional.of(site));
+        when(sites.updateAutoBlacklist(eq(7L), eq(owner), anyString())).thenReturn(1);
+        var input = new com.aibook.util.CrawlerAutoBlacklist.Configuration(
+                true, List.of(" 词 ", "词"), List.of("标签"));
+        var saved = service.setSiteAutoBlacklist(owner, 7L, input);
+        assertThat(saved.keywords()).containsExactly("词");
+        verify(sites).updateAutoBlacklist(7L, owner,
+                com.aibook.util.CrawlerAutoBlacklist.encode(saved));
+        verify(sites, never()).save(any());
+        assertThat(service.siteAutoBlacklist(owner, 7L).enabled()).isFalse();
+        User stranger = User.builder().id(99L).build();
+        assertThatThrownBy(() -> service.setSiteAutoBlacklist(stranger, 7L, input))
+                .isInstanceOf(ResponseStatusException.class);
+        verify(sites, never()).updateAutoBlacklist(eq(7L), eq(stranger), anyString());
+    }
+
+    @Test
+    void autoBlacklistUsesIndependentDiscoveryUpdateWithOwnerAndTimestamp() {
+        User owner = user();
+        CrawlerBook book = CrawlerBook.builder().id(15L)
+                .site(CrawlerSite.builder().user(owner).build()).build();
+        service.markAutoBlacklisted(book);
+        verify(books).updateDiscoveryStatus(eq(List.of(15L)), eq(owner),
+                eq(CrawlerBook.DiscoveryStatus.BLACKLISTED), eq(true), any(LocalDateTime.class));
+        assertThat(book.getDiscoveryStatus()).isEqualTo(CrawlerBook.DiscoveryStatus.BLACKLISTED);
+    }
+
+    @Test
     void blacklistBooksUsesOwnerStatusFiltersAndDatabasePagination() {
         User owner = user();
         CrawlerSite site = CrawlerSite.builder().id(7L).user(owner).siteName("来源站").build();

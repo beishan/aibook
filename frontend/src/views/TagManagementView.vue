@@ -331,11 +331,12 @@
       <div class="manage-pagination">
         <el-pagination
           v-model:current-page="managePage"
-          :page-size="managePageSize"
+          v-model:page-size="managePageSize"
+          :page-sizes="TAG_MANAGE_PAGE_SIZE_OPTIONS"
           :total="filteredManageTags.length"
           :pager-count="5"
           :disabled="deletingManageTags"
-          layout="total, prev, pager, next"
+          layout="total, sizes, prev, pager, next"
         />
       </div>
       <template #footer>
@@ -357,8 +358,10 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { confirm, message } from '@/utils/message'
 import { useTagStore, type Tag } from '@/stores/tag'
+import { usePreferencesStore, TAG_MANAGE_PAGE_SIZE_OPTIONS } from '@/stores/preferences'
 
 const tagStore = useTagStore()
+const preferencesStore = usePreferencesStore()
 const dialogVisible = ref(false)
 const pendingVisible = ref(false)
 const pendingBusy = ref(false)
@@ -416,7 +419,10 @@ const manageDialogVisible = ref(false)
 const manageKeyword = ref('')
 const manageSourceFilter = ref('')
 const managePage = ref(1)
-const managePageSize = 20
+const managePageSize = computed({
+  get: () => preferencesStore.tagManagePageSize,
+  set: value => { void preferencesStore.setTagManagePageSize(value) },
+})
 const selectedManageTagIds = ref<number[]>([])
 const deletingManageTags = ref(false)
 const currentPage = ref(1)
@@ -490,8 +496,8 @@ const filteredManageTags = computed(() => {
 })
 
 const pagedManageTags = computed(() => {
-  const start = (managePage.value - 1) * managePageSize
-  return filteredManageTags.value.slice(start, start + managePageSize)
+  const start = (managePage.value - 1) * managePageSize.value
+  return filteredManageTags.value.slice(start, start + managePageSize.value)
 })
 const allManagePageSelected = computed(() => pagedManageTags.value.length > 0
   && pagedManageTags.value.every(tag => selectedManageTagIds.value.includes(tag.id)))
@@ -511,11 +517,14 @@ const resetManageFilter = () => {
   selectedManageTagIds.value = []
 }
 const clampManagePage = () => {
-  const lastPage = Math.max(1, Math.ceil(filteredManageTags.value.length / managePageSize))
+  const lastPage = Math.max(1, Math.ceil(filteredManageTags.value.length / managePageSize.value))
   managePage.value = Math.min(managePage.value, lastPage)
 }
 watch([manageKeyword, manageSourceFilter], resetManageFilter)
 watch(() => filteredManageTags.value.length, clampManagePage)
+watch(managePageSize, () => {
+  managePage.value = 1
+})
 
 const tagStyle = (color?: string) => {
   const safeColor = /^#[0-9a-fA-F]{6}$/.test(color || '') ? color! : '#64748B'
@@ -689,7 +698,10 @@ watch(
   }
 )
 
-onMounted(() => tagStore.fetchTags())
+onMounted(() => {
+  void tagStore.fetchTags()
+  void preferencesStore.hydrate()
+})
 </script>
 
 <style scoped>

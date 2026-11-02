@@ -1,3 +1,4 @@
+import type { BlacklistScreenJob, BlacklistScreenItem, BlacklistScreenScope } from './crawlerBlacklistScreen'
 import type { CrawlerImportJob } from './crawlerImport'
 import type { StatisticsGranularity } from './crawlerStatistics'
 import api from '@/utils/api'
@@ -32,6 +33,11 @@ export interface CrawlerAutoImportExpression {
 export interface CrawlerAutoImportRule {
   name: string
   expressions: CrawlerAutoImportExpression[]
+}
+export interface CrawlerSiteAutoBlacklist {
+  enabled: boolean
+  keywords: string[]
+  tags: string[]
 }
 export interface CrawlerSiteAutoImport {
   enabled: boolean
@@ -318,6 +324,7 @@ export interface CrawlerRuleVersion { id:number; version:number; changeSummary:s
 export interface CrawlerRuleSave { version:number; changeSummary:string; rule:CrawlerRule; enabled:boolean }
 export interface CrawlerRuleExport { schemaVersion:number; siteCode:string; version:number; changeSummary:string; rule:CrawlerRule; enabled?:boolean }
 export interface CrawlerSiteConfiguration {
+  autoBlacklist?: CrawlerSiteAutoBlacklist
   schemaVersion: number
   type: 'AIBOOK_CRAWLER_SITE'
   site: CrawlerSitePayload
@@ -390,6 +397,22 @@ export const crawlerApi = {
     params: { range, granularity, end, page, size },
   }).then(r => r.data),
   sites: () => api.get<CrawlerSite[]>('/api/crawler/sites').then(r => r.data),
+  startBlacklistScreen: (siteId?: number, scope: BlacklistScreenScope = 'MANAGED') => api.post<BlacklistScreenJob>(
+    '/api/crawler/blacklist-screenings', { siteId, scope }).then(r => r.data),
+  latestBlacklistScreen: (scope: BlacklistScreenScope = 'MANAGED') => api.get<BlacklistScreenJob | null>(
+    '/api/crawler/blacklist-screenings/latest', { params: { scope } }).then(r => r.data),
+  blacklistScreenProgress: (id: string) => api.get<BlacklistScreenJob>(
+    `/api/crawler/blacklist-screenings/${id}`).then(r => r.data),
+  blacklistScreenResults: (id: string, page: number, size: number) => api.get<PageResult<BlacklistScreenItem>>(
+    `/api/crawler/blacklist-screenings/${id}/results`, { params: { page, size } }).then(r => r.data),
+  ignoreBlacklistScreenResult: (id: string, bookId: number, ignored: boolean) => api.put(
+    `/api/crawler/blacklist-screenings/${id}/results/${bookId}/ignore`, { ignored }).then(r => r.data),
+  applyBlacklistScreen: (id: string, all: boolean, bookIds: number[]) => api.post<{ affectedCount: number }>(
+    `/api/crawler/blacklist-screenings/${id}/apply`, { all, bookIds }).then(r => r.data),
+  siteAutoBlacklist: (id: number) => api.get<CrawlerSiteAutoBlacklist>(
+    `/api/crawler/sites/${id}/auto-blacklist`).then(r => r.data),
+  setSiteAutoBlacklist: (id: number, configuration: CrawlerSiteAutoBlacklist) =>
+    api.put<CrawlerSiteAutoBlacklist>(`/api/crawler/sites/${id}/auto-blacklist`, configuration).then(r => r.data),
   siteAutoImport: (id: number) => api.get<CrawlerSiteAutoImport>(
     `/api/crawler/sites/${id}/auto-import`,
   ).then(r => r.data),

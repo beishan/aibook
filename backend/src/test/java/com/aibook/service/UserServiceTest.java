@@ -624,6 +624,34 @@ class UserServiceTest {
     }
 
     @Test
+    void tagManagePageSizePersistsValidatesAndRemainsAccountScoped() {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(org.mockito.ArgumentMatchers.any(User.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        UserService service = new UserService(repository);
+        assertEquals(20, service.getPreferences("reader").getTagManagePageSize());
+        for (int size : new int[] {10, 20, 50, 100}) {
+            assertEquals(size, service.updatePreferences("reader",
+                    UserPreferencesDTO.builder().tagManagePageSize(size).build()).getTagManagePageSize());
+            assertEquals(size, reader.getPreferences().getTagManagePageSize());
+        }
+        assertEquals(100, service.getPreferences("reader").getTagManagePageSize());
+        assertEquals(20, service.getPreferences("other").getTagManagePageSize());
+        service.updatePreferences("reader", UserPreferencesDTO.builder().build());
+        assertEquals(100, reader.getTagManagePageSize());
+        for (int invalid : new int[] {-1, 0, 25, 200}) {
+            assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                    UserPreferencesDTO.builder().tagManagePageSize(invalid).build()));
+        }
+        reader.setTagManagePageSize(25);
+        assertEquals(20, service.getPreferences("reader").getTagManagePageSize());
+    }
+
+    @Test
     void rejectsUnsupportedLibraryPageSize() {
         UserRepository repository = mock(UserRepository.class);
         User user = User.builder()
