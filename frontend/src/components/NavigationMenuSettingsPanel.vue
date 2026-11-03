@@ -1,6 +1,6 @@
 <template>
   <section class="card glass navigation-order-settings">
-    <h2>导航菜单顺序</h2>
+    <h2>导航菜单</h2>
     <p>调整顶部导航、侧边栏和手机导航的顺序。“工具”下的功能一起移动，Dock 使用自己的导航配置。</p>
     <ol
       class="navigation-order-list"

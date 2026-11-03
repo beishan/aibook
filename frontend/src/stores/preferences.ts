@@ -16,6 +16,8 @@ import {
 } from '@/types/theme'
 import { normalizeThemeBackgroundConfig } from '@/utils/themeBackground'
 
+export type ShelfViewMode = 'grid' | 'list'
+export type ShelfCardSize = 'small' | 'medium' | 'large'
 export type LibraryViewMode = 'card' | 'compact-card' | 'list'
 export type CrawlerDiscoveryViewMode = 'table' | 'card'
 export type CrawlerBookViewMode = 'table' | 'card'
@@ -176,6 +178,8 @@ interface UserPreferences {
   bookNameMaskMode: BookNameMaskMode | null
   bookNamePrefixLength: number | null
   bookNameMaskCharacter: string | null
+  shelfViewMode?: ShelfViewMode | null
+  shelfCardSize?: ShelfCardSize | null
   shelfPageSize: number | null
   categoryPageSize: number | null
   scanThreadCount: number | null
@@ -494,6 +498,18 @@ const readLocalReaderSettings = (): ReaderSettings => {
   }
 }
 
+const readLegacyShelfDisplay = (): { viewMode?: ShelfViewMode; cardSize?: ShelfCardSize } => {
+  try {
+    const source = JSON.parse(localStorage.getItem('shelf-settings') || '{}')
+    return {
+      viewMode: ['grid', 'list'].includes(source?.viewMode) ? source.viewMode : undefined,
+      cardSize: ['small', 'medium', 'large'].includes(source?.cardSize) ? source.cardSize : undefined,
+    }
+  } catch {
+    return {}
+  }
+}
+
 export const usePreferencesStore = defineStore('preferences', () => {
   const hideBookNames = ref(false)
   const navigationMenuOrder = ref(defaultNavigationMenuOrder())
@@ -501,6 +517,10 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const bookNameMaskMode = ref<BookNameMaskMode>('HEAD_TAIL')
   const bookNamePrefixLength = ref(2)
   const bookNameMaskCharacter = ref('*')
+  const shelfViewMode = ref<ShelfViewMode>('grid')
+  const shelfCardSize = ref<ShelfCardSize>('medium')
+  let shelfViewRevision = 0
+  let shelfSizeRevision = 0
   const shelfPageSize = ref(24)
   const categoryPageSize = ref(20)
   const themeStore = useThemeStore()
@@ -878,6 +898,23 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (syncRemote) persistRemote({ bookNameMaskCharacter: value })
   }
 
+  const setShelfViewMode = (value: ShelfViewMode, syncRemote = true) => {
+    if (!['grid', 'list'].includes(value)) return
+    shelfViewMode.value = value
+    if (syncRemote) {
+      shelfViewRevision++
+      return persistRemote({ shelfViewMode: value })
+    }
+  }
+  const setShelfCardSize = (value: ShelfCardSize, syncRemote = true) => {
+    if (!['small', 'medium', 'large'].includes(value)) return
+    shelfCardSize.value = value
+    if (syncRemote) {
+      shelfSizeRevision++
+      return persistRemote({ shelfCardSize: value })
+    }
+  }
+
   const setShelfPageSize = (value: number, syncRemote = true) => {
     if (!(SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(value)) return
     shelfPageSize.value = value
@@ -966,11 +1003,30 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (!accountToken) return
     const sequence = ++hydrationSequence
     const tagPageRevision = tagManagePageSizeRevision
+    const viewRevision = shelfViewRevision
+    const sizeRevision = shelfSizeRevision
 
     try {
       const { data } = await api.get<UserPreferences>('/api/user/preferences')
       if (sequence !== hydrationSequence || localStorage.getItem('token') !== accountToken) return
       const missingPreferences: Partial<UserPreferences> = {}
+      const legacyShelf = readLegacyShelfDisplay()
+      if (viewRevision === shelfViewRevision) {
+        if (data.shelfViewMode === 'grid' || data.shelfViewMode === 'list') {
+          setShelfViewMode(data.shelfViewMode, false)
+        } else {
+          setShelfViewMode(legacyShelf.viewMode || 'grid', false)
+          if (legacyShelf.viewMode) missingPreferences.shelfViewMode = legacyShelf.viewMode
+        }
+      }
+      if (sizeRevision === shelfSizeRevision) {
+        if (data.shelfCardSize === 'small' || data.shelfCardSize === 'medium' || data.shelfCardSize === 'large') {
+          setShelfCardSize(data.shelfCardSize, false)
+        } else {
+          setShelfCardSize(legacyShelf.cardSize || 'medium', false)
+          if (legacyShelf.cardSize) missingPreferences.shelfCardSize = legacyShelf.cardSize
+        }
+      }
 
       if (isTheme(data.theme)) {
         setTheme(data.theme, false)
@@ -1140,7 +1196,13 @@ export const usePreferencesStore = defineStore('preferences', () => {
       hydrated.value = true
 
       if (Object.keys(missingPreferences).length > 0) {
-        persistRemote(missingPreferences)
+        void persistRemote(missingPreferences, accountToken).then(response => {
+          if (response && localStorage.getItem('token') === accountToken) {
+            localStorage.removeItem('shelf-settings')
+          }
+        })
+      } else if (localStorage.getItem('token') === accountToken) {
+        localStorage.removeItem('shelf-settings')
       }
     } catch (error) {
       console.error('Failed to load user preferences:', error)
@@ -1158,6 +1220,10 @@ export const usePreferencesStore = defineStore('preferences', () => {
     bookNamePrefixLength.value = 2
     bookNameMaskCharacter.value = '*'
     crawlerHideBookNames.value = false
+    shelfViewRevision++
+    shelfSizeRevision++
+    shelfViewMode.value = 'grid'
+    shelfCardSize.value = 'medium'
     shelfPageSize.value = 24
     categoryPageSize.value = 20
     crawlerStatisticsWindow.value = 'day:30'
@@ -1198,6 +1264,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     libraryListPageSize,
     authorPageSize,
     tagManagePageSize,
+    shelfViewMode,
+    shelfCardSize,
     shelfPageSize,
     categoryPageSize,
     scanThreadCount,
@@ -1228,6 +1296,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setLibraryListPageSize,
     setAuthorPageSize,
     setTagManagePageSize,
+    setShelfViewMode,
+    setShelfCardSize,
     setShelfPageSize,
     setCategoryPageSize,
     setScanThreadCount,

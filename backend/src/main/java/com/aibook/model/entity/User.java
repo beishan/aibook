@@ -427,6 +427,11 @@ public class User implements UserDetails {
         preference().setBookNamePrefixLength(value);
     }
 
+    public String getShelfViewMode() { return preference().getShelfViewMode(); }
+    public void setShelfViewMode(String value) { preference().setShelfViewMode(value); }
+    public String getShelfCardSize() { return preference().getShelfCardSize(); }
+    public void setShelfCardSize(String value) { preference().setShelfCardSize(value); }
+
     public Integer getShelfPageSize() {
         return preference().getShelfPageSize();
     }
