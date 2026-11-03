@@ -58,6 +58,10 @@ public class CrawlerTaskLog {
     private String proxyNode;
     private Boolean failed;
 
+    /** Explicitly retained entries are exempt from automatic cleanup. */
+    @Column(name = "retained")
+    private Boolean retained;
+
     @Column(nullable = false, length = 36)
     private String taskId;
 

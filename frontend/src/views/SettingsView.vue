@@ -555,6 +555,7 @@
 
     <div v-if="isAdmin && activeTab === 'crawler-settings'" class="tab-content">
       <ProxySettingsPanel scope="crawler" />
+      <CrawlerTaskLogManagementPanel />
     </div>
 
     <div v-if="isAdmin && activeTab === 'crawler-refresh-options'" class="tab-content">
@@ -773,6 +774,7 @@ import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
 import RandomCoverLibraryPanel from '@/components/RandomCoverLibraryPanel.vue'
 import ReaderBackgroundManagementPanel from '@/components/ReaderBackgroundManagementPanel.vue'
 import ProxySettingsPanel from '@/components/ProxySettingsPanel.vue'
+import CrawlerTaskLogManagementPanel from '@/components/CrawlerTaskLogManagementPanel.vue'
 import CrawlerPollingIntervalSettingsPanel from '@/components/CrawlerPollingIntervalSettingsPanel.vue'
 import { useThemeStore } from '@/stores/theme'
 import { usePreferencesStore } from '@/stores/preferences'
