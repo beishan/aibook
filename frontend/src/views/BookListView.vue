@@ -8,7 +8,7 @@
       </button>
       <div v-if="bookList">
         <h1 class="page-title">{{ bookList.name }}</h1>
-        <p class="page-subtitle">{{ bookList.description || '暂无描述' }} · {{ bookList.bookCount }} 本书</p>
+        <p class="page-subtitle">{{ bookList.description || '暂无描述' }} · {{ total }} 本书</p>
       </div>
     </div>
 
@@ -47,10 +47,24 @@
     </div>
 
     <!-- 空状态 -->
+    <div v-else-if="loadError" class="empty glass">
+      <p>书单加载失败，请重试</p>
+      <button class="btn btn-primary" @click="loadBookList">重新加载</button>
+    </div>
     <div v-else class="empty glass">
       <div class="empty-icon">📚</div>
       <p>书单中暂无书籍</p>
       <button class="btn btn-primary" @click="$router.push('/books')">去书库添加</button>
+    </div>
+    <div v-if="!loadError && total > pageSize" class="booklist-pagination">
+      <el-pagination
+        v-model:current-page="page"
+        :page-size="pageSize"
+        :total="total"
+        layout="total, prev, pager, next"
+        background
+        @current-change="loadBookList"
+      />
     </div>
   </div>
 </template>
@@ -59,8 +73,8 @@
 import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import BookCardBadges from '@/components/BookCardBadges.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
-import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import api from '@/utils/api'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
@@ -69,29 +83,73 @@ import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
 const { displayBookName } = useBookNameDisplay()
 
 const route = useRoute()
-const router = useRouter()
-
-const bookList = ref<any>(null)
-const books = ref<any[]>([])
+interface BookCard {
+  id: number
+  title: string
+  author?: string
+  format?: string
+  coverUrl?: string
+}
+interface BookListPage {
+  id: number
+  name: string
+  description?: string
+  books: { content: BookCard[]; totalElements: number }
+}
+const bookList = ref<BookListPage | null>(null)
+const books = ref<BookCard[]>([])
 const loading = ref(true)
+const loadError = ref(false)
+const page = ref(1)
+const pageSize = 24
+const total = ref(0)
+let requestSequence = 0
 
 const loadBookList = async () => {
   const listId = route.params.id
+  const request = ++requestSequence
+  loading.value = true
+  loadError.value = false
   try {
-    const response = await api.get(`/api/booklists/${listId}`)
+    const response = await api.get<BookListPage>(`/api/booklists/${listId}/books`, {
+      params: { page: page.value - 1, size: pageSize },
+    })
+    if (request !== requestSequence) return
     bookList.value = response.data
-    books.value = response.data.books || []
+    total.value = response.data.books.totalElements
+    const lastPage = Math.max(1, Math.ceil(total.value / pageSize))
+    if (page.value > lastPage) {
+      page.value = lastPage
+      await loadBookList()
+      return
+    }
+    books.value = response.data.books.content
   } catch (error) {
-    console.error('Failed to load book list:', error)
+    if (request !== requestSequence) return
+    books.value = []
+    loadError.value = true
   } finally {
-    loading.value = false
+    if (request === requestSequence) loading.value = false
   }
 }
 
-onMounted(loadBookList)
+watch(() => route.params.id, () => {
+  page.value = 1
+  books.value = []
+  bookList.value = null
+  total.value = 0
+  void loadBookList()
+}, { immediate: true })
 </script>
 
 <style scoped>
+.booklist-pagination {
+  display: flex;
+  justify-content: center;
+  max-width: 100%;
+  margin-top: var(--spacing-xl);
+  overflow-x: auto;
+}
 .booklist-view {
   max-width: 1400px;
   margin: 0 auto;

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Collection;
+import java.util.Optional;
 
 /**
  * 书单 Repository
@@ -21,6 +22,7 @@ public interface BookListRepository extends JpaRepository<BookList, Long> {
      * 根据用户查询书单
      */
     List<BookList> findByUser(User user);
+    Optional<BookList> findByIdAndUser(Long id, User user);
     List<BookList> findByIdInAndUser(Collection<Long> ids, User user);
 
     /**

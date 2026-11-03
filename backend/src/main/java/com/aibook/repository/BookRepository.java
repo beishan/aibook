@@ -86,6 +86,10 @@ public interface BookRepository
 
     Optional<Book> findByIdAndUserAndDeletedAtIsNull(Long id, User user);
 
+    @Query("select b from BookList l join l.books b where l.id = :listId and l.user = :user "
+            + "and b.user = :user and b.deletedAt is null order by b.id desc")
+    Page<Book> findBookListPage(@Param("listId") Long listId, @Param("user") User user, Pageable pageable);
+
     Optional<Book> findByIdAndUserAndDeletedAtIsNotNullAndPurgedAtIsNull(Long id, User user);
 
     /** 按主键游标分页读取来源回填需要的最小字段。 */
