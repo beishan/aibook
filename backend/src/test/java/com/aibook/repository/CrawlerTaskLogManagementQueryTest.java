@@ -32,6 +32,13 @@ class CrawlerTaskLogManagementQueryTest {
                     session.createSelectionQuery(query.value());
                 }
             }
+            Set<String> activityQueries = Set.of("setRetained", "deleteSelected", "deleteUnretained", "deleteExpired");
+            for (Method method : CrawlerSiteActivityRepository.class.getMethods()) {
+                Query query = method.getAnnotation(Query.class);
+                if (query != null && activityQueries.contains(method.getName())) {
+                    session.createMutationQuery(query.value());
+                }
+            }
         }
     }
 }

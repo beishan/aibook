@@ -1,6 +1,6 @@
 {
   "name": "aibook-frontend",
-  "version": "1.49.49",
+  "version": "1.49.50",
   "description": "汗牛充栋 - 阅读书籍管理系统前端",
   "type": "module",
   "scripts": {
@@ -110,7 +110,8 @@
     "test:crawler-blacklist-screen": "node scripts/check-crawler-blacklist-screen.mjs",
     "test:crawler-auto-blacklist": "node scripts/check-crawler-auto-blacklist.mjs",
     "test:quick-reader-state": "node scripts/check-quick-reader-state.mjs",
-    "test:shelf-display-preferences": "node scripts/check-shelf-display-preferences.mjs"
+    "test:shelf-display-preferences": "node scripts/check-shelf-display-preferences.mjs",
+    "test:site-activity-management": "node scripts/check-site-activity-management.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",

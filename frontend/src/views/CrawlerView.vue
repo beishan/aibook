@@ -2071,85 +2071,124 @@
         <span>ACTIVITY LEDGER</span>
         <p>查看扫描结果、源站访问限制和书籍采集状态。访问限制会附带保护原因与预计恢复时间。</p>
       </div>
-      <div class="site-activity-filters">
-        <span>行为类型</span>
-        <el-select
-          v-model="siteActivityEventType"
-          clearable
-          placeholder="全部行为类型"
-          aria-label="行为类型筛选"
-          @change="handleSiteActivityTypeChange"
-        >
-          <el-option
-            v-for="eventType in siteActivityEventTypes"
-            :key="eventType"
-            :label="siteActivityLabel(eventType)"
-            :value="eventType"
-          />
-        </el-select>
+      <div class="site-activity-tabs" role="tablist" aria-label="网站行为记录设置" @keydown="handleActivityTabKey">
+        <span class="site-activity-tab-indicator" :style="{ transform: `translateX(${siteActivityTab === 'records' ? 0 : 100}%)` }" />
+        <button v-for="tab in siteActivityTabs" :key="tab.value" type="button" role="tab"
+          :aria-selected="siteActivityTab === tab.value" :tabindex="siteActivityTab === tab.value ? 0 : -1"
+          :class="{ active: siteActivityTab === tab.value }" @click="siteActivityTab = tab.value">
+          {{ tab.label }}
+        </button>
       </div>
-      <el-table
-        v-loading="siteActivityLoading"
-        :data="siteActivities"
-        row-key="id"
-        max-height="56vh"
-        class="site-activity-table"
-      >
-        <el-table-column label="行为类型" width="150">
-          <template #default="{ row }">
-            <el-tag :type="siteActivityType(row.eventType)" effect="light">
-              {{ siteActivityLabel(row.eventType) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="时间" width="170">
-          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
-        </el-table-column>
-        <el-table-column label="行为描述" min-width="210" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.description }}</template>
-        </el-table-column>
-        <el-table-column label="详情信息" min-width="300">
-          <template #default="{ row }">
-            <p class="site-activity-details" :title="row.details || ''">
-              {{ row.details || '暂无补充详情' }}
-            </p>
-          </template>
-        </el-table-column>
-        <el-table-column label="结果" width="130" :fixed="isMobileCrawlerLayout ? false : 'right'" align="right">
-          <template #default="{ row }">
-            <el-button
-              v-if="row.eventType === 'DISCOVERY_SCAN' && row.taskId"
-              text
-              type="primary"
-              :loading="siteActivityScanTaskId === row.taskId"
-              @click="openActivityScanResults(row)"
-            >
-              查看扫描结果
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty
-        v-if="!siteActivityLoading && !siteActivities.length"
-        :image-size="72"
-        description="暂无行为记录；完成扫描或采集后，关键结果会显示在这里"
-      />
-      <div v-if="siteActivityTotal" class="site-activity-pagination">
-        <span>共 {{ siteActivityTotal }} 条行为记录</span>
-        <el-pagination
-          v-model:current-page="siteActivityPage"
-          v-model:page-size="siteActivityPageSize"
-          :page-sizes="[10, 20, 50]"
-          :total="siteActivityTotal"
-          layout="sizes, prev, pager, next"
-          background
-          small
-          @current-change="loadSiteActivities"
-          @size-change="handleSiteActivitySizeChange"
+      <div v-if="siteActivityTab === 'records'" role="tabpanel">
+        <div class="site-activity-filters">
+          <span>行为类型</span>
+          <el-select
+            v-model="siteActivityEventType"
+            clearable
+            placeholder="全部行为类型"
+            aria-label="行为类型筛选"
+            @change="handleSiteActivityTypeChange"
+          >
+            <el-option
+              v-for="eventType in siteActivityEventTypes"
+              :key="eventType"
+              :label="siteActivityLabel(eventType)"
+              :value="eventType"
+            />
+          </el-select>
+        </div>
+        <div class="site-activity-actions">
+          <span>已选 {{ selectedSiteActivities.length }} 条</span>
+          <el-button :disabled="!selectedSiteActivities.length || siteActivityBusy || siteActivityLoading"
+            @click="retainSiteActivities(true)">保留所选</el-button>
+          <el-button :disabled="!selectedSiteActivities.length || siteActivityBusy || siteActivityLoading"
+            @click="retainSiteActivities(false)">取消保留</el-button>
+          <el-button type="danger" plain :disabled="!selectedSiteActivities.length || siteActivityBusy || siteActivityLoading"
+            @click="deleteSiteActivities">删除所选</el-button>
+          <el-button type="danger" :disabled="siteActivityBusy || siteActivityLoading"
+            @click="clearSiteActivities">一键清理未保留记录</el-button>
+        </div>
+        <el-table
+          v-loading="siteActivityLoading"
+          :data="siteActivities"
+          row-key="id"
+          max-height="56vh"
+          class="site-activity-table"
+          @selection-change="selectedSiteActivities = $event"
+        >
+          <el-table-column type="selection" width="48" />
+          <el-table-column label="行为类型" width="150">
+            <template #default="{ row }">
+              <el-tag :type="siteActivityType(row.eventType)" effect="light">
+                {{ siteActivityLabel(row.eventType) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="时间" width="170">
+            <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+          </el-table-column>
+          <el-table-column label="行为描述" min-width="210" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.description }}</template>
+          </el-table-column>
+          <el-table-column label="详情信息" min-width="300">
+            <template #default="{ row }">
+              <p class="site-activity-details" :title="row.details || ''">
+                {{ row.details || '暂无补充详情' }}
+              </p>
+            </template>
+          </el-table-column>
+          <el-table-column label="保留" width="85">
+            <template #default="{ row }">{{ row.retained ? '已保留' : '普通' }}</template>
+          </el-table-column>
+          <el-table-column label="结果" width="130" :fixed="isMobileCrawlerLayout ? false : 'right'" align="right">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.eventType === 'DISCOVERY_SCAN' && row.taskId"
+                text
+                type="primary"
+                :loading="siteActivityScanTaskId === row.taskId"
+                @click="openActivityScanResults(row)"
+              >
+                查看扫描结果
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty
+          v-if="!siteActivityLoading && !siteActivities.length"
+          :image-size="72"
+          description="暂无行为记录；完成扫描或采集后，关键结果会显示在这里"
         />
+        <div v-if="siteActivityTotal" class="site-activity-pagination">
+          <span>共 {{ siteActivityTotal }} 条行为记录</span>
+          <el-pagination
+            v-model:current-page="siteActivityPage"
+            v-model:page-size="siteActivityPageSize"
+            :page-sizes="[10, 20, 50]"
+            :total="siteActivityTotal"
+            layout="sizes, prev, pager, next"
+            background
+            small
+            @current-change="loadSiteActivities"
+            @size-change="handleSiteActivitySizeChange"
+          />
+        </div>
+      </div>
+      <div v-else role="tabpanel" v-loading="siteActivityPolicyLoading" class="site-activity-policy">
+        <p>此策略仅作用于当前网站。保留天数为 0 表示永久保存；开启自动清理后，每天北京时间 02:00 物理删除超期且未保留的行为记录。</p>
+        <el-button v-if="!siteActivityPolicyLoaded && !siteActivityPolicyLoading" @click="loadSiteActivityPolicy">重新加载策略</el-button>
+        <el-form label-position="top">
+          <el-form-item label="保留天数（0–3650）">
+            <el-input-number v-model="siteActivityPolicy.retentionDays" :min="0" :max="3650" :precision="0" :disabled="siteActivityBusy || !siteActivityPolicyLoaded" />
+          </el-form-item>
+          <el-form-item label="自动清理">
+            <el-switch v-model="siteActivityPolicy.automatic" :disabled="siteActivityBusy || !siteActivityPolicyLoaded" />
+          </el-form-item>
+          <el-button type="primary" :disabled="siteActivityBusy || !siteActivityPolicyLoaded" @click="saveSiteActivityPolicy">保存策略</el-button>
+        </el-form>
       </div>
       <template #footer>
-        <el-button :loading="siteActivityLoading" @click="loadSiteActivities">刷新</el-button>
+        <el-button v-if="siteActivityTab === 'records'" :loading="siteActivityLoading" :disabled="siteActivityBusy" @click="loadSiteActivities">刷新</el-button>
         <el-button @click="siteActivityDialog = false">关闭</el-button>
       </template>
     </el-dialog>
@@ -2957,6 +2996,17 @@ const siteActivityDialog=ref(false), siteActivityLoading=ref(false), siteActivit
 const siteActivities=ref<CrawlerSiteActivity[]>([]), siteActivityPage=ref(1), siteActivityPageSize=ref(20)
 const siteActivityTotal=ref(0), siteActivityScanTaskId=ref<string>()
 const siteActivityEventType = ref<CrawlerSiteActivity['eventType']>()
+const siteActivityTabs = [
+  { value: 'records', label: '行为记录' },
+  { value: 'policy', label: '保留策略' },
+] as const
+const siteActivityTab = ref<'records' | 'policy'>('records')
+const selectedSiteActivities = ref<CrawlerSiteActivity[]>([])
+const siteActivityBusy = ref(false)
+const siteActivityPolicyLoading = ref(false)
+const siteActivityPolicyLoaded = ref(false)
+const siteActivityPolicy = ref({ retentionDays: 0, automatic: false })
+let siteActivityPolicyRequestSequence = 0
 const siteActivityEventTypes: CrawlerSiteActivity['eventType'][] = [
   'DISCOVERY_SCAN', 'ACCESS_LIMITED', 'CHAPTER_CRAWL_ERROR',
   'BOOK_CRAWL_COMPLETED', 'BOOK_CRAWL_PARTIAL', 'TASK_FAILED',
@@ -4686,8 +4736,13 @@ function openSiteActivities(site:CrawlerSite) {
   siteActivityPage.value = 1
   siteActivities.value = []
   siteActivityTotal.value = 0
+  selectedSiteActivities.value = []
+  siteActivityTab.value = 'records'
+  siteActivityPolicy.value = { retentionDays: 0, automatic: false }
+  siteActivityPolicyLoaded.value = false
   siteActivityDialog.value = true
   void loadSiteActivities()
+  void loadSiteActivityPolicy()
 }
 
 async function loadSiteActivities() {
@@ -4696,6 +4751,7 @@ async function loadSiteActivities() {
 
   const requestSequence = ++siteActivityRequestSequence
   siteActivityLoading.value = true
+  selectedSiteActivities.value = []
   try {
     const result = await crawlerApi.siteActivities(
       site.id,
@@ -4706,14 +4762,116 @@ async function loadSiteActivities() {
     if (requestSequence !== siteActivityRequestSequence) return
     siteActivities.value = result.content
     siteActivityTotal.value = result.totalElements
+    const lastPage = Math.max(1, Math.ceil(result.totalElements / siteActivityPageSize.value))
+    if (siteActivityPage.value > lastPage) {
+      siteActivityPage.value = lastPage
+      await loadSiteActivities()
+    }
   } catch (error: any) {
     if (requestSequence === siteActivityRequestSequence) {
+      siteActivities.value = []
+      siteActivityTotal.value = 0
       message.error(error.response?.data?.message || '网站行为记录加载失败')
     }
   } finally {
     if (requestSequence === siteActivityRequestSequence) {
       siteActivityLoading.value = false
     }
+  }
+}
+
+function handleActivityTabKey(event: KeyboardEvent) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  if (event.key === 'Home') siteActivityTab.value = 'records'
+  else if (event.key === 'End') siteActivityTab.value = 'policy'
+  else siteActivityTab.value = siteActivityTab.value === 'records' ? 'policy' : 'records'
+  requestAnimationFrame(() => {
+    const index = siteActivityTab.value === 'records' ? 0 : 1
+    document.querySelectorAll<HTMLButtonElement>('.site-activity-tabs button')[index]?.focus()
+  })
+}
+
+async function loadSiteActivityPolicy() {
+  const site = siteActivitySite.value
+  if (!site) return
+  const request = ++siteActivityPolicyRequestSequence
+  siteActivityPolicyLoading.value = true
+  try {
+    const result = await crawlerApi.siteActivityRetention(site.id)
+    if (request !== siteActivityPolicyRequestSequence) return
+    siteActivityPolicy.value = result
+    siteActivityPolicyLoaded.value = true
+  } catch (error: any) {
+    if (request === siteActivityPolicyRequestSequence) {
+      message.error(error.response?.data?.message || '网站行为记录策略加载失败')
+    }
+  } finally {
+    if (request === siteActivityPolicyRequestSequence) siteActivityPolicyLoading.value = false
+  }
+}
+
+async function saveSiteActivityPolicy() {
+  const site = siteActivitySite.value
+  if (!site || siteActivityBusy.value || !siteActivityPolicyLoaded.value) return
+  siteActivityBusy.value = true
+  try {
+    const policy = await crawlerApi.saveSiteActivityRetention(site.id, { ...siteActivityPolicy.value })
+    if (siteActivitySite.value?.id === site.id) siteActivityPolicy.value = policy
+    message.success('网站行为记录保留策略已保存')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '保存策略失败')
+  } finally {
+    siteActivityBusy.value = false
+  }
+}
+
+async function retainSiteActivities(retained: boolean) {
+  const site = siteActivitySite.value
+  const ids = selectedSiteActivities.value.map(item => item.id)
+  if (!site || !ids.length || siteActivityBusy.value) return
+  siteActivityBusy.value = true
+  try {
+    const result = await crawlerApi.retainSiteActivities(site.id, ids, retained)
+    message.success(`已处理 ${result.affectedCount} 条记录`)
+    if (siteActivitySite.value?.id === site.id) await loadSiteActivities()
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '修改保留状态失败')
+  } finally {
+    siteActivityBusy.value = false
+  }
+}
+
+async function deleteSiteActivities() {
+  const site = siteActivitySite.value
+  const ids = selectedSiteActivities.value.map(item => item.id)
+  if (!site || !ids.length || siteActivityBusy.value) return
+  siteActivityBusy.value = true
+  try {
+    if (!await confirm(`确定永久删除选中的 ${ids.length} 条行为记录吗？已保留的记录也会删除，无法恢复。`)) return
+    const result = await crawlerApi.deleteSiteActivities(site.id, ids)
+    message.success(`已删除 ${result.affectedCount} 条记录`)
+    if (siteActivitySite.value?.id === site.id) await loadSiteActivities()
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '删除行为记录失败')
+  } finally {
+    siteActivityBusy.value = false
+  }
+}
+
+async function clearSiteActivities() {
+  const site = siteActivitySite.value
+  if (!site || siteActivityBusy.value) return
+  siteActivityBusy.value = true
+  try {
+    if (!await confirm(`确定永久清理“${site.siteName}”的全部未保留行为记录吗？此操作不受当前筛选和保留天数限制，无法恢复。`)) return
+    const result = await crawlerApi.clearSiteActivities(site.id)
+    message.success(`已清理 ${result.deletedCount} 条记录`)
+    if (siteActivitySite.value?.id === site.id) await loadSiteActivities()
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '清理行为记录失败')
+  } finally {
+    siteActivityBusy.value = false
   }
 }
 
@@ -7346,6 +7504,66 @@ function handlePriorityKey(e:KeyboardEvent){if(!['ArrowLeft','ArrowRight','Home'
 
 .chapter-duration-empty {
   color: var(--text-tertiary);
+}
+.site-activity-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(100px, 1fr));
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-page);
+  isolation: isolate;
+  overflow-x: auto;
+}
+.site-activity-tab-indicator {
+  position: absolute;
+  inset: 4px auto 4px 4px;
+  width: calc((100% - 8px) / 2);
+  border: 1px solid var(--border-color-light);
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  transition: transform .25s cubic-bezier(.2, .8, .2, 1);
+}
+.site-activity-tabs button {
+  position: relative;
+  z-index: 1;
+  padding: 9px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.site-activity-tabs button.active {
+  color: var(--primary);
+  font-weight: 700;
+}
+.site-activity-tabs button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-radius: 10px;
+}
+.site-activity-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.site-activity-actions .el-button + .el-button {
+  margin-left: 0;
+}
+.site-activity-policy {
+  padding: 16px 0;
+}
+.site-activity-policy p {
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-activity-tab-indicator {
+    transition: none;
+  }
 }
 </style>
 
