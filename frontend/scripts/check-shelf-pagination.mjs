@@ -89,7 +89,7 @@ const options = [12, 24, 48, 96]
 const setterSource = preferenceSource.slice(preferenceSource.indexOf('  const setShelfPageSize ='),
   preferenceSource.indexOf('  const setCategoryPageSize ='))
 const setSize = new Function('shelfPageSize', 'SHELF_PAGE_SIZE_OPTIONS', 'persistRemote',
-  ts.transpile(setterSource + '\nreturn setShelfPageSize;', { target: ts.ScriptTarget.ES2022 }))(
+  ts.transpile('let shelfPageSizeRevision = 0;\n' + setterSource + '\nreturn setShelfPageSize;', { target: ts.ScriptTarget.ES2022 }))(
   accountSize, options, patch => remoteWrites.push(patch),
 )
 setSize(48)
@@ -98,15 +98,17 @@ assert.deepEqual(remoteWrites, [{ shelfPageSize: 48 }])
 for (const invalid of [0, -1, 25, 100]) setSize(invalid)
 assert.equal(accountSize.value, 48)
 assert.equal(remoteWrites.length, 1)
-const hydrationSource = preferenceSource.slice(preferenceSource.indexOf('      setShelfPageSize('),
+const hydrationSource = preferenceSource.slice(preferenceSource.indexOf('      if (pageSizeRevision === shelfPageSizeRevision)'),
   preferenceSource.indexOf('      setCategoryPageSize('))
-const hydrateSize = new Function('data', 'SHELF_PAGE_SIZE_OPTIONS', 'setShelfPageSize', ts.transpile(hydrationSource))
+const hydrateSize = new Function('data', 'SHELF_PAGE_SIZE_OPTIONS', 'setShelfPageSize', 'pageSizeRevision', 'shelfPageSizeRevision', ts.transpile(hydrationSource))
 hydrateSize({ shelfPageSize: 96 }, options, setSize)
 assert.equal(accountSize.value, 96)
 hydrateSize({ shelfPageSize: 1000 }, options, setSize)
 assert.equal(accountSize.value, 24)
 hydrateSize({}, options, setSize)
 assert.equal(accountSize.value, 24)
+hydrateSize({ shelfPageSize: 96 }, options, setSize, 0, 1)
+assert.equal(accountSize.value, 24, 'stale hydration must not overwrite a newer selection')
 assert.equal(remoteWrites.length, 1, 'hydration must not write preferences back')
 assert.match(preferenceSource, /const resetHydration = \(\) => \{[\s\S]*?shelfPageSize.value = 24/)
 

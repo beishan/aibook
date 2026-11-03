@@ -49,7 +49,7 @@ for (const value of [0, -1, 101, 2.5]) setters.setBookNamePrefixLength(value)
 setters.setBookNameMaskMode('INVALID')
 assert.equal(writes.length, 3)
 
-const hydration = preferences.slice(preferences.indexOf('      setHideBookNames('), preferences.indexOf('      setShelfPageSize('))
+const hydration = preferences.slice(preferences.indexOf('      setHideBookNames('), preferences.indexOf('      if (pageSizeRevision === shelfPageSizeRevision)'))
 let restoredDisplayTab
 const restoreDisplayTab = (value, syncRemote) => {
   restoredDisplayTab = value
@@ -84,7 +84,7 @@ state.bookNameMaskMode = 'PREFIX'
 assert.equal(displayBookName('三国演义'), '三国**')
 const resetSource = preferences.slice(preferences.indexOf('  const resetHydration ='), preferences.indexOf('    crawlerHideBookNames.value = false', preferences.indexOf('  const resetHydration =')))
 const bookDisplaySettingsTab = ref('cover')
-new Function('hideBookNames', 'bookNameMaskMode', 'bookNamePrefixLength', 'bookNameMaskCharacter', 'bookDisplaySettingsTab', 'let hydrationSequence = 0; const navigationMenuOrder = { value: [] }; const defaultNavigationMenuOrder = () => [];\n' + resetSource + '}\nresetHydration();')(
+new Function('hideBookNames', 'bookNameMaskMode', 'bookNamePrefixLength', 'bookNameMaskCharacter', 'bookDisplaySettingsTab', 'let hydrationSequence = 0; let tagManagePageSizeRevision = 0; const tagManagePageSize = { value: 20 }; const navigationMenuOrder = { value: [] }; const defaultNavigationMenuOrder = () => [];\n' + resetSource + '}\nresetHydration();')(
   hideBookNames, bookNameMaskMode, bookNamePrefixLength, bookNameMaskCharacter, bookDisplaySettingsTab,
 )
 assert.equal(bookDisplaySettingsTab.value, 'name')
@@ -126,6 +126,7 @@ const pending = []
 let activeToken = 'account-a'
 const guardContext = vm.createContext({
   hydrated: ref(false), hydrationSequence: 0, applied: 0,
+  tagManagePageSizeRevision: 0, shelfViewRevision: 0, shelfSizeRevision: 0, shelfPageSizeRevision: 0,
   localStorage: { getItem: () => activeToken },
   api: { get: () => new Promise(resolve => pending.push(resolve)) },
 })

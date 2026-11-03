@@ -42,6 +42,20 @@
         </div>
         <div class="book-info">
           <div class="book-title">{{ displayBookName(book.title) }}</div>
+          <div
+            v-if="book.totalProgress != null"
+            class="book-progress"
+            role="progressbar"
+            :aria-label="`${displayBookName(book.title)}阅读进度`"
+            :aria-valuenow="readingPercent(book.totalProgress)"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <span :style="{ width: `${readingPercent(book.totalProgress)}%` }" />
+          </div>
+          <small class="progress-label">
+            {{ book.totalProgress == null ? '尚未开始' : `已读 ${readingPercent(book.totalProgress)}%` }}
+          </small>
         </div>
       </div>
     </div>
@@ -56,12 +70,13 @@
       <p>书单中暂无书籍</p>
       <button class="btn btn-primary" @click="$router.push('/books')">去书库添加</button>
     </div>
-    <div v-if="!loadError && total > pageSize" class="booklist-pagination">
+    <div v-if="!loadError && total > 0" class="booklist-pagination">
       <el-pagination
         v-model:current-page="page"
-        :page-size="pageSize"
+        v-model:page-size="pageSize"
+        :page-sizes="[...SHELF_PAGE_SIZE_OPTIONS]"
         :total="total"
-        layout="total, prev, pager, next"
+        layout="total, sizes, prev, pager, next"
         background
         @current-change="loadBookList"
       />
@@ -73,22 +88,26 @@
 import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import BookCardBadges from '@/components/BookCardBadges.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
-import { ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/utils/api'
 import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import BookCoverPrivacyButton from '@/components/BookCoverPrivacyButton.vue'
+import { SHELF_PAGE_SIZE_OPTIONS, usePreferencesStore } from '@/stores/preferences'
+import { readingPercent } from '@/utils/home'
 
 const { displayBookName } = useBookNameDisplay()
 
 const route = useRoute()
+const preferencesStore = usePreferencesStore()
 interface BookCard {
   id: number
   title: string
   author?: string
   format?: string
   coverUrl?: string
+  totalProgress?: number | null
 }
 interface BookListPage {
   id: number
@@ -101,7 +120,10 @@ const books = ref<BookCard[]>([])
 const loading = ref(true)
 const loadError = ref(false)
 const page = ref(1)
-const pageSize = 24
+const pageSize = computed({
+  get: () => preferencesStore.shelfPageSize,
+  set: (value: number) => preferencesStore.setShelfPageSize(value),
+})
 const total = ref(0)
 let requestSequence = 0
 
@@ -112,12 +134,12 @@ const loadBookList = async () => {
   loadError.value = false
   try {
     const response = await api.get<BookListPage>(`/api/booklists/${listId}/books`, {
-      params: { page: page.value - 1, size: pageSize },
+      params: { page: page.value - 1, size: pageSize.value },
     })
     if (request !== requestSequence) return
     bookList.value = response.data
     total.value = response.data.books.totalElements
-    const lastPage = Math.max(1, Math.ceil(total.value / pageSize))
+    const lastPage = Math.max(1, Math.ceil(total.value / pageSize.value))
     if (page.value > lastPage) {
       page.value = lastPage
       await loadBookList()
@@ -140,9 +162,32 @@ watch(() => route.params.id, () => {
   total.value = 0
   void loadBookList()
 }, { immediate: true })
+watch(pageSize, () => {
+  page.value = 1
+  void loadBookList()
+})
+onMounted(() => { void preferencesStore.hydrate() })
 </script>
 
 <style scoped>
+.book-progress {
+  height: 4px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--border-color-light);
+}
+.book-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+}
+.progress-label {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-secondary);
+}
 .booklist-pagination {
   display: flex;
   justify-content: center;

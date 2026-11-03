@@ -522,6 +522,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   let shelfViewRevision = 0
   let shelfSizeRevision = 0
   const shelfPageSize = ref(24)
+  let shelfPageSizeRevision = 0
   const categoryPageSize = ref(20)
   const themeStore = useThemeStore()
   const libraryViewMode = ref<LibraryViewMode>(readLocalLibraryViewMode())
@@ -917,6 +918,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   const setShelfPageSize = (value: number, syncRemote = true) => {
     if (!(SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(value)) return
+    if (syncRemote) shelfPageSizeRevision++
     shelfPageSize.value = value
     if (syncRemote) persistRemote({ shelfPageSize: value })
   }
@@ -1005,6 +1007,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const tagPageRevision = tagManagePageSizeRevision
     const viewRevision = shelfViewRevision
     const sizeRevision = shelfSizeRevision
+    const pageSizeRevision = shelfPageSizeRevision
 
     try {
       const { data } = await api.get<UserPreferences>('/api/user/preferences')
@@ -1180,8 +1183,10 @@ export const usePreferencesStore = defineStore('preferences', () => {
       setBookNameMaskMode(data.bookNameMaskMode === 'PREFIX' ? 'PREFIX' : 'HEAD_TAIL', false)
       setBookNamePrefixLength(normalizeBookNamePrefixLength(data.bookNamePrefixLength), false)
       setBookNameMaskCharacter(normalizeBookNameMaskCharacter(data.bookNameMaskCharacter), false)
-      setShelfPageSize((SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(data.shelfPageSize ?? 0)
-        ? data.shelfPageSize! : 24, false)
+      if (pageSizeRevision === shelfPageSizeRevision) {
+        setShelfPageSize((SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(data.shelfPageSize ?? 0)
+          ? data.shelfPageSize! : 24, false)
+      }
       setCategoryPageSize([10, 20, 50, 100].includes(data.categoryPageSize ?? 0)
         ? data.categoryPageSize! : 20, false)
 
@@ -1222,6 +1227,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     crawlerHideBookNames.value = false
     shelfViewRevision++
     shelfSizeRevision++
+    shelfPageSizeRevision++
     shelfViewMode.value = 'grid'
     shelfCardSize.value = 'medium'
     shelfPageSize.value = 24

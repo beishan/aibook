@@ -12,7 +12,7 @@ const ref = value => ({ value })
 const pending = []
 const context = vm.createContext({
   route: { params: { id: '1' } }, bookList: ref(null), books: ref([]), loading: ref(false),
-  loadError: ref(false), page: ref(1), pageSize: 24, total: ref(0), requestSequence: 0,
+  loadError: ref(false), page: ref(1), pageSize: ref(24), total: ref(0), requestSequence: 0,
   api: { get: (url, options) => new Promise((resolve, reject) => pending.push({ url, options, resolve, reject })) },
 })
 vm.runInContext(ts.transpile(declaration.getText(ast).replace('const loadBookList', 'var loadBookList'),
@@ -36,15 +36,21 @@ pending[1].resolve({ data: { id: 1, name: '旧书单', books: { content: [{ id: 
 await old
 assert.equal(context.bookList.value.id, 2)
 assert.equal(context.books.value[0].id, 2)
+context.pageSize.value = 12
+const resized = run('loadBookList()')
+assert.equal(pending[3].options.params.size, 12)
+pending[3].resolve({ data: { id: 2, books: { content: [{ id: 2, totalProgress: 42 }], totalElements: 1 } } })
+await resized
+assert.equal(context.books.value[0].totalProgress, 42)
 context.page.value = 3
 const shrink = run('loadBookList()')
-pending[3].resolve({ data: { id: 2, books: { content: [], totalElements: 1 } } })
+pending[4].resolve({ data: { id: 2, books: { content: [], totalElements: 1 } } })
 await new Promise(resolve => setTimeout(resolve, 0))
 assert.equal(context.page.value, 1)
-pending[4].resolve({ data: { id: 2, books: { content: [{ id: 2 }], totalElements: 1 } } })
+pending[5].resolve({ data: { id: 2, books: { content: [{ id: 2 }], totalElements: 1 } } })
 await shrink
 const failed = run('loadBookList()')
-pending[5].reject(new Error('offline'))
+pending[6].reject(new Error('offline'))
 await failed
 assert.equal(context.loadError.value, true)
 assert.equal(context.books.value.length, 0)
