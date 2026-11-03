@@ -271,7 +271,7 @@
                   <button
                     v-if="!isExecutionDeleted(execution)"
                     type="button"
-                    class="btn btn-danger"
+                    class="btn btn-danger backup-execution-delete"
                     :disabled="deletingExecutionId !== null || isExecutionActive(execution)"
                     :title="isExecutionActive(execution) ? '请等待备份执行结束后删除' : '删除记录及备份文件'"
                     @click="removeExecution(execution)"
@@ -1182,6 +1182,28 @@ onBeforeUnmount(() => {
 .execution-progress-track.is-indeterminate > span {
   width: 38% !important;
   animation: backup-progress-slide 1.2s ease-in-out infinite alternate;
+}
+
+.backup-execution-delete {
+  color: #fff;
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.backup-execution-delete:not(:disabled):hover {
+  color: #fff;
+  background: #991b1b;
+  border-color: #991b1b;
+}
+
+.backup-execution-delete:focus-visible {
+  outline: 3px solid #ef4444;
+  outline-offset: 2px;
+}
+
+.backup-execution-delete:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .execution-detail-button {
