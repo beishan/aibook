@@ -122,6 +122,31 @@ public class UserService implements UserDetailsService {
         return toPreferences(user);
     }
 
+    public record ComicPreferences(String mode, String direction, String fit) {}
+
+    public ComicPreferences getComicPreferences(String username) {
+        User user = findByUsername(username);
+        return new ComicPreferences(
+                "scroll".equals(user.getComicReadingMode()) ? "scroll" : "single",
+                "rtl".equals(user.getComicReadingDirection()) ? "rtl" : "ltr",
+                "width".equals(user.getComicReadingFit()) ? "width" : "page");
+    }
+
+    @Transactional
+    public ComicPreferences updateComicPreferences(String username, ComicPreferences preferences) {
+        if (!("single".equals(preferences.mode()) || "scroll".equals(preferences.mode()))
+                || !("ltr".equals(preferences.direction()) || "rtl".equals(preferences.direction()))
+                || !("page".equals(preferences.fit()) || "width".equals(preferences.fit()))) {
+            throw new IllegalArgumentException("漫画阅读设置无效");
+        }
+        User user = findByUsername(username);
+        user.setComicReadingMode(preferences.mode());
+        user.setComicReadingDirection(preferences.direction());
+        user.setComicReadingFit(preferences.fit());
+        userRepository.save(user);
+        return preferences;
+    }
+
     public List<RewriteSearchRuleDTO> getRewriteSearchRules(String username) {
         return readRewriteSearchRules(findByUsername(username).getRewriteSearchRules());
     }

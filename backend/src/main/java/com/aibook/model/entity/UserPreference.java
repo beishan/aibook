@@ -37,6 +37,10 @@ public class UserPreference {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
+    private String comicReadingMode;
+    private String comicReadingDirection;
+    private String comicReadingFit;
+
     @Column(name = "book_preferences", columnDefinition = "TEXT")
     private String bookPreferences;
 

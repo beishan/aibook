@@ -75,12 +75,18 @@ public class ReadingProgressService {
                 .orElseThrow(() -> new RuntimeException("书籍不存在"));
         BookVersion version = bookVersionService.resolveVersion(book, versionId);
 
-        VersionReadingProgress progress =
-                versionProgressRepository.findByUserAndVersionForUpdate(user, version)
-                .orElse(VersionReadingProgress.builder()
-                        .version(version)
-                        .user(user)
-                        .build());
+        VersionReadingProgress progress = versionProgressRepository
+                .findByUserAndVersionForUpdate(user, version)
+                .orElseGet(() -> VersionReadingProgress.builder().version(version).user(user).build());
+        return savePosition(book, user, progress, currentChapter, currentChapterTitle,
+                chapterProgress, totalProgress, locator);
+    }
+
+    com.aibook.dto.ReadingProgressDTO savePosition(
+            Book book, User user, VersionReadingProgress progress, String currentChapter,
+            String currentChapterTitle, Integer chapterProgress, Integer totalProgress,
+            String locator) {
+        BookVersion version = progress.getVersion();
         LocalDate legacyDate = progress.getLastReadAt() == null
                 ? null : progress.getLastReadAt().toLocalDate();
 

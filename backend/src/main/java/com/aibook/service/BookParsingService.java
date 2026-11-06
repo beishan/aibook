@@ -58,6 +58,7 @@ public class BookParsingService {
     private final ObjectMapper objectMapper;
     private final BookCoverService bookCoverService;
     private final AuthorService authorService;
+    private final ComicArchiveService comicArchiveService;
 
     @Transactional
     public ParseResult reparse(Book book) {
@@ -75,6 +76,12 @@ public class BookParsingService {
             switch (format) {
                 case "txt", "md" -> parseText(book, file, updatedFields);
                 case "epub" -> parseEpubMetadata(book, file, updatedFields);
+                case "cbz" -> {
+                    updateTitleFromFilename(book, file, updatedFields);
+                    if (extractComicCover(book, file)) {
+                        updatedFields.add("coverUrl");
+                    }
+                }
                 default -> updateTitleFromFilename(book, file, updatedFields);
             }
 
@@ -83,6 +90,7 @@ public class BookParsingService {
             String message = switch (format) {
                 case "txt", "md" -> "文本信息与章节已重新解析";
                 case "epub" -> "EPUB 元数据、内容简介与章节已重新解析";
+                case "cbz" -> "漫画文件信息已刷新";
                 default -> "文件信息已刷新，当前格式暂不支持章节解析";
             };
             return ParseResult.builder()
@@ -114,6 +122,39 @@ public class BookParsingService {
         if (updatedFields.contains("title")) {
             BookMetadataSources.mark(book, "title", "filename");
         }
+    }
+
+    /** Generates a fallback cover and refreshes it when the comic file changes. */
+    public boolean extractComicCover(Book book, Path file) {
+        String oldCover = book.getCoverUrl();
+        String marker = book.getComicCoverSource();
+        boolean generated = marker != null && oldCover != null
+                && marker.startsWith(oldCover + ":");
+        if (!generated && oldCover != null && !oldCover.isBlank()) {
+            return false;
+        }
+        boolean cleared = false;
+        try {
+            var source = comicArchiveService.source(file.toString(), book.getFileHash());
+            if (generated && marker.equals(oldCover + ":" + source.revision())) {
+                return false;
+            }
+            if (generated) {
+                book.setCoverUrl(null);
+                book.setComicCoverSource(null);
+                cleared = true;
+            }
+            var cover = comicArchiveService.cover(source);
+            if (cover.isPresent() && bookCoverService.storeExtractedCover(
+                    book, cover.get().bytes(), cover.get().contentType())) {
+                book.setComicCoverSource(book.getCoverUrl() + ":" + source.revision());
+                return true;
+            }
+        } catch (ResponseStatusException exception) {
+            // An unreadable cover does not prevent importing or reading the original file.
+            log.debug("漫画封面不可用: {}", exception.getReason());
+        }
+        return cleared;
     }
 
     /**

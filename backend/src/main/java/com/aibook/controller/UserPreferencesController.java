@@ -37,6 +37,17 @@ public class UserPreferencesController {
                 userService.updatePreferences(authentication.getName(), request));
     }
 
+    @GetMapping("/comic")
+    public UserService.ComicPreferences getComicPreferences(Authentication authentication) {
+        return userService.getComicPreferences(authentication.getName());
+    }
+
+    @PutMapping("/comic")
+    public UserService.ComicPreferences updateComicPreferences(
+            Authentication authentication, @RequestBody UserService.ComicPreferences request) {
+        return userService.updateComicPreferences(authentication.getName(), request);
+    }
+
     @GetMapping("/rewrite-search-rules")
     public ResponseEntity<List<RewriteSearchRuleDTO>> getRewriteSearchRules(
             Authentication authentication) {

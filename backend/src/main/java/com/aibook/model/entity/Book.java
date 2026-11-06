@@ -85,6 +85,9 @@ public class Book {
      */
     private String coverUrl;
 
+    /** Marks a generated comic cover so replacing a file never overwrites a manual cover. */
+    private String comicCoverSource;
+
     /** 单书封面显示策略：null 沿用账户默认，true 隐藏，false 显示；优先于账户设置。 */
     @Column(name = "cover_hidden")
     private Boolean coverHidden;

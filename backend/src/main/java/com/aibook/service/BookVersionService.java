@@ -59,11 +59,19 @@ public class BookVersionService {
     public List<com.aibook.dto.BookVersionDTO> getVersions(Book book) {
         if (book.getFormat() == null) return List.of();
         ensurePrimaryVersion(book);
-        return bookVersionRepository
-                .findByBookOrderByPrimaryVersionDescCreatedAtAsc(book)
-                .stream()
-                .map(this::toDTO)
-                .toList();
+        List<BookVersion> versions = bookVersionRepository.findByBookOrderByPrimaryVersionDescCreatedAtAsc(book);
+        Long lastReadId = versions.stream().anyMatch(version -> "cbz".equalsIgnoreCase(version.getFormat()))
+                ? versionProgressRepository
+                        .findFirstByUserAndVersionBookAndLastReadAtIsNotNullOrderByLastReadAtDescIdDesc(
+                                book.getUser(), book)
+                        .map(progress -> progress.getVersion().getId())
+                        .orElse(null)
+                : null;
+        return versions.stream().map(version -> {
+            var dto = toDTO(version);
+            dto.setLastRead(lastReadId != null && lastReadId.equals(version.getId()));
+            return dto;
+        }).toList();
     }
 
     @Transactional

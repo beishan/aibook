@@ -11,6 +11,7 @@ import com.aibook.repository.projections.BookStatisticsProjections.BookFormatCou
 import com.aibook.repository.projections.BookStatisticsProjections.BookRatingCount;
 import com.aibook.repository.projections.BookStatisticsProjections.BookStatusCount;
 import com.aibook.repository.projections.BookTitleMatchProjection;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import java.time.LocalDateTime;
@@ -18,6 +19,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
@@ -85,6 +87,10 @@ public interface BookRepository
     Optional<Book> findByFileHashAndDeletedAtIsNull(String fileHash);
 
     Optional<Book> findByIdAndUserAndDeletedAtIsNull(Long id, User user);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select b from Book b where b.id = :id and b.user = :user and b.deletedAt is null")
+    Optional<Book> findOwnedBookForUpdate(@Param("id") Long id, @Param("user") User user);
 
     @Query("select b from BookList l join l.books b where l.id = :listId and l.user = :user "
             + "and b.user = :user and b.deletedAt is null order by b.id desc")

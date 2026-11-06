@@ -1276,6 +1276,7 @@ interface BookVersion {
   fileSize?: number
   primaryVersion: boolean
   selected?: boolean
+  lastRead?: boolean
   chapterCount?: number
 }
 
@@ -2086,12 +2087,26 @@ const loadBook = async () => {
     const requestedVersion = versions.value.find(
       version => version.id === requestedVersionId,
     )
+    if (requestedVersionId > 0 && !requestedVersion) {
+      await router.replace({ name: 'BookDetail', params: { id }, query: { versionId: String(requestedVersionId) } })
+      return
+    }
     const version = requestedVersion
+      || versions.value.find(item => item.lastRead && item.format !== 'cbr')
       || versions.value.find(item => item.selected)
       || versions.value.find(item => item.primaryVersion)
       || versions.value[0]
     if (!version) {
       throw new Error('书籍没有可阅读版本')
+    }
+    if (version.format === 'cbz' || version.format === 'cbr') {
+      if (route.query.quickWindow === '1') {
+        throw new Error('漫画请从书籍详情打开完整阅读页')
+      }
+      await router.replace(version.format === 'cbz'
+        ? { name: 'ComicReader', params: { id, versionId: version.id } }
+        : { name: 'BookDetail', params: { id }, query: { versionId: String(version.id) } })
+      return
     }
     selectedVersionId.value = version.id
     await api.put(`/api/books/${id}/versions/${version.id}/selection`)
