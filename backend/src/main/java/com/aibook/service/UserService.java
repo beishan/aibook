@@ -122,19 +122,23 @@ public class UserService implements UserDetailsService {
         return toPreferences(user);
     }
 
+    private static boolean isComicMode(String mode) {
+        return "single".equals(mode) || "double".equals(mode) || "scroll".equals(mode);
+    }
+
     public record ComicPreferences(String mode, String direction, String fit) {}
 
     public ComicPreferences getComicPreferences(String username) {
         User user = findByUsername(username);
         return new ComicPreferences(
-                "scroll".equals(user.getComicReadingMode()) ? "scroll" : "single",
+                isComicMode(user.getComicReadingMode()) ? user.getComicReadingMode() : "single",
                 "rtl".equals(user.getComicReadingDirection()) ? "rtl" : "ltr",
                 "width".equals(user.getComicReadingFit()) ? "width" : "page");
     }
 
     @Transactional
     public ComicPreferences updateComicPreferences(String username, ComicPreferences preferences) {
-        if (!("single".equals(preferences.mode()) || "scroll".equals(preferences.mode()))
+        if (!isComicMode(preferences.mode())
                 || !("ltr".equals(preferences.direction()) || "rtl".equals(preferences.direction()))
                 || !("page".equals(preferences.fit()) || "width".equals(preferences.fit()))) {
             throw new IllegalArgumentException("漫画阅读设置无效");

@@ -21,6 +21,22 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void comicDoublePageModePersistsForTheCurrentAccount() {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        UserService service = new UserService(repository);
+
+        var settings = new UserService.ComicPreferences("double", "rtl", "width");
+        service.updateComicPreferences("reader", settings);
+
+        assertEquals(settings, service.getComicPreferences("reader"));
+        assertEquals("single", service.getComicPreferences("other").mode());
+    }
+
+    @Test
     void shelfDisplayPreferencesPersistValidateAndRemainAccountScoped() {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();

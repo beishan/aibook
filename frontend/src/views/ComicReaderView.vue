@@ -9,14 +9,14 @@
     </header>
 
     <div v-if="manifest && toolbar" class="comic-tools">
-      <button type="button" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">上一页</button>
+      <button type="button" :disabled="previousPage < 1" @click="goToPage(previousPage)">上一页</button>
       <form class="comic-jump" novalidate @submit.prevent="jump">
         <input v-model="jumpText" type="text" inputmode="numeric" aria-label="跳转页码"
           :aria-invalid="Boolean(jumpError)" @input="jumpError = ''" />
         <span>/ {{ manifest.pageCount }} 页</span>
         <button type="submit">跳转</button>
       </form>
-      <button type="button" :disabled="currentPage >= manifest.pageCount" @click="goToPage(currentPage + 1)">下一页</button>
+      <button type="button" :disabled="nextPage > manifest.pageCount" @click="goToPage(nextPage)">下一页</button>
       <button type="button" aria-haspopup="dialog" :disabled="fileChanged || loading"
         @click="pagePickerOpen = true">页面缩略图</button>
       <button type="button" :aria-expanded="settingsOpen" @click="settingsOpen = !settingsOpen">阅读设置</button>
@@ -82,6 +82,17 @@
             </div>
           </div>
         </div>
+        <div v-else-if="doubleMode" class="comic-spread"
+          :class="{ rtl: preferences.direction === 'rtl', 'fit-width': preferences.fit === 'width', zoomed }">
+          <div v-for="page in spreadPages" :key="page" class="comic-spread-page">
+            <img v-if="pageStates[page]?.url" :src="pageStates[page].url" :alt="'第 ' + page + ' 页'"
+              draggable="false" @load="showPage(page, $event)" @error="decodeError(page, $event)" />
+            <div v-else class="comic-status">
+              <span>{{ pageStates[page]?.error || '正在加载第 ' + page + ' 页…' }}</span>
+              <button v-if="pageStates[page]?.error" type="button" @click.stop="retryPage(page)">重试</button>
+            </div>
+          </div>
+        </div>
         <div v-else class="comic-single" :class="{ 'fit-width': preferences.fit === 'width', zoomed }">
           <img v-if="pageStates[currentPage]?.url" :key="currentPage" :src="pageStates[currentPage].url"
             :alt="'第 ' + currentPage + ' 页'" draggable="false"
@@ -106,8 +117,8 @@
       @file-changed="markFileChanged"
     />
     <footer v-if="manifest" class="comic-footer">
-      <span aria-live="polite">第 {{ currentPage }} / {{ manifest.pageCount }} 页{{ finished ? ' · 已读完' : '' }}</span>
-      <button v-if="finished && currentPage === manifest.pageCount && manifest.pageCount > 1"
+      <span aria-live="polite">第 {{ displayedPageLabel }} / {{ manifest.pageCount }} 页{{ finished ? ' · 已读完' : '' }}</span>
+      <button v-if="finished && nextPage > manifest.pageCount && manifest.pageCount > 1"
         type="button" @click="goToPage(1)">回到首页</button>
     </footer>
   </section>
@@ -156,7 +167,11 @@ const endpoint = `/api/books/${bookId}/versions/${versionId}/comic`
 const sessionToken = localStorage.getItem('token')
 const preferencesEndpoint = '/api/user/preferences/comic'
 const quiet = { headers: { 'X-Suppress-Error-Toast': 'true' } }
-const modeOptions = [{ value: 'single', label: '单页翻页' }, { value: 'scroll', label: '纵向滚动' }]
+const modeOptions = [
+  { value: 'single', label: '单页翻页' },
+  { value: 'double', label: '双页翻页' },
+  { value: 'scroll', label: '纵向滚动' },
+]
 const directionOptions = [{ value: 'ltr', label: '从左往右' }, { value: 'rtl', label: '从右往左' }]
 const fitOptions = [{ value: 'page', label: '整页适配' }, { value: 'width', label: '适宽' }]
 
@@ -181,6 +196,20 @@ const preferenceError = ref(false)
 const conflict = ref(false)
 const fileChanged = ref(false)
 const scrollMode = computed(() => preferences.mode === 'scroll')
+const doubleMode = computed(() => preferences.mode === 'double')
+const spreadStart = computed(() => currentPage.value === 1 ? 1 : currentPage.value - currentPage.value % 2)
+const spreadPages = computed(() => {
+  const start = spreadStart.value
+  return start === 1 || start >= (manifest.value?.pageCount ?? 0) ? [start] : [start, start + 1]
+})
+const previousPage = computed(() => {
+  if (!doubleMode.value) return currentPage.value - 1
+  if (spreadStart.value <= 2) return spreadStart.value - 1
+  return spreadStart.value - 2
+})
+const nextPage = computed(() => doubleMode.value
+  ? spreadStart.value + spreadPages.value.length : currentPage.value + 1)
+const displayedPageLabel = computed(() => doubleMode.value ? spreadPages.value.join('–') : String(currentPage.value))
 const pageStates = reactive<Record<number, PageState>>({})
 const dimensions = reactive<Record<number, number>>({})
 const active = new Map<number, AbortController>()
@@ -318,8 +347,9 @@ async function errorText(error: unknown, fallback: string) {
 function requestPages() {
   const book = manifest.value
   if (!book || loading.value || fileChanged.value || disposed) return
-  const start = scrollMode.value ? windowStart.value : Math.max(1, currentPage.value - 1)
-  const end = scrollMode.value ? windowEnd.value : Math.min(book.pageCount, currentPage.value + 1)
+  const first = doubleMode.value ? spreadStart.value : currentPage.value
+  const start = scrollMode.value ? windowStart.value : Math.max(1, first - 1)
+  const end = scrollMode.value ? windowEnd.value : Math.min(book.pageCount, nextPage.value)
   const wanted = Array.from({ length: end - start + 1 }, (_, index) => start + index)
     .sort((a, b) => Math.abs(a - currentPage.value) - Math.abs(b - currentPage.value))
   const keep = new Set(wanted)
@@ -386,7 +416,7 @@ function showPage(page: number, event: Event) {
   const state = pageStates[page]
   if (state?.url && (event.target as HTMLImageElement).src === state.url) {
     state.shown = true
-    if (page === currentPage.value) queueProgress()
+    if (doubleMode.value ? spreadPages.value.includes(page) : page === currentPage.value) queueProgress()
   }
 }
 
@@ -482,7 +512,7 @@ function handleKey(event: KeyboardEvent) {
   if (!scrollMode.value && !zoomed.value && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
     event.preventDefault()
     const forward = (event.key === 'ArrowRight') === (preferences.direction === 'ltr')
-    void goToPage(currentPage.value + (forward ? 1 : -1))
+    void goToPage(forward ? nextPage.value : previousPage.value)
   }
 }
 
@@ -495,7 +525,7 @@ function handlePageClick(event: MouseEvent) {
     toolbar.value = !toolbar.value
   } else if (!scrollMode.value && !zoomed.value) {
     const forward = (x > 0.7) === (preferences.direction === 'ltr')
-    void goToPage(currentPage.value + (forward ? 1 : -1))
+    void goToPage(forward ? nextPage.value : previousPage.value)
   }
 }
 
@@ -570,11 +600,15 @@ async function restorePosition(position: Position) {
 }
 
 function queueProgress() {
-  if (!manifest.value || !pageStates[currentPage.value]?.shown || fileChanged.value) return
-  if (currentPage.value === manifest.value.pageCount) finished.value = true
+  if (!manifest.value || fileChanged.value) return
+  const visible = doubleMode.value ? spreadPages.value : [currentPage.value]
+  if (!visible.every(page => pageStates[page]?.shown)) return
+  const finalSpread = visible.includes(manifest.value.pageCount)
+  if (finalSpread) finished.value = true
+  const page = finalSpread ? manifest.value.pageCount : currentPage.value
   const position = {
-    page: currentPage.value,
-    offset: scrollOffsetPage === currentPage.value ? Math.round(scrollOffset * 1000) / 1000 : 0,
+    page,
+    offset: scrollOffsetPage === page ? Math.round(scrollOffset * 1000) / 1000 : 0,
     finished: finished.value,
     revision: manifest.value.revision,
   }
@@ -811,6 +845,64 @@ onBeforeUnmount(() => {
 
 .comic-viewport.is-scroll {
   overflow-x: hidden;
+}
+
+.comic-spread {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.comic-spread.rtl {
+  flex-direction: row-reverse;
+}
+
+.comic-spread-page {
+  display: grid;
+  place-items: center;
+  width: 50%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.comic-spread-page:only-child {
+  width: 100%;
+}
+
+.comic-spread-page img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
+.comic-spread-page:not(:only-child):first-child img,
+.comic-spread.rtl .comic-spread-page:not(:only-child):last-child img {
+  object-position: right center;
+}
+
+.comic-spread-page:not(:only-child):last-child img,
+.comic-spread.rtl .comic-spread-page:not(:only-child):first-child img {
+  object-position: left center;
+}
+
+.comic-spread.fit-width,
+.comic-spread.zoomed {
+  height: auto;
+  min-height: 100%;
+  align-items: flex-start;
+}
+
+.comic-spread.fit-width img,
+.comic-spread.zoomed img {
+  height: auto;
+}
+
+.comic-spread.zoomed {
+  width: 200%;
+  cursor: grab;
 }
 
 .comic-single {
