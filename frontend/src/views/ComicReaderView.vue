@@ -128,6 +128,15 @@
       <span aria-live="polite">第 {{ displayedPageLabel }} / {{ manifest.pageCount }} 页{{ finished ? ' · 已读完' : '' }}</span>
       <button v-if="finished && nextPage > manifest.pageCount && manifest.pageCount > 1"
         type="button" @click="goToPage(1)">回到首页</button>
+      <button
+        v-if="finished && nextPage > manifest.pageCount && manifest.nextVolume && !fileChanged"
+        class="comic-next-volume"
+        type="button"
+        :disabled="openingNextVolume"
+        @click="openNextVolume"
+      >
+        下一册 · {{ manifest.nextVolume.title }}
+      </button>
     </footer>
   </section>
 </template>
@@ -145,6 +154,7 @@ interface Manifest {
   revision: string
   pageCount: number
   bookPreferences?: Preferences | null
+  nextVolume?: { bookId: number; versionId: number; title: string } | null
 }
 
 interface Position {
@@ -202,6 +212,7 @@ const settingsSaving = ref(false)
 const pagePickerOpen = ref(false)
 const zoomed = ref(false)
 const finished = ref(false)
+const openingNextVolume = ref(false)
 const loading = ref(true)
 const loadError = ref('')
 const notice = ref('')
@@ -726,8 +737,31 @@ async function resolveConflict(keepLocal: boolean) {
   }
 }
 
+function flushBeforeLeaving() {
+  return Promise.race([flushProgress(true), new Promise(resolve => setTimeout(resolve, 350))])
+}
+
+async function openNextVolume() {
+  const volume = manifest.value?.nextVolume
+  if (!volume || openingNextVolume.value) return
+  openingNextVolume.value = true
+  try {
+    await flushBeforeLeaving()
+    if (disposed || fileChanged.value) return
+    await router.push({
+      name: 'ComicReader',
+      params: { id: volume.bookId, versionId: volume.versionId },
+      query: libraryQuery,
+    })
+  } catch {
+    notice.value = '暂时无法打开下一册，请重试。'
+  } finally {
+    openingNextVolume.value = false
+  }
+}
+
 async function returnToBook() {
-  await Promise.race([flushProgress(true), new Promise(resolve => setTimeout(resolve, 350))])
+  await flushBeforeLeaving()
   const previous = router.options.history.state.back
   if (typeof previous === 'string' && previous.split(/[?#]/)[0] === `/books/${bookId}`) {
     router.back()
@@ -885,6 +919,13 @@ onBeforeUnmount(() => {
   justify-content: center;
   min-height: 32px;
   padding-block: 4px;
+}
+
+.comic-next-volume {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .comic-viewport {

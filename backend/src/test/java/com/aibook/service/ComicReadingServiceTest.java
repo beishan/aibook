@@ -2,6 +2,7 @@ package com.aibook.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -13,6 +14,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.aibook.dto.BookVersionDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.BookVersion;
 import com.aibook.model.entity.ComicBookPreference;
@@ -22,12 +24,14 @@ import com.aibook.repository.BookRepository;
 import com.aibook.repository.ComicBookPreferenceRepository;
 import com.aibook.repository.VersionReadingProgressRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -113,7 +117,9 @@ class ComicReadingServiceTest {
                 source, List.of(new ComicArchiveService.Entry("1.png", 0))));
         when(bookPreferences.findByBookAndUser(book, user)).thenReturn(Optional.of(stored));
 
-        assertEquals(settings, service.manifest(2L, 4L, user).bookPreferences());
+        var manifest = service.manifest(2L, 4L, user);
+        assertEquals(settings, manifest.bookPreferences());
+        assertNull(manifest.nextVolume());
         service.resetBookPreferences(2L, 4L, user);
         verify(bookPreferences).delete(stored);
     }
@@ -126,6 +132,29 @@ class ComicReadingServiceTest {
         assertEquals(HttpStatus.NOT_FOUND, assertThrows(ResponseStatusException.class,
                 () -> service.resetBookPreferences(2L, 3L, other)).getStatusCode());
         verifyNoInteractions(bookPreferences);
+    }
+
+    @Test
+    void linksNextVolumeToItsLastReadCbzVersion() {
+        book.setSeriesName("测试系列");
+        book.setSeriesIndex(new BigDecimal("2.5"));
+        var nextBook = Book.builder().id(10L).title("第三册").user(user).build();
+        when(books.findNextComicVolumes(user, "测试系列", book.getSeriesIndex(), PageRequest.of(0, 1)))
+                .thenReturn(List.of(nextBook));
+        when(books.findOwnedBookForUpdate(10L, user)).thenReturn(Optional.of(nextBook));
+        when(versions.getVersions(nextBook)).thenReturn(List.of(
+                BookVersionDTO.builder().id(11L).format("pdf").primaryVersion(true).build(),
+                BookVersionDTO.builder().id(12L).format("cbz").selected(true).build(),
+                BookVersionDTO.builder().id(13L).format("CBZ").lastRead(true).build()));
+        when(archives.source("comic.cbz", "hash")).thenReturn(source);
+        when(archives.archive(source)).thenReturn(new ComicArchiveService.Archive(
+                source, List.of(new ComicArchiveService.Entry("1.png", 0))));
+
+        assertEquals(new ComicReadingService.NextVolume(10L, 13L, "第三册"),
+                service.manifest(2L, 3L, user).nextVolume());
+
+        when(books.findOwnedBookForUpdate(10L, user)).thenReturn(Optional.empty());
+        assertNull(service.manifest(2L, 3L, user).nextVolume());
     }
 
     @Test

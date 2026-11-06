@@ -12,6 +12,7 @@ import com.aibook.repository.projections.BookStatisticsProjections.BookRatingCou
 import com.aibook.repository.projections.BookStatisticsProjections.BookStatusCount;
 import com.aibook.repository.projections.BookTitleMatchProjection;
 import jakarta.persistence.LockModeType;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.time.LocalDateTime;
@@ -78,6 +79,14 @@ public interface BookRepository
     @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL "
             + "AND b.seriesName = :name AND " + LIBRARY_VISIBLE)
     List<Book> findSeriesBooks(@Param("user") User user, @Param("name") String name);
+
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL "
+            + "AND b.seriesName = :name AND b.seriesIndex > :currentIndex AND b.filePath IS NOT NULL AND " + LIBRARY_VISIBLE
+            + "AND (LOWER(b.format) = 'cbz' OR EXISTS (SELECT v FROM BookVersion v "
+            + "WHERE v.book = b AND v.primaryVersion = false AND LOWER(v.format) = 'cbz')) "
+            + "ORDER BY b.seriesIndex ASC, b.id ASC")
+    List<Book> findNextComicVolumes(@Param("user") User user, @Param("name") String name,
+            @Param("currentIndex") BigDecimal currentIndex, Pageable pageable);
 
     /**
      * 根据文件哈希查找书籍

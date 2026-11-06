@@ -1,5 +1,6 @@
 package com.aibook.service;
 
+import com.aibook.dto.BookVersionDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.BookVersion;
 import com.aibook.model.entity.ComicBookPreference;
@@ -11,9 +12,11 @@ import com.aibook.repository.VersionReadingProgressRepository;
 import com.aibook.service.UserService.ComicPreferences;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Comparator;
 import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,7 +36,8 @@ public class ComicReadingService {
     private final ComicBookPreferenceRepository bookPreferences;
 
     public record Manifest(String title, long versionId, String revision, int pageCount,
-                           ComicPreferences bookPreferences) {}
+                           ComicPreferences bookPreferences, NextVolume nextVolume) {}
+    public record NextVolume(long bookId, long versionId, String title) {}
     public record Position(int page, double offset, boolean finished, String revision, String token) {}
     public record ProgressUpdate(int page, double offset, boolean finished, String revision, String token) {}
 
@@ -51,7 +55,25 @@ public class ComicReadingService {
                 .map(stored -> new ComicPreferences(stored.getMode(), stored.getDirection(), stored.getFit()))
                 .orElse(null);
         return new Manifest(book.getTitle(), version.getId(),
-                archive.source().revision(), archive.pageCount(), preferences);
+                archive.source().revision(), archive.pageCount(), preferences, nextVolume(book, user));
+    }
+
+    private NextVolume nextVolume(Book book, User user) {
+        if (book.getSeriesName() == null || book.getSeriesName().isBlank()
+                || book.getSeriesIndex() == null) {
+            return null;
+        }
+        return books.findNextComicVolumes(user, book.getSeriesName(), book.getSeriesIndex(), PageRequest.of(0, 1))
+                .stream()
+                // A legacy book may need its primary version created before the link can be used.
+                .flatMap(candidate -> books.findOwnedBookForUpdate(candidate.getId(), user).stream())
+                .findFirst()
+                .flatMap(candidate -> versions.getVersions(candidate).stream()
+                        .filter(version -> "cbz".equalsIgnoreCase(version.getFormat()))
+                        .min(Comparator.comparing(BookVersionDTO::isLastRead).reversed()
+                                .thenComparing(Comparator.comparing(BookVersionDTO::isSelected).reversed()))
+                        .map(version -> new NextVolume(candidate.getId(), version.getId(), candidate.getTitle())))
+                .orElse(null);
     }
 
     @Transactional

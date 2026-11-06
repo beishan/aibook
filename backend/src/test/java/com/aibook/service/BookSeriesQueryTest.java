@@ -27,7 +27,9 @@ class BookSeriesQueryTest {
             }
             try (var factory = sources.buildMetadata().buildSessionFactory(); var session = factory.openSession()) {
                 for (var method : BookRepository.class.getMethods()) {
-                    if (method.getName().equals("findSeriesSummaries") || method.getName().equals("findSeriesBooks")) {
+                    if (method.getName().equals("findSeriesSummaries")
+                            || method.getName().equals("findSeriesBooks")
+                            || method.getName().equals("findNextComicVolumes")) {
                         session.createQuery(method.getAnnotation(Query.class).value(), Object.class);
                     }
                 }
