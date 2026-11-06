@@ -40,6 +40,7 @@ public class ComicArchiveService {
     private static final int MAX_DIRECTORY_BYTES = 8 * 1024 * 1024;
     private static final int END_RECORD_BYTES = 22;
     private static final int MAX_ZIP_COMMENT_BYTES = 65_535;
+    private static final int MAX_METADATA_BYTES = 256 * 1024;
     private static final int MAX_PAGE_BYTES = 16 * 1024 * 1024;
     private static final long MAX_PIXELS = 40_000_000L;
     private static final int MAX_DIMENSION = 32_768;
@@ -175,6 +176,32 @@ public class ComicArchiveService {
         throw new ZipException("Missing ZIP end record");
     }
 
+    Optional<byte[]> comicInfo(Source source) {
+        acquireReader();
+        try (ZipFile zip = openZip(source)) {
+            if (zip.size() > MAX_ENTRIES) {
+                return Optional.empty();
+            }
+            var matches = zip.stream()
+                    .filter(entry -> "ComicInfo.xml".equalsIgnoreCase(entry.getName()))
+                    .limit(2)
+                    .toList();
+            if (matches.size() != 1 || matches.getFirst().getSize() > MAX_METADATA_BYTES) {
+                return Optional.empty();
+            }
+            ZipEntry entry = matches.getFirst();
+            try (InputStream stream = zip.getInputStream(entry)) {
+                byte[] bytes = stream.readNBytes(MAX_METADATA_BYTES + 1);
+                return bytes.length <= MAX_METADATA_BYTES && matchesEntry(entry, bytes)
+                        ? Optional.of(bytes) : Optional.empty();
+            }
+        } catch (IOException exception) {
+            return Optional.empty();
+        } finally {
+            readers.release();
+        }
+    }
+
     public Optional<Page> cover(Source source) {
         Archive archive = archive(source);
         for (int number = 1; number <= Math.min(archive.pageCount(), 32); number++) {
@@ -242,9 +269,7 @@ public class ComicArchiveService {
                 if (bytes.length > MAX_PAGE_BYTES) {
                     throw limit("单张漫画图片不能超过 16 MiB");
                 }
-                CRC32 crc = new CRC32();
-                crc.update(bytes);
-                if (crc.getValue() != item.getCrc() || bytes.length != item.getSize()) {
+                if (!matchesEntry(item, bytes)) {
                     throw unreadable("漫画图片已损坏");
                 }
                 return inspectImage(bytes);
@@ -256,6 +281,12 @@ public class ComicArchiveService {
         } finally {
             readers.release();
         }
+    }
+
+    private static boolean matchesEntry(ZipEntry entry, byte[] bytes) {
+        CRC32 crc = new CRC32();
+        crc.update(bytes);
+        return crc.getValue() == entry.getCrc() && bytes.length == entry.getSize();
     }
 
     private static boolean isPageName(String name) {

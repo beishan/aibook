@@ -2,18 +2,22 @@ package com.aibook.service;
 
 import com.aibook.model.entity.Book;
 import com.aibook.repository.BookRepository;
+import com.aibook.util.BookMetadataSources;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -373,6 +377,87 @@ class BookParsingServiceTest {
 
         assertEquals(1, toc.size());
         assertEquals("第 1 章", toc.get(0).getTitle());
+    }
+
+    @Test
+    void reparsesComicInfoAndPreservesManualFields() throws Exception {
+        Path file = tempDir.resolve("volume.cbz");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(file))) {
+            addEntry(zip, "comicinfo.xml", """
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <ComicInfo>
+                      <Title>特别篇</Title>
+                      <Writer>漫画作者</Writer>
+                      <Summary><![CDATA[<p>漫画简介</p><script>hidden</script>]]></Summary>
+                      <Series>  漫画   系列  </Series>
+                      <Number>02.50</Number>
+                      <Pages><Page><Title>附页</Title></Page></Pages>
+                    </ComicInfo>
+                    """);
+        }
+        Book book = Book.builder().title("volume").author("手工作者")
+                .format("cbz").filePath(file.toString()).build();
+        BookMetadataSources.mark(book, "title", "filename");
+        BookMetadataSources.mark(book, "author", "manual");
+
+        var result = service().reparse(book);
+
+        assertEquals("特别篇", book.getTitle());
+        assertEquals("手工作者", book.getAuthor());
+        assertEquals("漫画简介", book.getDescription());
+        assertEquals("漫画 系列", book.getSeriesName());
+        assertEquals(new BigDecimal("2.5"), book.getSeriesIndex());
+        assertEquals("embedded", BookMetadataSources.read(book).get("seriesIndex"));
+        assertEquals(List.of("fileSize", "title", "description", "seriesName", "seriesIndex"),
+                result.getUpdatedFields());
+    }
+
+    @Test
+    void ignoresInvalidComicNumberAndDoesNotRestoreManuallyClearedSeries() throws Exception {
+        Path file = tempDir.resolve("special.cbz");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(file))) {
+            addEntry(zip, "ComicInfo.xml", """
+                    <ComicInfo><Series>新系列</Series><Number>2A</Number></ComicInfo>
+                    """);
+        }
+        Book book = Book.builder().title("已入库的书名").seriesName("旧系列")
+                .seriesIndex(BigDecimal.ONE).format("cbz").filePath(file.toString()).build();
+        BookMetadataSources.mark(book, List.of("seriesName", "seriesIndex"), "embedded");
+
+        var parsing = service();
+        parsing.reparse(book);
+        assertEquals("已入库的书名", book.getTitle());
+        assertEquals("新系列", book.getSeriesName());
+        assertNull(book.getSeriesIndex());
+
+        book.setSeriesName(null);
+        BookMetadataSources.mark(book, "seriesName", "manual");
+        parsing.reparse(book);
+        assertNull(book.getSeriesName());
+    }
+
+    @Test
+    void ignoresOversizedAndUnsafeComicInfo() throws Exception {
+        Path secret = Files.writeString(tempDir.resolve("secret.txt"), "private-data");
+        var parsing = service();
+        for (String xml : List.of(
+                "<ComicInfo><Writer>" + "x".repeat(256 * 1024) + "</Writer></ComicInfo>",
+                "<ComicInfo><Writer>" + "<x>".repeat(100) + "deep" + "</x>".repeat(100)
+                        + "</Writer></ComicInfo>",
+                """
+                <!DOCTYPE ComicInfo [<!ENTITY local SYSTEM "%s">]>
+                <ComicInfo><Writer>&local;</Writer><Series>不应导入</Series></ComicInfo>
+                """.formatted(secret.toUri()))) {
+            Path file = tempDir.resolve("unsafe.cbz");
+            try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(file))) {
+                addEntry(zip, "ComicInfo.xml", xml);
+            }
+            Book book = Book.builder().title("原始书名").format("cbz").filePath(file.toString()).build();
+
+            assertEquals(List.of("fileSize"), parsing.reparse(book).getUpdatedFields());
+            assertNull(book.getAuthor());
+            assertNull(book.getSeriesName());
+        }
     }
 
     private BookParsingService service() {
