@@ -26,7 +26,15 @@
       <small v-if="jumpError" role="alert">{{ jumpError }}</small>
     </div>
 
-    <div v-if="manifest && toolbar && settingsOpen" class="comic-settings">
+    <div v-if="manifest && toolbar && settingsOpen" class="comic-settings" :aria-busy="scopeSaving">
+      <button
+        type="button"
+        :aria-pressed="bookSettings"
+        :disabled="settingsSaving || settingsDirty || scopeSaving"
+        @click="toggleBookSettings"
+      >
+        仅本册
+      </button>
       <div>阅读模式
         <ReaderBlueGraySegmented :model-value="preferences.mode" :options="modeOptions"
           label="阅读模式" @update:model-value="changePreference('mode', $event)" />
@@ -136,6 +144,7 @@ interface Manifest {
   versionId: number
   revision: string
   pageCount: number
+  bookPreferences?: Preferences | null
 }
 
 interface Position {
@@ -166,6 +175,7 @@ const libraryQuery = { libraryId: route.query.libraryId, libraryReturn: route.qu
 const endpoint = `/api/books/${bookId}/versions/${versionId}/comic`
 const sessionToken = localStorage.getItem('token')
 const preferencesEndpoint = '/api/user/preferences/comic'
+const bookPreferencesEndpoint = endpoint + '/preferences'
 const quiet = { headers: { 'X-Suppress-Error-Toast': 'true' } }
 const modeOptions = [
   { value: 'single', label: '单页翻页' },
@@ -185,6 +195,10 @@ const jumpText = ref('1')
 const jumpError = ref('')
 const toolbar = ref(true)
 const settingsOpen = ref(false)
+const bookSettings = ref(false)
+const scopeSaving = ref(false)
+const settingsDirty = ref(false)
+const settingsSaving = ref(false)
 const pagePickerOpen = ref(false)
 const zoomed = ref(false)
 const finished = ref(false)
@@ -229,8 +243,6 @@ let progressTimer: ReturnType<typeof setTimeout> | undefined
 let pending: Omit<Position, 'token'> | undefined
 let lastSaved: Omit<Position, 'token'> | undefined
 let saving = false
-let settingsDirty = false
-let settingsSaving = false
 let pan: { id: number; x: number; y: number; left: number; top: number } | undefined
 let dragged = false
 
@@ -279,7 +291,8 @@ function resetImages() {
 }
 
 async function initialize() {
-  if (saving) return
+  if (saving || scopeSaving.value) return
+  const keepLocalSettings = settingsDirty.value || settingsSaving.value
   pagePickerOpen.value = false
   const request = ++generation
   clearTimeout(progressTimer)
@@ -301,7 +314,10 @@ async function initialize() {
       api.get<Preferences>(preferencesEndpoint, quiet),
     ])
     if (disposed || request !== generation) return
-    Object.assign(preferences, settings.data)
+    if (!keepLocalSettings) {
+      bookSettings.value = Boolean(book.data.bookPreferences)
+      Object.assign(preferences, book.data.bookPreferences ?? settings.data)
+    }
     manifest.value = book.data
     token = position.data.token
     const { token: _token, ...stored } = position.data
@@ -555,33 +571,64 @@ function endPan(event: PointerEvent) {
   if (pan?.id === event.pointerId) pan = undefined
 }
 
-async function changePreference(key: keyof Preferences, value: string) {
-  if (preferences[key] === value) return
-  preferences[key] = value
+async function applyPreferences(next: Preferences) {
+  const modeChanged = preferences.mode !== next.mode
+  const fitChanged = preferences.fit !== next.fit
+  Object.assign(preferences, next)
   zoomed.value = false
-  settingsDirty = true
-  void savePreferences()
-  if (key === 'mode') {
+  if (modeChanged) {
     offset = scrollMode.value && scrollOffsetPage === currentPage.value ? scrollOffset : 0
     await goToPage(currentPage.value)
-  } else if (key === 'fit') {
+  } else if (fitChanged) {
     viewport.value?.scrollTo(0, 0)
   }
 }
 
+function changePreference(key: keyof Preferences, value: string) {
+  if (scopeSaving.value || preferences[key] === value) return
+  void applyPreferences({ ...preferences, [key]: value })
+  settingsDirty.value = true
+  void savePreferences()
+}
+
+async function toggleBookSettings() {
+  if (scopeSaving.value || settingsSaving.value || settingsDirty.value
+    || localStorage.getItem('token') !== sessionToken) return
+  scopeSaving.value = true
+  notice.value = ''
+  try {
+    if (bookSettings.value) {
+      const defaults = await api.get<Preferences>(preferencesEndpoint, quiet)
+      if (disposed || localStorage.getItem('token') !== sessionToken) return
+      await api.delete(bookPreferencesEndpoint, quiet)
+      if (disposed) return
+      bookSettings.value = false
+      await applyPreferences(defaults.data)
+    } else {
+      await api.put(bookPreferencesEndpoint, { ...preferences }, quiet)
+      if (!disposed) bookSettings.value = true
+    }
+  } catch {
+    notice.value = '切换漫画设置范围失败，请重试。'
+  } finally {
+    scopeSaving.value = false
+  }
+}
+
 async function savePreferences() {
-  if (settingsSaving || !settingsDirty || localStorage.getItem('token') !== sessionToken) return
-  settingsSaving = true
-  settingsDirty = false
+  if (settingsSaving.value || !settingsDirty.value || localStorage.getItem('token') !== sessionToken) return
+  settingsSaving.value = true
+  settingsDirty.value = false
   preferenceError.value = false
   try {
-    await api.put(preferencesEndpoint, { ...preferences }, quiet)
+    const target = bookSettings.value ? bookPreferencesEndpoint : preferencesEndpoint
+    await api.put(target, { ...preferences }, quiet)
   } catch {
-    settingsDirty = true
+    settingsDirty.value = true
     preferenceError.value = true
   } finally {
-    settingsSaving = false
-    if (settingsDirty && !preferenceError.value) void savePreferences()
+    settingsSaving.value = false
+    if (settingsDirty.value && !preferenceError.value) void savePreferences()
   }
 }
 
@@ -816,6 +863,11 @@ onBeforeUnmount(() => {
   --blue-soft: #272c35;
   --blue-muted: #f1f3f6;
   --blue-line: #626b78;
+}
+
+.comic-settings > button[aria-pressed="true"] {
+  border-color: #8bc7ff;
+  background: #274a6b;
 }
 
 .comic-settings > div {

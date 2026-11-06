@@ -2,10 +2,13 @@ package com.aibook.service;
 
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.BookVersion;
+import com.aibook.model.entity.ComicBookPreference;
 import com.aibook.model.entity.User;
 import com.aibook.model.entity.VersionReadingProgress;
 import com.aibook.repository.BookRepository;
+import com.aibook.repository.ComicBookPreferenceRepository;
 import com.aibook.repository.VersionReadingProgressRepository;
+import com.aibook.service.UserService.ComicPreferences;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Objects;
@@ -27,8 +30,10 @@ public class ComicReadingService {
     private final ComicArchiveService comics;
     private final BookParsingService parsing;
     private final ObjectMapper json;
+    private final ComicBookPreferenceRepository bookPreferences;
 
-    public record Manifest(String title, long versionId, String revision, int pageCount) {}
+    public record Manifest(String title, long versionId, String revision, int pageCount,
+                           ComicPreferences bookPreferences) {}
     public record Position(int page, double offset, boolean finished, String revision, String token) {}
     public record ProgressUpdate(int page, double offset, boolean finished, String revision, String token) {}
 
@@ -42,8 +47,38 @@ public class ComicReadingService {
                 || book.getCoverUrl() == null || book.getCoverUrl().isBlank()) {
             parsing.extractComicCover(book, archive.source().path());
         }
+        ComicPreferences preferences = bookPreferences.findByBookAndUser(book, user)
+                .map(stored -> new ComicPreferences(stored.getMode(), stored.getDirection(), stored.getFit()))
+                .orElse(null);
         return new Manifest(book.getTitle(), version.getId(),
-                archive.source().revision(), archive.pageCount());
+                archive.source().revision(), archive.pageCount(), preferences);
+    }
+
+    @Transactional
+    public void saveBookPreferences(long bookId, long versionId, User user,
+            ComicPreferences preferences) {
+        Book book = lockComicBook(bookId, versionId, user);
+        UserService.validateComicPreferences(preferences);
+        var stored = bookPreferences.findByBookAndUser(book, user)
+                .orElseGet(() -> new ComicBookPreference(book, user));
+        stored.setMode(preferences.mode());
+        stored.setDirection(preferences.direction());
+        stored.setFit(preferences.fit());
+        bookPreferences.save(stored);
+    }
+
+    @Transactional
+    public void resetBookPreferences(long bookId, long versionId, User user) {
+        Book book = lockComicBook(bookId, versionId, user);
+        bookPreferences.findByBookAndUser(book, user).ifPresent(bookPreferences::delete);
+    }
+
+    private Book lockComicBook(long bookId, long versionId, User user) {
+        // Serialize preference writes even before a per-book row exists.
+        Book book = books.findOwnedBookForUpdate(bookId, user)
+                .orElseThrow(ComicReadingService::missingBook);
+        requireComic(versions.resolveVersion(book, versionId));
+        return book;
     }
 
     public ComicArchiveService.Page page(long bookId, long versionId, User user,

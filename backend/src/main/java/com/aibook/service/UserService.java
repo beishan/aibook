@@ -138,17 +138,21 @@ public class UserService implements UserDetailsService {
 
     @Transactional
     public ComicPreferences updateComicPreferences(String username, ComicPreferences preferences) {
-        if (!isComicMode(preferences.mode())
-                || !("ltr".equals(preferences.direction()) || "rtl".equals(preferences.direction()))
-                || !("page".equals(preferences.fit()) || "width".equals(preferences.fit()))) {
-            throw new IllegalArgumentException("漫画阅读设置无效");
-        }
+        validateComicPreferences(preferences);
         User user = findByUsername(username);
         user.setComicReadingMode(preferences.mode());
         user.setComicReadingDirection(preferences.direction());
         user.setComicReadingFit(preferences.fit());
         userRepository.save(user);
         return preferences;
+    }
+
+    static void validateComicPreferences(ComicPreferences preferences) {
+        if (!isComicMode(preferences.mode())
+                || !("ltr".equals(preferences.direction()) || "rtl".equals(preferences.direction()))
+                || !("page".equals(preferences.fit()) || "width".equals(preferences.fit()))) {
+            throw new IllegalArgumentException("漫画阅读设置无效");
+        }
     }
 
     public List<RewriteSearchRuleDTO> getRewriteSearchRules(String username) {
