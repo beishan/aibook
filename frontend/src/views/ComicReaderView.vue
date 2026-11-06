@@ -17,6 +17,8 @@
         <button type="submit">跳转</button>
       </form>
       <button type="button" :disabled="currentPage >= manifest.pageCount" @click="goToPage(currentPage + 1)">下一页</button>
+      <button type="button" aria-haspopup="dialog" :disabled="fileChanged || loading"
+        @click="pagePickerOpen = true">页面缩略图</button>
       <button type="button" :aria-expanded="settingsOpen" @click="settingsOpen = !settingsOpen">阅读设置</button>
       <button v-if="!scrollMode" type="button" :aria-pressed="zoomed" @click="toggleZoom">
         {{ zoomed ? '恢复适配' : '放大' }}
@@ -93,6 +95,16 @@
         </div>
       </template>
     </div>
+    <ComicPagePicker
+      v-if="manifest && pagePickerOpen && !fileChanged"
+      :endpoint="endpoint"
+      :revision="manifest.revision"
+      :page-count="manifest.pageCount"
+      :current-page="currentPage"
+      @close="pagePickerOpen = false"
+      @select="selectPreview"
+      @file-changed="markFileChanged"
+    />
     <footer v-if="manifest" class="comic-footer">
       <span aria-live="polite">第 {{ currentPage }} / {{ manifest.pageCount }} 页{{ finished ? ' · 已读完' : '' }}</span>
       <button v-if="finished && currentPage === manifest.pageCount && manifest.pageCount > 1"
@@ -104,6 +116,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import ComicPagePicker from '@/components/reader/ComicPagePicker.vue'
 import ReaderBlueGraySegmented from '@/components/reader/ReaderBlueGraySegmented.vue'
 import api from '@/utils/api'
 
@@ -157,6 +170,7 @@ const jumpText = ref('1')
 const jumpError = ref('')
 const toolbar = ref(true)
 const settingsOpen = ref(false)
+const pagePickerOpen = ref(false)
 const zoomed = ref(false)
 const finished = ref(false)
 const loading = ref(true)
@@ -237,6 +251,7 @@ function resetImages() {
 
 async function initialize() {
   if (saving) return
+  pagePickerOpen.value = false
   const request = ++generation
   clearTimeout(progressTimer)
   resetImages()
@@ -439,6 +454,17 @@ async function goToPage(page: number) {
   queueProgress()
 }
 
+async function selectPreview(page: number) {
+  pagePickerOpen.value = false
+  await goToPage(page)
+  viewport.value?.focus({ preventScroll: true })
+}
+
+function markFileChanged() {
+  pagePickerOpen.value = false
+  fileChanged.value = true
+}
+
 function jump() {
   const value = jumpText.value.trim()
   const page = Number(value)
@@ -451,7 +477,7 @@ function jump() {
 
 function handleKey(event: KeyboardEvent) {
   const target = event.target as HTMLElement
-  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey
+  if (pagePickerOpen.value || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey
       || target.closest('input, button, select, textarea, [contenteditable], [role="radiogroup"]')) return
   if (!scrollMode.value && !zoomed.value && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
     event.preventDefault()
