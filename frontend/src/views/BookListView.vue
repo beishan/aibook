@@ -28,6 +28,7 @@
       >
         <div class="book-cover">
           <BookCardBadges :format="book.format" :author="book.author" />
+          <ShelfBookMenu :book="book" :title="displayBookName(book.title)" :disabled="pending.has(book.id)" @action="handleAction" />
           <img
             v-if="book.coverUrl && shouldLoadBookCover(book.id)"
             :src="getCoverThumbnailUrl(book.coverUrl, 'card')"
@@ -56,6 +57,13 @@
 </template>
 
 <script setup lang="ts">
+import ShelfBookMenu from '@/components/ShelfBookMenu.vue'
+import BookQuickReader from '@/components/BookQuickReader.vue'
+import BookEditDialog from '@/components/BookEditDialog.vue'
+import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
+import ScraperDialog from '@/components/ScraperDialog.vue'
+import { useBookStore, type Book } from '@/stores/book'
+import { message, confirm } from '@/utils/message'
 import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import BookCardBadges from '@/components/BookCardBadges.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
@@ -74,6 +82,85 @@ const router = useRouter()
 const bookList = ref<any>(null)
 const books = ref<any[]>([])
 const loading = ref(true)
+const store = useBookStore()
+const pending = ref(new Set<number>())
+const quickReader = ref<InstanceType<typeof BookQuickReader> | null>(null)
+const editingBook = ref<Book | null>(null)
+const listBook = ref<Book | null>(null)
+const scrapingBook = ref<Book | null>(null)
+
+function setScrapeRunning(running: boolean) {
+  if (!scrapingBook.value) return
+  if (running) pending.value.add(scrapingBook.value.id)
+  else pending.value.delete(scrapingBook.value.id)
+}
+
+function applyBook(updated: Book) {
+  books.value = books.value.map(book => book.id === updated.id ? { ...book, ...updated } : book)
+}
+
+async function refreshBook(id: number) {
+  try {
+    const { data } = await api.get<Book>(`/api/books/${id}`)
+    applyBook(data)
+  } catch {
+    message.warning('刷新书籍信息失败，请重新打开书单')
+  }
+}
+
+async function handleAction(command: string, book: Book) {
+  if (pending.value.has(book.id)) return
+  pending.value.add(book.id)
+  try {
+    switch (command) {
+      case 'favorite':
+        applyBook(await store.toggleFavorite(book.id))
+        break
+      case 'wanted':
+        applyBook(await store.toggleWanted(book.id))
+        break
+      case 'shelf':
+        applyBook(book.onShelf ? await store.removeFromShelf(book.id) : await store.addToShelf(book.id))
+        break
+      case 'quick-read':
+        quickReader.value?.open(book)
+        break
+      case 'edit':
+        editingBook.value = book
+        break
+      case 'add-to-list':
+        listBook.value = book
+        break
+      case 'repair':
+        router.push(`/books/${book.id}/repair`)
+        break
+      case 'scrape':
+        if (!scrapingBook.value) scrapingBook.value = book
+        break
+      case 'random-cover':
+        applyBook(await store.randomizeBookCover(book.id))
+        message.success('已随机更换书籍封面')
+        break
+      case 'reparse': {
+        const result = await store.reparseBook(book.id)
+        if (result.book) applyBook(result.book)
+        message.success(result.message || '重新解析完成')
+        break
+      }
+      case 'delete':
+        if (!await confirm(`确定将《${displayBookName(book.title)}》移入回收站吗？原始文件会保留，可从回收站恢复。`, '移入回收站')) return
+        await store.deleteBook(book.id)
+        books.value = books.value.filter(item => item.id !== book.id)
+        if (bookList.value) bookList.value.bookCount = books.value.length
+        message.success('已移入回收站')
+        break
+    }
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '书籍操作失败，请稍后重试')
+  } finally {
+    pending.value.delete(book.id)
+  }
+}
 
 const loadBookList = async () => {
   const listId = route.params.id
