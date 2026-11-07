@@ -63,6 +63,11 @@ export interface CrawlerSiteActivity {
   createdAt:string
   description:string
   details?:string
+  retained:boolean
+}
+export interface CrawlerSiteActivityRetention {
+  retentionDays: number
+  automatic: boolean
 }
 export interface CrawlerDiscoveryPagePayload {
   pageName:string
@@ -423,6 +428,20 @@ export const crawlerApi = {
     api.get<PageResult<CrawlerSiteActivity>>(`/api/crawler/sites/${siteId}/activities`, {
       params:{page, size, eventType},
     }).then(r => r.data),
+  siteActivityRetention: (siteId: number) => api.get<CrawlerSiteActivityRetention>(
+    `/api/crawler/sites/${siteId}/activities/retention`).then(r => r.data),
+  saveSiteActivityRetention: (siteId: number, policy: CrawlerSiteActivityRetention) =>
+    api.put<CrawlerSiteActivityRetention>(`/api/crawler/sites/${siteId}/activities/retention`, policy)
+      .then(r => r.data),
+  retainSiteActivities: (siteId: number, ids: number[], retained: boolean) =>
+    api.post<{ affectedCount: number }>(`/api/crawler/sites/${siteId}/activities/retain`, { ids, retained })
+      .then(r => r.data),
+  deleteSiteActivities: (siteId: number, ids: number[]) =>
+    api.post<{ affectedCount: number }>(`/api/crawler/sites/${siteId}/activities/delete`, { ids })
+      .then(r => r.data),
+  clearSiteActivities: (siteId: number) =>
+    api.post<{ deletedCount: number }>(`/api/crawler/sites/${siteId}/activities/clear`)
+      .then(r => r.data),
   createSite: (data:CrawlerSitePayload) => api.post<CrawlerSite>('/api/crawler/sites', data).then(r => r.data),
   updateSite: (id:number, data:CrawlerSitePayload) => api.put<CrawlerSite>(`/api/crawler/sites/${id}`, data).then(r => r.data),
   deleteSite: (id:number) => api.delete(`/api/crawler/sites/${id}`),

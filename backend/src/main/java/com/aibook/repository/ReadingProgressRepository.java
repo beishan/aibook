@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 import java.util.List;
+import java.util.Collection;
 
 /**
  * 阅读进度 Repository
@@ -19,6 +20,8 @@ public interface ReadingProgressRepository extends JpaRepository<ReadingProgress
      * 根据用户和书籍查询阅读进度
      */
     Optional<ReadingProgress> findByUserAndBook(User user, Book book);
+
+    List<ReadingProgress> findByUserAndBookIdIn(User user, Collection<Long> bookIds);
 
     List<ReadingProgress> findAllByBook(Book book);
 

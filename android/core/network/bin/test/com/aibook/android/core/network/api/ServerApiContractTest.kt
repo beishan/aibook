@@ -14,6 +14,36 @@ import kotlin.test.assertTrue
 
 class ServerApiContractTest {
     @Test
+    fun `selected version is restored and progress requests identify that version`() = runSuspend {
+        val server = MockWebServer()
+        val versionJson = """{"id":12,"displayName":"修订版","format":"txt","selected":true}"""
+        server.enqueue(MockResponse().setBody("[$versionJson]"))
+        server.enqueue(MockResponse().setBody(versionJson))
+        server.enqueue(MockResponse().setBody("""{"bookId":7,"versionId":12,"totalProgress":42}"""))
+        server.start()
+        try {
+            val bookApi = ApiServiceFactory.createBookApi(retrofit(server, "jwt"))
+            val version = bookApi.getVersions(7).single()
+            assertTrue(version.selected)
+            assertEquals("txt", version.format)
+            assertEquals("/api/books/7/versions", server.takeRequest().path)
+
+            assertTrue(bookApi.selectVersion(7, version.id).selected)
+            val selectionRequest = server.takeRequest()
+            assertEquals("PUT", selectionRequest.method)
+            assertEquals("/api/books/7/versions/12/selection", selectionRequest.path)
+
+            val progressApi = ApiServiceFactory.createReadingProgressApi(retrofit(server, "jwt"))
+            val progress = progressApi.getProgress(7, version.id)
+            assertEquals(12L, progress.versionId)
+            assertEquals(42, progress.totalProgress)
+            assertEquals("/api/reading-progress/book/7?versionId=12", server.takeRequest().path)
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
     fun `authenticated shelf response matches backend contract`() = runSuspend {
         val server = MockWebServer()
         server.enqueue(MockResponse().setBody(SHELF_JSON))

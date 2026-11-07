@@ -123,6 +123,30 @@ public class User implements UserDetails {
         return preferences;
     }
 
+    public String getComicReadingMode() {
+        return preference().getComicReadingMode();
+    }
+
+    public void setComicReadingMode(String value) {
+        preference().setComicReadingMode(value);
+    }
+
+    public String getComicReadingDirection() {
+        return preference().getComicReadingDirection();
+    }
+
+    public void setComicReadingDirection(String value) {
+        preference().setComicReadingDirection(value);
+    }
+
+    public String getComicReadingFit() {
+        return preference().getComicReadingFit();
+    }
+
+    public void setComicReadingFit(String value) {
+        preference().setComicReadingFit(value);
+    }
+
     public String getBookPreferences() {
         return preference().getBookPreferences();
     }
@@ -426,6 +450,11 @@ public class User implements UserDetails {
     public void setBookNamePrefixLength(Integer value) {
         preference().setBookNamePrefixLength(value);
     }
+
+    public String getShelfViewMode() { return preference().getShelfViewMode(); }
+    public void setShelfViewMode(String value) { preference().setShelfViewMode(value); }
+    public String getShelfCardSize() { return preference().getShelfCardSize(); }
+    public void setShelfCardSize(String value) { preference().setShelfCardSize(value); }
 
     public Integer getShelfPageSize() {
         return preference().getShelfPageSize();

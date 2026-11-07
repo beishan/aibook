@@ -122,6 +122,39 @@ public class UserService implements UserDetailsService {
         return toPreferences(user);
     }
 
+    private static boolean isComicMode(String mode) {
+        return "single".equals(mode) || "double".equals(mode) || "scroll".equals(mode);
+    }
+
+    public record ComicPreferences(String mode, String direction, String fit) {}
+
+    public ComicPreferences getComicPreferences(String username) {
+        User user = findByUsername(username);
+        return new ComicPreferences(
+                isComicMode(user.getComicReadingMode()) ? user.getComicReadingMode() : "single",
+                "rtl".equals(user.getComicReadingDirection()) ? "rtl" : "ltr",
+                "width".equals(user.getComicReadingFit()) ? "width" : "page");
+    }
+
+    @Transactional
+    public ComicPreferences updateComicPreferences(String username, ComicPreferences preferences) {
+        validateComicPreferences(preferences);
+        User user = findByUsername(username);
+        user.setComicReadingMode(preferences.mode());
+        user.setComicReadingDirection(preferences.direction());
+        user.setComicReadingFit(preferences.fit());
+        userRepository.save(user);
+        return preferences;
+    }
+
+    static void validateComicPreferences(ComicPreferences preferences) {
+        if (!isComicMode(preferences.mode())
+                || !("ltr".equals(preferences.direction()) || "rtl".equals(preferences.direction()))
+                || !("page".equals(preferences.fit()) || "width".equals(preferences.fit()))) {
+            throw new IllegalArgumentException("漫画阅读设置无效");
+        }
+    }
+
     public List<RewriteSearchRuleDTO> getRewriteSearchRules(String username) {
         return readRewriteSearchRules(findByUsername(username).getRewriteSearchRules());
     }
@@ -203,6 +236,14 @@ public class UserService implements UserDetailsService {
         if (request.getBookNamePrefixLength() != null) {
             requireRange("书名前缀文字数", request.getBookNamePrefixLength(), 1, 100);
             user.setBookNamePrefixLength(request.getBookNamePrefixLength());
+        }
+        if (request.getShelfViewMode() != null) {
+            requireAllowed("书架显示方式", request.getShelfViewMode(), Set.of("grid", "list"));
+            user.setShelfViewMode(request.getShelfViewMode());
+        }
+        if (request.getShelfCardSize() != null) {
+            requireAllowed("书架卡片大小", request.getShelfCardSize(), Set.of("small", "medium", "large"));
+            user.setShelfCardSize(request.getShelfCardSize());
         }
         if (request.getShelfPageSize() != null) {
             requireAllowed("书架分页大小", request.getShelfPageSize(), Set.of(12, 24, 48, 96));
@@ -370,6 +411,8 @@ public class UserService implements UserDetailsService {
                 .bookNamePrefixLength(user.getBookNamePrefixLength() != null
                         && user.getBookNamePrefixLength() >= 1 && user.getBookNamePrefixLength() <= 100
                         ? user.getBookNamePrefixLength() : 2)
+                .shelfViewMode(user.getShelfViewMode())
+                .shelfCardSize(user.getShelfCardSize())
                 .shelfPageSize(user.getShelfPageSize() != null
                         && Set.of(12, 24, 48, 96).contains(user.getShelfPageSize())
                         ? user.getShelfPageSize() : 24)

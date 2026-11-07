@@ -46,6 +46,14 @@ public class BookListController {
         return ResponseEntity.ok(bookList);
     }
 
+    @GetMapping("/{id}/books")
+    public BookListService.BookListPage getBookListPage(Authentication authentication,
+            @PathVariable Long id, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "24") int size) {
+        User user = userService.findByUsername(authentication.getName());
+        return bookListService.getBookListPage(id, user, page, size);
+    }
+
     /**
      * 创建书单
      */

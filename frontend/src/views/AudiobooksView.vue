@@ -179,10 +179,11 @@ onMounted(load)
 </script>
 <style scoped>
 .audio-library {
-  max-width: 1600px;
-  margin: auto;
-  padding: 24px;
-  padding-bottom: 260px;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0 auto;
+  padding: var(--spacing-lg) 0 260px;
   color: var(--text-primary);
 }
 .audio-library-header,
@@ -307,7 +308,7 @@ select {
 }
 @media (max-width: 600px) {
   .audio-library {
-    padding: 16px 10px 240px;
+    padding: 16px 0 240px;
   }
   .audio-grid {
     grid-template-columns: 1fr;

@@ -362,7 +362,7 @@ public final class CrawlerDtos {
             Long id, String description, String details, LocalDateTime createdAt) { }
 
     public record SiteActivityView(Long id, String eventType, String taskId,
-            LocalDateTime createdAt, String description, String details) { }
+            LocalDateTime createdAt, String description, String details, boolean retained) { }
 
     public record ScanBookResultView(Long id, Long bookId, String bookName, String bookUrl,
             String resultStatus, String errorMessage, LocalDateTime createdAt) { }

@@ -4,6 +4,7 @@ import com.aibook.dto.BookTocItemDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.repository.BookRepository;
 import com.aibook.util.BookMetadataSources;
+import com.aibook.util.BookSeriesMetadata;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,11 +22,14 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
+import org.xml.sax.helpers.DefaultHandler;
 
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.StringReader;
+import java.math.BigDecimal;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -36,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.regex.Pattern;
@@ -58,6 +63,7 @@ public class BookParsingService {
     private final ObjectMapper objectMapper;
     private final BookCoverService bookCoverService;
     private final AuthorService authorService;
+    private final ComicArchiveService comicArchiveService;
 
     @Transactional
     public ParseResult reparse(Book book) {
@@ -75,6 +81,7 @@ public class BookParsingService {
             switch (format) {
                 case "txt", "md" -> parseText(book, file, updatedFields);
                 case "epub" -> parseEpubMetadata(book, file, updatedFields);
+                case "cbz" -> parseComicMetadata(book, file, updatedFields);
                 default -> updateTitleFromFilename(book, file, updatedFields);
             }
 
@@ -83,6 +90,7 @@ public class BookParsingService {
             String message = switch (format) {
                 case "txt", "md" -> "文本信息与章节已重新解析";
                 case "epub" -> "EPUB 元数据、内容简介与章节已重新解析";
+                case "cbz" -> "漫画文件信息已刷新";
                 default -> "文件信息已刷新，当前格式暂不支持章节解析";
             };
             return ParseResult.builder()
@@ -114,6 +122,139 @@ public class BookParsingService {
         if (updatedFields.contains("title")) {
             BookMetadataSources.mark(book, "title", "filename");
         }
+    }
+
+    public void parseComicMetadata(Book book, Path file, List<String> updatedFields) {
+        Map<String, String> fields = readComicInfo(book, file);
+        Map<String, String> sources = BookMetadataSources.read(book);
+        List<String> embeddedFields = new ArrayList<>();
+        updateComicField(book.getTitle(), fields.get("Title"), 255,
+                book::setTitle, "title", sources, embeddedFields);
+        updateComicField(book.getAuthor(), fields.get("Writer"), 255,
+                book::setAuthor, "author", sources, embeddedFields);
+        updateComicField(book.getDescription(), normalizeDescription(fields.get("Summary")),
+                MAX_DESCRIPTION_LENGTH, book::setDescription, "description", sources, embeddedFields);
+        updateComicSeries(book, fields, sources, embeddedFields);
+        if (!embeddedFields.isEmpty()) {
+            BookMetadataSources.mark(book, embeddedFields, "embedded");
+            updatedFields.addAll(embeddedFields);
+        }
+        if (extractComicCover(book, file)) {
+            updatedFields.add("coverUrl");
+        }
+    }
+
+    private Map<String, String> readComicInfo(Book book, Path file) {
+        try {
+            var source = comicArchiveService.source(file.toString(), book.getFileHash());
+            var bytes = comicArchiveService.comicInfo(source);
+            if (bytes.isEmpty()) {
+                return Map.of();
+            }
+            Element root = parseXml(new ByteArrayInputStream(bytes.get()), false).getDocumentElement();
+            if (!"ComicInfo".equals(root.getLocalName())) {
+                return Map.of();
+            }
+            Map<String, String> fields = new LinkedHashMap<>();
+            for (Node child = root.getFirstChild(); child != null; child = child.getNextSibling()) {
+                if (child instanceof Element element) {
+                    String value = element.getTextContent().strip();
+                    if (!value.isEmpty()) {
+                        fields.putIfAbsent(element.getLocalName(), value);
+                    }
+                }
+            }
+            return fields;
+        } catch (Exception exception) {
+            log.debug("漫画内嵌元数据不可用: {}", file);
+            return Map.of();
+        }
+    }
+
+    private void updateComicField(String current, String parsed, int maxLength,
+            Consumer<String> setter, String field, Map<String, String> sources, List<String> updated) {
+        if (parsed != null && parsed.length() <= maxLength
+                && canImportComicField(current, sources.get(field))) {
+            updateIfPresent(current, parsed, setter, field, updated);
+        }
+    }
+
+    private static boolean canImportComicField(String current, String source) {
+        return "embedded".equals(source) || "filename".equals(source)
+                || (source == null && (current == null || current.isBlank()));
+    }
+
+    private void updateComicSeries(Book book, Map<String, String> fields,
+            Map<String, String> sources, List<String> updated) {
+        String currentName = book.getSeriesName();
+        BigDecimal currentIndex = book.getSeriesIndex();
+        if (!canImportComicField(currentName, sources.get("seriesName"))
+                || (sources.containsKey("seriesIndex") && !"embedded".equals(sources.get("seriesIndex")))) {
+            return;
+        }
+        String name;
+        try {
+            name = BookSeriesMetadata.normalizeName(fields.get("Series"));
+        } catch (ResponseStatusException exception) {
+            return;
+        }
+        if (name.isEmpty()) {
+            return;
+        }
+        BigDecimal index;
+        try {
+            index = BookSeriesMetadata.parseIndex(fields.get("Number"));
+            BookSeriesMetadata.validateIndex(index);
+            if (index != null) {
+                index = index.stripTrailingZeros();
+            }
+        } catch (ResponseStatusException exception) {
+            index = null;
+        }
+        boolean nameChanged = !name.equals(currentName);
+        if (!nameChanged && index == null) {
+            return;
+        }
+        BookSeriesMetadata.apply(book, name, index);
+        if (nameChanged) {
+            updated.add("seriesName");
+        }
+        if (currentIndex == null ? index != null : index == null || currentIndex.compareTo(index) != 0) {
+            updated.add("seriesIndex");
+        }
+    }
+
+    /** Generates a fallback cover and refreshes it when the comic file changes. */
+    public boolean extractComicCover(Book book, Path file) {
+        String oldCover = book.getCoverUrl();
+        String marker = book.getComicCoverSource();
+        boolean generated = marker != null && oldCover != null
+                && marker.startsWith(oldCover + ":");
+        if (!generated && oldCover != null && !oldCover.isBlank()) {
+            return false;
+        }
+        boolean cleared = false;
+        try {
+            var source = comicArchiveService.source(file.toString(), book.getFileHash());
+            if (generated && marker.equals(oldCover + ":" + source.revision())) {
+                return false;
+            }
+            if (generated) {
+                book.setCoverUrl(null);
+                book.setComicCoverSource(null);
+                cleared = true;
+            }
+            var cover = comicArchiveService.cover(source);
+            if (cover.isPresent() && bookCoverService.storeExtractedCover(
+                    book, cover.get().bytes(), cover.get().contentType())) {
+                book.setComicCoverSource(book.getCoverUrl() + ":" + source.revision());
+                return true;
+            }
+        } catch (ResponseStatusException exception) {
+            // An unreadable cover does not prevent importing or reading the original file.
+            log.debug("漫画封面不可用: {}", exception.getReason());
+        }
+        return cleared;
     }
 
     /**
@@ -706,10 +847,16 @@ public class BookParsingService {
         if (entry == null) {
             throw new IllegalArgumentException("EPUB 缺少文件: " + entryName);
         }
+        try (InputStream input = zipFile.getInputStream(entry)) {
+            return parseXml(input, true);
+        }
+    }
+
+    private Document parseXml(InputStream input, boolean allowDoctype) throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
         factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
-        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", false);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", !allowDoctype);
         factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
         factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
         factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
@@ -717,12 +864,15 @@ public class BookParsingService {
         factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
         factory.setXIncludeAware(false);
         factory.setExpandEntityReferences(false);
-        try (InputStream input = zipFile.getInputStream(entry)) {
-            var builder = factory.newDocumentBuilder();
-            builder.setEntityResolver((publicId, systemId) ->
-                    new InputSource(new StringReader("")));
-            return builder.parse(input);
+        if (!allowDoctype) {
+            factory.setAttribute("http://www.oracle.com/xml/jaxp/properties/maxElementDepth", "32");
         }
+        var builder = factory.newDocumentBuilder();
+        builder.setEntityResolver((publicId, systemId) -> new InputSource(new StringReader("")));
+        if (!allowDoctype) {
+            builder.setErrorHandler(new DefaultHandler());
+        }
+        return builder.parse(input);
     }
 
     private String text(Document document, String localName) {

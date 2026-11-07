@@ -1,5 +1,6 @@
 package com.aibook.repository;
 
+import com.aibook.model.entity.Book;
 import com.aibook.model.entity.BookVersion;
 import com.aibook.model.entity.User;
 import com.aibook.model.entity.VersionReadingProgress;
@@ -16,6 +17,9 @@ import org.springframework.data.repository.query.Param;
 public interface VersionReadingProgressRepository
         extends JpaRepository<VersionReadingProgress, Long> {
     Optional<VersionReadingProgress> findByUserAndVersion(User user, BookVersion version);
+
+    Optional<VersionReadingProgress> findFirstByUserAndVersionBookAndLastReadAtIsNotNullOrderByLastReadAtDescIdDesc(
+            User user, Book book);
 
     /** 串行化同一账户、版本的心跳差值计算，防止并发请求重复累计或覆盖。 */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

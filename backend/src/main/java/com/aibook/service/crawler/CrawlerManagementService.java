@@ -122,7 +122,8 @@ public class CrawlerManagementService {
                         site, eventType, pageable);
         return activities.map(activity -> new SiteActivityView(
                         activity.getId(), activity.getEventType().name(), activity.getTaskId(),
-                        activity.getCreatedAt(), activity.getDescription(), activity.getDetails()));
+                        activity.getCreatedAt(), activity.getDescription(), activity.getDetails(),
+                        Boolean.TRUE.equals(activity.getRetained())));
     }
 
     @Transactional

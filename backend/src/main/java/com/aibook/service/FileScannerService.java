@@ -328,6 +328,9 @@ public class FileScannerService {
                 case "epub":
                     extractEpubMetadata(file, book);
                     break;
+                case "cbz":
+                    bookParsingService.parseComicMetadata(book, file, new ArrayList<>());
+                    break;
                 case "pdf":
                     extractPdfMetadata(file, book);
                     break;

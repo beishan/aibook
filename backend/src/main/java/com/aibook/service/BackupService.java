@@ -105,9 +105,7 @@ public class BackupService {
     }
 
     public List<BackupExecutionView> executions() {
-        return executionRepository.findTop100ByOrderByStartedAtDesc().stream()
-                .peek(this::reconcileDeletedBackup)
-                .map(BackupExecutionView::from).toList();
+        return executions(0, 100).content();
     }
 
     public record ExecutionPage(List<BackupExecutionView> content, long totalElements,
@@ -115,16 +113,24 @@ public class BackupService {
 
     public ExecutionPage executions(int page, int size) {
         int boundedSize = Math.max(1, Math.min(100, size));
-        var sort = org.springframework.data.domain.Sort.by(
-                org.springframework.data.domain.Sort.Direction.DESC, "startedAt", "id");
-        var result = executionRepository.findAll(org.springframework.data.domain.PageRequest.of(
-                Math.max(0, page), boundedSize, sort));
-        if (result.getTotalPages() > 0 && result.getNumber() >= result.getTotalPages()) {
-            result = executionRepository.findAll(org.springframework.data.domain.PageRequest.of(
-                    result.getTotalPages() - 1, boundedSize, sort));
+        int targetPage = Math.max(0, page);
+        org.springframework.data.domain.Page<BackupExecution> result;
+        while (true) {
+            result = executionRepository.findOrderedExecutions(
+                    org.springframework.data.domain.PageRequest.of(targetPage, boundedSize));
+            if (result.getTotalPages() > 0 && result.getNumber() >= result.getTotalPages()) {
+                targetPage = result.getTotalPages() - 1;
+                continue;
+            }
+            boolean changed = false;
+            for (BackupExecution execution : result.getContent()) {
+                boolean wasDeleted = execution.getDeletionReason() != null;
+                reconcileDeletedBackup(execution);
+                changed |= !wasDeleted && execution.getDeletionReason() != null;
+            }
+            if (!changed) break;
         }
-        var rows = result.getContent().stream().peek(this::reconcileDeletedBackup)
-                .map(BackupExecutionView::from).toList();
+        var rows = result.getContent().stream().map(BackupExecutionView::from).toList();
         return new ExecutionPage(rows, result.getTotalElements(), result.getTotalPages(),
                 result.getTotalElements() == 0 ? 0 : result.getNumber(), boundedSize,
                 executionRepository.existsByStatusIn(List.of(

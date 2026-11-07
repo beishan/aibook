@@ -46,7 +46,9 @@ class BackupServiceTest {
         execution.setTaskName("备份测试");
         execution.setOutputPath(root.resolve("aibook-"
                 + time.format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + "-1").toString());
-        when(repository.findTop100ByOrderByStartedAtDesc()).thenReturn(List.of(execution));
+        when(repository.findOrderedExecutions(any(org.springframework.data.domain.Pageable.class)))
+                .thenAnswer(call -> new org.springframework.data.domain.PageImpl<>(
+                        List.of(execution), call.getArgument(0), 1));
         return execution;
     }
 
@@ -56,12 +58,11 @@ class BackupServiceTest {
         row.setId(123L);
         row.setStatus(BackupExecution.Status.RUNNING);
         row.setTaskName("分页记录");
-        when(repository.findAll(any(org.springframework.data.domain.Pageable.class))).thenAnswer(call -> {
+        when(repository.findOrderedExecutions(any(org.springframework.data.domain.Pageable.class))).thenAnswer(call -> {
             org.springframework.data.domain.Pageable request = call.getArgument(0);
             assertThat(request.getPageNumber()).isEqualTo(1);
             assertThat(request.getPageSize()).isEqualTo(20);
-            assertThat(request.getSort().getOrderFor("startedAt").isDescending()).isTrue();
-            assertThat(request.getSort().getOrderFor("id").isDescending()).isTrue();
+            assertThat(request.getSort().isUnsorted()).isTrue();
             return new org.springframework.data.domain.PageImpl<>(List.of(row), request, 123);
         });
         when(repository.existsByStatusIn(any())).thenReturn(true);
@@ -73,8 +74,26 @@ class BackupServiceTest {
     }
 
     @Test
+    void newlyDetectedDeletionRequeriesThePageBeforeReturning() {
+        BackupExecution missing = execution(LocalDateTime.now());
+        BackupExecution present = new BackupExecution();
+        present.setId(2L);
+        present.setTaskName("仍有文件");
+        present.setStatus(BackupExecution.Status.RUNNING);
+        when(repository.findOrderedExecutions(any(org.springframework.data.domain.Pageable.class)))
+                .thenAnswer(call -> new org.springframework.data.domain.PageImpl<>(
+                        missing.getDeletionReason() == null ? List.of(missing) : List.of(present),
+                        call.getArgument(0), 2));
+        var result = service.executions(0, 1);
+        assertThat(missing.getDeletionReason()).isNotNull();
+        assertThat(result.content()).extracting(row -> row.id()).containsExactly(2L);
+        verify(repository, org.mockito.Mockito.times(2))
+                .findOrderedExecutions(any(org.springframework.data.domain.Pageable.class));
+    }
+
+    @Test
     void executionPaginationClampsSizeAndRecoversOutOfRangePage() {
-        when(repository.findAll(any(org.springframework.data.domain.Pageable.class))).thenAnswer(call -> {
+        when(repository.findOrderedExecutions(any(org.springframework.data.domain.Pageable.class))).thenAnswer(call -> {
             org.springframework.data.domain.Pageable request = call.getArgument(0);
             assertThat(request.getPageSize()).isEqualTo(100);
             return new org.springframework.data.domain.PageImpl<>(List.of(), request, 123);
@@ -87,7 +106,7 @@ class BackupServiceTest {
 
     @Test
     void executionPaginationNormalizesEmptyAndNegativeRequests() {
-        when(repository.findAll(any(org.springframework.data.domain.Pageable.class))).thenAnswer(call -> {
+        when(repository.findOrderedExecutions(any(org.springframework.data.domain.Pageable.class))).thenAnswer(call -> {
             org.springframework.data.domain.Pageable request = call.getArgument(0);
             assertThat(request.getPageNumber()).isZero();
             assertThat(request.getPageSize()).isEqualTo(1);

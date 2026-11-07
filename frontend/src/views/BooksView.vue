@@ -415,7 +415,7 @@
                       {{ book.onShelf ? '移出书架' : '加入书架' }}
                     </el-dropdown-item>
                     <el-dropdown-item command="add-to-library">加入图书馆</el-dropdown-item>
-                    <el-dropdown-item divided command="quick-read">▣ 小窗阅读</el-dropdown-item>
+                    <el-dropdown-item v-if="book.format !== 'cbz' && book.format !== 'cbr'" divided command="quick-read">▣ 小窗阅读</el-dropdown-item>
                     <el-dropdown-item command="scrape">✨ 刮削元数据</el-dropdown-item>
                     <el-dropdown-item command="random-cover">🎲 随机封面</el-dropdown-item>
                     <el-dropdown-item command="reparse">🔄 重新解析</el-dropdown-item>
@@ -543,8 +543,11 @@
           >
             加入图书馆
           </button>
-          <button class="btn btn-text" @click.stop="$router.push(`/reader/${row.id}`)">阅读</button>
-          <button class="btn btn-text" @click.stop="openQuickReader(row)">小窗阅读</button>
+          <button class="btn btn-text"
+            @click.stop="$router.push(row.format === 'cbz' || row.format === 'cbr' ? `/books/${row.id}` : `/reader/${row.id}`)">
+            阅读
+          </button>
+          <button v-if="row.format !== 'cbz' && row.format !== 'cbr'" class="btn btn-text" @click.stop="openQuickReader(row)">小窗阅读</button>
           <button
             class="btn btn-text"
             :disabled="downloadingBookId !== null"

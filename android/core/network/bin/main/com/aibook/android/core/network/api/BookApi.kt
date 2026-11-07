@@ -7,12 +7,23 @@ import com.aibook.android.core.network.api.dto.StructuredChapterDTO
 import com.aibook.android.core.network.api.dto.StructuredManifestDTO
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.PUT
+import com.aibook.android.core.network.api.dto.BookVersionDTO
 import retrofit2.http.Path
 import retrofit2.http.Query
 import okhttp3.ResponseBody
 import retrofit2.http.Streaming
 
 interface BookApi {
+    @GET("api/books/{id}/versions")
+    suspend fun getVersions(@Path("id") id: Long): List<BookVersionDTO>
+
+    @PUT("api/books/{id}/versions/{versionId}/selection")
+    suspend fun selectVersion(
+        @Path("id") id: Long,
+        @Path("versionId") versionId: Long
+    ): BookVersionDTO
+
     @GET("api/books")
     suspend fun getBooks(
         @Query("page") page: Int = 0,

@@ -21,6 +21,52 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void comicDoublePageModePersistsForTheCurrentAccount() {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        UserService service = new UserService(repository);
+
+        var settings = new UserService.ComicPreferences("double", "rtl", "width");
+        service.updateComicPreferences("reader", settings);
+
+        assertEquals(settings, service.getComicPreferences("reader"));
+        assertEquals("single", service.getComicPreferences("other").mode());
+    }
+
+    @Test
+    void shelfDisplayPreferencesPersistValidateAndRemainAccountScoped() {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+        assertEquals(null, service.getPreferences("reader").getShelfCardSize());
+        for (String mode : new String[] {"grid", "list"}) {
+            for (String size : new String[] {"small", "medium", "large"}) {
+                service.updatePreferences("reader", UserPreferencesDTO.builder()
+                        .shelfViewMode(mode).shelfCardSize(size).build());
+                var restored = service.getPreferences("reader");
+                assertEquals(mode, restored.getShelfViewMode());
+                assertEquals(size, restored.getShelfCardSize());
+            }
+        }
+        service.updatePreferences("reader", UserPreferencesDTO.builder().shelfCardSize("small").build());
+        assertEquals("list", service.getPreferences("reader").getShelfViewMode());
+        assertEquals("small", service.getPreferences("reader").getShelfCardSize());
+        assertEquals(null, service.getPreferences("other").getShelfViewMode());
+        assertEquals(null, service.getPreferences("other").getShelfCardSize());
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                UserPreferencesDTO.builder().shelfViewMode("cards").build()));
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                UserPreferencesDTO.builder().shelfCardSize("tiny").build()));
+    }
+
+    @Test
     void desktopIconsPersistPerAccountAndValidatePngSizeAndFormat() throws Exception {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();

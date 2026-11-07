@@ -55,6 +55,9 @@ public class CrawlerSiteActivity {
     @Column(columnDefinition = "TEXT")
     private String details;
 
+    @Column(name = "retained")
+    private Boolean retained;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

@@ -92,7 +92,7 @@
         <div
           class="content-shell"
           :class="{
-            'library-content-shell': route.path === '/books',
+            'library-content-shell': route.path === '/books' || route.path === '/audiobooks',
             'home-content-shell': route.path === '/',
             'crawler-content-shell': route.path === '/crawler',
           }"

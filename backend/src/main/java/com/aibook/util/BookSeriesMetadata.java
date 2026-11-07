@@ -22,12 +22,16 @@ public final class BookSeriesMetadata {
             book.setSeriesIndex(null);
             return;
         }
+        validateIndex(index);
+        book.setSeriesName(normalized);
+        book.setSeriesIndex(index);
+    }
+
+    public static void validateIndex(BigDecimal index) {
         if (index != null && (index.signum() < 0 || index.compareTo(new BigDecimal("9999.99")) > 0
                 || index.stripTrailingZeros().scale() > 2)) {
             throw invalid("卷序需为0至9999.99之间的数字，最多两位小数");
         }
-        book.setSeriesName(normalized);
-        book.setSeriesIndex(index);
     }
 
     public static BigDecimal parseIndex(String value) {

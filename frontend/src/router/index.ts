@@ -18,6 +18,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false },
   },
   {
+    path: '/comic/:id/:versionId',
+    name: 'ComicReader',
+    component: () => import('@/views/ComicReaderView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/',
     name: 'Layout',
     component: () => import('@/layouts/ThemeLayoutWrapper.vue'),

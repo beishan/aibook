@@ -97,7 +97,13 @@
     </header>
 
     <!-- 内容区 -->
-    <main class="layout-main" :class="{ 'library-layout-main': route.path === '/books', 'home-layout-main': route.path === '/' }">
+    <main
+      class="layout-main"
+      :class="{
+        'library-layout-main': route.path === '/books' || route.path === '/audiobooks',
+        'home-layout-main': route.path === '/',
+      }"
+    >
       <router-view v-slot="{ Component }">
         <Transition name="fade" mode="out-in">
           <component :is="Component" />

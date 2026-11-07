@@ -18,6 +18,7 @@ public class BookVersionDTO {
     private String fileHash;
     private Boolean primaryVersion;
     private boolean selected;
+    private boolean lastRead;
     private Integer chapterCount;
     private String description;
     private Long rewriteProjectId;

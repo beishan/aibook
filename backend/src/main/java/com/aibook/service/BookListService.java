@@ -5,11 +5,16 @@ import com.aibook.model.entity.BookList;
 import com.aibook.model.entity.User;
 import com.aibook.repository.BookListRepository;
 import com.aibook.repository.BookRepository;
+import com.aibook.repository.ReadingProgressRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 书单服务
@@ -20,6 +25,31 @@ public class BookListService {
 
     private final BookListRepository bookListRepository;
     private final BookRepository bookRepository;
+    private final ReadingProgressRepository readingProgressRepository;
+
+    public record BookCard(Long id, String title, String author, String format, String coverUrl,
+            Integer totalProgress, Boolean isFavorite, Boolean isWanted, Boolean onShelf) { }
+    public record BookListPage(Long id, String name, String description, Page<BookCard> books) { }
+
+    @Transactional(readOnly = true)
+    public BookListPage getBookListPage(Long id, User user, int page, int size) {
+        BookList list = bookListRepository.findByIdAndUser(id, user)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "书单不存在"));
+        Page<Book> pageOfBooks = bookRepository.findBookListPage(id, user,
+                PageRequest.of(Math.max(0, page), Math.clamp(size, 1, 100)));
+        List<Long> bookIds = pageOfBooks.getContent().stream().map(Book::getId).toList();
+        Map<Long, Integer> progressByBook = bookIds.isEmpty() ? Map.of()
+                : readingProgressRepository.findByUserAndBookIdIn(user, bookIds).stream()
+                        .filter(progress -> progress.getTotalProgress() != null)
+                        .collect(Collectors.toMap(progress -> progress.getBook().getId(),
+                                progress -> progress.getTotalProgress()));
+        Page<BookCard> books = pageOfBooks
+                .map(book -> new BookCard(book.getId(), book.getTitle(), book.getAuthor(),
+                        book.getFormat(), book.getCoverUrl(), progressByBook.get(book.getId()),
+                        book.getIsFavorite(), book.getIsWanted(), book.getOnShelf()));
+        return new BookListPage(list.getId(), list.getName(), list.getDescription(), books);
+    }
 
     /**
      * 获取用户所有书单

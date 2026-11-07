@@ -217,8 +217,13 @@
             </div>
           </div>
 
+          <p v-if="selectedVersionFormat === 'cbr'">该版本暂不支持在线阅读，可下载原文件。</p>
           <div class="primary-actions">
-            <button class="btn btn-primary btn-large read-button" @click="handleRead">
+            <button v-if="selectedVersionFormat === 'cbr'" class="btn btn-primary btn-large read-button"
+              :disabled="downloadingBook" @click="handleDownloadBook">
+              下载 CBR
+            </button>
+            <button v-else class="btn btn-primary btn-large read-button" @click="handleRead">
               <span>📖</span>
               <span>{{ hasReadingProgress ? '继续阅读' : '开始阅读' }}</span>
             </button>
@@ -1149,6 +1154,7 @@ interface BookVersion {
   fileHash?: string
   primaryVersion: boolean
   selected?: boolean
+  lastRead?: boolean
   chapterCount?: number
   description?: string | null
   rewriteProjectId?: number
@@ -1360,10 +1366,14 @@ const loadVersions = async () => {
   const currentVersion = versions.value.find(version => version.id === selectedVersionId.value)
   selectedVersionId.value = requestedVersion?.id
     || currentVersion?.id
+    || versions.value.find(version => version.lastRead && version.format !== 'cbr')?.id
     || versions.value.find(version => version.selected)?.id
     || versions.value.find(version => version.primaryVersion)?.id
     || versions.value[0]?.id
     || null
+  if (requestedVersionId > 0 && !requestedVersion) {
+    message.warning('原阅读版本已不可用，请选择其他版本')
+  }
   if (requestedVersion && !requestedVersion.selected) {
     await api.put(`/api/books/${book.value.id}/versions/${requestedVersion.id}/selection`)
   }
@@ -1466,6 +1476,14 @@ const handleDetailBack = () => {
 }
 
 const handleRead = () => {
+  if (selectedVersionFormat.value === 'cbz' && selectedVersionId.value) {
+    void router.push({
+      name: 'ComicReader',
+      params: { id: book.value.id, versionId: selectedVersionId.value },
+      query: { libraryId: route.query.libraryId, libraryReturn: route.query.libraryReturn },
+    })
+    return
+  }
   router.push({
     path: `/reader/${book.value.id}`,
     query: selectedVersionId.value
@@ -1539,6 +1557,11 @@ const loadToc = async () => {
   tocLoading.value = true
   tocError.value = ''
   tocCurrentPage.value = 1
+  if (['cbz', 'cbr'].includes(selectedVersionFormat.value)) {
+    tocItems.value = []
+    tocLoading.value = false
+    return
+  }
   try {
     const response = await api.get(`/api/books/${book.value.id}/toc`, {
       params: { versionId: selectedVersionId.value },

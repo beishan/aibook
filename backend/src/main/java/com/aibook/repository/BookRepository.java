@@ -11,6 +11,8 @@ import com.aibook.repository.projections.BookStatisticsProjections.BookFormatCou
 import com.aibook.repository.projections.BookStatisticsProjections.BookRatingCount;
 import com.aibook.repository.projections.BookStatisticsProjections.BookStatusCount;
 import com.aibook.repository.projections.BookTitleMatchProjection;
+import jakarta.persistence.LockModeType;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.time.LocalDateTime;
@@ -18,6 +20,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
@@ -77,6 +80,14 @@ public interface BookRepository
             + "AND b.seriesName = :name AND " + LIBRARY_VISIBLE)
     List<Book> findSeriesBooks(@Param("user") User user, @Param("name") String name);
 
+    @Query("SELECT b FROM Book b WHERE b.user = :user AND b.deletedAt IS NULL "
+            + "AND b.seriesName = :name AND b.seriesIndex > :currentIndex AND b.filePath IS NOT NULL AND " + LIBRARY_VISIBLE
+            + "AND (LOWER(b.format) = 'cbz' OR EXISTS (SELECT v FROM BookVersion v "
+            + "WHERE v.book = b AND v.primaryVersion = false AND LOWER(v.format) = 'cbz')) "
+            + "ORDER BY b.seriesIndex ASC, b.id ASC")
+    List<Book> findNextComicVolumes(@Param("user") User user, @Param("name") String name,
+            @Param("currentIndex") BigDecimal currentIndex, Pageable pageable);
+
     /**
      * 根据文件哈希查找书籍
      */
@@ -85,6 +96,14 @@ public interface BookRepository
     Optional<Book> findByFileHashAndDeletedAtIsNull(String fileHash);
 
     Optional<Book> findByIdAndUserAndDeletedAtIsNull(Long id, User user);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select b from Book b where b.id = :id and b.user = :user and b.deletedAt is null")
+    Optional<Book> findOwnedBookForUpdate(@Param("id") Long id, @Param("user") User user);
+
+    @Query("select b from BookList l join l.books b where l.id = :listId and l.user = :user "
+            + "and b.user = :user and b.deletedAt is null order by b.id desc")
+    Page<Book> findBookListPage(@Param("listId") Long listId, @Param("user") User user, Pageable pageable);
 
     Optional<Book> findByIdAndUserAndDeletedAtIsNotNullAndPurgedAtIsNull(Long id, User user);
 

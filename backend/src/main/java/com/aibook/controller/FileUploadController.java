@@ -10,6 +10,7 @@ import com.aibook.service.BookVersionService;
 import com.aibook.service.OperationLogService;
 import com.aibook.service.RandomBookCoverService;
 import com.aibook.service.UserService;
+import com.aibook.util.BookMetadataSources;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -120,6 +121,9 @@ public class FileUploadController {
                         .user(user)
                         .build();
 
+                if ("cbz".equals(book.getFormat())) {
+                    BookMetadataSources.mark(book, "title", "filename");
+                }
                 book = bookRepository.save(book);
                 try {
                     // EPUB 等格式优先采用文件内部元数据；TXT 等格式保留上传文件名。

@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 
 class FileScannerServiceTest {
 
@@ -72,6 +73,28 @@ class FileScannerServiceTest {
         assertThat(savedBook.get().getCategory()).isNull();
         assertThat(savedUserId.get()).isEqualTo(user.getId());
         assertThat(savedCategoryId.get()).isEqualTo(category.getId());
+    }
+
+    @Test
+    void scanExtractsComicMetadataBeforeSavingNewCbz() throws Exception {
+        Path file = Files.writeString(tempDir.resolve("第三卷.cbz"), "comic-content");
+        User user = User.builder().id(1L).username("reader").build();
+        BookRepository books = mock(BookRepository.class);
+        ScannedBookPersistenceService persistence = mock(ScannedBookPersistenceService.class);
+        BookParsingService parsing = mock(BookParsingService.class);
+        doAnswer(invocation -> {
+            Book book = invocation.getArgument(0);
+            book.setSeriesName("漫画系列");
+            return null;
+        }).when(parsing).parseComicMetadata(any(Book.class), eq(file), any());
+        FileScannerService scanner = new FileScannerService(books, persistence,
+                mock(MetadataService.class), mock(TxtParserService.class), parsing);
+
+        assertThat(scanner.scanDirectory(tempDir.toString(), user, null).getNewCount()).isEqualTo(1);
+
+        var book = ArgumentCaptor.forClass(Book.class);
+        verify(persistence).save(book.capture(), eq(user.getId()), eq(null));
+        assertThat(book.getValue().getSeriesName()).isEqualTo("漫画系列");
     }
 
     @Test

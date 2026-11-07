@@ -957,7 +957,6 @@ async function handleBookAction(command:string, book:Book) {
   }
 }
 
-const STORAGE_KEY = 'shelf-settings'
 
 const tabs = [
   { key: 'shelf', label: '书架', icon: '📚' },
@@ -1013,8 +1012,14 @@ const savingShelfGroup = ref(false)
 const editingShelfGroup = ref<ShelfGroup | null>(null)
 const shelfGroupIcons = ['📁', '📚', '⭐', '❤️', '🎯', '💡', '🌙', '☕', '🧠', '🚀']
 const shelfGroupForm = ref({ name: '', description: '', icon: '📁', color: '#4f8cff' })
-const viewMode = ref<'grid' | 'list'>('grid')
-const cardSize = ref<CardSize>('medium')
+const viewMode = computed({
+  get: () => preferencesStore.shelfViewMode,
+  set: value => { void preferencesStore.setShelfViewMode(value) },
+})
+const cardSize = computed({
+  get: () => preferencesStore.shelfCardSize,
+  set: value => { void preferencesStore.setShelfCardSize(value) },
+})
 const cardSizeIndex = computed(() => Math.max(0, cardSizes.findIndex(size => size.value === cardSize.value)))
 
 const newListForm = ref({
@@ -1099,31 +1104,6 @@ const selectedShelfDescription = computed(() => {
   return shelfOverview.value.groups.find(group => group.id === selectedShelfGroup.value)?.description
     || '可使用上移、下移手动调整组内顺序'
 })
-
-// 加载设置
-const loadSettings = () => {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
-      const settings = JSON.parse(saved)
-      if (settings.viewMode) viewMode.value = settings.viewMode
-      if (settings.cardSize) cardSize.value = settings.cardSize
-    }
-  } catch (e) { /* ignore */ }
-}
-
-// 保存设置
-const saveSettings = () => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      viewMode: viewMode.value,
-      cardSize: cardSize.value,
-    }))
-  } catch (e) { /* ignore */ }
-}
-
-// 监听设置变化
-watch([viewMode, cardSize], saveSettings)
 
 const loadFinishedBooks = async () => {
   if (finishedLoading.value) return
@@ -1482,7 +1462,7 @@ const handleViewList = (list: any) => {
 }
 
 onMounted(() => {
-  loadSettings()
+  void preferencesStore.hydrate()
   loadFinishedBooks()
   loadShelf()
   loadFavoriteBooks()

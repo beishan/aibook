@@ -37,6 +37,10 @@ public class UserPreference {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
+    private String comicReadingMode;
+    private String comicReadingDirection;
+    private String comicReadingFit;
+
     @Column(name = "book_preferences", columnDefinition = "TEXT")
     private String bookPreferences;
 
@@ -66,6 +70,10 @@ public class UserPreference {
     private Integer tagManagePageSize;
     @Column(name = "category_page_size")
     private Integer categoryPageSize;
+    @Column(name = "shelf_view_mode", length = 12)
+    private String shelfViewMode;
+    @Column(name = "shelf_card_size", length = 12)
+    private String shelfCardSize;
     @Column(name = "shelf_page_size")
     private Integer shelfPageSize;
     @Column(name = "hide_book_names")

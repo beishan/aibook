@@ -21,7 +21,7 @@
       <span v-else aria-hidden="true">{{ book.onShelf ? '📚' : '➕' }}</span>
       <span v-if="list || expanded">{{ book.onShelf ? '已在书架' : '加入书架' }}</span>
     </button>
-    <button v-if="list" type="button" :role="expanded ? 'menuitem' : undefined" class="common-action" :disabled="disabled"
+    <button v-if="list && canQuickRead" type="button" :role="expanded ? 'menuitem' : undefined" class="common-action" :disabled="disabled"
       @click="emit('action', 'quick-read', book)">小窗阅读</button>
     <template v-if="expanded">
       <div class="shelf-menu-divider" role="separator"></div>
@@ -50,7 +50,7 @@
       </button>
       <template #dropdown>
         <el-dropdown-menu>
-          <el-dropdown-item command="quick-read">▣ 小窗阅读</el-dropdown-item>
+          <el-dropdown-item v-if="canQuickRead" command="quick-read">▣ 小窗阅读</el-dropdown-item>
           <el-dropdown-item command="scrape">✨ 刮削元数据</el-dropdown-item>
           <el-dropdown-item command="random-cover">🎲 随机封面</el-dropdown-item>
           <el-dropdown-item command="reparse">🔄 重新解析</el-dropdown-item>
@@ -65,10 +65,11 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Star, CollectionTag, Reading, MagicStick, Picture, Refresh, Tools, Edit, Collection } from '@element-plus/icons-vue'
 import type { Book } from '@/stores/book'
 
-defineProps<{
+const props = defineProps<{
   book:Book
   list?:boolean
   small?:boolean
@@ -76,7 +77,8 @@ defineProps<{
   expanded?:boolean
   disabled?:boolean
 }>()
-const expandedActions = [
+const canQuickRead = computed(() => props.book.format !== 'cbz' && props.book.format !== 'cbr')
+const expandedActions = computed(() => [
   { value: 'quick-read', label: '小窗阅读', icon: Reading },
   { value: 'scrape', label: '刮削元数据', icon: MagicStick },
   { value: 'random-cover', label: '随机封面', icon: Picture },
@@ -84,7 +86,7 @@ const expandedActions = [
   { value: 'repair', label: '内容修复', icon: Tools },
   { value: 'edit', label: '编辑书籍', icon: Edit },
   { value: 'add-to-list', label: '加入书单', icon: Collection },
-]
+].filter(action => action.value !== 'quick-read' || canQuickRead.value))
 const emit = defineEmits<{ (event:'action', command:string, book:Book):void }>()
 </script>
 
