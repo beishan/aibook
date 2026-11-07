@@ -1,5 +1,6 @@
 <template>
   <button
+    v-if="route.query.independentWindow !== '1'"
     class="quick-reader-toolbar-drag"
     type="button"
     aria-label="拖动小窗：拖动调整位置，也可使用方向键"
@@ -17,7 +18,10 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount } from 'vue'
+import { useRoute } from 'vue-router'
 import { sendQuickReaderControl } from '@/reader/quickWindowBridge'
+
+const route = useRoute()
 
 let pointer: { id: number; x: number; y: number } | null = null
 const start = (event: PointerEvent) => {

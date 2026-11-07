@@ -836,7 +836,7 @@
               @mode="setReadingMode"
             >
               <template #chapter-title>
-                <QuickReaderWindowSettings v-if="isQuickWindow" />
+                <QuickReaderWindowSettings v-if="isQuickWindow && !isIndependentQuickWindow" />
                 <QuickChapterTitleSettings
                   v-if="isQuickWindow && book.format !== 'pdf'"
                   :mode="settings.quickChapterTitleStyle"
@@ -848,7 +848,7 @@
               </template>
             </ReaderBlueGraySettings>
             <div v-else class="settings-body">
-              <QuickReaderWindowSettings v-if="isQuickWindow" />
+              <QuickReaderWindowSettings v-if="isQuickWindow && !isIndependentQuickWindow" />
               <QuickChapterTitleSettings
                 v-if="isQuickWindow && book.format !== 'pdf'"
                 :mode="settings.quickChapterTitleStyle"
@@ -1183,6 +1183,8 @@ const { displayBookName } = useBookNameDisplay()
 const route = useRoute()
 const router = useRouter()
 const isQuickWindow = computed(() => route.query.quickWindow === '1')
+const isIndependentQuickWindow = computed(() => isQuickWindow.value
+  && route.query.independentWindow === '1' && window.parent === window)
 const bookStore = useBookStore()
 const themeStore = useThemeStore()
 const preferencesStore = usePreferencesStore()
@@ -3019,6 +3021,22 @@ const isChapterTitle = (paragraph: string): boolean => {
 /**
  * 判断是否为当前目录项
  */
+const currentPdfTocItem = computed(() => [...tocItems.value]
+  .reverse()
+  .find(chapter => chapter.page != null && chapter.page <= pdfCurrentPage.value)
+  || tocItems.value[0])
+
+const currentTextTocItem = computed(() => {
+  // The chapter name and panel state also track scroll and reopen changes.
+  const namedChapter = currentChapterName.value
+  if (!usesWorkspaceChrome.value && activeTab.value !== 'toc') {
+    return tocItems.value.find(item => item.title === namedChapter)
+  }
+  return chapterAtTextIndex(
+    usesWorkspaceChrome.value ? blueVisibleTextIndex.value : visibleTextIndex(),
+  ).chapter || tocItems.value[0]
+})
+
 const isCurrentTocItem = (item: Chapter): boolean => {
   if (book.value?.format === 'epub') {
     return currentTocHref.value
@@ -3026,17 +3044,10 @@ const isCurrentTocItem = (item: Chapter): boolean => {
       : item.title === currentChapterName.value
   }
   if (book.value?.format === 'pdf') {
-    const currentItem = [...tocItems.value]
-      .reverse()
-      .find(chapter => chapter.page != null && chapter.page <= pdfCurrentPage.value)
-      || tocItems.value[0]
-    return item === currentItem
+    return item === currentPdfTocItem.value
   }
   if (isTextFormat(book.value?.format)) {
-    const currentTextItem = chapterAtTextIndex(
-      usesWorkspaceChrome.value ? blueVisibleTextIndex.value : visibleTextIndex(),
-    ).chapter
-      || tocItems.value[0]
+    const currentTextItem = currentTextTocItem.value
     if (currentTextItem) return item.index === currentTextItem.index
   }
   return item.title === currentChapterName.value
@@ -4091,6 +4102,19 @@ const flushPendingReaderSettings = async (force = false) => {
 }
 
 const goBack = async () => {
+  if (isIndependentQuickWindow.value) {
+    await flushPendingReaderSettings()
+    window.close()
+    // Browsers may refuse to close a tab opened outside the detail page.
+    if (!window.closed) {
+      await router.replace({
+        name: 'BookDetail',
+        params: { id: route.params.id },
+        query: { versionId: route.query.versionId },
+      })
+    }
+    return
+  }
   if (isQuickWindow.value && window.parent !== window) {
     await nextTick()
     await flushPendingReaderSettings()

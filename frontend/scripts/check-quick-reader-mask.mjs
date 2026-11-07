@@ -84,7 +84,7 @@ assert.doesNotMatch(source, /book-quick-reader-window-toolbar/)
 assert.doesNotMatch(source, /class="book-quick-reader-drag"/)
 assert.match(source, /\.book-quick-reader-frame\s*\{[^}]*height: 0;[^}]*min-height: 0;[^}]*flex: 1 1 auto;/)
 const readerSource = await readFile(new URL('../src/views/ReaderView.vue', import.meta.url), 'utf8')
-assert.match(readerSource, /<QuickReaderWindowSettings v-if="isQuickWindow"/)
+assert.match(readerSource, /<QuickReaderWindowSettings v-if="isQuickWindow && !isIndependentQuickWindow"/)
 context.window = { innerWidth: 1200, innerHeight: 900 }
 context.quickReaderOpen = { value: true }
 context.quickReaderFrame = { value: { contentWindow: {} } }

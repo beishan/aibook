@@ -235,6 +235,15 @@
             >
               小窗阅读
             </button>
+            <a
+              v-if="independentReaderHref"
+              class="btn"
+              :href="independentReaderHref"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              小窗阅读（独立窗口）
+            </a>
             <button
               class="btn state-button"
               :class="{ active: book.isFavorite }"
@@ -1252,6 +1261,19 @@ const selectedVersion = computed(() =>
 const canQuickRead = computed(() => Boolean(
   selectedVersion.value && !['cbz', 'cbr'].includes(selectedVersion.value.format.toLowerCase()),
 ))
+
+const independentReaderHref = computed(() => {
+  if (!book.value || !canQuickRead.value || selectedVersionId.value === null) return ''
+  return router.resolve({
+    name: 'Reader',
+    params: { id: book.value.id },
+    query: {
+      versionId: String(selectedVersionId.value),
+      quickWindow: '1',
+      independentWindow: '1',
+    },
+  }).href
+})
 
 function openQuickReader() {
   if (!book.value || !canQuickRead.value || selectedVersionId.value === null) return
