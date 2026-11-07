@@ -1410,7 +1410,9 @@ const resolveReaderFontFamily = (value: string) => {
   const id = managedFontId(value)
   if (id != null) return `${fontStore.cssFamily(id)}, serif`
   return value === 'default'
-    ? (usesWorkspaceChrome.value ? '"Songti SC", "STSong", "SimSun", serif' : 'inherit')
+    ? (settings.value.appearance === 'trialReader'
+      ? '"Iowan Old Style", "Songti SC", "STSong", "SimSun", serif'
+      : '"Songti SC", "STSong", "SimSun", serif')
     : value
 }
 
@@ -6790,7 +6792,7 @@ onBeforeUnmount(() => {
 .reader-text p,
 .reader-html {
   color: inherit;
-  font-family: "Songti SC", "STSong", serif;
+  font-family: inherit;
   text-align: justify;
 }
 
@@ -7421,7 +7423,7 @@ onBeforeUnmount(() => {
 
 .trial-reader-mode .reader-text p,
 .trial-reader-mode .reader-html {
-  font-family: "Iowan Old Style", "Songti SC", "STSong", serif;
+  font-family: inherit;
   text-align: justify;
 }
 
