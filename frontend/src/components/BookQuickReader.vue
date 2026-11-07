@@ -50,6 +50,7 @@ const preferencesStore = usePreferencesStore()
 const { quickReaderWindow } = storeToRefs(preferencesStore)
 const quickReaderOpen = ref(false)
 const quickReaderBook = ref<Book | null>(null)
+const quickReaderVersionId = ref<number | null>(null)
 const quickReaderFrame = ref<HTMLIFrameElement | null>(null)
 const quickReaderSize = ref({ width: 0, height: 0, left: 0, top: 0 })
 const overlayTransparency = computed(() => quickReaderWindow.value?.overlayTransparency ?? 50)
@@ -82,7 +83,10 @@ const quickReaderSrc = computed(() => {
   return router.resolve({
     name: 'Reader',
     params: { id: quickReaderBook.value.id },
-    query: { quickWindow: '1' },
+    query: {
+      quickWindow: '1',
+      ...(quickReaderVersionId.value ? { versionId: String(quickReaderVersionId.value) } : {}),
+    },
   }).href
 })
 const quickReaderDialogStyle = computed(() => ({
@@ -91,7 +95,7 @@ const quickReaderDialogStyle = computed(() => ({
   margin: `${quickReaderSize.value.top}px 0 0 ${quickReaderSize.value.left}px`,
 }))
 
-const openQuickReader = (book: Book) => {
+const openQuickReader = (book: Book, versionId: number | null = null) => {
   const maxWidth = Math.max(120, window.innerWidth - 24)
   const maxHeight = Math.max(160, window.innerHeight - 24)
   const defaultWidth = Math.min(
@@ -129,6 +133,7 @@ const openQuickReader = (book: Book) => {
     left: Math.round(left),
     top: Math.round(top),
   }
+  quickReaderVersionId.value = versionId
   quickReaderBook.value = book
   quickReaderOpen.value = true
 }
@@ -282,6 +287,7 @@ const resetQuickReader = () => {
   void preferencesStore.flushQuickReaderWindow()
   if (quickReaderBook.value) emit('closed', quickReaderBook.value.id)
   quickReaderBook.value = null
+  quickReaderVersionId.value = null
   quickReaderResizeStart.value = null
 }
 

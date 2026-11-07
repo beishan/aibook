@@ -228,6 +228,14 @@
               <span>{{ hasReadingProgress ? '继续阅读' : '开始阅读' }}</span>
             </button>
             <button
+              v-if="canQuickRead"
+              class="btn"
+              type="button"
+              @click="openQuickReader"
+            >
+              小窗阅读
+            </button>
+            <button
               class="btn state-button"
               :class="{ active: book.isFavorite }"
               @click="handleToggleFavorite"
@@ -1053,10 +1061,12 @@
       :initial-isbn="book?.isbn || ''"
       @apply="applyMetadataCandidate"
     />
+    <BookQuickReader ref="quickReader" @closed="refreshQuickReadingProgress" />
   </div>
 </template>
 
 <script setup lang="ts">
+import BookQuickReader from '@/components/BookQuickReader.vue'
 import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import BookAudiobookPanel from '@/components/audio/BookAudiobookPanel.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
@@ -1210,6 +1220,7 @@ const bookmarks = ref<Bookmark[]>([])
 const bookmarksLoading = ref(false)
 const bookmarksError = ref('')
 const versions = ref<BookVersion[]>([])
+const quickReader = ref<InstanceType<typeof BookQuickReader> | null>(null)
 const selectedVersionId = ref<number | null>(null)
 const versionSelectionSaving = ref(false)
 const uploadingVersion = ref(false)
@@ -1238,6 +1249,19 @@ const allImportVersionsSelected = computed(() => importSources.value.length > 0
 const selectedVersion = computed(() =>
   versions.value.find(version => version.id === selectedVersionId.value) || null,
 )
+const canQuickRead = computed(() => Boolean(
+  selectedVersion.value && !['cbz', 'cbr'].includes(selectedVersion.value.format.toLowerCase()),
+))
+
+function openQuickReader() {
+  if (!book.value || !canQuickRead.value || selectedVersionId.value === null) return
+  quickReader.value?.open(book.value, selectedVersionId.value)
+}
+
+function refreshQuickReadingProgress(bookId: number) {
+  if (book.value?.id === bookId) void loadReadingProgress()
+}
+
 const selectedVersionSourceType = computed(() => selectedVersion.value?.sourceType
   || (selectedVersion.value?.primaryVersion ? book.value?.sourceType : 'UPLOAD'))
 const selectedVersionPath = computed(() => selectedVersion.value?.filePath
