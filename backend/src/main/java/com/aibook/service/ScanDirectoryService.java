@@ -29,11 +29,17 @@ public class ScanDirectoryService {
 
     @Transactional
     public ScanDirectory updateContentType(Long id, String type, User user) {
-        if (type == null || !List.of("EBOOK", "AUDIO", "MIXED").contains(type)) throw new IllegalArgumentException("扫描内容类型无效");
+        validateContentType(type);
         ScanDirectory directory = scanDirectoryRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResourceNotFoundException("扫描目录", id));
         directory.setContentType(type);
         return scanDirectoryRepository.save(directory);
+    }
+
+    private void validateContentType(String type) {
+        if (type == null || !List.of("EBOOK", "AUDIO", "MIXED").contains(type)) {
+            throw new IllegalArgumentException("扫描内容类型无效");
+        }
     }
 
     private final ScanDirectoryRepository scanDirectoryRepository;
@@ -69,7 +75,10 @@ public class ScanDirectoryService {
      * 添加扫描目录
      */
     @Transactional
-    public ScanDirectory addDirectory(User user, String path, Long defaultCategoryId) {
+    public ScanDirectory addDirectory(
+            User user, String path, Long defaultCategoryId, String contentType) {
+        String selectedContentType = contentType == null ? "EBOOK" : contentType;
+        validateContentType(selectedContentType);
         if (path == null || path.isBlank()) {
             throw new IllegalArgumentException("目录路径不能为空");
         }
@@ -91,6 +100,7 @@ public class ScanDirectoryService {
 
         ScanDirectory directory = ScanDirectory.builder()
                 .path(path)
+                .contentType(selectedContentType)
                 .enabled(exists)
                 .defaultCategory(defaultCategoryId == null
                         ? null

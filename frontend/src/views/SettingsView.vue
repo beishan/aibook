@@ -262,11 +262,11 @@
               </el-select>
               <button
                 class="btn btn-text"
-                :disabled="row._scanning || !row.enabled"
-                :title="row.enabled ? '立即扫描' : '请先启用该目录'"
+                :disabled="row._scanning || !row.enabled || row.contentType === 'AUDIO'"
+                :title="row.contentType === 'AUDIO' ? '请在有声书导入中探测音频' : '立即扫描电子书'"
                 @click="handleScan(row)"
               >
-                {{ row._scanning ? `${row._scanProgress?.progress || 0}%` : '立即扫描' }}
+                {{ row._scanning ? `${row._scanProgress?.progress || 0}%` : '扫描电子书' }}
               </button>
               <button
                 class="btn btn-text"
@@ -285,6 +285,17 @@
                   : row.libraryVisible !== false ? '书库隐藏' : '书库显示' }}
               </button>
               <button class="btn btn-text btn-danger" @click="handleRemove(row)">删除</button>
+            </div>
+            <div class="directory-strategy">
+              <span class="form-label">定时扫描策略</span>
+              <AudioSegmented
+                :model-value="row.contentType || 'EBOOK'"
+                :label="`目录 ${row.path} 的定时扫描策略`"
+                :options="scanContentOptions"
+                :aria-busy="row._contentTypeUpdating || undefined"
+                @update:model-value="value => handleContentTypeChange(row, value)"
+              />
+              <span v-if="row._contentTypeUpdating" role="status">保存中…</span>
             </div>
             <div
               v-if="row._scanProgress && row._scanProgress.status !== 'IDLE'"
@@ -694,6 +705,15 @@
 
             <div class="dialog-body">
               <DirectoryBrowser @select="handleDirectorySelect">
+                <div class="scan-strategy-field">
+                  <label class="form-label">定时扫描策略</label>
+                  <AudioSegmented
+                    v-model="selectedContentType"
+                    label="新目录的定时扫描策略"
+                    :options="scanContentOptions"
+                  />
+                  <p class="field-hint">有声书定时探测生成预览，需手动确认入库。</p>
+                </div>
                 <div class="form-group default-category-field">
                   <label class="form-label">新书默认分类</label>
                   <el-select
@@ -1114,6 +1134,12 @@ const scanPollTimers = new Map<number, ReturnType<typeof setTimeout>>()
 const newDir = reactive({ path: '' })
 const selectedPath = ref('')
 const selectedDefaultCategoryId = ref('')
+const selectedContentType = ref('EBOOK')
+const scanContentOptions = [
+  { value: 'EBOOK', label: '电子书' },
+  { value: 'AUDIO', label: '有声书' },
+  { value: 'MIXED', label: '混合' },
+]
 
 const schedulerConfig = reactive({
   enabled: true,
@@ -1394,6 +1420,7 @@ const closeAddDialog = () => {
   selectedPath.value = ''
   newDir.path = ''
   selectedDefaultCategoryId.value = ''
+  selectedContentType.value = 'EBOOK'
 }
 
 const handleDirectorySelect = (path: string) => {
@@ -1411,6 +1438,7 @@ const handleAddDirectory = async () => {
   try {
     await api.post('/api/scan-directories', {
       path: pathToAdd,
+      contentType: selectedContentType.value,
       defaultCategoryId: selectedDefaultCategoryId.value
         ? Number(selectedDefaultCategoryId.value)
         : null,
@@ -1419,12 +1447,29 @@ const handleAddDirectory = async () => {
     newDir.path = ''
     selectedPath.value = ''
     selectedDefaultCategoryId.value = ''
+    selectedContentType.value = 'EBOOK'
     showAddDialog.value = false
     await loadDirectories()
   } catch (error: any) {
     message.error(error.response?.data?.message || '添加失败')
   } finally {
     adding.value = false
+  }
+}
+
+const handleContentTypeChange = async (row: any, value: string) => {
+  if (row._contentTypeUpdating || value === (row.contentType || 'EBOOK')) return
+  row._contentTypeUpdating = true
+  try {
+    const { data } = await api.put(`/api/scan-directories/${row.id}/content-type`, {
+      contentType: value,
+    })
+    row.contentType = data.contentType
+    message.success('定时扫描策略已更新')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '定时扫描策略更新失败')
+  } finally {
+    row._contentTypeUpdating = false
   }
 }
 
@@ -1945,6 +1990,14 @@ onUnmounted(() => {
 .directory-actions {
   display: flex;
   align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.directory-strategy {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: var(--spacing-sm);
 }
 
@@ -2991,6 +3044,10 @@ onUnmounted(() => {
   width: min(1100px, 95vw);
   max-width: 1100px;
   max-height: 90dvh;
+}
+
+.scan-directory-dialog .scan-strategy-field {
+  margin-top: 18px;
 }
 
 .scan-directory-dialog .default-category-field {

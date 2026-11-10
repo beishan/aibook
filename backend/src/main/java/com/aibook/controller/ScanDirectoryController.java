@@ -53,7 +53,10 @@ public class ScanDirectoryController {
         Long categoryId = body.get("defaultCategoryId") == null
                 ? null
                 : Long.valueOf(body.get("defaultCategoryId").toString());
-        return ResponseEntity.ok(scanDirectoryService.addDirectory(user, path, categoryId));
+        String contentType = body.get("contentType") == null
+                ? null
+                : body.get("contentType").toString();
+        return ResponseEntity.ok(scanDirectoryService.addDirectory(user, path, categoryId, contentType));
     }
 
     /**

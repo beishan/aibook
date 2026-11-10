@@ -1,6 +1,8 @@
 package com.aibook.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -17,6 +19,29 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ScanDirectoryServiceTest {
+
+    @Test
+    void createsDirectoryWithSelectedStrategyAndDefaultsForOlderClients() {
+        User user = User.builder().id(1L).username("reader").build();
+        ScanDirectoryRepository repository = mock(ScanDirectoryRepository.class);
+        when(repository.save(any(ScanDirectory.class))).thenAnswer(call -> call.getArgument(0));
+        ScanDirectoryService service = new ScanDirectoryService(
+                repository,
+                mock(FileScannerService.class),
+                mock(CategoryService.class),
+                mock(BookScanSourceRepository.class),
+                mock(OperationLogService.class));
+
+        assertThat(service.addDirectory(user, "/audio", null, "AUDIO").getContentType())
+                .isEqualTo("AUDIO");
+        assertThat(service.addDirectory(user, "/mixed", null, "MIXED").getContentType())
+                .isEqualTo("MIXED");
+        assertThat(service.addDirectory(user, "/books", null, null).getContentType())
+                .isEqualTo("EBOOK");
+        assertThatThrownBy(() -> service.addDirectory(user, "/invalid", null, "INVALID"))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(repository, never()).existsByUserAndPath(user, "/invalid");
+    }
 
     @Test
     void updatesLibraryVisibilityIndependentlyAndIdempotently() {
