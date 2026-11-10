@@ -23,6 +23,11 @@ pipeline {
             defaultValue: params.BOOKS_MOUNTS ?: '',
             description: '附加书库，每行：宿主机绝对路径:/scanfolder/子目录[:ro|rw]；默认 ro，沿用上次构建输入'
         )
+        booleanParam(
+            name: 'AUTO_AUTHORIZE_BOOKS',
+            defaultValue: false,
+            description: '为附加书库目录的所属组递归授权读取及进入权限，并设置默认 ACL；会修改 NAS 文件权限'
+        )
         string(
             name: 'BOOKS_GIDS',
             defaultValue: params.BOOKS_GIDS ?: '',

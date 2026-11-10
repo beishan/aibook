@@ -99,6 +99,8 @@ validate_gid() {
     fi
 }
 
+BOOKS_MOUNT_SOURCES=()
+BOOKS_ALLOWED_GIDS=()
 OVERRIDE_MOUNT_SOURCES=()
 OVERRIDE_MOUNT_TARGETS=()
 OVERRIDE_MOUNT_READ_ONLY=()
@@ -191,6 +193,9 @@ collect_mounts_config() {
         else
             read_only=false
         fi
+        if [[ "${config_name}" == "BOOKS_MOUNTS" ]]; then
+            BOOKS_MOUNT_SOURCES+=("${source_path}")
+        fi
         add_override_mount \
             "${source_path}" \
             "${target_path}" \
@@ -215,6 +220,9 @@ collect_gids_config() {
             continue
         fi
         validate_gid "${config_name}" "${gid}"
+        if [[ "${config_name}" == "BOOKS_GIDS" ]]; then
+            BOOKS_ALLOWED_GIDS+=("${gid}")
+        fi
         add_override_gid "${gid}" "${description} GID ${gid}"
     done <<< "${normalized_gids}"
 }
@@ -233,6 +241,7 @@ prepare_mounts_override() {
     books_gid="$(trim_whitespace "${BOOKS_GID:-$(env_file_value BOOKS_GID)}")"
     books_gid="${books_gid:-1001}"
     validate_gid "BOOKS_GID" "${books_gid}"
+    BOOKS_ALLOWED_GIDS+=("${books_gid}")
     # 基础 Compose 已包含主书库 GID；后续动态 GID 必须与它一起去重。
     SEEN_OVERRIDE_GIDS+="${books_gid}"$'\n'
 
@@ -510,7 +519,65 @@ cleanup_images() {
     cleanup_dangling_images "frontend"
 }
 
+# 在 Docker 守护进程所在主机挂载书库，不依赖 Jenkins 工作节点的路径。
+# 授权是不可回滚的文件系统变更，只在用户明确勾选时进行。
+authorize_extra_books() {
+    if [[ "${AUTO_AUTHORIZE_BOOKS:-false}" != "true" ]]; then
+        return
+    fi
+    if ((${#BOOKS_MOUNT_SOURCES[@]} == 0)); then
+        echo "未配置附加书库，无需自动授权。"
+        return
+    fi
+    local source gid allowed configured_gid
+    local gids=()
+    local image="${BACKEND_IMAGE:?自动授权需要已构建的 BACKEND_IMAGE}"
+
+    # 先验证全部目录和组，避免因配置错误在部分目录已授权后才失败。
+    for source in "${BOOKS_MOUNT_SOURCES[@]}"; do
+        if [[ "${source}" == *,* ]]; then
+            echo "错误：自动授权暂不支持包含逗号的路径：${source}" >&2
+            return 1
+        fi
+        gid="$(docker run --rm --network none --user 0:0 --entrypoint sh \
+            --mount "type=bind,src=${source},dst=/books,bind-recursive=disabled" \
+            "${image}" -c 'test -d /books && command -v setfacl >/dev/null && stat -c %g /books')" || {
+            echo "错误：无法检查附加书库或 ACL 工具：${source}" >&2
+            return 1
+        }
+        validate_gid "书库所属组" "${gid}"
+        allowed=false
+        for configured_gid in "${BOOKS_ALLOWED_GIDS[@]}"; do
+            [[ "${gid}" == "${configured_gid}" ]] && allowed=true
+        done
+        if [[ "${gid}" == 0 || "${allowed}" != true ]]; then
+            echo "错误：${source} 的所属 GID ${gid} 不在书库授权组中或为 0；请检查 BOOKS_GID/BOOKS_GIDS。" >&2
+            return 1
+        fi
+        gids+=("${gid}")
+    done
+
+    local index
+    for index in "${!BOOKS_MOUNT_SOURCES[@]}"; do
+        source="${BOOKS_MOUNT_SOURCES[${index}]}"
+        gid="${gids[${index}]}"
+        echo "授权附加书库 ${source} 的所属组 ${gid} 读取和进入（含默认 ACL）。"
+        docker run --rm --network none --user 0:0 --cap-drop ALL \
+            --cap-add DAC_OVERRIDE --cap-add FOWNER --entrypoint sh \
+            --mount "type=bind,src=${source},dst=/books,bind-recursive=disabled" \
+            "${image}" -ec '
+                gid="$1"
+                find /books -xdev -type d -exec setfacl -m "g:${gid}:rX,d:g:${gid}:rX" {} +
+                find /books -xdev -type f -exec setfacl -m "g:${gid}:rX" {} +
+            ' sh "${gid}" || {
+            echo "错误：ACL 授权失败，先前已修改的权限不会自动回滚：${source}" >&2
+            return 1
+        }
+    done
+}
+
 deploy_release() {
+    authorize_extra_books
     record_previous_images
 
     echo "正在更新 aibook 服务。"
