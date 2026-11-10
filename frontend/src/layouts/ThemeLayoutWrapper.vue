@@ -5,7 +5,7 @@
     :class="{ 'app-layout--immersive': immersive, 'app-layout--audio': !!audioPlayer.book && route.name !== 'AudiobookPlayer' }"
   />
   <MobileNavigation />
-  <AudioMiniPlayer />
+  <AudioMiniPlayer :dock-layout="themeStore.currentLayout === 'dock'" />
 </template>
 
 <script setup lang="ts">

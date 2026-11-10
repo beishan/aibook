@@ -1,7 +1,7 @@
 <template>
   <section
     v-if="player.book && route.name !== 'AudiobookPlayer'"
-    class="audio-mini glass"
+    :class="['audio-mini', 'glass', { 'audio-mini--dock': dockLayout }]"
     aria-label="正在收听"
   >
     <div class="audio-mini-title">
@@ -47,6 +47,7 @@ import { useRoute } from 'vue-router'
 import { useAudioPlayerStore } from '@/stores/audioPlayer'
 import { audioTime } from '@/utils/audiobook'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
+defineProps<{ dockLayout: boolean }>()
 const player = useAudioPlayerStore()
 const route = useRoute()
 const { displayBookName } = useBookNameDisplay()
@@ -64,6 +65,9 @@ const { displayBookName } = useBookNameDisplay()
   padding: 14px 20px;
   border-radius: 22px;
   background: var(--surface-elevated);
+}
+.audio-mini--dock {
+  bottom: calc(var(--dock-size, 64px) + 28px + env(safe-area-inset-bottom));
 }
 .audio-mini-title {
   min-width: 0;
