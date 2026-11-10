@@ -64,8 +64,14 @@
         <button class="btn" :disabled="!book.tracks.length" @click="showChapters = true">
           编辑 / 批量清理章节名
         </button>
-        <div v-for="(chapter, index) in book.chapters" :key="chapter.id" class="audio-row">
-          <span>{{ String(index + 1).padStart(2, '0') }}</span
+        <div v-if="book.chapters.length" class="chapter-pagination" aria-label="章节分页">
+          <span>共 {{ book.chapters.length }} 章 · 第 {{ chapterPage }} / {{ chapterPages }} 页</span>
+          <button class="btn" :disabled="chapterPage === 1" @click="chapterPage--">上一页</button>
+          <button class="btn" :disabled="chapterPage >= chapterPages" @click="chapterPage++">下一页</button>
+        </div>
+        <p v-else>暂无章节。</p>
+        <div v-for="(chapter, index) in pagedChapters" :key="chapter.id" class="audio-row">
+          <span>{{ String((chapterPage - 1) * chapterPageSize + index + 1).padStart(2, '0') }}</span
           ><strong>{{ chapter.title }}</strong>
           <button class="btn" @click="listen(chapter.segments[0])">收听</button>
         </div>
@@ -143,7 +149,7 @@
 </template>
 <script setup lang="ts">
 import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import api from '@/utils/api'
@@ -160,6 +166,16 @@ const book = ref<Audiobook | null>(null),
   showImport = ref(false),
   showEdit = ref(false),
   tab = ref('chapters')
+const chapterPageSize = 20
+const chapterPage = ref(1)
+const chapterPages = computed(() => Math.max(1, Math.ceil((book.value?.chapters.length ?? 0) / chapterPageSize)))
+const pagedChapters = computed(() => {
+  const start = (chapterPage.value - 1) * chapterPageSize
+  return book.value?.chapters.slice(start, start + chapterPageSize) ?? []
+})
+watch(chapterPages, (pages) => {
+  chapterPage.value = Math.min(chapterPage.value, pages)
+})
 const work = ref<any>(null),
   showWorkEdit = ref(false),
   showChapters = ref(false)
@@ -186,7 +202,10 @@ async function favorite() {
   await api.put(`/api/books/${book.value.bookId}/favorite`)
   await load()
 }
-watch(() => route.params.id, load, { immediate: true })
+watch(() => route.params.id, () => {
+  chapterPage.value = 1
+  load()
+}, { immediate: true })
 async function listen(segment: { trackId: number; startMs: number }) {
   if (!book.value) return
   await router.push({
@@ -318,6 +337,13 @@ select {
   padding: 20px;
   margin-top: 24px;
   border-radius: 24px;
+}
+.chapter-pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
 }
 .audio-row {
   display: flex;
