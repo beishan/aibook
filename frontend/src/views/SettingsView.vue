@@ -685,36 +685,37 @@
     <!-- 添加目录对话框 -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="showAddDialog" class="dialog-overlay" @click.self="showAddDialog = false">
+        <div v-if="showAddDialog" class="dialog-overlay" @click.self="closeAddDialog">
           <div class="dialog scan-directory-dialog">
             <div class="dialog-header">
               <span>📂 添加扫描目录</span>
-              <button class="dialog-close" @click="showAddDialog = false">✕</button>
+              <button class="dialog-close" aria-label="关闭" @click="closeAddDialog">✕</button>
             </div>
 
             <div class="dialog-body">
-              <DirectoryBrowser @select="handleDirectorySelect" />
-              <div class="form-group default-category-field">
-                <label class="form-label">新书默认分类</label>
-                <el-select
-                  v-model="selectedDefaultCategoryId"
-                  class="default-category-select"
-                  placeholder="暂不分类"
-                >
-                  <el-option label="暂不分类" value="" />
-                  <el-option
-                    v-for="category in categoryStore.flatTree"
-                    :key="category.id"
-                    :label="category.path"
-                    :value="String(category.id)"
-                  />
-                </el-select>
-                <p class="field-hint">只影响之后新扫描入库的书，不覆盖已有书籍分类。</p>
-              </div>
+              <DirectoryBrowser @select="handleDirectorySelect">
+                <div class="form-group default-category-field">
+                  <label class="form-label">新书默认分类</label>
+                  <el-select
+                    v-model="selectedDefaultCategoryId"
+                    class="default-category-select"
+                    placeholder="暂不分类"
+                  >
+                    <el-option label="暂不分类" value="" />
+                    <el-option
+                      v-for="category in categoryStore.flatTree"
+                      :key="category.id"
+                      :label="category.path"
+                      :value="String(category.id)"
+                    />
+                  </el-select>
+                  <p class="field-hint">只影响之后新扫描入库的书，不覆盖已有书籍分类。</p>
+                </div>
+              </DirectoryBrowser>
             </div>
 
             <div class="dialog-footer">
-              <button class="btn" @click="showAddDialog = false">取消</button>
+              <button class="btn" @click="closeAddDialog">取消</button>
               <button
                 class="btn btn-primary"
                 @click="handleAddDirectory"
@@ -1386,6 +1387,13 @@ const handleSaveScanSettings = async () => {
   } finally {
     savingScanSettings.value = false
   }
+}
+
+const closeAddDialog = () => {
+  showAddDialog.value = false
+  selectedPath.value = ''
+  newDir.path = ''
+  selectedDefaultCategoryId.value = ''
 }
 
 const handleDirectorySelect = (path: string) => {
@@ -2980,6 +2988,17 @@ onUnmounted(() => {
 .scan-directory-dialog {
   display: flex;
   flex-direction: column;
+  width: min(1100px, 95vw);
+  max-width: 1100px;
+  max-height: 90dvh;
+}
+
+.scan-directory-dialog .default-category-field {
+  margin-top: 18px;
+}
+
+.scan-directory-dialog .default-category-select {
+  width: 100%;
 }
 
 .scan-directory-dialog .dialog-body {
