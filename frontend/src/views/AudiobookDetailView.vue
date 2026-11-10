@@ -62,7 +62,7 @@
       />
       <template v-if="tab === 'chapters'">
         <button class="btn" :disabled="!book.tracks.length" @click="showChapters = true">
-          编辑章节
+          编辑 / 批量清理章节名
         </button>
         <div v-for="(chapter, index) in book.chapters" :key="chapter.id" class="audio-row">
           <span>{{ String(index + 1).padStart(2, '0') }}</span

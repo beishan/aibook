@@ -7,6 +7,44 @@
     :close-on-click-modal="false"
   >
     <p>章节可包含多个音轨中的片段。保存会更新内容修订号并结束当前播放会话，原音频不变。</p>
+    <section class="bulk-clean" aria-label="批量清理章节名称">
+      <div class="bulk-clean-heading">
+        <strong>批量清理章节名</strong>
+        <span>仅修改章节标题，不修改音频文件。</span>
+      </div>
+      <label class="bulk-clean-input">
+        要删除的文字（按原文匹配）
+        <input
+          v-model="cleanText"
+          class="input"
+          type="text"
+          placeholder="例如：【持续更新关注闲鱼：大猫券码】"
+        />
+      </label>
+      <p v-if="cleanText" class="bulk-clean-count" role="status">
+        {{ cleanPreview.length ? `匹配 ${cleanPreview.length} 个章节` : '没有匹配的章节' }}
+      </p>
+      <div v-if="cleanPreview.length" class="bulk-clean-preview">
+        <div v-for="item in cleanPreview.slice(0, 3)" :key="item.index" class="bulk-clean-example">
+          <span>{{ item.before }}</span>
+          <span aria-hidden="true">↓</span>
+          <strong>{{ item.after || '清理后为空，不能应用' }}</strong>
+        </div>
+        <p v-if="cleanPreview.length > 3">仅展示前 3 条，共 {{ cleanPreview.length }} 条。</p>
+      </div>
+      <p v-if="cleanPreview.some(item => !item.after)" role="alert" class="bulk-clean-error">
+        存在清理后为空的章节名称，请调整删除文字。
+      </p>
+      <button
+        type="button"
+        class="btn"
+        :disabled="!cleanPreview.length || cleanPreview.some(item => !item.after)"
+        @click="applyCleanup"
+      >
+        应用到章节草稿
+      </button>
+      <small>应用后可继续检查或编辑，点击底部“保存章节”才会生效。</small>
+    </section>
     <div v-for="(chapter, index) in draft" :key="index" class="chapter-edit-item">
       <label
         >章节名称<input v-model="chapter.title" class="input" maxlength="500" required
@@ -69,9 +107,10 @@
   </el-dialog>
 </template>
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import api from '@/utils/api'
 import { type Audiobook } from '@/utils/audiobook'
+import { previewChapterCleanup } from '@/utils/audioChapterCleanup'
 import { useAudioPlayerStore } from '@/stores/audioPlayer'
 const props = defineProps<{ book: Audiobook }>()
 const visible = defineModel<boolean>({ required: true })
@@ -88,9 +127,19 @@ const draft = ref<
 >([])
 const saving = ref(false),
   error = ref('')
+const cleanText = ref('')
+const cleanPreview = computed(() =>
+  previewChapterCleanup(draft.value.map((chapter) => chapter.title), cleanText.value),
+)
+function applyCleanup() {
+  if (!cleanPreview.value.length || cleanPreview.value.some((item) => !item.after)) return
+  for (const item of cleanPreview.value) draft.value[item.index].title = item.after
+  cleanText.value = ''
+}
 watch(visible, (open) => {
   if (!open) return
   error.value = ''
+  cleanText.value = ''
   draft.value = props.book.chapters.map((chapter) => ({
     title: chapter.title,
     segments: chapter.segments.map((segment) => ({
@@ -157,6 +206,57 @@ p {
   margin-bottom: 16px;
   color: var(--text-secondary);
   line-height: 1.6;
+}
+.bulk-clean {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: var(--bg-secondary);
+}
+.bulk-clean-heading {
+  display: grid;
+  gap: 4px;
+}
+.bulk-clean-heading span,
+.bulk-clean small,
+.bulk-clean-count,
+.bulk-clean-preview p {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.bulk-clean-input {
+  font-size: 14px;
+}
+.bulk-clean-count,
+.bulk-clean-preview p,
+.bulk-clean-error {
+  margin: 0;
+}
+.bulk-clean-preview {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+}
+.bulk-clean-example {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  overflow-wrap: anywhere;
+}
+.bulk-clean-example span:first-child {
+  color: var(--text-secondary);
+}
+.bulk-clean-error {
+  color: var(--danger, #c0392b);
+}
+.bulk-clean > .btn {
+  justify-self: start;
 }
 .chapter-edit-item {
   padding: 16px;
