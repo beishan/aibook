@@ -20,13 +20,13 @@ pipeline {
         string(name: 'BOOKS_GID', defaultValue: '1001', description: '主书库目录所属用户组 GID')
         text(
             name: 'BOOKS_MOUNTS',
-            defaultValue: '',
-            description: '附加书库，每行：宿主机绝对路径:/scanfolder/子目录[:ro|rw]；默认 ro'
+            defaultValue: params.BOOKS_MOUNTS ?: '',
+            description: '附加书库，每行：宿主机绝对路径:/scanfolder/子目录[:ro|rw]；默认 ro，沿用上次构建输入'
         )
         string(
             name: 'BOOKS_GIDS',
-            defaultValue: '',
-            description: '附加书库所需的数字 GID，多个值使用逗号分隔'
+            defaultValue: params.BOOKS_GIDS ?: '',
+            description: '附加书库所需的数字 GID，多个值使用逗号分隔；沿用上次构建输入'
         )
         string(
             name: 'FONTS_PATH',

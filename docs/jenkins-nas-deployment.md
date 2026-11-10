@@ -232,7 +232,7 @@ git@github.com:beishan/aibook.git
 
 非空 Jenkins 参数会覆盖 Secret file 中同名配置。`BOOKS_MOUNTS` 留空时会读取
 Secret file 中的单行分号格式，便于固定配置；临时发版也可以直接在 Jenkins
-多行输入框中调整。字体参数使用相同规则；`FONTS_PATH`、`FONTS_GID` 都留空
+多行输入框中调整。`BOOKS_MOUNTS` 和 `BOOKS_GIDS` 的下次构建默认值沿用上一次构建输入（包括失败的构建）；首次应用此更新时需重新填写一次。清空参数会清除下次默认值，但部署仍会回退读取 Secret file 中的对应配置，如需移除挂载也要清除该配置。字体参数的 Secret file 回退规则相同；`FONTS_PATH`、`FONTS_GID` 都留空
 时不会生成字体挂载，也不会出现 Compose 缺少变量的错误。端口被其他应用占用
 时，在执行构建时修改参数即可。
 
