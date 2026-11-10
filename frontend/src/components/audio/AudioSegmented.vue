@@ -1,5 +1,11 @@
 <template>
-  <div class="audio-segmented" role="radiogroup" :aria-label="label" @keydown="keydown">
+  <div
+    class="audio-segmented"
+    :class="{ 'audio-segmented--compact': compact }"
+    role="radiogroup"
+    :aria-label="label"
+    @keydown="keydown"
+  >
     <div class="audio-segmented-track" :style="{ '--count': options.length, '--index': index }">
       <span class="audio-segmented-thumb" aria-hidden="true" />
       <button
@@ -21,6 +27,7 @@ import { computed, nextTick } from 'vue'
 const props = defineProps<{
   modelValue: string
   label: string
+  compact?: boolean
   options: Array<{ value: string; label: string }>
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
@@ -81,6 +88,16 @@ button {
   white-space: nowrap;
   font: inherit;
 }
+.audio-segmented--compact .audio-segmented-track {
+  grid-template-columns: repeat(var(--count), minmax(64px, 1fr));
+  min-width: 192px;
+}
+
+.audio-segmented--compact button {
+  padding: 9px 4px;
+  font-size: 13px;
+}
+
 button[aria-checked='true'] {
   color: var(--primary);
   font-weight: 600;

@@ -711,8 +711,9 @@
                     v-model="selectedContentType"
                     label="新目录的定时扫描策略"
                     :options="scanContentOptions"
+                    compact
                   />
-                  <p class="field-hint">有声书定时探测生成预览，需手动确认入库。</p>
+                  <p class="field-hint">有声书定时探测后生成预览，确认后入库。</p>
                 </div>
                 <div class="form-group default-category-field">
                   <label class="form-label">新书默认分类</label>
@@ -3047,7 +3048,19 @@ onUnmounted(() => {
 }
 
 .scan-directory-dialog .scan-strategy-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
   margin-top: 18px;
+}
+
+.scan-directory-dialog .scan-strategy-field .form-label,
+.scan-directory-dialog .scan-strategy-field .field-hint {
+  margin: 0;
+}
+
+.scan-directory-dialog .scan-strategy-field .field-hint {
+  line-height: 1.5;
 }
 
 .scan-directory-dialog .default-category-field {
