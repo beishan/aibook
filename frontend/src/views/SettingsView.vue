@@ -686,7 +686,7 @@
     <Teleport to="body">
       <Transition name="fade">
         <div v-if="showAddDialog" class="dialog-overlay" @click.self="showAddDialog = false">
-          <div class="dialog">
+          <div class="dialog scan-directory-dialog">
             <div class="dialog-header">
               <span>📂 添加扫描目录</span>
               <button class="dialog-close" @click="showAddDialog = false">✕</button>
@@ -2973,5 +2973,23 @@ onUnmounted(() => {
   .resource-collected-at {
     text-align: left;
   }
+}
+</style>
+
+<style scoped>
+.scan-directory-dialog {
+  display: flex;
+  flex-direction: column;
+}
+
+.scan-directory-dialog .dialog-body {
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scan-directory-dialog .dialog-header,
+.scan-directory-dialog .dialog-footer {
+  flex-shrink: 0;
 }
 </style>

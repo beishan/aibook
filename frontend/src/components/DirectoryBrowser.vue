@@ -100,7 +100,7 @@ const loadDirectory = async (path: string): Promise<TreeNodeData[]> => {
       }))
   } catch (error) {
     console.error('Failed to load directory:', error)
-    return []
+    throw error
   }
 }
 
@@ -109,6 +109,8 @@ const loadRoot = async () => {
   loading.value = true
   try {
     treeData.value = await loadDirectory('/')
+  } catch {
+    message.error('无法读取根目录，请检查服务连接和目录访问权限')
   } finally {
     loading.value = false
   }
@@ -126,9 +128,13 @@ const handleNodeSelect = (node: TreeNodeData) => {
 // 处理节点展开/收起
 const handleNodeToggle = async (node: TreeNodeData) => {
   if (!node.loaded) {
-    const children = await loadDirectory(node.path)
-    node.children = children
-    node.loaded = true
+    try {
+      node.children = await loadDirectory(node.path)
+      node.loaded = true
+    } catch {
+      message.error(`无法读取目录 ${node.path}，请检查容器挂载和读取权限；点击可重试`)
+      return
+    }
   }
   node.expanded = !node.expanded
 }
@@ -184,8 +190,10 @@ onMounted(() => {
 .tree-container {
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
-  max-height: 400px;
-  overflow-y: auto;
+  max-height: min(400px, 40dvh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: var(--spacing-sm);
 }
 

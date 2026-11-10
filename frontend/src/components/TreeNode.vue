@@ -77,6 +77,7 @@ const isSelected = computed(() => props.selectedPath === props.node.path)
 const handleClick = () => {
   if (props.node.accessible) {
     emit('select', props.node)
+    emit('toggle', props.node)
   }
 }
 
