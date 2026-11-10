@@ -171,6 +171,28 @@ public class AudiobookService {
         bump(id);
     }
 
+    @Transactional
+    public void updateChapterTitles(User user, long id, AudioTypes.ChapterTitleBatch batch) {
+        store.edition(user.getId(), id);
+        var chapterIds = new java.util.HashSet<Long>();
+        for (var change : batch.changes()) {
+            if (!chapterIds.add(change.id()) || change.after().isBlank()) {
+                throw new IllegalArgumentException("章节名称无效或重复");
+            }
+        }
+        if (store.update("UPDATE audiobook_editions SET content_revision=content_revision+1 "
+                + "WHERE id=? AND content_revision=? AND deleted_at IS NULL", id, batch.contentRevision()) != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "章节已发生变化，请重新预览");
+        }
+        for (var change : batch.changes()) {
+            if (store.update("UPDATE audio_chapters SET title=? WHERE id=? AND edition_id=? AND title=?",
+                    change.after(), change.id(), id, change.before()) != 1) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "章节已发生变化，请重新预览");
+            }
+        }
+        store.update("UPDATE listening_sessions SET ended=true WHERE edition_id=?", id);
+    }
+
     public void bump(long id) {
         store.update("UPDATE audiobook_editions SET content_revision=content_revision+1 WHERE id=?", id);
         store.update("UPDATE listening_sessions SET ended=true WHERE edition_id=?", id);

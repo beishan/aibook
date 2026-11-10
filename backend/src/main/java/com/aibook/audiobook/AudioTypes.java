@@ -31,6 +31,10 @@ public final class AudioTypes {
                             boolean finished) {}
     public record BookmarkRequest(@NotNull Long trackId, @Min(0) long positionMs,
                                   @NotBlank @Size(max = 200) String title) {}
+    public record ChapterTitleChange(@NotNull Long id, @NotBlank @Size(max = 500) String before,
+                                     @NotBlank @Size(max = 500) String after) {}
+    public record ChapterTitleBatch(@Min(1) long contentRevision,
+                                    @NotEmpty @Size(max = 10000) List<@Valid ChapterTitleChange> changes) {}
     public record TrackEdit(@NotBlank @Size(max = 500) String title) {}
     public record Segment(@NotNull Long trackId, @Min(0) long startMs, @Min(1) long endMs) {}
     public record ChapterEdit(@NotBlank @Size(max = 500) String title,

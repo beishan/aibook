@@ -45,7 +45,12 @@
       </button>
       <small>应用后可继续检查或编辑，点击底部“保存章节”才会生效。</small>
     </section>
-    <div v-for="(chapter, index) in draft" :key="index" class="chapter-edit-item">
+    <div class="chapter-pagination" aria-label="章节分页">
+      <span>共 {{ draft.length }} 章 · 第 {{ currentPage + 1 }} / {{ totalPages }} 页</span>
+      <button type="button" class="btn" :disabled="currentPage === 0" @click="currentPage--">上一页</button>
+      <button type="button" class="btn" :disabled="currentPage + 1 >= totalPages" @click="currentPage++">下一页</button>
+    </div>
+    <div v-for="{ chapter, index } in pagedDraft" :key="index" class="chapter-edit-item">
       <label
         >章节名称<input v-model="chapter.title" class="input" maxlength="500" required
       /></label>
@@ -88,15 +93,7 @@
       </div>
       <button class="btn" @click="chapter.segments.push(newSegment())">添加跨音轨片段</button>
     </div>
-    <button
-      class="btn"
-      @click="
-        draft.push({
-          title: `章节 ${draft.length + 1}`,
-          segments: [newSegment()],
-        })
-      "
-    >
+    <button class="btn" @click="addChapter">
       添加章节
     </button>
     <p v-if="error" role="alert">{{ error }}</p>
@@ -125,6 +122,23 @@ const draft = ref<
     }>
   }>
 >([])
+const pageSize = 20
+const currentPage = ref(0)
+const totalPages = computed(() => Math.max(1, Math.ceil(draft.value.length / pageSize)))
+const pagedDraft = computed(() => {
+  const start = currentPage.value * pageSize
+  return draft.value.slice(start, start + pageSize).map((chapter, offset) => ({
+    chapter,
+    index: start + offset,
+  }))
+})
+watch(totalPages, (total) => {
+  currentPage.value = Math.min(currentPage.value, total - 1)
+})
+function addChapter() {
+  draft.value.push({ title: `章节 ${draft.value.length + 1}`, segments: [newSegment()] })
+  currentPage.value = totalPages.value - 1
+}
 const saving = ref(false),
   error = ref('')
 const cleanText = ref('')
@@ -140,6 +154,7 @@ watch(visible, (open) => {
   if (!open) return
   error.value = ''
   cleanText.value = ''
+  currentPage.value = 0
   draft.value = props.book.chapters.map((chapter) => ({
     title: chapter.title,
     segments: chapter.segments.map((segment) => ({
@@ -257,6 +272,17 @@ p {
 }
 .bulk-clean > .btn {
   justify-self: start;
+}
+.chapter-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.chapter-pagination span {
+  margin-right: auto;
+  color: var(--text-secondary);
 }
 .chapter-edit-item {
   padding: 16px;

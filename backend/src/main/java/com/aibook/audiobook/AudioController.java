@@ -81,6 +81,12 @@ public class AudioController {
     public void chapters(Authentication auth, @PathVariable long id,
             @Valid @RequestBody List<AudioTypes.ChapterEdit> chapters) { audio.chapters(user(auth), id, chapters); }
 
+    @PutMapping("/audiobooks/{id}/chapter-titles")
+    public void updateChapterTitles(Authentication auth, @PathVariable long id,
+            @Valid @RequestBody AudioTypes.ChapterTitleBatch body) {
+        audio.updateChapterTitles(user(auth), id, body);
+    }
+
     @PostMapping("/audiobooks/imports/scan")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public Map<String, Object> scan(Authentication auth, @Valid @RequestBody AudioTypes.ScanRequest body) throws IOException {
