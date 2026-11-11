@@ -83,8 +83,13 @@
         <p>调整音轨顺序会终止当前播放会话；原有书签及音轨内位置保留。</p>
         <div v-for="(track, index) in book.tracks" :key="track.id" class="audio-row">
           <span>{{ index + 1 }}</span
-          ><strong>{{ track.title }}</strong
-          ><small>{{ audioTime(track.durationMs) }}</small>
+          ><div class="track-names">
+            <strong>{{ track.title }}</strong>
+            <small v-if="chaptersByTrack.get(track.id)?.length">
+              章节：{{ chaptersByTrack.get(track.id)?.join('、') }}
+            </small>
+          </div>
+          <small>{{ audioTime(track.durationMs) }}</small>
           <button
             class="btn"
             :disabled="index === 0"
@@ -171,6 +176,17 @@ const book = ref<Audiobook | null>(null),
   showImport = ref(false),
   showEdit = ref(false),
   tab = ref('chapters')
+const chaptersByTrack = computed(() => {
+  const result = new Map<number, string[]>()
+  for (const chapter of book.value?.chapters ?? []) {
+    for (const trackId of new Set(chapter.segments.map((segment) => segment.trackId))) {
+      const titles = result.get(trackId) ?? []
+      titles.push(chapter.title)
+      result.set(trackId, titles)
+    }
+  }
+  return result
+})
 const chapterPageSize = 20
 const chapterPage = ref(1)
 const chapterPages = computed(() => Math.max(1, Math.ceil((book.value?.chapters.length ?? 0) / chapterPageSize)))
@@ -357,6 +373,16 @@ select {
   gap: 12px;
   padding: 14px 4px;
   border-bottom: 1px solid var(--border-color-light);
+}
+.track-names {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+.track-names small {
+  color: var(--text-secondary);
 }
 .audio-row strong {
   flex: 1;
