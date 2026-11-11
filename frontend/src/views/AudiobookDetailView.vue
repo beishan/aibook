@@ -62,7 +62,10 @@
       />
       <template v-if="tab === 'chapters'">
         <button class="btn" :disabled="!book.tracks.length" @click="showChapters = true">
-          编辑 / 批量清理章节名
+          编辑章节
+        </button>
+        <button class="btn" :disabled="!book.chapters.length" @click="showCleanup = true">
+          批量清理章节名
         </button>
         <div v-if="book.chapters.length" class="chapter-pagination" aria-label="章节分页">
           <span>共 {{ book.chapters.length }} 章 · 第 {{ chapterPage }} / {{ chapterPages }} 页</span>
@@ -127,6 +130,7 @@
       @saved="load"
     />
     <AudioChapterEditor v-model="showChapters" :book="book" @saved="load" />
+    <AudioChapterCleanup v-model="showCleanup" :book="book" @saved="load" />
     <el-dialog v-model="showEdit" title="编辑有声版本资料" width="min(600px, 94vw)" append-to-body>
       <form class="audio-edit" @submit.prevent="saveEdit">
         <label>版本名称<input v-model="draft.name" class="input" required maxlength="200" /></label>
@@ -155,6 +159,7 @@ import { ElMessageBox } from 'element-plus'
 import api from '@/utils/api'
 import BookEditDialog from '@/components/BookEditDialog.vue'
 import AudioChapterEditor from '@/components/audio/AudioChapterEditor.vue'
+import AudioChapterCleanup from '@/components/audio/AudioChapterCleanup.vue'
 import { audioApi, audioTime, type Audiobook } from '@/utils/audiobook'
 import { useAudioPlayerStore } from '@/stores/audioPlayer'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
@@ -178,7 +183,8 @@ watch(chapterPages, (pages) => {
 })
 const work = ref<any>(null),
   showWorkEdit = ref(false),
-  showChapters = ref(false)
+  showChapters = ref(false),
+  showCleanup = ref(false)
 const draft = ref({ name: '', narrator: '', language: '', description: '' })
 watch(showEdit, (value) => {
   if (value && book.value)
