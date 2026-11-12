@@ -90,6 +90,7 @@
 </template>
 
 <script setup lang="ts">
+import { openIndependentReader } from '@/utils/independentReader'
 import ShelfBookMenu from '@/components/ShelfBookMenu.vue'
 import BookQuickReader from '@/components/BookQuickReader.vue'
 import BookEditDialog from '@/components/BookEditDialog.vue'
@@ -152,6 +153,10 @@ async function refreshBook(id: number) {
 
 async function handleAction(command: string, book: Book) {
   if (pending.value.has(book.id)) return
+  if (command === 'independent-read') {
+    openIndependentReader(router, book)
+    return
+  }
   pending.value.add(book.id)
   try {
     const { data: fullBook } = await api.get<Book>(`/api/books/${book.id}`)

@@ -810,6 +810,7 @@
 </template>
 
 <script setup lang="ts">
+import { openIndependentReader } from '@/utils/independentReader'
 import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import BookCardBadges from '@/components/BookCardBadges.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
@@ -916,6 +917,9 @@ async function handleBookAction(command:string, book:Book) {
         applyBookUpdate(book.onShelf
           ? await bookStore.removeFromShelf(book.id) : await bookStore.addToShelf(book.id))
         message.success(book.onShelf ? '已移出书架' : '已加入书架')
+        break
+      case 'independent-read':
+        openIndependentReader(router, book)
         break
       case 'quick-read':
         quickReader.value?.open(book)

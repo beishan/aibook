@@ -416,6 +416,10 @@
                     </el-dropdown-item>
                     <el-dropdown-item command="add-to-library">加入图书馆</el-dropdown-item>
                     <el-dropdown-item v-if="book.format !== 'cbz' && book.format !== 'cbr'" divided command="quick-read">▣ 小窗阅读</el-dropdown-item>
+                    <el-dropdown-item
+                      v-if="book.format !== 'cbz' && book.format !== 'cbr'"
+                      command="independent-read"
+                    >小窗阅读（独立窗口）</el-dropdown-item>
                     <el-dropdown-item command="scrape">✨ 刮削元数据</el-dropdown-item>
                     <el-dropdown-item command="random-cover">🎲 随机封面</el-dropdown-item>
                     <el-dropdown-item command="reparse">🔄 重新解析</el-dropdown-item>
@@ -703,6 +707,7 @@
 </template>
 
 <script setup lang="ts">
+import { openIndependentReader } from '@/utils/independentReader'
 import BookCoverPlaceholderText from '@/components/BookCoverPlaceholderText.vue'
 import AudioSegmented from '@/components/audio/AudioSegmented.vue'
 import { useBookNameDisplay } from '@/composables/useBookNameDisplay'
@@ -1246,6 +1251,9 @@ const handleMoreCommand = async (command: string, book: Book) => {
       break
     case 'add-to-library':
       openLibraryDialog([book.id])
+      break
+    case 'independent-read':
+      openIndependentReader(router, book)
       break
     case 'quick-read':
       openQuickReader(book)
