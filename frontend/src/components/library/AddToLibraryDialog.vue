@@ -155,7 +155,7 @@
       </el-table>
       <div class="picker-pages">
         <span>
-          已选 {{ chosen.length }} 本，已有馆藏会自动跳过
+          已选 {{ chosen.length }} 本，列表仅显示尚未加入本馆的书籍
         </span>
         <el-pagination
           v-model:current-page="page"
@@ -285,6 +285,7 @@ async function loadBooks() {
         const source = filters.source || '';
         const { data } = await api.get('/api/books', {
             params: {
+                excludeLibraryId: props.libraryId,
                 keyword: keyword.value.trim() || undefined,
                 format: filters.format || undefined,
                 status: filters.status || undefined,
@@ -310,10 +311,10 @@ async function loadBooks() {
         }
         const ids = data.content.map((book: Candidate) => book.id);
         const existing = ids.length ? (await api.get<number[]>(`/api/libraries/${props.libraryId}/membership`, {
-            params: { bookIds: ids.join(','), listId: props.listId },
+            params: { bookIds: ids.join(',') },
         })).data : [];
         if (request !== generation) return;
-        candidates.value = data.content.map((book: Candidate) => ({ ...book, existing: existing.includes(book.id) }));
+        candidates.value = data.content.filter((book: Candidate) => !existing.includes(book.id));
         total.value = data.totalElements;
     } catch (error) {
         if (request !== generation) return;

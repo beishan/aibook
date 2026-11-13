@@ -4,6 +4,7 @@ import com.aibook.dto.BookDTO;
 import com.aibook.dto.TagDTO;
 import com.aibook.model.entity.Book;
 import com.aibook.model.entity.BookScanSource;
+import com.aibook.model.entity.LibraryMembershipView;
 import com.aibook.model.entity.Category;
 import com.aibook.model.entity.OperationLog;
 import com.aibook.model.entity.Tag;
@@ -72,6 +73,18 @@ public class BookService {
             Long categoryId, boolean includeChildren, Long tagId, String sourceType,
             String sourceSiteName, Pageable pageable, java.time.LocalDate addedFrom,
             java.time.LocalDate addedTo) {
+        return filterBooks(user, keyword, format, status, categoryId, includeChildren, tagId,
+                sourceType, sourceSiteName, pageable, addedFrom, addedTo, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<BookDTO> filterBooks(User user, String keyword, String format, String status,
+            Long categoryId, boolean includeChildren, Long tagId, String sourceType,
+            String sourceSiteName, Pageable pageable, java.time.LocalDate addedFrom,
+            java.time.LocalDate addedTo, Long excludeLibraryId) {
+        if (excludeLibraryId != null && bookRepository.countOwnedLibrary(excludeLibraryId, user.getId()) != 1) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "图书馆不存在或无权访问");
+        }
         if (addedFrom != null && addedTo != null && addedFrom.isAfter(addedTo)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "入库时间范围无效");
         }
@@ -104,6 +117,14 @@ public class BookService {
                     cb.or(cb.isTrue(visibleSource.get("scanDirectory").get("libraryVisible")),
                             cb.isNull(visibleSource.get("scanDirectory").get("libraryVisible"))));
             predicates.add(cb.or(cb.not(cb.exists(scanSources)), cb.exists(visibleSources)));
+            if (excludeLibraryId != null) {
+                var membership = query.subquery(Long.class);
+                var member = membership.from(LibraryMembershipView.class);
+                membership.select(cb.literal(1L)).where(
+                        cb.equal(member.get("libraryId"), excludeLibraryId),
+                        cb.equal(member.get("bookId"), root.get("id")));
+                predicates.add(cb.not(cb.exists(membership)));
+            }
             if (addedFrom != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), addedFrom.atStartOfDay()));
             }

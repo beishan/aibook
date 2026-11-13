@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import com.aibook.model.entity.Book;
+import com.aibook.model.entity.LibraryMembershipView;
 import com.aibook.model.entity.User;
 import com.aibook.repository.*;
 import jakarta.persistence.criteria.*;
@@ -96,6 +97,39 @@ class BookSourceFilterTest {
         verify(cb).lessThan(root.get("createdAt"), end.plusDays(1).atStartOfDay());
         assertThatThrownBy(() -> service.filterBooks(user, null, null, null, null, false,
                 null, null, null, pageable, end, start)).isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void excludesCurrentLibraryBeforePaginationAndCount() {
+        Pageable pageable = PageRequest.of(1, 24);
+        when(repository.countOwnedLibrary(8L, user.getId())).thenReturn(1L);
+        when(repository.findAll(any(Specification.class), eq(pageable))).thenReturn(Page.empty(pageable));
+        service.filterBooks(user, null, "epub", null, null, false, null, null, null,
+                pageable, null, null, 8L);
+        ArgumentCaptor<Specification<Book>> captor = ArgumentCaptor.forClass(Specification.class);
+        verify(repository).findAll(captor.capture(), eq(pageable));
+        Root<Book> root = mock(Root.class, RETURNS_DEEP_STUBS);
+        CriteriaQuery<?> query = mock(CriteriaQuery.class, RETURNS_DEEP_STUBS);
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        captor.getValue().toPredicate(root, query, cb);
+        var membership = query.subquery(Long.class).from(LibraryMembershipView.class);
+        verify(cb).equal(membership.get("libraryId"), 8L);
+        verify(cb).equal(membership.get("bookId"), root.get("id"));
+        verify(cb, times(3)).exists(any(Subquery.class));
+        verify(cb, times(2)).not(any());
+        verify(cb).equal(root.get("user"), user);
+        verify(cb).equal(root.get("format"), "epub");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void rejectsForeignOrMissingExcludedLibrary() {
+        when(repository.countOwnedLibrary(8L, user.getId())).thenReturn(0L);
+        assertThatThrownBy(() -> service.filterBooks(user, null, null, null, null, false,
+                null, null, null, PageRequest.of(0, 24), null, null, 8L))
+                .isInstanceOf(ResponseStatusException.class);
+        verify(repository, never()).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test

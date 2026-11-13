@@ -38,6 +38,10 @@ public interface BookRepository
         Boolean getHidden();
     }
 
+    @Query(value = "SELECT COUNT(*) FROM personal_libraries WHERE id=:libraryId AND user_id=:userId",
+            nativeQuery = true)
+    long countOwnedLibrary(@Param("libraryId") Long libraryId, @Param("userId") Long userId);
+
     @Query("SELECT b.id AS id, b.coverHidden AS hidden FROM Book b "
             + "WHERE b.user = :user AND b.deletedAt IS NULL AND b.coverHidden IS NOT NULL")
     List<CoverVisibility> findCoverVisibilityOverrides(@Param("user") User user);

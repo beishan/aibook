@@ -47,18 +47,17 @@ assert.deepEqual(Array.from(context.candidateTagNames({ tags: [{ name: '科幻' 
 
 const first = context.loadBooks()
 assert.deepEqual(JSON.parse(JSON.stringify(requests[0].options.params)), {
-  keyword: '测试', format: 'epub', status: 'READING', categoryId: 3, includeChildren: true,
+  excludeLibraryId: 8, keyword: '测试', format: 'epub', status: 'READING', categoryId: 3, includeChildren: true,
   tagId: 5, sourceType: 'CRAWLER', sourceSiteName: 'example.org', addedFrom: '2026-11-01',
   addedTo: '2026-11-13', sortBy: 'title', sortDir: 'asc', page: 0, size: 48,
 })
 requests[0].resolve({ data: { content: [{ id: 1 }, { id: 2 }], totalElements: 90 } })
 await new Promise(resolve => setTimeout(resolve, 0))
 assert.equal(requests[1].url, '/api/libraries/8/membership')
-assert.equal(requests[1].options.params.listId, 9)
+assert.equal(requests[1].options.params.listId, undefined, 'exclude the whole library even when opened from a list')
 requests[1].resolve({ data: [1] })
 await first
-assert.equal(context.candidates.value[0].existing, true)
-assert.equal(context.candidates.value[1].existing, false)
+assert.deepEqual(Array.from(context.candidates.value, book => book.id), [2], 'concurrently added books are hidden too')
 assert.equal(context.total.value, 90)
 
 context.page.value = 2
