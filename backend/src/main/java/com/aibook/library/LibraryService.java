@@ -59,6 +59,22 @@ public class LibraryService {
                 args(user, 0).addValue("size", size));
     }
 
+    public String cardSize(User user) {
+        var values = jdbc.queryForList("SELECT card_size FROM personal_library_preferences WHERE user_id=:user",
+                args(user, 0), String.class);
+        return values.isEmpty() ? "standard" : values.get(0);
+    }
+
+    @Transactional
+    public void cardSize(User user, String value) {
+        if (!Set.of("standard", "small", "mini").contains(value)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无效的书馆卡片大小");
+        }
+        jdbc.update("INSERT INTO personal_library_preferences(user_id,card_size) VALUES(:user,:cardSize) "
+                + "ON CONFLICT(user_id) DO UPDATE SET card_size=EXCLUDED.card_size",
+                args(user, 0).addValue("cardSize", value));
+    }
+
     public Page libraries(User user, String keyword, int page, int size, String sort) {
         checkPage(page, size);
         var parameters = args(user, 0).addValue("query", search(keyword))

@@ -14,6 +14,36 @@ import org.springframework.web.server.ResponseStatusException;
 
 class LibraryServiceTest {
     @Test
+    void cardSizeDefaultsAndReadsOnlyTheCurrentAccount() {
+        var jdbc = mock(NamedParameterJdbcTemplate.class);
+        var service = new LibraryService(jdbc, new ObjectMapper());
+        User user = User.builder().id(7L).build();
+        when(jdbc.queryForList(anyString(), any(MapSqlParameterSource.class), eq(String.class)))
+                .thenReturn(List.of(), List.of("mini"));
+        assertEquals("standard", service.cardSize(user));
+        assertEquals("mini", service.cardSize(user));
+        var parameters = org.mockito.ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbc, times(2)).queryForList(contains("WHERE user_id=:user"), parameters.capture(), eq(String.class));
+        assertEquals(7L, parameters.getValue().getValue("user"));
+    }
+
+    @Test
+    void cardSizeUpdatesDoNotResetPageSizeAndRejectInvalidValues() {
+        var jdbc = mock(NamedParameterJdbcTemplate.class);
+        var service = new LibraryService(jdbc, new ObjectMapper());
+        User user = User.builder().id(7L).build();
+        for (String size : List.of("standard", "small", "mini")) service.cardSize(user, size);
+        var sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        var parameters = org.mockito.ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbc, times(3)).update(sql.capture(), parameters.capture());
+        assertTrue(sql.getAllValues().stream().noneMatch(value -> value.contains("page_size")));
+        assertEquals("mini", parameters.getValue().getValue("cardSize"));
+        assertEquals(7L, parameters.getValue().getValue("user"));
+        assertThrows(ResponseStatusException.class, () -> service.cardSize(user, "huge"));
+        verifyNoMoreInteractions(jdbc);
+    }
+
+    @Test
     void rejectsUnknownAndOversizedConfigurationInsteadOfSavingExecutableContent() {
         var service = new LibraryService(mock(NamedParameterJdbcTemplate.class), new ObjectMapper());
         assertThrows(ResponseStatusException.class, () -> service.encode(Map.of("accent", "url(https://other)")));

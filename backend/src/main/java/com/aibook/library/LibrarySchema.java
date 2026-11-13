@@ -86,6 +86,8 @@ public class LibrarySchema implements ApplicationRunner {
                     page_size INTEGER NOT NULL DEFAULT 24
                 )
                 """);
+        jdbc.execute("ALTER TABLE personal_library_preferences "
+                + "ADD COLUMN IF NOT EXISTS card_size VARCHAR(12) NOT NULL DEFAULT 'standard'");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_personal_library_user_order "
                 + "ON personal_libraries(user_id, sort_order, id)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_personal_library_book "

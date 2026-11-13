@@ -32,6 +32,15 @@
         <el-option value="manual" label="手工次序" />
         <el-option value="created" label="最近创建" />
       </el-select>
+      <div class="library-card-size-control" :inert="savingCardSize || undefined" :aria-busy="savingCardSize">
+        <span>书馆卡片大小</span>
+        <AudioSegmented
+          :model-value="cardSize"
+          label="书馆卡片大小"
+          :options="cardSizeOptions"
+          @update:model-value="changeCardSize"
+        />
+      </div>
       <span class="library-muted">
         {{ total }} 座图书馆 · 仅自己可见
       </span>
@@ -41,7 +50,11 @@
         重新加载
       </el-button>
     </el-alert>
-    <div v-loading="loading" class="personal-library-grid">
+    <div
+      v-loading="loading"
+      class="personal-library-grid"
+      :class="`library-cards-${cardSize}`"
+    >
       <article v-for="(library, index) in libraries" :key="library.id" class="personal-library-card">
         <button class="library-card-open" @click="router.push(`/libraries/${library.id}`)">
           <LibraryLandscape :library-id="library.id" :image-key="library.config.coverImage" :variant="library.config.cover" />
@@ -157,7 +170,29 @@ import api from '@/utils/api';
 import AudioSegmented from '@/components/audio/AudioSegmented.vue';
 import { personalLibraries, defaultLibraryConfig, type PersonalLibrary } from '@/utils/personalLibraries';
 import '@/styles/personal-libraries.css';
+import { message } from '@/utils/message';
 const router = useRouter();
+const cardSizeOptions = [
+    { value: 'mini', label: '迷你卡片' },
+    { value: 'small', label: '小卡片' },
+    { value: 'standard', label: '标准' },
+];
+const cardSize = ref('standard');
+const savingCardSize = ref(false);
+let cardSizeRevision = 0;
+async function changeCardSize(value: string) {
+    if (savingCardSize.value || !cardSizeOptions.some(option => option.value === value)) return;
+    savingCardSize.value = true;
+    cardSizeRevision++;
+    try {
+        await api.put('/api/libraries/preferences', { cardSize: value });
+        cardSize.value = value;
+    } catch {
+        message.error('书馆卡片大小保存失败，请重试');
+    } finally {
+        savingCardSize.value = false;
+    }
+}
 const libraries = ref<PersonalLibrary[]>([]);
 const createConfig = ref(defaultLibraryConfig());
 const keyword = ref(''), sort = ref('manual'), name = ref(''), description = ref('');
@@ -226,7 +261,12 @@ async function reorder(index: number, direction: number) {
 }
 onMounted(async () => {
     try {
-        size.value = (await api.get('/api/libraries/preferences')).data.pageSize;
+        const revision = cardSizeRevision;
+        const { data } = await api.get('/api/libraries/preferences');
+        size.value = data.pageSize;
+        if (revision === cardSizeRevision && cardSizeOptions.some(option => option.value === data.cardSize)) {
+            cardSize.value = data.cardSize;
+        }
     }
     finally {
         await load();

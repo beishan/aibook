@@ -223,3 +223,99 @@ no global theme overrides. */
     padding: 16px 8px;
   }
 }
+
+.library-card-size-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  min-width: 0;
+}
+.library-card-size-control > span {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.personal-library-grid.library-cards-small {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+.personal-library-grid.library-cards-mini {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+.library-cards-small .library-landscape {
+  height: 120px;
+}
+.library-cards-mini .library-landscape {
+  height: 80px;
+}
+.library-cards-small .library-card-copy {
+  padding: 16px;
+}
+.library-cards-mini .library-card-copy {
+  padding: 12px;
+}
+.library-cards-small .library-card-copy h2 {
+  font-size: 20px;
+  margin: 8px 0;
+}
+.library-cards-mini .library-card-copy h2 {
+  font-size: 17px;
+  margin: 6px 0;
+}
+.library-cards-small .library-card-copy p,
+.library-cards-mini .library-card-copy p {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 0;
+  font-size: 13px;
+}
+.library-cards-small .library-card-copy footer,
+.library-cards-mini .library-card-copy footer {
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+.library-cards-small .library-create-card {
+  min-height: 200px;
+  padding: 16px;
+}
+.library-cards-mini .library-create-card {
+  min-height: 160px;
+  padding: 12px;
+  font-size: 13px;
+}
+.library-cards-mini .library-cover-actions,
+.library-cards-mini .library-card-order {
+  padding-inline: 6px;
+}
+.library-cards-mini .library-card-order .el-button {
+  padding-inline: 6px;
+}
+@media (max-width: 1050px) {
+  .personal-library-grid.library-cards-small {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .personal-library-grid.library-cards-mini {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .personal-library-grid.library-cards-small {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .personal-library-grid.library-cards-mini {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .library-card-size-control {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 480px) {
+  .personal-library-grid.library-cards-mini {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

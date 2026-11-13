@@ -28,13 +28,18 @@ public class LibraryController {
     }
 
     @GetMapping("/preferences")
-    public Map<String, Integer> preferences(Authentication auth) {
-        return Map.of("pageSize", service.pageSize(user(auth)));
+    public Map<String, Object> preferences(Authentication auth) {
+        User user = user(auth);
+        return Map.of("pageSize", service.pageSize(user), "cardSize", service.cardSize(user));
     }
 
+    public record PreferencesRequest(Integer pageSize, String cardSize) {}
+
     @PutMapping("/preferences")
-    public void preferences(Authentication auth, @RequestBody Map<String, Integer> body) {
-        service.pageSize(user(auth), body.getOrDefault("pageSize", 24));
+    public void preferences(Authentication auth, @RequestBody PreferencesRequest body) {
+        User user = user(auth);
+        if (body.pageSize() != null) service.pageSize(user, body.pageSize());
+        if (body.cardSize() != null) service.cardSize(user, body.cardSize());
     }
 
     @GetMapping
