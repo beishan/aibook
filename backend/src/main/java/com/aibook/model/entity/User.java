@@ -464,6 +464,14 @@ public class User implements UserDetails {
     public String getShelfCardSize() { return preference().getShelfCardSize(); }
     public void setShelfCardSize(String value) { preference().setShelfCardSize(value); }
 
+    public Integer getLibraryPickerPageSize() {
+        return preference().getLibraryPickerPageSize();
+    }
+
+    public void setLibraryPickerPageSize(Integer value) {
+        preference().setLibraryPickerPageSize(value);
+    }
+
     public Integer getShelfPageSize() {
         return preference().getShelfPageSize();
     }

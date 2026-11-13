@@ -249,6 +249,10 @@ public class UserService implements UserDetailsService {
             requireAllowed("书架卡片大小", request.getShelfCardSize(), Set.of("small", "medium", "large"));
             user.setShelfCardSize(request.getShelfCardSize());
         }
+        if (request.getLibraryPickerPageSize() != null) {
+            requireAllowed("图书馆选书分页大小", request.getLibraryPickerPageSize(), Set.of(12, 24, 48, 96));
+            user.setLibraryPickerPageSize(request.getLibraryPickerPageSize());
+        }
         if (request.getShelfPageSize() != null) {
             requireAllowed("书架分页大小", request.getShelfPageSize(), Set.of(12, 24, 48, 96));
             user.setShelfPageSize(request.getShelfPageSize());
@@ -418,6 +422,9 @@ public class UserService implements UserDetailsService {
                 .bookListViewMode(user.getBookListViewMode())
                 .shelfViewMode(user.getShelfViewMode())
                 .shelfCardSize(user.getShelfCardSize())
+                .libraryPickerPageSize(user.getLibraryPickerPageSize() != null
+                        && Set.of(12, 24, 48, 96).contains(user.getLibraryPickerPageSize())
+                        ? user.getLibraryPickerPageSize() : 24)
                 .shelfPageSize(user.getShelfPageSize() != null
                         && Set.of(12, 24, 48, 96).contains(user.getShelfPageSize())
                         ? user.getShelfPageSize() : 24)

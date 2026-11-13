@@ -21,6 +21,26 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void libraryPickerPageSizeIsValidatedAndAccountScoped() {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+        assertEquals(24, service.getPreferences("reader").getLibraryPickerPageSize());
+        for (int size : new int[] {12, 24, 48, 96}) {
+            service.updatePreferences("reader", UserPreferencesDTO.builder().libraryPickerPageSize(size).build());
+            assertEquals(size, service.getPreferences("reader").getLibraryPickerPageSize());
+            assertEquals(24, service.getPreferences("other").getLibraryPickerPageSize());
+            assertEquals(24, service.getPreferences("reader").getShelfPageSize());
+        }
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                UserPreferencesDTO.builder().libraryPickerPageSize(1000).build()));
+    }
+
+    @Test
     void bookListViewPersistsIndependentlyAndRejectsInvalidModes() {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();

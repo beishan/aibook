@@ -28,6 +28,7 @@ public class UserPreferencesDTO {
     private String bookListViewMode;
     private String shelfViewMode;
     private String shelfCardSize;
+    private Integer libraryPickerPageSize;
     private Integer shelfPageSize;
     private Boolean hideBookNames;
     private String bookNameMaskMode;
@@ -382,6 +383,14 @@ public class UserPreferencesDTO {
     public String getShelfCardSize() { return shelfCardSize; }
     public void setShelfCardSize(String value) { shelfCardSize = value; }
 
+    public Integer getLibraryPickerPageSize() {
+        return libraryPickerPageSize;
+    }
+
+    public void setLibraryPickerPageSize(Integer value) {
+        libraryPickerPageSize = value;
+    }
+
     public Integer getShelfPageSize() {
         return shelfPageSize;
     }
@@ -616,6 +625,11 @@ public class UserPreferencesDTO {
         }
         public UserPreferencesDTOBuilder shelfCardSize(String value) {
             this.value.setShelfCardSize(value);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder libraryPickerPageSize(Integer size) {
+            value.setLibraryPickerPageSize(size);
             return this;
         }
 

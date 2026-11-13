@@ -76,6 +76,8 @@ public class UserPreference {
     private String shelfViewMode;
     @Column(name = "shelf_card_size", length = 12)
     private String shelfCardSize;
+    @Column(name = "library_picker_page_size")
+    private Integer libraryPickerPageSize;
     @Column(name = "shelf_page_size")
     private Integer shelfPageSize;
     @Column(name = "hide_book_names")

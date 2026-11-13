@@ -181,6 +181,7 @@ interface UserPreferences {
   bookListViewMode?: 'grid' | 'small' | 'list' | null
   shelfViewMode?: ShelfViewMode | null
   shelfCardSize?: ShelfCardSize | null
+  libraryPickerPageSize?: number | null
   shelfPageSize: number | null
   categoryPageSize: number | null
   scanThreadCount: number | null
@@ -524,6 +525,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const shelfCardSize = ref<ShelfCardSize>('medium')
   let shelfViewRevision = 0
   let shelfSizeRevision = 0
+  const libraryPickerPageSize = ref(24)
+  let libraryPickerPageRevision = 0
   const shelfPageSize = ref(24)
   let shelfPageSizeRevision = 0
   const categoryPageSize = ref(20)
@@ -928,6 +931,13 @@ export const usePreferencesStore = defineStore('preferences', () => {
     }
   }
 
+  const setLibraryPickerPageSize = (value: number, syncRemote = true) => {
+    if (!(SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(value)) return
+    if (syncRemote) libraryPickerPageRevision++
+    libraryPickerPageSize.value = value
+    if (syncRemote) return persistRemote({ libraryPickerPageSize: value })
+  }
+
   const setShelfPageSize = (value: number, syncRemote = true) => {
     if (!(SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(value)) return
     if (syncRemote) shelfPageSizeRevision++
@@ -1020,6 +1030,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const listViewRevision = bookListViewRevision
     const viewRevision = shelfViewRevision
     const sizeRevision = shelfSizeRevision
+    const pickerPageRevision = libraryPickerPageRevision
     const pageSizeRevision = shelfPageSizeRevision
 
     try {
@@ -1199,6 +1210,10 @@ export const usePreferencesStore = defineStore('preferences', () => {
       setBookNameMaskMode(data.bookNameMaskMode === 'PREFIX' ? 'PREFIX' : 'HEAD_TAIL', false)
       setBookNamePrefixLength(normalizeBookNamePrefixLength(data.bookNamePrefixLength), false)
       setBookNameMaskCharacter(normalizeBookNameMaskCharacter(data.bookNameMaskCharacter), false)
+      if (pickerPageRevision === libraryPickerPageRevision) {
+        setLibraryPickerPageSize((SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(data.libraryPickerPageSize ?? 0)
+          ? data.libraryPickerPageSize! : 24, false)
+      }
       if (pageSizeRevision === shelfPageSizeRevision) {
         setShelfPageSize((SHELF_PAGE_SIZE_OPTIONS as readonly number[]).includes(data.shelfPageSize ?? 0)
           ? data.shelfPageSize! : 24, false)
@@ -1246,6 +1261,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     shelfPageSizeRevision++
     bookListViewRevision++
     bookListViewMode.value = 'grid'
+    libraryPickerPageRevision++
+    libraryPickerPageSize.value = 24
     shelfViewMode.value = 'grid'
     shelfCardSize.value = 'medium'
     shelfPageSize.value = 24
@@ -1292,6 +1309,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setBookListViewMode,
     shelfViewMode,
     shelfCardSize,
+    libraryPickerPageSize,
+    setLibraryPickerPageSize,
     shelfPageSize,
     categoryPageSize,
     scanThreadCount,
