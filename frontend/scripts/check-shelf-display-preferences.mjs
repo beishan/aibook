@@ -41,11 +41,11 @@ try {
   await savedSmall
   const savedList = page.waitForResponse(res => res.url().endsWith('/api/user/preferences')
     && res.request().method() === 'PUT' && res.request().postDataJSON()?.shelfViewMode === 'list')
-  await page.getByRole('button', { name: '列表视图', exact: true }).click()
-  await page.locator('.books-list').waitFor()
+  await page.getByRole('button', { name: '表格视图', exact: true }).click()
+  await page.locator('.shelf-books-table').waitFor()
   await savedList
   await page.reload()
-  await page.locator('.books-list').waitFor()
+  await page.locator('.shelf-books-table').waitFor()
   const savedGrid = page.waitForResponse(res => res.url().endsWith('/api/user/preferences')
     && res.request().method() === 'PUT' && res.request().postDataJSON()?.shelfViewMode === 'grid')
   await page.getByRole('button', { name: '卡片视图', exact: true }).click()

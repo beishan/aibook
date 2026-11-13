@@ -13,6 +13,7 @@
           :class="{ 'is-list-view': viewMode === 'list' }"
           role="group"
           aria-label="书架显示方式"
+          @keydown="handleViewModeKeydown"
         >
           <span class="view-toggle-slider" aria-hidden="true"></span>
           <button
@@ -29,9 +30,9 @@
             class="view-btn"
             :class="{ active: viewMode === 'list' }"
             :aria-pressed="viewMode === 'list'"
-            aria-label="列表视图"
+            aria-label="表格视图"
             @click="viewMode = 'list'"
-            title="列表视图"
+            title="表格视图"
           >
             <span>☰</span>
           </button>
@@ -184,18 +185,100 @@
           <div class="empty-icon">📂</div>
           <p>{{ shelfKeyword.trim() ? '没有找到匹配的书籍，请尝试其他关键词' : '这个分组中还没有书籍' }}</p>
         </div>
-        <div v-else :class="[viewMode === 'grid' ? 'books-grid' : 'books-list', `card-${cardSize}`]">
+        <ShelfBooksTable
+          v-else-if="viewMode === 'list'"
+          :books="pagedShelfBooks"
+          :format-added-at="formatShelfDate"
+        >
+          <template #actions="{ book, index: bookIndex }">
+            <ShelfBookMenu
+              :book="book"
+              :title="displayBookName(book.title)"
+              :hide-shelf="activeTab === 'shelf'"
+              :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+              @action="handleBookAction"
+            >
+              <template #default="{ close }">
+                <button
+                  v-if="selectedShelfGroup !== 'all' && !shelfKeyword.trim()"
+                  class="shelf-menu-action"
+                  type="button"
+                  role="menuitem"
+                  :disabled="shelfPageOffset + bookIndex === 0 || shelfActionBookId === book.id"
+                  @click="close(); moveShelfBookOrder(shelfPageOffset + bookIndex, -1)"
+                >
+                  <el-icon><ArrowUp /></el-icon>
+                  <span>向前移动</span>
+                </button>
+                <button
+                  v-if="selectedShelfGroup !== 'all' && !shelfKeyword.trim()"
+                  class="shelf-menu-action"
+                  type="button"
+                  role="menuitem"
+                  :disabled="shelfPageOffset + bookIndex === displayedShelfBooks.length - 1 || shelfActionBookId === book.id"
+                  @click="close(); moveShelfBookOrder(shelfPageOffset + bookIndex, 1)"
+                >
+                  <el-icon><ArrowDown /></el-icon>
+                  <span>向后移动</span>
+                </button>
+                <el-dropdown
+                  :persistent="false"
+                  trigger="click"
+                  @command="command => { close(); moveBookToShelfGroup(book, command) }"
+                >
+                  <button class="shelf-menu-action" type="button" aria-label="移动到分组" @click.stop>
+                    <el-icon><Folder /></el-icon>
+                    <span>移动到分组</span>
+                  </button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="ungrouped" :disabled="!book.shelfGroupId">未分组</el-dropdown-item>
+                      <el-dropdown-item
+                        v-for="group in shelfOverview.groups"
+                        :key="group.id"
+                        :command="String(group.id)"
+                        :disabled="book.shelfGroupId === group.id"
+                      >{{ group.icon }} {{ group.name }}</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+                <button
+                  class="shelf-menu-action"
+                  type="button"
+                  role="menuitem"
+                  :disabled="downloadingBookId !== null"
+                  aria-label="下载到本地"
+                  @click.stop="close(); handleDownloadBook(book)"
+                >
+                  <el-icon><Download /></el-icon>
+                  <span>{{ downloadingBookId === book.id ? '下载中…' : '下载到本地' }}</span>
+                </button>
+                <button
+                  class="shelf-menu-action"
+                  type="button"
+                  role="menuitem"
+                  :disabled="shelfActionBookId === book.id"
+                  @click.stop="close(); removeShelfBook(book)"
+                >
+                  <el-icon><Close /></el-icon>
+                  <span>移出书架</span>
+                </button>
+              </template>
+            </ShelfBookMenu>
+          </template>
+        </ShelfBooksTable>
+        <div v-else class="books-grid" :class="`card-${cardSize}`">
           <div
             v-for="(book, bookIndex) in pagedShelfBooks"
             :key="book.id"
-            :class="viewMode === 'grid' ? 'book-card glass' : 'book-list-item glass'"
+            class="book-card glass"
             @click="$router.push(`/books/${book.id}`)"
           >
-            <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-              <BookCardBadges v-if="viewMode === 'grid'" :format="book.format" :author="book.author" />
+            <div class="book-cover">
+              <BookCardBadges :format="book.format" :author="book.author" />
               <img
                 v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-                :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
+                :src="getCoverThumbnailUrl(book.coverUrl, 'card')"
                 alt="封面"
               />
               <div v-else class="no-cover"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
@@ -203,10 +286,8 @@
                 v-if="book.coverUrl"
                 :book-id="book.id"
                 :book-title="book.title"
-                :compact="viewMode === 'list'"
               />
               <ShelfBookMenu
-                v-if="viewMode === 'grid'"
                 :book="book"
                 :title="displayBookName(book.title)"
                 :hide-shelf="activeTab === 'shelf'"
@@ -281,52 +362,16 @@
                 </template>
               </ShelfBookMenu>
             </div>
-            <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
+            <div class="book-info">
               <div class="book-title">{{ displayBookName(book.title) }}</div>
-              <div v-if="viewMode === 'list'" class="book-author">{{ book.author || '未知作者' }}</div>
-              <div v-if="viewMode === 'grid'" class="shelf-card-status" :class="{ finished: book.readingStatus === 'FINISHED' }">
+
+              <div class="shelf-card-status" :class="{ finished: book.readingStatus === 'FINISHED' }">
                 <span aria-hidden="true"></span>
                 {{ book.readingStatus === 'FINISHED' ? '已读完 ✓' : book.readingStatus === 'READING' ? '正在阅读' : '未读' }}
               </div>
-              <div v-if="viewMode === 'list'" class="book-meta">
-                <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
-                <span>加入于 {{ formatShelfDate(book.shelfAddedAt) }}</span>
-              </div>
+
             </div>
-            <div v-if="viewMode === 'list'" class="shelf-list-actions" @click.stop>
-              <ShelfBookActions :book="book" list hide-shelf :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id" @action="handleBookAction" />
-              <button
-                v-if="selectedShelfGroup !== 'all' && !shelfKeyword.trim()"
-                class="btn btn-text"
-                :disabled="shelfPageOffset + bookIndex === 0 || shelfActionBookId === book.id"
-                @click="moveShelfBookOrder(shelfPageOffset + bookIndex, -1)"
-              >上移</button>
-              <button
-                v-if="selectedShelfGroup !== 'all' && !shelfKeyword.trim()"
-                class="btn btn-text"
-                :disabled="shelfPageOffset + bookIndex === displayedShelfBooks.length - 1 || shelfActionBookId === book.id"
-                @click="moveShelfBookOrder(shelfPageOffset + bookIndex, 1)"
-              >下移</button>
-              <el-dropdown
-                :persistent="false"
-                trigger="click"
-                @command="command => moveBookToShelfGroup(book, command)"
-              >
-                <button class="btn btn-text" @click.stop>移动分组</button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="ungrouped" :disabled="!book.shelfGroupId">未分组</el-dropdown-item>
-                    <el-dropdown-item v-for="group in shelfOverview.groups" :key="group.id" :command="String(group.id)" :disabled="book.shelfGroupId === group.id">
-                      {{ group.icon }} {{ group.name }}
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-              <button class="btn btn-text" :disabled="downloadingBookId !== null" @click="handleDownloadBook(book)">
-                {{ downloadingBookId === book.id ? '下载中...' : '下载到本地' }}
-              </button>
-              <button class="btn btn-text remove-reading-list-action" @click="removeShelfBook(book)">移出书架</button>
-            </div>
+
           </div>
         </div>
       </template>
@@ -349,18 +394,46 @@
         <p>暂无收藏的书籍</p>
         <button class="btn btn-primary" @click="$router.push('/books')">去书库看看</button>
       </div>
-      <div v-else :class="[viewMode === 'grid' ? 'books-grid' : 'books-list', `card-${cardSize}`]">
+      <ShelfBooksTable
+        v-else-if="viewMode === 'list'"
+        :books="pagedFavoriteBooks"
+      >
+        <template #actions="{ book }">
+          <ShelfBookMenu
+            :book="book"
+            :title="displayBookName(book.title)"
+            :hide-shelf="activeTab === 'shelf'"
+            :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+            @action="handleBookAction"
+          >
+            <template #default="{ close }">
+              <button
+                class="shelf-menu-action"
+                type="button"
+                role="menuitem"
+                :disabled="downloadingBookId !== null"
+                aria-label="下载到本地"
+                @click.stop="close(); handleDownloadBook(book)"
+              >
+                <el-icon><Download /></el-icon>
+                <span>{{ downloadingBookId === book.id ? '下载中…' : '下载到本地' }}</span>
+              </button>
+            </template>
+          </ShelfBookMenu>
+        </template>
+      </ShelfBooksTable>
+      <div v-else class="books-grid" :class="`card-${cardSize}`">
         <div
           v-for="book in pagedFavoriteBooks"
           :key="book.id"
-          :class="viewMode === 'grid' ? 'book-card glass' : 'book-list-item glass'"
+          class="book-card glass"
           @click="$router.push(`/books/${book.id}`)"
         >
-          <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-            <BookCardBadges v-if="viewMode === 'grid'" :format="book.format" :author="book.author" />
+          <div class="book-cover">
+            <BookCardBadges :format="book.format" :author="book.author" />
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-              :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
+              :src="getCoverThumbnailUrl(book.coverUrl, 'card')"
               alt="封面"
             />
             <div v-else class="no-cover"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
@@ -368,10 +441,8 @@
               v-if="book.coverUrl"
               :book-id="book.id"
               :book-title="book.title"
-              :compact="viewMode === 'list'"
             />
             <ShelfBookMenu
-              v-if="viewMode === 'grid'"
               :book="book"
               :title="displayBookName(book.title)"
               :hide-shelf="activeTab === 'shelf'"
@@ -393,22 +464,11 @@
               </template>
             </ShelfBookMenu>
           </div>
-          <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
+          <div class="book-info">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
-            <div v-if="viewMode === 'list'" class="book-author">{{ book.author || '未知作者' }}</div>
-            <div v-if="viewMode === 'list'" class="book-meta">
-              <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
-              <span v-if="book.publisher">{{ book.publisher }}</span>
-            </div>
+
           </div>
-          <ShelfBookActions v-if="viewMode === 'list'" :book="book" list
-            :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id" @action="handleBookAction" />
-          <button
-            v-if="viewMode === 'list'"
-            class="btn btn-text"
-            :disabled="downloadingBookId !== null"
-            @click.stop="handleDownloadBook(book)"
-          >{{ downloadingBookId === book.id ? '下载中...' : '下载到本地' }}</button>
+
         </div>
       </div>
     </div>
@@ -430,18 +490,56 @@
         <p>暂无正在阅读的书籍</p>
         <button class="btn btn-primary" @click="$router.push('/books')">去书库看看</button>
       </div>
-      <div v-else :class="[viewMode === 'grid' ? 'books-grid' : 'books-list', `card-${cardSize}`]">
+      <ShelfBooksTable
+        v-else-if="viewMode === 'list'"
+        :books="pagedReadingBooks"
+      >
+        <template #actions="{ book }">
+          <ShelfBookMenu
+            :book="book"
+            :title="displayBookName(book.title)"
+            :hide-shelf="activeTab === 'shelf'"
+            :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+            @action="handleBookAction"
+          >
+            <template #default="{ close }">
+              <button
+                class="shelf-menu-action"
+                type="button"
+                role="menuitem"
+                :disabled="downloadingBookId !== null"
+                aria-label="下载到本地"
+                @click.stop="close(); handleDownloadBook(book)"
+              >
+                <el-icon><Download /></el-icon>
+                <span>{{ downloadingBookId === book.id ? '下载中…' : '下载到本地' }}</span>
+              </button>
+              <button
+                class="shelf-menu-action"
+                type="button"
+                role="menuitem"
+                :disabled="removingReadingIds.has(book.id)"
+                @click.stop="close(); removeFromReading(book)"
+              >
+                <el-icon><Close /></el-icon>
+                <span>移除正在阅读</span>
+              </button>
+            </template>
+          </ShelfBookMenu>
+        </template>
+      </ShelfBooksTable>
+      <div v-else class="books-grid" :class="`card-${cardSize}`">
         <div
           v-for="book in pagedReadingBooks"
           :key="book.id"
-          :class="viewMode === 'grid' ? 'book-card glass' : 'book-list-item glass'"
+          class="book-card glass"
           @click="$router.push(`/books/${book.id}`)"
         >
-          <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-            <BookCardBadges v-if="viewMode === 'grid'" :format="book.format" :author="book.author" />
+          <div class="book-cover">
+            <BookCardBadges :format="book.format" :author="book.author" />
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-              :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
+              :src="getCoverThumbnailUrl(book.coverUrl, 'card')"
               alt="封面"
             />
             <div v-else class="no-cover"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
@@ -449,10 +547,8 @@
               v-if="book.coverUrl"
               :book-id="book.id"
               :book-title="book.title"
-              :compact="viewMode === 'list'"
             />
             <ShelfBookMenu
-              v-if="viewMode === 'grid'"
               :book="book"
               :title="displayBookName(book.title)"
               :hide-shelf="activeTab === 'shelf'"
@@ -484,30 +580,11 @@
               </template>
             </ShelfBookMenu>
           </div>
-          <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
+          <div class="book-info">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
-            <div v-if="viewMode === 'list'" class="book-author">{{ book.author || '未知作者' }}</div>
-            <div v-if="viewMode === 'list'" class="book-meta">
-              <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
-              <span v-if="book.publisher">{{ book.publisher }}</span>
-            </div>
+
           </div>
-          <ShelfBookActions v-if="viewMode === 'list'" :book="book" list
-            :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id" @action="handleBookAction" />
-          <button
-            v-if="viewMode === 'list'"
-            class="btn btn-text"
-            :disabled="downloadingBookId !== null"
-            @click.stop="handleDownloadBook(book)"
-          >{{ downloadingBookId === book.id ? '下载中...' : '下载到本地' }}</button>
-          <button
-            v-if="viewMode === 'list'"
-            class="btn btn-text remove-reading-list-action"
-            :disabled="removingReadingIds.has(book.id)"
-            @click.stop="removeFromReading(book)"
-          >
-            {{ removingReadingIds.has(book.id) ? '处理中...' : '移除正在阅读' }}
-          </button>
+
         </div>
       </div>
     </div>
@@ -528,18 +605,46 @@
         <div class="empty-icon">✅</div>
         <p>暂无已读完的书籍</p>
       </div>
-      <div v-else :class="[viewMode === 'grid' ? 'books-grid' : 'books-list', `card-${cardSize}`]">
+      <ShelfBooksTable
+        v-else-if="viewMode === 'list'"
+        :books="pagedFinishedBooks"
+      >
+        <template #actions="{ book }">
+          <ShelfBookMenu
+            :book="book"
+            :title="displayBookName(book.title)"
+            :hide-shelf="activeTab === 'shelf'"
+            :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+            @action="handleBookAction"
+          >
+            <template #default="{ close }">
+              <button
+                class="shelf-menu-action"
+                type="button"
+                role="menuitem"
+                :disabled="downloadingBookId !== null"
+                aria-label="下载到本地"
+                @click.stop="close(); handleDownloadBook(book)"
+              >
+                <el-icon><Download /></el-icon>
+                <span>{{ downloadingBookId === book.id ? '下载中…' : '下载到本地' }}</span>
+              </button>
+            </template>
+          </ShelfBookMenu>
+        </template>
+      </ShelfBooksTable>
+      <div v-else class="books-grid" :class="`card-${cardSize}`">
         <div
           v-for="book in pagedFinishedBooks"
           :key="book.id"
-          :class="viewMode === 'grid' ? 'book-card glass' : 'book-list-item glass'"
+          class="book-card glass"
           @click="$router.push(`/books/${book.id}`)"
         >
-          <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-            <BookCardBadges v-if="viewMode === 'grid'" :format="book.format" :author="book.author" />
+          <div class="book-cover">
+            <BookCardBadges :format="book.format" :author="book.author" />
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-              :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
+              :src="getCoverThumbnailUrl(book.coverUrl, 'card')"
               alt="封面"
             />
             <div v-else class="no-cover"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
@@ -547,10 +652,8 @@
               v-if="book.coverUrl"
               :book-id="book.id"
               :book-title="book.title"
-              :compact="viewMode === 'list'"
             />
             <ShelfBookMenu
-              v-if="viewMode === 'grid'"
               :book="book"
               :title="displayBookName(book.title)"
               :hide-shelf="activeTab === 'shelf'"
@@ -572,22 +675,11 @@
               </template>
             </ShelfBookMenu>
           </div>
-          <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
+          <div class="book-info">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
-            <div v-if="viewMode === 'list'" class="book-author">{{ book.author || '未知作者' }}</div>
-            <div v-if="viewMode === 'list'" class="book-meta">
-              <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
-              <span v-if="book.publisher">{{ book.publisher }}</span>
-            </div>
+
           </div>
-          <ShelfBookActions v-if="viewMode === 'list'" :book="book" list
-            :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id" @action="handleBookAction" />
-          <button
-            v-if="viewMode === 'list'"
-            class="btn btn-text"
-            :disabled="downloadingBookId !== null"
-            @click.stop="handleDownloadBook(book)"
-          >{{ downloadingBookId === book.id ? '下载中...' : '下载到本地' }}</button>
+
         </div>
       </div>
     </div>
@@ -609,18 +701,46 @@
         <p>暂无想读的书籍</p>
         <button class="btn btn-primary" @click="$router.push('/books')">去书库看看</button>
       </div>
-      <div v-else :class="[viewMode === 'grid' ? 'books-grid' : 'books-list', `card-${cardSize}`]">
+      <ShelfBooksTable
+        v-else-if="viewMode === 'list'"
+        :books="pagedWantedBooks"
+      >
+        <template #actions="{ book }">
+          <ShelfBookMenu
+            :book="book"
+            :title="displayBookName(book.title)"
+            :hide-shelf="activeTab === 'shelf'"
+            :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id"
+            @action="handleBookAction"
+          >
+            <template #default="{ close }">
+              <button
+                class="shelf-menu-action"
+                type="button"
+                role="menuitem"
+                :disabled="downloadingBookId !== null"
+                aria-label="下载到本地"
+                @click.stop="close(); handleDownloadBook(book)"
+              >
+                <el-icon><Download /></el-icon>
+                <span>{{ downloadingBookId === book.id ? '下载中…' : '下载到本地' }}</span>
+              </button>
+            </template>
+          </ShelfBookMenu>
+        </template>
+      </ShelfBooksTable>
+      <div v-else class="books-grid" :class="`card-${cardSize}`">
         <div
           v-for="book in pagedWantedBooks"
           :key="book.id"
-          :class="viewMode === 'grid' ? 'book-card glass' : 'book-list-item glass'"
+          class="book-card glass"
           @click="$router.push(`/books/${book.id}`)"
         >
-          <div :class="viewMode === 'grid' ? 'book-cover' : 'book-list-cover'">
-            <BookCardBadges v-if="viewMode === 'grid'" :format="book.format" :author="book.author" />
+          <div class="book-cover">
+            <BookCardBadges :format="book.format" :author="book.author" />
             <img
               v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-              :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
+              :src="getCoverThumbnailUrl(book.coverUrl, 'card')"
               alt="封面"
             />
             <div v-else class="no-cover"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
@@ -628,10 +748,8 @@
               v-if="book.coverUrl"
               :book-id="book.id"
               :book-title="book.title"
-              :compact="viewMode === 'list'"
             />
             <ShelfBookMenu
-              v-if="viewMode === 'grid'"
               :book="book"
               :title="displayBookName(book.title)"
               :hide-shelf="activeTab === 'shelf'"
@@ -653,22 +771,11 @@
               </template>
             </ShelfBookMenu>
           </div>
-          <div :class="viewMode === 'grid' ? 'book-info' : 'book-list-info'">
+          <div class="book-info">
             <div class="book-title">{{ displayBookName(book.title) }}</div>
-            <div v-if="viewMode === 'list'" class="book-author">{{ book.author || '未知作者' }}</div>
-            <div v-if="viewMode === 'list'" class="book-meta">
-              <span class="book-format">{{ book.format === 'structured' ? '在线章节' : book.format?.toUpperCase() }}</span>
-              <span v-if="book.publisher">{{ book.publisher }}</span>
-            </div>
+
           </div>
-          <ShelfBookActions v-if="viewMode === 'list'" :book="book" list
-            :disabled="pendingBookActions.has(book.id) || shelfActionBookId === book.id" @action="handleBookAction" />
-          <button
-            v-if="viewMode === 'list'"
-            class="btn btn-text"
-            :disabled="downloadingBookId !== null"
-            @click.stop="handleDownloadBook(book)"
-          >{{ downloadingBookId === book.id ? '下载中...' : '下载到本地' }}</button>
+
         </div>
       </div>
     </div>
@@ -824,7 +931,7 @@ import { getCoverThumbnailUrl } from '@/utils/cover'
 import { shouldLoadBookCover } from '@/utils/imagePrivacy'
 import { ArrowUp, ArrowDown, Folder, Download, Close } from '@element-plus/icons-vue'
 import ShelfBookMenu from '@/components/ShelfBookMenu.vue'
-import ShelfBookActions from '@/components/ShelfBookActions.vue'
+import ShelfBooksTable from '@/components/ShelfBooksTable.vue'
 import BookQuickReader from '@/components/BookQuickReader.vue'
 import BookEditDialog from '@/components/BookEditDialog.vue'
 import AddToBookListDialog from '@/components/AddToBookListDialog.vue'
@@ -960,7 +1067,6 @@ async function handleBookAction(command:string, book:Book) {
     pendingBookActions.value.delete(book.id)
   }
 }
-
 
 const tabs = [
   { key: 'shelf', label: '书架', icon: '📚' },
@@ -1427,6 +1533,20 @@ const handleTabKeydown = (event: KeyboardEvent, index: number) => {
   const tabButtons = (event.currentTarget as HTMLButtonElement)
     .parentElement?.querySelectorAll<HTMLButtonElement>('.shelf-tab-button')
   tabButtons?.[nextIndex]?.focus()
+}
+
+const handleViewModeKeydown = (event: KeyboardEvent) => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  const nextMode = event.key === 'Home'
+    ? 'grid'
+    : event.key === 'End'
+      ? 'list'
+      : viewMode.value === 'grid' ? 'list' : 'grid'
+  viewMode.value = nextMode
+  const buttons = (event.currentTarget as HTMLElement)
+    .querySelectorAll<HTMLButtonElement>('.view-btn')
+  buttons[nextMode === 'grid' ? 0 : 1]?.focus()
 }
 
 const handleCardSizeKeydown = (event: KeyboardEvent, index: number) => {
@@ -2010,15 +2130,6 @@ button.shelf-folder-card {
   font-size: 42px;
 }
 
-.shelf-list-actions {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  max-width: 100%;
-  align-items: center;
-  gap: 4px;
-}
-
 .group-appearance-fields {
   display: grid;
   grid-template-columns: minmax(160px, 1fr) minmax(120px, 1fr);
@@ -2143,7 +2254,6 @@ button.shelf-folder-card {
 }
 
 .book-cover img.is-hidden,
-.book-list-cover img.is-hidden,
 .list-book-cover img.is-hidden {
   filter: blur(16px);
   transform: scale(1.15);
@@ -2171,12 +2281,6 @@ button.shelf-folder-card {
 .book-card:focus-within .book-cover-actions {
   opacity: 1;
   transform: translateY(0);
-}
-
-.remove-reading-list-action {
-  flex: 0 0 auto;
-  color: var(--danger);
-  white-space: nowrap;
 }
 
 .loading {
@@ -2231,83 +2335,6 @@ button.shelf-folder-card {
 .book-author {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
-}
-
-/* 书籍列表 */
-.books-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.book-list-item {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-lg);
-  padding: var(--spacing-md);
-  background: var(--surface-card);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: var(--glass-border);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: all var(--transition-normal);
-}
-
-.book-list-item:hover {
-  transform: translateX(4px);
-  box-shadow: var(--shadow-md);
-}
-
-.book-list-cover {
-  position: relative;
-  width: 50px;
-  height: 70px;
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.book-list-cover img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: filter 0.2s ease, transform 0.2s ease;
-}
-
-.book-list-cover .no-cover {
-  font-size: 24px;
-}
-
-.book-list-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.book-list-info .book-title {
-  font-size: var(--font-size-base);
-  margin-bottom: var(--spacing-xs);
-}
-
-.book-list-info .book-author {
-  font-size: var(--font-size-sm);
-}
-
-.book-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  margin-top: var(--spacing-xs);
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-}
-
-.book-format {
-  background: var(--bg-secondary);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  font-weight: 500;
 }
 
 /* 书单网格 */
@@ -2550,16 +2577,6 @@ button.shelf-folder-card {
     opacity: 1;
   }
 
-  .shelf-list-actions {
-    flex-basis: 100%;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .book-list-item > :deep(.shelf-common-actions.is-list) {
-    flex-basis: 100%;
-  }
-
   .group-appearance-fields {
     grid-template-columns: 1fr;
     gap: 0;
@@ -2576,7 +2593,6 @@ button.shelf-folder-card {
 @media (prefers-reduced-motion: reduce) {
   .book-cover-actions,
   .book-cover img,
-  .book-list-cover img,
   .list-book-cover img,
   .shelf-tab-slider,
   .view-toggle-slider,
