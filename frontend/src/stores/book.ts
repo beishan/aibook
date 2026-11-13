@@ -181,6 +181,20 @@ export const useBookStore = defineStore('book', () => {
     return updatedBook
   }
 
+  async function addMembershipBatch(
+    bookIds: number[],
+    action: 'SHELF' | 'FAVORITE' | 'BOOK_LIST',
+    listIds?: number[],
+  ) {
+    const { data } = await api.put<Book[]>('/api/books/batch/membership', {
+      bookIds,
+      action,
+      listIds,
+    })
+    data.forEach(updateLocalBook)
+    return data
+  }
+
   async function addToShelf(id: number, groupId?: number) {
     const response = await api.post(`/api/shelf/books/${id}`, { groupId: groupId || null })
     const updatedBook: Book = response.data
@@ -364,6 +378,7 @@ export const useBookStore = defineStore('book', () => {
     toggleFavorite,
     toggleWanted,
     updateReadingStatus,
+    addMembershipBatch,
     addToShelf,
     removeFromShelf,
     deleteBook,

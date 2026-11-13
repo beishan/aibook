@@ -239,6 +239,18 @@
     <div v-if="selectionMode && selectedBooks.size > 0" class="batch-toolbar glass">
       <span class="selection-count">已选择 {{ selectedBooks.size }} 本</span>
       <div class="batch-actions">
+        <div class="batch-action-group" role="group" aria-label="批量加入与收藏">
+          <button class="btn" :disabled="membershipBusy" @click="openBatchBookLists">
+            加入书单
+          </button>
+          <button class="btn" :disabled="membershipBusy" @click="addSelectedMembership('SHELF')">
+            加入书架
+          </button>
+          <button class="btn" :disabled="membershipBusy" @click="addSelectedMembership('FAVORITE')">
+            收藏
+          </button>
+          <span v-if="membershipBusy" role="status">处理中…</span>
+        </div>
         <button class="btn" @click="openLibraryDialog(Array.from(selectedBooks))">添加到图书馆</button>
         <div class="batch-action-group" role="group" aria-label="批量选择">
           <button class="btn btn-text" @click="selectAllCurrentPage">全选当前页</button>
@@ -680,6 +692,7 @@
     <AddToBookListDialog
       :visible="showAddToListDialog"
       :book="bookToAddToList"
+      :book-ids="batchListBookIds"
       @close="closeAddToListDialog"
     />
 
@@ -808,6 +821,8 @@ function openLibraryDialog(bookIds: number[]) {
 
 const showAddToListDialog = ref(false)
 const bookToAddToList = ref<Book | null>(null)
+const batchListBookIds = ref<number[]>([])
+const membershipBusy = ref(false)
 const processingBookId = ref<number | null>(null)
 const downloadingBookId = ref<number | null>(null)
 const showVersionRebuildDialog = ref(false)
@@ -1090,6 +1105,43 @@ const handleDownloadBook = async (book: Book) => {
   }
 }
 
+function captureMembershipSelection() {
+  const ids = Array.from(selectedBooks.value)
+  if (ids.length === 0) return null
+  if (ids.length > 200) {
+    message.warning('每次最多操作 200 本书，请减少勾选数量')
+    return null
+  }
+  return ids
+}
+
+function openBatchBookLists() {
+  if (membershipBusy.value) return
+  const ids = captureMembershipSelection()
+  if (!ids) return
+  bookToAddToList.value = null
+  batchListBookIds.value = ids
+  showAddToListDialog.value = true
+}
+
+async function addSelectedMembership(action: 'SHELF' | 'FAVORITE') {
+  if (membershipBusy.value) return
+  const ids = captureMembershipSelection()
+  if (!ids) return
+  membershipBusy.value = true
+  try {
+    const updated = await bookStore.addMembershipBatch(ids, action)
+    for (const book of updated) {
+      if (selectedBooks.value.has(book.id)) selectedBookSnapshots.value.set(book.id, book)
+    }
+    message.success(`已将 ${updated.length} 本书${action === 'SHELF' ? '加入书架' : '设为收藏'}`)
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '批量操作失败，请重试')
+  } finally {
+    membershipBusy.value = false
+  }
+}
+
 // 多选相关函数
 const toggleSelectionMode = () => {
   selectionMode.value = !selectionMode.value
@@ -1275,6 +1327,7 @@ const handleMoreCommand = async (command: string, book: Book) => {
       showEditDialog.value = true
       break
     case 'add-to-list':
+      batchListBookIds.value = []
       bookToAddToList.value = book
       showAddToListDialog.value = true
       break
@@ -1299,6 +1352,7 @@ const handleRandomCover = async (book: Book) => {
 const closeAddToListDialog = () => {
   showAddToListDialog.value = false
   bookToAddToList.value = null
+  batchListBookIds.value = []
 }
 
 const handleScrapeBook = (book: Book) => {

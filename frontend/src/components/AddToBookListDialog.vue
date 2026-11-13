@@ -1,15 +1,21 @@
 <template>
   <el-dialog
     :model-value="visible"
-    :title="book ? `加入书单 · ${displayBookName(book.title)}` : '加入书单'"
+    :title="book ? `加入书单 · ${displayBookName(book.title)}` : `加入书单 · ${targetBookIds.length} 本书`"
     width="min(560px, 92vw)"
     append-to-body
     destroy-on-close
+    :close-on-click-modal="!submitting"
+    :close-on-press-escape="!submitting"
+    :show-close="!submitting"
     @open="loadBookLists"
     @close="closeDialog"
   >
     <div v-loading="loading" class="book-list-selector">
-      <el-empty v-if="!loading && bookLists.length === 0" description="暂无书单">
+      <el-empty v-if="loadFailed" description="加载书单失败">
+        <el-button @click="loadBookLists">重试</el-button>
+      </el-empty>
+      <el-empty v-else-if="!loading && bookLists.length === 0" description="暂无书单">
         <el-button type="primary" @click="goToCreateList">创建书单</el-button>
       </el-empty>
 
@@ -20,7 +26,7 @@
           class="book-list-option"
           :class="{ selected: selectedListIds.includes(list.id) }"
         >
-          <el-checkbox :label="list.id" :disabled="existingListIds.has(list.id)">
+          <el-checkbox :label="list.id" :disabled="submitting || existingListIds.has(list.id)">
             <div class="list-summary">
               <strong>{{ list.name }}</strong>
               <span>{{ list.description || '暂无描述' }}</span>
@@ -35,11 +41,11 @@
     </div>
 
     <template #footer>
-      <el-button @click="closeDialog">取消</el-button>
+      <el-button :disabled="submitting" @click="closeDialog">取消</el-button>
       <el-button
         type="primary"
         :loading="submitting"
-        :disabled="bookLists.length === 0 || newListIds.length === 0"
+        :disabled="loading || loadFailed || bookLists.length === 0 || newListIds.length === 0"
         @click="submit"
       >
         {{ newListIds.length > 0 ? `加入 ${newListIds.length} 个书单` : '请选择新书单' }}
@@ -54,7 +60,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/utils/api'
 import { message } from '@/utils/message'
-import type { Book } from '@/stores/book'
+import { useBookStore, type Book } from '@/stores/book'
 
 const { displayBookName } = useBookNameDisplay()
 
@@ -68,6 +74,7 @@ interface BookListItem {
 const props = defineProps<{
   visible: boolean
   book: Book | null
+  bookIds?: number[]
 }>()
 
 const emit = defineEmits<{
@@ -75,8 +82,11 @@ const emit = defineEmits<{
   added: []
 }>()
 
+const bookStore = useBookStore()
+const targetBookIds = computed(() => props.book ? [props.book.id] : [...new Set(props.bookIds || [])])
 const router = useRouter()
 const loading = ref(false)
+const loadFailed = ref(false)
 const submitting = ref(false)
 const bookLists = ref<BookListItem[]>([])
 const selectedListIds = ref<number[]>([])
@@ -87,18 +97,26 @@ const newListIds = computed(() =>
 )
 
 const loadBookLists = async () => {
-  if (!props.book) return
+  if (targetBookIds.value.length === 0) return
   loading.value = true
+  loadFailed.value = false
+  bookLists.value = []
+  selectedListIds.value = []
+  existingListIds.value = new Set()
   try {
     const { data } = await api.get('/api/booklists')
     bookLists.value = data
     existingListIds.value = new Set(
       bookLists.value
-        .filter(list => list.books?.some(book => book.id === props.book?.id))
+        .filter(list => {
+          const existing = new Set(list.books?.map(book => book.id) || [])
+          return targetBookIds.value.every(id => existing.has(id))
+        })
         .map(list => list.id)
     )
     selectedListIds.value = Array.from(existingListIds.value)
   } catch {
+    loadFailed.value = true
     message.error('加载书单失败')
   } finally {
     loading.value = false
@@ -106,14 +124,25 @@ const loadBookLists = async () => {
 }
 
 const submit = async () => {
-  if (!props.book || newListIds.value.length === 0) return
+  if (
+    submitting.value || loading.value || loadFailed.value ||
+    targetBookIds.value.length === 0 || newListIds.value.length === 0
+  ) return
+  if (!props.book && newListIds.value.length > 20) {
+    message.warning('每次最多加入 20 个书单，请减少选择')
+    return
+  }
   submitting.value = true
   try {
-    await Promise.all(
-      newListIds.value.map(listId =>
-        api.post(`/api/booklists/${listId}/books/${props.book!.id}`)
+    if (props.book) {
+      await Promise.all(
+        newListIds.value.map(listId =>
+          api.post(`/api/booklists/${listId}/books/${props.book!.id}`)
+        )
       )
-    )
+    } else {
+      await bookStore.addMembershipBatch(targetBookIds.value, 'BOOK_LIST', [...newListIds.value])
+    }
     message.success(`已加入 ${newListIds.value.length} 个书单`)
     emit('added')
     closeDialog()
