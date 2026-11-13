@@ -37,7 +37,7 @@
           >
             <el-option v-for="item in switchOptions" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
-          <el-button @click="navigate('settings')">
+          <el-button @click="openSettings" :disabled="busy">
             设置
           </el-button>
           <el-button type="primary" :disabled="busy" @click="pickerOpen = true">
@@ -377,187 +377,194 @@
         </div>
         <el-empty v-if="!library.lists.length" description="把散落的书，串成自己的阅读路线" />
       </section>
-      <section
-        v-else-if="activeTab === 'settings'"
-        :inert="busy || undefined"
-        :aria-busy="busy"
-        class="library-section"
-        aria-label="图书馆设置"
-      >
-        <div class="library-section-heading">
-          <div>
-            <h2>
-              布置这间书房
-            </h2>
-            <small>
-              颜色和控件继承全站主题，馆配置只作用于馆内。
-            </small>
+    </div>
+    <el-skeleton v-else-if="busy" :rows="8" animated />
+    <el-dialog
+      v-if="library"
+      :model-value="settingsOpen"
+      :title="`${library.name} · 图书馆设置`"
+      width="min(1100px, 96vw)"
+      top="5vh"
+      append-to-body
+      class="library-settings-dialog"
+      :close-on-click-modal="false"
+      :close-on-press-escape="!saving && !busy"
+      :show-close="!saving && !busy"
+      :before-close="closeSettings"
+    >
+      <AudioSegmented
+        v-model="settingsTab"
+        label="图书馆设置分类"
+        :options="settingsTabs"
+      />
+      <p class="library-muted">设置只作用于当前图书馆，切换分类会保留未保存的修改。</p>
+      <el-alert
+        v-if="conflict"
+        title="其他设备已更新设置，当前草稿已保留。请复制需要的内容，再重新加载后修改。"
+        type="warning"
+        :closable="false"
+      />
+      <div class="library-settings-content" :inert="saving || busy || undefined" :aria-busy="saving || busy">
+        <el-form v-show="settingsTab === 'basic'" class="library-settings-panel" label-position="top" aria-label="基本资料">
+          <el-form-item label="名称">
+            <el-input v-model="draft.name" maxlength="50" show-word-limit />
+          </el-form-item>
+          <el-form-item label="简介">
+            <el-input v-model="draft.description" type="textarea" :rows="3" maxlength="500" show-word-limit />
+          </el-form-item>
+        </el-form>
+        <el-form v-show="settingsTab === 'appearance'" class="library-settings-panel" label-position="top" aria-label="外观布局">
+          <el-form-item label="首页模板">
+            <AudioSegmented
+              :model-value="draft.config.template"
+              label="首页模板"
+              :options="[{value:'simple',label:'简洁'},{value:'shelf',label:'书架'},{value:'editorial',label:'专题'}]"
+              @update:model-value="setTemplate"
+            />
+          </el-form-item>
+          <el-form-item label="馆头点缀色">
+            <el-select v-model="draft.config.accent">
+              <el-option label="跟随网站（推荐）" value="site" />
+              <el-option label="森林点缀" value="forest" />
+              <el-option label="雾蓝点缀" value="blue" />
+              <el-option label="暖棕点缀" value="brown" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="自定义封面图片">
+            <el-button :disabled="!!dirty || saving" @click="coverEditorOpen = true">上传 / 更换封面</el-button>
+            <p class="library-muted">同时用于图书馆卡片和馆头。有未保存设置时，请先保存再更换图片。</p>
+          </el-form-item>
+          <el-form-item label="馆头封面">
+            <AudioSegmented
+              v-model="draft.config.cover"
+              label="馆头封面"
+              :options="[{value:'landscape',label:'山景'},{value:'arches',label:'拱廊'},{value:'lines',label:'线条'}]"
+            />
+          </el-form-item>
+          <el-form-item label="背景">
+            <AudioSegmented
+              v-model="draft.config.background"
+              label="馆内背景"
+              :options="[{value:'plain',label:'纯色'},{value:'texture',label:'轻纹理'}]"
+            />
+          </el-form-item>
+          <el-form-item label="书架布局">
+            <AudioSegmented
+              v-model="draft.config.layout"
+              label="书架布局"
+              :options="[{value:'grid',label:'网格'},{value:'list',label:'列表'}]"
+            />
+          </el-form-item>
+          <el-form-item label="封面尺寸">
+            <AudioSegmented
+              v-model="draft.config.coverSize"
+              label="封面尺寸"
+              :options="[{value:'small',label:'小'},{value:'medium',label:'中'},{value:'large',label:'大'}]"
+            />
+          </el-form-item>
+          <div class="library-setting-switches">
+            <el-checkbox v-model="draft.config.showDescription">
+              显示简介
+            </el-checkbox>
+            <el-checkbox v-model="draft.config.showCount">
+              显示馆藏数量
+            </el-checkbox>
+            <el-checkbox v-model="draft.config.showCover">
+              显示馆头封面
+            </el-checkbox>
           </div>
-          <div class="library-heading-actions">
-            <el-button @click="reloadDraft">
-              重新加载
+        </el-form>
+        <div v-show="settingsTab === 'home'" aria-label="首页模块">
+          <section class="library-settings-panel">
+            <h3>
+              首页模块
+            </h3>
+            <div v-for="(key,index) in moduleOrder" :key="key" class="library-module-row">
+              <el-checkbox :model-value="draft.config.modules.includes(key)" @change="toggleModule(key)">
+                {{ moduleLabels[key] }}
+              </el-checkbox>
+              <div>
+                <el-button text :disabled="index === 0" :aria-label="`上移${moduleLabels[key]}`" @click="moveModule(index,-1)">
+                  ↑
+                </el-button>
+                <el-button
+                  text
+                  :disabled="index === moduleOrder.length-1"
+                  :aria-label="`下移${moduleLabels[key]}`"
+                  @click="moveModule(index,1)"
+                >
+                  ↓
+                </el-button>
+              </div>
+            </div>
+            <el-form label-position="top">
+              <el-form-item label="每个书籍模块数量">
+                <el-select v-model="draft.config.bookLimit">
+                  <el-option v-for="n in [4,8,12]" :key="n" :label="`${n} 本`" :value="n" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="首页书单数量">
+                <el-select v-model="draft.config.listLimit">
+                  <el-option v-for="n in [2,4,6]" :key="n" :label="`${n} 个`" :value="n" />
+                </el-select>
+              </el-form-item>
+            </el-form>
+            <p class="library-note">
+              从书架的“更多”设置精选；编辑书单可设为首页推荐。无数据模块在浏览时隐藏。
+            </p>
+          </section>
+        </div>
+        <div v-show="settingsTab === 'order'" aria-label="内容排序">
+          <p class="library-note">分组和精选排序立即保存，与其他分类中的设置草稿独立。</p>
+          <section class="library-settings-panel">
+            <h3>
+              分组排序
+            </h3>
+            <div v-for="(item,index) in library.groups" :key="item.id" class="library-module-row">
+              <span>
+                {{ item.name }}
+              </span>
+              <div>
+                <el-button text :disabled="index === 0" @click="orderCollection('groups',index,-1)">
+                  ↑
+                </el-button>
+                <el-button text :disabled="index === library.groups.length-1" @click="orderCollection('groups',index,1)">
+                  ↓
+                </el-button>
+              </div>
+            </div>
+          </section>
+          <section class="library-settings-panel">
+            <h3>
+              精选排序
+            </h3>
+            <div v-for="(book,index) in featuredBooks" :key="book.id" class="library-module-row">
+              <span>
+                {{ book.title }}
+              </span>
+              <div>
+                <el-button text :disabled="index === 0" @click="orderFeatured(index,-1)">
+                  ↑
+                </el-button>
+                <el-button text :disabled="index === featuredBooks.length-1" @click="orderFeatured(index,1)">
+                  ↓
+                </el-button>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div v-show="settingsTab === 'manage'" class="library-settings-panel" aria-label="管理操作">
+          <p class="library-note">恢复默认外观需要保存后生效；删除图书馆会立即删除馆藏关联，原书和文件保留。</p>
+          <div class="library-section-heading">
+            <el-button @click="resetAppearance">
+              恢复默认外观
             </el-button>
-            <el-button type="primary" :loading="saving" @click="saveSettings">
-              保存设置
+            <el-button type="danger" plain @click="deleteLibrary">
+              删除图书馆
             </el-button>
           </div>
         </div>
-        <el-alert v-if="conflict" title="其他设备已更新设置，当前草稿已保留。请复制需要的内容，再重新加载后修改。" type="warning" :closable="false" />
-        <div class="library-settings-grid">
-          <div>
-            <el-form class="library-settings-panel" label-position="top">
-              <h3>
-                基本资料与外观
-              </h3>
-              <el-form-item label="名称">
-                <el-input v-model="draft.name" maxlength="50" show-word-limit />
-              </el-form-item>
-              <el-form-item label="简介">
-                <el-input v-model="draft.description" type="textarea" :rows="3" maxlength="500" show-word-limit />
-              </el-form-item>
-              <el-form-item label="首页模板">
-                <AudioSegmented
-                  :model-value="draft.config.template"
-                  label="首页模板"
-                  :options="[{value:'simple',label:'简洁'},{value:'shelf',label:'书架'},{value:'editorial',label:'专题'}]"
-                  @update:model-value="setTemplate"
-                />
-              </el-form-item>
-              <el-form-item label="馆头点缀色">
-                <el-select v-model="draft.config.accent">
-                  <el-option label="跟随网站（推荐）" value="site" />
-                  <el-option label="森林点缀" value="forest" />
-                  <el-option label="雾蓝点缀" value="blue" />
-                  <el-option label="暖棕点缀" value="brown" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="自定义封面图片">
-                <el-button :disabled="!!dirty || saving" @click="coverEditorOpen = true">上传 / 更换封面</el-button>
-                <p class="library-muted">同时用于图书馆卡片和馆头。有未保存设置时，请先保存再更换图片。</p>
-              </el-form-item>
-              <el-form-item label="馆头封面">
-                <AudioSegmented
-                  v-model="draft.config.cover"
-                  label="馆头封面"
-                  :options="[{value:'landscape',label:'山景'},{value:'arches',label:'拱廊'},{value:'lines',label:'线条'}]"
-                />
-              </el-form-item>
-              <el-form-item label="背景">
-                <AudioSegmented
-                  v-model="draft.config.background"
-                  label="馆内背景"
-                  :options="[{value:'plain',label:'纯色'},{value:'texture',label:'轻纹理'}]"
-                />
-              </el-form-item>
-              <el-form-item label="书架布局">
-                <AudioSegmented
-                  v-model="draft.config.layout"
-                  label="书架布局"
-                  :options="[{value:'grid',label:'网格'},{value:'list',label:'列表'}]"
-                />
-              </el-form-item>
-              <el-form-item label="封面尺寸">
-                <AudioSegmented
-                  v-model="draft.config.coverSize"
-                  label="封面尺寸"
-                  :options="[{value:'small',label:'小'},{value:'medium',label:'中'},{value:'large',label:'大'}]"
-                />
-              </el-form-item>
-              <div class="library-setting-switches">
-                <el-checkbox v-model="draft.config.showDescription">
-                  显示简介
-                </el-checkbox>
-                <el-checkbox v-model="draft.config.showCount">
-                  显示馆藏数量
-                </el-checkbox>
-                <el-checkbox v-model="draft.config.showCover">
-                  显示馆头封面
-                </el-checkbox>
-              </div>
-            </el-form>
-            <section class="library-settings-panel">
-              <h3>
-                首页模块
-              </h3>
-              <div v-for="(key,index) in moduleOrder" :key="key" class="library-module-row">
-                <el-checkbox :model-value="draft.config.modules.includes(key)" @change="toggleModule(key)">
-                  {{ moduleLabels[key] }}
-                </el-checkbox>
-                <div>
-                  <el-button text :disabled="index === 0" :aria-label="`上移${moduleLabels[key]}`" @click="moveModule(index,-1)">
-                    ↑
-                  </el-button>
-                  <el-button
-                    text
-                    :disabled="index === moduleOrder.length-1"
-                    :aria-label="`下移${moduleLabels[key]}`"
-                    @click="moveModule(index,1)"
-                  >
-                    ↓
-                  </el-button>
-                </div>
-              </div>
-              <el-form label-position="top">
-                <el-form-item label="每个书籍模块数量">
-                  <el-select v-model="draft.config.bookLimit">
-                    <el-option v-for="n in [4,8,12]" :key="n" :label="`${n} 本`" :value="n" />
-                  </el-select>
-                </el-form-item>
-                <el-form-item label="首页书单数量">
-                  <el-select v-model="draft.config.listLimit">
-                    <el-option v-for="n in [2,4,6]" :key="n" :label="`${n} 个`" :value="n" />
-                  </el-select>
-                </el-form-item>
-              </el-form>
-              <p class="library-note">
-                从书架的“更多”设置精选；编辑书单可设为首页推荐。无数据模块在浏览时隐藏。
-              </p>
-            </section>
-            <section class="library-settings-panel">
-              <h3>
-                分组排序
-              </h3>
-              <div v-for="(item,index) in library.groups" :key="item.id" class="library-module-row">
-                <span>
-                  {{ item.name }}
-                </span>
-                <div>
-                  <el-button text :disabled="index === 0" @click="orderCollection('groups',index,-1)">
-                    ↑
-                  </el-button>
-                  <el-button text :disabled="index === library.groups.length-1" @click="orderCollection('groups',index,1)">
-                    ↓
-                  </el-button>
-                </div>
-              </div>
-            </section>
-            <section class="library-settings-panel">
-              <h3>
-                精选排序
-              </h3>
-              <div v-for="(book,index) in featuredBooks" :key="book.id" class="library-module-row">
-                <span>
-                  {{ book.title }}
-                </span>
-                <div>
-                  <el-button text :disabled="index === 0" @click="orderFeatured(index,-1)">
-                    ↑
-                  </el-button>
-                  <el-button text :disabled="index === featuredBooks.length-1" @click="orderFeatured(index,1)">
-                    ↓
-                  </el-button>
-                </div>
-              </div>
-            </section>
-            <div class="library-section-heading">
-              <el-button @click="resetAppearance">
-                恢复默认外观
-              </el-button>
-              <el-button type="danger" plain @click="deleteLibrary">
-                删除图书馆
-              </el-button>
-            </div>
-          </div>
+        <div v-show="settingsTab === 'preview'" aria-label="首页预览">
           <aside class="library-preview library-settings-panel" :class="`template-${draft.config.template}`">
             <div class="library-section-heading">
               <h3>
@@ -599,9 +606,20 @@
             </p>
           </aside>
         </div>
-      </section>
-    </div>
-    <el-skeleton v-else-if="busy" :rows="8" animated />
+      </div>
+      <template #footer>
+        <div class="library-settings-footer">
+          <span class="library-muted">{{ dirty ? '尚未保存' : '已保存' }}</span>
+          <div>
+            <el-button :disabled="saving || busy" @click="reloadDraft">重新加载</el-button>
+            <el-button :disabled="saving || busy" @click="closeSettings()">关闭</el-button>
+            <el-button type="primary" :loading="saving" :disabled="busy || !draft.name.trim()" @click="saveSettings">
+              保存设置
+            </el-button>
+          </div>
+        </div>
+      </template>
+    </el-dialog>
     <LibraryCoverEditor v-model="coverEditorOpen" :library="library" @saved="refresh" />
     <AddToLibraryDialog v-model="pickerOpen" :library-id="id" :list-id="listId" @added="refresh" />
     <el-dialog
@@ -651,7 +669,7 @@ function clone<T>(value: T): T { return JSON.parse(JSON.stringify(value)); }
 const route = useRoute(), router = useRouter();
 const id = computed(() => Number(route.params.libraryId));
 const listId = computed(() => route.params.listId ? Number(route.params.listId) : undefined);
-const activeTab = computed(() => listId.value ? 'shelf' : String(route.meta.libraryTab || 'home'));
+const activeTab = computed(() => listId.value ? 'shelf' : route.meta.libraryTab === 'settings' ? 'home' : String(route.meta.libraryTab || 'home'));
 const tabOptions = [{ value: 'home', label: '首页' }, { value: 'shelf', label: '书架' }, { value: 'lists', label: '书单' }, { value: 'favorites', label: '收藏' }];
 const library = ref<PersonalLibrary | null>(null);
 const switchOptions = ref<PersonalLibrary[]>([]);
@@ -664,6 +682,30 @@ const categories = ref<{
     id: number;
     name: string;
 }[]>([]);
+const settingsOpen = ref(false);
+const settingsTab = ref('basic');
+const settingsTabs = [
+    { value: 'basic', label: '基本资料' },
+    { value: 'appearance', label: '外观布局' },
+    { value: 'home', label: '首页模块' },
+    { value: 'order', label: '内容排序' },
+    { value: 'manage', label: '管理操作' },
+    { value: 'preview', label: '首页预览' },
+];
+function openSettings() {
+    if (!library.value || busy.value || settingsOpen.value) return;
+    initializeDraft();
+    settingsTab.value = 'basic';
+    settingsOpen.value = true;
+}
+async function closeSettings(done?: () => void) {
+    if (saving.value || busy.value) return;
+    if (dirty.value && !await confirm('设置尚未保存。确定放弃草稿并关闭？')) return;
+    initializeDraft();
+    settingsOpen.value = false;
+    done?.();
+    if (route.meta.libraryTab === 'settings') await router.replace(`/libraries/${id.value}`);
+}
 const coverEditorOpen = ref(false)
 const busy = ref(false), failed = ref(false), saving = ref(false), pickerOpen = ref(false), conflict = ref(false);
 const query = ref(''), status = ref(''), group = ref(''), sort = ref('added');
@@ -673,7 +715,7 @@ const pages = new Map<string, number>();
 let generation = 0, bookGeneration = 0;
 const draft = ref({ name: '', description: '', config: defaultLibraryConfig() });
 const moduleOrder = ref(Object.keys(moduleLabels));
-const activeConfig = computed(() => activeTab.value === 'settings' ? draft.value.config : (library.value?.config || defaultLibraryConfig()));
+const activeConfig = computed(() => settingsOpen.value ? draft.value.config : (library.value?.config || defaultLibraryConfig()));
 const currentList = computed(() => library.value?.lists.find(list => list.id === listId.value));
 const selectedGroup = computed(() => library.value?.groups.find(item => String(item.id) === group.value));
 const groupOptions = computed(() => [{ value: '', label: '全部书籍' }, { value: '0', label: '未分组' }, ...(library.value?.groups || []).map(g => ({ value: String(g.id), label: g.name }))]);
@@ -701,7 +743,7 @@ async function searchLibraries(keyword = '') {
 async function refresh() {
     const request = ++generation;
     const target = id.value;
-    const preserveDraft = activeTab.value === 'settings' && library.value?.id === target && dirty.value;
+    const preserveDraft = settingsOpen.value && library.value?.id === target && dirty.value;
     busy.value = true;
     failed.value = false;
     try {
@@ -897,7 +939,7 @@ async function savePreference(key: keyof LibraryConfig, value: any) {
     }
 }
 async function saveSettings() {
-    if (!library.value || !draft.value.name.trim())
+    if (saving.value || busy.value || !library.value || !draft.value.name.trim())
         return;
     saving.value = true;
     try {
@@ -919,8 +961,19 @@ async function saveSettings() {
 async function reloadDraft() {
     if (dirty.value && !await confirm('重新加载会放弃当前未保存草稿，是否继续？'))
         return;
-    library.value = await personalLibraries.get(id.value);
-    initializeDraft();
+    if (saving.value || busy.value) return;
+    const target = id.value;
+    busy.value = true;
+    try {
+        const updated = await personalLibraries.get(target);
+        if (target !== id.value) return;
+        library.value = updated;
+        initializeDraft();
+    } catch {
+        message.error('重新加载设置失败，当前草稿已保留');
+    } finally {
+        busy.value = false;
+    }
 }
 async function setTemplate(value: string) {
     if (!await confirm('切换模板会调整首页模块顺序及书架展示方式，保留全部书籍和书单。是否继续？'))
@@ -961,14 +1014,15 @@ async function deleteLibrary() {
     await router.push('/libraries');
 }
 async function allowLeave() {
-    return activeTab.value !== 'settings' || !dirty.value || await confirm('设置尚未保存。确定放弃草稿并离开？');
+    if (settingsOpen.value && (saving.value || busy.value)) return false;
+    return !settingsOpen.value || !dirty.value || await confirm('设置尚未保存。确定放弃草稿并离开？');
 }
 onBeforeRouteLeave(allowLeave);
 onBeforeRouteUpdate(async (to, from) => {
     if (to.path !== from.path && !await allowLeave())
         return false;
 });
-function beforeUnload(event: BeforeUnloadEvent) { if (activeTab.value === 'settings' && dirty.value) {
+function beforeUnload(event: BeforeUnloadEvent) { if (settingsOpen.value && dirty.value) {
     event.preventDefault();
     event.returnValue = '';
 } }
@@ -982,6 +1036,7 @@ function hydrateQuery() {
     page.value = Math.max(1, Number(route.query.page) || pages.get(activeTab.value + (listId.value || '')) || 1);
 }
 watch(() => route.path, async () => {
+    settingsOpen.value = false;
     coverEditorOpen.value = false;
     generation++;
     bookGeneration++;
@@ -990,13 +1045,13 @@ watch(() => route.path, async () => {
     failed.value = false;
     hydrateQuery();
     await refresh();
-    if (activeTab.value === 'settings')
-        initializeDraft();
+    if (route.meta.libraryTab === 'settings') openSettings();
 });
 onMounted(async () => {
     hydrateQuery();
     window.addEventListener('beforeunload', beforeUnload);
     await refresh();
+    if (route.meta.libraryTab === 'settings') openSettings();
     const options = await Promise.allSettled([api.get('/api/categories'), api.get('/api/tags')]);
     if (options[0].status === 'fulfilled')
         categories.value = options[0].value.data;
@@ -1006,6 +1061,43 @@ onMounted(async () => {
 onBeforeUnmount(() => { generation++; bookGeneration++; window.removeEventListener('beforeunload', beforeUnload); });
 </script>
 <style scoped>
+.library-settings-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+.library-settings-dialog :deep(.el-dialog__body) {
+  min-height: 0;
+  overflow-y: auto;
+}
+.library-settings-content {
+  margin-top: 18px;
+}
+.library-settings-content .library-settings-panel {
+  margin-bottom: 0;
+}
+.library-settings-content .library-settings-panel + .library-settings-panel {
+  margin-top: 16px;
+}
+.library-settings-content .library-preview {
+  position: static;
+}
+.library-settings-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.library-settings-footer > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.library-settings-footer :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
 .library-loading-status {
   min-height: 24px;
   padding-top: 4px;
@@ -1116,12 +1208,6 @@ onBeforeUnmount(() => { generation++; bookGeneration++; window.removeEventListen
   color: var(--primary);
   margin-right: 15px;
 }
-.library-settings-grid {
-  display: grid;
-  grid-template-columns: minmax(0,1.1fr) minmax(0,1fr);
-  gap: 28px;
-  align-items: start;
-}
 .library-settings-panel {
   padding: 24px;
   background: var(--surface-card);
@@ -1210,9 +1296,6 @@ onBeforeUnmount(() => { generation++; bookGeneration++; window.removeEventListen
   background-image: repeating-linear-gradient(0deg, transparent 0 5px, var(--primary-alpha-10) 5px 6px);
 }
 @media (max-width: 900px) {
-  .library-settings-grid {
-    grid-template-columns: 1fr;
-  }
   .library-preview {
     position: static;
   }
