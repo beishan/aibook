@@ -50,13 +50,41 @@
         重新加载
       </el-button>
     </el-alert>
+    <p v-if="sort === 'manual' && !keyword" class="library-muted library-order-hint" role="status">
+      拖动卡片的“调整顺序”手柄到另一张卡片可交换位置，也可使用前移、后移按钮（支持跨页）。
+    </p>
     <div
       v-loading="loading"
       class="personal-library-grid"
       :class="`library-cards-${cardSize}`"
     >
-      <article v-for="(library, index) in libraries" :key="library.id" class="personal-library-card">
-        <button class="library-card-open" @click="router.push(`/libraries/${library.id}`)">
+      <article
+        v-for="(library, index) in libraries"
+        :key="library.id"
+        class="personal-library-card"
+        :class="{
+          'library-card-dragging': draggingLibraryId === library.id,
+          'library-card-drop-target': dropTargetId === library.id,
+        }"
+        @dragover="dragOverLibrary($event, library.id)"
+        @drop="dropLibrary($event, library.id)"
+      >
+        <button
+          v-if="sort === 'manual' && !keyword"
+          type="button"
+          class="library-drag-handle"
+          :draggable="canReorder"
+          :disabled="!canReorder"
+          :aria-label="`调整${library.name}的展示顺序`"
+          title="拖动到另一张卡片以交换位置；也可使用前移、后移按钮"
+          @dragstart="startLibraryDrag($event, library.id)"
+          @dragend="clearLibraryDrag"
+          @click.stop
+        >
+          <span aria-hidden="true">⠿</span>
+          <span>调整顺序</span>
+        </button>
+        <button class="library-card-open" @dragstart.prevent @click="router.push(`/libraries/${library.id}`)">
           <LibraryLandscape :library-id="library.id" :image-key="library.config.coverImage" :variant="library.config.cover" />
           <div class="library-card-copy">
             <small>
@@ -164,7 +192,7 @@
 <script setup lang="ts">
 import LibraryLandscape from '@/components/library/LibraryLandscape.vue'
 import LibraryCoverEditor from '@/components/library/LibraryCoverEditor.vue'
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '@/utils/api';
 import AudioSegmented from '@/components/audio/AudioSegmented.vue';
@@ -200,8 +228,52 @@ const page = ref(1), size = ref(24), total = ref(0);
 const coverEditorOpen = ref(false)
 const coverLibrary = ref<PersonalLibrary | null>(null)
 const loading = ref(false), failed = ref(false), creating = ref(false), createOpen = ref(false), savingOrder = ref(false);
+const draggingLibraryId = ref<number | null>(null);
+const dropTargetId = ref<number | null>(null);
+const canReorder = computed(() => sort.value === 'manual' && !keyword.value && !savingOrder.value && !loading.value);
+
+function clearLibraryDrag() {
+    draggingLibraryId.value = null;
+    dropTargetId.value = null;
+}
+function startLibraryDrag(event: DragEvent, id: number) {
+    if (!canReorder.value || !event.dataTransfer) {
+        event.preventDefault();
+        return;
+    }
+    draggingLibraryId.value = id;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(id));
+}
+function dragOverLibrary(event: DragEvent, id: number) {
+    if (!canReorder.value || draggingLibraryId.value === null || draggingLibraryId.value === id) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    dropTargetId.value = id;
+}
+async function dropLibrary(event: DragEvent, targetId: number) {
+    const sourceId = draggingLibraryId.value;
+    const allowed = canReorder.value;
+    clearLibraryDrag();
+    if (!allowed || sourceId === null || sourceId === targetId) return;
+    event.preventDefault();
+    const ids = new Set(libraries.value.map(library => library.id));
+    if (!ids.has(sourceId) || !ids.has(targetId)) return;
+    savingOrder.value = true;
+    try {
+        await personalLibraries.order(sourceId, 'libraries', sourceId, targetId);
+        await load();
+        message.success('书馆展示顺序已保存');
+    } catch {
+        message.error('调整顺序失败，请刷新后重试');
+    } finally {
+        savingOrder.value = false;
+    }
+}
+
 let generation = 0;
 async function load() {
+    clearLibraryDrag();
     const request = ++generation;
     loading.value = true;
     failed.value = false;
@@ -244,6 +316,8 @@ async function create() {
     }
 }
 async function reorder(index: number, direction: number) {
+    if (!canReorder.value) return;
+    clearLibraryDrag();
     savingOrder.value = true;
     try {
         let other = libraries.value[index + direction];
@@ -254,8 +328,9 @@ async function reorder(index: number, direction: number) {
         if (!other) return;
         await personalLibraries.order(libraries.value[index].id, 'libraries', libraries.value[index].id, other.id);
         await load();
-    }
-    finally {
+    } catch {
+        message.error('调整顺序失败，请刷新后重试');
+    } finally {
         savingOrder.value = false;
     }
 }
