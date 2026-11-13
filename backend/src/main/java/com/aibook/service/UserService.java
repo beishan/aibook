@@ -237,6 +237,10 @@ public class UserService implements UserDetailsService {
             requireRange("书名前缀文字数", request.getBookNamePrefixLength(), 1, 100);
             user.setBookNamePrefixLength(request.getBookNamePrefixLength());
         }
+        if (request.getBookListViewMode() != null) {
+            requireAllowed("书单显示方式", request.getBookListViewMode(), Set.of("grid", "small", "list"));
+            user.setBookListViewMode(request.getBookListViewMode());
+        }
         if (request.getShelfViewMode() != null) {
             requireAllowed("书架显示方式", request.getShelfViewMode(), Set.of("grid", "list"));
             user.setShelfViewMode(request.getShelfViewMode());
@@ -411,6 +415,7 @@ public class UserService implements UserDetailsService {
                 .bookNamePrefixLength(user.getBookNamePrefixLength() != null
                         && user.getBookNamePrefixLength() >= 1 && user.getBookNamePrefixLength() <= 100
                         ? user.getBookNamePrefixLength() : 2)
+                .bookListViewMode(user.getBookListViewMode())
                 .shelfViewMode(user.getShelfViewMode())
                 .shelfCardSize(user.getShelfCardSize())
                 .shelfPageSize(user.getShelfPageSize() != null

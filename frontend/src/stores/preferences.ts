@@ -178,6 +178,7 @@ interface UserPreferences {
   bookNameMaskMode: BookNameMaskMode | null
   bookNamePrefixLength: number | null
   bookNameMaskCharacter: string | null
+  bookListViewMode?: 'grid' | 'small' | 'list' | null
   shelfViewMode?: ShelfViewMode | null
   shelfCardSize?: ShelfCardSize | null
   shelfPageSize: number | null
@@ -517,6 +518,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const bookNameMaskMode = ref<BookNameMaskMode>('HEAD_TAIL')
   const bookNamePrefixLength = ref(2)
   const bookNameMaskCharacter = ref('*')
+  const bookListViewMode = ref<'grid' | 'small' | 'list'>('grid')
+  let bookListViewRevision = 0
   const shelfViewMode = ref<ShelfViewMode>('grid')
   const shelfCardSize = ref<ShelfCardSize>('medium')
   let shelfViewRevision = 0
@@ -899,6 +902,15 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (syncRemote) persistRemote({ bookNameMaskCharacter: value })
   }
 
+  const setBookListViewMode = (value: string, syncRemote = true) => {
+    if (value !== 'grid' && value !== 'small' && value !== 'list') return
+    bookListViewMode.value = value
+    if (syncRemote) {
+      bookListViewRevision++
+      return persistRemote({ bookListViewMode: value })
+    }
+  }
+
   const setShelfViewMode = (value: ShelfViewMode, syncRemote = true) => {
     if (!['grid', 'list'].includes(value)) return
     shelfViewMode.value = value
@@ -1005,6 +1017,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (!accountToken) return
     const sequence = ++hydrationSequence
     const tagPageRevision = tagManagePageSizeRevision
+    const listViewRevision = bookListViewRevision
     const viewRevision = shelfViewRevision
     const sizeRevision = shelfSizeRevision
     const pageSizeRevision = shelfPageSizeRevision
@@ -1012,6 +1025,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
     try {
       const { data } = await api.get<UserPreferences>('/api/user/preferences')
       if (sequence !== hydrationSequence || localStorage.getItem('token') !== accountToken) return
+      if (listViewRevision === bookListViewRevision) {
+        setBookListViewMode(data.bookListViewMode ?? 'grid', false)
+      }
       const missingPreferences: Partial<UserPreferences> = {}
       const legacyShelf = readLegacyShelfDisplay()
       if (viewRevision === shelfViewRevision) {
@@ -1228,6 +1244,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     shelfViewRevision++
     shelfSizeRevision++
     shelfPageSizeRevision++
+    bookListViewRevision++
+    bookListViewMode.value = 'grid'
     shelfViewMode.value = 'grid'
     shelfCardSize.value = 'medium'
     shelfPageSize.value = 24
@@ -1270,6 +1288,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     libraryListPageSize,
     authorPageSize,
     tagManagePageSize,
+    bookListViewMode,
+    setBookListViewMode,
     shelfViewMode,
     shelfCardSize,
     shelfPageSize,

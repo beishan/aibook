@@ -25,6 +25,7 @@ public class UserPreferencesDTO {
     private Integer authorPageSize;
     private Integer tagManagePageSize;
     private Integer categoryPageSize;
+    private String bookListViewMode;
     private String shelfViewMode;
     private String shelfCardSize;
     private Integer shelfPageSize;
@@ -368,6 +369,14 @@ public class UserPreferencesDTO {
         this.bookNamePrefixLength = value;
     }
 
+    public String getBookListViewMode() {
+        return bookListViewMode;
+    }
+
+    public void setBookListViewMode(String value) {
+        bookListViewMode = value;
+    }
+
     public String getShelfViewMode() { return shelfViewMode; }
     public void setShelfViewMode(String value) { shelfViewMode = value; }
     public String getShelfCardSize() { return shelfCardSize; }
@@ -593,6 +602,11 @@ public class UserPreferencesDTO {
 
         public UserPreferencesDTOBuilder bookNamePrefixLength(Integer value) {
             this.value.setBookNamePrefixLength(value);
+            return this;
+        }
+
+        public UserPreferencesDTOBuilder bookListViewMode(String value) {
+            this.value.setBookListViewMode(value);
             return this;
         }
 

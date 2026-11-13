@@ -451,6 +451,14 @@ public class User implements UserDetails {
         preference().setBookNamePrefixLength(value);
     }
 
+    public String getBookListViewMode() {
+        return preference().getBookListViewMode();
+    }
+
+    public void setBookListViewMode(String value) {
+        preference().setBookListViewMode(value);
+    }
+
     public String getShelfViewMode() { return preference().getShelfViewMode(); }
     public void setShelfViewMode(String value) { preference().setShelfViewMode(value); }
     public String getShelfCardSize() { return preference().getShelfCardSize(); }

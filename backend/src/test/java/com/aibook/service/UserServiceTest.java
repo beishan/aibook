@@ -21,6 +21,28 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     @Test
+    void bookListViewPersistsIndependentlyAndRejectsInvalidModes() {
+        UserRepository repository = mock(UserRepository.class);
+        User reader = User.builder().username("reader").build();
+        User other = User.builder().username("other").build();
+        when(repository.findByUsername("reader")).thenReturn(Optional.of(reader));
+        when(repository.findByUsername("other")).thenReturn(Optional.of(other));
+        when(repository.save(reader)).thenReturn(reader);
+        UserService service = new UserService(repository);
+
+        service.updatePreferences("reader", UserPreferencesDTO.builder().shelfViewMode("list").build());
+        for (String mode : new String[] {"grid", "small", "list"}) {
+            service.updatePreferences("reader", UserPreferencesDTO.builder().bookListViewMode(mode).build());
+            assertEquals(mode, service.getPreferences("reader").getBookListViewMode());
+            assertEquals("list", service.getPreferences("reader").getShelfViewMode());
+            assertEquals(null, service.getPreferences("other").getBookListViewMode());
+        }
+        assertThrows(IllegalArgumentException.class, () -> service.updatePreferences("reader",
+                UserPreferencesDTO.builder().bookListViewMode("invalid").build()));
+        assertEquals("list", service.getPreferences("reader").getBookListViewMode());
+    }
+
+    @Test
     void comicDoublePageModePersistsForTheCurrentAccount() {
         UserRepository repository = mock(UserRepository.class);
         User reader = User.builder().username("reader").build();

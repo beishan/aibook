@@ -12,6 +12,14 @@
       </div>
     </div>
 
+    <div class="view-toolbar">
+      <AudioSegmented
+        v-model="viewMode"
+        label="书单显示方式"
+        :options="viewOptions"
+      />
+    </div>
+
     <!-- 加载中 -->
     <div v-if="loading" class="loading">
       <div class="loading-spinner"></div>
@@ -19,7 +27,11 @@
     </div>
 
     <!-- 书籍列表 -->
-    <div v-else-if="books.length > 0" class="books-grid">
+    <div
+      v-else-if="books.length > 0"
+      class="books-grid"
+      :class="{ 'books-grid--small': viewMode === 'small', 'books-list': viewMode === 'list' }"
+    >
       <div
         v-for="book in books"
         :key="book.id"
@@ -27,11 +39,20 @@
         @click="$router.push(`/books/${book.id}`)"
       >
         <div class="book-cover">
-          <BookCardBadges :format="book.format" :author="book.author" />
-          <ShelfBookMenu :book="book" :title="displayBookName(book.title)" :disabled="pending.has(book.id)" @action="handleAction" />
+          <BookCardBadges
+            v-if="viewMode !== 'list'"
+            :format="book.format"
+            :author="book.author"
+          />
+          <ShelfBookMenu
+            :book="book"
+            :title="displayBookName(book.title)"
+            :disabled="pending.has(book.id)"
+            @action="handleAction"
+          />
           <img
             v-if="book.coverUrl && shouldLoadBookCover(book.id)"
-            :src="getCoverThumbnailUrl(book.coverUrl, 'card')"
+            :src="getCoverThumbnailUrl(book.coverUrl, viewMode === 'list' ? 'list' : 'card')"
             alt="封面"
           />
           <div v-else class="no-cover"><BookCoverPlaceholderText :title="displayBookName(book.title)" /></div>
@@ -39,10 +60,16 @@
             v-if="book.coverUrl"
             :book-id="book.id"
             :book-title="book.title"
+            :compact="viewMode === 'list'"
           />
         </div>
         <div class="book-info">
-          <div class="book-title">{{ displayBookName(book.title) }}</div>
+          <div class="book-title" :title="displayBookName(book.title)">
+            {{ displayBookName(book.title) }}
+          </div>
+          <div v-if="viewMode === 'list'" class="book-author">
+            {{ book.author || '未知作者' }} · {{ book.format?.toUpperCase() || '未知格式' }}
+          </div>
           <div
             v-if="book.totalProgress != null"
             class="book-progress"
@@ -91,6 +118,7 @@
 
 <script setup lang="ts">
 import { openIndependentReader } from '@/utils/independentReader'
+import AudioSegmented from '@/components/audio/AudioSegmented.vue'
 import ShelfBookMenu from '@/components/ShelfBookMenu.vue'
 import BookQuickReader from '@/components/BookQuickReader.vue'
 import BookEditDialog from '@/components/BookEditDialog.vue'
@@ -115,6 +143,17 @@ const { displayBookName } = useBookNameDisplay()
 const route = useRoute()
 const router = useRouter()
 const preferencesStore = usePreferencesStore()
+const viewOptions = [
+  { value: 'grid', label: '卡片' },
+  { value: 'small', label: '小卡片' },
+  { value: 'list', label: '列表' },
+]
+const viewMode = computed({
+  get: () => preferencesStore.bookListViewMode,
+  set: (value: string) => {
+    void preferencesStore.setBookListViewMode(value)
+  },
+})
 type BookCard = Book & { totalProgress?: number | null }
 interface BookListPage {
   id: number
@@ -261,6 +300,12 @@ onMounted(() => { void preferencesStore.hydrate() })
 </script>
 
 <style scoped>
+.view-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--spacing-lg);
+  min-width: 0;
+}
 .book-progress {
   height: 4px;
   margin-top: 10px;
@@ -487,6 +532,63 @@ onMounted(() => { void preferencesStore.hydrate() })
 
   .book-info {
     padding: 9px 10px 11px;
+  }
+}
+.books-grid--small {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+.books-grid--small .book-cover {
+  height: auto;
+  aspect-ratio: 2 / 3;
+}
+.books-grid--small .book-info {
+  padding: 8px;
+}
+.books-list {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+.books-list .book-card {
+  display: flex;
+  align-items: center;
+  position: relative;
+  padding-right: 44px;
+}
+.books-list .book-card:hover {
+  transform: none;
+}
+.books-list .book-cover {
+  position: static;
+  flex: 0 0 64px;
+  height: 96px;
+  aspect-ratio: auto;
+}
+.books-list :deep(.book-cover-privacy-button) {
+  left: 36px;
+  right: auto;
+}
+.books-list .book-info {
+  flex: 1;
+  min-width: 0;
+}
+.books-list .book-progress {
+  max-width: 320px;
+}
+.books-list .book-author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .books-grid--small {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .book-card {
+    transition: none;
   }
 }
 </style>

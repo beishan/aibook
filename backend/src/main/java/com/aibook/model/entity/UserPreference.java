@@ -70,6 +70,8 @@ public class UserPreference {
     private Integer tagManagePageSize;
     @Column(name = "category_page_size")
     private Integer categoryPageSize;
+    @Column(name = "book_list_view_mode", length = 12)
+    private String bookListViewMode;
     @Column(name = "shelf_view_mode", length = 12)
     private String shelfViewMode;
     @Column(name = "shelf_card_size", length = 12)
