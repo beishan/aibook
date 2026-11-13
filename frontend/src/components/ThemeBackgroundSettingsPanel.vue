@@ -163,11 +163,121 @@ const presetGroups: Record<ThemeId, BackgroundPreset[]> = {
   ],
 }
 
+const freshPresets: BackgroundPreset[] = [
+  {
+    name: '纯白空间',
+    description: '纯白、简洁',
+    config: {
+      mode: 'solid',
+      pageColor: '#FFFFFF',
+      secondaryColor: '#FFFFFF',
+      navColor: '#FFFFFF',
+      navOpacity: 100,
+      surfaceColor: '#FFFFFF',
+      surfaceOpacity: 100,
+    },
+  },
+  {
+    name: '晴空云朵',
+    description: '天蓝、轻盈',
+    config: {
+      mode: 'gradient',
+      pageColor: '#E0F2FE',
+      secondaryColor: '#F0F9FF',
+      navColor: '#F8FCFF',
+      navOpacity: 100,
+      surfaceColor: '#FFFFFF',
+      surfaceOpacity: 96,
+    },
+  },
+  {
+    name: '薄荷花园',
+    description: '清新、透亮',
+    config: {
+      mode: 'gradient',
+      pageColor: '#D1FAE5',
+      secondaryColor: '#ECFDF5',
+      navColor: '#F4FFF9',
+      navOpacity: 96,
+      surfaceColor: '#FFFFFF',
+      surfaceOpacity: 94,
+    },
+  },
+  {
+    name: '桃子汽水',
+    description: '蜜桃、活泼',
+    config: {
+      mode: 'gradient',
+      pageColor: '#FFE4D6',
+      secondaryColor: '#FFF1E8',
+      navColor: '#FFFAF6',
+      navOpacity: 100,
+      surfaceColor: '#FFFFFF',
+      surfaceOpacity: 96,
+    },
+  },
+  {
+    name: '柠檬奶油',
+    description: '明快、温柔',
+    config: {
+      mode: 'gradient',
+      pageColor: '#FEF3C7',
+      secondaryColor: '#FFFDEB',
+      navColor: '#FFFEF5',
+      navOpacity: 100,
+      surfaceColor: '#FFFFFF',
+      surfaceOpacity: 98,
+    },
+  },
+  {
+    name: '樱花晴日',
+    description: '浅粉、轻甜',
+    config: {
+      mode: 'gradient',
+      pageColor: '#FCE7F3',
+      secondaryColor: '#FFF1F5',
+      navColor: '#FFFAFC',
+      navOpacity: 98,
+      surfaceColor: '#FFFFFF',
+      surfaceOpacity: 96,
+    },
+  },
+  {
+    name: '紫藤轻梦',
+    description: '淡紫、柔亮',
+    config: {
+      mode: 'gradient',
+      pageColor: '#EDE9FE',
+      secondaryColor: '#F5F0FF',
+      navColor: '#FCFAFF',
+      navOpacity: 96,
+      surfaceColor: '#FFFFFF',
+      surfaceOpacity: 94,
+    },
+  },
+  {
+    name: '碧海微风',
+    description: '水青、清爽',
+    config: {
+      mode: 'gradient',
+      pageColor: '#CFFAFE',
+      secondaryColor: '#E6FFFA',
+      navColor: '#F5FFFE',
+      navOpacity: 96,
+      surfaceColor: '#FFFFFF',
+      surfaceOpacity: 94,
+    },
+  },
+]
+
 const themeStore = useThemeStore()
 const preferencesStore = usePreferencesStore()
 const config = computed(() => themeStore.currentBackgroundSettings)
 const currentThemeName = computed(() => THEMES.find(theme => theme.id === themeStore.currentTheme)?.name || '当前主题')
-const currentPresets = computed(() => presetGroups[themeStore.currentTheme])
+const currentPresets = computed(() => [
+  ...presetGroups[themeStore.currentTheme],
+  ...freshPresets,
+])
 const previewStyle = computed(() => createThemeBackgroundTokens(config.value))
 
 const isPresetActive = (preset: ThemeBackgroundConfig) =>
