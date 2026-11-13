@@ -32,18 +32,19 @@
         <el-option value="manual" label="手工次序" />
         <el-option value="created" label="最近创建" />
       </el-select>
+      <span class="library-muted">
+        {{ total }} 座图书馆 · 仅自己可见
+      </span>
       <div class="library-card-size-control" :inert="savingCardSize || undefined" :aria-busy="savingCardSize">
         <span>书馆卡片大小</span>
         <AudioSegmented
+          compact
           :model-value="cardSize"
           label="书馆卡片大小"
           :options="cardSizeOptions"
           @update:model-value="changeCardSize"
         />
       </div>
-      <span class="library-muted">
-        {{ total }} 座图书馆 · 仅自己可见
-      </span>
     </div>
     <el-alert v-if="failed" type="error" title="加载失败，请重试" :closable="false">
       <el-button @click="load">

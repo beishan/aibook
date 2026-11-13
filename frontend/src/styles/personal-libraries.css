@@ -227,7 +227,8 @@ no global theme overrides. */
 .library-card-size-control {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  margin-left: auto;
   max-width: 100%;
   min-width: 0;
 }
@@ -235,6 +236,22 @@ no global theme overrides. */
   flex-shrink: 0;
   color: var(--text-secondary);
   font-size: 13px;
+}
+.library-toolbar .library-card-size-control .audio-segmented {
+  padding: 2px;
+  border-radius: 10px;
+}
+.library-toolbar .library-card-size-control .audio-segmented .audio-segmented-track {
+  grid-template-columns: repeat(var(--count), minmax(60px, 1fr));
+  min-width: 180px;
+}
+.library-toolbar .library-card-size-control .audio-segmented button {
+  padding: 6px 4px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.library-toolbar .library-card-size-control .audio-segmented .audio-segmented-thumb {
+  border-radius: 8px;
 }
 .personal-library-grid.library-cards-small {
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -312,6 +329,7 @@ no global theme overrides. */
   }
   .library-card-size-control {
     flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
 @media (max-width: 480px) {
