@@ -161,13 +161,31 @@ const presetGroups: Record<ThemeId, Array<{ name: string; color: string }>> = {
   ],
 }
 
+const vibrantPresets = [
+  { name: '西瓜红', color: '#FF6B6B' },
+  { name: '蜜橘橙', color: '#FF8A3D' },
+  { name: '芒果黄', color: '#FFB020' },
+  { name: '柠檬黄', color: '#F6D32D' },
+  { name: '青柠绿', color: '#A3E635' },
+  { name: '薄荷糖', color: '#34D399' },
+  { name: '碧波青', color: '#2DD4BF' },
+  { name: '晴空青', color: '#22D3EE' },
+  { name: '晴天蓝', color: '#38BDF8' },
+  { name: '绣球蓝', color: '#818CF8' },
+  { name: '泡泡紫', color: '#C084FC' },
+  { name: '桃桃粉', color: '#F472B6' },
+]
+
 const themeStore = useThemeStore()
 const preferencesStore = usePreferencesStore()
 const draftColor = ref(themeStore.currentAccentColor)
 const colorError = ref(false)
 const activeColor = computed(() => themeStore.currentAccentColor)
 const currentThemeName = computed(() => THEMES.find(item => item.id === themeStore.currentTheme)?.name || '当前主题')
-const currentPresets = computed(() => presetGroups[themeStore.currentTheme])
+const currentPresets = computed(() => [
+  ...presetGroups[themeStore.currentTheme],
+  ...vibrantPresets,
+])
 const previewStyle = computed(() => createThemeColorTokens(activeColor.value))
 
 watch([() => themeStore.currentTheme, activeColor], () => {
