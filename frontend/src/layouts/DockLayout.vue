@@ -22,9 +22,13 @@
           :key="item.path"
           :to="item.path"
           class="dock-item"
-          :class="{ active: isActiveRoute(item.path) }"
+          :class="{ active: isActiveRoute(item.path), 'dock-item--dragging': draggingPath === item.path }"
           :style="dockItemStyle(index)"
           :aria-label="item.title"
+          :data-dock-path="item.path"
+          @pointerdown="startDockDrag(item.path, $event)"
+          @click.capture="blockDragClick"
+          @dragstart.prevent
         >
           <span
             class="dock-icon-tile"
@@ -158,7 +162,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import DockIcon, { type DockIconName } from '@/components/DockIcon.vue'
-import { confirm } from '@/utils/message'
+import { confirm, message } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useDockIconStore } from '@/stores/dockIcons'
@@ -178,6 +182,14 @@ const showUserMenu = ref(false)
 const showTrashMenu = ref(false)
 const dockContainerRef = ref<HTMLElement | null>(null)
 const dockScales = ref<number[]>([])
+const draggingPath = ref<string | null>(null)
+let dragTimer: ReturnType<typeof setTimeout> | undefined
+let dragStartX = 0
+let dragStartY = 0
+let dragPointerId: number | null = null
+let dragTargetPath: string | null = null
+let suppressDragClick = false
+let dockSaving = false
 
 const menuRoutes: Record<string, string> = {
   home: '/',
@@ -237,7 +249,7 @@ const resetDockMagnification = () => {
 }
 
 const handleDockPointerMove = (event: PointerEvent) => {
-  if (event.pointerType === 'touch' || !dockContainerRef.value) return
+  if (event.pointerType === 'touch' || draggingPath.value || !dockContainerRef.value) return
   const maxScale = preferencesStore.dockMagnification / 100
   const influenceRadius = preferencesStore.dockSize * 1.75
   const items = dockContainerRef.value.querySelectorAll<HTMLElement>('.dock-item')
@@ -247,6 +259,80 @@ const handleDockPointerMove = (event: PointerEvent) => {
     const proximity = Math.max(0, 1 - distance / influenceRadius)
     return 1 + (maxScale - 1) * proximity * proximity
   })
+}
+
+const startDockDrag = (path: string, event: PointerEvent) => {
+  if (event.pointerType !== 'mouse' || event.button !== 0 || dockSaving) return
+  dragPointerId = event.pointerId
+  dragStartX = event.clientX
+  dragStartY = event.clientY
+  dragTargetPath = path
+  dragTimer = setTimeout(() => {
+    draggingPath.value = path
+    resetDockMagnification()
+  }, 400)
+  window.addEventListener('pointermove', moveDockDrag)
+  window.addEventListener('pointerup', endDockDrag)
+  window.addEventListener('pointercancel', cancelDockDrag)
+}
+
+const moveDockDrag = (event: PointerEvent) => {
+  if (event.pointerId !== dragPointerId) return
+  if (!draggingPath.value) {
+    if (Math.hypot(event.clientX - dragStartX, event.clientY - dragStartY) > 6) cancelDockDrag()
+    return
+  }
+  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-dock-path]')
+  if (target?.dataset.dockPath) dragTargetPath = target.dataset.dockPath
+}
+
+const clearDockDrag = () => {
+  clearTimeout(dragTimer)
+  dragPointerId = null
+  window.removeEventListener('pointermove', moveDockDrag)
+  window.removeEventListener('pointerup', endDockDrag)
+  window.removeEventListener('pointercancel', cancelDockDrag)
+}
+
+const cancelDockDrag = () => {
+  clearDockDrag()
+  draggingPath.value = null
+  dragTargetPath = null
+}
+
+const endDockDrag = async (event: PointerEvent) => {
+  if (event.pointerId !== dragPointerId) return
+  const source = draggingPath.value
+  const target = dragTargetPath
+  clearDockDrag()
+  draggingPath.value = null
+  dragTargetPath = null
+  if (!source) return
+  suppressDragClick = true
+  setTimeout(() => { suppressDragClick = false }, 0)
+  if (!target || source === target) return
+  const items = [...preferencesStore.dockNavigationItems].sort((a, b) => a.order - b.order)
+  const from = items.findIndex(item => menuRoutes[item.key] === source)
+  const to = items.findIndex(item => menuRoutes[item.key] === target)
+  if (from < 0 || to < 0) return
+  const [item] = items.splice(from, 1)
+  if (!item) return
+  items.splice(to, 0, item)
+  dockSaving = true
+  try {
+    await preferencesStore.saveDockNavigationItems(items.map((entry, order) => ({ ...entry, order })))
+  } catch {
+    message.error('Dock 顺序保存失败，请检查网络后重试')
+  } finally {
+    dockSaving = false
+  }
+}
+
+const blockDragClick = (event: MouseEvent) => {
+  if (!suppressDragClick) return
+  event.preventDefault()
+  event.stopPropagation()
+  suppressDragClick = false
 }
 
 const isActiveRoute = (path: string) => {
