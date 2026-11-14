@@ -164,7 +164,7 @@ import { useRoute, useRouter } from 'vue-router'
 import DockIcon, { type DockIconName } from '@/components/DockIcon.vue'
 import { confirm, message } from '@/utils/message'
 import { useUserStore } from '@/stores/user'
-import { usePreferencesStore } from '@/stores/preferences'
+import { usePreferencesStore, type DockNavigationItem } from '@/stores/preferences'
 import { useDockIconStore } from '@/stores/dockIcons'
 import { useBookStore } from '@/stores/book'
 import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
@@ -183,6 +183,7 @@ const showTrashMenu = ref(false)
 const dockContainerRef = ref<HTMLElement | null>(null)
 const dockScales = ref<number[]>([])
 const draggingPath = ref<string | null>(null)
+const dragDraft = ref<DockNavigationItem[] | null>(null)
 let dragTimer: ReturnType<typeof setTimeout> | undefined
 let dragStartX = 0
 let dragStartY = 0
@@ -205,7 +206,7 @@ const menuRoutes: Record<string, string> = {
   settings: '/settings',
 }
 
-const menuItems = computed(() => preferencesStore.dockNavigationItems
+const menuItems = computed(() => (dragDraft.value ?? preferencesStore.dockNavigationItems)
   .filter(item => item.enabled)
   .sort((a, b) => a.order - b.order)
   .map(item => ({ path: menuRoutes[item.key], icon: item.icon as DockIconName, title: item.title })))
@@ -268,6 +269,7 @@ const startDockDrag = (path: string, event: PointerEvent) => {
   dragStartY = event.clientY
   dragTargetPath = path
   dragTimer = setTimeout(() => {
+    dragDraft.value = preferencesStore.dockNavigationItems.map(item => ({ ...item }))
     draggingPath.value = path
     resetDockMagnification()
   }, 400)
@@ -282,8 +284,26 @@ const moveDockDrag = (event: PointerEvent) => {
     if (Math.hypot(event.clientX - dragStartX, event.clientY - dragStartY) > 6) cancelDockDrag()
     return
   }
-  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-dock-path]')
-  if (target?.dataset.dockPath) dragTargetPath = target.dataset.dockPath
+  const candidates = Array.from(dockContainerRef.value?.querySelectorAll<HTMLElement>('[data-dock-path]') ?? [])
+  const target = candidates.reduce<HTMLElement | null>((nearest, element) => {
+    const rect = element.getBoundingClientRect()
+    const distance = Math.abs(event.clientX - (rect.left + rect.width / 2))
+    if (!nearest) return element
+    const nearestRect = nearest.getBoundingClientRect()
+    const nearestDistance = Math.abs(event.clientX - (nearestRect.left + nearestRect.width / 2))
+    return distance < nearestDistance ? element : nearest
+  }, null)
+  const targetPath = target?.dataset.dockPath
+  if (!targetPath || targetPath === draggingPath.value || !dragDraft.value) return
+  const items = [...dragDraft.value].sort((left, right) => left.order - right.order)
+  const from = items.findIndex(item => menuRoutes[item.key] === draggingPath.value)
+  const to = items.findIndex(item => menuRoutes[item.key] === targetPath)
+  if (from < 0 || to < 0) return
+  const [item] = items.splice(from, 1)
+  if (!item) return
+  items.splice(to, 0, item)
+  dragTargetPath = targetPath
+  dragDraft.value = items.map((entry, order) => ({ ...entry, order }))
 }
 
 const clearDockDrag = () => {
@@ -297,33 +317,32 @@ const clearDockDrag = () => {
 const cancelDockDrag = () => {
   clearDockDrag()
   draggingPath.value = null
+  dragDraft.value = null
   dragTargetPath = null
 }
 
 const endDockDrag = async (event: PointerEvent) => {
   if (event.pointerId !== dragPointerId) return
   const source = draggingPath.value
-  const target = dragTargetPath
+  const items = dragDraft.value
+  const changed = Boolean(source && dragTargetPath && source !== dragTargetPath)
   clearDockDrag()
   draggingPath.value = null
   dragTargetPath = null
   if (!source) return
   suppressDragClick = true
   setTimeout(() => { suppressDragClick = false }, 0)
-  if (!target || source === target) return
-  const items = [...preferencesStore.dockNavigationItems].sort((a, b) => a.order - b.order)
-  const from = items.findIndex(item => menuRoutes[item.key] === source)
-  const to = items.findIndex(item => menuRoutes[item.key] === target)
-  if (from < 0 || to < 0) return
-  const [item] = items.splice(from, 1)
-  if (!item) return
-  items.splice(to, 0, item)
+  if (!changed || !items) {
+    dragDraft.value = null
+    return
+  }
   dockSaving = true
   try {
-    await preferencesStore.saveDockNavigationItems(items.map((entry, order) => ({ ...entry, order })))
+    await preferencesStore.saveDockNavigationItems(items)
   } catch {
     message.error('Dock 顺序保存失败，请检查网络后重试')
   } finally {
+    dragDraft.value = null
     dockSaving = false
   }
 }
@@ -474,6 +493,14 @@ onUnmounted(() => {
   transition: transform 90ms cubic-bezier(0.2, 0.8, 0.2, 1);
   cursor: pointer;
   will-change: transform;
+}
+
+.dock-item.dock-item--dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 3px;
+  border-radius: 14px;
 }
 
 .dock-user-entry {
