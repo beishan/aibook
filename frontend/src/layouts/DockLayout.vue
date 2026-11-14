@@ -155,6 +155,13 @@
         </div>
       </div>
     </nav>
+    <Teleport to="body">
+      <div v-if="draggingItem" class="dock-drag-ghost" :style="dragGhostStyle" aria-hidden="true">
+        <span class="dock-icon-tile" :class="{ 'dock-icon-tile--custom': preferencesStore.dockIconStyle === 'custom' }">
+          <DockIcon class="dock-icon" :name="draggingItem.icon" :variant="preferencesStore.dockIconStyle" :custom-src="dockIconStore.iconUrls[draggingItem.icon]" />
+        </span>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -184,6 +191,8 @@ const dockContainerRef = ref<HTMLElement | null>(null)
 const dockScales = ref<number[]>([])
 const draggingPath = ref<string | null>(null)
 const dragDraft = ref<DockNavigationItem[] | null>(null)
+const dragPosition = ref({ x: 0, y: 0 })
+const dragOffset = ref({ x: 0, y: 0 })
 let dragTimer: ReturnType<typeof setTimeout> | undefined
 let dragStartX = 0
 let dragStartY = 0
@@ -210,6 +219,14 @@ const menuItems = computed(() => (dragDraft.value ?? preferencesStore.dockNaviga
   .filter(item => item.enabled)
   .sort((a, b) => a.order - b.order)
   .map(item => ({ path: menuRoutes[item.key], icon: item.icon as DockIconName, title: item.title })))
+
+const draggingItem = computed(() => menuItems.value.find(item => item.path === draggingPath.value))
+const dragGhostStyle = computed(() => ({
+  left: (dragPosition.value.x - dragOffset.value.x) + 'px',
+  top: (dragPosition.value.y - dragOffset.value.y) + 'px',
+  width: preferencesStore.dockSize + 'px',
+  height: preferencesStore.dockSize + 'px',
+}))
 
 const dockStyle = computed(() => ({
   '--dock-size': `${preferencesStore.dockSize}px`,
@@ -268,6 +285,9 @@ const startDockDrag = (path: string, event: PointerEvent) => {
   dragStartX = event.clientX
   dragStartY = event.clientY
   dragTargetPath = path
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  dragPosition.value = { x: event.clientX, y: event.clientY }
+  dragOffset.value = { x: event.clientX - rect.left, y: event.clientY - rect.top }
   dragTimer = setTimeout(() => {
     dragDraft.value = preferencesStore.dockNavigationItems.map(item => ({ ...item }))
     draggingPath.value = path
@@ -284,6 +304,7 @@ const moveDockDrag = (event: PointerEvent) => {
     if (Math.hypot(event.clientX - dragStartX, event.clientY - dragStartY) > 6) cancelDockDrag()
     return
   }
+  dragPosition.value = { x: event.clientX, y: event.clientY }
   const candidates = Array.from(dockContainerRef.value?.querySelectorAll<HTMLElement>('[data-dock-path]') ?? [])
   const target = candidates.reduce<HTMLElement | null>((nearest, element) => {
     const rect = element.getBoundingClientRect()
@@ -496,11 +517,24 @@ onUnmounted(() => {
 }
 
 .dock-item.dock-item--dragging {
-  opacity: 0.5;
+  opacity: 0.2;
   cursor: grabbing;
-  outline: 2px solid var(--el-color-primary);
-  outline-offset: 3px;
-  border-radius: 14px;
+}
+
+.dock-drag-ghost {
+  position: fixed;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transform: scale(1.08);
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.25));
+}
+
+.dock-drag-ghost .dock-icon-tile {
+  width: 100%;
+  height: 100%;
 }
 
 .dock-user-entry {
