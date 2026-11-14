@@ -7,22 +7,17 @@
       </div>
     </header>
 
-    <div class="dock-navigation-list">
-      <article v-for="(item, index) in draft" :key="item.key" class="dock-navigation-row">
-        <div class="dock-navigation-order">
-          <button
-            type="button"
-            :disabled="index === 0"
-            :aria-label="`上移${item.title}`"
-            @click="moveItem(index, -1)"
-          >↑</button>
-          <button
-            type="button"
-            :disabled="index === draft.length - 1"
-            :aria-label="`下移${item.title}`"
-            @click="moveItem(index, 1)"
-          >↓</button>
-        </div>
+    <div class="dock-navigation-list" @pointermove="dragMove" @pointerup="finishDrag" @pointercancel="finishDrag">
+      <article v-for="(item, index) in draft" :key="item.key" class="dock-navigation-row" :data-dock-key="item.key">
+        <button
+          type="button"
+          class="dock-navigation-handle"
+          :aria-label="`调整${item.title}顺序，拖动或使用上下方向键`"
+          title="拖动调整顺序，也可使用上下方向键"
+          @pointerdown="startDrag(item.key, $event)"
+          @keydown.up.prevent="moveItem(index, -1)"
+          @keydown.down.prevent="moveItem(index, 1)"
+        >⠿</button>
         <DockIcon
           class="dock-navigation-preview"
           :name="item.icon"
@@ -65,6 +60,7 @@ const preferencesStore = usePreferencesStore()
 const dockIconStore = useDockIconStore()
 const draft = ref<DockNavigationItem[]>([])
 const saving = ref(false)
+let draggingKey: DockNavigationItem['key'] | null = null
 const iconOptions: Array<{ value: DockNavigationIcon; label: string }> = [
   { value: 'home', label: '首页' },
   { value: 'library', label: '书库' },
@@ -89,6 +85,29 @@ const moveItem = (index: number, direction: -1 | 1) => {
   const items = [...draft.value]
   ;[items[index], items[destination]] = [items[destination], items[index]]
   draft.value = items.map((item, order) => ({ ...item, order }))
+}
+
+const startDrag = (key: DockNavigationItem['key'], event: PointerEvent) => {
+  if (event.button !== 0) return
+  draggingKey = key
+  ;(event.currentTarget as HTMLElement).closest<HTMLElement>('.dock-navigation-list')?.setPointerCapture(event.pointerId)
+}
+
+const dragMove = (event: PointerEvent) => {
+  if (draggingKey === null) return
+  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-dock-key]')
+  const from = draft.value.findIndex(item => item.key === draggingKey)
+  const to = draft.value.findIndex(item => item.key === target?.dataset.dockKey)
+  if (from < 0 || to < 0 || from === to) return
+  const items = [...draft.value]
+  const [item] = items.splice(from, 1)
+  if (!item) return
+  items.splice(to, 0, item)
+  draft.value = items.map((entry, order) => ({ ...entry, order }))
+}
+
+const finishDrag = () => {
+  draggingKey = null
 }
 
 const save = async () => {
@@ -149,23 +168,25 @@ const save = async () => {
   background: var(--surface-card);
 }
 
-.dock-navigation-order {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px;
-}
-
-.dock-navigation-order button {
+.dock-navigation-handle {
+  min-height: 38px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-secondary);
-  cursor: pointer;
+  font-size: 22px;
+  cursor: grab;
+  touch-action: none;
 }
 
-.dock-navigation-order button:disabled {
-  opacity: .35;
-  cursor: default;
+.dock-navigation-handle:active {
+  cursor: grabbing;
+  background: var(--surface-elevated);
+}
+
+.dock-navigation-handle:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
 }
 
 .dock-navigation-preview {
