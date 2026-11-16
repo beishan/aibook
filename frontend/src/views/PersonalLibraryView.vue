@@ -1014,6 +1014,7 @@ async function deleteLibrary() {
     await router.push('/libraries');
 }
 async function allowLeave() {
+    if (!localStorage.getItem('token')) return true;
     if (settingsOpen.value && (saving.value || busy.value)) return false;
     return !settingsOpen.value || !dirty.value || await confirm('设置尚未保存。确定放弃草稿并离开？');
 }

@@ -4128,6 +4128,7 @@ const goBack = async () => {
 }
 
 onBeforeRouteLeave(async () => {
+  if (!localStorage.getItem('token')) return
   await nextTick()
   await flushPendingReaderSettings()
 })

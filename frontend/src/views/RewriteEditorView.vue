@@ -2059,7 +2059,8 @@ const beforeUnload = (event: BeforeUnloadEvent) => {
 }
 
 onBeforeRouteLeave(async () => {
-  if (!(await saveNow())) return false
+  if (!localStorage.getItem('token')) return true
+  if (!(await saveNow())) return !localStorage.getItem('token')
   await persistCurrentPosition()
   return true
 })

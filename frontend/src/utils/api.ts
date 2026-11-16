@@ -52,6 +52,12 @@ api.interceptors.response.use(
     ) === 'true'
 
     if (status === 401 && !authRequest) {
+      const activeToken = localStorage.getItem('token')
+      const authorization = error.config?.headers?.get?.('Authorization')
+        ?? error.config?.headers?.Authorization
+      if (activeToken && authorization && authorization !== `Bearer ${activeToken}`) {
+        return Promise.reject(error)
+      }
       clearStoredAuthSession()
 
       if (!authExpiryHandled) {
